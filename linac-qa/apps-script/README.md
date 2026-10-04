@@ -26,6 +26,22 @@
 
 ทดสอบ: เปิด `…/exec?ping=1` ต้องเห็น `{"ok":true,"app":"linac-qa",…}` และเปิด `…/exec` ต้องเห็นหน้าฟอร์ม
 
+## เข้าสู่ระบบด้วย Gmail
+
+1. รัน `setup` อีกครั้ง (สร้างโฟลเดอร์รูปกลาง "Linac QA Photos" และจำ ID ไว้) ดูลิงก์ Sheet และโฟลเดอร์ได้ใน Execution log
+2. **แชร์ Google Sheet และโฟลเดอร์ "Linac QA Photos"** ให้ Gmail ของเจ้าหน้าที่แต่ละคนเป็น **Editor** รายชื่อที่แชร์คือรายชื่อคนที่ใช้ระบบได้
+3. Deploy → Manage deployments → ✏️
+   - Execute as: **User accessing the web app**
+   - Who has access: **Anyone with Google account**
+   - Version: **New version** → Deploy
+4. เปิด `…/exec` ครั้งแรก Google จะให้ล็อกอิน Gmail และขออนุญาตสิทธิ์ 1 ครั้ง (ถ้าขึ้น "Google hasn't verified this app" กด Advanced → Go to … → Allow)
+
+หลังล็อกอิน หัวหน้าเว็บจะแสดงอีเมลผู้ใช้ และ Sheet แท็บ Records บันทึกอีเมลผู้ส่งให้อัตโนมัติ บัญชีที่ไม่ได้รับแชร์ Sheet จะเห็นข้อความว่ายังไม่มีสิทธิ์ และมีปุ่มเข้าสู่ระบบด้วยบัญชีอื่น
+
+ตั้งค่าเพิ่มเติมใน `CONFIG` ของ `Code.gs`:
+- `ALLOWED_EMAILS` / `ALLOWED_DOMAINS` จำกัดรายชื่อให้แคบกว่าคนที่แชร์ Sheet
+- `PHYSICIST_EMAILS` จับคู่อีเมลกับชื่อ Physicist เพื่อติ๊กชื่อให้อัตโนมัติ เช่น `{ 'someone@gmail.com': 'วันนิตา มะลิลา' }`
+
 ## อัปเดตภายหลัง
 
 1. แก้ `linac-qa/index.html` แล้วรัน `linac-qa/build-apps-script.sh` เพื่อคัดลอกไปที่ `apps-script/Index.html`

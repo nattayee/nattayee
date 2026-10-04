@@ -24,11 +24,16 @@ const CONFIG = {
   // Needed when this Apps Script project was created on its own rather than from the Sheet's
   // Extensions → Apps Script menu. Leave empty to use the Sheet the project is attached to.
   SHEET_ID: '1ehuUJ5WR5Rie-aC8AU1dTskwENA3LyHS-bU33dBpd28',
-  // Same value as AUTH.clientId in index.html. When set, only signed-in users on the
-  // allowed list can send data (their Google ID token is checked here on the server).
-  CLIENT_ID: '',
-  ALLOWED_EMAILS: [],     // e.g. ['someone@gmail.com']; empty with empty domains = any verified Google account
+  // Sign-in with Gmail: deploy the web app with Execute as "User accessing the web app" and
+  // Who has access "Anyone with Google account". Google then asks people to sign in, this
+  // script sees their email, and only accounts that can open the Sheet above may use the form.
+  // ALLOWED_EMAILS / ALLOWED_DOMAINS narrow it further (empty = everyone the Sheet is shared with).
+  ALLOWED_EMAILS: [],     // e.g. ['someone@gmail.com']
   ALLOWED_DOMAINS: [],    // e.g. ['example.go.th']
+  // Optional: email → physicist name, ticked automatically on the form after sign-in.
+  PHYSICIST_EMAILS: {},   // e.g. { 'someone@gmail.com': 'วันนิตา มะลิลา' }
+  // Only for the separate hosted page (index.html outside Apps Script) with its own Google button.
+  CLIENT_ID: '',
   PHOTO_FOLDER: 'Linac QA Photos'
 };
 
@@ -58,6 +63,44 @@ function setup() {
   Object.keys(TABS).forEach(k => tab_(TABS[k]));
   const first = ss_().getSheets()[0];
   if (first.getName() !== TABS.records.name && first.getLastRow() === 0) ss_().deleteSheet(first);
+  // One shared photo folder for everyone (needed when the app runs as each signed-in user).
+  const props = PropertiesService.getScriptProperties();
+  let dir = null;
+  try { dir = props.getProperty('PHOTO_FOLDER_ID') && DriveApp.getFolderById(props.getProperty('PHOTO_FOLDER_ID')); } catch (e) { dir = null; }
+  if (!dir) {
+    dir = folder_(DriveApp.getRootFolder(), CONFIG.PHOTO_FOLDER);
+    props.setProperty('PHOTO_FOLDER_ID', dir.getId());
+  }
+  Logger.log('Sheet: ' + ss_().getUrl());
+  Logger.log('Photo folder: ' + dir.getUrl() + '  (share this folder and the Sheet with staff as Editor)');
+}
+
+/* ---------- who is signed in ---------- */
+function whoAmI() {
+  const email = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  let switchUrl = '';
+  try { switchUrl = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(ScriptApp.getService().getUrl()); } catch (e) { /* not deployed */ }
+  const base = { email, name: email, physicist: CONFIG.PHYSICIST_EMAILS[email] || '', switchUrl };
+  const denied = allowError_(email);
+  if (denied) return Object.assign(base, { allowed: false, message: denied });
+  return Object.assign(base, { allowed: true });
+}
+
+// Returns a reason (Thai) when this account may not use the form, or '' when it may.
+function allowError_(email) {
+  const emails = CONFIG.ALLOWED_EMAILS.map(x => x.toLowerCase());
+  const domains = CONFIG.ALLOWED_DOMAINS.map(x => x.toLowerCase());
+  const restricted = emails.length || domains.length;
+  if (!email) {
+    return restricted ? 'ระบบจำกัดผู้ใช้ไว้ แต่ไม่ทราบอีเมลของบัญชีนี้ ผู้ดูแลต้องตั้ง Deploy เป็น Execute as: User accessing the web app' : '';
+  }
+  if (restricted && !emails.includes(email) && !domains.includes(email.split('@')[1])) {
+    return email + ' ไม่อยู่ในรายชื่อผู้ใช้ ติดต่อผู้ดูแลเพื่อเพิ่มบัญชี';
+  }
+  try { ss_(); } catch (e) {
+    return email + ' ยังไม่มีสิทธิ์เข้าถึง Google Sheet ของระบบ ติดต่อผู้ดูแลให้แชร์ Sheet (Editor) ให้บัญชีนี้';
+  }
+  return '';
 }
 
 // …/exec shows the form; …/exec?ping=1 returns a JSON health check.
@@ -121,7 +164,18 @@ function handle_(body) {
 /* ---------- sign-in check ---------- */
 function checkUser_(data) {
   const sent = data.recordedBy || {};
-  if (!CONFIG.CLIENT_ID) return { name: sent.name || '', email: sent.email || '' };
+  // Signed in through the Apps Script web app: Google tells us who it is.
+  const session = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  if (session) {
+    const denied = allowError_(session);
+    if (denied) throw new Error(denied);
+    return { name: CONFIG.PHYSICIST_EMAILS[session] || session, email: session };
+  }
+  if (!CONFIG.CLIENT_ID) {
+    const denied = allowError_('');
+    if (denied) throw new Error(denied);
+    return { name: sent.name || '', email: sent.email || '' };
+  }
   if (!data.idToken) throw new Error('ต้องเข้าสู่ระบบด้วย Google ก่อนส่งข้อมูล');
   const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(data.idToken), { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('การเข้าสู่ระบบหมดอายุ เข้าสู่ระบบอีกครั้งแล้วส่งใหม่');
@@ -139,7 +193,7 @@ function checkUser_(data) {
 
 /* ---------- photos ---------- */
 function savePhotos_(id, info, photos) {
-  const root = folder_(DriveApp.getRootFolder(), CONFIG.PHOTO_FOLDER);
+  const root = photoRoot_();
   const name = [info.date, info.machine, id].filter(Boolean).join(' ');
   const existing = root.getFoldersByName(name);
   if (!photos.length) {
@@ -157,6 +211,16 @@ function savePhotos_(id, info, photos) {
     return [id, info.machine, info.date, p.category, p.cap, file.getName(), file.getUrl()];
   }).filter(Boolean);
   return { rows, folderUrl: dir.getUrl() };
+}
+
+function photoRoot_() {
+  const id = PropertiesService.getScriptProperties().getProperty('PHOTO_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) {
+      throw new Error('เปิดโฟลเดอร์รูป Linac QA Photos ไม่ได้ ติดต่อผู้ดูแลให้แชร์โฟลเดอร์ (Editor) ให้บัญชีนี้');
+    }
+  }
+  return folder_(DriveApp.getRootFolder(), CONFIG.PHOTO_FOLDER);
 }
 
 function folder_(parent, name) {

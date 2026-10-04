@@ -96,7 +96,7 @@ h1 { font-size: 1.125rem; font-weight: 700; margin: 0; line-height: 1.25; letter
 .progress span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s ease; }
 
 .btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 500 .875rem/1.2 var(--f-sans);
-  padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
+  padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; text-decoration: none; }
 .btn:hover { background: var(--sunken); }
 .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .btn.primary:hover { opacity: .9; }
@@ -354,9 +354,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle" hidden>
   <div class="gate-card">
     <div class="brand"><span class="lamp" aria-hidden="true"></span><div><h2 id="gateTitle">Lampang Cancer Hospital, <span class="nw">Linac QA</span></h2></div></div>
-    <p>เข้าสู่ระบบด้วยบัญชี Google (Gmail) เพื่อบันทึกผล QA</p>
+    <p id="gateText">เข้าสู่ระบบด้วยบัญชี Google (Gmail) เพื่อบันทึกผล QA</p>
     <div class="gbtn" id="gBtn"></div>
     <p class="gate-err" id="gateErr" role="alert" hidden></p>
+    <a class="btn" id="gateSwitch" target="_top" rel="noopener" hidden>เข้าสู่ระบบด้วยบัญชี Gmail อื่น</a>
   </div>
 </div>
 
@@ -378,6 +379,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       <div class="who" id="who" hidden>
         <span id="whoAva"></span><span class="wname" id="whoName"></span>
         <button class="btn small" type="button" id="signOut">ออกจากระบบ</button>
+        <a class="btn small" id="switchAcct" target="_top" rel="noopener" hidden>สลับบัญชี</a>
       </div>
     </div>
     <div class="tabrow">
@@ -1646,6 +1648,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   function showUser() {
     const who = $('#who');
     who.hidden = !currentUser;
+    // inside Apps Script, Google handles the session: offer "switch account" instead of sign-out
+    $('#signOut').hidden = GAS;
+    $('#switchAcct').hidden = !GAS || !$('#switchAcct').getAttribute('href');
     if (!currentUser) return;
     $('#whoName').textContent = currentUser.name || currentUser.email;
     $('#whoName').title = currentUser.email;
@@ -1665,7 +1670,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     currentUser = user;
     lockPage(false); gateError(''); showUser();
     // tick the matching physicist if nobody is ticked yet
-    const mapped = AUTH.physicistEmails[String(user.email).toLowerCase()];
+    const mapped = user.physicist || AUTH.physicistEmails[String(user.email).toLowerCase()];
     const idx = mapped ? PHYSICISTS.indexOf(mapped) : -1;
     if (idx >= 0 && !physicistText()) { state.values['phys_' + idx] = '1'; fillInputs(); changed(); }
     else updateAll();
@@ -1714,7 +1719,34 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   }
   $('#signOut').addEventListener('click', signOut);
 
+  // Served by Apps Script: Google signs the user in before the page loads; ask the server who it is
+  // and whether that account may use the form (see whoAmI in Code.gs).
+  function gasAuth() {
+    lockPage(true);
+    $('#gateText').textContent = 'กำลังตรวจสอบบัญชี Google…';
+    $('#gBtn').hidden = true;
+    google.script.run
+      .withSuccessHandler(r => {
+        r = r || {};
+        if (r.switchUrl) { $('#gateSwitch').href = r.switchUrl; $('#switchAcct').href = r.switchUrl; }
+        if (!r.allowed) {
+          $('#gateText').textContent = r.email ? 'บัญชี ' + r.email + ' ยังใช้งานไม่ได้' : 'ยังใช้งานไม่ได้';
+          gateError(r.message || 'บัญชีนี้ไม่มีสิทธิ์ใช้งาน');
+          $('#gateSwitch').hidden = !r.switchUrl;
+          return;
+        }
+        if (!r.email) { lockPage(false); return; }   // open access: the server does not know who this is
+        signedIn({ email: r.email, name: r.name || r.email, picture: '', physicist: r.physicist || '' });
+      })
+      .withFailureHandler(err => {
+        $('#gateText').textContent = 'ตรวจสอบบัญชีไม่สำเร็จ';
+        gateError((err && err.message || String(err)) + ' ลองโหลดหน้าใหม่อีกครั้ง');
+      })
+      .whoAmI();
+  }
+
   function initAuth() {
+    if (GAS) { gasAuth(); return; }
     if (!authOn) return;
     const saved = store.get(USER_KEY);
     if (saved && saved.email && saved.until > Date.now() && isAllowed(saved.email)) signedIn(saved);
