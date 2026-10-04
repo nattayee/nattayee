@@ -407,6 +407,12 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     { name: 'VersaHD', room: 'L3', value: 'VersaHD (L3)' }
   ];
   const PHYSICISTS = ['จำเนียรพันธ์ เรือนศรี', 'วันนิตา มะลิลา', 'นัฐวุฒิ ยี่นาง', 'วรรณวนัช สุมนาพันธุ์'];
+  const FREQS = ['Weekly', 'Monthly', 'Annually', 'PM'];
+  const freqText = () => {
+    const f = state.values.freq;
+    if (f === 'other') return String(state.values.freq_other || '').trim();
+    return f || '';
+  };
   const physicistText = () => {
     const names = PHYSICISTS.filter((n, i) => state.values['phys_' + i] === '1');
     if (state.values.phys_other_on === '1') String(state.values.phys_other || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => names.push(x));
@@ -473,7 +479,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const fmtStep = n => (n > 0 ? '+' : '−') + Math.abs(n) + ' cm';
 
   const SECTIONS = [
-    { id: 'info', name: 'ข้อมูลการตรวจ', tab: 'ข้อมูล', sub: 'Machine · Date · Physicist', blocks: [{ type: 'info' }] },
+    { id: 'info', name: 'ข้อมูลการตรวจ', tab: 'ข้อมูล', sub: 'Machine · ความถี่ของ QA · Date · Physicist', blocks: [{ type: 'info' }] },
 
     { id: 'gantry', name: 'Gantry', tab: 'Gantry', sub: 'มุม gantry และค่าที่เครื่องแสดง', blocks: [
       { type: 'list', items: [
@@ -746,6 +752,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '<fieldset class="fld full"><legend class="flabel">Machine</legend><div class="opts">' + MACHINES.map((m, i) =>
           '<label class="opt"><input type="radio" name="machine" id="f-machine-' + i + '" data-radio="machine" value="' + esc(m.value) + '"><span>' + esc(m.name) + '<small>' + esc(m.room) + '</small></span></label>').join('') +
         '</div></fieldset>' +
+        '<fieldset class="fld full"><legend class="flabel">ความถี่ของ QA</legend><div class="opts">' + FREQS.map((f, i) =>
+          '<label class="opt"><input type="radio" name="freq" id="f-freq-' + i + '" data-radio="freq" value="' + f + '"><span>' + f + '</span></label>').join('') +
+        '<label class="opt"><input type="radio" name="freq" id="f-freq-other" data-radio="freq" value="other" aria-controls="f-freq_other"><span>อื่นๆ</span></label></div>' +
+        '<input type="text" class="other" id="f-freq_other" data-id="freq_other" placeholder="ระบุความถี่ เช่น Quarterly, หลังซ่อม" aria-label="ความถี่ของ QA อื่นๆ" autocomplete="off" hidden></fieldset>' +
         '<label class="fld full date"><span class="flabel">Date</span><input type="date" id="f-date" data-id="date"></label>' +
         '<fieldset class="fld full"><legend class="flabel">Physicist <span class="hint">· เลือกได้หลายคน</span></legend><div class="opts">' + PHYSICISTS.map((n, i) =>
           '<label class="opt check"><input type="checkbox" id="f-phys-' + i + '" data-check="phys_' + i + '"><span>' + esc(n) + '</span></label>').join('') +
@@ -845,6 +855,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   function syncOther() {
     const box = $('#f-phys_other');
     if (box) box.hidden = state.values.phys_other_on !== '1';
+    const fbox = $('#f-freq_other');
+    if (fbox) fbox.hidden = state.values.freq !== 'other';
   }
   function fillInputs() {
     main.querySelectorAll('[data-id]').forEach(el => { el.value = valueOf(el.dataset.id); });
@@ -1104,8 +1116,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         (st.fail ? '<span class="chip bad">ไม่ผ่าน ' + st.fail + '</span>' : '') + pchip;
     });
 
-    const m = valueOf('machine'), d = valueOf('date'), p = physicistText();
-    $('#metaLine').textContent = [m || 'ยังไม่ระบุเครื่อง', thaiDate(d), p].filter(Boolean).join(' · ');
+    const m = valueOf('machine'), d = valueOf('date'), p = physicistText(), fq = freqText();
+    $('#metaLine').textContent = [m || 'ยังไม่ระบุเครื่อง', fq, thaiDate(d), p].filter(Boolean).join(' · ');
 
     renderSummary(stats, fails, tp, tf, tq);
   }
@@ -1167,7 +1179,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const statusLabel = s => ({ pass: 'Pass', fail: 'Fail', rec: 'Recorded', invalid: 'Invalid', nonom: 'No nominal' }[s] || '');
   function buildCSV() {
     const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['Date', valueOf('date')], ['Physicist', physicistText()], [],
+    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['QA frequency', freqText()], ['Date', valueOf('date')], ['Physicist', physicistText()], [],
       ['Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']];
     order.forEach(id => SEC[id].cells.forEach(c => {
       const r = c.r || evaluate(c);
@@ -1430,7 +1442,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     const t = e.target;
     if (t.dataset.addphoto) return;
     if (t.dataset.cap) { setCaption(t.dataset.cap, t.value); return; }
-    if (t.dataset.radio) { if (t.checked) { state.values[t.dataset.radio] = t.value; changed(); } }
+    if (t.dataset.radio) {
+      if (t.checked) {
+        state.values[t.dataset.radio] = t.value;
+        syncOther();
+        if (t.dataset.radio === 'freq' && t.value === 'other') $('#f-freq_other').focus();
+        changed();
+      }
+    }
     else if (t.dataset.check) {
       state.values[t.dataset.check] = t.checked ? '1' : '';
       if (t.dataset.check === 'phys_other_on') { syncOther(); if (t.checked) $('#f-phys_other').focus(); }
