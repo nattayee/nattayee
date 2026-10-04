@@ -28,6 +28,8 @@
   --beam: #FFF3D2;            /* light field through the MLC opening */
   --leaf: #8D9AAA;
   --leaf-edge: #C9D1DA;
+  --scrim: rgba(8, 12, 18, .95);  /* photo viewer backdrop, same in both themes */
+  --on-scrim: #F2F5F8;
   --f-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --stick: 118px;
@@ -218,6 +220,31 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .nom { display: flex; align-items: center; gap: 4px; font: 400 .7rem/1 var(--f-mono); color: var(--muted); margin-bottom: 2px; }
 .nom input { width: 3.8rem; height: 1.45rem; padding: 0 5px; border: 1px dashed var(--line-strong); border-radius: 4px; background: transparent; color: var(--muted); font: 400 .72rem/1 var(--f-mono); }
 
+/* photos */
+.pdrop { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px; border: 1.5px dashed var(--line-strong); border-radius: 10px; background: var(--sunken); }
+.pdrop.over { border-color: var(--accent); background: var(--accent-soft); }
+.pdrop .hint { flex: 1 1 14rem; }
+.addphoto { position: relative; overflow: hidden; }
+.addphoto input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.addphoto:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 10px; align-items: start; }
+.ph { margin: 0; display: flex; flex-direction: column; gap: 6px; position: relative; min-width: 0; }
+.ph-open { appearance: none; display: block; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--sunken); cursor: zoom-in; }
+.ph-open img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ph-del { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--scrim); color: var(--on-scrim); cursor: pointer; display: grid; place-items: center; }
+.ph-del svg { width: 14px; height: 14px; }
+.ph-cap { width: 100%; min-width: 0; height: 2rem; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); font-size: .8rem; }
+.lb { position: fixed; inset: 0; z-index: 60; background: var(--scrim); color: var(--on-scrim); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  padding: calc(env(safe-area-inset-top, 0px) + 52px) 12px calc(env(safe-area-inset-bottom, 0px) + 16px); }
+.lb figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; max-height: 100%; }
+.lb img { max-width: 100%; max-height: calc(100vh - 140px); object-fit: contain; border-radius: 6px; }
+.lb figcaption { font-size: .875rem; text-align: center; }
+.lb button { appearance: none; border: 0; background: none; color: var(--on-scrim); cursor: pointer; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
+.lb button:hover:not(:disabled) { background: rgba(255, 255, 255, .12); }
+.lb button:disabled { opacity: .25; cursor: default; }
+.lb button svg { width: 22px; height: 22px; }
+.lb .lb-x { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 6px); right: 8px; }
+
 /* info + note + summary */
 .info { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; }
 .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 0; margin: 0; padding: 0; }
@@ -273,8 +300,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .navb svg { width: 14px; height: 14px; flex: none; }
 .navb[hidden] { display: none !important; }
 
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50;
-  background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: .875rem; box-shadow: var(--shadow-lg); max-width: calc(100% - 32px); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 70;
+  background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: .875rem; box-shadow: var(--shadow-lg); max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 14px; }
+.toast button { appearance: none; border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 4px; white-space: nowrap; }
 
 @media (max-width: 560px) {
   .sec { padding: 16px; }
@@ -335,7 +364,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
 <main class="wrap" id="main"></main>
 
-<div class="toast" id="toast" role="status" hidden></div>
+<div class="toast" id="toast" role="status" hidden><span id="toastText"></span><button type="button" id="toastAct" hidden></button></div>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="ดูรูปประกอบ" hidden>
+  <button type="button" class="lb-x" id="lbClose" aria-label="ปิด"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
+  <button type="button" id="lbPrev" aria-label="รูปก่อนหน้า"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
+  <figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
+  <button type="button" id="lbNext" aria-label="รูปถัดไป"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
+</div>
 
 <script>
 (function () {
@@ -583,6 +619,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   }
 
   /* tag each cell with where it lives (for summary + CSV) */
+  const NO_PHOTO = ['info', 'note', 'summary'];
+  SECTIONS.forEach(s => { if (!NO_PHOTO.includes(s.id)) s.blocks.push({ type: 'photos', sec: s.id }); });
+
   const SEC = {};
   SECTIONS.forEach(s => {
     SEC[s.id] = s; s.cells = [];
@@ -728,6 +767,13 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       body = tableHTML(b);
     } else if (b.type === 'note') {
       body = '<label class="fld"><span class="flabel">QA Note</span><textarea class="note" id="f-note" data-id="note" placeholder="บันทึกข้อสังเกต ปัญหาที่พบ หรือการแก้ไข"></textarea></label>';
+    } else if (b.type === 'photos') {
+      head = '<div class="block-head"><h3>รูปประกอบ</h3><span class="chip" data-pcount>0 รูป</span></div>';
+      body = '<div class="pdrop" data-photos="' + b.sec + '">' +
+        '<label class="btn addphoto"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5h2.5L6 3.5h4l1.5 2H14v7.5H2z"/><circle cx="8" cy="9" r="2.3"/></svg>' +
+        '<span>แนบรูป</span><input type="file" accept="image/*" multiple data-addphoto="' + b.sec + '" aria-label="แนบรูปหมวด ' + esc(SEC[b.sec].name) + '"></label>' +
+        '<p class="hint">ถ่ายจากกล้องหรือเลือกจากคลังภาพ เลือกได้หลายรูป บนคอมพิวเตอร์ลากไฟล์มาวางที่นี่ได้</p></div>' +
+        '<div class="pgrid" data-pgrid="' + b.sec + '" hidden></div>';
     } else if (b.type === 'summary') {
       body = '<div id="sumBox" class="block"></div>';
     } else if (b.type === 'tools') {
@@ -743,7 +789,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '<div class="subpanel" id="importBox" hidden><p class="hint">วาง JSON ที่ส่งออกไว้ หรือเลือกไฟล์ .json แล้วกด “นำเข้า” ค่าปัจจุบันจะถูกแทนที่</p>' +
         '<textarea id="importText" aria-label="JSON สำหรับนำเข้า" placeholder="{ &quot;values&quot;: { … } }"></textarea>' +
         '<div class="row"><input type="file" id="importFile" accept=".json,application/json" aria-label="เลือกไฟล์ JSON"><button class="btn primary small" type="button" data-act="do-import">นำเข้า</button></div></div>' +
-        '<div class="subpanel" id="clearBox" hidden><p class="hint">ล้างค่าที่กรอกทั้งหมดของรอบนี้? ลำดับหมวดหมู่จะไม่เปลี่ยน</p>' +
+        '<div class="subpanel" id="clearBox" hidden><p class="hint">ล้างค่าที่กรอกและรูปประกอบทั้งหมดของรอบนี้? ลำดับหมวดหมู่จะไม่เปลี่ยน</p>' +
         '<div class="row"><button class="btn danger small" type="button" data-act="do-clear">ล้างข้อมูลทั้งหมด</button><button class="btn small" type="button" data-act="cancel-clear">ยกเลิก</button></div></div>' +
         '<p class="saved" id="savedAt"></p>';
     }
@@ -1047,12 +1093,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
     order.forEach(id => {
       const st = stats[id], tab = tabsEl.querySelector('[data-target="' + id + '"]'), statEl = $('[data-stat]', secEls[id]);
-      if (!st) { if (tab) tab.dataset.st = 'none'; statEl.innerHTML = ''; return; }
+      const pc = photos.filter(x => x.sec === id).length;
+      const pchip = pc ? '<span class="chip">รูป ' + pc + '</span>' : '';
+      if (!st) { if (tab) tab.dataset.st = 'none'; statEl.innerHTML = pchip; return; }
       const done = st.pass + st.fail;
       const s = st.fail ? 'fail' : done === st.total ? 'done' : done ? 'part' : 'empty';
       if (tab) { tab.dataset.st = s; $('.cnt', tab).textContent = done + '/' + st.total; }
       statEl.innerHTML = '<span class="chip' + (done === st.total && !st.fail ? ' ok' : '') + '">กรอกแล้ว ' + done + '/' + st.total + '</span>' +
-        (st.fail ? '<span class="chip bad">ไม่ผ่าน ' + st.fail + '</span>' : '');
+        (st.fail ? '<span class="chip bad">ไม่ผ่าน ' + st.fail + '</span>' : '') + pchip;
     });
 
     const m = valueOf('machine'), d = valueOf('date'), p = physicistText();
@@ -1130,10 +1178,15 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       const dev = r.dev != null && c.kind !== 'calc' ? r.dev.toFixed(dpOf(c.tolUnit || c.unit)) + ' ' + (c.tolUnit || c.unit) : '';
       rows.push([SEC[id].name, test, c.item, nom == null ? '' : nom, val, unit, dev, c.limit, statusLabel(r.status)]);
     }));
+    order.forEach(id => {
+      const ps = photos.filter(x => x.sec === id);
+      if (ps.length) rows.push([SEC[id].name, 'รูปประกอบ', ps.map(x => x.cap || x.name).join(' / '), '', ps.length, 'รูป', '', '', '']);
+    });
     rows.push([], ['QA Note', valueOf('note')]);
     return rows.map(r => r.map(q).join(',')).join('\r\n');
   }
-  const buildJSON = () => JSON.stringify({ app: 'linac-mechanical-qa', version: 1, exportedAt: new Date().toISOString(), order, values: state.values, nominals: state.nominals }, null, 2);
+  const buildJSON = () => JSON.stringify({ app: 'linac-mechanical-qa', version: 1, exportedAt: new Date().toISOString(), order, values: state.values, nominals: state.nominals,
+    photos: photos.map(x => ({ id: x.id, sec: x.sec, name: x.name, cap: x.cap, w: x.w, h: x.h, at: x.at, data: x.data })) }, null, 2);
   const fileBase = () => 'linac-qa_' + (valueOf('machine') || 'machine').replace(/[^\w฀-๿-]+/g, '-') + '_' + (valueOf('date') || todayISO());
 
   function copyText(text, label) {
@@ -1165,10 +1218,188 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       DEFAULT_ORDER.forEach(id => { if (!o.includes(id)) o.push(id); });
       order = o;
     }
+    if (Array.isArray(obj.photos)) replacePhotos(obj.photos.filter(x => x && SEC[x.sec] && /^data:image\//.test(x.data || '')));
     fillInputs(); applyOrder(); save();
     $('#importBox').hidden = true; $('[data-act="import"]').setAttribute('aria-expanded', 'false');
     toast('นำเข้าข้อมูลแล้ว');
   }
+
+  /* ================= photos ================= */
+  // Photos are downscaled to JPEG and kept in this browser's IndexedDB (memory only if that is blocked).
+  const PHOTO_MAX = 1600;
+  let photos = [];
+  let photoStoreOK = true;
+  const photoDB = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open('linac-mech-qa', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id' });
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
+    }));
+    const tx = (mode, fn) => open().then(db => new Promise((res, rej) => {
+      const t = db.transaction('photos', mode), req = fn(t.objectStore('photos'));
+      t.oncomplete = () => res(req && req.result);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    }));
+    return {
+      all: () => tx('readonly', st => st.getAll()),
+      put: rec => tx('readwrite', st => st.put(rec)),
+      del: id => tx('readwrite', st => st.delete(id)),
+      replace: recs => tx('readwrite', st => { st.clear(); recs.forEach(r => st.put(r)); })
+    };
+  })();
+  const storeFail = () => {
+    if (!photoStoreOK) return;
+    photoStoreOK = false;
+    toast('เบราว์เซอร์นี้เก็บรูปไม่ได้ รูปจะหายเมื่อปิดหน้า คัดลอก JSON เก็บไว้');
+  };
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+  function compressImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        try {
+          const k = Math.min(1, PHOTO_MAX / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+          const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+          res({ data: cv.toDataURL('image/jpeg', 0.82), w, h });
+        } catch (e) { rej(e); } finally { URL.revokeObjectURL(url); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
+  async function addPhotos(sec, fileList) {
+    const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
+    if (!files.length) { toast('เลือกได้เฉพาะไฟล์รูปภาพ'); return; }
+    toast('กำลังเพิ่มรูป ' + files.length + ' รูป…');
+    let ok = 0, bad = 0;
+    for (const f of files) {
+      try {
+        const r = await compressImage(f);
+        const rec = { id: uid(), sec, name: f.name || 'photo.jpg', cap: '', data: r.data, w: r.w, h: r.h, at: Date.now() };
+        photos.push(rec); ok++;
+        if (photoStoreOK) await photoDB.put(rec).catch(storeFail);
+      } catch (e) { bad++; }
+    }
+    renderPhotos(sec); updateAll();
+    toast(ok ? 'แนบรูปแล้ว ' + ok + ' รูป' + (bad ? ' · เปิดไม่ได้ ' + bad + ' ไฟล์' : '') : 'เปิดไฟล์รูปไม่ได้ ลองบันทึกเป็น JPG หรือ PNG แล้วแนบใหม่');
+  }
+
+  function removePhoto(id) {
+    const i = photos.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const rec = photos.splice(i, 1)[0];
+    if (photoStoreOK) photoDB.del(id).catch(storeFail);
+    renderPhotos(rec.sec); updateAll();
+    toast('ลบรูปแล้ว', { label: 'เลิกทำ', fn: () => {
+      photos.push(rec); photos.sort((a, b) => a.at - b.at);
+      if (photoStoreOK) photoDB.put(rec).catch(storeFail);
+      renderPhotos(rec.sec); updateAll();
+    } });
+  }
+
+  function replacePhotos(list) {
+    photos = list.map(x => ({ id: x.id || uid(), sec: x.sec, name: x.name || 'photo.jpg', cap: x.cap || '', data: x.data, w: x.w || 0, h: x.h || 0, at: x.at || Date.now() }));
+    photos.sort((a, b) => a.at - b.at);
+    if (photoStoreOK) photoDB.replace(photos).catch(storeFail);
+    renderPhotos(); updateAll();
+  }
+
+  const DEL_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  function renderPhotos(only) {
+    main.querySelectorAll('[data-pgrid]').forEach(grid => {
+      const sec = grid.dataset.pgrid;
+      if (only && sec !== only) return;
+      const ps = photos.filter(x => x.sec === sec);
+      grid.hidden = !ps.length;
+      grid.innerHTML = ps.map((x, i) =>
+        '<figure class="ph"><button type="button" class="ph-open" data-open="' + x.id + '" aria-label="ดูรูป ' + (i + 1) + ' ' + esc(x.cap || x.name) + '">' +
+        '<img src="' + x.data + '" alt="' + esc(x.cap || ('รูปประกอบ ' + SEC[sec].name + ' ' + (i + 1))) + '" loading="lazy"></button>' +
+        '<button type="button" class="ph-del" data-del="' + x.id + '" aria-label="ลบรูป ' + (i + 1) + '">' + DEL_ICON + '</button>' +
+        '<input type="text" class="ph-cap" id="cap-' + x.id + '" data-cap="' + x.id + '" placeholder="คำอธิบายรูป" aria-label="คำอธิบายรูป ' + (i + 1) + '" autocomplete="off"></figure>'
+      ).join('');
+      grid.querySelectorAll('[data-cap]').forEach(inp => { const r = photos.find(x => x.id === inp.dataset.cap); inp.value = r ? r.cap : ''; });
+      const cnt = $('[data-pcount]', grid.closest('.block'));
+      if (cnt) cnt.textContent = ps.length + ' รูป';
+    });
+  }
+
+  const capTimers = {};
+  function setCaption(id, text) {
+    const r = photos.find(x => x.id === id);
+    if (!r) return;
+    r.cap = text;
+    clearTimeout(capTimers[id]);
+    capTimers[id] = setTimeout(() => { if (photoStoreOK) photoDB.put(r).catch(storeFail); }, 400);
+  }
+
+  /* viewer */
+  const lb = $('#lb');
+  let lbList = [], lbIdx = 0, lbReturn = null;
+  function openViewer(id, opener) {
+    const r = photos.find(x => x.id === id);
+    if (!r) return;
+    lbList = photos.filter(x => x.sec === r.sec);
+    lbIdx = lbList.indexOf(r); lbReturn = opener || null;
+    lb.hidden = false; showViewer();
+    $('#lbClose').focus();
+  }
+  function showViewer() {
+    const r = lbList[lbIdx];
+    $('#lbImg').src = r.data;
+    $('#lbImg').alt = r.cap || r.name;
+    $('#lbCap').textContent = SEC[r.sec].name + ' · ' + (lbIdx + 1) + '/' + lbList.length + (r.cap ? ' · ' + r.cap : '');
+    $('#lbPrev').disabled = lbIdx === 0;
+    $('#lbNext').disabled = lbIdx === lbList.length - 1;
+  }
+  function closeViewer() {
+    lb.hidden = true; $('#lbImg').removeAttribute('src');
+    if (lbReturn && document.body.contains(lbReturn)) lbReturn.focus();
+  }
+  $('#lbClose').addEventListener('click', closeViewer);
+  $('#lbPrev').addEventListener('click', () => { if (lbIdx > 0) { lbIdx--; showViewer(); } });
+  $('#lbNext').addEventListener('click', () => { if (lbIdx < lbList.length - 1) { lbIdx++; showViewer(); } });
+  lb.addEventListener('click', e => { if (e.target === lb) closeViewer(); });
+  document.addEventListener('keydown', e => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeViewer(); }
+    else if (e.key === 'ArrowLeft') $('#lbPrev').click();
+    else if (e.key === 'ArrowRight') $('#lbNext').click();
+    else if (e.key === 'Tab') {
+      const f = Array.from(lb.querySelectorAll('button:not(:disabled)'));
+      const i = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
+  });
+
+  main.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.addphoto) { addPhotos(t.dataset.addphoto, t.files); t.value = ''; }
+  });
+  main.addEventListener('dragover', e => {
+    const z = e.target.closest('[data-photos]');
+    if (!z || !e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+    e.preventDefault(); z.classList.add('over');
+  });
+  main.addEventListener('dragleave', e => {
+    const z = e.target.closest('[data-photos]');
+    if (z && !z.contains(e.relatedTarget)) z.classList.remove('over');
+  });
+  main.addEventListener('drop', e => {
+    const z = e.target.closest('[data-photos]');
+    if (!z || !e.dataTransfer || !e.dataTransfer.files.length) return;
+    e.preventDefault(); z.classList.remove('over');
+    addPhotos(z.dataset.photos, e.dataTransfer.files);
+  });
 
   /* ================= events ================= */
   let saveTimer = null;
@@ -1196,6 +1427,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
   main.addEventListener('input', e => {
     const t = e.target;
+    if (t.dataset.addphoto) return;
+    if (t.dataset.cap) { setCaption(t.dataset.cap, t.value); return; }
     if (t.dataset.radio) { if (t.checked) { state.values[t.dataset.radio] = t.value; changed(); } }
     else if (t.dataset.check) {
       state.values[t.dataset.check] = t.checked ? '1' : '';
@@ -1207,6 +1440,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   });
 
   main.addEventListener('click', e => {
+    const del = e.target.closest('[data-del]');
+    if (del) { removePhoto(del.dataset.del); return; }
+    const op = e.target.closest('[data-open]');
+    if (op) { openViewer(op.dataset.open, op); return; }
     const pfb = e.target.closest('[data-pf]');
     if (pfb) {
       const id = pfb.dataset.pf, v = pfb.dataset.v;
@@ -1256,6 +1493,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     }
     else if (a === 'do-clear') {
       state.values = { date: todayISO() }; state.nominals = {};
+      replacePhotos([]);
       fillInputs(); updateAll(); save();
       $('#clearBox').hidden = true; $('[data-act="clear"]').setAttribute('aria-expanded', 'false');
       toast('ล้างข้อมูลแล้ว');
@@ -1263,19 +1501,29 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     else if (a === 'cancel-clear') { $('#clearBox').hidden = true; $('[data-act="clear"]').setAttribute('aria-expanded', 'false'); }
   });
 
-  let toastTimer = null;
-  function toast(msg) {
-    const t = $('#toast');
-    t.textContent = msg; t.hidden = false;
+  let toastTimer = null, toastFn = null;
+  function toast(msg, action) {
+    const t = $('#toast'), b = $('#toastAct');
+    $('#toastText').textContent = msg; t.hidden = false;
+    toastFn = action ? action.fn : null;
+    b.hidden = !action; if (action) b.textContent = action.label;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+    toastTimer = setTimeout(() => { t.hidden = true; toastFn = null; }, action ? 6000 : 2200);
   }
+  $('#toastAct').addEventListener('click', () => {
+    const fn = toastFn; toastFn = null; $('#toast').hidden = true;
+    if (fn) fn();
+  });
 
   /* ================= boot ================= */
   fillInputs();
   applyOrder();
   setStick();
   showSaved();
+  photoDB.all().then(list => {
+    photos = (list || []).filter(x => SEC[x.sec]).sort((a, b) => a.at - b.at);
+    renderPhotos(); updateAll();
+  }).catch(() => { photoStoreOK = false; renderPhotos(); });
   const hash = (location.hash || '').slice(1);
   if (SEC[hash]) requestAnimationFrame(() => goToSection(hash));
   else spy();
