@@ -857,7 +857,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '<div class="row"><button class="btn primary" type="button" data-act="send-sheet" id="sendBtn">ส่งผลไป Google Sheet</button>' +
         '<label class="opt check"><input type="checkbox" id="f-send_photos" data-check="send_photos"><span>ส่งรูปประกอบด้วย</span></label></div>' +
         '<div class="row"><span class="rid" id="sheetRid"></span>' +
-        (SHEET.sheetUrl ? '<a class="extlink" href="' + esc(SHEET.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a>' : '') + '</div></div>';
+        (SHEET.sheetUrl ? '<a class="extlink" href="' + esc(SHEET.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a>' : '') +
+        (SHEET.endpoint ? '<a class="extlink" href="' + esc(SHEET.endpoint) + '" target="_blank" rel="noopener">ทดสอบการเชื่อมต่อ</a>' : '') + '</div></div>';
     } else if (b.type === 'summary') {
       body = '<div id="sumBox" class="block"></div>';
     } else if (b.type === 'tools') {
@@ -1776,15 +1777,24 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     };
     sending = true; sheetError = ''; renderSheet();
     try {
-      const res = await fetch(SHEET.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), redirect: 'follow' });
-      const out = await res.json();
+      let res;
+      try {
+        res = await fetch(SHEET.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), redirect: 'follow' });
+      } catch (netErr) {
+        throw new Error('เบราว์เซอร์ติดต่อ Apps Script ไม่ได้ ตรวจอินเทอร์เน็ต แล้วกด “ทดสอบการเชื่อมต่อ” ถ้าไม่เห็นข้อความ {"ok":true…} ให้แก้ Deploy ใน Apps Script: Who has access ต้องเป็น Anyone และ Version ต้องเป็น New version');
+      }
+      const text = await res.text();
+      let out;
+      try { out = JSON.parse(text); } catch (parseErr) {
+        throw new Error('Apps Script ตอบกลับไม่ใช่ข้อมูลที่คาดไว้ (HTTP ' + res.status + ') ตรวจว่า Deploy เป็น New version ของโค้ดชุดเต็ม และ Who has access เป็น Anyone');
+      }
       if (!out.ok) throw new Error(out.error || 'Sheet ตอบกลับว่าไม่สำเร็จ');
       state.values.sent_at = new Date().toISOString();
       state.values.sent_sig = sig;
       save();
       toast('ส่งไป Google Sheet แล้ว ' + out.results + ' รายการ' + (out.photos ? ' · รูป ' + out.photos + ' รูป' : ''));
     } catch (e) {
-      sheetError = 'ส่งไม่สำเร็จ: ' + (e && e.message && !/fetch|network|JSON/i.test(e.message) ? e.message : 'เชื่อมต่อ Google Sheet ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่') + ' ข้อมูลยังเก็บอยู่ในเครื่องนี้';
+      sheetError = 'ส่งไม่สำเร็จ: ' + (e && e.message || 'ไม่ทราบสาเหตุ') + ' (ข้อมูลยังเก็บอยู่ในเครื่องนี้)';
       toast('ส่งไป Google Sheet ไม่สำเร็จ');
     } finally {
       sending = false; renderSheet();
