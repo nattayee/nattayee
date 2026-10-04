@@ -334,6 +334,10 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
 .info { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; }
 .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 0; margin: 0; padding: 0; }
 .fld.full { grid-column: 1 / -1; }
+.req { color: var(--bad); margin-left: 3px; }
+.fld-err { margin: 0; color: var(--bad); font-size: .8rem; font-weight: 500; }
+.fld.missing .opt span, .fld.missing input[type="date"], .fld.missing input.other { border-color: var(--bad); }
+.fld.missing .flabel { color: var(--bad); }
 .fld.date input { max-width: 16rem; }
 .flabel { padding: 0; font-size: .75rem; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
 .opts { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -912,19 +916,19 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     let body = '';
     if (b.type === 'info') {
       body = '<div class="info">' +
-        '<fieldset class="fld full"><legend class="flabel">Machine</legend><div class="opts">' + MACHINES.map((m, i) =>
-          '<label class="opt"><input type="radio" name="machine" id="f-machine-' + i + '" data-radio="machine" value="' + esc(m.value) + '"><span>' + esc(m.name) + '<small>' + esc(m.room) + '</small></span></label>').join('') +
-        '</div></fieldset>' +
-        '<fieldset class="fld full"><legend class="flabel">ความถี่ของ QA</legend><div class="opts">' + FREQS.map((f, i) =>
+        '<fieldset class="fld full" id="fs-machine" aria-describedby="err-machine"><legend class="flabel">Machine<span class="req" aria-hidden="true">*</span></legend><div class="opts">' + MACHINES.map((m, i) =>
+          '<label class="opt"><input type="radio" name="machine" id="f-machine-' + i + '" data-radio="machine" value="' + esc(m.value) + '" required><span>' + esc(m.name) + '<small>' + esc(m.room) + '</small></span></label>').join('') +
+        '</div><p class="fld-err" id="err-machine" hidden></p></fieldset>' +
+        '<fieldset class="fld full" id="fs-freq" aria-describedby="err-freq"><legend class="flabel">ความถี่ของ QA<span class="req" aria-hidden="true">*</span></legend><div class="opts">' + FREQS.map((f, i) =>
           '<label class="opt"><input type="radio" name="freq" id="f-freq-' + i + '" data-radio="freq" value="' + f + '"><span>' + f + '</span></label>').join('') +
         '<label class="opt"><input type="radio" name="freq" id="f-freq-other" data-radio="freq" value="other" aria-controls="f-freq_other"><span>อื่นๆ</span></label></div>' +
-        '<input type="text" class="other" id="f-freq_other" data-id="freq_other" placeholder="ระบุความถี่ เช่น Quarterly, หลังซ่อม" aria-label="ความถี่ของ QA อื่นๆ" autocomplete="off" hidden></fieldset>' +
-        '<label class="fld full date"><span class="flabel">Date</span><input type="date" id="f-date" data-id="date"></label>' +
-        '<fieldset class="fld full"><legend class="flabel">Physicist <span class="hint">· เลือกได้หลายคน</span></legend><div class="opts">' + PHYSICISTS.map((n, i) =>
+        '<input type="text" class="other" id="f-freq_other" data-id="freq_other" placeholder="ระบุความถี่ เช่น Quarterly, หลังซ่อม" aria-label="ความถี่ของ QA อื่นๆ" autocomplete="off" hidden><p class="fld-err" id="err-freq" hidden></p></fieldset>' +
+        '<div class="fld full date" id="fs-date"><label class="flabel" for="f-date">Date<span class="req" aria-hidden="true">*</span></label><input type="date" id="f-date" data-id="date" required aria-describedby="err-date"><p class="fld-err" id="err-date" hidden></p></div>' +
+        '<fieldset class="fld full" id="fs-phys" aria-describedby="err-phys"><legend class="flabel">Physicist<span class="req" aria-hidden="true">*</span> <span class="hint">· เลือกได้หลายคน</span></legend><div class="opts">' + PHYSICISTS.map((n, i) =>
           '<label class="opt check"><input type="checkbox" id="f-phys-' + i + '" data-check="phys_' + i + '"><span>' + esc(n) + '</span></label>').join('') +
         '<label class="opt check"><input type="checkbox" id="f-phys-other-on" data-check="phys_other_on" aria-controls="f-phys_other"><span>อื่นๆ</span></label></div>' +
-        '<input type="text" class="other" id="f-phys_other" data-id="phys_other" placeholder="กรอกชื่อ (หลายคนคั่นด้วย ,)" aria-label="ชื่อ Physicist อื่นๆ" autocomplete="off" hidden></fieldset>' +
-        '</div><p class="hint">ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้ ส่งออกเป็น CSV หรือ JSON ได้ที่หมวด “สรุปผล”</p>';
+        '<input type="text" class="other" id="f-phys_other" data-id="phys_other" placeholder="กรอกชื่อ (หลายคนคั่นด้วย ,)" aria-label="ชื่อ Physicist อื่นๆ" autocomplete="off" hidden><p class="fld-err" id="err-phys" hidden></p></fieldset>' +
+        '</div><p class="hint"><span class="req" aria-hidden="true">*</span> จำเป็นต้องกรอกก่อนส่งผลไป Google Sheet · ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้</p>';
     } else if (b.type === 'list') {
       body = '<div class="list">' + b.items.map(it =>
         '<div class="lrow"><div class="lab"><span class="lname">' + esc(it.label) + '</span>' +
@@ -1257,6 +1261,29 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     return isNaN(d) ? iso : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
+  /* required fields in ข้อมูลการตรวจ */
+  let showRequired = false;   // turned on after the first attempt to send with missing fields
+  function infoMissing() {
+    const out = [];
+    if (!valueOf('machine')) out.push({ key: 'machine', label: 'Machine', msg: 'เลือกเครื่อง' });
+    const f = state.values.freq;
+    if (!f) out.push({ key: 'freq', label: 'ความถี่ของ QA', msg: 'เลือกความถี่ของ QA' });
+    else if (f === 'other' && !String(state.values.freq_other || '').trim()) out.push({ key: 'freq', label: 'ความถี่ของ QA', msg: 'ระบุความถี่ในช่อง “อื่นๆ”' });
+    if (!valueOf('date')) out.push({ key: 'date', label: 'Date', msg: 'เลือกวันที่ตรวจ' });
+    if (state.values.phys_other_on === '1' && !String(state.values.phys_other || '').trim()) out.push({ key: 'phys', label: 'Physicist', msg: 'กรอกชื่อในช่อง “อื่นๆ” หรือเอาเครื่องหมายออก' });
+    else if (!physicistText()) out.push({ key: 'phys', label: 'Physicist', msg: 'เลือก Physicist อย่างน้อย 1 คน' });
+    return out;
+  }
+  function paintRequired(missing) {
+    ['machine', 'freq', 'date', 'phys'].forEach(k => {
+      const m = missing.find(x => x.key === k), fs = document.getElementById('fs-' + k), err = document.getElementById('err-' + k);
+      if (!fs || !err) return;
+      const on = showRequired && !!m;
+      fs.classList.toggle('missing', on);
+      err.hidden = !on; err.textContent = on ? m.msg : '';
+    });
+  }
+
   function updateAll() {
     drawMlc();
     const stats = {};
@@ -1280,6 +1307,12 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
       const st = stats[id], tab = tabsEl.querySelector('[data-target="' + id + '"]'), statEl = $('[data-stat]', secEls[id]);
       const pc = photos.filter(x => x.sec === id).length;
       const pchip = pc ? '<span class="chip">รูป ' + pc + '</span>' : '';
+      if (id === 'info') {
+        const miss = infoMissing().length, have = 4 - miss;
+        if (tab) { tab.dataset.st = miss ? (showRequired ? 'fail' : 'part') : 'done'; $('.cnt', tab).textContent = have + '/4'; }
+        statEl.innerHTML = '<span class="chip' + (miss ? (showRequired ? ' bad' : '') : ' ok') + '">ข้อมูลจำเป็น ' + have + '/4</span>';
+        return;
+      }
       if (!st) { if (tab) tab.dataset.st = 'none'; statEl.innerHTML = pchip; return; }
       const done = st.pass + st.fail;
       const s = st.fail ? 'fail' : done === st.total ? 'done' : done ? 'part' : 'empty';
@@ -1291,6 +1324,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     const m = valueOf('machine'), d = valueOf('date'), p = physicistText(), fq = freqText();
     $('#metaLine').textContent = [m || 'ยังไม่ระบุเครื่อง', fq, thaiDate(d), p].filter(Boolean).join(' · ');
 
+    paintRequired(infoMissing());
     renderSummary(stats, fails, tp, tf, tq);
     renderSheet();
   }
@@ -1864,7 +1898,9 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     if (!st) return;
     $('#sheetRid').textContent = 'Record ID ' + valueOf('recordId');
     let msg, k;
+    const missing = infoMissing();
     if (inFrame && !GAS) { msg = 'ส่งไป Google Sheet ได้เมื่อเปิดจากเว็บที่โฮสต์เอง'; k = 'off'; }
+    else if (missing.length && !sending) { msg = 'กรอกข้อมูลการตรวจให้ครบก่อนส่ง ยังขาด: ' + missing.map(x => x.label).join(', '); k = showRequired ? 'err' : 'dirty'; }
     else if (!SHEET.endpoint) { msg = 'ยังไม่ได้เชื่อม Google Sheet ผู้ดูแลต้องใส่ Web app URL ใน SHEET.endpoint (ดู README)'; k = 'off'; }
     else if (sending) { msg = 'กำลังส่ง…'; k = ''; }
     else if (sheetError) { msg = sheetError; k = 'err'; }
@@ -1906,6 +1942,15 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
 
   async function sendToSheet() {
     if (!sheetOn || sending) return;
+    const missing = infoMissing();
+    if (missing.length) {
+      showRequired = true; updateAll();
+      toast('กรอกข้อมูลการตรวจให้ครบก่อนส่ง');
+      goToSection('info');
+      const first = document.querySelector('#fs-' + missing[0].key + ' input:not([hidden])');
+      if (first) setTimeout(() => first.focus({ preventScroll: true }), reduceMotion ? 0 : 450);
+      return;
+    }
     if (authOn) {
       if (!currentUser) { lockPage(true); return; }
       if (!currentUser.token || currentUser.tokenExp < Date.now() + 60e3) {
