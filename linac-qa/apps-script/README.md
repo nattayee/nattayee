@@ -11,7 +11,7 @@
 
 ## ติดตั้งครั้งแรก
 
-1. เปิด Google Sheet ที่จะเก็บผล → **Extensions → Apps Script**
+1. เปิด Google Sheet ที่จะเก็บผล → **Extensions → Apps Script** (ถ้าสร้างโปรเจกต์จาก script.google.com เอง ให้ใส่ ID ของ Sheet ใน `CONFIG.SHEET_ID`)
 2. ไฟล์ `Code.gs`: กด Ctrl+A ในหน้าโค้ด แล้ววางเนื้อหา `Code.gs` ทับทั้งหมด
 3. เพิ่มไฟล์ HTML: กด **+** ข้าง Files → **HTML** → ตั้งชื่อ `Index` (ไม่ต้องพิมพ์ .html) → ลบเนื้อหาเดิม แล้ววางเนื้อหา `Index.html` ทั้งหมด
 4. กด **Save** (Ctrl+S)

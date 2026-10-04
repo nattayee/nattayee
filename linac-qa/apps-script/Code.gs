@@ -11,14 +11,19 @@
  *   Index.html  the form (same file as linac-qa/index.html)
  *
  * Setup (see linac-qa/apps-script/README.md):
- *   1. Open the spreadsheet → Extensions → Apps Script. Paste this file as Code.gs and add an
- *      HTML file named "Index" with the contents of Index.html. Save.
+ *   1. Open the spreadsheet → Extensions → Apps Script (or any Apps Script project and set
+ *      CONFIG.SHEET_ID). Paste this file as Code.gs and add an HTML file named "Index" with the
+ *      contents of Index.html. Save.
  *   2. Run `setup` once and allow the requested permissions (creates the tabs and headers).
  *   3. Deploy → New deployment → type "Web app", Execute as "Me", choose who has access.
  *   4. Open the Web app URL (…/exec): that is the public address of the form.
  */
 
 const CONFIG = {
+  // ID of the Google Sheet that stores the results (the part between /d/ and /edit in its link).
+  // Needed when this Apps Script project was created on its own rather than from the Sheet's
+  // Extensions → Apps Script menu. Leave empty to use the Sheet the project is attached to.
+  SHEET_ID: '1ehuUJ5WR5Rie-aC8AU1dTskwENA3LyHS-bU33dBpd28',
   // Same value as AUTH.clientId in index.html. When set, only signed-in users on the
   // allowed list can send data (their Google ID token is checked here on the server).
   CLIENT_ID: '',
@@ -43,16 +48,22 @@ const TABS = {
   }
 };
 
+function ss_() {
+  const ss = CONFIG.SHEET_ID ? SpreadsheetApp.openById(CONFIG.SHEET_ID) : SpreadsheetApp.getActive();
+  if (!ss) throw new Error('ไม่พบ Google Sheet ใส่ ID ของ Sheet ใน CONFIG.SHEET_ID ที่ด้านบนของ Code.gs');
+  return ss;
+}
+
 function setup() {
   Object.keys(TABS).forEach(k => tab_(TABS[k]));
-  const first = SpreadsheetApp.getActive().getSheets()[0];
-  if (first.getName() !== TABS.records.name && first.getLastRow() === 0) SpreadsheetApp.getActive().deleteSheet(first);
+  const first = ss_().getSheets()[0];
+  if (first.getName() !== TABS.records.name && first.getLastRow() === 0) ss_().deleteSheet(first);
 }
 
 // …/exec shows the form; …/exec?ping=1 returns a JSON health check.
 function doGet(e) {
   if (e && e.parameter && e.parameter.ping) {
-    return json_({ ok: true, app: 'linac-qa', sheet: SpreadsheetApp.getActive().getUrl() });
+    return json_({ ok: true, app: 'linac-qa', sheet: ss_().getUrl() });
   }
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Lampang Cancer Hospital, Linac QA')
@@ -99,7 +110,7 @@ function handle_(body) {
     ]));
     replaceRows_(TABS.photos, id, photo.rows);
 
-    return { ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: SpreadsheetApp.getActive().getUrl() };
+    return { ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: ss_().getUrl() };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   } finally {
@@ -155,7 +166,7 @@ function folder_(parent, name) {
 
 /* ---------- sheet helpers ---------- */
 function tab_(def) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   let sh = ss.getSheetByName(def.name);
   if (!sh) sh = ss.insertSheet(def.name);
   if (sh.getLastRow() === 0) {
