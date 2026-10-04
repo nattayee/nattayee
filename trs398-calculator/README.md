@@ -56,7 +56,11 @@ k_Q,Q0 ของ photon คำนวณจาก TPR20,10 (= M20/M10 ที่ S
 - **Imported**: ไฟล์ที่นำเข้าแล้ว
 - **ReportImporter.gs**: Apps Script (ต้นฉบับอยู่ที่ `apps-script/ReportImporter.gs`)
 
-ติดตั้ง Apps Script ครั้งเดียว: เปิด Log Sheet → Extensions → Apps Script → วางโค้ด → บันทึก → Run `setup`
+ปลายทางของรายงานย้ายไปเป็นของ **nattayee@gmail.com**: โฟลเดอร์แชร์ให้เป็น Editor แล้ว จากนั้นโอนความเป็นเจ้าของ
+(Drive → แชร์ → nattayee → โอนการเป็นเจ้าของ แล้ว nattayee กดยอมรับ) ให้ครบทุกไฟล์: โฟลเดอร์หลัก, Inbox, Imported,
+Log Sheet และ ReportImporter.gs ID และลิงก์ไม่เปลี่ยน แอปและสคริปต์จึงไม่ต้องแก้ ผู้ที่ส่งรายงานต้องมีสิทธิ์ Editor ในโฟลเดอร์ Inbox
+
+ติดตั้ง Apps Script ครั้งเดียว (ทำด้วยบัญชี nattayee หลังรับโอนแล้ว เพื่อให้ trigger ทำงานในชื่อเจ้าของ): เปิด Log Sheet → Extensions → Apps Script → วางโค้ด → บันทึก → Run `setup`
 แล้วอนุญาตสิทธิ์ สคริปต์จะนำเข้าไฟล์ใน Inbox ลงแท็บ `Log` ทุก 5 นาที (หรือเมนู TRS-398 → นำเข้ารายงานตอนนี้)
 จับคู่คอลัมน์ตามชื่อหัวคอลัมน์ ข้าม Report ID ที่มีแล้ว และระบายสีช่องผล PASS/FAIL
 
