@@ -262,6 +262,11 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .extlink { color: var(--ink); font-weight: 500; font-size: .875rem; text-underline-offset: 3px; text-decoration-color: var(--accent); }
 
 /* view switch + dashboard */
+.themes { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.themes button { appearance: none; border: 0; background: var(--surface); color: var(--muted); width: 36px; height: 32px; display: grid; place-items: center; cursor: pointer; }
+.themes button + button { border-left: 1px solid var(--line-strong); }
+.themes button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.themes svg { width: 16px; height: 16px; }
 .views { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
 .views button { appearance: none; border: 0; background: var(--surface); color: var(--muted); padding: 7px 14px; font-weight: 600; font-size: .85rem; cursor: pointer; }
 .views button + button { border-left: 1px solid var(--line-strong); }
@@ -421,6 +426,10 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   body { background: #fff; }
 }
 </style>
+<script>
+  // apply the saved light/dark choice before the page paints (no flash)
+  try { var t = localStorage.getItem('linac-mech-qa:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) { /* storage blocked */ }
+</script>
 </head>
 <body>
 
@@ -447,6 +456,11 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
       <div class="views" role="tablist" aria-label="มุมมอง">
         <button type="button" role="tab" id="viewForm" aria-selected="true" aria-controls="main">บันทึก QA</button>
         <button type="button" role="tab" id="viewDash" aria-selected="false" aria-controls="dash">Dashboard</button>
+      </div>
+      <div class="themes" role="group" aria-label="ธีมสี">
+        <button type="button" data-theme-set="light" aria-pressed="false" title="โหมดสว่าง" aria-label="โหมดสว่าง"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></svg></button>
+        <button type="button" data-theme-set="auto" aria-pressed="false" title="ตามระบบเครื่อง" aria-label="ตามระบบเครื่อง"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" stroke="none"/></svg></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false" title="โหมดมืด" aria-label="โหมดมืด"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
       </div>
       <div class="tally" aria-live="polite">
         <span class="t-pass"><b id="tPass">0</b> ผ่าน</span>
@@ -2417,6 +2431,24 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
         .map(x => ({ id: x.id, machine: x.machine, date: x.date, value: x.value, deviation: x.deviation, result: x.result }))
     };
   })();
+
+  /* ================= light / dark ================= */
+  const THEME_KEY = 'linac-mech-qa:theme';
+  function applyTheme(t) {
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    else document.documentElement.removeAttribute('data-theme');
+    document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeSet === (t || 'auto'))));
+  }
+  let savedTheme = 'auto';
+  try { savedTheme = localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { savedTheme = 'auto'; }
+  applyTheme(savedTheme === 'auto' && document.documentElement.getAttribute('data-theme') ? document.documentElement.getAttribute('data-theme') : savedTheme);
+  document.querySelector('.themes').addEventListener('click', e => {
+    const b = e.target.closest('[data-theme-set]'); if (!b) return;
+    const t = b.dataset.themeSet;
+    applyTheme(t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (err) { /* storage blocked */ }
+    toast(t === 'dark' ? 'ใช้โหมดมืด' : t === 'light' ? 'ใช้โหมดสว่าง' : 'ใช้สีตามระบบเครื่อง');
+  });
 
   /* ================= boot ================= */
   fillInputs();
