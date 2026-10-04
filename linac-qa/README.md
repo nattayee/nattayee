@@ -1,5 +1,7 @@
 # Lampang Cancer Hospital, Linac QA
 
+> ใช้งานจริงแนะนำให้นำขึ้น Google Apps Script ทั้งชุด ดู [apps-script/README.md](apps-script/README.md)
+
 แบบฟอร์มกรอกค่า Monthly Linac Mechanical QA (จาก worksheet "Worksheet Monthly QA Linac") เป็นไฟล์ HTML ไฟล์เดียว เปิด `index.html` ในเบราว์เซอร์ได้ทันที ไม่ต้องติดตั้งอะไรเพิ่ม
 
 ## หมวดหมู่

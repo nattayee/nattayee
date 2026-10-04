@@ -1,16 +1,21 @@
 /**
- * Lampang Cancer Hospital, Linac QA — Google Sheets receiver
+ * Lampang Cancer Hospital, Linac QA — Apps Script web app
  *
- * Receives QA results from linac-qa/index.html and writes them to this spreadsheet:
+ * This project serves the QA form (Index.html) and writes results to this spreadsheet:
  *   Records  one row per QA record (updated in place when the same record is sent again)
  *   Results  one row per checked item
  *   Photos   one row per attached photo (image files go to a Drive folder)
  *
- * Setup (see linac-qa/README.md):
- *   1. Open the spreadsheet → Extensions → Apps Script, paste this file as Code.gs, save.
+ * Files in the Apps Script project:
+ *   Code.gs     this file
+ *   Index.html  the form (same file as linac-qa/index.html)
+ *
+ * Setup (see linac-qa/apps-script/README.md):
+ *   1. Open the spreadsheet → Extensions → Apps Script. Paste this file as Code.gs and add an
+ *      HTML file named "Index" with the contents of Index.html. Save.
  *   2. Run `setup` once and allow the requested permissions (creates the tabs and headers).
- *   3. Deploy → New deployment → type "Web app", Execute as "Me", Who has access "Anyone".
- *   4. Copy the Web app URL (…/exec) into SHEET.endpoint in index.html.
+ *   3. Deploy → New deployment → type "Web app", Execute as "Me", choose who has access.
+ *   4. Open the Web app URL (…/exec): that is the public address of the form.
  */
 
 const CONFIG = {
@@ -44,8 +49,19 @@ function setup() {
   if (first.getName() !== TABS.records.name && first.getLastRow() === 0) SpreadsheetApp.getActive().deleteSheet(first);
 }
 
-function doGet() {
-  return json_({ ok: true, app: 'linac-qa', sheet: SpreadsheetApp.getActive().getUrl() });
+// …/exec shows the form; …/exec?ping=1 returns a JSON health check.
+function doGet(e) {
+  if (e && e.parameter && e.parameter.ping) {
+    return json_({ ok: true, app: 'linac-qa', sheet: SpreadsheetApp.getActive().getUrl() });
+  }
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('Lampang Cancer Hospital, Linac QA')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+// Called by the form through google.script.run when it is served by this web app.
+function submitRecord(body) {
+  return handle_(body);
 }
 
 // The page sends either a JSON body (fetch) or a form field `payload` (hidden-iframe fallback,
