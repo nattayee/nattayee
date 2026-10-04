@@ -32,3 +32,24 @@
 เมื่อเข้าสู่ระบบแล้ว ชื่อและอีเมลผู้บันทึกจะอยู่ในไฟล์ CSV/JSON ที่ส่งออก (Recorded by) การล็อกอินค้างไว้ `sessionHours` ชั่วโมง
 
 หมายเหตุ: การตรวจสิทธิ์ทำในเบราว์เซอร์ (ไม่มีเซิร์ฟเวอร์) จึงเป็นการคัดกรองผู้ใช้และบันทึกตัวตน ไม่ใช่ระบบความปลอดภัยเต็มรูปแบบ ข้อมูล QA ยังเก็บอยู่ในเบราว์เซอร์ของแต่ละเครื่องเหมือนเดิม
+
+## เชื่อมกับ Google Sheet
+
+ผลที่กรอกส่งไปเก็บใน Google Sheet ผ่าน Google Apps Script (`apps-script/Code.gs`) โดย Sheet มี 3 แท็บ
+
+- **Records**: 1 แถวต่อ 1 รอบการตรวจ (Record ID, ผู้บันทึก, เครื่อง, ความถี่, วันที่, Physicist, จำนวนผ่าน/ไม่ผ่าน/ค้าง, QA note, ลิงก์โฟลเดอร์รูป)
+- **Results**: 1 แถวต่อ 1 รายการตรวจ (หมวด, test, item, ค่าตั้ง, ค่าที่วัด, ส่วนต่าง, เกณฑ์, ผล)
+- **Photos**: 1 แถวต่อ 1 รูป รูปจริงเก็บใน Google Drive โฟลเดอร์ `Linac QA Photos/<วันที่ เครื่อง Record ID>`
+
+ส่งซ้ำด้วย Record ID เดิมจะอัปเดตแถวเดิม ไม่สร้างแถวซ้ำ กด "ล้างข้อมูล" เพื่อเริ่มรอบใหม่ด้วย Record ID ใหม่
+
+### ตั้งค่า (ทำครั้งเดียว)
+
+1. เปิด Google Sheet ปลายทาง → **Extensions → Apps Script**
+2. ลบโค้ดเดิม วางโค้ดจาก `apps-script/Code.gs` แล้วกด Save
+3. ถ้าเปิดล็อกอิน Google ไว้ ใส่ `CONFIG.CLIENT_ID` (ค่าเดียวกับ `AUTH.clientId`) และ `ALLOWED_EMAILS` ให้ตรงกับหน้าเว็บ เพื่อให้เซิร์ฟเวอร์ตรวจตัวตนผู้ส่งจริง
+4. เลือกฟังก์ชัน `setup` แล้วกด **Run** อนุญาตสิทธิ์ที่ขอ (สร้างแท็บและหัวตาราง)
+5. **Deploy → New deployment** → ประเภท **Web app** → Execute as **Me** → Who has access **Anyone** → Deploy
+6. คัดลอก **Web app URL** (ลงท้าย `/exec`) ไปใส่ `SHEET.endpoint` ใน `index.html` และใส่ลิงก์ Sheet ใน `SHEET.sheetUrl`
+
+เมื่อแก้โค้ด Apps Script ภายหลัง ให้ Deploy → Manage deployments → Edit → Version: New version เพื่อให้ URL เดิมใช้โค้ดใหม่

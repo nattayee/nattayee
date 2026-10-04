@@ -235,6 +235,17 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .who .wname { font-size: .8125rem; font-weight: 500; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 560px) { .who .wname { display: none; } }
 
+/* google sheet */
+.sheetbox { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunken); }
+.sheetbox .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sheetbox .stat { margin: 0; font-size: .875rem; }
+.sheetbox .stat[data-s="ok"] { color: var(--ok); }
+.sheetbox .stat[data-s="dirty"], .sheetbox .stat[data-s="off"] { color: var(--accent-ink); }
+.sheetbox .stat[data-s="err"] { color: var(--bad); }
+.sheetbox .rid { font: 500 .78rem/1 var(--f-mono); color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: default; }
+.extlink { color: var(--ink); font-weight: 500; font-size: .875rem; text-underline-offset: 3px; text-decoration-color: var(--accent); }
+
 /* photos */
 .pdrop { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px; border: 1.5px dashed var(--line-strong); border-radius: 10px; background: var(--sunken); }
 .pdrop.over { border-color: var(--accent); background: var(--accent-soft); }
@@ -422,6 +433,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     physicistEmails: {}         // optional: { 'someone@gmail.com': 'วันนิตา มะลิลา' } ticks that physicist on sign-in
   };
   const USER_KEY = 'linac-mech-qa:user';
+
+  /* ================= Google Sheet settings =================
+     endpoint: Web app URL (…/exec) of the Apps Script in linac-qa/apps-script/Code.gs,
+               deployed from the spreadsheet below. Leave empty to hide sending. */
+  const SHEET = {
+    endpoint: '',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/1zr0HUmE2_wrh9JIaZ0oHexSBXFJypv_KO2F2FNg3j8c/edit'
+  };
   const store = {
     get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
@@ -639,7 +658,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
     { id: 'note', name: 'QA Note', tab: 'QA Note', sub: 'บันทึกเพิ่มเติม ข้อสังเกต การแก้ไข', blocks: [{ type: 'note' }] },
 
-    { id: 'summary', name: 'สรุปผลและส่งออก', tab: 'สรุปผล', sub: 'รายการที่ไม่ผ่าน · ส่งออก CSV / JSON', blocks: [{ type: 'summary' }, { type: 'tools' }] }
+    { id: 'summary', name: 'สรุปผลและส่งออก', tab: 'สรุปผล', sub: 'รายการที่ไม่ผ่าน · ส่งไป Google Sheet · ส่งออก CSV / JSON', blocks: [{ type: 'summary' }, { type: 'sheet' }, { type: 'tools' }] }
   ];
 
   function profilerTable(title, sizeHead, rows, flatTol) {
@@ -688,6 +707,11 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const saved = store.get(KEY) || {};
   const state = { values: Object.assign({}, saved.values), nominals: Object.assign({}, saved.nominals), savedAt: saved.savedAt || null };
   if (!state.values.date) state.values.date = todayISO();
+  function ensureDefaults(v) {
+    if (!v.recordId) v.recordId = 'LQA-' + todayISO().replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+    if (v.send_photos === undefined) v.send_photos = '1';
+  }
+  ensureDefaults(state.values);
   migrateInfo(state.values);
   function migrateInfo(v) {
     if (v.physicist && !Object.keys(v).some(k => k.indexOf('phys_') === 0)) {
@@ -826,6 +850,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '<span>แนบรูป</span><input type="file" accept="image/*" multiple data-addphoto="' + b.sec + '" aria-label="แนบรูปหมวด ' + esc(SEC[b.sec].name) + '"></label>' +
         '<p class="hint">ถ่ายจากกล้องหรือเลือกจากคลังภาพ เลือกได้หลายรูป บนคอมพิวเตอร์ลากไฟล์มาวางที่นี่ได้</p></div>' +
         '<div class="pgrid" data-pgrid="' + b.sec + '" hidden></div>';
+    } else if (b.type === 'sheet') {
+      head = '<div class="block-head"><h3>Google Sheet</h3></div>';
+      body = '<div class="sheetbox">' +
+        '<p class="stat" id="sheetStat" aria-live="polite"></p>' +
+        '<div class="row"><button class="btn primary" type="button" data-act="send-sheet" id="sendBtn">ส่งผลไป Google Sheet</button>' +
+        '<label class="opt check"><input type="checkbox" id="f-send_photos" data-check="send_photos"><span>ส่งรูปประกอบด้วย</span></label></div>' +
+        '<div class="row"><span class="rid" id="sheetRid"></span>' +
+        (SHEET.sheetUrl ? '<a class="extlink" href="' + esc(SHEET.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a>' : '') + '</div></div>';
     } else if (b.type === 'summary') {
       body = '<div id="sumBox" class="block"></div>';
     } else if (b.type === 'tools') {
@@ -841,7 +873,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '<div class="subpanel" id="importBox" hidden><p class="hint">วาง JSON ที่ส่งออกไว้ หรือเลือกไฟล์ .json แล้วกด “นำเข้า” ค่าปัจจุบันจะถูกแทนที่</p>' +
         '<textarea id="importText" aria-label="JSON สำหรับนำเข้า" placeholder="{ &quot;values&quot;: { … } }"></textarea>' +
         '<div class="row"><input type="file" id="importFile" accept=".json,application/json" aria-label="เลือกไฟล์ JSON"><button class="btn primary small" type="button" data-act="do-import">นำเข้า</button></div></div>' +
-        '<div class="subpanel" id="clearBox" hidden><p class="hint">ล้างค่าที่กรอกและรูปประกอบทั้งหมดของรอบนี้? ลำดับหมวดหมู่จะไม่เปลี่ยน</p>' +
+        '<div class="subpanel" id="clearBox" hidden><p class="hint">ล้างค่าที่กรอกและรูปประกอบในเครื่องนี้ แล้วเริ่มรอบใหม่ด้วย Record ID ใหม่? ข้อมูลที่ส่งไป Google Sheet แล้วจะยังอยู่ใน Sheet</p>' +
         '<div class="row"><button class="btn danger small" type="button" data-act="do-clear">ล้างข้อมูลทั้งหมด</button><button class="btn small" type="button" data-act="cancel-clear">ยกเลิก</button></div></div>' +
         '<p class="saved" id="savedAt"></p>';
     }
@@ -1161,6 +1193,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     $('#metaLine').textContent = [m || 'ยังไม่ระบุเครื่อง', fq, thaiDate(d), p].filter(Boolean).join(' · ');
 
     renderSummary(stats, fails, tp, tf, tq);
+    renderSheet();
   }
 
   function paint(c, r) {
@@ -1218,10 +1251,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
   /* ================= export / import ================= */
   const statusLabel = s => ({ pass: 'Pass', fail: 'Fail', rec: 'Recorded', invalid: 'Invalid', nonom: 'No nominal' }[s] || '');
-  function buildCSV() {
-    const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['QA frequency', freqText()], ['Date', valueOf('date')], ['Physicist', physicistText()], ['Recorded by', currentUser ? currentUser.name + ' <' + currentUser.email + '>' : ''], [],
-      ['Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']];
+  function resultRows() {
+    const out = [];
     order.forEach(id => SEC[id].cells.forEach(c => {
       const r = c.r || evaluate(c);
       let test = c.test;
@@ -1230,8 +1261,15 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       const val = c.kind === 'pf' ? (state.values[c.id] === 'pass' ? c.yes : state.values[c.id] === 'fail' ? c.no + (failText(c) ? ' (' + failText(c) + ')' : '') : '') : c.kind === 'calc' ? (r.dev != null ? r.dev.toFixed(2) : '') : valueOf(c.id);
       const unit = c.kind === 'calc' ? '%' : (c.unit || '');
       const dev = r.dev != null && c.kind !== 'calc' ? r.dev.toFixed(dpOf(c.tolUnit || c.unit)) + ' ' + (c.tolUnit || c.unit) : '';
-      rows.push([SEC[id].name, test, c.item, nom == null ? '' : nom, val, unit, dev, c.limit, statusLabel(r.status)]);
+      out.push({ category: SEC[id].name, test, item: c.item, nominal: nom == null ? '' : nom, value: val, unit, deviation: dev, limit: c.limit, result: statusLabel(r.status) });
     }));
+    return out;
+  }
+  function buildCSV() {
+    const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['QA frequency', freqText()], ['Date', valueOf('date')], ['Physicist', physicistText()], ['Recorded by', currentUser ? currentUser.name + ' <' + currentUser.email + '>' : ''], [],
+      ['Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']];
+    resultRows().forEach(r => rows.push([r.category, r.test, r.item, r.nominal, r.value, r.unit, r.deviation, r.limit, r.result]));
     order.forEach(id => {
       const ps = photos.filter(x => x.sec === id);
       if (ps.length) rows.push([SEC[id].name, 'รูปประกอบ', ps.map(x => x.cap || x.name).join(' / '), '', ps.length, 'รูป', '', '', '']);
@@ -1266,6 +1304,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     if (!obj || typeof obj.values !== 'object') { toast('ไม่พบข้อมูล “values” ในไฟล์ ใช้ไฟล์ที่ส่งออกจากหน้านี้'); return; }
     state.values = Object.assign({}, obj.values);
     migrateInfo(state.values);
+    ensureDefaults(state.values);
     state.nominals = Object.assign({}, obj.nominals);
     if (Array.isArray(obj.order)) {
       const o = obj.order.filter(id => SEC[id]);
@@ -1537,7 +1576,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     const act = e.target.closest('[data-act]');
     if (!act) return;
     const a = act.dataset.act;
-    if (a === 'copy-csv') copyText(buildCSV(), 'CSV');
+    if (a === 'send-sheet') sendToSheet();
+    else if (a === 'copy-csv') copyText(buildCSV(), 'CSV');
     else if (a === 'copy-json') copyText(buildJSON(), 'JSON');
     else if (a === 'dl-csv') download(fileBase() + '.csv', '﻿' + buildCSV(), 'text/csv;charset=utf-8');
     else if (a === 'dl-json') download(fileBase() + '.json', buildJSON(), 'application/json');
@@ -1554,6 +1594,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     }
     else if (a === 'do-clear') {
       state.values = { date: todayISO() }; state.nominals = {};
+      ensureDefaults(state.values);
       replacePhotos([]);
       fillInputs(); updateAll(); save();
       $('#clearBox').hidden = true; $('[data-act="clear"]').setAttribute('aria-expanded', 'false');
@@ -1636,10 +1677,12 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
       return;
     }
-    const user = { email: p.email, name: p.name || p.email, picture: p.picture || '', until: Date.now() + AUTH.sessionHours * 3600e3 };
+    const user = { email: p.email, name: p.name || p.email, picture: p.picture || '', until: Date.now() + AUTH.sessionHours * 3600e3,
+      token: resp.credential, tokenExp: (p.exp || 0) * 1000 };
     store.set(USER_KEY, user);
     signedIn(user);
     toast('เข้าสู่ระบบแล้ว: ' + user.email);
+    if (pendingSend) { pendingSend = false; sendToSheet(); }
   }
 
   function loadGoogle() {
@@ -1674,6 +1717,78 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     if (saved && saved.email && saved.until > Date.now() && isAllowed(saved.email)) signedIn(saved);
     else lockPage(true);
     startGoogle();
+  }
+
+  /* ================= Google Sheet ================= */
+  let pendingSend = false, sending = false, sheetError = '';
+  const sheetOn = !!SHEET.endpoint && !inFrame;
+  function dataSig() {
+    const v = Object.assign({}, state.values);
+    delete v.sent_at; delete v.sent_sig; delete v.send_photos;
+    const str = JSON.stringify([v, state.nominals, photos.map(x => [x.id, x.cap])]);
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return String(h >>> 0);
+  }
+  function renderSheet() {
+    const st = $('#sheetStat'), btn = $('#sendBtn');
+    if (!st) return;
+    $('#sheetRid').textContent = 'Record ID ' + valueOf('recordId');
+    let msg, k;
+    if (inFrame) { msg = 'ส่งไป Google Sheet ได้เมื่อเปิดจากเว็บที่โฮสต์เอง'; k = 'off'; }
+    else if (!SHEET.endpoint) { msg = 'ยังไม่ได้เชื่อม Google Sheet ผู้ดูแลต้องใส่ Web app URL ใน SHEET.endpoint (ดู README)'; k = 'off'; }
+    else if (sending) { msg = 'กำลังส่ง…'; k = ''; }
+    else if (sheetError) { msg = sheetError; k = 'err'; }
+    else if (state.values.sent_at) {
+      const t = new Date(state.values.sent_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      if (state.values.sent_sig === dataSig()) { msg = 'ส่งแล้วเมื่อ ' + t + ' ข้อมูลใน Sheet เป็นปัจจุบัน'; k = 'ok'; }
+      else { msg = 'ส่งล่าสุดเมื่อ ' + t + ' มีการแก้ไขหลังจากนั้น กดส่งอีกครั้งเพื่ออัปเดตแถวเดิม'; k = 'dirty'; }
+    } else { msg = 'ยังไม่ได้ส่ง ส่งได้ทุกเมื่อ ส่งซ้ำจะอัปเดตแถวเดิมของ Record ID นี้'; k = ''; }
+    st.textContent = msg; st.dataset.s = k;
+    btn.disabled = !sheetOn || sending;
+    btn.textContent = sending ? 'กำลังส่ง…' : state.values.sent_at ? 'ส่งอัปเดตไป Google Sheet' : 'ส่งผลไป Google Sheet';
+  }
+
+  async function sendToSheet() {
+    if (!sheetOn || sending) return;
+    if (authOn) {
+      if (!currentUser) { lockPage(true); return; }
+      if (!currentUser.token || currentUser.tokenExp < Date.now() + 60e3) {
+        pendingSend = true;
+        lockPage(true);
+        gateError('เข้าสู่ระบบอีกครั้งเพื่อยืนยันตัวตนก่อนส่ง ข้อมูลที่กรอกไว้ยังอยู่ครบ');
+        try { google.accounts.id.prompt(); } catch (e) { /* button is shown */ }
+        return;
+      }
+    }
+    flushSave();
+    const tf = +$('#tFail').textContent, tp = +$('#tPass').textContent, tq = +$('#tPend').textContent;
+    const sig = dataSig();
+    const payload = {
+      app: 'linac-qa', version: 1, recordId: valueOf('recordId'), sentAt: new Date().toISOString(),
+      idToken: currentUser && currentUser.token || '',
+      recordedBy: currentUser ? { name: currentUser.name, email: currentUser.email } : null,
+      info: { machine: valueOf('machine'), frequency: freqText(), date: valueOf('date'), physicist: physicistText() },
+      summary: { pass: tp, fail: tf, pending: tq, overall: tf ? 'Fail' : tq ? 'Incomplete' : 'Pass' },
+      note: valueOf('note'),
+      results: resultRows(),
+      photos: valueOf('send_photos') === '1' ? photos.filter(x => SEC[x.sec]).map(x => ({ category: SEC[x.sec].name, name: x.name, cap: x.cap, data: x.data })) : []
+    };
+    sending = true; sheetError = ''; renderSheet();
+    try {
+      const res = await fetch(SHEET.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), redirect: 'follow' });
+      const out = await res.json();
+      if (!out.ok) throw new Error(out.error || 'Sheet ตอบกลับว่าไม่สำเร็จ');
+      state.values.sent_at = new Date().toISOString();
+      state.values.sent_sig = sig;
+      save();
+      toast('ส่งไป Google Sheet แล้ว ' + out.results + ' รายการ' + (out.photos ? ' · รูป ' + out.photos + ' รูป' : ''));
+    } catch (e) {
+      sheetError = 'ส่งไม่สำเร็จ: ' + (e && e.message && !/fetch|network|JSON/i.test(e.message) ? e.message : 'เชื่อมต่อ Google Sheet ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่') + ' ข้อมูลยังเก็บอยู่ในเครื่องนี้';
+      toast('ส่งไป Google Sheet ไม่สำเร็จ');
+    } finally {
+      sending = false; renderSheet();
+    }
   }
 
   /* ================= boot ================= */
