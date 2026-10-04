@@ -1750,6 +1750,32 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     btn.textContent = sending ? 'กำลังส่ง…' : state.values.sent_at ? 'ส่งอัปเดตไป Google Sheet' : 'ส่งผลไป Google Sheet';
   }
 
+  // Fallback transport: a normal form POST into a hidden iframe (not subject to fetch/CORS limits).
+  // The Apps Script answers with a page that postMessages the result back.
+  function postViaForm(body) {
+    return new Promise((resolve, reject) => {
+      const rid = uid(), name = 'lqa-' + rid;
+      const ifr = document.createElement('iframe');
+      ifr.name = name; ifr.hidden = true; ifr.title = 'ส่งข้อมูลไป Google Sheet';
+      const form = document.createElement('form');
+      form.method = 'POST'; form.action = SHEET.endpoint; form.target = name; form.acceptCharset = 'UTF-8'; form.hidden = true;
+      [['payload', body], ['rid', rid]].forEach(([n, v]) => { const t = document.createElement('textarea'); t.name = n; t.value = v; form.appendChild(t); });
+      const done = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); setTimeout(() => { ifr.remove(); form.remove(); }, 1000); };
+      const onMsg = ev => {
+        const d = ev.data;
+        if (!d || d.source !== 'linac-qa' || d.rid !== rid) return;
+        done(); resolve(d.result || { ok: false });
+      };
+      const timer = setTimeout(() => {
+        done();
+        reject(new Error('ไม่ได้รับคำตอบจาก Apps Script ตรวจ 3 ข้อ: ใช้โค้ด Code.gs ชุดล่าสุด, Deploy เป็น New version, และ Who has access เป็น Anyone แล้วกด “ทดสอบการเชื่อมต่อ” ต้องเห็น {"ok":true…}'));
+      }, 120000);
+      window.addEventListener('message', onMsg);
+      document.body.append(ifr, form);
+      form.submit();
+    });
+  }
+
   async function sendToSheet() {
     if (!sheetOn || sending) return;
     if (authOn) {
@@ -1777,16 +1803,20 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     };
     sending = true; sheetError = ''; renderSheet();
     try {
-      let res;
+      const body = JSON.stringify(payload);
+      let out = null, res = null;
       try {
-        res = await fetch(SHEET.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), redirect: 'follow' });
+        res = await fetch(SHEET.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, redirect: 'follow' });
       } catch (netErr) {
-        throw new Error('เบราว์เซอร์ติดต่อ Apps Script ไม่ได้ ตรวจอินเทอร์เน็ต แล้วกด “ทดสอบการเชื่อมต่อ” ถ้าไม่เห็นข้อความ {"ok":true…} ให้แก้ Deploy ใน Apps Script: Who has access ต้องเป็น Anyone และ Version ต้องเป็น New version');
+        res = null;   // blocked (e.g. page opened from a local file): use the form fallback below
       }
-      const text = await res.text();
-      let out;
-      try { out = JSON.parse(text); } catch (parseErr) {
-        throw new Error('Apps Script ตอบกลับไม่ใช่ข้อมูลที่คาดไว้ (HTTP ' + res.status + ') ตรวจว่า Deploy เป็น New version ของโค้ดชุดเต็ม และ Who has access เป็น Anyone');
+      if (res) {
+        const text = await res.text();
+        try { out = JSON.parse(text); } catch (parseErr) {
+          throw new Error('Apps Script ตอบกลับไม่ใช่ข้อมูลที่คาดไว้ (HTTP ' + res.status + ') ตรวจว่า Deploy เป็น New version ของโค้ดชุดเต็ม และ Who has access เป็น Anyone');
+        }
+      } else {
+        out = await postViaForm(body);
       }
       if (!out.ok) throw new Error(out.error || 'Sheet ตอบกลับว่าไม่สำเร็จ');
       state.values.sent_at = new Date().toISOString();

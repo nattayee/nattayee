@@ -48,11 +48,23 @@ function doGet() {
   return json_({ ok: true, app: 'linac-qa', sheet: SpreadsheetApp.getActive().getUrl() });
 }
 
+// The page sends either a JSON body (fetch) or a form field `payload` (hidden-iframe fallback,
+// used when the browser blocks fetch, e.g. a page opened from a local file). Form posts get an
+// HTML reply that passes the result back to the page with postMessage.
 function doPost(e) {
+  const viaForm = !!(e.parameter && e.parameter.payload);
+  const out = handle_(viaForm ? e.parameter.payload : e.postData.contents);
+  if (!viaForm) return json_(out);
+  const msg = JSON.stringify({ source: 'linac-qa', rid: String(e.parameter.rid || ''), result: out }).replace(/</g, '\\u003c');
+  return HtmlService.createHtmlOutput('<script>window.top.postMessage(' + msg + ', "*");</script>')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function handle_(body) {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
-    const data = JSON.parse(e.postData.contents);
+    const data = JSON.parse(body);
     if (!data || data.app !== 'linac-qa' || !data.recordId) throw new Error('ข้อมูลที่ส่งมาไม่ถูกต้อง');
     const user = checkUser_(data);
     const info = data.info || {};
@@ -71,9 +83,9 @@ function doPost(e) {
     ]));
     replaceRows_(TABS.photos, id, photo.rows);
 
-    return json_({ ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: SpreadsheetApp.getActive().getUrl() });
+    return { ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: SpreadsheetApp.getActive().getUrl() };
   } catch (err) {
-    return json_({ ok: false, error: String(err && err.message || err) });
+    return { ok: false, error: String(err && err.message || err) };
   } finally {
     try { lock.releaseLock(); } catch (e) { /* not held */ }
   }
