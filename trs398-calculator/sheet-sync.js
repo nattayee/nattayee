@@ -21,7 +21,7 @@
 
   function fileIdFromUrl(text) {
     var s = String(text || '').trim();
-    var m = s.match(/\/d\/([A-Za-z0-9_-]{20,})/) || s.match(/^([A-Za-z0-9_-]{20,})$/);
+    var m = s.match(/\/(?:d|folders)\/([A-Za-z0-9_-]{20,})/) || s.match(/^([A-Za-z0-9_-]{20,})$/);
     return m ? m[1] : null;
   }
 

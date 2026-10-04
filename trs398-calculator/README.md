@@ -47,10 +47,28 @@ k_Q,Q0 ของ photon คำนวณจาก TPR20,10 (= M20/M10 ที่ S
 ติ๊ก "ปรับ output แล้ววัดซ้ำ" แล้วใส่ T, P และ M1 หลังปรับ ค่า k_pol, k_s, k_Q, k_Q,Qcross, N_D,w และ TMR/PDD
 ใช้จากผลก่อนปรับ เหมือนใน Sheet (T31/R33)
 
+## บันทึกรายงานลง Sheet
+
+ใน Google Drive มีโฟลเดอร์ **TRS-398 Output Reports** ซึ่งมี:
+
+- **TRS-398 Output Log (LPCH)**: แท็บ `Log` เก็บรายงานหนึ่งแถวต่อการวัดหนึ่งครั้ง และแท็บ `วิธีใช้`
+- **Inbox**: ปุ่ม "ส่งรายงานไปที่ Sheet" ในแอปสร้างไฟล์รายงาน (หัวคอลัมน์ + ค่า) ไว้ที่นี่ผ่าน Google Drive connector
+- **Imported**: ไฟล์ที่นำเข้าแล้ว
+- **ReportImporter.gs**: Apps Script (ต้นฉบับอยู่ที่ `apps-script/ReportImporter.gs`)
+
+ติดตั้ง Apps Script ครั้งเดียว: เปิด Log Sheet → Extensions → Apps Script → วางโค้ด → บันทึก → Run `setup`
+แล้วอนุญาตสิทธิ์ สคริปต์จะนำเข้าไฟล์ใน Inbox ลงแท็บ `Log` ทุก 5 นาที (หรือเมนู TRS-398 → นำเข้ารายงานตอนนี้)
+จับคู่คอลัมน์ตามชื่อหัวคอลัมน์ ข้าม Report ID ที่มีแล้ว และระบายสีช่องผล PASS/FAIL
+
+หัวคอลัมน์กำหนดไว้ที่ `report-log.js` (COLUMNS) ต้องตรงกับแถวที่ 1 ของแท็บ Log
+ถ้ารายงานมีคอลัมน์ใหม่ สคริปต์จะเพิ่มคอลัมน์ต่อท้ายให้เอง
+
 ## ไฟล์
 
 - `index.html` — หน้าเว็บ (UI ภาษาไทย)
 - `lpch-data.js` — สำเนาข้อมูลเครื่อง หัววัด และตาราง k_Q จาก Sheet
+- `report-log.js` — แปลงผลคำนวณเป็นแถวรายงานและส่งเข้า Inbox
+- `apps-script/ReportImporter.gs` — สคริปต์นำเข้ารายงานใน Log Sheet
 - `sheet-sync.js` — อ่าน workbook (Drive connector หรือไฟล์ .xlsx) เป็นข้อมูลชุดเดียวกับ `lpch-data.js`
 - `trs398.js` — ฟังก์ชันคำนวณ (pure functions) ใช้ได้ทั้งในเบราว์เซอร์และ Node (`require('./trs398.js')`)
 

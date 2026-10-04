@@ -159,6 +159,14 @@ textarea#report { display: block; margin-top: 10px; min-height: 160px; font-size
 .result-row .mid { font: 500 1.7rem/1.15 var(--font-mono); font-variant-numeric: tabular-nums; margin: 2px 0; }
 .result-row .mid small { font: 400 .9rem var(--font-body); color: var(--muted); margin-left: 4px; }
 .dev-bar .mark.before { background: transparent !important; border: 2px solid var(--muted); width: 8px; margin-left: -4px; }
+.send-status { font-size: .84rem; margin-top: 10px; display: grid; gap: 4px; }
+.send-status.ok { color: var(--ok); }
+.send-status.err { color: var(--bad); }
+.send-status a, .log-link { color: var(--accent); }
+.log-link { display: inline-block; margin-top: 10px; font-size: .86rem; }
+details.dest { margin-top: 10px; font-size: .84rem; }
+details.dest summary { cursor: pointer; color: var(--muted); }
+details.dest .field { margin-top: 8px; }
 .libnote { font-size: .8rem; color: var(--muted); margin-top: 10px; }
 .missing { color: var(--warn); font-size: .78rem; }
 .kq-show { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 10px 12px; border-radius: 4px; background: var(--accent-soft); }
@@ -417,10 +425,19 @@ footer p { margin: 6px 0; }
       </div>
 
       <div class="card">
+        <h2>บันทึกรายงาน</h2>
         <div class="actions">
-          <button type="button" id="copyBtn">คัดลอกรายงาน</button>
+          <button type="button" id="sendBtn">ส่งรายงานไปที่ Sheet</button>
+          <button type="button" class="ghost" id="copyBtn">คัดลอกรายงาน</button>
           <span class="toast" id="toast" role="status"></span>
         </div>
+        <div class="send-status" id="sendStatus" role="status"></div>
+        <a class="log-link" id="logLink" target="_blank" rel="noopener">เปิด TRS-398 Output Log</a>
+        <details class="dest">
+          <summary>ปลายทางของรายงาน</summary>
+          <div class="field"><label for="inboxId">Folder ID ของโฟลเดอร์ Inbox</label><input id="inboxId" type="text" class="mono" spellcheck="false"></div>
+          <div class="field"><label for="logUrl">ลิงก์ Log Sheet</label><input id="logUrl" type="text" class="mono" spellcheck="false"></div>
+        </details>
         <textarea id="report" readonly hidden aria-label="รายงานแบบข้อความ"></textarea>
       </div>
     </aside>
@@ -436,6 +453,7 @@ footer p { margin: 6px 0; }
 <script src="lpch-data.js"></script>
 <script src="trs398.js"></script>
 <script src="sheet-sync.js"></script>
+<script src="report-log.js"></script>
 <script>
 (function () {
   'use strict';
@@ -446,6 +464,9 @@ footer p { margin: 6px 0; }
   var SHEET_KEY = 'trs398-lpch-sheet-v1';      // last good sheet data + source, per browser
   var DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1t8KCsJtuv3vVzqRT_uWblHEDWYARuB1KU5gqVUTpt4w/edit';
   var CUSTOM = '__custom';
+  var DEST_KEY = 'trs398-lpch-dest-v1';
+  var DEFAULT_INBOX = '18t0FBIWRVNzcZJca09wQXg6uwlQmBkw-';
+  var DEFAULT_LOG = 'https://docs.google.com/spreadsheets/d/1UpWd0zPjEDnKIuV1q6j5O4CDemNt0BbYkbFWMIudTL8/edit';
 
   var FIELDS = ['date', 'physicist', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
     'ndw', 'kelec', 'kcross', 'kvol', 'kqMode', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit',
@@ -672,6 +693,11 @@ footer p { margin: 6px 0; }
 
   var last = null;
 
+  function resetSendConfirm() {
+    var b = $('sendBtn');
+    if (b && b.dataset.confirm === '1') { b.dataset.confirm = ''; b.textContent = 'ส่งรายงานไปที่ Sheet'; }
+  }
+
   function setChip(chip, res) {
     chip.className = 'chip' + (res.ok && res.status ? ' ' + res.status : '');
     if (res.ok && res.status) {
@@ -854,7 +880,7 @@ footer p { margin: 6px 0; }
   }
 
   // ---- Wiring ----
-  $('f').addEventListener('input', function () { render(); });
+  $('f').addEventListener('input', function () { render(); resetSendConfirm(); });
   $('f').addEventListener('change', function (e) {
     var id = e.target.id;
     if (id === 'accSel') { fillEnergies(); applyEnergy(); }
@@ -973,7 +999,65 @@ footer p { margin: 6px 0; }
     reader.readAsArrayBuffer(f);
   });
 
+  // ---- Send report to the Log sheet (Drive Inbox folder → Apps Script import) ----
+  var lastSent = null;   // fingerprint of the last report sent, to catch double sends
+
+  function sendStatus(kind, html) {
+    var el = $('sendStatus');
+    el.className = 'send-status' + (kind ? ' ' + kind : '');
+    el.innerHTML = html || '';
+  }
+  function escapeHtml(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function currentRecord() {
+    return ReportLog.buildRecord({ inp: last.inp, r: last.r, aft: last.aft, ra: last.ra, meta: last.meta,
+      accelerator: acc().name, energy: energyLabel(), chamber: chamberName(), electrometer: electrometerName(),
+      source: D.source || '', now: new Date() });
+  }
+  function fingerprint(rec) {
+    var copy = {}; Object.keys(rec).forEach(function (k) { if (k !== 'id' && k !== 'savedAt') copy[k] = rec[k]; });
+    return JSON.stringify(copy);
+  }
+  function saveDest() { writeStore({ inbox: $('inboxId').value.trim(), log: $('logUrl').value.trim() }, DEST_KEY); $('logLink').href = $('logUrl').value.trim() || DEFAULT_LOG; }
+
+  $('sendBtn').addEventListener('click', function () {
+    if (!last || !last.r.ok) { sendStatus('err', 'ผลการคำนวณยังไม่ครบ แก้รายการใน "ข้อควรตรวจสอบ" ก่อนส่ง'); return; }
+    if (last.ra && !last.ra.ok) { sendStatus('err', 'ผลหลังปรับยังไม่ครบ กรอกให้ครบหรือยกเลิกการติ๊ก "ปรับ output แล้ววัดซ้ำ"'); return; }
+    if (!mcpNs) { sendStatus('err', 'การส่งไปที่ Sheet ใช้ได้เมื่อเปิดหน้านี้ใน claude.ai ที่เชื่อม Google Drive ไว้ ตอนนี้ใช้ "คัดลอกรายงาน" แทนได้'); return; }
+    var folder = SheetSync.fileIdFromUrl($('inboxId').value) || $('inboxId').value.trim();
+    if (!folder) { sendStatus('err', 'ใส่ Folder ID ของโฟลเดอร์ Inbox ใน "ปลายทางของรายงาน"'); return; }
+    var rec = currentRecord(), fp = fingerprint(rec);
+    if (lastSent && lastSent.fp === fp && $('sendBtn').dataset.confirm !== '1') {
+      $('sendBtn').dataset.confirm = '1';
+      $('sendBtn').textContent = 'ยืนยันส่งซ้ำ';
+      sendStatus('err', 'รายงานนี้ส่งไปแล้ว (' + escapeHtml(lastSent.id) + ') กด "ยืนยันส่งซ้ำ" ถ้าต้องการบันทึกอีกแถว');
+      return;
+    }
+    $('sendBtn').disabled = true;
+    sendStatus('', 'กำลังส่ง ' + escapeHtml(rec.id) + '…');
+    ReportLog.sendToDrive(mcpNs, folder, rec).then(function (res) {
+      lastSent = { fp: fp, id: rec.id };
+      sendStatus('ok', 'ส่งแล้ว: <strong>' + escapeHtml(rec.id) + '</strong>' +
+        (res.url ? ' · <a href="' + escapeHtml(res.url) + '" target="_blank" rel="noopener">ดูไฟล์รายงาน</a>' : '') +
+        '<span>จะเข้าแท็บ Log ภายใน 5 นาที (หรือเมนู TRS-398 → นำเข้ารายงานตอนนี้ ใน Log Sheet)</span>');
+    }, function (err) {
+      var e = err && err.code ? err : { code: 'upstream_error', message: err && err.message };
+      var msg = driveErrorText(e);
+      if (e.code === 'server_unavailable' || e.code === 'upstream_error') msg += ' · ตรวจในโฟลเดอร์ Inbox ก่อนกดส่งอีกครั้ง เพราะไฟล์อาจถูกสร้างไปแล้ว';
+      sendStatus('err', escapeHtml(msg));
+    }).then(function () {
+      $('sendBtn').disabled = false;
+      $('sendBtn').dataset.confirm = '';
+      $('sendBtn').textContent = 'ส่งรายงานไปที่ Sheet';
+    });
+  });
+  $('inboxId').addEventListener('change', saveDest);
+  $('logUrl').addEventListener('change', saveDest);
+
   // ---- Boot ----
+  var dest = readStore(DEST_KEY) || {};
+  $('inboxId').value = dest.inbox || DEFAULT_INBOX;
+  $('logUrl').value = dest.log || DEFAULT_LOG;
+  $('logLink').href = $('logUrl').value;
   var cachedSheet = readStore(SHEET_KEY);
   $('sheetUrl').value = (cachedSheet && cachedSheet.url) || DEFAULT_SHEET;
   if (cachedSheet && cachedSheet.data && cachedSheet.data.accelerators) {
