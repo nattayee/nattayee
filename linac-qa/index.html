@@ -25,6 +25,9 @@
   --bad: #C1352A;
   --bad-bg: #FBE8E6;
   --shadow-lg: 0 14px 36px rgba(19, 32, 47, .18);
+  --beam: #FFF3D2;            /* light field through the MLC opening */
+  --leaf: #8D9AAA;
+  --leaf-edge: #C9D1DA;
   --f-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --stick: 118px;
@@ -34,6 +37,7 @@
     --bg: #0D131A; --surface: #151E28; --sunken: #111922; --ink: #E4EAF1; --muted: #97A3B3;
     --line: #263342; --line-strong: #3A4A5C; --accent: #F0AA35; --accent-ink: #F5BE62; --accent-soft: #30250F;
     --ok: #52C68D; --ok-bg: #12291E; --bad: #F2766D; --bad-bg: #34181A; --shadow-lg: 0 14px 36px rgba(0, 0, 0, .55);
+    --beam: #4A3C17; --leaf: #2F3B49; --leaf-edge: #18212B;
     color-scheme: dark;
   }
 }
@@ -41,6 +45,7 @@
   --bg: #0D131A; --surface: #151E28; --sunken: #111922; --ink: #E4EAF1; --muted: #97A3B3;
   --line: #263342; --line-strong: #3A4A5C; --accent: #F0AA35; --accent-ink: #F5BE62; --accent-soft: #30250F;
   --ok: #52C68D; --ok-bg: #12291E; --bad: #F2766D; --bad-bg: #34181A; --shadow-lg: 0 14px 36px rgba(0, 0, 0, .55);
+    --beam: #4A3C17; --leaf: #2F3B49; --leaf-edge: #18212B;
   color-scheme: dark;
 }
 
@@ -159,6 +164,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 10px; }
 .gitem { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--sunken); min-width: 0; }
 .glab { font-weight: 600; font-size: .8125rem; line-height: 1.2; }
+.gdesc { font-size: .75rem; line-height: 1.3; color: var(--muted); margin-top: -3px; }
+.grid.shapes { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+.mlcfig { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--beam); }
+.mlc { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 1; }
+.mlc-field { fill: var(--beam); }
+.mlc-leaves rect { fill: var(--leaf); stroke: var(--leaf-edge); stroke-width: .6; }
+.mlc-ideal { fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 5 3; }
+.mlc-axis { stroke: var(--ink); stroke-width: .7; opacity: .45; fill: none; }
 
 .cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .inp { position: relative; display: flex; align-items: center; }
@@ -362,6 +375,53 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     return names.join(', ');
   };
 
+  // MLC shapes: size in cm at isocenter (Round = diameter, Diamond = width × height of its bounding box)
+  const MLC_SHAPES = [
+    { label: 'S3×3', type: 'square', size: 3, desc: 'Square 3 × 3 cm' },
+    { label: 'S7×7', type: 'square', size: 7, desc: 'Square 7 × 7 cm' },
+    { label: 'S10×10', type: 'square', size: 10, desc: 'Square 10 × 10 cm' },
+    { label: 'R5', type: 'round', size: 5, desc: 'Round Ø 5 cm' },
+    { label: 'R10', type: 'round', size: 10, desc: 'Round Ø 10 cm' },
+    { label: 'D10×10', type: 'diamond', size: 10, desc: 'Diamond 10 × 10 cm' },
+    { label: 'D15×15', type: 'diamond', size: 15, desc: 'Diamond 15 × 15 cm' }
+  ];
+  const MLC_VIEW = 20;  // drawing shows a 20 × 20 cm field at isocenter
+
+  function mlcSVG(sh, lw) {
+    const S = 10, half = MLC_VIEW / 2, W = MLC_VIEW * S, c = W / 2;
+    const n = Math.round(MLC_VIEW / lw);
+    let leaves = '';
+    for (let i = 0; i < n; i++) {
+      const y0 = -half + i * lw, yc = y0 + lw / 2;
+      let w = 0;
+      if (sh.type === 'square') w = Math.abs(yc) < sh.size / 2 ? sh.size / 2 : 0;
+      else if (sh.type === 'round') { const r = sh.size / 2; w = Math.abs(yc) < r ? Math.sqrt(r * r - yc * yc) : 0; }
+      else w = Math.max(0, sh.size / 2 - Math.abs(yc));
+      const py = ((y0 + half) * S).toFixed(1), ph = (lw * S).toFixed(1);
+      const xl = (half - w) * S, xr = (half + w) * S;
+      leaves += '<rect x="0" y="' + py + '" width="' + xl.toFixed(1) + '" height="' + ph + '"/>' +
+        '<rect x="' + xr.toFixed(1) + '" y="' + py + '" width="' + (W - xr).toFixed(1) + '" height="' + ph + '"/>';
+    }
+    const h = sh.size / 2 * S;
+    const ideal = sh.type === 'square' ? '<rect x="' + (c - h) + '" y="' + (c - h) + '" width="' + 2 * h + '" height="' + 2 * h + '"/>'
+      : sh.type === 'round' ? '<circle cx="' + c + '" cy="' + c + '" r="' + h + '"/>'
+      : '<polygon points="' + c + ',' + (c - h) + ' ' + (c + h) + ',' + c + ' ' + c + ',' + (c + h) + ' ' + (c - h) + ',' + c + '"/>';
+    return '<svg class="mlc" viewBox="0 0 ' + W + ' ' + W + '" role="img" aria-label="ตัวอย่าง ' + esc(sh.desc) + ' leaf ' + lw * 10 + ' mm">' +
+      '<rect class="mlc-field" width="' + W + '" height="' + W + '"/><g class="mlc-leaves">' + leaves + '</g>' +
+      '<g class="mlc-ideal">' + ideal + '</g><path class="mlc-axis" d="M' + c + ' 0V' + W + 'M0 ' + c + 'H' + W + '"/></svg>';
+  }
+  const leafWidth = () => (valueOf('machine') === 'Precise (L2)' ? 1 : 0.5);
+  let drawnLeaf = null;
+  function drawMlc() {
+    const lw = leafWidth();
+    if (lw === drawnLeaf) return;
+    drawnLeaf = lw;
+    document.querySelectorAll('[data-mlc]').forEach(f => { f.innerHTML = mlcSVG(MLC_SHAPES[+f.dataset.mlc], lw); });
+    const hint = document.getElementById('mlcHint');
+    if (hint) hint.textContent = 'ภาพตัวอย่างในกรอบ ' + MLC_VIEW + ' × ' + MLC_VIEW + ' cm ที่ isocenter · leaf กว้าง ' + lw * 10 + ' mm' +
+      (valueOf('machine') ? ' (' + valueOf('machine') + ')' : '') + ' · เส้นประคือรูปร่างที่ต้องการ';
+  }
+
   const LF_ROWS = [
     ['s10', 'Sym 10×10', '', [5, 5, 5, 5]],
     ['s15', 'Sym 15×15', '', [7.5, 7.5, 7.5, 7.5]],
@@ -433,8 +493,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     ] },
 
     { id: 'mlc', name: 'MLC', tab: 'MLC', sub: 'รูปร่าง MLC และ Picket fence test', blocks: [
-      { type: 'grid', title: 'MLC shape', hint: 'Square (S), Round (R), Diamond (D)',
-        items: ['S3×3', 'S7×7', 'S10×10', 'R5', 'R10', 'D10×10', 'D15×15'].map((s, i) => ({ label: s, cell: pf('m_shape_' + i) })) },
+      { type: 'grid', title: 'MLC shape', cls: 'shapes', hintId: 'mlcHint',
+        items: MLC_SHAPES.map((sh, i) => ({ label: sh.label, desc: sh.desc, figure: '<figure class="mlcfig" data-mlc="' + i + '"></figure>', cell: pf('m_shape_' + i) })) },
       { type: 'list', items: [
         { label: 'MLC Test · Picket fence', limit: '≤ 1 mm', cell: pf('m_picket') }
       ] }
@@ -639,7 +699,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   function blockHTML(b) {
     let head = '';
     if (b.title) head += '<div class="block-head"><h3>' + esc(b.title) + '</h3>' + (b.limit ? '<span class="limit">' + esc(b.limit) + '</span>' : '') + '</div>';
-    if (b.hint) head += '<p class="hint">' + esc(b.hint) + '</p>';
+    if (b.hint || b.hintId) head += '<p class="hint"' + (b.hintId ? ' id="' + b.hintId + '"' : '') + '>' + esc(b.hint || '') + '</p>';
     let body = '';
     if (b.type === 'info') {
       body = '<div class="info">' +
@@ -660,8 +720,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         '</div>' + (it.limit ? '<span class="limit">' + esc(it.limit) + '</span>' : '<span></span>') + cellHTML(it.cell, it.label) + '</div>'
       ).join('') + '</div>';
     } else if (b.type === 'grid') {
-      body = '<div class="grid">' + b.items.map(it =>
-        '<div class="gitem"><span class="glab">' + esc(it.label) + '</span>' + cellHTML(it.cell, (b.title ? b.title + ' ' : '') + it.label) + '</div>'
+      body = '<div class="grid' + (b.cls ? ' ' + b.cls : '') + '">' + b.items.map(it =>
+        '<div class="gitem"><span class="glab">' + esc(it.label) + '</span>' + (it.figure || '') + (it.desc ? '<span class="gdesc">' + esc(it.desc) + '</span>' : '') +
+        cellHTML(it.cell, (b.title ? b.title + ' ' : '') + it.label) + '</div>'
       ).join('') + '</div>';
     } else if (b.type === 'table') {
       body = tableHTML(b);
@@ -966,6 +1027,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   };
 
   function updateAll() {
+    drawMlc();
     const stats = {};
     let tp = 0, tf = 0, tq = 0;
     const fails = [];
