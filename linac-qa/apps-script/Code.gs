@@ -8,7 +8,8 @@
  *
  * Files in the Apps Script project:
  *   Code.gs     this file
- *   Index.html  the form (same file as linac-qa/index.html)
+ *   Index.html  optional: the form (same file as linac-qa/index.html). By default the form is
+ *               loaded from GitHub (CONFIG.PAGE_URL), so only this file has to be pasted.
  *
  * Setup (see linac-qa/apps-script/README.md):
  *   1. Open the spreadsheet → Extensions → Apps Script (or any Apps Script project and set
@@ -34,7 +35,10 @@ const CONFIG = {
   PHYSICIST_EMAILS: {},   // e.g. { 'someone@gmail.com': 'วันนิตา มะลิลา' }
   // Only for the separate hosted page (index.html outside Apps Script) with its own Google button.
   CLIENT_ID: '',
-  PHOTO_FOLDER: 'Linac QA Photos'
+  PHOTO_FOLDER: 'Linac QA Photos',
+  // Where the form page comes from. Updates pushed to GitHub show up within ~10 minutes
+  // (open …/exec?refresh=1 to load them at once). Leave empty to use the Index file instead.
+  PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/claude/modest-euler-colam2/linac-qa/index.html'
 };
 
 const TABS = {
@@ -108,9 +112,52 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.ping) {
     return json_({ ok: true, app: 'linac-qa', sheet: ss_().getUrl() });
   }
-  return HtmlService.createHtmlOutputFromFile('Index')
+  const html = pageHtml_(!!(e && e.parameter && e.parameter.refresh));
+  return HtmlService.createHtmlOutput(html)
     .setTitle('Lampang Cancer Hospital, Linac QA')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/* ---------- form page ---------- */
+// The page (~120 KB) is cached in pieces because one cache entry holds at most 100 KB.
+function pageHtml_(refresh) {
+  const cache = CacheService.getScriptCache();
+  const complete = h => !!h && h.indexOf('</html>') > -1;
+  if (CONFIG.PAGE_URL) {
+    let html = refresh ? '' : cacheGet_(cache, 'page');
+    if (!complete(html)) {
+      try {
+        const res = UrlFetchApp.fetch(CONFIG.PAGE_URL, { muteHttpExceptions: true });
+        if (res.getResponseCode() === 200) html = res.getContentText('UTF-8');
+      } catch (err) { html = ''; }
+      if (complete(html)) cachePut_(cache, 'page', html, 600);
+    }
+    if (complete(html)) return html;
+  }
+  let local = '';
+  try { local = HtmlService.createHtmlOutputFromFile('Index').getContent(); } catch (err) { local = ''; }
+  if (complete(local)) return local;
+  return '<p style="font:16px sans-serif;padding:24px">โหลดหน้าฟอร์มไม่ได้ ตรวจ CONFIG.PAGE_URL ใน Code.gs ' +
+    'หรือวางไฟล์ Index ให้ครบ (บรรทัดสุดท้ายต้องเป็น &lt;/html&gt;)</p>';
+}
+
+function cachePut_(cache, key, text, seconds) {
+  const size = 30000, parts = {};   // characters; Thai text is up to 3 bytes each
+  let n = 0;
+  for (let i = 0; i < text.length; i += size) parts[key + '_' + (n++)] = text.slice(i, i + size);
+  parts[key + '_n'] = String(n);
+  cache.putAll(parts, seconds);
+}
+
+function cacheGet_(cache, key) {
+  const n = Number(cache.get(key + '_n') || 0);
+  if (!n) return '';
+  const keys = [];
+  for (let i = 0; i < n; i++) keys.push(key + '_' + i);
+  const got = cache.getAll(keys);
+  let text = '';
+  for (let i = 0; i < n; i++) { if (got[keys[i]] == null) return ''; text += got[keys[i]]; }
+  return text;
 }
 
 // Called by the form through google.script.run when it is served by this web app.

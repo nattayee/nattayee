@@ -6,10 +6,13 @@
 | ไฟล์ | ใส่ใน Apps Script เป็น | หน้าที่ |
 |---|---|---|
 | `Code.gs` | ไฟล์ Script ชื่อ `Code` | แสดงหน้าฟอร์ม (doGet), รับข้อมูลลง Sheet, เก็บรูปใน Drive |
-| `Index.html` | ไฟล์ HTML ชื่อ `Index` | หน้าฟอร์ม QA (สำเนาของ `linac-qa/index.html`) |
+| `Index.html` | (ไม่บังคับ) ไฟล์ HTML ชื่อ `Index` | หน้าฟอร์ม QA สำรอง ปกติ `Code.gs` โหลดหน้าฟอร์มจาก GitHub (`CONFIG.PAGE_URL`) เอง |
 | `appsscript.json` | (ไม่บังคับ) manifest | เขตเวลา Asia/Bangkok และค่า Web app สำหรับผู้ใช้ clasp |
 
 ## ติดตั้งครั้งแรก
+
+ปกติวางแค่ `Code.gs` ก็พอ หน้าฟอร์มโหลดจาก GitHub อัตโนมัติ (อัปเดตตามที่ push ภายใน ~10 นาที หรือเปิด `…/exec?refresh=1` เพื่อโหลดใหม่ทันที)
+
 
 1. เปิด Google Sheet ที่จะเก็บผล → **Extensions → Apps Script** (ถ้าสร้างโปรเจกต์จาก script.google.com เอง ให้ใส่ ID ของ Sheet ใน `CONFIG.SHEET_ID`)
 2. ไฟล์ `Code.gs`: กด Ctrl+A ในหน้าโค้ด แล้ววางเนื้อหา `Code.gs` ทับทั้งหมด
