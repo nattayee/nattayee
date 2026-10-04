@@ -396,6 +396,9 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
 .subpanel .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .saved { font-size: .78rem; color: var(--muted); }
 
+.sec-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--line); }
+.sec-actions .btn { min-height: 2.6rem; padding-inline: 18px; }
+.sec-actions .btn.danger { background: var(--surface); }
 .sec-nav { display: flex; justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 .navb { appearance: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 6px 4px; font-size: .85rem; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .navb:hover { color: var(--ink); }
@@ -1036,6 +1039,9 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
       '<div class="mv" data-noprint><button type="button" data-move="-1" aria-label="เลื่อนหมวด ' + esc(s.name) + ' ขึ้น" title="เลื่อนหมวดขึ้น">' + ICON.up + '</button>' +
       '<button type="button" data-move="1" aria-label="เลื่อนหมวด ' + esc(s.name) + ' ลง" title="เลื่อนหมวดลง">' + ICON.down + '</button></div></div></header>' +
       s.blocks.map(blockHTML).join('') +
+      (s.id === 'summary' ? '' : '<div class="sec-actions" data-noprint>' +
+        '<button class="btn danger" type="button" data-sec-clear aria-label="ล้างข้อมูลหมวด ' + esc(s.name) + '">ล้างข้อมูลหมวดนี้</button>' +
+        '<button class="btn primary" type="button" data-sec-save>บันทึกข้อมูล</button></div>') +
       '<nav class="sec-nav" aria-label="ไปหมวดก่อนหน้า / ถัดไป">' +
       '<button type="button" class="navb" data-go="prev">' + ICON.left + '<span></span></button>' +
       '<button type="button" class="navb" data-go="next"><span></span>' + ICON.right + '</button></nav>' +
@@ -1669,6 +1675,36 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   const flushSave = () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; save(); } };
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+  // Clears one category (its values, set values and local photos); undo from the toast.
+  const INFO_KEYS = ['machine', 'freq', 'freq_other', 'date', 'phys_other_on', 'phys_other'].concat(PHYSICISTS.map((n, i) => 'phys_' + i));
+  function clearSection(id) {
+    const keys = [];
+    SEC[id].cells.forEach(c => { keys.push(c.id); if (c.failInput) keys.push(c.id + '_val'); });
+    if (id === 'info') keys.push(...INFO_KEYS);
+    if (id === 'note') keys.push('note');
+    const before = { values: {}, nominals: {}, photos: photos.filter(x => x.sec === id) };
+    keys.forEach(k => {
+      if (k in state.values) { before.values[k] = state.values[k]; delete state.values[k]; }
+      if (k in state.nominals) { before.nominals[k] = state.nominals[k]; delete state.nominals[k]; }
+    });
+    if (id === 'info') state.values.date = todayISO();
+    if (before.photos.length) {
+      photos = photos.filter(x => x.sec !== id);
+      if (photoStoreOK) before.photos.forEach(x => photoDB.del(x.id).catch(storeFail));
+      renderPhotos(id);
+    }
+    fillInputs(); changed();
+    toast('ล้างข้อมูลหมวด ' + SEC[id].name + ' แล้ว', { label: 'เลิกทำ', fn: () => {
+      Object.assign(state.values, before.values); Object.assign(state.nominals, before.nominals);
+      if (before.photos.length) {
+        photos = photos.concat(before.photos).sort((a, b) => a.at - b.at);
+        if (photoStoreOK) before.photos.forEach(x => photoDB.put(x).catch(storeFail));
+        renderPhotos(id);
+      }
+      fillInputs(); changed();
+    } });
+  }
+
   // Empties the form (values, set values, local photos) and starts a new Record ID.
   function resetForm() {
     state.values = { date: todayISO() }; state.nominals = {};
@@ -1707,6 +1743,13 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   });
 
   main.addEventListener('click', e => {
+    const sc = e.target.closest('[data-sec-clear]');
+    if (sc) { clearSection(sc.closest('.sec').dataset.sec); return; }
+    if (e.target.closest('[data-sec-save]')) {
+      if (!sheetOn) toast(inFrame && !GAS ? 'บันทึกไป Google Sheet ได้เมื่อเปิดจากลิงก์ Apps Script' : 'ยังไม่ได้เชื่อม Google Sheet');
+      else sendToSheet();
+      return;
+    }
     const del = e.target.closest('[data-del]');
     if (del) { removePhoto(del.dataset.del); return; }
     const op = e.target.closest('[data-open]');
@@ -1949,6 +1992,10 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     st.textContent = msg; st.dataset.s = k;
     btn.disabled = !sheetOn || sending;
     btn.textContent = sending ? 'กำลังส่ง…' : state.values.sent_at ? 'ส่งอัปเดตไป Google Sheet' : 'ส่งผลไป Google Sheet';
+    main.querySelectorAll('[data-sec-save]').forEach(b => {
+      b.disabled = sending;
+      b.textContent = sending ? 'กำลังบันทึก…' : 'บันทึกข้อมูล';
+    });
   }
 
   // Fallback transport: a normal form POST into a hidden iframe (not subject to fetch/CORS limits).
