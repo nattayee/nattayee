@@ -357,7 +357,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   // mode: abs |v| ≤ tol · lt v < tol · dev |v − nominal| ≤ tol · devAbs ||v| − |nominal|| ≤ tol · angle (wraps 360°) · record (no criterion)
   const num = (id, o) => reg(Object.assign({ id, kind: 'num', mode: 'abs', tol: null, unit: '', scale: 1 }, o));
   const rec = (id, o) => reg(Object.assign({ id, kind: 'num', mode: 'record', unit: '' }, o));
-  const pf = (id, o) => reg(Object.assign({ id, kind: 'pf', yes: 'ผ่าน', no: 'ไม่ผ่าน' }, o));
+  // every pass/fail item asks for the observed value when it fails
+  const pf = (id, o) => reg(Object.assign({ id, kind: 'pf', yes: 'ผ่าน', no: 'ไม่ผ่าน', failInput: { unit: 'mm', label: 'ค่าที่วัดได้' } }, o));
   const calc = (id, o) => reg(Object.assign({ id, kind: 'calc' }, o));
   const ang = (id, nom, tol) => num(id, { mode: 'angle', nom, tol: tol || 0.5, unit: '°', tolUnit: '°', neg: true, ph: nom.toFixed(1) });
   const mm = (id, tol) => num(id, { mode: 'abs', tol: tol || 1, unit: 'mm', tolUnit: 'mm', ph: '0.0' });
@@ -454,8 +455,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
     { id: 'coll', name: 'Collimator', tab: 'Collimator', sub: 'ความเสถียรของแสงและ crosshair · มุม collimator', blocks: [
       { type: 'list', items: [
-        { label: 'Light source stability with collimator rotation', hint: 'Gantry 0° · ruler shadow ที่พื้น · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_light_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น' } }) },
-        { label: 'Crosshair stability with collimator rotation', hint: 'ที่ระยะ ≈ 100 cm · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_cross_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น' } }) }
+        { label: 'Light source stability with collimator rotation', hint: 'Gantry 0° · ruler shadow ที่พื้น · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_light_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น', prefix: 'Ø ' } }) },
+        { label: 'Crosshair stability with collimator rotation', hint: 'ที่ระยะ ≈ 100 cm · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_cross_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น', prefix: 'Ø ' } }) }
       ] },
       { type: 'grid', title: 'Real collimator 0°', limit: '≤ 0.5°', hint: 'ค่าที่เครื่องแสดงเมื่อ collimator อยู่ที่ 0° จริง หมุนเข้าหาจากแต่ละทิศ', items: [
         { label: 'CCW', cell: ang('c_real0_ccw', 0) },
@@ -541,9 +542,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       { type: 'grid', title: 'Spatial linearity (MV)', limit: '10 ± 0.2 cm',
         items: [['W', 'i_lin_w'], ['H', 'i_lin_h']].map(([label, id]) => ({ label, cell: num(id, { mode: 'dev', nom: 10, tol: 0.2, unit: 'cm', tolUnit: 'cm', ph: '10.00' }) })) },
       { type: 'grid', title: 'Image quality of EPID · Low contrast', limit: 'A, B, C, D',
-        items: ['A', 'B', 'C', 'D'].map(l => ({ label: 'กลุ่ม ' + l, cell: pf('i_lc_' + l, { yes: 'เห็น', no: 'ไม่เห็น' }) })) },
+        items: ['A', 'B', 'C', 'D'].map(l => ({ label: 'กลุ่ม ' + l, cell: pf('i_lc_' + l, { yes: 'เห็น', no: 'ไม่เห็น', failInput: { unit: '', label: 'สิ่งที่เห็น', text: true } }) })) },
       { type: 'list', items: [
-        { label: 'Image quality of EPID · High contrast', hint: 'มองเห็นรายละเอียดขนาด 1 mm', limit: '1 mm', cell: pf('i_hc', { yes: 'เห็น', no: 'ไม่เห็น' }) }
+        { label: 'Image quality of EPID · High contrast', hint: 'มองเห็นรายละเอียดขนาด 1 mm', limit: '1 mm', cell: pf('i_hc', { yes: 'เห็น', no: 'ไม่เห็น', failInput: { unit: 'mm', label: 'ขนาดเล็กสุดที่เห็น' } }) }
       ] }
     ] },
 
@@ -682,7 +683,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       const f = c.failInput;
       return '<div class="cell pf-val" data-cell="' + c.id + '" data-status="empty">' +
         '<div class="pfrow" role="group" aria-label="' + esc(aria) + '">' + btns + '</div>' +
-        '<div class="inp" data-failval hidden><input type="text" inputmode="decimal" id="f-' + c.id + '_val" data-id="' + c.id + '_val" autocomplete="off" spellcheck="false" placeholder="' + esc(f.label) + '" aria-label="' + esc(f.label + ' ' + aria) + '"><span class="unit">' + esc(f.unit) + '</span></div></div>';
+        '<div class="inp" data-failval hidden><input type="text" inputmode="' + (f.text ? 'text' : 'decimal') + '" id="f-' + c.id + '_val" data-id="' + c.id + '_val" autocomplete="off" spellcheck="false" placeholder="' + esc(f.label) + '" aria-label="' + esc(f.label + ' ' + aria) + '">' + (f.unit ? '<span class="unit">' + esc(f.unit) + '</span>' : '') + '</div></div>';
     }
     if (c.kind === 'calc') {
       return '<div class="cell calc" data-cell="' + c.id + '" data-status="empty"><output id="f-' + c.id + '" aria-label="' + esc(aria) + '">—</output></div>';
@@ -1103,9 +1104,13 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     }
     box.innerHTML = html;
   }
+  function failText(c) {
+    const f = c.failInput, v = f && String(valueOf(c.id + '_val')).trim();
+    return v ? (f.prefix || '') + v + (f.unit ? ' ' + f.unit : '') : '';
+  }
   function failValue(c) {
     if (c.r.text) return c.r.text;
-    if (c.kind === 'pf') return c.failInput && valueOf(c.id + '_val') ? 'Ø ' + valueOf(c.id + '_val') + ' ' + c.failInput.unit : c.no;
+    if (c.kind === 'pf') return failText(c) || c.no;
     return valueOf(c.id) + (c.unit ? ' ' + c.unit : '');
   }
 
@@ -1120,7 +1125,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       let test = c.test;
       if (c.nameId && valueOf(c.nameId)) test += ' (' + valueOf(c.nameId) + ')';
       const nom = c.kind === 'num' && c.mode !== 'record' && c.mode !== 'abs' && c.mode !== 'lt' ? nominalOf(c) : '';
-      const val = c.kind === 'pf' ? (state.values[c.id] === 'pass' ? c.yes : state.values[c.id] === 'fail' ? c.no + (c.failInput && valueOf(c.id + '_val') ? ' (' + valueOf(c.id + '_val') + ' ' + c.failInput.unit + ')' : '') : '') : c.kind === 'calc' ? (r.dev != null ? r.dev.toFixed(2) : '') : valueOf(c.id);
+      const val = c.kind === 'pf' ? (state.values[c.id] === 'pass' ? c.yes : state.values[c.id] === 'fail' ? c.no + (failText(c) ? ' (' + failText(c) + ')' : '') : '') : c.kind === 'calc' ? (r.dev != null ? r.dev.toFixed(2) : '') : valueOf(c.id);
       const unit = c.kind === 'calc' ? '%' : (c.unit || '');
       const dev = r.dev != null && c.kind !== 'calc' ? r.dev.toFixed(dpOf(c.tolUnit || c.unit)) + ' ' + (c.tolUnit || c.unit) : '';
       rows.push([SEC[id].name, test, c.item, nom == null ? '' : nom, val, unit, dev, c.limit, statusLabel(r.status)]);
