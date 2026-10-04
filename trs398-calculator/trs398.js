@@ -288,12 +288,43 @@
     return out;
   }
 
+  /*
+   * Re-measurement after the linac output has been adjusted (LPCH sheet "After adjust").
+   * Only M1 at the routine polarity and T/P are re-measured; k_pol, k_s, k_Q, k_Q,Qcross,
+   * N_D,w and the depth-dose conversion are carried over from the "before" calculation.
+   * aft: { readNormal, tempC, pressure, pUnit, mu }
+   */
+  function calculateAfter(inp, before, aft) {
+    var out = { warnings: [], errors: [] };
+    var sA = stats(parseReadings(aft.readNormal));
+    out.readNormal = sA;
+    if (!sA) out.errors.push('หลังปรับ: ต้องมีค่าที่อ่านได้อย่างน้อย 1 ค่า');
+    else if (sA.n > 1 && sA.cv > 0.1) out.warnings.push('หลังปรับ: ค่าที่อ่านซ้ำกระจายเกิน 0.1% (CV ' + sA.cv.toFixed(2) + '%)');
+    out.ktp = kTP(aft.tempC, aft.pressure, aft.pUnit);
+    if (!isFinite(out.ktp)) out.errors.push('หลังปรับ: ต้องระบุอุณหภูมิและความดัน');
+    var mu = aft.mu > 0 ? aft.mu : inp.mu;
+    if (!before || !before.ok) out.errors.push('ต้องคำนวณผลก่อนปรับให้ได้ก่อน');
+    if (sA && before && before.ok && isFinite(out.ktp)) {
+      out.mCorr = sA.mean * out.ktp * inp.kelec * before.kpol * before.ks * inp.kvol;
+      out.dZref = out.mCorr * inp.ndw * before.kq * before.kcross;
+      out.dZrefPerMU = out.dZref / mu;
+      out.outputPerMU = out.dZrefPerMU / before.depthFrac;
+      if (inp.expected > 0) {
+        out.deviation = (100 * (out.outputPerMU - inp.expected)) / inp.expected;
+        var a = Math.abs(out.deviation);
+        out.status = a <= inp.warnPct ? 'pass' : a <= inp.tolPct ? 'warn' : 'fail';
+      }
+    }
+    out.ok = out.errors.length === 0 && isFinite(out.outputPerMU);
+    return out;
+  }
+
   return {
     T0: T0, P0: P0, KS_COEFFS: KS_COEFFS,
     parseReadings: parseReadings, stats: stats,
     kTP: kTP, kPol: kPol, kS: kS, ksCoefficients: ksCoefficients,
     tprFromPdd: tprFromPdd, r50FromI50: r50FromI50, electronZref: electronZref,
     parseKqTable: parseKqTable, interpolateKq: interpolateKq, kqRowsFromGrid: kqRowsFromGrid,
-    calculate: calculate
+    calculate: calculate, calculateAfter: calculateAfter
   };
 });

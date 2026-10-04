@@ -140,6 +140,25 @@ ul.msgs li.wrn { background: var(--warn-soft); color: var(--warn); }
 .toast { font-size: .82rem; color: var(--ok); }
 textarea#report { display: block; margin-top: 10px; min-height: 160px; font-size: .78rem; }
 
+.source { display: grid; gap: 10px; }
+.source-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.source-row input[type="text"] { flex: 1 1 260px; }
+.src-status { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .84rem; }
+.src-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: .78rem; background: var(--bg); color: var(--muted); }
+.src-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.src-pill.live { background: var(--ok-soft); color: var(--ok); }
+.src-pill.file { background: var(--accent-soft); color: var(--accent); }
+.src-pill.busy { background: var(--warn-soft); color: var(--warn); }
+.src-pill.err { background: var(--bad-soft); color: var(--bad); }
+.src-msg { color: var(--muted); }
+.file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; cursor: pointer; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; padding: 7px 14px; font-weight: 500; font-size: .86rem; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-btn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.result-row + .result-row { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.result-row .tag { font: 600 .7rem var(--font-display); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.result-row .mid { font: 500 1.7rem/1.15 var(--font-mono); font-variant-numeric: tabular-nums; margin: 2px 0; }
+.result-row .mid small { font: 400 .9rem var(--font-body); color: var(--muted); margin-left: 4px; }
+.dev-bar .mark.before { background: transparent !important; border: 2px solid var(--muted); width: 8px; margin-left: -4px; }
 .libnote { font-size: .8rem; color: var(--muted); margin-top: 10px; }
 .missing { color: var(--warn); font-size: .78rem; }
 .kq-show { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 10px 12px; border-radius: 4px; background: var(--accent-soft); }
@@ -169,6 +188,18 @@ footer p { margin: 6px 0; }
 
   <div class="layout">
     <form id="f" autocomplete="off">
+      <fieldset>
+        <legend>แหล่งข้อมูลหลัก <small>Google Sheet TG398 LPCH</small></legend>
+        <div class="source">
+          <div class="source-row">
+            <input id="sheetUrl" type="text" class="mono" aria-label="ลิงก์ Google Sheet" spellcheck="false">
+            <button type="button" id="syncBtn">ดึงข้อมูลจาก Sheet</button>
+            <label class="file-btn">เลือกไฟล์ .xlsx<input type="file" id="xlsxFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+          </div>
+          <div class="src-status"><span class="src-pill" id="srcPill">สำเนาในแอป</span><span class="src-msg" id="srcMsg"></span></div>
+        </div>
+      </fieldset>
+
       <fieldset>
         <legend>เครื่องและอุปกรณ์ <small>จาก Sheet "0. List"</small></legend>
         <div class="grid">
@@ -324,6 +355,21 @@ footer p { margin: 6px 0; }
       </fieldset>
 
       <fieldset>
+        <legend>หลังปรับเครื่อง <small>After adjust</small></legend>
+        <label class="check"><input type="checkbox" id="useAfter"><span>ปรับ output แล้ววัดซ้ำ</span></label>
+        <div class="grid" id="afterBlock" style="margin-top:12px">
+          <div class="field"><label for="tempAfter">อุณหภูมิ (°C)</label><input id="tempAfter" type="number" step="0.1"></div>
+          <div class="field"><label for="pressureAfter">ความดัน (<span id="pUnitAfter">mbar</span>)</label><input id="pressureAfter" type="number" step="0.01"></div>
+          <div class="field"><span class="lbl">k<sub>TP</sub> หลังปรับ</span><div class="derived" id="ktpAfterOut" style="font-size:1rem;padding-top:6px">—</div></div>
+          <div class="field span2">
+            <div class="lbl-row"><label for="readAfter">M<sub>1</sub> หลังปรับ (+V<sub>1</sub>, nC)</label><span class="stat" id="statA"></span></div>
+            <input id="readAfter" type="text" class="mono" inputmode="decimal">
+            <span class="hint">วัดเฉพาะ polarity ที่ใช้ ส่วน k<sub>pol</sub>, k<sub>s</sub>, k<sub>Q</sub> และ TMR/PDD ใช้ค่าจากก่อนปรับ เหมือนใน Sheet</span>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>แปลงไปยัง z<sub>max</sub> และเกณฑ์ยอมรับ</legend>
         <div class="grid">
           <div class="field"><label for="depthDose" id="depthDoseLbl">TMR(z<sub>ref</sub>)</label><input id="depthDose" type="number" step="0.001"><span class="hint" id="depthDoseHint"></span></div>
@@ -338,14 +384,23 @@ footer p { margin: 6px 0; }
     <aside aria-live="polite">
       <div class="card headline">
         <div class="k" id="outLabel">Output ที่ z<sub>max</sub></div>
-        <div class="big" id="outBig">—<small>cGy/MU</small></div>
-        <div class="sub" id="outSub">&nbsp;</div>
-        <div class="chip" id="chip">รอข้อมูล</div>
+        <div class="result-row">
+          <div class="tag" id="beforeTag">ผลการวัด</div>
+          <div class="big" id="outBig">—<small>cGy/MU</small></div>
+          <div class="sub" id="outSub">&nbsp;</div>
+          <div class="chip" id="chip">รอข้อมูล</div>
+        </div>
+        <div class="result-row" id="afterRow" hidden>
+          <div class="tag">หลังปรับ</div>
+          <div class="mid" id="outAfter">—<small>cGy/MU</small></div>
+          <div class="chip" id="chipAfter">รอข้อมูล</div>
+        </div>
         <div class="dev-bar" aria-hidden="true">
           <div class="track"></div>
           <div class="band t" id="bandT"></div>
           <div class="band w" id="bandW"></div>
           <div class="zero"></div>
+          <div class="mark before" id="devMarkBefore" hidden></div>
           <div class="mark" id="devMark" hidden></div>
         </div>
         <div class="dev-scale"><span id="scaleL">−3%</span><span>0</span><span id="scaleR">+3%</span></div>
@@ -377,19 +432,25 @@ footer p { margin: 6px 0; }
   </footer>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="lpch-data.js"></script>
 <script src="trs398.js"></script>
+<script src="sheet-sync.js"></script>
 <script>
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var D = window.LPCH_DATA;
-  var STORE_KEY = 'trs398-lpch-worksheet-v2';
+  var SNAPSHOT = window.LPCH_DATA;
+  var D = SNAPSHOT;
+  var STORE_KEY = 'trs398-lpch-worksheet-v3';
+  var SHEET_KEY = 'trs398-lpch-sheet-v1';      // last good sheet data + source, per browser
+  var DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1t8KCsJtuv3vVzqRT_uWblHEDWYARuB1KU5gqVUTpt4w/edit';
   var CUSTOM = '__custom';
 
   var FIELDS = ['date', 'physicist', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
     'ndw', 'kelec', 'kcross', 'kvol', 'kqMode', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit',
-    'readNormal', 'readOpposite', 'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'zmax', 'expected', 'warnPct', 'tolPct'];
+    'readNormal', 'readOpposite', 'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'zmax', 'expected', 'warnPct', 'tolPct',
+    'tempAfter', 'pressureAfter', 'readAfter'];
 
   var Q_METHODS = {
     photon: [['ratio', 'TPR20,10 จาก M20/M10'], ['tpr', 'TPR20,10 (ใส่ค่า)'], ['pdd', 'PDD20,10 → TPR20,10']],
@@ -398,28 +459,33 @@ footer p { margin: 6px 0; }
 
   var READINGS = {
     photon: { m10: '15.10 15.11 15.10', m20: '10.40 10.40 10.41', readNormal: '15.02 15.03 15.02',
-      readOpposite: '15.04 15.05 15.04', readLow: '14.97 14.98 14.97', v1: 300, v2: 100, temp: 22.0, pressure: 1000.0 },
+      readOpposite: '15.04 15.05 15.04', readLow: '14.97 14.98 14.97', v1: 300, v2: 100, temp: 22.0, pressure: 1000.0,
+      useAfter: true, readAfter: '15.09 15.10 15.09', tempAfter: 22.1, pressureAfter: 1000.0 },
     electron: { m10: '', m20: '', readNormal: '12.38 12.39 12.38', readOpposite: '12.41 12.40 12.41',
-      readLow: '12.30 12.31 12.30', v1: 200, v2: 50, temp: 22.0, pressure: 1000.0 }
+      readLow: '12.30 12.31 12.30', v1: 200, v2: 50, temp: 22.0, pressure: 1000.0,
+      useAfter: false, readAfter: '', tempAfter: '', pressureAfter: '' }
   };
 
   function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
   function num(id) { var v = parseFloat(String($(id).value).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
   function fmt(v, d) { return isFinite(v) ? v.toFixed(d) : '—'; }
   function setVal(id, v) { $(id).value = v == null ? '' : v; }
-  function readStore() { try { var s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
-  function writeStore(v) { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+  function readStore(key) { try { var s = localStorage.getItem(key || STORE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function writeStore(v, key) { try { localStorage.setItem(key || STORE_KEY, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+  function byName(list, name) { for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i]; return null; }
 
-  function acc() { return D.accelerators[+$('accSel').value] || D.accelerators[0]; }
-  // energySel value: "p:<i>", "e:<i>", "p:custom", "e:custom"
+  function acc() { return byName(D.accelerators, $('accSel').value) || D.accelerators[0]; }
+  // energySel value: "p:<energy label>" or "e:<energy label>", "p:__custom" / "e:__custom" for manual entry
   function beam() { return $('energySel').value.charAt(0) === 'e' ? 'electron' : 'photon'; }
   function energyRow() {
-    var v = $('energySel').value.split(':');
-    if (v[1] === 'custom') return null;
-    return (v[0] === 'e' ? acc().electron : acc().photon)[+v[1]] || null;
+    var v = $('energySel').value, kind = v.charAt(0), label = v.slice(2);
+    if (label === CUSTOM) return null;
+    var list = kind === 'e' ? acc().electron : acc().photon;
+    for (var i = 0; i < list.length; i++) if (list[i].energy === label) return list[i];
+    return null;
   }
   function energyLabel() { var o = $('energySel').selectedOptions[0]; return o ? o.textContent : ''; }
-  function chamberRow() { return D.chambers[+$('chamberSel').value] || null; }
+  function chamberRow() { return byName(D.chambers, $('chamberSel').value); }
   function chamberName() { var c = chamberRow(); return c ? c.name : $('chamberCustom').value; }
   function electrometerName() { var v = $('electrometerSel').value; return v === CUSTOM ? $('electrometerCustom').value : v; }
   function kqLib() { return beam() === 'electron' ? D.kqElectron : D.kqPhoton; }
@@ -427,20 +493,20 @@ footer p { margin: 6px 0; }
   // ---- Populate selects ----
   function fillAccelerators() {
     var s = $('accSel'); s.innerHTML = '';
-    D.accelerators.forEach(function (a, i) { opt(s, String(i), a.name); });
+    D.accelerators.forEach(function (a) { opt(s, a.name, a.name); });
   }
   function fillEnergies(keep) {
     var s = $('energySel'); s.innerHTML = '';
     var a = acc();
-    a.photon.forEach(function (p, i) { opt(s, 'p:' + i, p.energy); });
-    a.electron.forEach(function (e, i) { opt(s, 'e:' + i, e.energy); });
-    opt(s, 'p:custom', 'Photon อื่นๆ (กรอกเอง)');
-    opt(s, 'e:custom', 'Electron อื่นๆ (กรอกเอง)');
+    a.photon.forEach(function (p) { opt(s, 'p:' + p.energy, p.energy); });
+    a.electron.forEach(function (e) { opt(s, 'e:' + e.energy, e.energy); });
+    opt(s, 'p:' + CUSTOM, 'Photon อื่นๆ (กรอกเอง)');
+    opt(s, 'e:' + CUSTOM, 'Electron อื่นๆ (กรอกเอง)');
     if (keep && [].some.call(s.options, function (o) { return o.value === keep; })) s.value = keep;
   }
   function fillChambers() {
     var s = $('chamberSel'); s.innerHTML = '';
-    D.chambers.forEach(function (c, i) { opt(s, String(i), c.name); });
+    D.chambers.forEach(function (c) { opt(s, c.name, c.name); });
     opt(s, CUSTOM, 'อื่นๆ (กรอกเอง)');
   }
   function fillElectrometers() {
@@ -455,7 +521,7 @@ footer p { margin: 6px 0; }
   }
   function fillKqSources(keep) {
     var s = $('kqSource'); s.innerHTML = '';
-    kqLib().chambers.forEach(function (c, i) { opt(s, String(i), c.name + ' (Sheet "1. kQ,Q0 table")'); });
+    kqLib().chambers.forEach(function (c) { opt(s, c.name, c.name + ' (Sheet "1. kQ,Q0 table")'); });
     opt(s, CUSTOM, 'วางตารางเอง');
     if (keep != null && [].some.call(s.options, function (o) { return o.value === keep; })) s.value = keep;
   }
@@ -463,8 +529,8 @@ footer p { margin: 6px 0; }
   // ---- Apply library values for the selected accelerator/energy/chamber ----
   function applyEnergy() {
     var b = beam(), row = energyRow();
-    fillQMethods();
-    fillKqSources();
+    fillQMethods($('qMethod').value);
+    fillKqSources($('kqSource').value);
     if (b === 'photon') {
       setVal('kcross', 1);
       $('kqMode').value = 'table';
@@ -472,13 +538,13 @@ footer p { margin: 6px 0; }
       else { setVal('depthDose', ''); setVal('zmax', ''); }
       var c = chamberRow();
       if (!c || c.type === 'pp') {
-        var i = D.chambers.findIndex(function (x) { return x.type === 'cyl'; });
-        if (i >= 0) $('chamberSel').value = String(i);
+        var cyl = D.chambers.filter(function (x) { return x.type === 'cyl'; })[0];
+        if (cyl) $('chamberSel').value = cyl.name;
       }
       applyChamber();
     } else {
-      var pp = D.chambers.findIndex(function (x) { return x.type === 'pp'; });
-      if (pp >= 0) $('chamberSel').value = String(pp);
+      var pp = D.chambers.filter(function (x) { return x.type === 'pp'; })[0];
+      if (pp) $('chamberSel').value = pp.name;
       if (row) {
         setVal('qValue', row.r50); setVal('zmax', row.zmax); setVal('ndw', row.ndw);
         setVal('depthDose', row.pdd != null ? +(row.pdd * 100).toFixed(2) : '');
@@ -534,12 +600,14 @@ footer p { margin: 6px 0; }
     $('ndwHint').textContent = photon ? 'จากใบรับรองหัววัด (Co-60)' : 'Sheet: N_D,w ของ PP chamber แยกตามพลังงาน electron';
     $('polBlock').hidden = !$('usePol').checked;
     $('ksBlock').hidden = !$('useKs').checked;
+    $('afterBlock').hidden = !$('useAfter').checked;
+    $('pUnitAfter').textContent = $('pUnit').selectedOptions[0] ? $('pUnit').selectedOptions[0].textContent.split(' ')[0] : '';
   }
 
   function kqRows() {
     if ($('kqMode').value !== 'table') return null;
     if ($('kqSource').value === CUSTOM) return TRS398.parseKqTable($('kqTable').value);
-    var lib = kqLib(), c = lib.chambers[+$('kqSource').value];
+    var lib = kqLib(), c = byName(lib.chambers, $('kqSource').value);
     return c ? TRS398.kqRowsFromGrid(lib.grid, c.kq) : [];
   }
 
@@ -562,22 +630,25 @@ footer p { margin: 6px 0; }
     var s = { acc: $('accSel').value, energy: $('energySel').value, chamber: $('chamberSel').value,
       electrometer: $('electrometerSel').value, kqSource: $('kqSource').value,
       setup: document.querySelector('input[name="setup"]:checked').value,
-      usePol: $('usePol').checked, useKs: $('useKs').checked };
+      usePol: $('usePol').checked, useKs: $('useKs').checked, useAfter: $('useAfter').checked };
     FIELDS.forEach(function (k) { s[k] = $(k).value; });
     return s;
   }
 
   function restore(s) {
-    $('accSel').value = s.acc || '0';
+    $('accSel').value = byName(D.accelerators, s.acc) ? s.acc : D.accelerators[0].name;
     fillEnergies(s.energy);
-    $('chamberSel').value = s.chamber || '0';
+    $('chamberSel').value = s.chamber || (D.chambers[0] && D.chambers[0].name);
+    if (!$('chamberSel').value && D.chambers[0]) $('chamberSel').value = D.chambers[0].name;
     $('electrometerSel').value = s.electrometer || D.electrometers[0];
+    if (!$('electrometerSel').value) $('electrometerSel').value = D.electrometers[0] || CUSTOM;
     fillQMethods(s.qMethod);
     fillKqSources(s.kqSource);
     var r = document.querySelector('input[name="setup"][value="' + (s.setup || 'SAD') + '"]'); if (r) r.checked = true;
     FIELDS.forEach(function (k) { if (k !== 'qMethod' && s[k] !== undefined) $(k).value = s[k]; });
     $('usePol').checked = s.usePol !== false;
     $('useKs').checked = s.useKs !== false;
+    $('useAfter').checked = !!s.useAfter;
   }
 
   function statText(s) {
@@ -601,13 +672,26 @@ footer p { margin: 6px 0; }
 
   var last = null;
 
+  function setChip(chip, res) {
+    chip.className = 'chip' + (res.ok && res.status ? ' ' + res.status : '');
+    if (res.ok && res.status) {
+      var label = { pass: 'ผ่าน', warn: 'ผ่าน แต่เกินระดับเฝ้าระวัง', fail: 'เกินเกณฑ์ยอมรับ' }[res.status];
+      chip.textContent = (res.deviation >= 0 ? '+' : '−') + Math.abs(res.deviation).toFixed(2) + '% · ' + label;
+    } else chip.textContent = res.errors.length ? 'ข้อมูลไม่ครบ' : 'รอข้อมูล';
+  }
+
   function render() {
     syncVisibility();
     libNote();
     var inp = gather();
     var r = TRS398.calculate(inp);
     var photon = inp.beam === 'photon';
-    last = { inp: inp, r: r, meta: snapshot() };
+    var useAfter = $('useAfter').checked;
+    var aft = useAfter ? { readNormal: $('readAfter').value, tempC: num('tempAfter'), pressure: num('pressureAfter'), pUnit: inp.pUnit, mu: inp.mu } : null;
+    var ra = useAfter ? TRS398.calculateAfter(inp, r, aft) : null;
+    last = { inp: inp, r: r, aft: aft, ra: ra, meta: snapshot() };
+    $('statA').textContent = ra ? statText(ra.readNormal) : '';
+    $('ktpAfterOut').textContent = ra ? fmt(ra.ktp, 4) : '—';
 
     $('stat10').textContent = statText(r.read10);
     $('stat20').textContent = statText(r.read20);
@@ -632,12 +716,13 @@ footer p { margin: 6px 0; }
     $('outSub').textContent = ok
       ? acc().name + ' · ' + energyLabel() + ' · D_w(z_ref) = ' + r.dZrefPerMU.toFixed(4) + ' cGy/MU'
       : 'กรอกข้อมูลให้ครบเพื่อคำนวณ';
-    var chip = $('chip');
-    chip.className = 'chip' + (ok && r.status ? ' ' + r.status : '');
-    if (ok && r.status) {
-      var label = { pass: 'ผ่าน', warn: 'ผ่าน แต่เกินระดับเฝ้าระวัง', fail: 'เกินเกณฑ์ยอมรับ' }[r.status];
-      chip.textContent = (r.deviation >= 0 ? '+' : '−') + Math.abs(r.deviation).toFixed(2) + '% · ' + label;
-    } else chip.textContent = r.errors.length ? 'ข้อมูลไม่ครบ' : 'รอข้อมูล';
+    setChip($('chip'), r);
+    $('beforeTag').textContent = useAfter ? 'ก่อนปรับ' : 'ผลการวัด';
+    $('afterRow').hidden = !useAfter;
+    if (ra) {
+      $('outAfter').innerHTML = (ra.ok ? ra.outputPerMU.toFixed(4) : '—') + '<small>cGy/MU</small>';
+      setChip($('chipAfter'), ra);
+    }
 
     var tol = inp.tolPct > 0 ? inp.tolPct : 2;
     var warn = inp.warnPct > 0 ? Math.min(inp.warnPct, tol) : tol / 2;
@@ -647,12 +732,18 @@ footer p { margin: 6px 0; }
     $('bandW').style.left = pos(-warn) + '%'; $('bandW').style.width = (pos(warn) - pos(-warn)) + '%';
     $('scaleL').textContent = '−' + span.toFixed(1) + '%';
     $('scaleR').textContent = '+' + span.toFixed(1) + '%';
-    var mark = $('devMark');
-    if (ok && isFinite(r.deviation)) {
+    // Solid mark = the current result (after adjust when used); ring = before adjust
+    var cur = ra ? ra : r;
+    var mark = $('devMark'), markB = $('devMarkBefore');
+    if (cur.ok && isFinite(cur.deviation)) {
       mark.hidden = false;
-      mark.style.left = Math.max(0, Math.min(100, pos(r.deviation))) + '%';
-      mark.style.background = r.status === 'fail' ? 'var(--bad)' : r.status === 'warn' ? 'var(--warn)' : 'var(--ink)';
+      mark.style.left = Math.max(0, Math.min(100, pos(cur.deviation))) + '%';
+      mark.style.background = cur.status === 'fail' ? 'var(--bad)' : cur.status === 'warn' ? 'var(--warn)' : 'var(--ink)';
     } else mark.hidden = true;
+    if (ra && ok && isFinite(r.deviation)) {
+      markB.hidden = false;
+      markB.style.left = Math.max(0, Math.min(100, pos(r.deviation))) + '%';
+    } else markB.hidden = true;
 
     var h = '';
     h += row('M̄<sub>1</sub> (+V<sub>1</sub>)', r.readNormal ? r.readNormal.mean.toFixed(4) + ' nC' : '—');
@@ -668,11 +759,18 @@ footer p { margin: 6px 0; }
     h += row('k<sub>Q,Qcross</sub>', fmt(r.kcross, 4));
     h += row('D<sub>w</sub>(z<sub>ref</sub>)', isFinite(r.dZrefPerMU) ? r.dZrefPerMU.toFixed(4) + ' cGy/MU' : '—', 'sep');
     h += row(r.depthDoseKind + '(z<sub>ref</sub>)', r.depthDoseKind === 'TMR' ? fmt(inp.depthDose, 3) : fmt(inp.depthDose, 2) + ' %');
-    h += row('Output ที่ z<sub>max</sub>', ok ? r.outputPerMU.toFixed(4) + ' cGy/MU' : '—', 'total');
+    h += row('Output ที่ z<sub>max</sub>' + (ra ? ' ก่อนปรับ' : ''), ok ? r.outputPerMU.toFixed(4) + ' cGy/MU' : '—', 'total');
+    if (ra) {
+      h += row('M̄<sub>1</sub> หลังปรับ', ra.readNormal ? ra.readNormal.mean.toFixed(4) + ' nC' : '—', 'sep');
+      h += row('k<sub>TP</sub> หลังปรับ', fmt(ra.ktp, 4));
+      h += row('M<sub>Q</sub> หลังปรับ', isFinite(ra.mCorr) ? ra.mCorr.toFixed(4) + ' nC' : '—');
+      h += row('Output ที่ z<sub>max</sub> หลังปรับ', ra.ok ? ra.outputPerMU.toFixed(4) + ' cGy/MU' : '—', 'total');
+    }
     $('factors').innerHTML = h;
 
-    var msgs = r.errors.map(function (m) { return '<li class="err">' + m + '</li>'; })
-      .concat(r.warnings.map(function (m) { return '<li class="wrn">' + m + '</li>'; }));
+    var errs = r.errors.concat(ra ? ra.errors : []), wrns = r.warnings.concat(ra ? ra.warnings : []);
+    var msgs = errs.map(function (m) { return '<li class="err">' + m + '</li>'; })
+      .concat(wrns.map(function (m) { return '<li class="wrn">' + m + '</li>'; }));
     $('msgs').innerHTML = msgs.join('');
     $('msgCard').hidden = msgs.length === 0;
 
@@ -712,22 +810,40 @@ footer p { margin: 6px 0; }
     line('D_w(z_max) (cGy/MU)', fmt(r.outputPerMU, 4));
     line('Expected (cGy/MU)', fmt(i.expected, 4));
     line('%Difference', isFinite(r.deviation) ? (r.deviation >= 0 ? '+' : '') + r.deviation.toFixed(2) + ' %  [' + (r.status || '').toUpperCase() + ']' : '—');
-    if (r.errors.length || r.warnings.length) {
+    var ra = last.ra, a = last.aft;
+    if (ra) {
+      L.push(''); L.push('AFTER ADJUST'); L.push('------------');
+      line('T (C) / P', fmt(a.tempC, 1) + ' / ' + a.pressure + ' ' + (i.pUnit === 'hPa' ? 'mbar' : i.pUnit));
+      line('M1 (+V1) nC', a.readNormal);
+      line('k_TP', fmt(ra.ktp, 4));
+      line('k_pol, k_s (from before)', fmt(r.kpol, 4) + ', ' + fmt(r.ks, 4));
+      line('M_Q corrected (nC)', fmt(ra.mCorr, 4));
+      line('D_w(z_ref) (cGy/MU)', fmt(ra.dZrefPerMU, 4));
+      line('D_w(z_max) (cGy/MU)', fmt(ra.outputPerMU, 4));
+      line('%Difference', isFinite(ra.deviation) ? (ra.deviation >= 0 ? '+' : '') + ra.deviation.toFixed(2) + ' %  [' + (ra.status || '').toUpperCase() + ']' : '—');
+    }
+    line('Data source', D.source || '');
+    var notes = r.errors.concat(r.warnings, ra ? ra.errors.concat(ra.warnings) : []);
+    if (notes.length) {
       L.push(''); L.push('Notes:');
-      r.errors.concat(r.warnings).forEach(function (w) { L.push(' - ' + w); });
+      notes.forEach(function (w) { L.push(' - ' + w); });
     }
     return L.join('\n');
   }
 
   function useExample(kind) {
-    $('accSel').value = '0';
+    // First accelerator that has the example energy (falls back to its first energy of that kind)
+    var want = kind === 'photon' ? '6 MV' : '9 MeV';
+    var a = D.accelerators.filter(function (x) { return x[kind].some(function (e) { return e.energy === want; }); })[0]
+      || D.accelerators.filter(function (x) { return x[kind].length; })[0] || D.accelerators[0];
+    $('accSel').value = a.name;
     fillEnergies();
-    var idx = acc()[kind].findIndex(function (e) { return e.energy === (kind === 'photon' ? '6 MV' : '9 MeV'); });
-    $('energySel').value = (kind === 'photon' ? 'p:' : 'e:') + Math.max(idx, 0);
-    $('electrometerSel').value = D.electrometers[0];
+    var row = a[kind].filter(function (e) { return e.energy === want; })[0] || a[kind][0];
+    $('energySel').value = (kind === 'photon' ? 'p:' : 'e:') + (row ? row.energy : CUSTOM);
+    $('electrometerSel').value = D.electrometers[0] || CUSTOM;
     applyEnergy();
     var x = READINGS[kind];
-    Object.keys(x).forEach(function (k) { setVal(k, x[k]); });
+    Object.keys(x).forEach(function (k) { if (k === 'useAfter') $('useAfter').checked = x[k]; else setVal(k, x[k]); });
     setVal('mu', 100); setVal('kelec', 1); setVal('kvol', 1); setVal('pUnit', 'hPa'); setVal('recomb', 'pulsed');
     setVal('expected', 1); setVal('warnPct', 1); setVal('tolPct', 2);
     if (kind === 'photon') document.getElementById('setupSAD').checked = true;
@@ -750,7 +866,7 @@ footer p { margin: 6px 0; }
   $('exPhoton').addEventListener('click', function () { useExample('photon'); });
   $('exElectron').addEventListener('click', function () { useExample('electron'); });
   $('clearAll').addEventListener('click', function () {
-    ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure'].forEach(function (k) { $(k).value = ''; });
+    ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure', 'readAfter', 'tempAfter', 'pressureAfter'].forEach(function (k) { $(k).value = ''; });
     $('noticeText').textContent = 'ล้างค่าการวัดแล้ว ข้อมูลเครื่อง หัววัด และเกณฑ์ยังคงอยู่';
     render();
     $('temp').focus();
@@ -765,6 +881,106 @@ footer p { margin: 6px 0; }
     } else fallback();
   });
 
+  // ---- Master data source: Google Drive connector → .xlsx file → bundled snapshot ----
+  function setSource(kind, msg) {
+    var pill = $('srcPill');
+    pill.className = 'src-pill' + (kind ? ' ' + kind : '');
+    pill.textContent = { live: 'เชื่อมกับ Sheet', file: 'จากไฟล์ .xlsx', busy: 'กำลังดึงข้อมูล', err: 'ดึงข้อมูลไม่สำเร็จ', cached: 'ข้อมูลจาก Sheet ครั้งล่าสุด' }[kind] || 'สำเนาในแอป';
+    $('srcMsg').textContent = msg || '';
+  }
+  function timeText(ms) {
+    try { return new Date(ms).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return new Date(ms).toISOString(); }
+  }
+
+  // Swap in new master data, keep the user's selections by name, refresh the library-driven fields
+  function setData(data) {
+    var keep = snapshot();
+    D = data;
+    fillAccelerators(); fillChambers(); fillElectrometers();
+    restore(keep);
+    applyEnergy();
+    render();
+  }
+
+  var mcpNs = null, XLSXok = typeof XLSX !== 'undefined';
+
+  function driveErrorText(err) {
+    var code = err && err.code;
+    var server = SheetSync.DRIVE_SERVER;
+    switch (code) {
+      case 'needs_reauth': return 'เชื่อมต่อ ' + server + ' ใหม่ที่ claude.ai Settings → Connectors แล้วกดดึงข้อมูลอีกครั้ง';
+      case 'server_not_connected': return 'เพิ่ม ' + server + ' ที่ claude.ai Settings → Connectors เพื่อดึงข้อมูลจาก Sheet โดยตรง';
+      case 'selection_required': return 'เลือกบัญชี ' + server + ' ที่จะใช้ในหน้าต่างที่ claude.ai แสดง';
+      case 'not_in_manifest': return 'หน้านี้ไม่ได้รับอนุญาตให้ใช้ ' + server + ' เปิดได้ที่เมนู Permissions ของหน้านี้';
+      case 'blocked_by_policy': case 'approval_required': return 'นโยบายขององค์กรไม่อนุญาตให้หน้านี้อ่าน ' + server;
+      case 'tool_error': return 'Google Drive ตอบกลับว่า: ' + (err.message || 'อ่านไฟล์ไม่ได้') + ' ตรวจสอบลิงก์และสิทธิ์การเข้าถึง Sheet';
+      case 'server_unavailable': return server + ' ไม่ตอบสนองชั่วคราว ลองกดดึงข้อมูลอีกครั้ง';
+      case 'bad_shape': return err.message;
+      case 'parse': return 'อ่านโครงสร้าง Sheet ไม่ได้: ' + err.message;
+      default: return 'ดึงข้อมูลไม่สำเร็จ (' + (code || 'error') + ') ' + (err && err.message ? err.message : '');
+    }
+  }
+
+  function syncFromDrive(isAuto) {
+    var id = SheetSync.fileIdFromUrl($('sheetUrl').value);
+    if (!id) { setSource('err', 'ลิงก์ Google Sheet ไม่ถูกต้อง'); return; }
+    if (!XLSXok) { setSource('err', 'โหลดตัวอ่านไฟล์ Excel ไม่ได้ ใช้สำเนาในแอปแทน'); return; }
+    if (!mcpNs) {
+      if (!isAuto) $('srcMsg').textContent = 'การดึงข้อมูลจาก Sheet โดยตรงใช้ได้เมื่อเปิดหน้านี้ใน claude.ai (ผ่าน Google Drive connector) ที่นี่ใช้ปุ่ม "เลือกไฟล์ .xlsx" แทน';
+      return;
+    }
+    $('syncBtn').disabled = true;
+    setSource('busy', 'กำลังอ่าน Sheet ผ่าน Google Drive…');
+    var attempt = function (retried) {
+      return SheetSync.fetchFromDrive(mcpNs, XLSX, id).catch(function (err) {
+        if (err && err.retryable && !retried) {
+          return new Promise(function (res) { setTimeout(res, (err.retryAfterMs || 1500) + Math.random() * 500); })
+            .then(function () { return attempt(true); });
+        }
+        throw err;
+      });
+    };
+    attempt(false).then(function (got) {
+      var when = Date.now();
+      setData(got.data);
+      writeStore({ data: got.data, at: when, url: $('sheetUrl').value }, SHEET_KEY);
+      setSource('live', (got.title ? got.title + ' · ' : '') + 'อัปเดต ' + timeText(when));
+    }, function (err) {
+      var e = err && err.code ? err : { code: 'parse', message: err && err.message ? err.message : String(err) };
+      setSource('err', driveErrorText(e) + (D === SNAPSHOT ? ' · ใช้สำเนาในแอปอยู่' : ' · ใช้ข้อมูลชุดล่าสุดอยู่'));
+    }).then(function () { $('syncBtn').disabled = false; });
+  }
+
+  $('syncBtn').addEventListener('click', function () { syncFromDrive(false); });
+  $('xlsxFile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!XLSXok) { setSource('err', 'โหลดตัวอ่านไฟล์ Excel ไม่ได้ (ต้องต่ออินเทอร์เน็ตเพื่อโหลด SheetJS)'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = SheetSync.parseArrayBuffer(XLSX, reader.result, f.name + ' (ไฟล์ .xlsx)');
+        var when = Date.now();
+        setData(data);
+        writeStore({ data: data, at: when, file: f.name }, SHEET_KEY);
+        setSource('file', f.name + ' · โหลดเมื่อ ' + timeText(when));
+      } catch (err) {
+        setSource('err', 'อ่านไฟล์ไม่ได้: ' + err.message + ' ต้องเป็นไฟล์ TG398 LPCH ที่มี sheet "0. List" และ "1. kQ,Q0 table"');
+      }
+      e.target.value = '';
+    };
+    reader.onerror = function () { setSource('err', 'อ่านไฟล์ไม่ได้'); };
+    reader.readAsArrayBuffer(f);
+  });
+
+  // ---- Boot ----
+  var cachedSheet = readStore(SHEET_KEY);
+  $('sheetUrl').value = (cachedSheet && cachedSheet.url) || DEFAULT_SHEET;
+  if (cachedSheet && cachedSheet.data && cachedSheet.data.accelerators) {
+    D = cachedSheet.data;
+    setSource('cached', (D.source || '') + ' · ' + timeText(cachedSheet.at));
+  } else setSource('', SNAPSHOT.source + ' (บันทึกในแอป)');
+
   fillAccelerators(); fillChambers(); fillElectrometers();
   var saved = readStore();
   if (saved && saved.energy) {
@@ -774,6 +990,14 @@ footer p { margin: 6px 0; }
   } else {
     fillEnergies();
     useExample('photon');
+  }
+
+  // Light up the live Sheet link when this view can reach the viewer's connectors
+  if (window.claude && typeof window.claude.use === 'function') {
+    window.claude.use('mcp').then(function (ns) {
+      mcpNs = ns;
+      if (ns) syncFromDrive(true);
+    }, function () { /* no connector access in this view */ });
   }
 })();
 </script>
