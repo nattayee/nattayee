@@ -1669,7 +1669,17 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   const flushSave = () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; save(); } };
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+  // Empties the form (values, set values, local photos) and starts a new Record ID.
+  function resetForm() {
+    state.values = { date: todayISO() }; state.nominals = {};
+    ensureDefaults(state.values);
+    showRequired = false;
+    replacePhotos([]);
+    fillInputs(); updateAll(); save();
+  }
+
   function changed() {
+    lastSent = null;   // the "sent and cleared" note gives way once a new record is being filled
     updateAll();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; save(); }, 300);
@@ -1750,10 +1760,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
       else toast('วาง JSON หรือเลือกไฟล์ก่อนกดนำเข้า');
     }
     else if (a === 'do-clear') {
-      state.values = { date: todayISO() }; state.nominals = {};
-      ensureDefaults(state.values);
-      replacePhotos([]);
-      fillInputs(); updateAll(); save();
+      resetForm();
       $('#clearBox').hidden = true; $('[data-act="clear"]').setAttribute('aria-expanded', 'false');
       toast('ล้างข้อมูลแล้ว');
     }
@@ -1908,6 +1915,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
 
   /* ================= Google Sheet ================= */
   let pendingSend = false, sending = false, sheetError = '';
+  let lastSent = null;   // { id, at, results, photos } of the record just sent, shown after the form is cleared
   const sheetOn = GAS || (!!SHEET.endpoint && !inFrame);
   function dataSig() {
     const v = Object.assign({}, state.values);
@@ -1924,6 +1932,11 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     let msg, k;
     const missing = infoMissing();
     if (inFrame && !GAS) { msg = 'ส่งไป Google Sheet ได้เมื่อเปิดจากเว็บที่โฮสต์เอง'; k = 'off'; }
+    else if (lastSent && !sending && !sheetError) {
+      msg = 'ส่ง Record ID ' + lastSent.id + ' แล้วเมื่อ ' + lastSent.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) +
+        ' (' + lastSent.results + ' รายการ' + (lastSent.photos ? ' · รูป ' + lastSent.photos + ' รูป' : '') + ') ล้างฟอร์มแล้ว พร้อมบันทึกครั้งใหม่ ดูหรือแก้ครั้งที่ส่งไปได้ที่ Dashboard';
+      k = 'ok';
+    }
     else if (missing.length && !sending) { msg = 'กรอกข้อมูลการตรวจให้ครบก่อนส่ง ยังขาด: ' + missing.map(x => x.label).join(', '); k = showRequired ? 'err' : 'dirty'; }
     else if (!SHEET.endpoint) { msg = 'ยังไม่ได้เชื่อม Google Sheet ผู้ดูแลต้องใส่ Web app URL ใน SHEET.endpoint (ดู README)'; k = 'off'; }
     else if (sending) { msg = 'กำลังส่ง…'; k = ''; }
@@ -1987,7 +2000,6 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     }
     flushSave();
     const tf = +$('#tFail').textContent, tp = +$('#tPass').textContent, tq = +$('#tPend').textContent;
-    const sig = dataSig();
     const payload = {
       app: 'linac-qa', version: 1, recordId: valueOf('recordId'), sentAt: new Date().toISOString(),
       idToken: currentUser && currentUser.token || '',
@@ -2028,10 +2040,13 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
         }
       }
       if (!out.ok) throw new Error(out.error || 'Sheet ตอบกลับว่าไม่สำเร็จ');
-      state.values.sent_at = new Date().toISOString();
-      state.values.sent_sig = sig;
-      save();
-      toast('ส่งไป Google Sheet แล้ว ' + out.results + ' รายการ' + (out.photos ? ' · รูป ' + out.photos + ' รูป' : ''));
+      // sent: clear everything and start the next record
+      const sentId = valueOf('recordId');
+      resetForm();
+      lastSent = { id: sentId, at: new Date(), results: out.results, photos: out.photos };
+      dashRecords = null; trendCache = {};   // the Dashboard reloads with the new record
+      toast('ส่งไป Google Sheet แล้ว ' + out.results + ' รายการ' + (out.photos ? ' · รูป ' + out.photos + ' รูป' : '') + ' · ล้างฟอร์มแล้ว');
+      goToSection(order[0]);
     } catch (e) {
       sheetError = 'ส่งไม่สำเร็จ: ' + (e && e.message || 'ไม่ทราบสาเหตุ') + ' (ข้อมูลยังเก็บอยู่ในเครื่องนี้)';
       toast('ส่งไป Google Sheet ไม่สำเร็จ');
