@@ -46,7 +46,7 @@ const TABS = {
   records: {
     name: 'Records',
     head: ['Record ID', 'Sent at', 'Recorded by', 'Email', 'Machine', 'QA frequency', 'QA date', 'Physicist',
-      'Pass', 'Fail', 'Pending', 'Overall', 'QA note', 'Photos', 'Photo folder']
+      'Pass', 'Fail', 'Pending', 'Overall', 'QA note', 'Photos', 'Photo folder', 'Form data']
   },
   results: {
     name: 'Results',
@@ -202,18 +202,21 @@ function handle_(body) {
     const info = data.info || {};
     const id = String(data.recordId);
 
-    const photo = savePhotos_(id, info, data.photos || [], user.email);
+    // keepPhotos: the page has no new photos for this record, so leave the saved ones untouched
+    const photo = data.keepPhotos ? keptPhotos_(id) : savePhotos_(id, info, data.photos || [], user.email);
 
     const s = data.summary || {};
+    let form = data.form ? JSON.stringify(data.form) : '';
+    if (form.length > 45000) form = '';   // a Sheets cell holds at most 50,000 characters
     upsertRow_(TABS.records, id, [
       id, new Date(), user.name, user.email || UNKNOWN_EMAIL, info.machine, info.frequency, info.date, info.physicist,
-      s.pass, s.fail, s.pending, s.overall, data.note, photo.rows.length, photo.folderUrl
+      s.pass, s.fail, s.pending, s.overall, data.note, photo.rows.length, photo.folderUrl, form
     ]);
 
     replaceRows_(TABS.results, id, (data.results || []).map(r => [
       id, info.machine, info.date, r.category, r.test, r.item, r.nominal, r.value, r.unit, r.deviation, r.limit, r.result, user.email
     ]));
-    replaceRows_(TABS.photos, id, photo.rows);
+    if (!data.keepPhotos) replaceRows_(TABS.photos, id, photo.rows);
     log_(user.email, 'ส่งผล', id, (data.results || []).length + ' รายการ · รูป ' + photo.rows.length + ' รูป · ' + (s.overall || ''));
 
     return { ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: ss_().getUrl() };
@@ -224,6 +227,77 @@ function handle_(body) {
   } finally {
     try { lock.releaseLock(); } catch (e) { /* not held */ }
   }
+}
+
+/* ---------- dashboard: history and trends ---------- */
+// Called by the Dashboard tab through google.script.run. Dates go back as text because
+// google.script.run cannot return Date objects.
+function getHistory() {
+  requireUser_();
+  const sh = tab_(TABS.records), n = sh.getLastRow() - 1;
+  if (n < 1) return { records: [] };
+  const rows = sh.getRange(2, 1, n, TABS.records.head.length).getValues();
+  const records = rows.filter(r => r[0]).map(r => ({
+    id: String(r[0]), sentAt: text_(r[1], true), by: String(r[2] || ''), email: String(r[3] || ''),
+    machine: String(r[4] || ''), frequency: String(r[5] || ''), date: text_(r[6]), physicist: String(r[7] || ''),
+    pass: Number(r[8]) || 0, fail: Number(r[9]) || 0, pending: Number(r[10]) || 0, overall: String(r[11] || ''),
+    note: String(r[12] || ''), photos: Number(r[13]) || 0, folder: String(r[14] || ''), hasForm: !!r[15]
+  }));
+  return { records };
+}
+
+function getRecord(id) {
+  requireUser_();
+  id = String(id);
+  const rec = tab_(TABS.records), hit = idRows_(rec, id)[0];
+  if (!hit) throw new Error('ไม่พบ Record ID ' + id);
+  const r = rec.getRange(hit, 1, 1, TABS.records.head.length).getValues()[0];
+  let form = null;
+  try { form = r[15] ? JSON.parse(r[15]) : null; } catch (e) { form = null; }
+  const pick = (def, map) => {
+    const sh = tab_(def), n = sh.getLastRow() - 1;
+    if (n < 1) return [];
+    return sh.getRange(2, 1, n, def.head.length).getValues().filter(x => String(x[0]) === id).map(map);
+  };
+  const results = pick(TABS.results, x => ({ category: String(x[3]), test: String(x[4]), item: String(x[5]), nominal: text_(x[6]),
+    value: text_(x[7]), unit: String(x[8]), deviation: text_(x[9]), limit: String(x[10]), result: String(x[11]) }));
+  const photos = pick(TABS.photos, x => ({ category: String(x[3]), caption: String(x[4]), name: String(x[5]), url: String(x[6]) }));
+  return {
+    record: { id, sentAt: text_(r[1], true), by: String(r[2] || ''), email: String(r[3] || ''), machine: String(r[4] || ''),
+      frequency: String(r[5] || ''), date: text_(r[6]), physicist: String(r[7] || ''), pass: Number(r[8]) || 0,
+      fail: Number(r[9]) || 0, pending: Number(r[10]) || 0, overall: String(r[11] || ''), note: String(r[12] || ''),
+      photos: Number(r[13]) || 0, folder: String(r[14] || '') },
+    results, photos, form
+  };
+}
+
+// One checked item across every saved record, e.g. ('Gantry', 'Gantry reading', '90°').
+function getTrend(category, test, item) {
+  requireUser_();
+  const sh = tab_(TABS.results), n = sh.getLastRow() - 1;
+  if (n < 1) return [];
+  return sh.getRange(2, 1, n, 12).getValues()
+    .filter(x => String(x[3]) === category && String(x[4]) === test && String(x[5]) === item && x[7] !== '')
+    .map(x => ({ id: String(x[0]), machine: String(x[1]), date: text_(x[2]), value: text_(x[7]), deviation: text_(x[9]), result: String(x[11]) }));
+}
+
+function requireUser_() {
+  const email = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  const denied = allowError_(email);
+  if (denied) throw new Error(denied);
+}
+
+function text_(v, withTime) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), withTime ? "yyyy-MM-dd'T'HH:mm" : 'yyyy-MM-dd');
+  return v === null || v === undefined ? '' : String(v);
+}
+
+function keptPhotos_(id) {
+  const sh = tab_(TABS.photos), n = sh.getLastRow() - 1;
+  const rows = n < 1 ? [] : sh.getRange(2, 1, n, TABS.photos.head.length).getValues().filter(x => String(x[0]) === id);
+  const rec = tab_(TABS.records), hit = idRows_(rec, id)[0];
+  const folderUrl = hit ? String(rec.getRange(hit, 15).getValue() || '') : '';
+  return { rows, folderUrl };
 }
 
 /* ---------- sign-in check ---------- */

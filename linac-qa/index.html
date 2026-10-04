@@ -24,6 +24,8 @@
   --ok-bg: #E4F3EB;
   --bad: #C1352A;
   --bad-bg: #FBE8E6;
+  --series: #2D6CB5;         /* trend line (validated against both surfaces) */
+  --bad-mark: #C1352A;       /* out-of-tolerance points on charts */
   --shadow-lg: 0 14px 36px rgba(19, 32, 47, .18);
   --beam: #FFF3D2;            /* light field through the MLC opening */
   --leaf: #8D9AAA;
@@ -39,6 +41,7 @@
     --bg: #0D131A; --surface: #151E28; --sunken: #111922; --ink: #E4EAF1; --muted: #97A3B3;
     --line: #263342; --line-strong: #3A4A5C; --accent: #F0AA35; --accent-ink: #F5BE62; --accent-soft: #30250F;
     --ok: #52C68D; --ok-bg: #12291E; --bad: #F2766D; --bad-bg: #34181A; --shadow-lg: 0 14px 36px rgba(0, 0, 0, .55);
+    --series: #5B93D3; --bad-mark: #E5675D;
     --beam: #4A3C17; --leaf: #2F3B49; --leaf-edge: #18212B;
     color-scheme: dark;
   }
@@ -47,12 +50,14 @@
   --bg: #0D131A; --surface: #151E28; --sunken: #111922; --ink: #E4EAF1; --muted: #97A3B3;
   --line: #263342; --line-strong: #3A4A5C; --accent: #F0AA35; --accent-ink: #F5BE62; --accent-soft: #30250F;
   --ok: #52C68D; --ok-bg: #12291E; --bad: #F2766D; --bad-bg: #34181A; --shadow-lg: 0 14px 36px rgba(0, 0, 0, .55);
+    --series: #5B93D3; --bad-mark: #E5675D;
     --beam: #4A3C17; --leaf: #2F3B49; --leaf-edge: #18212B;
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--f-sans); }
 button, input, textarea { font: inherit; color: inherit; }
@@ -246,6 +251,60 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .btn:disabled { opacity: .5; cursor: default; }
 .extlink { color: var(--ink); font-weight: 500; font-size: .875rem; text-underline-offset: 3px; text-decoration-color: var(--accent); }
 
+/* view switch + dashboard */
+.views { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.views button { appearance: none; border: 0; background: var(--surface); color: var(--muted); padding: 7px 14px; font-weight: 600; font-size: .85rem; cursor: pointer; }
+.views button + button { border-left: 1px solid var(--line-strong); }
+.views button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { display: none; }
+.dash { display: flex; flex-direction: column; gap: 20px; padding-block: 20px 80px; }
+.dcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dcard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; flex-wrap: wrap; }
+.dcard-head h2 { font-size: 1.15rem; }
+.dfilters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
+.dfilters label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; color: var(--muted); font-weight: 600; min-width: 0; }
+.dfilters select, .trend-pick select { height: 2.4rem; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); padding: 0 10px; font-size: .9rem; max-width: 100%; }
+.trend-pick { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; color: var(--muted); font-weight: 600; min-width: 0; }
+.trend-pick select { width: min(32rem, 100%); }
+.demo-note { margin: 0; padding: 10px 14px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); font-size: .85rem; }
+.dash-msg { margin: 0; color: var(--muted); font-size: .9rem; }
+.dash-msg.err { color: var(--bad); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 12px; }
+.tile { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .tl { font-size: .8rem; color: var(--muted); }
+.tile .tv { font-size: 1.75rem; font-weight: 600; line-height: 1.25; }
+.tile .ts { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chartbox { position: relative; min-height: 120px; outline-offset: 4px; }
+.chartbox svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chartbox .axis { font: 400 11px var(--f-mono); fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chartbox .endlabel { font: 600 12px var(--f-mono); fill: var(--ink); }
+.ctip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; box-shadow: var(--shadow-lg); font-size: .8rem; min-width: 10rem; z-index: 3; display: flex; flex-direction: column; gap: 2px; }
+.ctip .cv { font: 600 1rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.ctip .cs { color: var(--muted); }
+.trend-meta { margin: 0; font-size: .8rem; color: var(--muted); }
+.ht td, .ht th { white-space: nowrap; min-width: 0; vertical-align: middle; }
+.ht td { padding-block: 10px; }
+.ht tbody tr { cursor: pointer; }
+.ht tbody tr:hover, .ht tbody tr:focus-visible { background: var(--sunken); }
+.ht tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ht .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.pill.pass { background: var(--ok-bg); color: var(--ok); }
+.pill.fail { background: var(--bad-bg); color: var(--bad); }
+.pill.inc { background: var(--accent-soft); color: var(--accent-ink); }
+.scrim { position: fixed; inset: 0; z-index: 64; background: rgba(8, 12, 18, .45); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 65; width: min(48rem, 100%); background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.drawer-head h2 { font-size: 1.1rem; }
+.drawer-body { overflow: auto; padding: 16px 20px calc(40px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 16px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 10px 16px; margin: 0; }
+.kv div { min-width: 0; }
+.kv dt { font-size: .75rem; color: var(--muted); font-weight: 600; }
+.kv dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.rgroup h3 { margin-bottom: 6px; }
+.rtable td.res { white-space: nowrap; }
+.rtable tr.isfail td { background: var(--bad-bg); }
+
 /* photos */
 .pdrop { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px; border: 1.5px dashed var(--line-strong); border-radius: 10px; background: var(--sunken); }
 .pdrop.over { border-color: var(--accent); background: var(--accent-soft); }
@@ -371,6 +430,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
           <p class="meta" id="metaLine">Monthly QA worksheet</p>
         </div>
       </div>
+      <div class="views" role="tablist" aria-label="มุมมอง">
+        <button type="button" role="tab" id="viewForm" aria-selected="true" aria-controls="main">บันทึก QA</button>
+        <button type="button" role="tab" id="viewDash" aria-selected="false" aria-controls="dash">Dashboard</button>
+      </div>
       <div class="tally" aria-live="polite">
         <span class="t-pass"><b id="tPass">0</b> ผ่าน</span>
         <span class="t-fail"><b id="tFail">0</b> ไม่ผ่าน</span>
@@ -404,6 +467,37 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 </div>
 
 <main class="wrap" id="main"></main>
+
+<main class="wrap dash" id="dash" aria-labelledby="dashTitle" hidden>
+  <h2 class="sr-only" id="dashTitle">Dashboard</h2>
+  <p class="demo-note" id="demoNote" hidden>ข้อมูลตัวอย่าง สุ่มขึ้นเพื่อแสดงหน้าตา Dashboard ข้อมูลจริงจาก Google Sheet จะแสดงเมื่อเปิดผ่านลิงก์ Apps Script</p>
+  <div class="dfilters">
+    <label>เครื่อง<select id="fMachine"></select></label>
+    <label>ความถี่ของ QA<select id="fFreq"></select></label>
+    <label>ช่วงเวลา<select id="fRange">
+      <option value="0">ทั้งหมด</option><option value="30">30 วันล่าสุด</option><option value="90">90 วันล่าสุด</option><option value="365">1 ปีล่าสุด</option>
+    </select></label>
+    <button class="btn" type="button" id="dashRefresh">โหลดข้อมูลใหม่</button>
+  </div>
+  <p class="dash-msg" id="dashMsg" role="status"></p>
+  <section class="tiles" id="tiles" aria-label="สรุป"></section>
+  <section class="dcard" aria-labelledby="trendTitle">
+    <div class="dcard-head"><h2 id="trendTitle">Trend</h2><p class="trend-meta" id="trendMeta"></p></div>
+    <label class="trend-pick">รายการที่ต้องการดู<select id="trendItem"></select></label>
+    <div class="chartbox" id="trendChart" tabindex="0" aria-label="กราฟ trend ใช้ลูกศรซ้าย/ขวาเพื่อดูค่าแต่ละครั้ง"></div>
+    <details><summary>ดูค่าเป็นตาราง</summary><div class="tscroll" id="trendTable"></div></details>
+  </section>
+  <section class="dcard" aria-labelledby="histTitle">
+    <div class="dcard-head"><h2 id="histTitle">ประวัติการบันทึก</h2><p class="trend-meta">กดที่แถวเพื่อดูรายละเอียดของครั้งนั้น</p></div>
+    <div class="tscroll" id="histTable"></div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+  <div class="drawer-head"><h2 id="drawerTitle">รายละเอียด</h2><button class="btn small" type="button" id="drawerClose">ปิด</button></div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
 
 <div class="toast" id="toast" role="status" hidden><span id="toastText"></span><button type="button" id="toastAct" hidden></button></div>
 
@@ -1759,7 +1853,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const sheetOn = GAS || (!!SHEET.endpoint && !inFrame);
   function dataSig() {
     const v = Object.assign({}, state.values);
-    delete v.sent_at; delete v.sent_sig; delete v.send_photos;
+    delete v.sent_at; delete v.sent_sig; delete v.send_photos; delete v.loaded_from_sheet;
     const str = JSON.stringify([v, state.nominals, photos.map(x => [x.id, x.cap])]);
     let h = 5381;
     for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
@@ -1833,6 +1927,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       summary: { pass: tp, fail: tf, pending: tq, overall: tf ? 'Fail' : tq ? 'Incomplete' : 'Pass' },
       note: valueOf('note'),
       results: resultRows(),
+      form: formSnapshot(),
+      // no new photos for a record reopened from the Sheet (or photos switched off): keep the saved ones
+      keepPhotos: valueOf('send_photos') !== '1' || (state.values.loaded_from_sheet === '1' && !photos.length),
       photos: valueOf('send_photos') === '1' ? photos.filter(x => SEC[x.sec]).map(x => ({ category: SEC[x.sec].name, name: x.name, cap: x.cap, data: x.data })) : []
     };
     sending = true; sheetError = ''; renderSheet();
@@ -1874,6 +1971,398 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     }
   }
 
+  /* ================= dashboard ================= */
+  // Reads saved records back from the Google Sheet (getHistory / getRecord / getTrend in Code.gs).
+  // Outside Apps Script there is no Sheet to read, so the dashboard shows clearly marked sample data.
+  const dashEl = $('#dash');
+  let view = 'form', dashRecords = null, dashLoading = false, trendCache = {}, trendPts = [], trendFocus = -1;
+
+  function formSnapshot() {
+    const v = Object.assign({}, state.values);
+    ['sent_at', 'sent_sig', 'send_photos', 'loaded_from_sheet'].forEach(k => delete v[k]);
+    return { values: v, nominals: state.nominals };
+  }
+
+  function api(name, ...args) {
+    if (GAS) {
+      return new Promise((resolve, reject) => google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(new Error(err && err.message || String(err))))[name](...args));
+    }
+    return new Promise(resolve => setTimeout(() => resolve(demoApi[name](...args)), 120));
+  }
+
+  function setView(v) {
+    view = v;
+    document.body.classList.toggle('dash-view', v === 'dash');
+    $('#main').hidden = v === 'dash';
+    dashEl.hidden = v !== 'dash';
+    $('#viewForm').setAttribute('aria-selected', String(v === 'form'));
+    $('#viewDash').setAttribute('aria-selected', String(v === 'dash'));
+    try { history.replaceState(null, '', v === 'dash' ? '#dashboard' : '#' + (activeId || '')); } catch (e) { /* ignore */ }
+    window.scrollTo(0, 0);
+    if (v === 'dash' && !dashRecords && !dashLoading) loadDash();
+    if (v === 'dash' && dashRecords) renderDash();
+    if (v === 'form') spy();
+  }
+  $('#viewForm').addEventListener('click', () => setView('form'));
+  $('#viewDash').addEventListener('click', () => setView('dash'));
+
+  /* ---- filters ---- */
+  function fillFilters() {
+    const keepM = $('#fMachine').value, keepF = $('#fFreq').value;
+    const machines = Array.from(new Set(MACHINES.map(m => m.value).concat((dashRecords || []).map(r => r.machine)).filter(Boolean)));
+    const freqs = Array.from(new Set(FREQS.concat((dashRecords || []).map(r => r.frequency)).filter(Boolean)));
+    $('#fMachine').innerHTML = '<option value="">ทุกเครื่อง</option>' + machines.map(m => '<option>' + esc(m) + '</option>').join('');
+    $('#fFreq').innerHTML = '<option value="">ทุกความถี่</option>' + freqs.map(f => '<option>' + esc(f) + '</option>').join('');
+    $('#fMachine').value = keepM || (machines.includes(valueOf('machine')) ? valueOf('machine') : '');
+    $('#fFreq').value = keepF || '';
+  }
+  ['fMachine', 'fFreq', 'fRange'].forEach(id => $('#' + id).addEventListener('change', renderDash));
+  $('#dashRefresh').addEventListener('click', () => { trendCache = {}; loadDash(); });
+
+  function filtered() {
+    const m = $('#fMachine').value, f = $('#fFreq').value, days = +$('#fRange').value;
+    const since = days ? new Date(Date.now() - days * 864e5).toISOString().slice(0, 10) : '';
+    return (dashRecords || [])
+      .filter(r => (!m || r.machine === m) && (!f || r.frequency === f) && (!since || r.date >= since))
+      .sort((a, b) => (b.date + b.sentAt).localeCompare(a.date + a.sentAt));
+  }
+
+  function dashMsg(text, err) { const el = $('#dashMsg'); el.textContent = text || ''; el.classList.toggle('err', !!err); el.hidden = !text; }
+
+  function loadDash() {
+    dashLoading = true;
+    $('#demoNote').hidden = GAS;
+    dashEl.style.opacity = dashRecords ? '.55' : '';
+    dashMsg(dashRecords ? '' : 'กำลังโหลดข้อมูลจาก Google Sheet…');
+    api('getHistory').then(res => {
+      dashRecords = (res && res.records) || [];
+      dashMsg(dashRecords.length ? '' : 'ยังไม่มีข้อมูลที่บันทึกไว้ใน Google Sheet ส่งผลจากแท็บ “บันทึก QA” แล้วข้อมูลจะแสดงที่นี่');
+      fillFilters(); renderDash();
+    }).catch(err => {
+      dashMsg('โหลดข้อมูลไม่สำเร็จ: ' + err.message, true);
+    }).finally(() => { dashLoading = false; dashEl.style.opacity = ''; });
+  }
+
+  function renderDash() {
+    if (!dashRecords) return;
+    const list = filtered();
+    renderTiles(list);
+    renderHistory(list);
+    renderTrend();
+  }
+
+  /* ---- tiles ---- */
+  function renderTiles(list) {
+    const pass = list.filter(r => r.overall === 'Pass').length;
+    const fail = list.filter(r => r.overall === 'Fail').length;
+    const last = list[0];
+    const tile = (label, value, sub) => '<div class="tile"><span class="tl">' + esc(label) + '</span><span class="tv">' + esc(value) + '</span>' +
+      (sub ? '<span class="ts">' + esc(sub) + '</span>' : '') + '</div>';
+    $('#tiles').innerHTML =
+      tile('บันทึกทั้งหมด', list.length, 'ตามตัวกรองด้านบน') +
+      tile('ผ่านทุกรายการ', pass, list.length ? Math.round(pass / list.length * 100) + '% ของที่บันทึก' : '') +
+      tile('มีรายการไม่ผ่าน', fail, fail ? 'ดูรายละเอียดในประวัติด้านล่าง' : 'ไม่มี') +
+      tile('ครั้งล่าสุด', last ? thaiDate(last.date) : '—', last ? [last.machine, last.frequency].filter(Boolean).join(' · ') : '');
+  }
+
+  /* ---- history table ---- */
+  const overallPill = r => r.overall === 'Pass' ? '<span class="pill pass">✓ ผ่าน</span>'
+    : r.overall === 'Fail' ? '<span class="pill fail">✕ ไม่ผ่าน ' + r.fail + '</span>'
+    : '<span class="pill inc">ไม่ครบ ' + r.pending + '</span>';
+  function renderHistory(list) {
+    const box = $('#histTable');
+    if (!list.length) { box.innerHTML = '<p class="dash-msg" style="padding:14px">ไม่มีข้อมูลตามตัวกรองนี้</p>'; return; }
+    box.innerHTML = '<table class="qt ht"><thead><tr><th scope="col">วันที่ QA</th><th scope="col">ผล</th><th scope="col">เครื่อง</th><th scope="col">ความถี่</th>' +
+      '<th scope="col">ผ่าน / ไม่ผ่าน / ค้าง</th><th scope="col">รูป</th><th scope="col">Physicist</th><th scope="col">ผู้ส่ง</th></tr></thead><tbody>' +
+      list.map(r => '<tr tabindex="0" data-rec="' + esc(r.id) + '"><td>' + esc(thaiDate(r.date)) + '</td><td>' + overallPill(r) + '</td><td>' + esc(r.machine) + '</td><td>' + esc(r.frequency) +
+        '</td><td class="num">' + r.pass + ' / ' + r.fail + ' / ' + r.pending + '</td><td class="num">' + (r.photos || '') + '</td><td>' + esc(r.physicist) + '</td><td>' + esc(r.email) + '</td></tr>').join('') +
+      '</tbody></table>';
+  }
+  $('#histTable').addEventListener('click', e => { const tr = e.target.closest('[data-rec]'); if (tr) openRecord(tr.dataset.rec, tr); });
+  $('#histTable').addEventListener('keydown', e => {
+    const tr = e.target.closest('[data-rec]');
+    if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openRecord(tr.dataset.rec, tr); }
+  });
+
+  /* ---- trend ---- */
+  const TREND_CELLS = [];
+  SECTIONS.forEach(sec => sec.cells.forEach(c => {
+    if (c.kind === 'calc' || (c.kind === 'num' && c.mode !== 'record')) TREND_CELLS.push(c);
+  }));
+  $('#trendItem').innerHTML = SECTIONS.filter(sec => sec.cells.some(c => TREND_CELLS.includes(c))).map(sec =>
+    '<optgroup label="' + esc(sec.name) + '">' + sec.cells.filter(c => TREND_CELLS.includes(c)).map(c =>
+      '<option value="' + c.id + '">' + esc(c.test + (c.item ? ' · ' + c.item : '')) + '</option>').join('') + '</optgroup>').join('');
+  $('#trendItem').value = 'p_6x_diff';
+  $('#trendItem').addEventListener('change', renderTrend);
+
+  const toNum = v => { const n = parseFloat(String(v).replace(/[−–]/g, '-').replace(/[^\d.+-]/g, '')); return Number.isFinite(n) ? n : null; };
+  // What the chart plots for one cell: the deviation from its set value, or the measured value itself.
+  function trendSpec(c) {
+    if (c.kind === 'calc') return { pick: 'value', lo: -c.tol, hi: c.tol, unit: '%', what: 'Dose diff' };
+    if (c.mode === 'angle' || c.mode === 'dev' || c.mode === 'devAbs') {
+      const u = c.tolUnit || c.unit;
+      return { pick: 'deviation', lo: -c.tol, hi: c.tol, unit: u, what: 'ส่วนต่างจากค่าตั้ง (Δ)' };
+    }
+    if (c.mode === 'lt') return { pick: 'value', lo: 0, hi: c.tol, unit: c.unit, what: 'ค่าที่วัดได้' };
+    return { pick: 'value', lo: c.neg ? -c.tol : 0, hi: c.tol, unit: c.tolUnit || c.unit, what: 'ค่าที่วัดได้', scale: c.scale || 1 };
+  }
+
+  function renderTrend() {
+    const c = cells[$('#trendItem').value];
+    if (!c || !dashRecords) return;
+    const key = [SEC[c.secId].name, c.test, c.item].join('|');
+    const spec = trendSpec(c);
+    $('#trendMeta').textContent = spec.what + ' (' + spec.unit + ') · เกณฑ์ ' + c.limit;
+    const draw = rows => {
+      const keep = new Set(filtered().map(r => r.id));
+      const byId = {}; (dashRecords || []).forEach(r => { byId[r.id] = r; });
+      trendPts = rows.filter(x => keep.has(x.id)).map(x => {
+        const y = toNum(spec.pick === 'deviation' ? x.deviation : x.value);
+        return y == null ? null : { y: y * (spec.scale || 1), fail: x.result === 'Fail', rec: byId[x.id] || { id: x.id, date: x.date, machine: x.machine } };
+      }).filter(Boolean).sort((a, b) => (a.rec.date + (a.rec.sentAt || '')).localeCompare(b.rec.date + (b.rec.sentAt || '')));
+      trendFocus = -1;
+      drawTrend(spec);
+      renderTrendTable(spec);
+    };
+    if (trendCache[key]) { draw(trendCache[key]); return; }
+    $('#trendChart').style.opacity = '.55';
+    api('getTrend', SEC[c.secId].name, c.test, c.item).then(rows => { trendCache[key] = rows || []; draw(trendCache[key]); })
+      .catch(err => { $('#trendChart').innerHTML = '<p class="dash-msg err">โหลด trend ไม่สำเร็จ: ' + esc(err.message) + '</p>'; })
+      .finally(() => { $('#trendChart').style.opacity = ''; });
+  }
+
+  function niceTicks(lo, hi, count) {
+    const span = hi - lo || 1, raw = span / Math.max(1, count - 1), mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(st => st >= raw) || 10 * mag;
+    const out = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) out.push(Math.round(v / step) * step);
+    return { ticks: out, step };
+  }
+  const dpFor = step => Math.max(0, Math.min(3, -Math.floor(Math.log10(step || 1)) + (/\.\d*[25]$/.test(String(step)) ? 1 : 0)));
+  const fmtN = (v, step, signed) => {
+    const dp = dpFor(step), r = Number(Math.abs(v).toFixed(dp));
+    if (r === 0) return (0).toFixed(dp);
+    return (v < 0 ? '−' : signed ? '+' : '') + r.toFixed(dp);
+  };
+  const shortDate = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }); };
+
+  function drawTrend(spec) {
+    const box = $('#trendChart');
+    const pts = trendPts;
+    if (!pts.length) { box.innerHTML = '<p class="dash-msg" style="padding:24px 0">ยังไม่มีค่าของรายการนี้ในช่วงที่เลือก</p>'; return; }
+    const W = Math.max(300, box.clientWidth || 600), H = 280, m = { l: 48, r: 64, t: 16, b: 36 };
+    let lo = Math.min(spec.lo, ...pts.map(p => p.y)), hi = Math.max(spec.hi, ...pts.map(p => p.y));
+    const pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
+    const t = niceTicks(lo, hi, 5); lo = Math.min(lo, t.ticks[0]); hi = Math.max(hi, t.ticks[t.ticks.length - 1]);
+    const X = i => m.l + (pts.length === 1 ? (W - m.l - m.r) / 2 : i * (W - m.l - m.r) / (pts.length - 1));
+    const Y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+    const f1 = v => v.toFixed(1);
+    let g = '';
+    t.ticks.forEach(v => { g += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + f1(Y(v)) + '" y2="' + f1(Y(v)) + '" stroke="var(--line)" stroke-width="1"/>' +
+      '<text class="axis" x="' + (m.l - 8) + '" y="' + f1(Y(v) + 4) + '" text-anchor="end">' + esc(fmtN(v, t.step)) + '</text>'; });
+    // tolerance band
+    g += '<rect x="' + m.l + '" y="' + f1(Y(spec.hi)) + '" width="' + (W - m.l - m.r) + '" height="' + f1(Y(spec.lo) - Y(spec.hi)) + '" fill="var(--ok)" opacity=".09"/>';
+    [spec.hi, spec.lo].forEach(v => {
+      if (v === 0 && spec.lo === 0) return;
+      g += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + f1(Y(v)) + '" y2="' + f1(Y(v)) + '" stroke="var(--ok)" stroke-width="1" opacity=".7"/>' +
+        '<text class="axis" x="' + (W - m.r + 6) + '" y="' + f1(Y(v) + 4) + '">' + esc((v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v)) + '</text>';
+    });
+    if (lo < 0 && hi > 0 && spec.lo < 0) g += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + f1(Y(0)) + '" y2="' + f1(Y(0)) + '" stroke="var(--line-strong)" stroke-width="1"/>';
+    // x labels (at most 6)
+    const nLab = Math.min(pts.length, W < 480 ? 2 : W < 760 ? 4 : 6), seen = new Set();
+    for (let k = 0; k < nLab; k++) {
+      const i = nLab === 1 ? 0 : Math.round(k * (pts.length - 1) / (nLab - 1));
+      if (seen.has(i)) continue; seen.add(i);
+      const anchor = pts.length > 1 && i === 0 ? 'start' : pts.length > 1 && i === pts.length - 1 ? 'end' : 'middle';
+      g += '<text class="axis" x="' + f1(X(i)) + '" y="' + (H - 12) + '" text-anchor="' + anchor + '">' + esc(shortDate(pts[i].rec.date)) + '</text>';
+    }
+    // line + points
+    if (pts.length > 1) g += '<path d="' + pts.map((p, i) => (i ? 'L' : 'M') + f1(X(i)) + ' ' + f1(Y(p.y))).join('') + '" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    pts.forEach((p, i) => { g += '<circle cx="' + f1(X(i)) + '" cy="' + f1(Y(p.y)) + '" r="' + (p.fail ? 5 : 4) + '" fill="' + (p.fail ? 'var(--bad-mark)' : 'var(--series)') + '" stroke="var(--surface)" stroke-width="2"/>'; });
+    const last = pts[pts.length - 1];
+    g += '<text class="endlabel" x="' + f1(X(pts.length - 1) + 8) + '" y="' + f1(Y(last.y) - 8) + '">' + esc(fmtN(last.y, t.step / 10, spec.pick === 'deviation' || spec.lo < 0)) + '</text>';
+    g += '<line id="tx" x1="0" x2="0" y1="' + m.t + '" y2="' + (H - m.b) + '" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>' +
+      '<circle id="tdot" r="6" fill="none" stroke="var(--ink)" stroke-width="2" visibility="hidden"/>' +
+      '<rect id="thit" x="' + m.l + '" y="' + m.t + '" width="' + (W - m.l - m.r) + '" height="' + (H - m.t - m.b) + '" fill="transparent"/>';
+    box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc($('#trendItem').selectedOptions[0].textContent + ' จำนวน ' + pts.length + ' ครั้ง') + '">' + g + '</svg><div class="ctip" id="ctip" hidden></div>';
+    box._geo = { X, Y, W, H, m, spec, step: t.step };
+    const hit = $('#thit', box);
+    const near = ev => {
+      const r = box.querySelector('svg').getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+      let best = 0; pts.forEach((p, i) => { if (Math.abs(X(i) - x) < Math.abs(X(best) - x)) best = i; });
+      return best;
+    };
+    hit.addEventListener('pointermove', ev => showTip(near(ev)));
+    hit.addEventListener('pointerleave', () => showTip(-1));
+    hit.addEventListener('click', ev => { const i = near(ev); openRecord(pts[i].rec.id); });
+  }
+
+  function showTip(i) {
+    const box = $('#trendChart'), tip = $('#ctip', box), geo = box._geo;
+    if (!tip || !geo) return;
+    const tx = $('#tx', box), td = $('#tdot', box);
+    if (i < 0) { tip.hidden = true; tx.setAttribute('visibility', 'hidden'); td.setAttribute('visibility', 'hidden'); return; }
+    trendFocus = i;
+    const p = trendPts[i], x = geo.X(i), y = geo.Y(p.y);
+    tx.setAttribute('x1', x); tx.setAttribute('x2', x); tx.setAttribute('visibility', 'visible');
+    td.setAttribute('cx', x); td.setAttribute('cy', y); td.setAttribute('visibility', 'visible');
+    tip.textContent = '';
+    const line = (cls, text) => { const el = document.createElement('span'); el.className = cls; el.textContent = text; tip.appendChild(el); };
+    line('cv', fmtN(p.y, geo.step / 10, geo.spec.pick === 'deviation' || geo.spec.lo < 0) + ' ' + geo.spec.unit);
+    line('cs', p.fail ? '✕ เกินเกณฑ์' : '✓ อยู่ในเกณฑ์');
+    line('cs', thaiDate(p.rec.date) + ' · ' + (p.rec.machine || ''));
+    line('cs', 'กดเพื่อดูรายละเอียดครั้งนี้');
+    tip.hidden = false;
+    const r = box.querySelector('svg').getBoundingClientRect(), k = r.width / geo.W;
+    const left = Math.min(Math.max(0, x * k + 12), r.width - tip.offsetWidth);
+    tip.style.left = left + 'px';
+    tip.style.top = Math.max(0, y * k - tip.offsetHeight - 10) + 'px';
+  }
+  $('#trendChart').addEventListener('keydown', e => {
+    if (!trendPts.length) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const i = trendFocus < 0 ? trendPts.length - 1 : Math.max(0, Math.min(trendPts.length - 1, trendFocus + (e.key === 'ArrowRight' ? 1 : -1)));
+      showTip(i);
+    } else if (e.key === 'Enter' && trendFocus >= 0) openRecord(trendPts[trendFocus].rec.id);
+    else if (e.key === 'Escape') showTip(-1);
+  });
+  $('#trendChart').addEventListener('blur', () => showTip(-1));
+  let trendResize = null;
+  window.addEventListener('resize', () => { clearTimeout(trendResize); trendResize = setTimeout(() => { if (view === 'dash' && trendPts.length) { const c = cells[$('#trendItem').value]; if (c) drawTrend(trendSpec(c)); } }, 150); });
+
+  function renderTrendTable(spec) {
+    const box = $('#trendTable');
+    if (!trendPts.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<table class="qt ht"><thead><tr><th scope="col">วันที่ QA</th><th scope="col">เครื่อง</th><th scope="col">' + esc(spec.what + ' (' + spec.unit + ')') + '</th><th scope="col">ผล</th></tr></thead><tbody>' +
+      trendPts.slice().reverse().map(p => '<tr tabindex="0" data-rec="' + esc(p.rec.id) + '"><td>' + esc(thaiDate(p.rec.date)) + '</td><td>' + esc(p.rec.machine || '') + '</td><td class="num">' + esc(String(Math.round(p.y * 1000) / 1000)) +
+        '</td><td>' + (p.fail ? '<span class="pill fail">✕ ไม่ผ่าน</span>' : '<span class="pill pass">✓ ผ่าน</span>') + '</td></tr>').join('') + '</tbody></table>';
+  }
+  $('#trendTable').addEventListener('click', e => { const tr = e.target.closest('[data-rec]'); if (tr) openRecord(tr.dataset.rec, tr); });
+
+  /* ---- record detail ---- */
+  const drawer = $('#drawer'), scrim = $('#scrim');
+  let drawerReturn = null, drawerData = null;
+  function closeDrawer() {
+    drawer.hidden = true; scrim.hidden = true; drawerData = null;
+    if (drawerReturn && document.body.contains(drawerReturn)) drawerReturn.focus();
+  }
+  $('#drawerClose').addEventListener('click', closeDrawer);
+  scrim.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !drawer.hidden) closeDrawer(); });
+
+  function openRecord(id, opener) {
+    drawerReturn = opener || document.activeElement;
+    drawer.hidden = false; scrim.hidden = false;
+    $('#drawerTitle').textContent = 'กำลังโหลด…';
+    $('#drawerBody').innerHTML = '';
+    $('#drawerClose').focus();
+    api('getRecord', id).then(d => { drawerData = d; renderRecord(false); })
+      .catch(err => { $('#drawerTitle').textContent = 'โหลดไม่สำเร็จ'; $('#drawerBody').innerHTML = '<p class="dash-msg err">' + esc(err.message) + '</p>'; });
+  }
+
+  function renderRecord(onlyFail) {
+    const d = drawerData; if (!d) return;
+    const r = d.record;
+    $('#drawerTitle').textContent = thaiDate(r.date) + ' · ' + (r.machine || 'ไม่ระบุเครื่อง');
+    const kv = (k, v) => v ? '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' : '';
+    let html = '<div>' + overallPill(r) + '</div><dl class="kv">' +
+      kv('ความถี่ของ QA', r.frequency) + kv('Physicist', r.physicist) + kv('ผู้ส่ง (Gmail)', r.email) +
+      kv('ส่งเมื่อ', r.sentAt ? new Date(r.sentAt).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') +
+      kv('ผ่าน / ไม่ผ่าน / ค้าง', r.pass + ' / ' + r.fail + ' / ' + r.pending) + kv('Record ID', r.id) + '</dl>';
+    if (r.note) html += '<div><h3>QA Note</h3><p style="margin:4px 0 0;white-space:pre-wrap">' + esc(r.note) + '</p></div>';
+    html += '<div class="tools">' +
+      (d.form ? '<button class="btn primary" type="button" data-dact="load">เปิดในฟอร์ม (แก้ไข / ส่งซ้ำ)</button>' : '') +
+      (r.folder ? '<a class="btn" href="' + esc(r.folder) + '" target="_blank" rel="noopener">เปิดโฟลเดอร์รูป (' + r.photos + ')</a>' : '') +
+      '<button class="btn" type="button" data-dact="toggle" aria-pressed="' + onlyFail + '">' + (onlyFail ? 'แสดงทุกรายการ' : 'แสดงเฉพาะที่ไม่ผ่าน') + '</button></div>' +
+      '<div class="subpanel" id="loadBox" hidden><p class="hint">แทนที่ค่าที่กรอกในฟอร์มตอนนี้ด้วยข้อมูลครั้งนี้? รูปที่แนบไว้ในเครื่องจะถูกล้าง รูปเดิมใน Google Drive ยังอยู่ ส่งซ้ำจะอัปเดตแถวเดิมของ Record ID นี้</p>' +
+      '<div class="row"><button class="btn primary small" type="button" data-dact="load-yes">เปิดในฟอร์ม</button><button class="btn small" type="button" data-dact="load-no">ยกเลิก</button></div></div>';
+    const groups = {};
+    d.results.filter(x => !onlyFail || x.result === 'Fail').forEach(x => { (groups[x.category] = groups[x.category] || []).push(x); });
+    const cats = Object.keys(groups);
+    if (!cats.length) html += '<p class="dash-msg">' + (onlyFail ? 'ไม่มีรายการที่ไม่ผ่าน' : 'ไม่มีรายการตรวจ') + '</p>';
+    cats.forEach(cat => {
+      html += '<div class="rgroup"><h3>' + esc(cat) + '</h3><div class="tscroll"><table class="qt ht rtable"><thead><tr><th scope="col">รายการ</th><th scope="col">ค่า</th><th scope="col">Δ</th><th scope="col">เกณฑ์</th><th scope="col">ผล</th></tr></thead><tbody>' +
+        groups[cat].map(x => '<tr class="' + (x.result === 'Fail' ? 'isfail' : '') + '"><td>' + esc(x.test + (x.item ? ' · ' + x.item : '')) + '</td><td class="num">' + esc(x.value + (x.value !== '' && x.unit && !/[ก-๙]/.test(x.value) ? ' ' + x.unit : '')) +
+          '</td><td class="num">' + esc(x.deviation) + '</td><td>' + esc(x.limit) + '</td><td class="res">' +
+          (x.result === 'Pass' ? '<span class="pill pass">✓ ผ่าน</span>' : x.result === 'Fail' ? '<span class="pill fail">✕ ไม่ผ่าน</span>' : esc(x.result === 'Recorded' ? 'บันทึก' : x.result || '—')) + '</td></tr>').join('') +
+        '</tbody></table></div></div>';
+    });
+    if (d.photos.length) {
+      html += '<div><h3>รูปประกอบ</h3><ul style="margin:6px 0 0;padding-left:1.2em">' + d.photos.map(ph => '<li><a class="extlink" href="' + esc(ph.url) + '" target="_blank" rel="noopener">' +
+        esc(ph.category + (ph.caption ? ' · ' + ph.caption : '') ) + '</a></li>').join('') + '</ul></div>';
+    }
+    $('#drawerBody').innerHTML = html;
+  }
+
+  $('#drawerBody').addEventListener('click', e => {
+    const b = e.target.closest('[data-dact]'); if (!b || !drawerData) return;
+    const a = b.dataset.dact;
+    if (a === 'toggle') renderRecord(b.getAttribute('aria-pressed') !== 'true');
+    else if (a === 'load') $('#loadBox').hidden = false;
+    else if (a === 'load-no') $('#loadBox').hidden = true;
+    else if (a === 'load-yes') loadIntoForm(drawerData);
+  });
+
+  function loadIntoForm(d) {
+    if (!d.form || !d.form.values) return;
+    state.values = Object.assign({}, d.form.values);
+    state.nominals = Object.assign({}, d.form.nominals);
+    migrateInfo(state.values); ensureDefaults(state.values);
+    state.values.recordId = d.record.id;
+    state.values.loaded_from_sheet = '1';
+    replacePhotos([]);
+    fillInputs(); applyOrder();
+    state.values.sent_at = d.record.sentAt ? new Date(d.record.sentAt).toISOString() : new Date().toISOString();
+    state.values.sent_sig = dataSig();
+    save(); updateAll();
+    closeDrawer(); setView('form');
+    toast('เปิดข้อมูล ' + thaiDate(d.record.date) + ' ในฟอร์มแล้ว');
+  }
+
+  /* ---- sample data when not served by Apps Script ---- */
+  const demoApi = (() => {
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += rnd(); return u - 3; };
+    const records = [], results = {};
+    const today = new Date();
+    const machines = MACHINES.map(m => m.value);
+    for (let k = 0; k < 10; k++) {
+      machines.forEach((mc, mi) => {
+        const d = new Date(today.getTime() - (k * 30 + mi * 3 + 2) * 864e5);
+        const date = d.toISOString().slice(0, 10), id = 'DEMO-' + date.replace(/-/g, '') + '-' + (mi + 1);
+        const rows = []; let pass = 0, fail = 0;
+        TREND_CELLS.concat(Object.values(cells).filter(c => c.kind === 'pf')).forEach(c => {
+          const sp = c.kind === 'pf' ? null : trendSpec(c);
+          let y, dev = '', val, ok;
+          if (c.kind === 'pf') { ok = rnd() > 0.004; val = ok ? c.yes : c.no; }
+          else {
+            const drift = (mi - 1) * 0.08 * (sp.hi - sp.lo) / 2;
+            y = sp.lo === 0 ? Math.abs(sp.hi * (0.4 + 0.12 * gauss())) : drift + gauss() * (sp.hi - sp.lo) / 11;
+            ok = y >= sp.lo - 1e-9 && y <= sp.hi + 1e-9;
+            if (sp.pick === 'deviation') { dev = y.toFixed(2) + ' ' + sp.unit; val = c.nom != null ? String(+(c.nom + y / (c.scale || 1)).toFixed(2)) : y.toFixed(2); }
+            else val = (y / (sp.scale || 1)).toFixed(2);
+          }
+          ok ? pass++ : fail++;
+          rows.push({ category: SEC[c.secId].name, test: c.test, item: c.item, nominal: c.nom != null ? String(c.nom) : '', value: val, unit: c.kind === 'calc' ? '%' : c.unit || '',
+            deviation: dev, limit: c.limit, result: ok ? 'Pass' : 'Fail', machine: mc, date, id });
+        });
+        results[id] = rows;
+        records.push({ id, sentAt: date + 'T10:0' + mi, by: '', email: 'physicist@example.com', machine: mc, frequency: k % 3 ? 'Monthly' : 'Weekly', date,
+          physicist: PHYSICISTS[(k + mi) % PHYSICISTS.length], pass, fail, pending: 0, overall: fail ? 'Fail' : 'Pass', note: '', photos: 0, folder: '', hasForm: false });
+      });
+    }
+    return {
+      getHistory: () => ({ records }),
+      getRecord: id => ({ record: records.find(r => r.id === id), results: results[id] || [], photos: [], form: null }),
+      getTrend: (cat, test, item) => records.map(r => (results[r.id] || []).find(x => x.category === cat && x.test === test && x.item === item)).filter(Boolean)
+        .map(x => ({ id: x.id, machine: x.machine, date: x.date, value: x.value, deviation: x.deviation, result: x.result }))
+    };
+  })();
+
   /* ================= boot ================= */
   fillInputs();
   applyOrder();
@@ -1885,7 +2374,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     renderPhotos(); updateAll();
   }).catch(() => { photoStoreOK = false; renderPhotos(); });
   const hash = (location.hash || '').slice(1);
-  if (SEC[hash]) requestAnimationFrame(() => goToSection(hash));
+  if (hash === 'dashboard') setView('dash');
+  else if (SEC[hash]) requestAnimationFrame(() => goToSection(hash));
   else spy();
 })();
 </script>
