@@ -221,6 +221,20 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .nom { display: flex; align-items: center; gap: 4px; font: 400 .7rem/1 var(--f-mono); color: var(--muted); margin-bottom: 2px; }
 .nom input { width: 3.8rem; height: 1.45rem; padding: 0 5px; border: 1px dashed var(--line-strong); border-radius: 4px; background: transparent; color: var(--muted); font: 400 .72rem/1 var(--f-mono); }
 
+/* sign-in */
+.gate { position: fixed; inset: 0; z-index: 90; background: var(--bg); display: grid; place-items: center; overflow: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+.gate-card { width: min(26rem, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; display: flex; flex-direction: column; gap: 16px; }
+.gate-card .brand { flex: none; }
+.gate-card h2 { font-size: 1.25rem; }
+.gate-card p { margin: 0; color: var(--muted); font-size: .9rem; }
+.gbtn { min-height: 44px; display: flex; justify-content: center; }
+.gate-err { color: var(--bad); background: var(--bad-bg); border-radius: 8px; padding: 10px 12px; font-size: .875rem; }
+.who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.who img, .who .ava { width: 28px; height: 28px; border-radius: 50%; flex: none; object-fit: cover; background: var(--accent-soft); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; font-size: .8rem; }
+.who .wname { font-size: .8125rem; font-weight: 500; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) { .who .wname { display: none; } }
+
 /* photos */
 .pdrop { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px; border: 1.5px dashed var(--line-strong); border-radius: 10px; background: var(--sunken); }
 .pdrop.over { border-color: var(--accent); background: var(--accent-soft); }
@@ -326,6 +340,15 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 </head>
 <body>
 
+<div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle" hidden>
+  <div class="gate-card">
+    <div class="brand"><span class="lamp" aria-hidden="true"></span><div><h2 id="gateTitle">Lampang Cancer Hospital, <span class="nw">Linac QA</span></h2></div></div>
+    <p>เข้าสู่ระบบด้วยบัญชี Google (Gmail) เพื่อบันทึกผล QA</p>
+    <div class="gbtn" id="gBtn"></div>
+    <p class="gate-err" id="gateErr" role="alert" hidden></p>
+  </div>
+</div>
+
 <header class="top" id="top">
   <div class="wrap">
     <div class="top-row">
@@ -340,6 +363,10 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         <span class="t-pass"><b id="tPass">0</b> ผ่าน</span>
         <span class="t-fail"><b id="tFail">0</b> ไม่ผ่าน</span>
         <span class="t-pend"><b id="tPend">0</b> รอกรอก</span>
+      </div>
+      <div class="who" id="who" hidden>
+        <span id="whoAva"></span><span class="wname" id="whoName"></span>
+        <button class="btn small" type="button" id="signOut">ออกจากระบบ</button>
       </div>
     </div>
     <div class="tabrow">
@@ -381,6 +408,20 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   /* ================= storage ================= */
   const KEY = 'linac-mech-qa:v1';
   const ORDER_KEY = 'linac-mech-qa:order';
+
+  /* ================= Google sign-in settings =================
+     clientId: OAuth 2.0 Client ID (Web application) from Google Cloud Console,
+               with this site's address added under "Authorized JavaScript origins".
+               Leave empty to use the form without signing in.
+     allowedEmails / allowedDomains: who may sign in. Both empty = any verified Google account. */
+  const AUTH = {
+    clientId: '',
+    allowedEmails: [],          // e.g. ['someone@gmail.com']
+    allowedDomains: [],         // e.g. ['example.go.th']
+    sessionHours: 12,
+    physicistEmails: {}         // optional: { 'someone@gmail.com': 'วันนิตา มะลิลา' } ticks that physicist on sign-in
+  };
+  const USER_KEY = 'linac-mech-qa:user';
   const store = {
     get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
@@ -1179,7 +1220,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const statusLabel = s => ({ pass: 'Pass', fail: 'Fail', rec: 'Recorded', invalid: 'Invalid', nonom: 'No nominal' }[s] || '');
   function buildCSV() {
     const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['QA frequency', freqText()], ['Date', valueOf('date')], ['Physicist', physicistText()], [],
+    const rows = [['Lampang Cancer Hospital, Linac QA'], ['Machine', valueOf('machine')], ['QA frequency', freqText()], ['Date', valueOf('date')], ['Physicist', physicistText()], ['Recorded by', currentUser ? currentUser.name + ' <' + currentUser.email + '>' : ''], [],
       ['Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']];
     order.forEach(id => SEC[id].cells.forEach(c => {
       const r = c.r || evaluate(c);
@@ -1198,7 +1239,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     rows.push([], ['QA Note', valueOf('note')]);
     return rows.map(r => r.map(q).join(',')).join('\r\n');
   }
-  const buildJSON = () => JSON.stringify({ app: 'linac-mechanical-qa', version: 1, exportedAt: new Date().toISOString(), order, values: state.values, nominals: state.nominals,
+  const buildJSON = () => JSON.stringify({ app: 'linac-mechanical-qa', version: 1, exportedAt: new Date().toISOString(), recordedBy: currentUser ? { name: currentUser.name, email: currentUser.email } : null, order, values: state.values, nominals: state.nominals,
     photos: photos.map(x => ({ id: x.id, sec: x.sec, name: x.name, cap: x.cap, w: x.w, h: x.h, at: x.at, data: x.data })) }, null, 2);
   const fileBase = () => 'linac-qa_' + (valueOf('machine') || 'machine').replace(/[^\w฀-๿-]+/g, '-') + '_' + (valueOf('date') || todayISO());
 
@@ -1535,11 +1576,112 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     if (fn) fn();
   });
 
+  /* ================= Google sign-in ================= */
+  let currentUser = null;
+  const gate = $('#gate');
+  const authOn = !!AUTH.clientId && !inFrame;
+
+  function decodeJwt(token) {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+    return JSON.parse(decodeURIComponent(Array.from(bin, c => '%' + ('0' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  }
+  function isAllowed(email) {
+    email = String(email || '').toLowerCase();
+    const emails = AUTH.allowedEmails.map(x => x.toLowerCase()), domains = AUTH.allowedDomains.map(x => x.toLowerCase());
+    if (!emails.length && !domains.length) return true;
+    return emails.includes(email) || domains.includes(email.split('@')[1]);
+  }
+  function lockPage(locked) {
+    gate.hidden = !locked;
+    ['#top', '#main'].forEach(sel => { const el = $(sel); if (locked) el.setAttribute('inert', ''); else el.removeAttribute('inert'); });
+    if (locked) { panel.hidden = true; reorderBtn.setAttribute('aria-expanded', 'false'); }
+  }
+  function gateError(msg) { const e = $('#gateErr'); e.textContent = msg || ''; e.hidden = !msg; }
+
+  function showUser() {
+    const who = $('#who');
+    who.hidden = !currentUser;
+    if (!currentUser) return;
+    $('#whoName').textContent = currentUser.name || currentUser.email;
+    $('#whoName').title = currentUser.email;
+    const ava = $('#whoAva');
+    ava.innerHTML = '';
+    if (currentUser.picture) {
+      const img = document.createElement('img');
+      img.src = currentUser.picture; img.alt = ''; img.referrerPolicy = 'no-referrer';
+      img.onerror = () => { ava.innerHTML = '<span class="ava">' + esc((currentUser.name || currentUser.email).charAt(0).toUpperCase()) + '</span>'; };
+      ava.appendChild(img);
+    } else {
+      ava.innerHTML = '<span class="ava">' + esc((currentUser.name || currentUser.email).charAt(0).toUpperCase()) + '</span>';
+    }
+  }
+
+  function signedIn(user) {
+    currentUser = user;
+    lockPage(false); gateError(''); showUser();
+    // tick the matching physicist if nobody is ticked yet
+    const mapped = AUTH.physicistEmails[String(user.email).toLowerCase()];
+    const idx = mapped ? PHYSICISTS.indexOf(mapped) : -1;
+    if (idx >= 0 && !physicistText()) { state.values['phys_' + idx] = '1'; fillInputs(); changed(); }
+    else updateAll();
+  }
+
+  function onCredential(resp) {
+    let p;
+    try { p = decodeJwt(resp.credential); } catch (e) { gateError('อ่านข้อมูลบัญชีไม่ได้ ลองเข้าสู่ระบบอีกครั้ง'); return; }
+    if (!p.email || p.email_verified === false) { gateError('บัญชีนี้ยังไม่ได้ยืนยันอีเมลกับ Google'); return; }
+    if (!isAllowed(p.email)) {
+      gateError(p.email + ' ไม่มีสิทธิ์ใช้งาน ติดต่อผู้ดูแลเพื่อเพิ่มบัญชี');
+      try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
+      return;
+    }
+    const user = { email: p.email, name: p.name || p.email, picture: p.picture || '', until: Date.now() + AUTH.sessionHours * 3600e3 };
+    store.set(USER_KEY, user);
+    signedIn(user);
+    toast('เข้าสู่ระบบแล้ว: ' + user.email);
+  }
+
+  function loadGoogle() {
+    return new Promise((res, rej) => {
+      if (window.google && google.accounts && google.accounts.id) { res(); return; }
+      const sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+      sc.onload = () => res(); sc.onerror = () => rej(new Error('gsi'));
+      document.head.appendChild(sc);
+    });
+  }
+  function startGoogle() {
+    loadGoogle().then(() => {
+      google.accounts.id.initialize({ client_id: AUTH.clientId, callback: onCredential, auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
+      google.accounts.id.renderButton($('#gBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'th', width: 280 });
+      if (!currentUser) google.accounts.id.prompt();
+    }).catch(() => gateError('โหลดระบบเข้าสู่ระบบของ Google ไม่ได้ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดหน้าใหม่'));
+  }
+
+  function signOut() {
+    currentUser = null;
+    try { localStorage.removeItem(USER_KEY); } catch (e) { /* ignore */ }
+    try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
+    showUser(); lockPage(true); gateError('');
+    toast('ออกจากระบบแล้ว');
+  }
+  $('#signOut').addEventListener('click', signOut);
+
+  function initAuth() {
+    if (!authOn) return;
+    const saved = store.get(USER_KEY);
+    if (saved && saved.email && saved.until > Date.now() && isAllowed(saved.email)) signedIn(saved);
+    else lockPage(true);
+    startGoogle();
+  }
+
   /* ================= boot ================= */
   fillInputs();
   applyOrder();
   setStick();
   showSaved();
+  initAuth();
   photoDB.all().then(list => {
     photos = (list || []).filter(x => SEC[x.sec]).sort((a, b) => a.at - b.at);
     renderPhotos(); updateAll();
