@@ -1,4 +1,4 @@
-# Lampang Cancer Hospital, Linac QA
+# Linac QA, Lampang Cancer Hospital
 
 > ใช้งานจริงแนะนำให้นำขึ้น Google Apps Script ทั้งชุด ดู [apps-script/README.md](apps-script/README.md)
 

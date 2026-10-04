@@ -1,5 +1,5 @@
 /**
- * Lampang Cancer Hospital, Linac QA — Apps Script web app
+ * Linac QA, Lampang Cancer Hospital — Apps Script web app
  *
  * This project serves the QA form (Index.html) and writes results to this spreadsheet:
  *   Records  one row per QA record (updated in place when the same record is sent again)
@@ -127,7 +127,7 @@ function doGet(e) {
   }
   const html = pageHtml_(!!(e && e.parameter && e.parameter.refresh));
   return HtmlService.createHtmlOutput(html)
-    .setTitle('Lampang Cancer Hospital, Linac QA')
+    .setTitle('Linac QA, Lampang Cancer Hospital')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
