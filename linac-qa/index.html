@@ -205,9 +205,23 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
 /* info + note + summary */
 .info { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; }
-.fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.fld span { font-size: .75rem; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
-.fld input, .note { width: 100%; min-width: 0; height: 2.6rem; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
+.fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.fld.full { grid-column: 1 / -1; }
+.fld.date input { max-width: 16rem; }
+.flabel { padding: 0; font-size: .75rem; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { position: relative; display: inline-flex; }
+.opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.opt span { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-weight: 500; font-size: .9rem; line-height: 1.2; }
+.opt small { font: 500 .75rem/1 var(--f-mono); color: var(--muted); padding: 3px 5px; border-radius: 4px; background: var(--sunken); }
+.opt:hover span { border-color: var(--ink); }
+.opt input:checked + span { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+.opt input:checked + span small { color: var(--ink); background: var(--surface); }
+.opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opt.check span::before { content: ""; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 3px; opacity: .55; flex: none; }
+.opt.check input:checked + span::before { content: "✓"; opacity: 1; display: grid; place-items: center; font-size: .7rem; line-height: 1; font-weight: 700; }
+.fld input[type="text"].other { max-width: 26rem; }
+.fld input[type="text"], .fld input[type="date"], .note { width: 100%; min-width: 0; height: 2.6rem; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
 .note { height: auto; min-height: 10rem; padding: 10px 12px; line-height: 1.6; resize: vertical;
   background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.6em - 1px), var(--line) calc(1.6em - 1px), var(--line) 1.6em);
   background-attachment: local; background-position: 0 10px; }
@@ -333,6 +347,18 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const ang = (id, nom, tol) => num(id, { mode: 'angle', nom, tol: tol || 0.5, unit: '°', tolUnit: '°', neg: true, ph: nom.toFixed(1) });
   const mm = (id, tol) => num(id, { mode: 'abs', tol: tol || 1, unit: 'mm', tolUnit: 'mm', ph: '0.0' });
   const cmDev = (id, nom, o) => num(id, Object.assign({ mode: 'dev', nom, unit: 'cm', scale: 10, tol: 1, tolUnit: 'mm', ph: nom == null ? '' : String(nom) }, o));
+
+  const MACHINES = [
+    { name: 'Infinity', room: 'L1', value: 'Infinity (L1)' },
+    { name: 'Precise', room: 'L2', value: 'Precise (L2)' },
+    { name: 'VersaHD', room: 'L3', value: 'VersaHD (L3)' }
+  ];
+  const PHYSICISTS = ['จำเนียรพันธ์ เรือนศรี', 'วันนิตา มะลิลา', 'นัฐวุฒิ ยี่นาง', 'วรรณวนัช สุมนาพันธุ์'];
+  const physicistText = () => {
+    const names = PHYSICISTS.filter((n, i) => state.values['phys_' + i] === '1');
+    if (state.values.phys_other_on === '1') String(state.values.phys_other || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => names.push(x));
+    return names.join(', ');
+  };
 
   const LF_ROWS = [
     ['s10', 'Sym 10×10', '', [5, 5, 5, 5]],
@@ -513,6 +539,18 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const saved = store.get(KEY) || {};
   const state = { values: Object.assign({}, saved.values), nominals: Object.assign({}, saved.nominals), savedAt: saved.savedAt || null };
   if (!state.values.date) state.values.date = todayISO();
+  migrateInfo(state.values);
+  function migrateInfo(v) {
+    if (v.physicist && !Object.keys(v).some(k => k.indexOf('phys_') === 0)) {
+      const rest = [];
+      String(v.physicist).split(',').map(x => x.trim()).filter(Boolean).forEach(x => {
+        const i = PHYSICISTS.indexOf(x);
+        if (i >= 0) v['phys_' + i] = '1'; else rest.push(x);
+      });
+      if (rest.length) { v.phys_other_on = '1'; v.phys_other = rest.join(', '); }
+    }
+    delete v.physicist;
+  }
 
   const DEFAULT_ORDER = SECTIONS.map(s => s.id);
   let order = (store.get(ORDER_KEY) || []).filter(id => SEC[id]);
@@ -599,9 +637,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     let body = '';
     if (b.type === 'info') {
       body = '<div class="info">' +
-        '<label class="fld"><span>Machine</span><input type="text" id="f-machine" data-id="machine" placeholder="ชื่อ / รุ่นเครื่อง" autocomplete="off"></label>' +
-        '<label class="fld"><span>Date</span><input type="date" id="f-date" data-id="date"></label>' +
-        '<label class="fld"><span>Physicist</span><input type="text" id="f-physicist" data-id="physicist" placeholder="ชื่อผู้ตรวจ" autocomplete="off"></label>' +
+        '<fieldset class="fld full"><legend class="flabel">Machine</legend><div class="opts">' + MACHINES.map((m, i) =>
+          '<label class="opt"><input type="radio" name="machine" id="f-machine-' + i + '" data-radio="machine" value="' + esc(m.value) + '"><span>' + esc(m.name) + '<small>' + esc(m.room) + '</small></span></label>').join('') +
+        '</div></fieldset>' +
+        '<label class="fld full date"><span class="flabel">Date</span><input type="date" id="f-date" data-id="date"></label>' +
+        '<fieldset class="fld full"><legend class="flabel">Physicist <span class="hint">· เลือกได้หลายคน</span></legend><div class="opts">' + PHYSICISTS.map((n, i) =>
+          '<label class="opt check"><input type="checkbox" id="f-phys-' + i + '" data-check="phys_' + i + '"><span>' + esc(n) + '</span></label>').join('') +
+        '<label class="opt check"><input type="checkbox" id="f-phys-other-on" data-check="phys_other_on" aria-controls="f-phys_other"><span>อื่นๆ</span></label></div>' +
+        '<input type="text" class="other" id="f-phys_other" data-id="phys_other" placeholder="กรอกชื่อ (หลายคนคั่นด้วย ,)" aria-label="ชื่อ Physicist อื่นๆ" autocomplete="off" hidden></fieldset>' +
         '</div><p class="hint">ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้ ส่งออกเป็น CSV หรือ JSON ได้ที่หมวด “สรุปผล”</p>';
     } else if (b.type === 'list') {
       body = '<div class="list">' + b.items.map(it =>
@@ -617,7 +660,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     } else if (b.type === 'table') {
       body = tableHTML(b);
     } else if (b.type === 'note') {
-      body = '<label class="fld"><span>QA Note</span><textarea class="note" id="f-note" data-id="note" placeholder="บันทึกข้อสังเกต ปัญหาที่พบ หรือการแก้ไข"></textarea></label>';
+      body = '<label class="fld"><span class="flabel">QA Note</span><textarea class="note" id="f-note" data-id="note" placeholder="บันทึกข้อสังเกต ปัญหาที่พบ หรือการแก้ไข"></textarea></label>';
     } else if (b.type === 'summary') {
       body = '<div id="sumBox" class="block"></div>';
     } else if (b.type === 'tools') {
@@ -685,8 +728,15 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const cellEls = {};
   main.querySelectorAll('[data-cell]').forEach(el => { cellEls[el.dataset.cell] = el; });
 
+  function syncOther() {
+    const box = $('#f-phys_other');
+    if (box) box.hidden = state.values.phys_other_on !== '1';
+  }
   function fillInputs() {
     main.querySelectorAll('[data-id]').forEach(el => { el.value = valueOf(el.dataset.id); });
+    main.querySelectorAll('[data-radio]').forEach(el => { el.checked = valueOf(el.dataset.radio) === el.value; });
+    main.querySelectorAll('[data-check]').forEach(el => { el.checked = valueOf(el.dataset.check) === '1'; });
+    syncOther();
     main.querySelectorAll('[data-nom]').forEach(el => {
       const c = cells[el.dataset.nom];
       el.value = state.nominals[c.id] !== undefined ? state.nominals[c.id] : (c.nom == null ? '' : c.nom);
@@ -937,7 +987,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
         (st.fail ? '<span class="chip bad">ไม่ผ่าน ' + st.fail + '</span>' : '');
     });
 
-    const m = valueOf('machine'), d = valueOf('date'), p = valueOf('physicist');
+    const m = valueOf('machine'), d = valueOf('date'), p = physicistText();
     $('#metaLine').textContent = [m || 'ยังไม่ระบุเครื่อง', thaiDate(d), p].filter(Boolean).join(' · ');
 
     renderSummary(stats, fails, tp, tf, tq);
@@ -994,7 +1044,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   const statusLabel = s => ({ pass: 'Pass', fail: 'Fail', rec: 'Recorded', invalid: 'Invalid', nonom: 'No nominal' }[s] || '');
   function buildCSV() {
     const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = [['Linac Mechanical QA'], ['Machine', valueOf('machine')], ['Date', valueOf('date')], ['Physicist', valueOf('physicist')], [],
+    const rows = [['Linac Mechanical QA'], ['Machine', valueOf('machine')], ['Date', valueOf('date')], ['Physicist', physicistText()], [],
       ['Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']];
     order.forEach(id => SEC[id].cells.forEach(c => {
       const r = c.r || evaluate(c);
@@ -1034,6 +1084,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     try { obj = JSON.parse(text); } catch (e) { toast('อ่าน JSON ไม่ได้ ตรวจว่าวางข้อความครบทั้งหมด'); return; }
     if (!obj || typeof obj.values !== 'object') { toast('ไม่พบข้อมูล “values” ในไฟล์ ใช้ไฟล์ที่ส่งออกจากหน้านี้'); return; }
     state.values = Object.assign({}, obj.values);
+    migrateInfo(state.values);
     state.nominals = Object.assign({}, obj.nominals);
     if (Array.isArray(obj.order)) {
       const o = obj.order.filter(id => SEC[id]);
@@ -1060,15 +1111,24 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     const t = new Date(state.savedAt);
     el.textContent = 'บันทึกอัตโนมัติในเบราว์เซอร์นี้ล่าสุด ' + t.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
+  const flushSave = () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; save(); } };
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
   function changed() {
     updateAll();
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 300);
+    saveTimer = setTimeout(() => { saveTimer = null; save(); }, 300);
   }
 
   main.addEventListener('input', e => {
     const t = e.target;
-    if (t.dataset.id) { state.values[t.dataset.id] = t.value; changed(); }
+    if (t.dataset.radio) { if (t.checked) { state.values[t.dataset.radio] = t.value; changed(); } }
+    else if (t.dataset.check) {
+      state.values[t.dataset.check] = t.checked ? '1' : '';
+      if (t.dataset.check === 'phys_other_on') { syncOther(); if (t.checked) $('#f-phys_other').focus(); }
+      changed();
+    }
+    else if (t.dataset.id) { state.values[t.dataset.id] = t.value; changed(); }
     else if (t.dataset.nom) { state.nominals[t.dataset.nom] = t.value; changed(); }
   });
 

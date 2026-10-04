@@ -4,7 +4,7 @@
 
 ## หมวดหมู่
 
-ข้อมูลการตรวจ · Gantry · Collimator · ODI · Light Field · MLC · Couch · Laser · Light/Radiation & Winston-Lutz · Imaging QA · Flatness/Symmetry/Dose (Profiler) · QA Note · สรุปผล
+ข้อมูลการตรวจ (Machine: Infinity L1 / Precise L2 / VersaHD L3 · Physicist เลือกได้หลายคน + อื่นๆ) · Gantry · Collimator · ODI · Light Field · MLC · Couch · Laser · Light/Radiation & Winston-Lutz · Imaging QA · Flatness/Symmetry/Dose (Profiler) · QA Note · สรุปผล
 
 ## การใช้งาน
 
