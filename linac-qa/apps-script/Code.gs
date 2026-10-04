@@ -5,6 +5,7 @@
  *   Records  one row per QA record (updated in place when the same record is sent again)
  *   Results  one row per checked item
  *   Photos   one row per attached photo (image files go to a Drive folder)
+ *   Log      one row each time someone opens the form or sends results, with their Gmail
  *
  * Files in the Apps Script project:
  *   Code.gs     this file
@@ -49,13 +50,24 @@ const TABS = {
   },
   results: {
     name: 'Results',
-    head: ['Record ID', 'Machine', 'QA date', 'Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result']
+    head: ['Record ID', 'Machine', 'QA date', 'Category', 'Test', 'Item', 'Nominal', 'Value', 'Unit', 'Deviation', 'Limit', 'Result', 'Email']
   },
   photos: {
     name: 'Photos',
-    head: ['Record ID', 'Machine', 'QA date', 'Category', 'Caption', 'File name', 'Link']
+    head: ['Record ID', 'Machine', 'QA date', 'Category', 'Caption', 'File name', 'Link', 'Email']
+  },
+  log: {
+    name: 'Log',
+    head: ['Time', 'Email', 'Action', 'Record ID', 'Detail']
   }
 };
+
+const UNKNOWN_EMAIL = '(ไม่ทราบอีเมล: ตั้ง Deploy เป็น Execute as = User accessing the web app)';
+
+// Adds one row to the Log tab. Never stops the main work if logging fails.
+function log_(email, action, recordId, detail) {
+  try { tab_(TABS.log).appendRow([new Date(), email || UNKNOWN_EMAIL, action, recordId || '', detail || ''].map(cell_)); } catch (e) { /* no access */ }
+}
 
 function ss_() {
   const ss = CONFIG.SHEET_ID ? SpreadsheetApp.openById(CONFIG.SHEET_ID) : SpreadsheetApp.getActive();
@@ -86,6 +98,7 @@ function whoAmI() {
   try { switchUrl = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(ScriptApp.getService().getUrl()); } catch (e) { /* not deployed */ }
   const base = { email, name: email, physicist: CONFIG.PHYSICIST_EMAILS[email] || '', switchUrl };
   const denied = allowError_(email);
+  log_(email, denied ? 'ถูกปฏิเสธ' : 'เปิดฟอร์ม', '', denied);
   if (denied) return Object.assign(base, { allowed: false, message: denied });
   return Object.assign(base, { allowed: true });
 }
@@ -179,30 +192,35 @@ function doPost(e) {
 
 function handle_(body) {
   const lock = LockService.getScriptLock();
+  let recordId = '';
   try {
     lock.waitLock(30000);
     const data = JSON.parse(body);
+    recordId = data && data.recordId || '';
     if (!data || data.app !== 'linac-qa' || !data.recordId) throw new Error('ข้อมูลที่ส่งมาไม่ถูกต้อง');
     const user = checkUser_(data);
     const info = data.info || {};
     const id = String(data.recordId);
 
-    const photo = savePhotos_(id, info, data.photos || []);
+    const photo = savePhotos_(id, info, data.photos || [], user.email);
 
     const s = data.summary || {};
     upsertRow_(TABS.records, id, [
-      id, new Date(), user.name, user.email, info.machine, info.frequency, info.date, info.physicist,
+      id, new Date(), user.name, user.email || UNKNOWN_EMAIL, info.machine, info.frequency, info.date, info.physicist,
       s.pass, s.fail, s.pending, s.overall, data.note, photo.rows.length, photo.folderUrl
     ]);
 
     replaceRows_(TABS.results, id, (data.results || []).map(r => [
-      id, info.machine, info.date, r.category, r.test, r.item, r.nominal, r.value, r.unit, r.deviation, r.limit, r.result
+      id, info.machine, info.date, r.category, r.test, r.item, r.nominal, r.value, r.unit, r.deviation, r.limit, r.result, user.email
     ]));
     replaceRows_(TABS.photos, id, photo.rows);
+    log_(user.email, 'ส่งผล', id, (data.results || []).length + ' รายการ · รูป ' + photo.rows.length + ' รูป · ' + (s.overall || ''));
 
     return { ok: true, recordId: id, results: (data.results || []).length, photos: photo.rows.length, sheetUrl: ss_().getUrl() };
   } catch (err) {
-    return { ok: false, error: String(err && err.message || err) };
+    const message = String(err && err.message || err);
+    log_(String(Session.getActiveUser().getEmail() || '').toLowerCase(), 'ส่งไม่สำเร็จ', recordId, message);
+    return { ok: false, error: message };
   } finally {
     try { lock.releaseLock(); } catch (e) { /* not held */ }
   }
@@ -239,7 +257,7 @@ function checkUser_(data) {
 }
 
 /* ---------- photos ---------- */
-function savePhotos_(id, info, photos) {
+function savePhotos_(id, info, photos, email) {
   const root = photoRoot_();
   const name = [info.date, info.machine, id].filter(Boolean).join(' ');
   const existing = root.getFoldersByName(name);
@@ -255,7 +273,7 @@ function savePhotos_(id, info, photos) {
     if (!m) return null;
     const fileName = (i + 1) + ' ' + (p.category || '') + (p.cap ? ' - ' + p.cap : '') + '.jpg';
     const file = dir.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], fileName.replace(/[\\/:*?"<>|]/g, '-')));
-    return [id, info.machine, info.date, p.category, p.cap, file.getName(), file.getUrl()];
+    return [id, info.machine, info.date, p.category, p.cap, file.getName(), file.getUrl(), email];
   }).filter(Boolean);
   return { rows, folderUrl: dir.getUrl() };
 }
@@ -283,6 +301,9 @@ function tab_(def) {
   if (sh.getLastRow() === 0) {
     sh.getRange(1, 1, 1, def.head.length).setValues([def.head]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else if (sh.getLastColumn() < def.head.length) {
+    // a column was added in a newer version (e.g. Email): extend the header row
+    sh.getRange(1, 1, 1, def.head.length).setValues([def.head]).setFontWeight('bold');
   }
   return sh;
 }
