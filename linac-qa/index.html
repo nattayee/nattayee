@@ -175,6 +175,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .cell[data-status="invalid"] .res, .cell[data-status="nonom"] .res { color: var(--accent-ink); }
 
 .pf { flex-direction: row; }
+.pf-val { gap: 6px; }
+.pf-val .pfrow { display: flex; }
 .pfb { flex: 1; min-width: 0; height: 2.5rem; padding: 0 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); font-weight: 500; font-size: .85rem; cursor: pointer; }
 .pfb.yes { border-radius: 7px 0 0 7px; }
 .pfb.no { border-radius: 0 7px 7px 0; border-left: 0; }
@@ -392,8 +394,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
     { id: 'coll', name: 'Collimator', tab: 'Collimator', sub: 'ความเสถียรของแสงและ crosshair · มุม collimator', blocks: [
       { type: 'list', items: [
-        { label: 'Light source stability with collimator rotation', hint: 'Gantry 0° · ruler shadow ที่พื้น · เส้นผ่านศูนย์กลาง', limit: 'Ø ≤ 1 mm', cell: mm('c_light') },
-        { label: 'Crosshair stability with collimator rotation', hint: 'ที่ระยะ ≈ 100 cm · เส้นผ่านศูนย์กลาง', limit: 'Ø ≤ 1 mm', cell: mm('c_cross') }
+        { label: 'Light source stability with collimator rotation', hint: 'Gantry 0° · ruler shadow ที่พื้น · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_light_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น' } }) },
+        { label: 'Crosshair stability with collimator rotation', hint: 'ที่ระยะ ≈ 100 cm · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น', limit: 'Ø ≤ 1 mm', cell: pf('c_cross_pf', { failInput: { unit: 'mm', label: 'Ø ที่เห็น' } }) }
       ] },
       { type: 'grid', title: 'Real collimator 0°', limit: '≤ 0.5°', hint: 'ค่าที่เครื่องแสดงเมื่อ collimator อยู่ที่ 0° จริง หมุนเข้าหาจากแต่ละทิศ', items: [
         { label: 'CCW', cell: ang('c_real0_ccw', 0) },
@@ -615,9 +617,13 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 
   function cellHTML(c, aria, inTable) {
     if (c.kind === 'pf') {
-      return '<div class="cell pf" data-cell="' + c.id + '" data-status="empty" role="group" aria-label="' + esc(aria) + '">' +
-        '<button type="button" class="pfb yes" data-pf="' + c.id + '" data-v="pass" aria-pressed="false">' + esc(c.yes) + '</button>' +
-        '<button type="button" class="pfb no" data-pf="' + c.id + '" data-v="fail" aria-pressed="false">' + esc(c.no) + '</button></div>';
+      const btns = '<button type="button" class="pfb yes" data-pf="' + c.id + '" data-v="pass" aria-pressed="false">' + esc(c.yes) + '</button>' +
+        '<button type="button" class="pfb no" data-pf="' + c.id + '" data-v="fail" aria-pressed="false">' + esc(c.no) + '</button>';
+      if (!c.failInput) return '<div class="cell pf" data-cell="' + c.id + '" data-status="empty" role="group" aria-label="' + esc(aria) + '">' + btns + '</div>';
+      const f = c.failInput;
+      return '<div class="cell pf-val" data-cell="' + c.id + '" data-status="empty">' +
+        '<div class="pfrow" role="group" aria-label="' + esc(aria) + '">' + btns + '</div>' +
+        '<div class="inp" data-failval hidden><input type="text" inputmode="decimal" id="f-' + c.id + '_val" data-id="' + c.id + '_val" autocomplete="off" spellcheck="false" placeholder="' + esc(f.label) + '" aria-label="' + esc(f.label + ' ' + aria) + '"><span class="unit">' + esc(f.unit) + '</span></div></div>';
     }
     if (c.kind === 'calc') {
       return '<div class="cell calc" data-cell="' + c.id + '" data-status="empty"><output id="f-' + c.id + '" aria-label="' + esc(aria) + '">—</output></div>';
@@ -999,6 +1005,8 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     el.dataset.status = r.status;
     if (c.kind === 'pf') {
       el.querySelectorAll('.pfb').forEach(b => b.setAttribute('aria-pressed', String(state.values[c.id] === b.dataset.v)));
+      const fv = $('[data-failval]', el);
+      if (fv) fv.hidden = r.status !== 'fail';
       return;
     }
     if (c.kind === 'calc') { $('output', el).textContent = r.text || '—'; return; }
@@ -1036,7 +1044,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
   }
   function failValue(c) {
     if (c.r.text) return c.r.text;
-    if (c.kind === 'pf') return c.no;
+    if (c.kind === 'pf') return c.failInput && valueOf(c.id + '_val') ? 'Ø ' + valueOf(c.id + '_val') + ' ' + c.failInput.unit : c.no;
     return valueOf(c.id) + (c.unit ? ' ' + c.unit : '');
   }
 
@@ -1051,7 +1059,7 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
       let test = c.test;
       if (c.nameId && valueOf(c.nameId)) test += ' (' + valueOf(c.nameId) + ')';
       const nom = c.kind === 'num' && c.mode !== 'record' && c.mode !== 'abs' && c.mode !== 'lt' ? nominalOf(c) : '';
-      const val = c.kind === 'pf' ? (state.values[c.id] === 'pass' ? c.yes : state.values[c.id] === 'fail' ? c.no : '') : c.kind === 'calc' ? (r.dev != null ? r.dev.toFixed(2) : '') : valueOf(c.id);
+      const val = c.kind === 'pf' ? (state.values[c.id] === 'pass' ? c.yes : state.values[c.id] === 'fail' ? c.no + (c.failInput && valueOf(c.id + '_val') ? ' (' + valueOf(c.id + '_val') + ' ' + c.failInput.unit + ')' : '') : '') : c.kind === 'calc' ? (r.dev != null ? r.dev.toFixed(2) : '') : valueOf(c.id);
       const unit = c.kind === 'calc' ? '%' : (c.unit || '');
       const dev = r.dev != null && c.kind !== 'calc' ? r.dev.toFixed(dpOf(c.tolUnit || c.unit)) + ' ' + (c.tolUnit || c.unit) : '';
       rows.push([SEC[id].name, test, c.item, nom == null ? '' : nom, val, unit, dev, c.limit, statusLabel(r.status)]);
@@ -1137,7 +1145,9 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
     if (pfb) {
       const id = pfb.dataset.pf, v = pfb.dataset.v;
       state.values[id] = state.values[id] === v ? '' : v;
-      changed(); return;
+      changed();
+      if (state.values[id] === 'fail' && cells[id].failInput) document.getElementById('f-' + id + '_val').focus();
+      return;
     }
     const mv = e.target.closest('[data-move]');
     if (mv) {
