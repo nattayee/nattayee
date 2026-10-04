@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ระบบเช็กอินเจ้าหน้าที่</title>
+  <title>แดชบอร์ดเช็กอิน</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -200,6 +200,11 @@
 
     .footer-actions { margin-top: 32px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--muted); }
     .danger { color: var(--injured); border-color: var(--injured); background: transparent; }
+    a.icon-btn { text-decoration: none; color: var(--text); }
+    .pin-box { max-width: 360px; margin: 40px auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .pin-box h2 { margin: 0; font-size: 18px; }
+    .pin-box p { margin: 0; font-size: 14px; color: var(--muted); }
+    .pin-box input { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 18px; letter-spacing: .1em; }
 
     /* ---------- ฟอร์มเช็กอิน ---------- */
     dialog {
@@ -228,7 +233,8 @@
       border: 1px solid var(--border); border-radius: 10px; padding: 10px 4px; text-align: center;
       font-weight: 600; font-size: 14px; color: var(--muted); cursor: pointer; display: block;
     }
-    .status-pick input { position: absolute; opacity: 0; pointer-events: none; }
+    .status-pick > div { position: relative; }
+    .status-pick input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
     .status-pick input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 1px; }
     .status-pick input:checked + label.present { background: var(--present-bg); color: var(--present); border-color: var(--present); }
     .status-pick input:checked + label.absent { background: var(--absent-bg); color: var(--absent); border-color: var(--absent); }
@@ -270,7 +276,8 @@
   <header class="top">
     <div class="top-inner">
       <div class="title-row">
-        <h1>ระบบเช็กอินเจ้าหน้าที่ <span class="sub" id="subtitle">กำลังโหลด…</span></h1>
+        <h1>แดชบอร์ดเช็กอิน <span class="sub" id="subtitle">กำลังโหลด…</span></h1>
+        <a class="icon-btn" id="qrLink" target="_top" hidden title="พิมพ์ QR Code ให้เจ้าหน้าที่สแกนเช็กอินเอง">▦ <span class="refresh-label">QR Code</span></a>
         <button class="icon-btn" id="refreshBtn" title="ดึงข้อมูลล่าสุด">
           <span id="refreshIcon">⟳</span><span class="refresh-label">รีเฟรช</span>
         </button>
@@ -290,6 +297,13 @@
 
   <main class="wrap">
     <div id="banner"></div>
+    <form class="pin-box" id="pinForm" hidden>
+      <h2>สำหรับผู้ดูแลระบบ</h2>
+      <p>หน้านี้มีเบอร์โทรและวันเกิดของเจ้าหน้าที่ทุกคน กรุณาใส่รหัสผู้ดูแล</p>
+      <input type="password" id="pinInput" inputmode="numeric" autocomplete="current-password" placeholder="รหัสผู้ดูแล" aria-label="รหัสผู้ดูแล">
+      <button type="submit" class="primary">เข้าสู่ระบบ</button>
+      <div class="form-err" id="pinErr" role="alert"></div>
+    </form>
     <div id="content"><div class="loading">กำลังโหลดข้อมูลจาก Google Sheet…</div></div>
     <div class="footer-actions" id="footer" hidden>
       <span id="fetchedAt"></span>
@@ -362,7 +376,9 @@
       query: '',
       pending: {},
       loading: false,
-      editing: null
+      editing: null,
+      pin: readSession('pin'),
+      locked: false
     };
 
     // ---------- API (google.script.run หรือโหมดตัวอย่าง) ----------
@@ -386,6 +402,9 @@
     }
     function readPref(k, d) { try { var v = localStorage.getItem('checkin.' + k); return v == null ? d : v; } catch (e) { return d; } }
     function writePref(k, v) { try { localStorage.setItem('checkin.' + k, v); } catch (e) {} }
+    function readSession(k) { try { return sessionStorage.getItem('checkin.' + k) || ''; } catch (e) { return ''; } }
+    function writeSession(k, v) { try { sessionStorage.setItem('checkin.' + k, v); } catch (e) {} }
+    function isAuthError(e) { return /AUTH/.test(errMsg(e)); }
     function personKey(zone, p) { return zone.sheet + '#' + p.row + '#' + p.name; }
     function normalize(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
     function errMsg(e) { return (e && (e.message || e.toString())) || 'เกิดข้อผิดพลาด'; }
@@ -583,7 +602,13 @@
       state.loading = true;
       $('refreshBtn').disabled = true;
       $('refreshIcon').className = 'spin';
-      return api.call('getData').then(function (data) {
+      return api.call('getData', state.pin).then(function (data) {
+        state.locked = false;
+        $('pinForm').hidden = true;
+        if (data.url || isDemo) {
+          $('qrLink').href = isDemo ? 'Qr.html' : data.url + '?page=qr';
+          $('qrLink').hidden = false;
+        }
         // คงค่าที่กำลังบันทึกไว้ เพื่อไม่ให้ข้อมูลเก่าทับการกดล่าสุด
         data.zones.forEach(function (z) {
           zonePeople(z).forEach(function (p) {
@@ -593,9 +618,11 @@
         });
         state.data = data;
         if (state.zone && !currentZone()) state.zone = '';
-        $('banner').innerHTML = isDemo ? '<div class="banner">โหมดตัวอย่าง: แสดงข้อมูลจำลอง ไม่ได้เชื่อมต่อ Google Sheet</div>' : '';
+        $('banner').innerHTML = isDemo ? '<div class="banner">โหมดตัวอย่าง: แสดงข้อมูลจำลอง ไม่ได้เชื่อมต่อ Google Sheet</div>'
+          : data.pinSet ? '' : '<div class="banner error">ยังไม่ได้ตั้งรหัสผู้ดูแล (ADMIN_PIN ใน Code.gs) ทุกคนที่สแกน QR Code สามารถเปิดหน้านี้และเห็นเบอร์โทร/วันเกิดได้</div>';
         render();
       }).catch(function (e) {
+        if (isAuthError(e)) return showPinForm(state.pin ? 'รหัสไม่ถูกต้อง' : '');
         if (!silent || !state.data) {
           $('banner').innerHTML = '<div class="banner error">โหลดข้อมูลไม่สำเร็จ: ' + esc(errMsg(e)) + '</div>';
         }
@@ -605,6 +632,18 @@
         $('refreshBtn').disabled = false;
         $('refreshIcon').className = '';
       });
+    }
+
+    function showPinForm(message) {
+      state.locked = true;
+      state.data = null;
+      $('content').innerHTML = '';
+      $('footer').hidden = true;
+      $('pinForm').hidden = false;
+      $('pinErr').textContent = message || '';
+      $('pinErr').className = 'form-err' + (message ? ' show' : '');
+      $('pinInput').value = '';
+      $('pinInput').focus();
     }
 
     function findPerson(el) {
@@ -628,7 +667,7 @@
       state.pending[key] = changes;
       render();
 
-      return api.call('saveCheckin', hit.zone.sheet, p.row, p.name, changes).then(function (res) {
+      return api.call('saveCheckin', state.pin, hit.zone.sheet, p.row, p.name, changes).then(function (res) {
         delete state.pending[key];
         ['status', 'phone', 'birthday', 'note', 'updated', 'row'].forEach(function (k) { if (k in res) p[k] = res[k]; });
         render();
@@ -657,7 +696,7 @@
       var label = zone ? zone.name : 'ทุกโซน';
       if (!confirm('ยืนยันรีเซ็ตสถานะของ' + label + ' ให้เป็น "ไม่ทราบ" ทั้งหมด?\nสถานะและหมายเหตุเดิมจะถูกล้าง (เบอร์โทรและวันเกิดยังอยู่)')) return;
       $('resetBtn').disabled = true;
-      api.call('resetStatuses', zone ? zone.sheet : '').then(function (res) {
+      api.call('resetStatuses', state.pin, zone ? zone.sheet : '').then(function (res) {
         toast('รีเซ็ตแล้ว ' + res.count + ' คน');
         return load();
       }).catch(function (e) {
@@ -771,6 +810,13 @@
     $('refreshBtn').addEventListener('click', function () { load(); });
     $('resetBtn').addEventListener('click', reset);
     $('dlgForm').addEventListener('submit', submitForm);
+    $('pinForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      state.pin = $('pinInput').value.trim();
+      writeSession('pin', state.pin);
+      $('content').innerHTML = '<div class="loading">กำลังตรวจสอบ…</div>';
+      load();
+    });
     $('dlgCancel').addEventListener('click', function () { $('dlg').close(); });
     $('dlg').addEventListener('close', function () { state.editing = null; });
     $('phone').addEventListener('input', function () { if (validPhone(this.value)) $('fPhone').classList.remove('invalid'); });
@@ -793,11 +839,11 @@
     });
 
     setInterval(function () {
-      if (document.hidden || state.editing || Object.keys(state.pending).length) return;
+      if (document.hidden || state.locked || state.editing || Object.keys(state.pending).length) return;
       load(true);
     }, AUTO_REFRESH_MS);
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden && state.data && !state.editing) load(true);
+      if (!document.hidden && state.data && !state.locked && !state.editing) load(true);
     });
 
     setupForm();
@@ -857,7 +903,7 @@
       }
       var fns = {
         getData: function () { data.fetchedAt = stamp(); return JSON.parse(JSON.stringify(data)); },
-        saveCheckin: function (sheet, row, name, changes) {
+        saveCheckin: function (pin, sheet, row, name, changes) {
           var z = data.zones.filter(function (z) { return z.sheet === sheet; })[0];
           var p = z && zonePeople(z).filter(function (p) { return p.row === row && p.name === name; })[0];
           if (!p) throw new Error('ไม่พบรายชื่อ');
@@ -866,7 +912,7 @@
           p.updated = stamp();
           return JSON.parse(JSON.stringify(p));
         },
-        resetStatuses: function (sheet) {
+        resetStatuses: function (pin, sheet) {
           var count = 0;
           data.zones.forEach(function (z) {
             if (sheet && z.sheet !== sheet) return;

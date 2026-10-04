@@ -8,13 +8,24 @@
  *   แถว 3 ขึ้นไป: แถวชื่อหน่วยงาน (มีค่าในคอลัมน์ A, คอลัมน์ E ว่าง)
  *               หรือแถวเจ้าหน้าที่ (D สถานะ, E ชื่อ, F ตำแหน่ง, G เบอร์โทร, H วันเกิด,
  *               I อัปเดตล่าสุด, J หมายเหตุ)
+ *
+ * หน้าเว็บ (เลือกด้วยพารามิเตอร์ page):
+ *   (ค่าเริ่มต้น)  Checkin.html  เจ้าหน้าที่สแกน QR Code แล้วเช็กอินเอง  ?z=<รหัสแท็บ> เลือกโซนให้อัตโนมัติ
+ *   ?page=admin  Admin.html    แดชบอร์ดผู้ดูแล ดู/แก้สถานะทุกคน (ต้องใช้ ADMIN_PIN)
+ *   ?page=qr     Qr.html       สร้างและพิมพ์ QR Code ของแต่ละโซน
  */
 
 var SPREADSHEET_ID = '1-6yW-yDd3l6LDmkJUliJyPGggXpLm3edwrXDXZ7LxFM';
 
+// รหัสผู้ดูแลสำหรับหน้า ?page=admin (มีเบอร์โทร/วันเกิดของทุกคน)
+// ควรตั้งเสมอ เพราะลิงก์เว็บแอปถูกแจกผ่าน QR Code  ปล่อยว่าง = ไม่ต้องใช้รหัส
+var ADMIN_PIN = '';
+
 // สถานะที่เลือกได้ ("ไม่ทราบ" = ยังไม่เช็กอิน)
 var STATUSES = ['อยู่', 'ไม่อยู่', 'บาดเจ็บ', 'ไม่ทราบ'];
 var DEFAULT_STATUS = 'ไม่ทราบ';
+// สถานะที่เจ้าหน้าที่เลือกได้เองตอนสแกน QR Code
+var CHECKIN_STATUSES = ['อยู่', 'ไม่อยู่', 'บาดเจ็บ'];
 // ค่าสถานะเดิมในชีตที่แปลงเป็นสถานะใหม่
 var LEGACY_STATUS = { 'ลา': 'ไม่อยู่' };
 
@@ -38,11 +49,29 @@ var BIRTHDAY_FORMAT = 'dd/mm/yyyy';
 var FIRST_DATA_ROW = 3;
 var NOTE_MAX_LENGTH = 300;
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('ระบบเช็กอินเจ้าหน้าที่')
+var PAGES = {
+  checkin: { file: 'Checkin', title: 'เช็กอินเจ้าหน้าที่' },
+  admin: { file: 'Admin', title: 'แดชบอร์ดเช็กอินเจ้าหน้าที่' },
+  qr: { file: 'Qr', title: 'QR Code เช็กอินแต่ละโซน' }
+};
+
+function doGet(e) {
+  var key = e && e.parameter && e.parameter.page;
+  var page = PAGES[key] || PAGES.checkin;
+  return HtmlService.createHtmlOutputFromFile(page.file)
+    .setTitle(page.title)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function appUrl_() {
+  return ScriptApp.getService().getUrl() || '';
+}
+
+function requireAdmin_(pin) {
+  if (ADMIN_PIN && String(pin || '') !== String(ADMIN_PIN)) {
+    throw new Error('AUTH: รหัสผู้ดูแลไม่ถูกต้อง');
+  }
 }
 
 function getSpreadsheet_() {
@@ -70,16 +99,74 @@ function normalizeStatus_(value) {
   return STATUSES.indexOf(s) >= 0 ? s : DEFAULT_STATUS;
 }
 
-/** อ่านข้อมูลทุกโซนส่งให้หน้าเว็บ */
-function getData() {
+/** อ่านข้อมูลทุกโซน (หน้าผู้ดูแล) */
+function getData(pin) {
+  requireAdmin_(pin);
   var ss = getSpreadsheet_();
+  return {
+    title: ss.getName(),
+    statuses: STATUSES,
+    zones: readZones_(ss),
+    url: appUrl_(),
+    pinSet: !!ADMIN_PIN,
+    fetchedAt: now_()
+  };
+}
+
+/**
+ * รายชื่อสำหรับหน้าเช็กอินด้วยตนเอง (เปิดให้ทุกคนที่สแกน QR)
+ * ไม่ส่งเบอร์โทร วันเกิด หรือหมายเหตุ บอกเพียงว่ามีข้อมูลแล้วหรือยัง
+ */
+function getRoster() {
+  var ss = getSpreadsheet_();
+  var zones = readZones_(ss).map(function (z) {
+    return {
+      id: z.id,
+      sheet: z.sheet,
+      name: z.name,
+      departments: z.departments.map(function (d) {
+        return {
+          name: d.name,
+          notes: d.notes,
+          people: d.people.map(function (p) {
+            return {
+              row: p.row,
+              name: p.name,
+              position: p.position,
+              checkedIn: p.status !== DEFAULT_STATUS,
+              hasPhone: !!p.phone,
+              hasBirthday: !!p.birthday
+            };
+          })
+        };
+      })
+    };
+  });
+  return { title: ss.getName(), statuses: CHECKIN_STATUSES, zones: zones };
+}
+
+/** ข้อมูลสำหรับหน้าพิมพ์ QR Code (ชื่อโซนและลิงก์ ไม่มีข้อมูลส่วนตัว) */
+function getQrInfo() {
+  var ss = getSpreadsheet_();
+  return {
+    title: ss.getName(),
+    url: appUrl_(),
+    zones: readZones_(ss).map(function (z) {
+      var count = 0;
+      z.departments.forEach(function (d) { count += d.people.length; });
+      return { id: z.id, sheet: z.sheet, name: z.name, count: count };
+    })
+  };
+}
+
+function readZones_(ss) {
   var tz = ss.getSpreadsheetTimeZone();
   var zones = [];
 
   ss.getSheets().forEach(function (sheet) {
     if (!isZoneSheet_(sheet)) return;
 
-    var zone = { sheet: sheet.getName(), name: clean_(sheet.getName()), departments: [] };
+    var zone = { id: sheet.getSheetId(), sheet: sheet.getName(), name: clean_(sheet.getName()), departments: [] };
     var width = Math.min(LAST_COL, sheet.getMaxColumns());
     var range = sheet.getRange(1, 1, sheet.getLastRow(), width);
     var display = padRows_(range.getDisplayValues());
@@ -123,27 +210,43 @@ function getData() {
     });
     zones.push(zone);
   });
-
-  return {
-    title: ss.getName(),
-    statuses: STATUSES,
-    zones: zones,
-    fetchedAt: now_()
-  };
-}
-
-/** เปลี่ยนเฉพาะสถานะ (ปุ่มเช็กอินด่วน) */
-function setStatus(sheetName, row, name, status) {
-  return saveCheckin(sheetName, row, name, { status: status });
+  return zones;
 }
 
 /**
- * บันทึกการเช็กอินของเจ้าหน้าที่ 1 คน
+ * เจ้าหน้าที่เช็กอินด้วยตนเอง (สแกน QR Code)
+ * data: { status, phone, birthday, note }  ต้องเลือกสถานะ และต้องกรอกเบอร์โทร/วันเกิด
+ * หากยังไม่มีในชีต (ถ้ามีแล้วเว้นว่างไว้ได้ ข้อมูลเดิมจะไม่ถูกลบ)
+ */
+function selfCheckin(sheetName, row, name, data) {
+  data = data || {};
+  if (CHECKIN_STATUSES.indexOf(data.status) < 0) throw new Error('กรุณาเลือกสถานะ');
+  var input = { status: data.status, note: data.note || '' };
+  if (clean_(data.phone)) input.phone = data.phone;
+  if (clean_(data.birthday)) input.birthday = data.birthday;
+
+  var res = writeCheckin_(sheetName, row, name, input, function (sheet, target) {
+    var current = sheet.getRange(target, COL_PHONE, 1, 2).getDisplayValues()[0];
+    if (!('phone' in input) && !clean_(current[0])) throw new Error('กรุณากรอกเบอร์โทร');
+    if (!('birthday' in input) && !clean_(current[1])) throw new Error('กรุณาเลือกวันเกิด');
+  });
+  return { name: clean_(name), status: res.status, updated: res.updated };
+}
+
+/**
+ * บันทึกการเช็กอินจากหน้าผู้ดูแล
  * data: { status, phone, birthday (yyyy-mm-dd ค.ศ.), note } ส่งเฉพาะช่องที่ต้องการบันทึก
+ */
+function saveCheckin(pin, sheetName, row, name, data) {
+  requireAdmin_(pin);
+  return writeCheckin_(sheetName, row, name, data || {});
+}
+
+/**
+ * เขียนข้อมูลเช็กอินลงชีต
  * ตรวจสอบชื่อในแถวก่อนเขียน หากแถวถูกเลื่อน (มีการแทรก/ลบแถว) จะค้นหาชื่อใหม่ในแท็บเดิม
  */
-function saveCheckin(sheetName, row, name, data) {
-  data = data || {};
+function writeCheckin_(sheetName, row, name, data, precheck) {
   var values = validateCheckin_(data);
 
   var lock = LockService.getScriptLock();
@@ -156,6 +259,7 @@ function saveCheckin(sheetName, row, name, data) {
     var target = findRow_(sheet, Number(row), clean_(name));
     if (!target) throw new Error('ไม่พบรายชื่อ "' + name + '" ในแท็บ ' + sheetName + ' กรุณารีเฟรชข้อมูล');
     ensureColumns_(sheet);
+    if (precheck) precheck(sheet, target);
 
     if ('status' in values) {
       ensureStatusValidation_(sheet, target);
@@ -289,7 +393,8 @@ function ensureStatusValidation_(sheet, row) {
 
 /** รีเซ็ตสถานะและหมายเหตุของทุกคนในโซน (หรือทุกโซนหาก sheetName ว่าง) กลับเป็น "ไม่ทราบ"
  *  เบอร์โทรและวันเกิดยังคงอยู่ */
-function resetStatuses(sheetName) {
+function resetStatuses(pin, sheetName) {
+  requireAdmin_(pin);
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
