@@ -3,8 +3,10 @@
  * Pure functions only: no DOM access, so the same file runs in the browser
  * (window.TRS398) and in Node (require('./trs398.js')) for testing.
  *
- *   D_w,Q(z_ref) = M_Q · N_D,w,Q0 · k_Q,Q0
+ *   D_w,Q(z_ref) = M_Q · N_D,w,Q0 · k_Q,Q0 · k_Q,Qcross
  *   M_Q          = M̄ · k_TP · k_elec · k_pol · k_s · k_vol
+ *
+ * Units follow the LPCH worksheet: readings in nC, N_D,w in cGy/nC, dose in cGy.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -123,6 +125,15 @@
     return 0.6 * r50 - 0.1;
   }
 
+  // k_Q table from a grid of beam-quality values and the matching k_Q values
+  function kqRowsFromGrid(grid, kq) {
+    var rows = [];
+    for (var i = 0; i < Math.min(grid.length, kq.length); i++) {
+      if (isFinite(grid[i]) && isFinite(kq[i]) && kq[i] > 0) rows.push([grid[i], kq[i]]);
+    }
+    return rows;
+  }
+
   // k_Q from a user-supplied table "Q kQ" per line, linear interpolation
   function parseKqTable(text) {
     var rows = [];
@@ -151,9 +162,10 @@
    * Full worksheet calculation.
    * inp: {
    *   beam: 'photon'|'electron', setup: 'SSD'|'SAD', mu,
-   *   qMethod: 'tpr'|'pdd' (photon) | 'r50'|'i50' (electron), qValue,
-   *   ndw (Gy/C), kelec, kvol,
-   *   kqMode: 'direct'|'table', kqDirect, kqTable,
+   *   qMethod: 'ratio'|'tpr'|'pdd' (photon) | 'r50'|'i50' (electron), qValue,
+   *   m10, m20  (readings at 10 and 20 g/cm², SAD 100, for qMethod 'ratio'),
+   *   ndw (cGy/nC), kelec, kvol, kcross,
+   *   kqMode: 'table'|'direct'|'unity', kqRows ([[Q, kQ], ...]) or kqTable (text), kqDirect,
    *   tempC, pressure, pUnit,
    *   readNormal, readOpposite, readLow  (strings, nC),
    *   usePol, useKs, v1, v2, recomb: 'pulsed'|'scanned'|'continuous',
@@ -172,9 +184,15 @@
       out.qLabel = 'R50';
       out.zref = electronZref(r50);
       if (!(r50 > 0)) E.push('ต้องระบุ R50 หรือ I50 ที่มากกว่า 0');
-      else if (r50 < 4) W.push('R50 < 4 g/cm²: TRS-398 กำหนดให้ใช้หัววัดแบบ plane-parallel ตรวจสอบรุ่นหัววัดที่ใช้');
+      else if (r50 < 4 && inp.chamberType !== 'pp') W.push('R50 < 4 g/cm²: TRS-398 กำหนดให้ใช้หัววัดแบบ plane-parallel ตรวจสอบรุ่นหัววัดที่ใช้');
     } else {
-      var tpr = inp.qMethod === 'pdd' ? tprFromPdd(inp.qValue) : inp.qValue;
+      var tpr;
+      if (inp.qMethod === 'ratio') {
+        var s10 = stats(parseReadings(inp.m10)), s20 = stats(parseReadings(inp.m20));
+        out.read10 = s10; out.read20 = s20;
+        tpr = s10 && s20 ? s20.mean / s10.mean : NaN;
+        if (!(s10 && s20)) E.push('ต้องมีค่าที่อ่านได้ที่ระดับลึก 10 และ 20 g/cm² เพื่อหา TPR20,10');
+      } else tpr = inp.qMethod === 'pdd' ? tprFromPdd(inp.qValue) : inp.qValue;
       out.q = tpr;
       out.qLabel = 'TPR20,10';
       out.zref = 10;
@@ -182,8 +200,10 @@
     }
 
     // k_Q,Q0
-    if (inp.kqMode === 'table') {
-      var rows = parseKqTable(inp.kqTable);
+    if (inp.kqMode === 'unity') {
+      out.kq = 1;
+    } else if (inp.kqMode === 'table') {
+      var rows = inp.kqRows || parseKqTable(inp.kqTable);
       out.kqRows = rows.length;
       out.kq = interpolateKq(rows, out.q);
       if (rows.length < 2) E.push('ตาราง k_Q ต้องมีอย่างน้อย 2 แถว');
@@ -237,13 +257,15 @@
 
     out.kelec = inp.kelec;
     out.kvol = inp.kvol;
+    out.kcross = isFinite(inp.kcross) && inp.kcross > 0 ? inp.kcross : 1;
     if (!(inp.ndw > 0)) E.push('ต้องระบุ N_D,w,Q0');
+    else if (inp.ndw > 100) E.push('N_D,w ต้องเป็นหน่วย cGy/nC (เช่น 5.307) ไม่ใช่ Gy/C');
     if (!(inp.mu > 0)) E.push('ต้องระบุจำนวน MU');
 
     if (sN) {
       out.mRaw = sN.mean;                                   // nC
       out.mCorr = sN.mean * out.ktp * inp.kelec * out.kpol * out.ks * inp.kvol;   // nC
-      out.dZref = out.mCorr * 1e-9 * inp.ndw * out.kq;      // Gy
+      out.dZref = out.mCorr * inp.ndw * out.kq * out.kcross; // cGy
     }
 
     // Transfer to the depth of maximum dose
@@ -252,9 +274,9 @@
     out.depthFrac = frac;
     if (!(frac > 0 && frac <= 1.0001)) E.push(out.depthDoseKind === 'TMR' ? 'TMR(z_ref) ต้องอยู่ระหว่าง 0 ถึง 1' : 'PDD(z_ref) ต้องอยู่ระหว่าง 0 ถึง 100%');
     if (out.dZref != null && frac > 0) {
-      out.dMax = out.dZref / frac;                          // Gy
-      out.dZrefPerMU = (100 * out.dZref) / inp.mu;          // cGy/MU at z_ref
-      out.outputPerMU = (100 * out.dMax) / inp.mu;          // cGy/MU at z_max
+      out.dMax = out.dZref / frac;                          // cGy
+      out.dZrefPerMU = out.dZref / inp.mu;                  // cGy/MU at z_ref
+      out.outputPerMU = out.dMax / inp.mu;                  // cGy/MU at z_max
       if (inp.expected > 0) {
         out.deviation = (100 * (out.outputPerMU - inp.expected)) / inp.expected;
         var a = Math.abs(out.deviation);
@@ -271,7 +293,7 @@
     parseReadings: parseReadings, stats: stats,
     kTP: kTP, kPol: kPol, kS: kS, ksCoefficients: ksCoefficients,
     tprFromPdd: tprFromPdd, r50FromI50: r50FromI50, electronZref: electronZref,
-    parseKqTable: parseKqTable, interpolateKq: interpolateKq,
+    parseKqTable: parseKqTable, interpolateKq: interpolateKq, kqRowsFromGrid: kqRowsFromGrid,
     calculate: calculate
   };
 });

@@ -140,6 +140,11 @@ ul.msgs li.wrn { background: var(--warn-soft); color: var(--warn); }
 .toast { font-size: .82rem; color: var(--ok); }
 textarea#report { display: block; margin-top: 10px; min-height: 160px; font-size: .78rem; }
 
+.libnote { font-size: .8rem; color: var(--muted); margin-top: 10px; }
+.missing { color: var(--warn); font-size: .78rem; }
+.kq-show { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 10px 12px; border-radius: 4px; background: var(--accent-soft); }
+.kq-show .v { font: 500 1.25rem var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.kq-show .d { font: .8rem var(--font-mono); color: var(--muted); }
 footer { margin-top: 28px; font-size: .8rem; color: var(--muted); max-width: 80ch; }
 footer p { margin: 6px 0; }
 </style>
@@ -148,16 +153,16 @@ footer p { margin: 6px 0; }
   <header class="top">
     <div>
       <h1>TRS-398 <span>Output Calibration</span></h1>
-      <p>คำนวณ absorbed dose to water ที่ระดับลึกอ้างอิง และ output (cGy/MU) ที่ z<sub>max</sub> ของเครื่องเร่งอนุภาค ตามโปรโตคอล IAEA TRS-398 สำหรับ photon และ electron</p>
+      <p>คำนวณ absorbed dose to water ที่ระดับลึกอ้างอิง และ output (cGy/MU) ที่ z<sub>max</sub> ของเครื่องเร่งอนุภาค ตามโปรโตคอล IAEA TRS-398 ใช้ข้อมูลหัววัด เครื่องวัดประจุ และตาราง k<sub>Q,Q0</sub> จาก TG398 LPCH Ver 20260924</p>
     </div>
     <div class="eq">D<sub>w,Q</sub>(z<sub>ref</sub>) = M<sub>Q</sub> · N<sub>D,w,Q0</sub> · k<sub>Q,Q0</sub></div>
   </header>
 
   <div class="notice" id="notice">
-    <span id="noticeText">แบบฟอร์มเปิดด้วย<strong>ค่าตัวอย่าง</strong> (6 MV, Farmer chamber) แทนที่ด้วยค่าวัดจริงและค่าจากใบรับรองการสอบเทียบของคุณ</span>
+    <span id="noticeText">ข้อมูลเครื่อง หัววัด และ k<sub>Q</sub> มาจาก Sheet ส่วน<strong>ค่าที่อ่านได้เป็นตัวอย่าง</strong> แทนที่ด้วยค่าวัดจริง</span>
     <span class="btns">
-      <button type="button" class="ghost" id="exPhoton">ตัวอย่าง photon</button>
-      <button type="button" class="ghost" id="exElectron">ตัวอย่าง electron</button>
+      <button type="button" class="ghost" id="exPhoton">ตัวอย่าง 6 MV</button>
+      <button type="button" class="ghost" id="exElectron">ตัวอย่าง 9 MeV</button>
       <button type="button" class="ghost" id="clearAll">ล้างค่าการวัด</button>
     </span>
   </div>
@@ -165,43 +170,55 @@ footer p { margin: 6px 0; }
   <div class="layout">
     <form id="f" autocomplete="off">
       <fieldset>
-        <legend>ข้อมูลการวัด</legend>
+        <legend>เครื่องและอุปกรณ์ <small>จาก Sheet "0. List"</small></legend>
         <div class="grid">
-          <div class="field"><label for="date">วันที่</label><input id="date" type="date"></div>
+          <div class="field"><label for="accSel">เครื่องเร่งอนุภาค</label><select id="accSel"></select></div>
+          <div class="field"><label for="energySel">พลังงาน</label><select id="energySel"></select></div>
+          <div class="field"><label for="chamberSel">หัววัด</label><select id="chamberSel"></select>
+            <input id="chamberCustom" type="text" placeholder="รุ่นและ S/N หัววัด" hidden></div>
+          <div class="field"><label for="electrometerSel">เครื่องวัดประจุ</label><select id="electrometerSel"></select>
+            <input id="electrometerCustom" type="text" placeholder="รุ่นและ S/N" hidden></div>
+          <div class="field"><label for="date">วันที่วัด</label><input id="date" type="date"></div>
           <div class="field"><label for="physicist">นักฟิสิกส์</label><input id="physicist" type="text" placeholder="ชื่อผู้วัด"></div>
-          <div class="field"><label for="machine">เครื่องเร่งอนุภาค</label><input id="machine" type="text" placeholder="เช่น Linac 1"></div>
-          <div class="field"><label for="energy">พลังงาน</label><input id="energy" type="text" placeholder="เช่น 6 MV"></div>
         </div>
+        <div class="libnote" id="libNote"></div>
       </fieldset>
 
       <fieldset>
-        <legend>ลำรังสีและคุณภาพลำรังสี</legend>
+        <legend>คุณภาพลำรังสี</legend>
         <div class="grid wide">
-          <div class="field">
-            <span class="lbl">ชนิดลำรังสี</span>
-            <div class="seg" role="radiogroup" aria-label="ชนิดลำรังสี">
-              <label><input type="radio" name="beam" id="beamPhoton" value="photon" checked>Photon</label>
-              <label><input type="radio" name="beam" id="beamElectron" value="electron">Electron</label>
-            </div>
-          </div>
           <div class="field" id="setupField">
             <span class="lbl">การจัดวาง (setup)</span>
             <div class="seg" role="radiogroup" aria-label="การจัดวาง">
-              <label><input type="radio" name="setup" id="setupSSD" value="SSD" checked>SSD 100 cm</label>
-              <label><input type="radio" name="setup" id="setupSAD" value="SAD">SAD 100 cm</label>
+              <label><input type="radio" name="setup" id="setupSAD" value="SAD" checked>SAD 100 cm</label>
+              <label><input type="radio" name="setup" id="setupSSD" value="SSD">SSD 100 cm</label>
             </div>
           </div>
-        </div>
-
-        <div class="grid" style="margin-top:14px">
           <div class="field">
             <label for="qMethod">ดัชนีคุณภาพลำรังสี</label>
             <select id="qMethod"></select>
           </div>
+        </div>
+
+        <div class="grid wide" id="ratioBlock" style="margin-top:14px">
           <div class="field">
+            <div class="lbl-row"><label for="m10">M ที่ระดับลึก 10 g/cm² (nC)</label><span class="stat" id="stat10"></span></div>
+            <input id="m10" type="text" class="mono" inputmode="decimal">
+          </div>
+          <div class="field">
+            <div class="lbl-row"><label for="m20">M ที่ระดับลึก 20 g/cm² (nC)</label><span class="stat" id="stat20"></span></div>
+            <input id="m20" type="text" class="mono" inputmode="decimal">
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:14px">
+          <div class="field" id="qValueField">
             <label for="qValue" id="qValueLbl">ค่า</label>
             <input id="qValue" type="number" step="0.001" inputmode="decimal">
-            <span class="derived" id="qDerived"></span>
+          </div>
+          <div class="field">
+            <span class="lbl" id="qOutLbl">TPR<sub>20,10</sub></span>
+            <div class="derived" id="qOut" style="font-size:1rem;padding-top:6px">—</div>
           </div>
           <div class="field">
             <span class="lbl">ระดับลึกอ้างอิง z<sub>ref</sub></span>
@@ -216,58 +233,62 @@ footer p { margin: 6px 0; }
       </fieldset>
 
       <fieldset>
-        <legend>หัววัดและเครื่องวัดประจุ</legend>
+        <legend>ปัจจัยการสอบเทียบ</legend>
         <div class="grid">
-          <div class="field"><label for="chamber">รุ่นหัววัด</label><input id="chamber" type="text" placeholder="เช่น PTW 30013"></div>
-          <div class="field"><label for="chamberSN">S/N หัววัด</label><input id="chamberSN" type="text"></div>
-          <div class="field"><label for="electrometer">เครื่องวัดประจุ / S/N</label><input id="electrometer" type="text"></div>
           <div class="field">
-            <label for="ndw">N<sub>D,w,Q0</sub> (Gy/C)</label>
-            <input id="ndw" type="text" class="mono" inputmode="decimal" placeholder="5.380e7">
-            <span class="derived" id="ndwDerived"></span>
+            <label for="ndw">N<sub>D,w,Q0</sub> (cGy/nC)</label>
+            <input id="ndw" type="number" step="0.001" inputmode="decimal">
+            <span class="hint" id="ndwHint"></span>
           </div>
-          <div class="field"><label for="kelec">k<sub>elec</sub></label><input id="kelec" type="number" step="0.0001"><span class="hint">1.000 หากสอบเทียบหัววัดกับเครื่องวัดเป็นชุดเดียวกัน</span></div>
-          <div class="field"><label for="kvol">k<sub>vol</sub> (FFF)</label><input id="kvol" type="number" step="0.0001"><span class="hint">volume averaging ตาม TRS-398 Rev.1 ใช้ 1.000 สำหรับลำรังสีแบบมี flattening filter</span></div>
+          <div class="field"><label for="kelec">k<sub>elec</sub></label><input id="kelec" type="number" step="0.0001"><span class="hint">1.000 เมื่อสอบเทียบหัววัดกับเครื่องวัดเป็นชุดเดียวกัน</span></div>
+          <div class="field"><label for="kcross">k<sub>Q,Qcross</sub></label><input id="kcross" type="number" step="0.0001"><span class="hint">ใช้กับ electron ที่ cross-calibrate (Kcross ใน Sheet)</span></div>
+          <div class="field"><label for="kvol">k<sub>vol</sub> (FFF)</label><input id="kvol" type="number" step="0.0001"><span class="hint">1.000 สำหรับลำรังสีที่มี flattening filter</span></div>
         </div>
 
-        <div class="subhead"><h3>ปัจจัยคุณภาพลำรังสี k<sub>Q,Q0</sub></h3>
-          <div class="seg" role="radiogroup" aria-label="วิธีหา k_Q">
-            <label><input type="radio" name="kqMode" id="kqDirect" value="direct" checked>ใส่ค่าโดยตรง</label>
-            <label><input type="radio" name="kqMode" id="kqTableMode" value="table">ประมาณค่าจากตาราง</label>
-          </div>
+        <div class="subhead"><h3>k<sub>Q,Q0</sub></h3>
+          <select id="kqMode" style="width:auto">
+            <option value="table">คำนวณจากตาราง k_Q ตามคุณภาพลำรังสี</option>
+            <option value="unity">สอบเทียบในลำรังสีนี้ (k_Q = 1)</option>
+            <option value="direct">ใส่ค่าเอง</option>
+          </select>
         </div>
         <div class="grid wide">
-          <div class="field" id="kqDirectField">
+          <div class="field" id="kqSourceField">
+            <label for="kqSource">ตาราง k<sub>Q</sub> ของหัววัด</label>
+            <select id="kqSource"></select>
+          </div>
+          <div class="field" id="kqDirectField" hidden>
             <label for="kqValue">k<sub>Q,Q0</sub></label>
             <input id="kqValue" type="number" step="0.001">
-            <span class="hint">จาก TRS-398 ตาราง 6.III (photon) หรือ 7.III (electron) สำหรับรุ่นหัววัดของคุณ</span>
           </div>
           <div class="field span2" id="kqTableField" hidden>
-            <div class="lbl-row"><label for="kqTable">ตาราง k<sub>Q</sub> ของหัววัด: หนึ่งแถวต่อบรรทัด "<span id="kqColName">TPR20,10</span> &nbsp;k<sub>Q</sub>"</label><span class="derived" id="kqInterp"></span></div>
+            <label for="kqTable">ตารางของคุณ: หนึ่งแถวต่อบรรทัด "<span id="kqColName">TPR20,10</span> &nbsp;k<sub>Q</sub>"</label>
             <textarea id="kqTable" spellcheck="false" placeholder="0.65 0.994&#10;0.68 0.990&#10;0.70 0.988"></textarea>
-            <span class="hint">คัดลอกแถวของหัววัดจากตารางใน TRS-398 แอปจะประมาณค่าเชิงเส้นที่ค่าคุณภาพลำรังสีที่วัดได้ ตารางจะถูกจำไว้ในเบราว์เซอร์นี้ตามชื่อรุ่นหัววัด</span>
+          </div>
+          <div class="field span2">
+            <div class="kq-show"><span class="lbl">k<sub>Q,Q0</sub> ที่ใช้</span><span class="v" id="kqOut">—</span><span class="d" id="kqDetail"></span></div>
           </div>
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>สภาพแวดล้อม <small>k<sub>TP</sub> อ้างอิง 20 °C, 101.325 kPa</small></legend>
+        <legend>สภาพแวดล้อม <small>k<sub>TP</sub> อ้างอิง 20 °C, 1013.25 mbar</small></legend>
         <div class="grid">
           <div class="field"><label for="temp">อุณหภูมิ (°C)</label><input id="temp" type="number" step="0.1"></div>
           <div class="field"><label for="pressure">ความดัน</label><input id="pressure" type="number" step="0.01"></div>
           <div class="field"><label for="pUnit">หน่วยความดัน</label>
-            <select id="pUnit"><option value="hPa">hPa (mbar)</option><option value="kPa">kPa</option><option value="mmHg">mmHg</option></select>
+            <select id="pUnit"><option value="hPa">mbar (hPa)</option><option value="kPa">kPa</option><option value="mmHg">mmHg</option></select>
           </div>
           <div class="field"><span class="lbl">k<sub>TP</sub></span><div class="derived" id="ktpOut" style="font-size:1rem;padding-top:6px">—</div></div>
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>ค่าที่อ่านได้ (nC) <small>คั่นแต่ละค่าด้วยช่องว่างหรือจุลภาค</small></legend>
+        <legend>ค่าที่อ่านได้ที่ z<sub>ref</sub> (nC) <small>คั่นแต่ละค่าด้วยช่องว่างหรือจุลภาค</small></legend>
 
-        <div class="subhead"><h3>Polarity และแรงดันปกติ (V<sub>1</sub>)</h3><span class="stat" id="statN"></span></div>
+        <div class="subhead"><h3>Polarity ที่ใช้ (+V<sub>1</sub>)</h3><span class="stat" id="statN"></span></div>
         <div class="grid wide">
-          <div class="field span2"><label for="readNormal">M ที่ polarity ที่ใช้ประจำและแรงดัน V<sub>1</sub></label><input id="readNormal" type="text" class="mono" inputmode="decimal"></div>
+          <div class="field span2"><label for="readNormal">M<sub>1</sub> ที่ polarity ที่ใช้และแรงดัน V<sub>1</sub></label><input id="readNormal" type="text" class="mono" inputmode="decimal"></div>
         </div>
 
         <div class="subhead"><h3>Polarity effect k<sub>pol</sub></h3>
@@ -275,9 +296,9 @@ footer p { margin: 6px 0; }
         </div>
         <div class="grid wide" id="polBlock">
           <div class="field span2">
-            <div class="lbl-row"><label for="readOpposite">M ที่ polarity ตรงข้าม (แรงดัน V<sub>1</sub>)</label><span class="stat" id="statO"></span></div>
+            <div class="lbl-row"><label for="readOpposite">−M<sub>1</sub> ที่ polarity ตรงข้าม (−V<sub>1</sub>)</label><span class="stat" id="statO"></span></div>
             <input id="readOpposite" type="text" class="mono" inputmode="decimal">
-            <span class="hint">k<sub>pol</sub> = (|M<sub>+</sub>| + |M<sub>−</sub>|) / 2M ใช้ค่าสัมบูรณ์ เครื่องหมายลบไม่มีผล</span>
+            <span class="hint">k<sub>pol</sub> = (|M<sub>+</sub>| + |M<sub>−</sub>|) / 2M ใช้ค่าสัมบูรณ์</span>
           </div>
         </div>
 
@@ -296,7 +317,7 @@ footer p { margin: 6px 0; }
           </div>
           <div class="field"><span class="lbl">V<sub>1</sub>/V<sub>2</sub> · M<sub>1</sub>/M<sub>2</sub></span><div class="derived" id="ksRatios" style="padding-top:6px">—</div></div>
           <div class="field span2">
-            <div class="lbl-row"><label for="readLow">M ที่แรงดัน V<sub>2</sub> (polarity ปกติ)</label><span class="stat" id="statL"></span></div>
+            <div class="lbl-row"><label for="readLow">M<sub>2</sub> ที่แรงดัน V<sub>2</sub></label><span class="stat" id="statL"></span></div>
             <input id="readLow" type="text" class="mono" inputmode="decimal">
           </div>
         </div>
@@ -305,7 +326,8 @@ footer p { margin: 6px 0; }
       <fieldset>
         <legend>แปลงไปยัง z<sub>max</sub> และเกณฑ์ยอมรับ</legend>
         <div class="grid">
-          <div class="field"><label for="depthDose" id="depthDoseLbl">PDD(z<sub>ref</sub>) (%)</label><input id="depthDose" type="number" step="0.01"><span class="hint" id="depthDoseHint"></span></div>
+          <div class="field"><label for="depthDose" id="depthDoseLbl">TMR(z<sub>ref</sub>)</label><input id="depthDose" type="number" step="0.001"><span class="hint" id="depthDoseHint"></span></div>
+          <div class="field"><label for="zmax">z<sub>max</sub> (g/cm²)</label><input id="zmax" type="number" step="0.01"><span class="hint">ใช้แสดงในรายงาน</span></div>
           <div class="field"><label for="expected">Output ที่คาดหวัง (cGy/MU)</label><input id="expected" type="number" step="0.001"></div>
           <div class="field"><label for="warnPct">ระดับเฝ้าระวัง (± %)</label><input id="warnPct" type="number" step="0.1"></div>
           <div class="field"><label for="tolPct">เกณฑ์ยอมรับ (± %)</label><input id="tolPct" type="number" step="0.1"></div>
@@ -315,7 +337,7 @@ footer p { margin: 6px 0; }
 
     <aside aria-live="polite">
       <div class="card headline">
-        <div class="k">Output ที่ z<sub>max</sub></div>
+        <div class="k" id="outLabel">Output ที่ z<sub>max</sub></div>
         <div class="big" id="outBig">—<small>cGy/MU</small></div>
         <div class="sub" id="outSub">&nbsp;</div>
         <div class="chip" id="chip">รอข้อมูล</div>
@@ -350,114 +372,184 @@ footer p { margin: 6px 0; }
   </div>
 
   <footer>
-    <p>อ้างอิง: IAEA Technical Reports Series No. 398, <em>Absorbed Dose Determination in External Beam Radiotherapy</em> (2000) และ Rev.1 (2024). TPR<sub>20,10</sub> = 1.2661·PDD<sub>20,10</sub> − 0.0595; R<sub>50</sub> = 1.029·I<sub>50</sub> − 0.06 (I<sub>50</sub> ≤ 10 g/cm²) หรือ 1.059·I<sub>50</sub> − 0.37; z<sub>ref</sub> electron = 0.6·R<sub>50</sub> − 0.1 g/cm²; k<sub>s</sub> ใช้สัมประสิทธิ์จากตาราง 4.VII</p>
-    <p>เครื่องมือนี้ช่วยคำนวณเท่านั้น ค่า k<sub>Q,Q0</sub> ต้องนำมาจากตารางใน TRS-398 หรือใบรับรองการสอบเทียบของหัววัดรุ่นที่ใช้ และผลการวัดทางคลินิกควรได้รับการทวนสอบอิสระโดยนักฟิสิกส์การแพทย์อีกท่าน</p>
+    <p>อ้างอิง: IAEA TRS-398 (2000) และ Rev.1 (2024). k<sub>TP</sub> = (273.2 + T)·1013.25 / ((273.2 + 20)·P); TPR<sub>20,10</sub> = M<sub>20</sub>/M<sub>10</sub> (SAD 100, 10×10 cm²) หรือ 1.2661·PDD<sub>20,10</sub> − 0.0595; z<sub>ref</sub> electron = 0.6·R<sub>50</sub> − 0.1 g/cm²; k<sub>s</sub> จากตาราง 4.VII; k<sub>Q,Q0</sub> ประมาณค่าเชิงเส้นระหว่างสองจุดของตาราง (เหมือน FORECAST ใน Sheet)</p>
+    <p>เครื่องมือนี้ช่วยคำนวณเท่านั้น ผลการวัดทางคลินิกควรได้รับการทวนสอบอิสระโดยนักฟิสิกส์การแพทย์อีกท่าน</p>
   </footer>
 </div>
 
+<script src="lpch-data.js"></script>
 <script src="trs398.js"></script>
 <script>
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var STORE_KEY = 'trs398-worksheet-v1';
-  var KQ_KEY = 'trs398-kq-tables-v1';
+  var D = window.LPCH_DATA;
+  var STORE_KEY = 'trs398-lpch-worksheet-v2';
+  var CUSTOM = '__custom';
 
-  var EXAMPLES = {
-    photon: {
-      date: '', physicist: '', machine: 'Linac 1', energy: '6 MV',
-      beam: 'photon', setup: 'SSD', qMethod: 'pdd', qValue: 0.574, mu: 100,
-      chamber: 'PTW 30013 Farmer', chamberSN: '', electrometer: '',
-      ndw: '5.380e7', kelec: 1.000, kvol: 1.000,
-      kqMode: 'direct', kqValue: 0.992, kqTable: '',
-      temp: 24.5, pressure: 1008.0, pUnit: 'hPa',
-      readNormal: '12.27 12.28 12.27', usePol: true, readOpposite: '12.29 12.30 12.29',
-      useKs: true, v1: 300, v2: 100, recomb: 'pulsed', readLow: '12.21 12.22 12.21',
-      depthDose: 66.9, expected: 1.000, warnPct: 1.0, tolPct: 2.0
-    },
-    electron: {
-      date: '', physicist: '', machine: 'Linac 1', energy: '9 MeV',
-      beam: 'electron', setup: 'SSD', qMethod: 'i50', qValue: 3.45, mu: 100,
-      chamber: 'PTW 34001 Roos', chamberSN: '', electrometer: '',
-      ndw: '8.350e7', kelec: 1.000, kvol: 1.000,
-      kqMode: 'direct', kqValue: 0.915, kqTable: '',
-      temp: 24.5, pressure: 1008.0, pUnit: 'hPa',
-      readNormal: '12.81 12.80 12.81', usePol: true, readOpposite: '12.84 12.83 12.84',
-      useKs: true, v1: 200, v2: 100, recomb: 'pulsed', readLow: '12.76 12.75 12.76',
-      depthDose: 99.8, expected: 1.000, warnPct: 1.0, tolPct: 2.0
-    }
-  };
-
-  var FIELDS = ['date', 'physicist', 'machine', 'energy', 'qValue', 'mu', 'chamber', 'chamberSN', 'electrometer',
-    'ndw', 'kelec', 'kvol', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit', 'readNormal', 'readOpposite',
-    'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'expected', 'warnPct', 'tolPct'];
+  var FIELDS = ['date', 'physicist', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
+    'ndw', 'kelec', 'kcross', 'kvol', 'kqMode', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit',
+    'readNormal', 'readOpposite', 'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'zmax', 'expected', 'warnPct', 'tolPct'];
 
   var Q_METHODS = {
-    photon: [['pdd', 'PDD20,10 (SSD 100, 10×10)'], ['tpr', 'TPR20,10 (วัดโดยตรง)']],
-    electron: [['i50', 'I50 (g/cm²) จาก ionization curve'], ['r50', 'R50 (g/cm²)']]
+    photon: [['ratio', 'TPR20,10 จาก M20/M10'], ['tpr', 'TPR20,10 (ใส่ค่า)'], ['pdd', 'PDD20,10 → TPR20,10']],
+    electron: [['r50', 'R50 (g/cm²)'], ['i50', 'I50 → R50']]
   };
 
-  function radio(name) { var el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : null; }
-  function setRadio(name, v) { var el = document.querySelector('input[name="' + name + '"][value="' + v + '"]'); if (el) el.checked = true; }
+  var READINGS = {
+    photon: { m10: '15.10 15.11 15.10', m20: '10.40 10.40 10.41', readNormal: '15.02 15.03 15.02',
+      readOpposite: '15.04 15.05 15.04', readLow: '14.97 14.98 14.97', v1: 300, v2: 100, temp: 22.0, pressure: 1000.0 },
+    electron: { m10: '', m20: '', readNormal: '12.38 12.39 12.38', readOpposite: '12.41 12.40 12.41',
+      readLow: '12.30 12.31 12.30', v1: 200, v2: 50, temp: 22.0, pressure: 1000.0 }
+  };
+
+  function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
   function num(id) { var v = parseFloat(String($(id).value).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
   function fmt(v, d) { return isFinite(v) ? v.toFixed(d) : '—'; }
-  function readStore(key) { try { var s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
-  function writeStore(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+  function setVal(id, v) { $(id).value = v == null ? '' : v; }
+  function readStore() { try { var s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function writeStore(v) { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
 
-  function fillQMethods(beam, selected) {
-    var sel = $('qMethod');
-    sel.innerHTML = '';
-    Q_METHODS[beam].forEach(function (m) {
-      var o = document.createElement('option'); o.value = m[0]; o.textContent = m[1]; sel.appendChild(o);
-    });
-    sel.value = selected && Q_METHODS[beam].some(function (m) { return m[0] === selected; }) ? selected : Q_METHODS[beam][0][0];
+  function acc() { return D.accelerators[+$('accSel').value] || D.accelerators[0]; }
+  // energySel value: "p:<i>", "e:<i>", "p:custom", "e:custom"
+  function beam() { return $('energySel').value.charAt(0) === 'e' ? 'electron' : 'photon'; }
+  function energyRow() {
+    var v = $('energySel').value.split(':');
+    if (v[1] === 'custom') return null;
+    return (v[0] === 'e' ? acc().electron : acc().photon)[+v[1]] || null;
+  }
+  function energyLabel() { var o = $('energySel').selectedOptions[0]; return o ? o.textContent : ''; }
+  function chamberRow() { return D.chambers[+$('chamberSel').value] || null; }
+  function chamberName() { var c = chamberRow(); return c ? c.name : $('chamberCustom').value; }
+  function electrometerName() { var v = $('electrometerSel').value; return v === CUSTOM ? $('electrometerCustom').value : v; }
+  function kqLib() { return beam() === 'electron' ? D.kqElectron : D.kqPhoton; }
+
+  // ---- Populate selects ----
+  function fillAccelerators() {
+    var s = $('accSel'); s.innerHTML = '';
+    D.accelerators.forEach(function (a, i) { opt(s, String(i), a.name); });
+  }
+  function fillEnergies(keep) {
+    var s = $('energySel'); s.innerHTML = '';
+    var a = acc();
+    a.photon.forEach(function (p, i) { opt(s, 'p:' + i, p.energy); });
+    a.electron.forEach(function (e, i) { opt(s, 'e:' + i, e.energy); });
+    opt(s, 'p:custom', 'Photon อื่นๆ (กรอกเอง)');
+    opt(s, 'e:custom', 'Electron อื่นๆ (กรอกเอง)');
+    if (keep && [].some.call(s.options, function (o) { return o.value === keep; })) s.value = keep;
+  }
+  function fillChambers() {
+    var s = $('chamberSel'); s.innerHTML = '';
+    D.chambers.forEach(function (c, i) { opt(s, String(i), c.name); });
+    opt(s, CUSTOM, 'อื่นๆ (กรอกเอง)');
+  }
+  function fillElectrometers() {
+    var s = $('electrometerSel'); s.innerHTML = '';
+    D.electrometers.forEach(function (e) { opt(s, e, e); });
+    opt(s, CUSTOM, 'อื่นๆ (กรอกเอง)');
+  }
+  function fillQMethods(keep) {
+    var s = $('qMethod'), list = Q_METHODS[beam()]; s.innerHTML = '';
+    list.forEach(function (m) { opt(s, m[0], m[1]); });
+    s.value = keep && list.some(function (m) { return m[0] === keep; }) ? keep : list[0][0];
+  }
+  function fillKqSources(keep) {
+    var s = $('kqSource'); s.innerHTML = '';
+    kqLib().chambers.forEach(function (c, i) { opt(s, String(i), c.name + ' (Sheet "1. kQ,Q0 table")'); });
+    opt(s, CUSTOM, 'วางตารางเอง');
+    if (keep != null && [].some.call(s.options, function (o) { return o.value === keep; })) s.value = keep;
   }
 
-  function load(state) {
-    setRadio('beam', state.beam || 'photon');
-    setRadio('setup', state.setup || 'SSD');
-    setRadio('kqMode', state.kqMode || 'direct');
-    fillQMethods(state.beam || 'photon', state.qMethod);
-    FIELDS.forEach(function (k) { if (state[k] !== undefined && $(k)) $(k).value = state[k]; });
-    $('usePol').checked = state.usePol !== false;
-    $('useKs').checked = state.useKs !== false;
-    if (!state.date) $('date').value = new Date().toISOString().slice(0, 10);
+  // ---- Apply library values for the selected accelerator/energy/chamber ----
+  function applyEnergy() {
+    var b = beam(), row = energyRow();
+    fillQMethods();
+    fillKqSources();
+    if (b === 'photon') {
+      setVal('kcross', 1);
+      $('kqMode').value = 'table';
+      if (row) { setVal('depthDose', row.tmr); setVal('zmax', row.zmax); }
+      else { setVal('depthDose', ''); setVal('zmax', ''); }
+      var c = chamberRow();
+      if (!c || c.type === 'pp') {
+        var i = D.chambers.findIndex(function (x) { return x.type === 'cyl'; });
+        if (i >= 0) $('chamberSel').value = String(i);
+      }
+      applyChamber();
+    } else {
+      var pp = D.chambers.findIndex(function (x) { return x.type === 'pp'; });
+      if (pp >= 0) $('chamberSel').value = String(pp);
+      if (row) {
+        setVal('qValue', row.r50); setVal('zmax', row.zmax); setVal('ndw', row.ndw);
+        setVal('depthDose', row.pdd != null ? +(row.pdd * 100).toFixed(2) : '');
+        setVal('kcross', row.kcross != null ? row.kcross : 1);
+        // Sheet: Roos calibrated in each electron energy, so Q0 = Q and k_Q,Q0 = 1
+        $('kqMode').value = 'unity';
+      } else {
+        setVal('qValue', ''); setVal('zmax', ''); setVal('depthDose', ''); setVal('kcross', 1);
+      }
+    }
+  }
+  function applyChamber() {
+    var c = chamberRow();
+    if (beam() === 'photon' && c && c.ndw != null) setVal('ndw', c.ndw);
   }
 
-  function snapshot() {
-    var s = { beam: radio('beam'), setup: radio('setup'), kqMode: radio('kqMode'), qMethod: $('qMethod').value,
-      usePol: $('usePol').checked, useKs: $('useKs').checked };
-    FIELDS.forEach(function (k) { s[k] = $(k).value; });
-    return s;
+  function libNote() {
+    var row = energyRow(), b = beam(), notes = [];
+    if (row) {
+      var missing = [];
+      if (b === 'photon') { if (row.tmr == null) missing.push('TMR(z_ref)'); if (row.zmax == null) missing.push('z_max'); }
+      else { if (row.zmax == null) missing.push('z_max'); if (row.pdd == null) missing.push('PDD(z_ref)'); if (row.ndw == null) missing.push('N_D,w'); }
+      notes.push('ค่าจาก Sheet สำหรับ ' + acc().name + ' ' + row.energy + ': ' +
+        (b === 'photon'
+          ? 'z_max ' + (row.zmax != null ? row.zmax : '—') + ' g/cm², TMR(z_ref) ' + (row.tmr != null ? row.tmr : '—')
+          : 'R50 ' + row.r50 + ' g/cm², N_D,w ' + (row.ndw != null ? row.ndw : '—') + ' cGy/nC, PDD(z_ref) ' + (row.pdd != null ? row.pdd : '—') + ', z_max ' + (row.zmax != null ? row.zmax : '—')));
+      if (missing.length) notes.push('<span class="missing">ช่องว่างใน Sheet: ' + missing.join(', ') + ' กรุณากรอกเอง</span>');
+    } else notes.push('พลังงานที่กรอกเอง: ใส่ค่าคุณภาพลำรังสี TMR/PDD และ N_D,w เอง');
+    $('libNote').innerHTML = notes.join('<br>');
   }
 
+  // ---- Visibility ----
   function syncVisibility() {
-    var beam = radio('beam');
-    var photon = beam === 'photon';
+    var b = beam(), photon = b === 'photon';
     $('setupField').hidden = !photon;
-    var sad = photon && radio('setup') === 'SAD';
+    $('chamberCustom').hidden = $('chamberSel').value !== CUSTOM;
+    $('electrometerCustom').hidden = $('electrometerSel').value !== CUSTOM;
+    var m = $('qMethod').value;
+    $('ratioBlock').hidden = m !== 'ratio';
+    $('qValueField').hidden = m === 'ratio';
+    $('qValueLbl').textContent = { pdd: 'PDD20,10 (อัตราส่วน)', tpr: 'TPR20,10', i50: 'I50 (g/cm²)', r50: 'R50 (g/cm²)' }[m] || '';
+    $('qOutLbl').innerHTML = photon ? 'TPR<sub>20,10</sub>' : 'R<sub>50</sub> (g/cm²)';
+    var sad = photon && document.querySelector('input[name="setup"]:checked').value === 'SAD';
     $('depthDoseLbl').innerHTML = sad ? 'TMR(z<sub>ref</sub>)' : 'PDD(z<sub>ref</sub>) (%)';
     $('depthDose').step = sad ? '0.001' : '0.01';
-    $('depthDoseHint').textContent = sad
-      ? 'ค่า TMR ที่ 10 cm สำหรับสนาม 10×10 cm² ที่ isocenter'
-      : photon ? 'PDD ที่ 10 cm, SSD 100 cm, สนาม 10×10 cm²' : 'PDD ที่ z_ref ของ electron ที่ SSD อ้างอิง';
-    var tableMode = radio('kqMode') === 'table';
-    $('kqDirectField').hidden = tableMode;
-    $('kqTableField').hidden = !tableMode;
+    $('depthDoseHint').textContent = sad ? 'TMR ที่ 10 g/cm², 10×10 cm² (Sheet: TMR zref)'
+      : photon ? 'PDD ที่ 10 g/cm², SSD 100 cm, 10×10 cm²' : 'PDD ที่ z_ref เป็น % (Sheet: PDD × 100)';
+    var mode = $('kqMode').value, custom = $('kqSource').value === CUSTOM;
+    $('kqSourceField').hidden = mode !== 'table';
+    $('kqTableField').hidden = !(mode === 'table' && custom);
+    $('kqDirectField').hidden = mode !== 'direct';
     $('kqColName').textContent = photon ? 'TPR20,10' : 'R50';
+    $('ndwHint').textContent = photon ? 'จากใบรับรองหัววัด (Co-60)' : 'Sheet: N_D,w ของ PP chamber แยกตามพลังงาน electron';
     $('polBlock').hidden = !$('usePol').checked;
     $('ksBlock').hidden = !$('useKs').checked;
-    var m = $('qMethod').value;
-    $('qValueLbl').textContent = { pdd: 'PDD20,10 (อัตราส่วน)', tpr: 'TPR20,10', i50: 'I50 (g/cm²)', r50: 'R50 (g/cm²)' }[m];
+  }
+
+  function kqRows() {
+    if ($('kqMode').value !== 'table') return null;
+    if ($('kqSource').value === CUSTOM) return TRS398.parseKqTable($('kqTable').value);
+    var lib = kqLib(), c = lib.chambers[+$('kqSource').value];
+    return c ? TRS398.kqRowsFromGrid(lib.grid, c.kq) : [];
   }
 
   function gather() {
-    var ndw = parseFloat(String($('ndw').value).replace(/[, ]/g, ''));
     return {
-      beam: radio('beam'), setup: radio('setup'), mu: num('mu'),
-      qMethod: $('qMethod').value, qValue: num('qValue'),
-      ndw: ndw, kelec: num('kelec'), kvol: num('kvol'),
-      kqMode: radio('kqMode'), kqDirect: num('kqValue'), kqTable: $('kqTable').value,
+      chamberType: chamberRow() ? chamberRow().type : null,
+      beam: beam(), setup: document.querySelector('input[name="setup"]:checked').value, mu: num('mu'),
+      qMethod: $('qMethod').value, qValue: num('qValue'), m10: $('m10').value, m20: $('m20').value,
+      ndw: num('ndw'), kelec: num('kelec'), kvol: num('kvol'), kcross: num('kcross'),
+      kqMode: $('kqMode').value, kqRows: kqRows(), kqDirect: num('kqValue'),
       tempC: num('temp'), pressure: num('pressure'), pUnit: $('pUnit').value,
       readNormal: $('readNormal').value, readOpposite: $('readOpposite').value, readLow: $('readLow').value,
       usePol: $('usePol').checked, useKs: $('useKs').checked,
@@ -466,54 +558,87 @@ footer p { margin: 6px 0; }
     };
   }
 
+  function snapshot() {
+    var s = { acc: $('accSel').value, energy: $('energySel').value, chamber: $('chamberSel').value,
+      electrometer: $('electrometerSel').value, kqSource: $('kqSource').value,
+      setup: document.querySelector('input[name="setup"]:checked').value,
+      usePol: $('usePol').checked, useKs: $('useKs').checked };
+    FIELDS.forEach(function (k) { s[k] = $(k).value; });
+    return s;
+  }
+
+  function restore(s) {
+    $('accSel').value = s.acc || '0';
+    fillEnergies(s.energy);
+    $('chamberSel').value = s.chamber || '0';
+    $('electrometerSel').value = s.electrometer || D.electrometers[0];
+    fillQMethods(s.qMethod);
+    fillKqSources(s.kqSource);
+    var r = document.querySelector('input[name="setup"][value="' + (s.setup || 'SAD') + '"]'); if (r) r.checked = true;
+    FIELDS.forEach(function (k) { if (k !== 'qMethod' && s[k] !== undefined) $(k).value = s[k]; });
+    $('usePol').checked = s.usePol !== false;
+    $('useKs').checked = s.useKs !== false;
+  }
+
   function statText(s) {
     if (!s) return '';
     return 'n=' + s.n + ' · M̄=' + s.mean.toFixed(3) + (s.n > 1 ? ' · CV ' + s.cv.toFixed(2) + '%' : '');
   }
-
   function row(label, value, cls) {
     return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td><td>' + value + '</td></tr>';
+  }
+
+  // Bracketing table points used for k_Q interpolation
+  function kqBracket(rows, q) {
+    if (!rows || rows.length < 2 || !isFinite(q)) return '';
+    for (var i = 0; i < rows.length - 1; i++) {
+      if (q >= rows[i][0] && q <= rows[i + 1][0]) {
+        return rows[i][0] + ' → ' + rows[i][1].toFixed(3) + '  ·  ' + rows[i + 1][0] + ' → ' + rows[i + 1][1].toFixed(3);
+      }
+    }
+    return '';
   }
 
   var last = null;
 
   function render() {
     syncVisibility();
+    libNote();
     var inp = gather();
     var r = TRS398.calculate(inp);
+    var photon = inp.beam === 'photon';
     last = { inp: inp, r: r, meta: snapshot() };
 
-    // Derived inline values
-    var photon = inp.beam === 'photon';
-    $('qDerived').textContent =
-      inp.qMethod === 'pdd' ? 'TPR20,10 = ' + fmt(r.q, 4) :
-      inp.qMethod === 'i50' ? 'R50 = ' + fmt(r.q, 3) + ' g/cm²' : '';
-    $('zrefOut').textContent = isFinite(r.zref) ? r.zref.toFixed(2) + ' g/cm²' : '—';
-    $('zrefHint').textContent = photon ? 'TRS-398 Rev.1: 10 g/cm² สำหรับ photon' : '0.6·R50 − 0.1';
-    $('ndwDerived').textContent = isFinite(inp.ndw) ? '= ' + (inp.ndw * 1e-6).toFixed(3) + ' mGy/nC' : '';
+    $('stat10').textContent = statText(r.read10);
+    $('stat20').textContent = statText(r.read20);
+    $('qOut').textContent = photon ? fmt(r.q, 4) : fmt(r.q, 3);
+    $('zrefOut').textContent = isFinite(r.zref) ? r.zref.toFixed(3) + ' g/cm²' : '—';
+    $('zrefHint').textContent = photon ? '10 g/cm² สำหรับ photon' : '0.6·R50 − 0.1';
     $('ktpOut').textContent = fmt(r.ktp, 4);
-    $('kqInterp').textContent = inp.kqMode === 'table' && r.kq != null ? 'k_Q = ' + fmt(r.kq, 4) + ' (' + r.kqRows + ' แถว)' : '';
     $('statN').textContent = statText(r.readNormal);
     $('statO').textContent = statText(r.readOpposite);
     $('statL').textContent = statText(r.readLow);
     $('ksRatios').textContent = r.readNormal && r.readLow && inp.v2 > 0
       ? fmt(inp.v1 / inp.v2, 2) + ' · ' + fmt(r.readNormal.mean / r.readLow.mean, 4) : '—';
 
-    // Headline
+    $('kqOut').textContent = r.kq != null && isFinite(r.kq) ? r.kq.toFixed(4) : '—';
+    $('kqDetail').textContent =
+      inp.kqMode === 'table' ? (r.kq != null ? 'ที่ ' + (photon ? 'TPR20,10 ' : 'R50 ') + fmt(r.q, photon ? 4 : 3) + '  [' + kqBracket(inp.kqRows, r.q) + ']' : '') :
+      inp.kqMode === 'unity' ? 'Q0 = Q (N_D,w สอบเทียบในลำรังสีพลังงานนี้)' : 'ค่าที่กรอกเอง';
+
     var ok = r.ok;
+    $('outLabel').innerHTML = 'Output ที่ z<sub>max</sub>' + (isFinite(num('zmax')) ? ' <span style="text-transform:none">= ' + num('zmax') + ' g/cm²</span>' : '');
     $('outBig').innerHTML = (ok ? r.outputPerMU.toFixed(4) : '—') + '<small>cGy/MU</small>';
     $('outSub').textContent = ok
-      ? 'D_w(z_ref) = ' + r.dZref.toFixed(4) + ' Gy  ·  ' + r.dZrefPerMU.toFixed(4) + ' cGy/MU ที่ ' + r.zref.toFixed(2) + ' cm'
+      ? acc().name + ' · ' + energyLabel() + ' · D_w(z_ref) = ' + r.dZrefPerMU.toFixed(4) + ' cGy/MU'
       : 'กรอกข้อมูลให้ครบเพื่อคำนวณ';
     var chip = $('chip');
     chip.className = 'chip' + (ok && r.status ? ' ' + r.status : '');
     if (ok && r.status) {
-      var sign = r.deviation >= 0 ? '+' : '−';
       var label = { pass: 'ผ่าน', warn: 'ผ่าน แต่เกินระดับเฝ้าระวัง', fail: 'เกินเกณฑ์ยอมรับ' }[r.status];
-      chip.textContent = sign + Math.abs(r.deviation).toFixed(2) + '% · ' + label;
+      chip.textContent = (r.deviation >= 0 ? '+' : '−') + Math.abs(r.deviation).toFixed(2) + '% · ' + label;
     } else chip.textContent = r.errors.length ? 'ข้อมูลไม่ครบ' : 'รอข้อมูล';
 
-    // Deviation bar: scale spans ±1.5× tolerance
     var tol = inp.tolPct > 0 ? inp.tolPct : 2;
     var warn = inp.warnPct > 0 ? Math.min(inp.warnPct, tol) : tol / 2;
     var span = tol * 1.5;
@@ -529,64 +654,64 @@ footer p { margin: 6px 0; }
       mark.style.background = r.status === 'fail' ? 'var(--bad)' : r.status === 'warn' ? 'var(--warn)' : 'var(--ink)';
     } else mark.hidden = true;
 
-    // Factor table
     var h = '';
-    h += row('M̄ (V<sub>1</sub>, polarity ปกติ)', r.readNormal ? r.readNormal.mean.toFixed(4) + ' nC' : '—');
+    h += row('M̄<sub>1</sub> (+V<sub>1</sub>)', r.readNormal ? r.readNormal.mean.toFixed(4) + ' nC' : '—');
+    h += row('nC/MU', r.readNormal && inp.mu > 0 ? (r.readNormal.mean / inp.mu).toFixed(5) : '—');
     h += row('k<sub>TP</sub>', fmt(r.ktp, 4));
     h += row('k<sub>pol</sub>', inp.usePol ? fmt(r.kpol, 4) : '1.0000 (ไม่ใช้)');
     h += row('k<sub>s</sub>', inp.useKs ? fmt(r.ks, 4) : '1.0000 (ไม่ใช้)');
-    h += row('k<sub>elec</sub>', fmt(inp.kelec, 4));
-    h += row('k<sub>vol</sub>', fmt(inp.kvol, 4));
+    h += row('k<sub>elec</sub> · k<sub>vol</sub>', fmt(inp.kelec, 4) + ' · ' + fmt(inp.kvol, 4));
     h += row('M<sub>Q</sub> (แก้ไขแล้ว)', isFinite(r.mCorr) ? r.mCorr.toFixed(4) + ' nC' : '—', 'sep');
-    h += row('N<sub>D,w,Q0</sub>', isFinite(inp.ndw) ? (inp.ndw * 1e-6).toFixed(4) + ' mGy/nC' : '—');
-    h += row(r.qLabel, fmt(r.q, photon ? 4 : 3) + (photon ? '' : ' g/cm²'));
+    h += row('N<sub>D,w,Q0</sub>', fmt(inp.ndw, 3) + ' cGy/nC');
+    h += row(photon ? 'TPR<sub>20,10</sub>' : 'R<sub>50</sub>', fmt(r.q, photon ? 4 : 3) + (photon ? '' : ' g/cm²'));
     h += row('k<sub>Q,Q0</sub>', r.kq != null ? fmt(r.kq, 4) : '—');
-    h += row('D<sub>w</sub>(z<sub>ref</sub>)', isFinite(r.dZref) ? r.dZref.toFixed(4) + ' Gy' : '—', 'sep');
-    h += row(r.depthDoseKind + '(z<sub>ref</sub>)', r.depthDoseKind === 'TMR' ? fmt(inp.depthDose, 4) : fmt(inp.depthDose, 2) + ' %');
-    h += row('D<sub>w</sub>(z<sub>max</sub>)', isFinite(r.dMax) ? r.dMax.toFixed(4) + ' Gy' : '—');
+    h += row('k<sub>Q,Qcross</sub>', fmt(r.kcross, 4));
+    h += row('D<sub>w</sub>(z<sub>ref</sub>)', isFinite(r.dZrefPerMU) ? r.dZrefPerMU.toFixed(4) + ' cGy/MU' : '—', 'sep');
+    h += row(r.depthDoseKind + '(z<sub>ref</sub>)', r.depthDoseKind === 'TMR' ? fmt(inp.depthDose, 3) : fmt(inp.depthDose, 2) + ' %');
     h += row('Output ที่ z<sub>max</sub>', ok ? r.outputPerMU.toFixed(4) + ' cGy/MU' : '—', 'total');
     $('factors').innerHTML = h;
 
-    // Messages
     var msgs = r.errors.map(function (m) { return '<li class="err">' + m + '</li>'; })
       .concat(r.warnings.map(function (m) { return '<li class="wrn">' + m + '</li>'; }));
     $('msgs').innerHTML = msgs.join('');
     $('msgCard').hidden = msgs.length === 0;
 
-    writeStore(STORE_KEY, last.meta);
+    writeStore(last.meta);
   }
 
   function reportText() {
     if (!last) return '';
-    var r = last.r, i = last.inp, m = last.meta;
+    var r = last.r, i = last.inp, m = last.meta, photon = i.beam === 'photon';
     var L = [];
-    var line = function (k, v) { L.push((k + '                              ').slice(0, 30) + v); };
-    L.push('TRS-398 OUTPUT CALIBRATION WORKSHEET');
-    L.push('====================================');
-    line('Date', m.date); line('Physicist', m.physicist); line('Machine', m.machine); line('Energy', m.energy);
-    line('Beam / setup', i.beam + (i.beam === 'photon' ? ' / ' + i.setup + ' 100 cm' : ''));
-    line('Chamber', m.chamber + (m.chamberSN ? ' S/N ' + m.chamberSN : ''));
-    line('Electrometer', m.electrometer);
+    var line = function (k, v) { L.push((k + '                              ').slice(0, 30) + (v == null ? '' : v)); };
+    L.push('TRS-398 OUTPUT CALIBRATION WORKSHEET (LPCH)');
+    L.push('===========================================');
+    line('Date', m.date); line('Physicist', m.physicist);
+    line('Accelerator', acc().name); line('Energy', energyLabel());
+    line('Setup', photon ? i.setup + ' 100 cm' : 'SSD 100 cm');
+    line('Chamber', chamberName()); line('Electrometer', electrometerName());
     L.push('');
-    line(r.qLabel, fmt(r.q, 4));
-    line('z_ref (g/cm2)', fmt(r.zref, 2));
+    if (photon && i.qMethod === 'ratio') { line('M10 (nC)', i.m10); line('M20 (nC)', i.m20); }
+    line(photon ? 'TPR20,10' : 'R50 (g/cm2)', fmt(r.q, photon ? 4 : 3));
+    line('z_ref (g/cm2)', fmt(r.zref, 3));
+    line('z_max (g/cm2)', m.zmax || '—');
     line('MU', String(i.mu));
-    line('N_D,w,Q0 (Gy/C)', isFinite(i.ndw) ? i.ndw.toExponential(4) : '—');
-    line('k_Q,Q0', r.kq != null ? fmt(r.kq, 4) : '—');
-    line('T (C) / P', fmt(i.tempC, 1) + ' / ' + i.pressure + ' ' + i.pUnit);
-    line('M (V1, normal) nC', i.readNormal);
-    if (i.usePol) line('M (opposite pol) nC', i.readOpposite);
-    if (i.useKs) line('M (V2) nC', i.readLow + '  [V1/V2 = ' + i.v1 + '/' + i.v2 + ' V, ' + i.recomb + ']');
+    line('N_D,w,Q0 (cGy/nC)', fmt(i.ndw, 3));
+    line('k_Q,Q0', (r.kq != null ? fmt(r.kq, 4) : '—') + '  [' + { table: 'interpolated from table', unity: 'calibrated in this beam', direct: 'entered' }[i.kqMode] + ']');
+    line('k_Q,Qcross', fmt(r.kcross, 4));
+    line('T (C) / P', fmt(i.tempC, 1) + ' / ' + i.pressure + ' ' + (i.pUnit === 'hPa' ? 'mbar' : i.pUnit));
+    line('M1 (+V1) nC', i.readNormal);
+    if (i.usePol) line('-M1 (-V1) nC', i.readOpposite);
+    if (i.useKs) line('M2 (V2) nC', i.readLow + '  [V1/V2 = ' + i.v1 + '/' + i.v2 + ' V, ' + i.recomb + ']');
     L.push('');
     line('k_TP', fmt(r.ktp, 4)); line('k_pol', fmt(r.kpol, 4)); line('k_s', fmt(r.ks, 4));
     line('k_elec', fmt(i.kelec, 4)); line('k_vol', fmt(i.kvol, 4));
     line('M_Q corrected (nC)', fmt(r.mCorr, 4));
-    line('D_w(z_ref) (Gy)', fmt(r.dZref, 4));
-    line(r.depthDoseKind + '(z_ref)', r.depthDoseKind === 'TMR' ? fmt(i.depthDose, 4) : fmt(i.depthDose, 2) + ' %');
-    line('D_w(z_max) (Gy)', fmt(r.dMax, 4));
-    line('Output (cGy/MU)', fmt(r.outputPerMU, 4));
+    line('D_w(z_ref) (cGy/MU)', fmt(r.dZrefPerMU, 4));
+    line(r.depthDoseKind + '(z_ref)', r.depthDoseKind === 'TMR' ? fmt(i.depthDose, 3) : fmt(i.depthDose, 2) + ' %');
+    line('D_w(z_max) (cGy/MU)', fmt(r.outputPerMU, 4));
     line('Expected (cGy/MU)', fmt(i.expected, 4));
-    line('Deviation', isFinite(r.deviation) ? (r.deviation >= 0 ? '+' : '') + r.deviation.toFixed(2) + ' %  [' + (r.status || '').toUpperCase() + ']' : '—');
+    line('%Difference', isFinite(r.deviation) ? (r.deviation >= 0 ? '+' : '') + r.deviation.toFixed(2) + ' %  [' + (r.status || '').toUpperCase() + ']' : '—');
     if (r.errors.length || r.warnings.length) {
       L.push(''); L.push('Notes:');
       r.errors.concat(r.warnings).forEach(function (w) { L.push(' - ' + w); });
@@ -594,50 +719,44 @@ footer p { margin: 6px 0; }
     return L.join('\n');
   }
 
-  // k_Q tables remembered per chamber model
-  function kqTables() { return readStore(KQ_KEY) || {}; }
-  function chamberKey() { return ($('chamber').value || '').trim().toLowerCase() + '|' + radio('beam'); }
-  function saveKqTable() {
-    var key = chamberKey(); if (!key || key[0] === '|') return;
-    var all = kqTables(); all[key] = $('kqTable').value; writeStore(KQ_KEY, all);
-  }
-  function restoreKqTable() {
-    var t = kqTables()[chamberKey()];
-    if (t && !$('kqTable').value.trim()) $('kqTable').value = t;
-  }
-
   function useExample(kind) {
-    load(EXAMPLES[kind]);
-    $('noticeText').innerHTML = 'กำลังแสดง<strong>ค่าตัวอย่าง ' + (kind === 'photon' ? '(6 MV, Farmer chamber)' : '(9 MeV, Roos chamber)') +
-      '</strong> แทนที่ด้วยค่าวัดจริงและค่าจากใบรับรองการสอบเทียบของคุณ';
+    $('accSel').value = '0';
+    fillEnergies();
+    var idx = acc()[kind].findIndex(function (e) { return e.energy === (kind === 'photon' ? '6 MV' : '9 MeV'); });
+    $('energySel').value = (kind === 'photon' ? 'p:' : 'e:') + Math.max(idx, 0);
+    $('electrometerSel').value = D.electrometers[0];
+    applyEnergy();
+    var x = READINGS[kind];
+    Object.keys(x).forEach(function (k) { setVal(k, x[k]); });
+    setVal('mu', 100); setVal('kelec', 1); setVal('kvol', 1); setVal('pUnit', 'hPa'); setVal('recomb', 'pulsed');
+    setVal('expected', 1); setVal('warnPct', 1); setVal('tolPct', 2);
+    if (kind === 'photon') document.getElementById('setupSAD').checked = true;
+    $('usePol').checked = true; $('useKs').checked = true;
+    if (!$('date').value) $('date').value = new Date().toISOString().slice(0, 10);
+    $('noticeText').innerHTML = 'ตัวอย่าง ' + acc().name + ' ' + energyLabel() + ': ข้อมูลเครื่องและหัววัดมาจาก Sheet ส่วน<strong>ค่าที่อ่านได้เป็นตัวอย่าง</strong> แทนที่ด้วยค่าวัดจริง';
     render();
   }
 
-  // Wiring
-  $('f').addEventListener('input', function (e) {
-    if (e.target.id === 'kqTable') saveKqTable();
-    render();
-  });
+  // ---- Wiring ----
+  $('f').addEventListener('input', function () { render(); });
   $('f').addEventListener('change', function (e) {
-    if (e.target.name === 'beam') {
-      fillQMethods(radio('beam'));
-      restoreKqTable();
-    }
-    if (e.target.id === 'chamber' || e.target.name === 'kqMode') restoreKqTable();
+    var id = e.target.id;
+    if (id === 'accSel') { fillEnergies(); applyEnergy(); }
+    else if (id === 'energySel') applyEnergy();
+    else if (id === 'chamberSel') applyChamber();
     render();
   });
   $('f').addEventListener('submit', function (e) { e.preventDefault(); });
   $('exPhoton').addEventListener('click', function () { useExample('photon'); });
   $('exElectron').addEventListener('click', function () { useExample('electron'); });
   $('clearAll').addEventListener('click', function () {
-    ['readNormal', 'readOpposite', 'readLow', 'temp', 'pressure'].forEach(function (k) { $(k).value = ''; });
-    $('noticeText').textContent = 'ล้างค่าการวัดแล้ว ข้อมูลหัววัดและเกณฑ์ยังคงอยู่';
+    ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure'].forEach(function (k) { $(k).value = ''; });
+    $('noticeText').textContent = 'ล้างค่าการวัดแล้ว ข้อมูลเครื่อง หัววัด และเกณฑ์ยังคงอยู่';
     render();
     $('temp').focus();
   });
   $('copyBtn').addEventListener('click', function () {
-    var text = reportText();
-    var ta = $('report');
+    var text = reportText(), ta = $('report');
     ta.value = text;
     var done = function (msg) { $('toast').textContent = msg; setTimeout(function () { $('toast').textContent = ''; }, 2500); };
     var fallback = function () { ta.hidden = false; ta.focus(); ta.select(); done('เลือกข้อความแล้ว กด Ctrl/⌘+C เพื่อคัดลอก'); };
@@ -646,12 +765,16 @@ footer p { margin: 6px 0; }
     } else fallback();
   });
 
-  var saved = readStore(STORE_KEY);
-  if (saved && saved.readNormal !== undefined) {
-    load(saved);
+  fillAccelerators(); fillChambers(); fillElectrometers();
+  var saved = readStore();
+  if (saved && saved.energy) {
+    restore(saved);
     $('noticeText').textContent = 'โหลดข้อมูลล่าสุดที่กรอกไว้ในเบราว์เซอร์นี้';
-  } else load(EXAMPLES.photon);
-  render();
+    render();
+  } else {
+    fillEnergies();
+    useExample('photon');
+  }
 })();
 </script>
 <!-- page:end -->
