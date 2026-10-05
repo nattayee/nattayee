@@ -768,6 +768,11 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
       ] }
     ] },
 
+    { id: 'starshot', name: 'Star Shot', tab: 'Star Shot', sub: 'Radiation isocenter · ขนาดวงกลมเล็กสุดที่ตัดทุกเส้นของ star shot', blocks: [
+      { type: 'grid', title: 'Star shot · Isocenter radius', limit: '≤ 1 mm', hint: 'วิเคราะห์จาก film / EPID · กรอกรัศมีเป็น mm',
+        items: [['Gantry', 'ss_gantry'], ['Collimator', 'ss_coll'], ['Couch', 'ss_couch']].map(([label, id]) => ({ label, cell: mm(id, 1) })) }
+    ] },
+
     { id: 'imaging', name: 'Imaging QA', tab: 'Imaging', sub: 'MV imaging (EPID)', blocks: [
       { type: 'grid', title: 'MV image isocenter', limit: '≤ 0.15 cm radius', hint: 'ตามองศาของ source',
         items: [270, 0, 90, 180].map(a => ({ label: a + '°', cell: num('i_iso_' + a, { mode: 'abs', tol: 0.15, unit: 'cm', tolUnit: 'cm', ph: '0.00' }) })) },
@@ -855,8 +860,17 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   }
 
   const DEFAULT_ORDER = SECTIONS.map(s => s.id);
-  let order = (store.get(ORDER_KEY) || []).filter(id => SEC[id]);
-  DEFAULT_ORDER.forEach(id => { if (!order.includes(id)) order.push(id); });
+  // New sections slot in after their default predecessor instead of at the end.
+  const mergeOrder = saved => {
+    const o = saved.filter(id => SEC[id]);
+    DEFAULT_ORDER.forEach((id, i) => {
+      if (o.includes(id)) return;
+      const at = i ? o.indexOf(DEFAULT_ORDER[i - 1]) + 1 : 0;
+      o.splice(at, 0, id);
+    });
+    return o;
+  };
+  let order = mergeOrder(store.get(ORDER_KEY) || []);
 
   const valueOf = id => (state.values[id] !== undefined ? state.values[id] : (cells[id] && cells[id].def) || '');
 
@@ -1469,9 +1483,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     ensureDefaults(state.values);
     state.nominals = Object.assign({}, obj.nominals);
     if (Array.isArray(obj.order)) {
-      const o = obj.order.filter(id => SEC[id]);
-      DEFAULT_ORDER.forEach(id => { if (!o.includes(id)) o.push(id); });
-      order = o;
+      order = mergeOrder(obj.order);
     }
     if (Array.isArray(obj.photos)) replacePhotos(obj.photos.filter(x => x && SEC[x.sec] && /^data:image\//.test(x.data || '')));
     fillInputs(); applyOrder(); save();
