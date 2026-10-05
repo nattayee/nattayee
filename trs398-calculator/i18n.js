@@ -336,6 +336,32 @@
     'ไม่พบแท็บ Log': 'Log tab not found',
     'แถวแรกของแท็บ Log ไม่มีหัวคอลัมน์ "Report ID"': 'The first row of the Log tab has no "Report ID" header',
 
+    // ---- Calculation history ----
+    'ประวัติการคำนวณ': 'Calculation history',
+    'ผลที่คำนวณครบทุกครั้งถูกเก็บไว้ในเบราว์เซอร์นี้อัตโนมัติ ทั้งที่ส่งและยังไม่ส่งไปที่ Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ': 'Every complete calculation is saved in this browser automatically, whether or not it was sent to the Sheet. Tap an entry to see all values or open it in the calculator again.',
+    'ค้นหา': 'Search',
+    'พลังงาน, นักฟิสิกส์, วันที่, หมายเหตุ': 'Energy, physicist, date, note',
+    'ล้างประวัติทั้งหมด': 'Clear all history',
+    'ยืนยันล้างประวัติ': 'Confirm: clear history',
+    'ยังไม่มีประวัติการคำนวณ': 'No calculations yet',
+    'เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่': 'Once the inputs are complete enough to calculate the output, the result is saved here',
+    'คำนวณเมื่อ': 'Calculated',
+    'สถานะ': 'Status',
+    'ส่งแล้ว': 'Sent',
+    'ยังไม่ส่ง': 'Not sent',
+    'ไม่พบรายการที่ตรงกับตัวกรอง': 'No entries match the filter',
+    'ชนิดลำรังสี': 'Beam type',
+    'ดัชนีคุณภาพ': 'Quality index',
+    'ที่มาของ k_Q': 'k_Q source',
+    'หน่วย P': 'P unit',
+    'หมายเหตุผู้วัด': 'Measurement remark',
+    'ตาราง k_Q': 'k_Q table',
+    'สอบเทียบในลำรังสีนี้ (1)': 'Calibrated in this beam (1)',
+    'โหลดค่ากลับไปที่หน้าคำนวณ': 'Open in calculator',
+    'ลบรายการนี้': 'Delete this entry',
+    'โหลดค่าจากประวัติการคำนวณแล้ว (': 'Loaded from calculation history (',
+    ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้': '). Edit and recalculate, or send the report.',
+
     // ---- Footer ----
     'อ้างอิง: IAEA TRS-398 (2000) และ Rev.1 (2024). k': 'Reference: IAEA TRS-398 (2000) and Rev.1 (2024). k',
     '(SAD 100, 10×10 cm²) หรือ 1.2661·PDD': '(SAD 100, 10×10 cm²) or 1.2661·PDD',
@@ -343,6 +369,9 @@
     'ประมาณค่าเชิงเส้นระหว่างสองจุดของตาราง (เหมือน FORECAST ใน Sheet)': 'linearly interpolated between two table points (like FORECAST in the Sheet)',
     'เครื่องมือนี้ช่วยคำนวณเท่านั้น ผลการวัดทางคลินิกควรได้รับการทวนสอบอิสระโดยนักฟิสิกส์การแพทย์อีกท่าน': 'This tool only assists with the calculation. Clinical results should be independently checked by a second medical physicist.'
   };
+
+  // Short words translated only when they are the whole text (as fragments they would break longer sentences)
+  var EXACT = { 'ใช่': 'Yes', 'ไม่': 'No', 'กรอกเอง': 'Entered' };
 
   var KEYS = Object.keys(DICT).sort(function (a, b) { return b.length - a.length; });
   var ATTRS = ['placeholder', 'title', 'aria-label'];
@@ -361,6 +390,7 @@
     var t = s.trim();
     if (!t || !TH.test(t)) return s;
     if (Object.prototype.hasOwnProperty.call(DICT, t)) return s.replace(t, DICT[t]);
+    if (Object.prototype.hasOwnProperty.call(EXACT, t)) return s.replace(t, EXACT[t]);
     var out = s;
     for (var i = 0; i < KEYS.length && TH.test(out); i++) {
       if (out.indexOf(KEYS[i]) >= 0) out = out.split(KEYS[i]).join(DICT[KEYS[i]]);

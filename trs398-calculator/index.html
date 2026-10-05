@@ -277,6 +277,21 @@ details.dest .field { margin-top: 8px; }
 .db-empty { text-align: center; padding: 40px 16px; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
 .db-empty strong { color: var(--ink); font-size: 1.05rem; }
 .db-demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; font-size: .86rem; }
+.db-src.sent { background: var(--ok-soft); color: var(--ok); }
+.hist-intro { font-size: .86rem; color: var(--muted); margin: 0 0 12px; max-width: 80ch; }
+.hist-search { flex: 1 1 260px !important; }
+.hist-row { cursor: pointer; }
+.hist-row:hover td { background: var(--accent-soft); }
+.hist-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hist-row[aria-expanded="true"] td { background: var(--accent-soft); border-bottom-color: transparent; }
+.hist-detail td { white-space: normal; background: var(--bg); padding: 12px; }
+.hist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin: 0 0 12px; }
+.hist-grid dt { font-size: .74rem; color: var(--muted); }
+.hist-grid dd { margin: 0; font-family: var(--font-mono); font-size: .84rem; overflow-wrap: anywhere; }
+.hist-detail dl, .hist-actions { position: sticky; left: 12px; max-width: calc(100vw - 80px); }
+.hist-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.hist-sent-id { font-size: .78rem; color: var(--muted); font-family: var(--font-mono); }
+.hist-none { text-align: center; color: var(--muted); padding: 18px 8px !important; }
 footer { margin-top: 28px; font-size: .8rem; color: var(--muted); max-width: 80ch; }
 footer p { margin: 6px 0; }
 </style>
@@ -332,6 +347,7 @@ footer p { margin: 6px 0; }
 
   <nav class="tabs" role="tablist" aria-label="มุมมอง">
     <button type="button" role="tab" id="tabCalc" aria-selected="true" aria-controls="calcView">คำนวณ</button>
+    <button type="button" role="tab" id="tabHist" aria-selected="false" aria-controls="histView">ประวัติการคำนวณ</button>
     <button type="button" role="tab" id="tabDash" aria-selected="false" aria-controls="dashView">Dashboard ย้อนหลัง</button>
   </nav>
 
@@ -616,6 +632,29 @@ footer p { margin: 6px 0; }
   </div>
   </div>
 
+  <section id="histView" role="tabpanel" aria-labelledby="tabHist" hidden>
+    <p class="hist-intro">ผลที่คำนวณครบทุกครั้งถูกเก็บไว้ในเบราว์เซอร์นี้อัตโนมัติ ทั้งที่ส่งและยังไม่ส่งไปที่ Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ</p>
+    <div class="db-filters">
+      <div class="field"><label for="histAcc">เครื่อง</label><select id="histAcc"></select></div>
+      <div class="field hist-search"><label for="histSearch">ค้นหา</label><input id="histSearch" type="search" placeholder="พลังงาน, นักฟิสิกส์, วันที่, หมายเหตุ"></div>
+      <span class="spacer"></span>
+      <button type="button" class="ghost" id="histClear">ล้างประวัติทั้งหมด</button>
+    </div>
+    <div class="db-empty" id="histEmpty" hidden>
+      <strong>ยังไม่มีประวัติการคำนวณ</strong>
+      <span>เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่</span>
+    </div>
+    <div class="db-card" id="histBody">
+      <h2>ประวัติการคำนวณ <span id="histCount" style="text-transform:none;letter-spacing:0;font-family:var(--font-body)"></span></h2>
+      <div class="db-table-wrap">
+        <table class="db-table hist-table" id="histTable">
+          <thead><tr><th>คำนวณเมื่อ</th><th>วันที่วัด</th><th>เครื่อง</th><th>พลังงาน</th><th>ชนิด QA</th><th class="num">TPR / R50</th><th class="num">k<sub>Q,Q0</sub></th><th class="num">Output</th><th class="num">%Diff</th><th>ผล</th><th class="num">หลังปรับ</th><th>สถานะ</th></tr></thead>
+          <tbody id="histTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section id="dashView" role="tabpanel" aria-labelledby="tabDash" hidden>
     <div class="db-filters">
       <div class="field"><label for="dbAcc">เครื่อง</label><select id="dbAcc"></select></div>
@@ -670,6 +709,7 @@ footer p { margin: 6px 0; }
 <script src="sheet-sync.js"></script>
 <script src="report-log.js"></script>
 <script src="dashboard.js"></script>
+<script src="calc-history.js"></script>
 <script src="i18n.js"></script>
 <script>
 (function () {
@@ -1184,6 +1224,7 @@ footer p { margin: 6px 0; }
   }
 
   function useExample(kind) {
+    CalcHistory.newSession();
     // First accelerator that has the example energy (falls back to its first energy of that kind)
     var want = kind === 'photon' ? '6 MV' : '9 MeV';
     var a = D.accelerators.filter(function (x) { return x[kind].some(function (e) { return e.energy === want; }); })[0]
@@ -1206,13 +1247,14 @@ footer p { margin: 6px 0; }
   }
 
   // ---- Wiring ----
-  $('f').addEventListener('input', function () { render(); resetSendConfirm(); });
+  $('f').addEventListener('input', function () { render(); resetSendConfirm(); CalcHistory.note(); });
   $('f').addEventListener('change', function (e) {
     var id = e.target.id;
     if (id === 'accSel') { fillEnergies(); applyEnergy(); }
     else if (id === 'energySel') applyEnergy();
     else if (id === 'chamberSel') applyChamber();
     render();
+    CalcHistory.note();
   });
   $('f').addEventListener('submit', function (e) { e.preventDefault(); });
   $('exPhoton').addEventListener('click', function () { useExample('photon'); });
@@ -1220,6 +1262,7 @@ footer p { margin: 6px 0; }
   // Clears what is measured each time; machine, chamber, physicists, QA type, date and criteria stay
   var MEASURED = ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure', 'readAfter', 'tempAfter', 'pressureAfter'];
   function clearMeasurements(afterSend) {
+    CalcHistory.newSession();
     MEASURED.forEach(function (k) { $(k).value = ''; });
     if (afterSend) { $('userNote').value = ''; $('useAfter').checked = false; }
     $('noticeText').textContent = 'ล้างค่าการวัดแล้ว ข้อมูลเครื่อง หัววัด และเกณฑ์ยังคงอยู่';
@@ -1379,6 +1422,7 @@ footer p { margin: 6px 0; }
     sendStatus('', 'กำลังส่ง ' + escapeHtml(rec.id) + '…');
     ReportLog.sendToDrive(mcpNs, folder, rec).then(function (res) {
       lastSent = { fp: fp, id: rec.id };
+      CalcHistory.markSent(rec, last.meta);
       if (res.appended || res.duplicate) {
         // Apps Script web app: the row is already in the Log tab
         Dashboard.invalidate();
@@ -1466,16 +1510,30 @@ footer p { margin: 6px 0; }
     measure(); window.addEventListener('resize', measure);
   })();
 
-  // ---- Tabs: calculator / history dashboard ----
-  function showTab(dash) {
-    $('calcView').hidden = dash;
-    $('dashView').hidden = !dash;
-    $('tabCalc').setAttribute('aria-selected', String(!dash));
-    $('tabDash').setAttribute('aria-selected', String(dash));
-    if (dash) Dashboard.show();
+  // ---- Tabs: calculator / calculation history / history dashboard ----
+  var TABS = { calc: ['tabCalc', 'calcView'], hist: ['tabHist', 'histView'], dash: ['tabDash', 'dashView'] };
+  function showTab(name) {
+    Object.keys(TABS).forEach(function (k) {
+      $(TABS[k][1]).hidden = k !== name;
+      $(TABS[k][0]).setAttribute('aria-selected', String(k === name));
+    });
+    if (name === 'dash') Dashboard.show();
+    if (name === 'hist') CalcHistory.show();
   }
-  $('tabCalc').addEventListener('click', function () { showTab(false); });
-  $('tabDash').addEventListener('click', function () { showTab(true); });
+  $('tabCalc').addEventListener('click', function () { showTab('calc'); });
+  $('tabHist').addEventListener('click', function () { showTab('hist'); });
+  $('tabDash').addEventListener('click', function () { showTab('dash'); });
+  CalcHistory.init({
+    getEntry: function () { return last && last.r.ok && (!last.ra || last.ra.ok) ? { ok: true, rec: currentRecord(), meta: last.meta } : null; },
+    restore: function (meta, it) {
+      CalcHistory.newSession();   // edits from here on are a new entry, the opened one stays as it was
+      restore(meta);
+      render();
+      showTab('calc');
+      $('noticeText').textContent = 'โหลดค่าจากประวัติการคำนวณแล้ว (' + (it.rec.accelerator || '') + ' ' + (it.rec.energy || '') + ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้';
+      window.scrollTo(0, 0);
+    }
+  });
   Dashboard.init({
     getMcp: function () { return mcpNs; },
     getXLSX: function () { return typeof XLSX !== 'undefined' ? XLSX : null; },
@@ -1488,7 +1546,8 @@ footer p { margin: 6px 0; }
   });
 
   // ---- Boot ----
-  if (location.hash === '#dashboard') showTab(true);
+  if (location.hash === '#dashboard') showTab('dash');
+  else if (location.hash === '#history') showTab('hist');
   var dest = readStore(DEST_KEY) || {};
   $('inboxId').value = dest.inbox || DEFAULT_INBOX;
   $('logUrl').value = dest.log || DEFAULT_LOG;
@@ -1518,6 +1577,7 @@ footer p { margin: 6px 0; }
     render();
     fitSecTags();
     Dashboard.relang();
+    CalcHistory.relang();
   });
   [].forEach.call(document.querySelectorAll('input[name="lang"]'), function (r) {
     r.addEventListener('change', function () { if (r.checked) I18N.set(r.value); });
