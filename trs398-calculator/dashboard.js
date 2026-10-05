@@ -456,5 +456,8 @@
     if (S.opts && S.loaded) render();
   }
 
-  root.Dashboard = { relang: relang, init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
+  // Force a fresh Log read the next time the dashboard opens (a report was just written to it)
+  function invalidate() { S.loaded = false; S.triedMcp = false; }
+
+  root.Dashboard = { invalidate: invalidate, relang: relang, init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
 })(typeof self !== 'undefined' ? self : this);

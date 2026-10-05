@@ -87,10 +87,16 @@ Log Sheet และ ReportImporter.gs ID และลิงก์ไม่เป
 ชื่อนักฟิสิกส์ ชื่อไฟล์ และข้อมูลที่ส่งเข้า Log ไม่ถูกแปล (ค่าใน Log ยังเป็นภาษาไทยเหมือนเดิม)
 เพิ่มข้อความไทยใหม่ในแอปเมื่อไร ให้เพิ่มคำแปลใน DICT ด้วย
 
+## Google Apps Script Web App
+
+ใช้แอปเดียวกันเป็นเว็บแอปของ Google Apps Script ได้ ดู `apps-script/webapp/README.md`
+(ไฟล์ `WebApp.gs` + `index.html` ที่รวมทุกสคริปต์ไว้ในไฟล์เดียว สร้างด้วย `apps-script/build_webapp.py`)
+
 ## ไฟล์
 
 - `index.html` — หน้าเว็บ (UI ภาษาไทย)
 - `lpch-data.js` — สำเนาข้อมูลเครื่อง หัววัด และตาราง k_Q จาก Sheet
+- `gas-bridge.js` — ตัวเชื่อม google.script.run เมื่อรันเป็น Apps Script web app
 - `i18n.js` — สลับภาษาไทย/อังกฤษ
 - `dashboard.js` — Dashboard ย้อนหลัง (อ่าน Log, การ์ดสรุป, กราฟแนวโน้ม, ตาราง)
 - `report-log.js` — แปลงผลคำนวณเป็นแถวรายงานและส่งเข้า Inbox

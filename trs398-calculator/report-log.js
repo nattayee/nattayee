@@ -107,7 +107,8 @@
     }).then(function (res) {
       var p = res && res.payload;
       if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = null; } }
-      return { id: p && p.id, url: p && (p.viewUrl || p.webViewLink || p.alternateLink) || (p && p.id ? 'https://docs.google.com/spreadsheets/d/' + p.id + '/edit' : '') };
+      return { id: p && p.id, url: p && (p.viewUrl || p.webViewLink || p.alternateLink) || (p && p.id ? 'https://docs.google.com/spreadsheets/d/' + p.id + '/edit' : ''),
+        appended: !!(p && p.appended), duplicate: !!(p && p.duplicate) };   // appended: written straight to the Log (Apps Script web app)
     });
   }
 
