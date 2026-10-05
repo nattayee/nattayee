@@ -278,6 +278,7 @@ details.dest .field { margin-top: 8px; }
 .db-empty strong { color: var(--ink); font-size: 1.05rem; }
 .db-demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; font-size: .86rem; }
 .db-src.sent { background: var(--ok-soft); color: var(--ok); }
+.db-src.log { background: var(--accent-soft); color: var(--accent); }
 .hist-intro { font-size: .86rem; color: var(--muted); margin: 0 0 12px; max-width: 80ch; }
 .hist-search { flex: 1 1 260px !important; }
 .hist-row { cursor: pointer; }
@@ -633,16 +634,22 @@ footer p { margin: 6px 0; }
   </div>
 
   <section id="histView" role="tabpanel" aria-labelledby="tabHist" hidden>
-    <p class="hist-intro">ผลที่คำนวณครบทุกครั้งถูกเก็บไว้ในเบราว์เซอร์นี้อัตโนมัติ ทั้งที่ส่งและยังไม่ส่งไปที่ Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ</p>
+    <p class="hist-intro">แสดงผลที่คำนวณครบในเบราว์เซอร์นี้ (บันทึกอัตโนมัติ ทั้งที่ส่งและยังไม่ส่ง) รวมกับรายงานทั้งหมดใน Log Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ</p>
+    <div class="db-source">
+      <span class="src-pill" id="histStatus">ยังไม่ได้โหลด Log Sheet</span>
+      <button type="button" class="ghost" id="histRefresh">รีเฟรชจาก Log Sheet</button>
+    </div>
     <div class="db-filters">
       <div class="field"><label for="histAcc">เครื่อง</label><select id="histAcc"></select></div>
+      <div class="field"><label for="histSrc">แหล่ง</label>
+        <select id="histSrc"><option value="">ทุกแหล่ง</option><option value="local">คำนวณในเบราว์เซอร์นี้</option><option value="log">อยู่ใน Log Sheet</option></select></div>
       <div class="field hist-search"><label for="histSearch">ค้นหา</label><input id="histSearch" type="search" placeholder="พลังงาน, นักฟิสิกส์, วันที่, หมายเหตุ"></div>
       <span class="spacer"></span>
-      <button type="button" class="ghost" id="histClear">ล้างประวัติทั้งหมด</button>
+      <button type="button" class="ghost" id="histClear">ล้างประวัติในเบราว์เซอร์นี้</button>
     </div>
     <div class="db-empty" id="histEmpty" hidden>
       <strong>ยังไม่มีประวัติการคำนวณ</strong>
-      <span>เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่</span>
+      <span>เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่ รายงานใน Log Sheet จะแสดงเมื่ออ่าน Log ได้</span>
     </div>
     <div class="db-card" id="histBody">
       <h2>ประวัติการคำนวณ <span id="histCount" style="text-transform:none;letter-spacing:0;font-family:var(--font-body)"></span></h2>
@@ -1523,14 +1530,45 @@ footer p { margin: 6px 0; }
   $('tabCalc').addEventListener('click', function () { showTab('calc'); });
   $('tabHist').addEventListener('click', function () { showTab('hist'); });
   $('tabDash').addEventListener('click', function () { showTab('dash'); });
+  // Form state from a report row of the Log (reports sent before this browser kept history).
+  // The Log has TPR20,10 / R50 but not M10/M20, so the quality index is entered as a value.
+  function metaFromRecord(r) {
+    var s = snapshot(), t = function (v) { return v == null ? '' : String(v); };
+    var electron = /electron/i.test(r.beam), kind = electron ? 'e:' : 'p:';
+    var a = byName(D.accelerators, r.accelerator);
+    s.acc = a ? a.name : s.acc;
+    var list = a ? (electron ? a.electron : a.photon) : [];
+    s.energy = kind + (list.some(function (e) { return e.energy === r.energy; }) ? r.energy : CUSTOM);
+    s.chamber = byName(D.chambers, r.chamber) ? r.chamber : CUSTOM; s.chamberCustom = s.chamber === CUSTOM ? t(r.chamber) : '';
+    s.electrometer = D.electrometers.indexOf(r.electrometer) >= 0 ? r.electrometer : CUSTOM; s.electrometerCustom = s.electrometer === CUSTOM ? t(r.electrometer) : '';
+    s.setup = /SSD/.test(r.setup) ? 'SSD' : 'SAD';
+    s.date = t(r.date); s.qaType = t(r.qaType); s.userNote = t(r.userNote);
+    var known = physicistBoxes().map(function (b) { return b.value; }), others = [];
+    s.physicists = [];
+    t(r.physicist).split(/\s*,\s*/).forEach(function (n) { if (!n) return; if (known.indexOf(n) >= 0) s.physicists.push(n); else others.push(n); });
+    if (others.length) s.physicists.push(CUSTOM);
+    s.physicistCustom = others.join(', ');
+    s.qMethod = electron ? 'r50' : 'tpr'; s.qValue = t(r.q); s.m10 = ''; s.m20 = '';
+    s.kqMode = { 'ตาราง k_Q': 'table', 'สอบเทียบในลำรังสีนี้ (1)': 'unity', 'กรอกเอง': 'direct' }[r.kqMode] || s.kqMode;
+    s.kqValue = s.kqMode === 'direct' ? t(r.kq) : s.kqValue;
+    // Constants keep the form's value when the Log cell is empty (older rows, optional columns)
+    ['mu', 'ndw', 'kcross', 'kvol', 'kelec', 'v1', 'v2', 'depthDose', 'zmax', 'expected'].forEach(function (k) { if (t(r[k]) !== '') s[k] = t(r[k]); });
+    s.temp = t(r.temp); s.pressure = t(r.pressure); s.pUnit = r.pUnit === 'mbar' || !r.pUnit ? 'hPa' : t(r.pUnit);
+    s.readNormal = t(r.m1); s.readOpposite = t(r.m1neg); s.readLow = t(r.m2);
+    s.usePol = !!s.readOpposite; s.useKs = !!s.readLow;
+    s.useAfter = r.adjusted === 'ใช่';
+    s.tempAfter = t(r.tempAfter); s.pressureAfter = t(r.pressureAfter); s.readAfter = t(r.m1After);
+    return s;
+  }
+
   CalcHistory.init({
     getEntry: function () { return last && last.r.ok && (!last.ra || last.ra.ok) ? { ok: true, rec: currentRecord(), meta: last.meta } : null; },
     restore: function (meta, it) {
       CalcHistory.newSession();   // edits from here on are a new entry, the opened one stays as it was
-      restore(meta);
+      restore(meta || metaFromRecord(it.rec));
       render();
       showTab('calc');
-      $('noticeText').textContent = 'โหลดค่าจากประวัติการคำนวณแล้ว (' + (it.rec.accelerator || '') + ' ' + (it.rec.energy || '') + ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้';
+      $('noticeText').textContent = (it.log ? 'โหลดค่าจากรายงานใน Log แล้ว (' : 'โหลดค่าจากประวัติการคำนวณแล้ว (') + (it.rec.accelerator || '') + ' ' + (it.rec.energy || '') + ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้';
       window.scrollTo(0, 0);
     }
   });
@@ -1565,6 +1603,7 @@ footer p { margin: 6px 0; }
     restore(saved);
     $('noticeText').textContent = 'โหลดข้อมูลล่าสุดที่กรอกไว้ในเบราว์เซอร์นี้';
     render();
+    CalcHistory.note();   // a finished calculation from before this tab existed goes into the history too
   } else {
     fillEnergies();
     useExample('photon');
@@ -1590,6 +1629,7 @@ footer p { margin: 6px 0; }
       mcpNs = ns;
       if (ns) syncFromDrive(true);
       if (!$('dashView').hidden) Dashboard.show();
+      if (!$('histView').hidden) CalcHistory.show();
     }, function () { /* no connector access in this view */ });
   }
 })();

@@ -68,12 +68,17 @@
     if (!rows.length) return [];
     var heads = rows[0].map(function (h) { return HEAD[str(h)] || null; });
     if (heads.indexOf('id') < 0) throw new Error('แถวแรกของแท็บ Log ไม่มีหัวคอลัมน์ "Report ID"');
+    // Every report column by its ReportLog key, so the calculation history can show and reopen the whole report
+    var byHeader = {};
+    if (root.ReportLog) root.ReportLog.COLUMNS.forEach(function (c) { byHeader[c[1]] = c[0]; });
+    var fullKeys = rows[0].map(function (h) { return byHeader[str(h)] || null; });
     var out = [];
     for (var i = 1; i < rows.length; i++) {
-      var o = {};
+      var o = {}, full = {};
       heads.forEach(function (k, j) { if (k) o[k] = rows[i][j]; });
+      fullKeys.forEach(function (k, j) { if (k && rows[i][j] != null) full[k] = rows[i][j]; });
       var n = normalize(o, 'log');
-      if (n) out.push(n);
+      if (n) { n.full = full; out.push(n); }
     }
     return out;
   }
@@ -130,7 +135,7 @@
   }
 
   // ---- State ----
-  var S = { log: [], logStatus: '', logAt: 0, demo: false, opts: null, loaded: false, hoverDate: null };
+  var S = { listeners: [], busy: false, log: [], logStatus: '', logAt: 0, demo: false, opts: null, loaded: false, hoverDate: null };
 
   function allRows() {
     if (S.demo) return demoRows();
@@ -403,14 +408,17 @@
     return 'ดึง Log ไม่สำเร็จ' + (err && err.message ? ': ' + err.message : '');
   }
 
+  function done() { S.busy = false; S.loaded = true; render(); S.listeners.forEach(function (f) { f(); }); }
+
   function load() {
     var o = S.opts;
+    S.busy = true;
     var mcp = o.getMcp(), XLSX = o.getXLSX();
     var id = o.getLogId();
     $('dbBody').classList.add('db-loading');
     if (!mcp || !XLSX || !id) {
       setStatus('', mcp ? 'ใส่ลิงก์ Log Sheet ใน "ปลายทางของรายงาน"' : 'อ่าน Log Sheet ได้เมื่อเปิดใน claude.ai · ใช้ปุ่มเลือกไฟล์ .xlsx ได้');
-      S.loaded = true; render(); return;
+      done(); return;
     }
     S.triedMcp = true;
     setStatus('busy', 'กำลังอ่าน Log Sheet…');
@@ -419,7 +427,7 @@
       setStatus('live', function () { return 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }); });
     }, function (err) {
       setStatus('err', errorText(err));
-    }).then(function () { S.loaded = true; render(); });
+    }).then(done);
   }
 
   function loadFile(file) {
@@ -432,7 +440,7 @@
         S.demo = false;
         setStatus('file', file.name + ' · ' + S.log.length + ' รายการ');
       } catch (e) { setStatus('err', 'อ่านไฟล์ไม่ได้: ' + e.message); }
-      render();
+      done();
     };
     reader.readAsArrayBuffer(file);
   }
@@ -449,8 +457,16 @@
 
   // Load on first open, and again once the Drive connector becomes available
   function show() {
+    if (S.busy) return;   // a load already running renders when it finishes
     if (!S.loaded || (S.opts.getMcp() && !S.triedMcp)) load(); else render();
   }
+
+  // Load the Log once without opening the dashboard (the calculation history lists its reports too)
+  function ensure() {
+    if (S.busy) return;
+    if (!S.loaded || (S.opts.getMcp() && !S.triedMcp)) load();
+  }
+  function status() { return S.status ? [S.status[0], typeof S.status[1] === 'function' ? S.status[1]() : S.status[1], S.busy] : null; }
 
   // Rebuild language-dependent text (dates, status) after the language changes
   function relang() {
@@ -461,5 +477,7 @@
   // Force a fresh Log read the next time the dashboard opens (a report was just written to it)
   function invalidate() { S.loaded = false; S.triedMcp = false; }
 
-  root.Dashboard = { invalidate: invalidate, relang: relang, init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
+  root.Dashboard = { ensure: ensure, status: status, onLoad: function (f) { S.listeners.push(f); },
+    logReports: function () { return S.log.filter(function (r) { return r.full; }).map(function (r) { return r.full; }); },
+    invalidate: invalidate, relang: relang, init: init, show: show, refresh: function () { S.demo = false; if (!S.busy) load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
 })(typeof self !== 'undefined' ? self : this);

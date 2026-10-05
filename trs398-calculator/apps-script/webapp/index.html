@@ -279,6 +279,7 @@ details.dest .field { margin-top: 8px; }
 .db-empty strong { color: var(--ink); font-size: 1.05rem; }
 .db-demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; font-size: .86rem; }
 .db-src.sent { background: var(--ok-soft); color: var(--ok); }
+.db-src.log { background: var(--accent-soft); color: var(--accent); }
 .hist-intro { font-size: .86rem; color: var(--muted); margin: 0 0 12px; max-width: 80ch; }
 .hist-search { flex: 1 1 260px !important; }
 .hist-row { cursor: pointer; }
@@ -634,16 +635,22 @@ footer p { margin: 6px 0; }
   </div>
 
   <section id="histView" role="tabpanel" aria-labelledby="tabHist" hidden>
-    <p class="hist-intro">ผลที่คำนวณครบทุกครั้งถูกเก็บไว้ในเบราว์เซอร์นี้อัตโนมัติ ทั้งที่ส่งและยังไม่ส่งไปที่ Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ</p>
+    <p class="hist-intro">แสดงผลที่คำนวณครบในเบราว์เซอร์นี้ (บันทึกอัตโนมัติ ทั้งที่ส่งและยังไม่ส่ง) รวมกับรายงานทั้งหมดใน Log Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ</p>
+    <div class="db-source">
+      <span class="src-pill" id="histStatus">ยังไม่ได้โหลด Log Sheet</span>
+      <button type="button" class="ghost" id="histRefresh">รีเฟรชจาก Log Sheet</button>
+    </div>
     <div class="db-filters">
       <div class="field"><label for="histAcc">เครื่อง</label><select id="histAcc"></select></div>
+      <div class="field"><label for="histSrc">แหล่ง</label>
+        <select id="histSrc"><option value="">ทุกแหล่ง</option><option value="local">คำนวณในเบราว์เซอร์นี้</option><option value="log">อยู่ใน Log Sheet</option></select></div>
       <div class="field hist-search"><label for="histSearch">ค้นหา</label><input id="histSearch" type="search" placeholder="พลังงาน, นักฟิสิกส์, วันที่, หมายเหตุ"></div>
       <span class="spacer"></span>
-      <button type="button" class="ghost" id="histClear">ล้างประวัติทั้งหมด</button>
+      <button type="button" class="ghost" id="histClear">ล้างประวัติในเบราว์เซอร์นี้</button>
     </div>
     <div class="db-empty" id="histEmpty" hidden>
       <strong>ยังไม่มีประวัติการคำนวณ</strong>
-      <span>เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่</span>
+      <span>เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่ รายงานใน Log Sheet จะแสดงเมื่ออ่าน Log ได้</span>
     </div>
     <div class="db-card" id="histBody">
       <h2>ประวัติการคำนวณ <span id="histCount" style="text-transform:none;letter-spacing:0;font-family:var(--font-body)"></span></h2>
@@ -1532,12 +1539,17 @@ window.LPCH_DATA = {
     if (!rows.length) return [];
     var heads = rows[0].map(function (h) { return HEAD[str(h)] || null; });
     if (heads.indexOf('id') < 0) throw new Error('แถวแรกของแท็บ Log ไม่มีหัวคอลัมน์ "Report ID"');
+    // Every report column by its ReportLog key, so the calculation history can show and reopen the whole report
+    var byHeader = {};
+    if (root.ReportLog) root.ReportLog.COLUMNS.forEach(function (c) { byHeader[c[1]] = c[0]; });
+    var fullKeys = rows[0].map(function (h) { return byHeader[str(h)] || null; });
     var out = [];
     for (var i = 1; i < rows.length; i++) {
-      var o = {};
+      var o = {}, full = {};
       heads.forEach(function (k, j) { if (k) o[k] = rows[i][j]; });
+      fullKeys.forEach(function (k, j) { if (k && rows[i][j] != null) full[k] = rows[i][j]; });
       var n = normalize(o, 'log');
-      if (n) out.push(n);
+      if (n) { n.full = full; out.push(n); }
     }
     return out;
   }
@@ -1594,7 +1606,7 @@ window.LPCH_DATA = {
   }
 
   // ---- State ----
-  var S = { log: [], logStatus: '', logAt: 0, demo: false, opts: null, loaded: false, hoverDate: null };
+  var S = { listeners: [], busy: false, log: [], logStatus: '', logAt: 0, demo: false, opts: null, loaded: false, hoverDate: null };
 
   function allRows() {
     if (S.demo) return demoRows();
@@ -1867,14 +1879,17 @@ window.LPCH_DATA = {
     return 'ดึง Log ไม่สำเร็จ' + (err && err.message ? ': ' + err.message : '');
   }
 
+  function done() { S.busy = false; S.loaded = true; render(); S.listeners.forEach(function (f) { f(); }); }
+
   function load() {
     var o = S.opts;
+    S.busy = true;
     var mcp = o.getMcp(), XLSX = o.getXLSX();
     var id = o.getLogId();
     $('dbBody').classList.add('db-loading');
     if (!mcp || !XLSX || !id) {
       setStatus('', mcp ? 'ใส่ลิงก์ Log Sheet ใน "ปลายทางของรายงาน"' : 'อ่าน Log Sheet ได้เมื่อเปิดใน claude.ai · ใช้ปุ่มเลือกไฟล์ .xlsx ได้');
-      S.loaded = true; render(); return;
+      done(); return;
     }
     S.triedMcp = true;
     setStatus('busy', 'กำลังอ่าน Log Sheet…');
@@ -1883,7 +1898,7 @@ window.LPCH_DATA = {
       setStatus('live', function () { return 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }); });
     }, function (err) {
       setStatus('err', errorText(err));
-    }).then(function () { S.loaded = true; render(); });
+    }).then(done);
   }
 
   function loadFile(file) {
@@ -1896,7 +1911,7 @@ window.LPCH_DATA = {
         S.demo = false;
         setStatus('file', file.name + ' · ' + S.log.length + ' รายการ');
       } catch (e) { setStatus('err', 'อ่านไฟล์ไม่ได้: ' + e.message); }
-      render();
+      done();
     };
     reader.readAsArrayBuffer(file);
   }
@@ -1913,8 +1928,16 @@ window.LPCH_DATA = {
 
   // Load on first open, and again once the Drive connector becomes available
   function show() {
+    if (S.busy) return;   // a load already running renders when it finishes
     if (!S.loaded || (S.opts.getMcp() && !S.triedMcp)) load(); else render();
   }
+
+  // Load the Log once without opening the dashboard (the calculation history lists its reports too)
+  function ensure() {
+    if (S.busy) return;
+    if (!S.loaded || (S.opts.getMcp() && !S.triedMcp)) load();
+  }
+  function status() { return S.status ? [S.status[0], typeof S.status[1] === 'function' ? S.status[1]() : S.status[1], S.busy] : null; }
 
   // Rebuild language-dependent text (dates, status) after the language changes
   function relang() {
@@ -1925,14 +1948,17 @@ window.LPCH_DATA = {
   // Force a fresh Log read the next time the dashboard opens (a report was just written to it)
   function invalidate() { S.loaded = false; S.triedMcp = false; }
 
-  root.Dashboard = { invalidate: invalidate, relang: relang, init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
+  root.Dashboard = { ensure: ensure, status: status, onLoad: function (f) { S.listeners.push(f); },
+    logReports: function () { return S.log.filter(function (r) { return r.full; }).map(function (r) { return r.full; }); },
+    invalidate: invalidate, relang: relang, init: init, show: show, refresh: function () { S.demo = false; if (!S.busy) load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
 })(typeof self !== 'undefined' ? self : this);
 </script>
 <script>
 /* ---- calc-history.js ---- */
 /*
  * Calculation history: every completed calculation is kept in this browser (localStorage), whether or
- * not it was sent to the Log. While the user keeps editing the same machine and energy, the latest
+ * not it was sent to the Log, and every report already in the Log Sheet is listed with them (read
+ * through the Dashboard's Log loader), so past measurements show even on a new device. While the user keeps editing the same machine and energy, the latest
  * entry is updated instead of adding a row per keystroke; clearing the readings, loading an example or
  * sending the report starts a new entry. Entries can be reopened in the calculator or deleted.
  * All stored text goes into the DOM through textContent.
@@ -1943,6 +1969,7 @@ window.LPCH_DATA = {
   var KEY = 'trs398-calc-history-v1';
   var CAP = 200;
   var SAVE_DELAY = 1500;
+  var DAY = 86400000, BKK = 7 * 3600000;
 
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -2020,24 +2047,63 @@ window.LPCH_DATA = {
   function newSession() { flush(); clearTimeout(S.timer); S.timer = null; read().current = null; write(); }
   function markSent(rec, meta) { clearTimeout(S.timer); S.timer = null; save({ rec: rec, meta: meta }, rec.id); }
 
+  // ---- Reports from the Log Sheet ----
+  function clean(v) { return typeof v === 'string' ? v.replace(/^'/, '') : v; }
+  // Cell → epoch ms. Sheet dates/times are Thailand local time; serials and "YYYY-MM-DD HH:mm" text both occur.
+  function logTime(v) {
+    if (typeof v === 'number' && isFinite(v) && v > 20000) return Math.round((v - 25569) * DAY) - BKK;
+    var m = String(v || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) - BKK : 0;
+  }
+  function logDate(v) {
+    if (typeof v === 'number' && isFinite(v) && v > 20000) {
+      var d = new Date(Math.round((v - 25569) * DAY));
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+    }
+    var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[0] : clean(v) || '';
+  }
+  function logItems() {
+    if (!root.Dashboard || !root.Dashboard.logReports) return [];
+    var mine = {};
+    read().items.forEach(function (it) { if (it.sent) mine[it.sent] = 1; });   // already listed with its full form state
+    return root.Dashboard.logReports().filter(function (r) { return r.id && !mine[clean(r.id)]; }).map(function (r) {
+      var rec = {};
+      Object.keys(r).forEach(function (k) { rec[k] = clean(r[k]); });
+      rec.id = String(rec.id); rec.date = logDate(r.date);
+      return { id: 'log:' + rec.id, at: logTime(r.savedAt) || logTime(r.date), rec: rec, meta: null, sent: rec.id, log: true };
+    });
+  }
+  function merged() {
+    return read().items.concat(logItems()).sort(function (a, b) { return b.at - a.at || String(b.rec.id || '').localeCompare(String(a.rec.id || '')); });   // Log times are per minute; Report IDs carry seconds
+  }
+
+  function showStatus() {
+    var st = root.Dashboard && root.Dashboard.status ? root.Dashboard.status() : null, p = $('histStatus');
+    p.className = 'src-pill' + (st && st[0] ? ' ' + st[0] : '');
+    p.textContent = st ? st[1] : 'ยังไม่ได้โหลด Log Sheet';
+  }
+
   // ---- View ----
   var DETAIL_SKIP = { id: 1, savedAt: 1 };
 
-  function filtered() {
-    var acc = $('histAcc').value, q = $('histSearch').value.trim().toLowerCase();
-    return read().items.filter(function (it) {
+  function filtered(all) {
+    var acc = $('histAcc').value, src = $('histSrc').value, q = $('histSearch').value.trim().toLowerCase();
+    return all.filter(function (it) {
       var r = it.rec;
       if (acc && r.accelerator !== acc) return false;
+      if (src === 'local' && it.log) return false;
+      if (src === 'log' && !it.sent) return false;
       if (!q) return true;
       return [r.accelerator, r.energy, r.qaType, r.physicist, r.date, r.userNote, r.result, it.sent].join(' ').toLowerCase().indexOf(q) >= 0;
     });
   }
 
-  function fillAccFilter() {
+  function fillAccFilter(all) {
     var sel = $('histAcc'), keep = sel.value, seen = {};
     sel.textContent = '';
     sel.appendChild(el('option', null, 'ทุกเครื่อง')).value = '';
-    read().items.forEach(function (it) {
+    all.forEach(function (it) {
       var a = it.rec.accelerator;
       if (a && !seen[a]) { seen[a] = 1; var o = el('option', null, a); o.value = a; o.setAttribute('translate', 'no'); sel.appendChild(o); }
     });
@@ -2062,13 +2128,20 @@ window.LPCH_DATA = {
     var bar = el('div', 'hist-actions');
     var load = el('button', null, 'โหลดค่ากลับไปที่หน้าคำนวณ'); load.type = 'button';
     load.addEventListener('click', function () { flush(); S.opts.restore(it.meta, it); });
+    bar.appendChild(load);
+    if (it.log) {
+      bar.appendChild(el('span', 'hist-sent-id', 'รายงานจาก Log Sheet · ค่า TPR/R50 ที่บันทึกไว้จะถูกใช้แทน M20/M10'));
+      var lid = el('span', 'hist-sent-id', 'Report ID: ' + it.sent); lid.setAttribute('translate', 'no'); bar.appendChild(lid);
+      td.appendChild(bar); tr.appendChild(td);
+      return tr;
+    }
     var del = el('button', 'ghost', 'ลบรายการนี้'); del.type = 'button';
     del.addEventListener('click', function () {
       var s = read(); s.items.splice(s.items.indexOf(it), 1);
       if (s.current === it.id) s.current = null;
       S.open = null; write(); render();
     });
-    bar.appendChild(load); bar.appendChild(del);
+    bar.appendChild(del);
     if (it.sent) { var sid = el('span', 'hist-sent-id', 'Report ID: ' + it.sent); sid.setAttribute('translate', 'no'); bar.appendChild(sid); }
     td.appendChild(bar);
     tr.appendChild(td);
@@ -2076,9 +2149,10 @@ window.LPCH_DATA = {
   }
 
   function render() {
-    var all = read().items;
-    fillAccFilter();
-    var rows = filtered();
+    var all = merged();
+    showStatus();
+    fillAccFilter(all);
+    var rows = filtered(all);
     $('histEmpty').hidden = all.length > 0;
     $('histBody').hidden = all.length === 0;
     $('histCount').textContent = rows.length + ' รายการ';
@@ -2099,7 +2173,7 @@ window.LPCH_DATA = {
       cells.forEach(function (c) { var td = el('td', c[2] || null, c[0] || '—'); if (c[1]) td.setAttribute('translate', 'no'); tr.appendChild(td); });
       var res = el('td'); if (r.result) res.appendChild(el('span', 'chip ' + statusClass(r.result), r.result)); tr.appendChild(res);
       tr.appendChild(el('td', 'num', r.adjusted === 'ใช่' ? sgn(num(r.diffAfter)) : ''));
-      var st = el('td'); st.appendChild(el('span', 'db-src ' + (it.sent ? 'sent' : 'local'), it.sent ? 'ส่งแล้ว' : 'ยังไม่ส่ง')); tr.appendChild(st);
+      var st = el('td'); st.appendChild(el('span', 'db-src ' + (it.log ? 'log' : it.sent ? 'sent' : 'local'), it.log ? 'Log Sheet' : it.sent ? 'ส่งแล้ว' : 'ยังไม่ส่ง')); tr.appendChild(st);
       function toggle() { S.open = S.open === it.id ? null : it.id; render(); }
       tr.addEventListener('click', toggle);
       tr.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
@@ -2107,15 +2181,18 @@ window.LPCH_DATA = {
       if (S.open === it.id) tb.appendChild(detailRow(it, cols));
     });
     S.confirmClear = false;
-    $('histClear').textContent = 'ล้างประวัติทั้งหมด';
+    $('histClear').textContent = 'ล้างประวัติในเบราว์เซอร์นี้';
   }
 
   function init(opts) {
     S.opts = opts;
     $('histAcc').addEventListener('change', function () { S.open = null; render(); });
+    $('histSrc').addEventListener('change', function () { S.open = null; render(); });
+    $('histRefresh').addEventListener('click', function () { if (root.Dashboard) { root.Dashboard.refresh(); showStatus(); } });
+    if (root.Dashboard && root.Dashboard.onLoad) root.Dashboard.onLoad(function () { if (!$('histView').hidden) render(); });
     $('histSearch').addEventListener('input', function () { S.open = null; render(); });
     $('histClear').addEventListener('click', function () {
-      if (!S.confirmClear) { S.confirmClear = true; $('histClear').textContent = 'ยืนยันล้างประวัติ'; return; }
+      if (!S.confirmClear) { S.confirmClear = true; $('histClear').textContent = 'ยืนยันล้าง (Log Sheet ไม่ถูกลบ)'; return; }
       S.store = { current: null, items: [] }; S.open = null; write(); render();
     });
     // Do not lose the last edit when the page is closed before the save delay ends
@@ -2123,7 +2200,11 @@ window.LPCH_DATA = {
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   }
 
-  function show() { flush(); render(); }
+  function show() {
+    flush();
+    if (root.Dashboard && root.Dashboard.ensure) root.Dashboard.ensure();
+    render();
+  }
   function relang() { if (!$('histView').hidden) render(); }
 
   root.CalcHistory = { init: init, note: note, flush: flush, newSession: newSession, markSent: markSent, show: show, relang: relang, items: function () { return read().items; } };
@@ -2430,6 +2511,7 @@ window.LPCH_DATA = {
     'รายการการวัด': 'Measurements',
     'ผล': 'Result',
     'แหล่ง': 'Source',
+    'ทุกแหล่ง': 'All sources',
     'จำนวนการวัด': 'Measurements',
     'ไม่มีข้อมูลในช่วงนี้': 'No data in this period',
     'ค่าล่าสุด': 'Latest',
@@ -2474,8 +2556,8 @@ window.LPCH_DATA = {
     'ผลที่คำนวณครบทุกครั้งถูกเก็บไว้ในเบราว์เซอร์นี้อัตโนมัติ ทั้งที่ส่งและยังไม่ส่งไปที่ Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ': 'Every complete calculation is saved in this browser automatically, whether or not it was sent to the Sheet. Tap an entry to see all values or open it in the calculator again.',
     'ค้นหา': 'Search',
     'พลังงาน, นักฟิสิกส์, วันที่, หมายเหตุ': 'Energy, physicist, date, note',
-    'ล้างประวัติทั้งหมด': 'Clear all history',
-    'ยืนยันล้างประวัติ': 'Confirm: clear history',
+    'ล้างประวัติในเบราว์เซอร์นี้': 'Clear this browser\'s history',
+    'ยืนยันล้าง (Log Sheet ไม่ถูกลบ)': 'Confirm clear (the Log Sheet is kept)',
     'ยังไม่มีประวัติการคำนวณ': 'No calculations yet',
     'เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่': 'Once the inputs are complete enough to calculate the output, the result is saved here',
     'คำนวณเมื่อ': 'Calculated',
@@ -2483,11 +2565,20 @@ window.LPCH_DATA = {
     'ส่งแล้ว': 'Sent',
     'ยังไม่ส่ง': 'Not sent',
     'ไม่พบรายการที่ตรงกับตัวกรอง': 'No entries match the filter',
+    'แสดงผลที่คำนวณครบในเบราว์เซอร์นี้ (บันทึกอัตโนมัติ ทั้งที่ส่งและยังไม่ส่ง) รวมกับรายงานทั้งหมดใน Log Sheet แตะรายการเพื่อดูค่าทั้งหมดหรือโหลดกลับไปคำนวณต่อ': 'Shows the complete calculations made in this browser (saved automatically, sent or not) together with every report in the Log Sheet. Tap an entry to see all values or open it in the calculator again.',
+    'ยังไม่ได้โหลด Log Sheet': 'Log Sheet not loaded yet',
+    'แหล่ง': 'Source',
+    'คำนวณในเบราว์เซอร์นี้': 'Calculated in this browser',
+    'อยู่ใน Log Sheet': 'In the Log Sheet',
+    'เมื่อกรอกค่าจนคำนวณ Output ได้ ผลจะถูกบันทึกไว้ที่นี่ รายงานใน Log Sheet จะแสดงเมื่ออ่าน Log ได้': 'Once the inputs are complete enough to calculate the output, the result is saved here. Reports in the Log Sheet appear once the Log can be read.',
+    'รายงานจาก Log Sheet · ค่า TPR/R50 ที่บันทึกไว้จะถูกใช้แทน M20/M10': 'Report from the Log Sheet · the recorded TPR/R50 is used instead of M20/M10',
+    'โหลดค่าจากรายงานใน Log แล้ว (': 'Loaded from the Log report (',
     'ชนิดลำรังสี': 'Beam type',
     'ดัชนีคุณภาพ': 'Quality index',
     'ที่มาของ k_Q': 'k_Q source',
     'หน่วย P': 'P unit',
     'หมายเหตุผู้วัด': 'Measurement remark',
+    'ผู้บันทึก (Gmail)': 'Recorded by (Gmail)',
     'ตาราง k_Q': 'k_Q table',
     'สอบเทียบในลำรังสีนี้ (1)': 'Calibrated in this beam (1)',
     'โหลดค่ากลับไปที่หน้าคำนวณ': 'Open in calculator',
@@ -3416,14 +3507,45 @@ window.LPCH_DATA = {
   $('tabCalc').addEventListener('click', function () { showTab('calc'); });
   $('tabHist').addEventListener('click', function () { showTab('hist'); });
   $('tabDash').addEventListener('click', function () { showTab('dash'); });
+  // Form state from a report row of the Log (reports sent before this browser kept history).
+  // The Log has TPR20,10 / R50 but not M10/M20, so the quality index is entered as a value.
+  function metaFromRecord(r) {
+    var s = snapshot(), t = function (v) { return v == null ? '' : String(v); };
+    var electron = /electron/i.test(r.beam), kind = electron ? 'e:' : 'p:';
+    var a = byName(D.accelerators, r.accelerator);
+    s.acc = a ? a.name : s.acc;
+    var list = a ? (electron ? a.electron : a.photon) : [];
+    s.energy = kind + (list.some(function (e) { return e.energy === r.energy; }) ? r.energy : CUSTOM);
+    s.chamber = byName(D.chambers, r.chamber) ? r.chamber : CUSTOM; s.chamberCustom = s.chamber === CUSTOM ? t(r.chamber) : '';
+    s.electrometer = D.electrometers.indexOf(r.electrometer) >= 0 ? r.electrometer : CUSTOM; s.electrometerCustom = s.electrometer === CUSTOM ? t(r.electrometer) : '';
+    s.setup = /SSD/.test(r.setup) ? 'SSD' : 'SAD';
+    s.date = t(r.date); s.qaType = t(r.qaType); s.userNote = t(r.userNote);
+    var known = physicistBoxes().map(function (b) { return b.value; }), others = [];
+    s.physicists = [];
+    t(r.physicist).split(/\s*,\s*/).forEach(function (n) { if (!n) return; if (known.indexOf(n) >= 0) s.physicists.push(n); else others.push(n); });
+    if (others.length) s.physicists.push(CUSTOM);
+    s.physicistCustom = others.join(', ');
+    s.qMethod = electron ? 'r50' : 'tpr'; s.qValue = t(r.q); s.m10 = ''; s.m20 = '';
+    s.kqMode = { 'ตาราง k_Q': 'table', 'สอบเทียบในลำรังสีนี้ (1)': 'unity', 'กรอกเอง': 'direct' }[r.kqMode] || s.kqMode;
+    s.kqValue = s.kqMode === 'direct' ? t(r.kq) : s.kqValue;
+    // Constants keep the form's value when the Log cell is empty (older rows, optional columns)
+    ['mu', 'ndw', 'kcross', 'kvol', 'kelec', 'v1', 'v2', 'depthDose', 'zmax', 'expected'].forEach(function (k) { if (t(r[k]) !== '') s[k] = t(r[k]); });
+    s.temp = t(r.temp); s.pressure = t(r.pressure); s.pUnit = r.pUnit === 'mbar' || !r.pUnit ? 'hPa' : t(r.pUnit);
+    s.readNormal = t(r.m1); s.readOpposite = t(r.m1neg); s.readLow = t(r.m2);
+    s.usePol = !!s.readOpposite; s.useKs = !!s.readLow;
+    s.useAfter = r.adjusted === 'ใช่';
+    s.tempAfter = t(r.tempAfter); s.pressureAfter = t(r.pressureAfter); s.readAfter = t(r.m1After);
+    return s;
+  }
+
   CalcHistory.init({
     getEntry: function () { return last && last.r.ok && (!last.ra || last.ra.ok) ? { ok: true, rec: currentRecord(), meta: last.meta } : null; },
     restore: function (meta, it) {
       CalcHistory.newSession();   // edits from here on are a new entry, the opened one stays as it was
-      restore(meta);
+      restore(meta || metaFromRecord(it.rec));
       render();
       showTab('calc');
-      $('noticeText').textContent = 'โหลดค่าจากประวัติการคำนวณแล้ว (' + (it.rec.accelerator || '') + ' ' + (it.rec.energy || '') + ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้';
+      $('noticeText').textContent = (it.log ? 'โหลดค่าจากรายงานใน Log แล้ว (' : 'โหลดค่าจากประวัติการคำนวณแล้ว (') + (it.rec.accelerator || '') + ' ' + (it.rec.energy || '') + ') แก้ไขแล้วคำนวณต่อหรือส่งรายงานได้';
       window.scrollTo(0, 0);
     }
   });
@@ -3458,6 +3580,7 @@ window.LPCH_DATA = {
     restore(saved);
     $('noticeText').textContent = 'โหลดข้อมูลล่าสุดที่กรอกไว้ในเบราว์เซอร์นี้';
     render();
+    CalcHistory.note();   // a finished calculation from before this tab existed goes into the history too
   } else {
     fillEnergies();
     useExample('photon');
@@ -3483,6 +3606,7 @@ window.LPCH_DATA = {
       mcpNs = ns;
       if (ns) syncFromDrive(true);
       if (!$('dashView').hidden) Dashboard.show();
+      if (!$('histView').hidden) CalcHistory.show();
     }, function () { /* no connector access in this view */ });
   }
 })();

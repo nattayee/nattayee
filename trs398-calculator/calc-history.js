@@ -1,6 +1,7 @@
 /*
  * Calculation history: every completed calculation is kept in this browser (localStorage), whether or
- * not it was sent to the Log. While the user keeps editing the same machine and energy, the latest
+ * not it was sent to the Log, and every report already in the Log Sheet is listed with them (read
+ * through the Dashboard's Log loader), so past measurements show even on a new device. While the user keeps editing the same machine and energy, the latest
  * entry is updated instead of adding a row per keystroke; clearing the readings, loading an example or
  * sending the report starts a new entry. Entries can be reopened in the calculator or deleted.
  * All stored text goes into the DOM through textContent.
@@ -11,6 +12,7 @@
   var KEY = 'trs398-calc-history-v1';
   var CAP = 200;
   var SAVE_DELAY = 1500;
+  var DAY = 86400000, BKK = 7 * 3600000;
 
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -88,24 +90,63 @@
   function newSession() { flush(); clearTimeout(S.timer); S.timer = null; read().current = null; write(); }
   function markSent(rec, meta) { clearTimeout(S.timer); S.timer = null; save({ rec: rec, meta: meta }, rec.id); }
 
+  // ---- Reports from the Log Sheet ----
+  function clean(v) { return typeof v === 'string' ? v.replace(/^'/, '') : v; }
+  // Cell → epoch ms. Sheet dates/times are Thailand local time; serials and "YYYY-MM-DD HH:mm" text both occur.
+  function logTime(v) {
+    if (typeof v === 'number' && isFinite(v) && v > 20000) return Math.round((v - 25569) * DAY) - BKK;
+    var m = String(v || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) - BKK : 0;
+  }
+  function logDate(v) {
+    if (typeof v === 'number' && isFinite(v) && v > 20000) {
+      var d = new Date(Math.round((v - 25569) * DAY));
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+    }
+    var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[0] : clean(v) || '';
+  }
+  function logItems() {
+    if (!root.Dashboard || !root.Dashboard.logReports) return [];
+    var mine = {};
+    read().items.forEach(function (it) { if (it.sent) mine[it.sent] = 1; });   // already listed with its full form state
+    return root.Dashboard.logReports().filter(function (r) { return r.id && !mine[clean(r.id)]; }).map(function (r) {
+      var rec = {};
+      Object.keys(r).forEach(function (k) { rec[k] = clean(r[k]); });
+      rec.id = String(rec.id); rec.date = logDate(r.date);
+      return { id: 'log:' + rec.id, at: logTime(r.savedAt) || logTime(r.date), rec: rec, meta: null, sent: rec.id, log: true };
+    });
+  }
+  function merged() {
+    return read().items.concat(logItems()).sort(function (a, b) { return b.at - a.at || String(b.rec.id || '').localeCompare(String(a.rec.id || '')); });   // Log times are per minute; Report IDs carry seconds
+  }
+
+  function showStatus() {
+    var st = root.Dashboard && root.Dashboard.status ? root.Dashboard.status() : null, p = $('histStatus');
+    p.className = 'src-pill' + (st && st[0] ? ' ' + st[0] : '');
+    p.textContent = st ? st[1] : 'ยังไม่ได้โหลด Log Sheet';
+  }
+
   // ---- View ----
   var DETAIL_SKIP = { id: 1, savedAt: 1 };
 
-  function filtered() {
-    var acc = $('histAcc').value, q = $('histSearch').value.trim().toLowerCase();
-    return read().items.filter(function (it) {
+  function filtered(all) {
+    var acc = $('histAcc').value, src = $('histSrc').value, q = $('histSearch').value.trim().toLowerCase();
+    return all.filter(function (it) {
       var r = it.rec;
       if (acc && r.accelerator !== acc) return false;
+      if (src === 'local' && it.log) return false;
+      if (src === 'log' && !it.sent) return false;
       if (!q) return true;
       return [r.accelerator, r.energy, r.qaType, r.physicist, r.date, r.userNote, r.result, it.sent].join(' ').toLowerCase().indexOf(q) >= 0;
     });
   }
 
-  function fillAccFilter() {
+  function fillAccFilter(all) {
     var sel = $('histAcc'), keep = sel.value, seen = {};
     sel.textContent = '';
     sel.appendChild(el('option', null, 'ทุกเครื่อง')).value = '';
-    read().items.forEach(function (it) {
+    all.forEach(function (it) {
       var a = it.rec.accelerator;
       if (a && !seen[a]) { seen[a] = 1; var o = el('option', null, a); o.value = a; o.setAttribute('translate', 'no'); sel.appendChild(o); }
     });
@@ -130,13 +171,20 @@
     var bar = el('div', 'hist-actions');
     var load = el('button', null, 'โหลดค่ากลับไปที่หน้าคำนวณ'); load.type = 'button';
     load.addEventListener('click', function () { flush(); S.opts.restore(it.meta, it); });
+    bar.appendChild(load);
+    if (it.log) {
+      bar.appendChild(el('span', 'hist-sent-id', 'รายงานจาก Log Sheet · ค่า TPR/R50 ที่บันทึกไว้จะถูกใช้แทน M20/M10'));
+      var lid = el('span', 'hist-sent-id', 'Report ID: ' + it.sent); lid.setAttribute('translate', 'no'); bar.appendChild(lid);
+      td.appendChild(bar); tr.appendChild(td);
+      return tr;
+    }
     var del = el('button', 'ghost', 'ลบรายการนี้'); del.type = 'button';
     del.addEventListener('click', function () {
       var s = read(); s.items.splice(s.items.indexOf(it), 1);
       if (s.current === it.id) s.current = null;
       S.open = null; write(); render();
     });
-    bar.appendChild(load); bar.appendChild(del);
+    bar.appendChild(del);
     if (it.sent) { var sid = el('span', 'hist-sent-id', 'Report ID: ' + it.sent); sid.setAttribute('translate', 'no'); bar.appendChild(sid); }
     td.appendChild(bar);
     tr.appendChild(td);
@@ -144,9 +192,10 @@
   }
 
   function render() {
-    var all = read().items;
-    fillAccFilter();
-    var rows = filtered();
+    var all = merged();
+    showStatus();
+    fillAccFilter(all);
+    var rows = filtered(all);
     $('histEmpty').hidden = all.length > 0;
     $('histBody').hidden = all.length === 0;
     $('histCount').textContent = rows.length + ' รายการ';
@@ -167,7 +216,7 @@
       cells.forEach(function (c) { var td = el('td', c[2] || null, c[0] || '—'); if (c[1]) td.setAttribute('translate', 'no'); tr.appendChild(td); });
       var res = el('td'); if (r.result) res.appendChild(el('span', 'chip ' + statusClass(r.result), r.result)); tr.appendChild(res);
       tr.appendChild(el('td', 'num', r.adjusted === 'ใช่' ? sgn(num(r.diffAfter)) : ''));
-      var st = el('td'); st.appendChild(el('span', 'db-src ' + (it.sent ? 'sent' : 'local'), it.sent ? 'ส่งแล้ว' : 'ยังไม่ส่ง')); tr.appendChild(st);
+      var st = el('td'); st.appendChild(el('span', 'db-src ' + (it.log ? 'log' : it.sent ? 'sent' : 'local'), it.log ? 'Log Sheet' : it.sent ? 'ส่งแล้ว' : 'ยังไม่ส่ง')); tr.appendChild(st);
       function toggle() { S.open = S.open === it.id ? null : it.id; render(); }
       tr.addEventListener('click', toggle);
       tr.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
@@ -175,15 +224,18 @@
       if (S.open === it.id) tb.appendChild(detailRow(it, cols));
     });
     S.confirmClear = false;
-    $('histClear').textContent = 'ล้างประวัติทั้งหมด';
+    $('histClear').textContent = 'ล้างประวัติในเบราว์เซอร์นี้';
   }
 
   function init(opts) {
     S.opts = opts;
     $('histAcc').addEventListener('change', function () { S.open = null; render(); });
+    $('histSrc').addEventListener('change', function () { S.open = null; render(); });
+    $('histRefresh').addEventListener('click', function () { if (root.Dashboard) { root.Dashboard.refresh(); showStatus(); } });
+    if (root.Dashboard && root.Dashboard.onLoad) root.Dashboard.onLoad(function () { if (!$('histView').hidden) render(); });
     $('histSearch').addEventListener('input', function () { S.open = null; render(); });
     $('histClear').addEventListener('click', function () {
-      if (!S.confirmClear) { S.confirmClear = true; $('histClear').textContent = 'ยืนยันล้างประวัติ'; return; }
+      if (!S.confirmClear) { S.confirmClear = true; $('histClear').textContent = 'ยืนยันล้าง (Log Sheet ไม่ถูกลบ)'; return; }
       S.store = { current: null, items: [] }; S.open = null; write(); render();
     });
     // Do not lose the last edit when the page is closed before the save delay ends
@@ -191,7 +243,11 @@
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   }
 
-  function show() { flush(); render(); }
+  function show() {
+    flush();
+    if (root.Dashboard && root.Dashboard.ensure) root.Dashboard.ensure();
+    render();
+  }
   function relang() { if (!$('histView').hidden) render(); }
 
   root.CalcHistory = { init: init, note: note, flush: flush, newSession: newSession, markSent: markSent, show: show, relang: relang, items: function () { return read().items; } };
