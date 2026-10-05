@@ -414,7 +414,7 @@
     setStatus('busy', 'กำลังอ่าน Log Sheet…');
     fetchLog(mcp, XLSX, id).then(function (rows) {
       S.log = rows; S.logAt = Date.now(); S.demo = false;
-      setStatus('live', function () { return 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' }); });
+      setStatus('live', function () { return 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }); });
     }, function (err) {
       setStatus('err', errorText(err));
     }).then(function () { S.loaded = true; render(); });

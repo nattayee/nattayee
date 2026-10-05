@@ -38,9 +38,17 @@
   function r2(v) { return typeof v === 'number' && isFinite(v) ? Number(v.toFixed(2)) : ''; }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
+  // All dates and times are Thailand time (GMT+7, no daylight saving), whatever the device's timezone.
+  var BKK_OFFSET_MS = 7 * 3600 * 1000;
+  function bangkokParts(d) {
+    var t = new Date((d || new Date()).getTime() + BKK_OFFSET_MS);
+    return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate(), h: t.getUTCHours(), mi: t.getUTCMinutes(), s: t.getUTCSeconds() };
+  }
+  function todayBangkok(d) { var p = bangkokParts(d); return p.y + '-' + pad(p.mo) + '-' + pad(p.d); }
+
   function makeId(now, accelerator, energy) {
-    var d = now;
-    var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+    var p = bangkokParts(now);
+    var stamp = p.y + pad(p.mo) + pad(p.d) + '-' + pad(p.h) + pad(p.mi) + pad(p.s);
     var tag = (String(accelerator || '').split(/[-\s]/)[0].slice(0, 4) + '-' + String(energy || '').replace(/\s+/g, '')).toUpperCase();
     return stamp + '-' + tag;
   }
@@ -57,7 +65,7 @@
     var pUnit = i.pUnit === 'hPa' ? 'mbar' : i.pUnit;
     var rec = {
       id: makeId(now, ctx.accelerator, ctx.energy),
-      savedAt: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()),
+      savedAt: (function (p) { return p.y + '-' + pad(p.mo) + '-' + pad(p.d) + ' ' + pad(p.h) + ':' + pad(p.mi); })(bangkokParts(now)),
       date: m.date || '', qaType: ctx.qaType || '', userEmail: ctx.userEmail || '', physicist: ctx.physicist || m.physicist || '',
       accelerator: ctx.accelerator || '', energy: ctx.energy || '', beam: photon ? 'Photon' : 'Electron',
       setup: photon ? i.setup + ' 100 cm' : 'SSD 100 cm',
@@ -112,6 +120,6 @@
     });
   }
 
-  return { COLUMNS: COLUMNS, headers: headers, buildRecord: buildRecord, toCsv: toCsv, sendToDrive: sendToDrive,
+  return { bangkokParts: bangkokParts, todayBangkok: todayBangkok, COLUMNS: COLUMNS, headers: headers, buildRecord: buildRecord, toCsv: toCsv, sendToDrive: sendToDrive,
     DRIVE_SERVER: DRIVE_SERVER, CREATE_TOOL: CREATE_TOOL };
 });

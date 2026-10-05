@@ -24,6 +24,7 @@ var WEBAPP = {
   ID_HEADER: 'Report ID',
   RESULT_HEADERS: ['ผล', 'ผลหลังปรับ'],
   TITLE: 'TRS-398 Output Calibration · Lampang Cancer Hospital',
+  TIME_ZONE: 'Asia/Bangkok',   // GMT+7: dates and times in the Log are Thailand time
   CACHE_SECONDS: 600,
   LOG_HEADERS: [
     'Report ID', 'บันทึกเมื่อ', 'วันที่วัด', 'ชนิด QA', 'นักฟิสิกส์', 'ผู้บันทึก (Gmail)',
@@ -121,6 +122,7 @@ function setup() {
   if (!folder) folder = DriveApp.createFolder(WEBAPP.FOLDER_NAME);
 
   var ss = SpreadsheetApp.create(WEBAPP.LOG_NAME);
+  ss.setSpreadsheetTimeZone(WEBAPP.TIME_ZONE);
   DriveApp.getFileById(ss.getId()).moveTo(folder);
   var sheet = ss.getSheets()[0].setName(WEBAPP.LOG_TAB);
 
@@ -209,6 +211,9 @@ function apiAppendReport(csvText) {
     var ss;
     try { ss = SpreadsheetApp.openById(logId); }
     catch (e) { throw new Error('บัญชี ' + me + ' ไม่มีสิทธิ์แก้ไข Log ขอให้ ' + WEBAPP.OWNER_EMAIL + ' เพิ่มใน EDITORS แล้วรัน shareLog'); }
+    if (ss.getSpreadsheetTimeZone() !== WEBAPP.TIME_ZONE) {
+      try { ss.setSpreadsheetTimeZone(WEBAPP.TIME_ZONE); } catch (e) { /* editors without that right keep the sheet's zone */ }
+    }
     var sheet = ss.getSheetByName(WEBAPP.LOG_TAB);
     if (!sheet) throw new Error('ไม่พบแท็บ "' + WEBAPP.LOG_TAB + '" ใน Log Sheet');
     var logHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
