@@ -262,11 +262,12 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .extlink { color: var(--ink); font-weight: 500; font-size: .875rem; text-underline-offset: 3px; text-decoration-color: var(--accent); }
 
 /* view switch + dashboard */
-.themes { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
-.themes button { appearance: none; border: 0; background: var(--surface); color: var(--muted); width: 36px; height: 32px; display: grid; place-items: center; cursor: pointer; }
-.themes button + button { border-left: 1px solid var(--line-strong); }
-.themes button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.themes, .langs { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
+.themes button, .langs button { appearance: none; border: 0; background: var(--surface); color: var(--muted); width: 36px; height: 32px; display: grid; place-items: center; cursor: pointer; }
+.themes button + button, .langs button + button { border-left: 1px solid var(--line-strong); }
+.themes button[aria-pressed="true"], .langs button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .themes svg { width: 16px; height: 16px; }
+.langs button { font-family: inherit; font-size: .72rem; font-weight: 600; letter-spacing: .03em; }
 .views { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; flex: none; }
 .views button { appearance: none; border: 0; background: var(--surface); color: var(--muted); padding: 7px 14px; font-weight: 600; font-size: .85rem; cursor: pointer; }
 .views button + button { border-left: 1px solid var(--line-strong); }
@@ -465,6 +466,10 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
         <button type="button" data-theme-set="auto" aria-pressed="false" title="ตามระบบเครื่อง" aria-label="ตามระบบเครื่อง"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" stroke="none"/></svg></button>
         <button type="button" data-theme-set="dark" aria-pressed="false" title="โหมดมืด" aria-label="โหมดมืด"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
       </div>
+      <div class="langs" role="group" aria-label="ภาษา / Language">
+        <button type="button" data-lang-set="th" aria-pressed="true" lang="th" title="ภาษาไทย">TH</button>
+        <button type="button" data-lang-set="en" aria-pressed="false" lang="en" title="English">EN</button>
+      </div>
       <div class="tally" aria-live="polite">
         <span class="t-pass"><b id="tPass">0</b> ผ่าน</span>
         <span class="t-fail"><b id="tFail">0</b> ไม่ผ่าน</span>
@@ -572,6 +577,11 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
   };
+  // UI language: the page is written in Thai; English is applied over the rendered page (see "language" below).
+  const LANG_KEY = 'linac-mech-qa:lang';
+  let lang = 'th';
+  try { lang = localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'th'; } catch (e) { lang = 'th'; }
+  const LOC = () => (lang === 'en' ? 'en-GB' : 'th-TH');
   // GAS: the page is served by the Apps Script web app itself (HtmlService), so it can call the server directly.
   const GAS = !!(window.google && google.script && google.script.run);
   let inFrame = true;
@@ -1301,7 +1311,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   const thaiDate = iso => {
     if (!iso) return '';
     const d = new Date(iso + 'T00:00:00');
-    return isNaN(d) ? iso : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+    return isNaN(d) ? iso : d.toLocaleDateString(LOC(), { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   /* required fields in ข้อมูลการตรวจ */
@@ -1681,7 +1691,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     if (ok === false) { el.textContent = 'เบราว์เซอร์นี้ไม่อนุญาตให้บันทึกอัตโนมัติ คัดลอก JSON เก็บไว้ก่อนปิดหน้า'; return; }
     if (!state.savedAt) { el.textContent = 'ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้'; return; }
     const t = new Date(state.savedAt);
-    el.textContent = 'บันทึกอัตโนมัติในเบราว์เซอร์นี้ล่าสุด ' + t.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    el.textContent = 'บันทึกอัตโนมัติในเบราว์เซอร์นี้ล่าสุด ' + t.toLocaleString(LOC(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
   const flushSave = () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; save(); } };
   window.addEventListener('pagehide', flushSave);
@@ -1913,7 +1923,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
   function startGoogle() {
     loadGoogle().then(() => {
       google.accounts.id.initialize({ client_id: AUTH.clientId, callback: onCredential, auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
-      google.accounts.id.renderButton($('#gBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'th', width: 280 });
+      google.accounts.id.renderButton($('#gBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: lang, width: 280 });
       if (!currentUser) google.accounts.id.prompt();
     }).catch(() => gateError('โหลดระบบเข้าสู่ระบบของ Google ไม่ได้ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดหน้าใหม่'));
   }
@@ -1982,7 +1992,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     const missing = infoMissing();
     if (inFrame && !GAS) { msg = 'ส่งไป Google Sheet ได้เมื่อเปิดจากเว็บที่โฮสต์เอง'; k = 'off'; }
     else if (lastSent && !sending && !sheetError) {
-      msg = 'ส่ง Record ID ' + lastSent.id + ' แล้วเมื่อ ' + lastSent.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) +
+      msg = 'ส่ง Record ID ' + lastSent.id + ' แล้วเมื่อ ' + lastSent.at.toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' }) +
         ' (' + lastSent.results + ' รายการ' + (lastSent.photos ? ' · รูป ' + lastSent.photos + ' รูป' : '') + ') ล้างฟอร์มแล้ว พร้อมบันทึกครั้งใหม่ ดูหรือแก้ครั้งที่ส่งไปได้ที่ Dashboard';
       k = 'ok';
     }
@@ -1991,7 +2001,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     else if (sending) { msg = 'กำลังส่ง…'; k = ''; }
     else if (sheetError) { msg = sheetError; k = 'err'; }
     else if (state.values.sent_at) {
-      const t = new Date(state.values.sent_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      const t = new Date(state.values.sent_at).toLocaleString(LOC(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       if (state.values.sent_sig === dataSig()) { msg = 'ส่งแล้วเมื่อ ' + t + ' ข้อมูลใน Sheet เป็นปัจจุบัน'; k = 'ok'; }
       else { msg = 'ส่งล่าสุดเมื่อ ' + t + ' มีการแก้ไขหลังจากนั้น กดส่งอีกครั้งเพื่ออัปเดตแถวเดิม'; k = 'dirty'; }
     } else { msg = 'ยังไม่ได้ส่ง ส่งได้ทุกเมื่อ ส่งซ้ำจะอัปเดตแถวเดิมของ Record ID นี้'; k = ''; }
@@ -2279,7 +2289,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     if (r === 0) return (0).toFixed(dp);
     return (v < 0 ? '−' : signed ? '+' : '') + r.toFixed(dp);
   };
-  const shortDate = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }); };
+  const shortDate = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(LOC(), { day: 'numeric', month: 'short', year: '2-digit' }); };
 
   function drawTrend(spec) {
     const box = $('#trendChart');
@@ -2403,7 +2413,7 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     const kv = (k, v) => v ? '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' : '';
     let html = '<div>' + overallPill(r) + '</div><dl class="kv">' +
       kv('ความถี่ของ QA', r.frequency) + kv('Physicist', r.physicist) + kv('ผู้ส่ง (Gmail)', r.email) +
-      kv('ส่งเมื่อ', r.sentAt ? new Date(r.sentAt).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') +
+      kv('ส่งเมื่อ', r.sentAt ? new Date(r.sentAt).toLocaleString(LOC(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') +
       kv('ผ่าน / ไม่ผ่าน / ค้าง', r.pass + ' / ' + r.fail + ' / ' + r.pending) + kv('Record ID', r.id) + '</dl>';
     if (r.note) html += '<div><h3>QA Note</h3><p style="margin:4px 0 0;white-space:pre-wrap">' + esc(r.note) + '</p></div>';
     html += '<div class="tools">' +
@@ -2514,11 +2524,301 @@ body.dash-view .tabrow, body.dash-view .progress, body.dash-view .tally { displa
     toast(t === 'dark' ? 'ใช้โหมดมืด' : t === 'light' ? 'ใช้โหมดสว่าง' : 'ใช้สีตามระบบเครื่อง');
   });
 
+  /* ================= language (TH / EN) ================= */
+  // English mode rewrites the rendered Thai text and the placeholder / title / aria-label / alt / label
+  // attributes in place, and a MutationObserver keeps doing so for anything rendered later.
+  // Only the screen changes: values, CSV / JSON and what is sent to the Google Sheet stay as they are.
+  const EN = {
+    // header, gate, reorder panel
+    'เข้าสู่ระบบด้วยบัญชี Google (Gmail) เพื่อบันทึกผล QA': 'Sign in with your Google (Gmail) account to record QA results',
+    'เข้าสู่ระบบด้วยบัญชี Gmail อื่น': 'Sign in with another Gmail account',
+    'มุมมอง': 'View', 'บันทึก QA': 'QA form', 'ธีมสี': 'Color theme', 'ภาษา / Language': 'Language',
+    'โหมดสว่าง': 'Light mode', 'ตามระบบเครื่อง': 'Match system', 'โหมดมืด': 'Dark mode',
+    'ใช้โหมดมืด': 'Dark mode on', 'ใช้โหมดสว่าง': 'Light mode on', 'ใช้สีตามระบบเครื่อง': 'Following the system theme',
+    'ผ่าน': 'Pass', 'ไม่ผ่าน': 'Fail', 'รอกรอก': 'Pending',
+    'ออกจากระบบ': 'Sign out', 'สลับบัญชี': 'Switch account',
+    'หมวดหมู่ QA': 'QA categories', 'สลับลำดับหมวดหมู่': 'Reorder categories', 'จัดลำดับ': 'Reorder', 'จัดลำดับหมวดหมู่': 'Reorder categories',
+    'ลากที่ไอคอนจุดหรือกดลูกศรเพื่อสลับลำดับ บนคอมพิวเตอร์ลากแท็บด้านบนได้โดยตรง หรือกด Alt + ← / → ขณะเลือกแท็บ':
+      'Drag the dotted handle or use the arrows to reorder. On a computer you can drag the tabs above, or press Alt + ← / → on a selected tab.',
+    'คืนลำดับเดิม': 'Reset order', 'เสร็จ': 'Done', 'คืนลำดับเดิมแล้ว': 'Order reset',
+    'เลื่อนหมวดขึ้น': 'Move category up', 'เลื่อนหมวดลง': 'Move category down',
+    'ล้างข้อมูลหมวดนี้': 'Clear this category', 'ไปหมวดก่อนหน้า / ถัดไป': 'Previous / next category',
+    // categories
+    'ข้อมูลการตรวจ': 'QA details', 'ข้อมูล': 'Details',
+    'Machine · ความถี่ของ QA · Date · Physicist': 'Machine · QA frequency · Date · Physicist',
+    'มุม gantry และค่าที่เครื่องแสดง': 'Gantry angle and machine readout',
+    'ค่าที่เครื่องแสดงเมื่อ gantry อยู่ที่ 0° จริง': 'Machine readout when the gantry is truly at 0°',
+    'กรอกมุมที่เครื่องแสดง ระบบคำนวณส่วนต่าง (Δ) จากมุมที่ตั้งให้ · Max CW / CCW บันทึกค่าอย่างเดียว':
+      'Enter the angle the machine shows; the deviation (Δ) from the set angle is calculated · Max CW / CCW are recorded only',
+    'ความเสถียรของแสงและ crosshair · มุม collimator': 'Light and crosshair stability · collimator angle',
+    'Gantry 0° · ruler shadow ที่พื้น · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น': 'Gantry 0° · ruler shadow on the floor · if it fails, enter the observed diameter',
+    'ที่ระยะ ≈ 100 cm · ถ้าไม่ผ่านให้กรอกเส้นผ่านศูนย์กลางที่เห็น': 'At ≈ 100 cm · if it fails, enter the observed diameter',
+    'Ø ที่เห็น': 'Observed Ø',
+    'ค่าที่เครื่องแสดงเมื่อ collimator อยู่ที่ 0° จริง หมุนเข้าหาจากแต่ละทิศ': 'Machine readout when the collimator is truly at 0°, approached from each direction',
+    'ค่า ODI ที่อ่านได้ (cm)': 'ODI reading (cm)',
+    'ODI scale (Solid phantom) · กรอกค่า ODI ที่อ่านได้ (cm)': 'ODI scale (Solid phantom) · enter the ODI reading (cm)',
+    'ขนาด light field เทียบกับค่าที่ตั้ง (cm²)': 'Light field size against the set value (cm²)',
+    'กรอกระยะจาก crosshair ถึงขอบ light field (cm) · ช่อง “ตั้ง” คือค่าที่คาดหวัง แก้ไขได้':
+      'Enter the distance from the crosshair to the light field edge (cm) · the “Set” box is the expected value and can be edited',
+    'รูปร่าง MLC และ Picket fence test': 'MLC shapes and Picket fence test',
+    'Sag · rotation · ระยะเคลื่อนที่': 'Sag · rotation · travel',
+    'ค่าที่เครื่องแสดงเมื่อ couch อยู่ที่ 0° จริง': 'Machine readout when the couch is truly at 0°',
+    'Max บันทึกค่าอย่างเดียว': 'Max is recorded only', 'Max (ฝั่ง 270°)': 'Max (270° side)', 'Max (ฝั่ง 90°)': 'Max (90° side)',
+    'กรอกระยะที่เคลื่อนที่จริง (cm) ระบบเทียบขนาดกับค่าที่สั่ง': 'Enter the actual distance travelled (cm); it is compared with the commanded distance',
+    'ความตรงของ room laser': 'Room laser alignment',
+    'Radiation isocenter · ขนาดวงกลมเล็กสุดที่ตัดทุกเส้นของ star shot': 'Radiation isocenter · smallest circle crossing every star shot line',
+    'วิเคราะห์จาก film / EPID · ถ้าไม่ผ่านให้กรอกรัศมีที่วัดได้': 'Analysed from film / EPID · if it fails, enter the measured radius',
+    'รัศมีที่วัดได้': 'Measured radius', 'ค่าที่วัดได้': 'Measured value',
+    'ตามองศาของ source': 'By source angle', 'เห็น': 'Visible', 'ไม่เห็น': 'Not visible', 'สิ่งที่เห็น': 'What is visible',
+    'มองเห็นรายละเอียดขนาด 1 mm': '1 mm detail is visible', 'ขนาดเล็กสุดที่เห็น': 'Smallest visible size',
+    'วัดด้วย Profiler · Dose diff คำนวณอัตโนมัติจาก Reference dose (TPS)': 'Measured with the Profiler · Dose diff is calculated from the Reference dose (TPS)',
+    'บันทึกเพิ่มเติม ข้อสังเกต การแก้ไข': 'Additional notes, observations and corrections',
+    'สรุปผลและส่งออก': 'Summary and export', 'สรุปผล': 'Summary',
+    'รายการที่ไม่ผ่าน · ส่งไป Google Sheet · ส่งออก CSV / JSON': 'Failed items · send to Google Sheet · export CSV / JSON',
+    // fields and results
+    'ใส่ค่า': 'Enter', 'ตรวจค่า dose': 'Check dose values', 'ไม่ใช่ตัวเลข': 'Not a number', 'ใส่ค่าตั้งก่อน': 'Enter the set value first',
+    'ตั้ง': 'Set', 'เกินเกณฑ์': 'Out of tolerance', 'อื่นๆ': 'Other',
+    'ความถี่ของ QA': 'QA frequency', 'ระบุความถี่ เช่น Quarterly, หลังซ่อม': 'Specify, e.g. Quarterly, after repair',
+    'ความถี่ของ QA อื่นๆ': 'Other QA frequency', '· เลือกได้หลายคน': '· select one or more',
+    'กรอกชื่อ (หลายคนคั่นด้วย ,)': 'Enter names (separate with ,)', 'ชื่อ Physicist อื่นๆ': 'Other physicist names',
+    'จำเป็นต้องกรอกก่อนส่งผลไป Google Sheet · ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้': 'Required before sending to the Google Sheet · entries are saved automatically in this browser',
+    'เลือกเครื่อง': 'Select a machine', 'เลือกความถี่ของ QA': 'Select the QA frequency', 'ระบุความถี่ในช่อง “อื่นๆ”': 'Specify the frequency under “Other”',
+    'เลือกวันที่ตรวจ': 'Select the QA date', 'กรอกชื่อในช่อง “อื่นๆ” หรือเอาเครื่องหมายออก': 'Enter a name under “Other” or untick it',
+    'เลือก Physicist อย่างน้อย 1 คน': 'Select at least one physicist',
+    'บันทึกข้อสังเกต ปัญหาที่พบ หรือการแก้ไข': 'Observations, problems found or corrections',
+    // photos
+    'รูปประกอบ': 'Photos', 'แนบรูป': 'Add photos', 'คำอธิบายรูป': 'Caption', 'ดูรูปประกอบ': 'View photo',
+    'รูปก่อนหน้า': 'Previous photo', 'รูปถัดไป': 'Next photo', 'ปิด': 'Close',
+    'ถ่ายจากกล้องหรือเลือกจากคลังภาพ เลือกได้หลายรูป บนคอมพิวเตอร์ลากไฟล์มาวางที่นี่ได้': 'Take a photo or pick from your library, several at once. On a computer you can drop files here.',
+    'เลือกได้เฉพาะไฟล์รูปภาพ': 'Only image files can be added', 'ลบรูปแล้ว': 'Photo removed', 'เลิกทำ': 'Undo',
+    'เปิดไฟล์รูปไม่ได้ ลองบันทึกเป็น JPG หรือ PNG แล้วแนบใหม่': 'Could not open the image. Save it as JPG or PNG and try again.',
+    'เบราว์เซอร์นี้เก็บรูปไม่ได้ รูปจะหายเมื่อปิดหน้า คัดลอก JSON เก็บไว้': 'This browser cannot store photos; they are lost when the page closes. Copy the JSON to keep them.',
+    // summary, Sheet, export
+    'ยังกรอกไม่ครบ': 'Not complete yet', 'กรอกครบทุกรายการแล้ว': 'Every item is filled in', 'ผ่านทุกรายการ': 'All items pass',
+    'รายการที่ไม่ผ่าน': 'Failed items', 'หมวดที่ยังกรอกไม่ครบ': 'Categories not yet complete',
+    'ส่งผลไป Google Sheet': 'Send results to Google Sheet', 'ส่งอัปเดตไป Google Sheet': 'Send update to Google Sheet',
+    'ส่งข้อมูลไป Google Sheet': 'Send data to Google Sheet', 'ส่งรูปประกอบด้วย': 'Include photos',
+    'เปิด Google Sheet': 'Open Google Sheet', 'ทดสอบการเชื่อมต่อ': 'Test connection', 'กำลังส่ง…': 'Sending…',
+    'ส่งไป Google Sheet ได้เมื่อเปิดจากเว็บที่โฮสต์เอง': 'Sending to the Google Sheet works when the page is opened from its own web address',
+    'ยังไม่ได้เชื่อม Google Sheet ผู้ดูแลต้องใส่ Web app URL ใน SHEET.endpoint (ดู README)': 'Google Sheet is not connected. An admin must set the Web app URL in SHEET.endpoint (see README).',
+    'ยังไม่ได้ส่ง ส่งได้ทุกเมื่อ ส่งซ้ำจะอัปเดตแถวเดิมของ Record ID นี้': 'Not sent yet. Send any time; sending again updates the rows of this Record ID.',
+    'กรอกข้อมูลการตรวจให้ครบก่อนส่ง': 'Complete the QA details before sending',
+    'เข้าสู่ระบบอีกครั้งเพื่อยืนยันตัวตนก่อนส่ง ข้อมูลที่กรอกไว้ยังอยู่ครบ': 'Sign in again to confirm who you are before sending. Your entries are kept.',
+    'ส่งไป Google Sheet ไม่สำเร็จ': 'Sending to the Google Sheet failed', 'ไม่ทราบสาเหตุ': 'unknown reason',
+    'Sheet ตอบกลับว่าไม่สำเร็จ': 'the Sheet reported a failure',
+    'ไม่ได้รับคำตอบจาก Apps Script ตรวจ 3 ข้อ: ใช้โค้ด Code.gs ชุดล่าสุด, Deploy เป็น New version, และ Who has access เป็น Anyone แล้วกด “ทดสอบการเชื่อมต่อ” ต้องเห็น {"ok":true…}':
+      'No reply from Apps Script. Check: the latest Code.gs is used, it is deployed as a New version, and Who has access is Anyone; then “Test connection” must show {"ok":true…}',
+    'ส่งออก / นำเข้า': 'Export / import', 'คัดลอก CSV': 'Copy CSV', 'คัดลอก JSON': 'Copy JSON',
+    'ดาวน์โหลด CSV': 'Download CSV', 'ดาวน์โหลด JSON': 'Download JSON', 'พิมพ์': 'Print', 'นำเข้า JSON': 'Import JSON',
+    'ล้างข้อมูล': 'Clear data', 'ล้างข้อมูลทั้งหมด': 'Clear everything', 'ยกเลิก': 'Cancel', 'นำเข้า': 'Import',
+    'เบราว์เซอร์ไม่อนุญาตให้คัดลอกอัตโนมัติ ข้อความด้านล่างถูกเลือกไว้แล้ว กด Ctrl + C หรือ ⌘ + C เพื่อคัดลอก': 'The browser blocked automatic copying. The text below is selected; press Ctrl + C or ⌘ + C to copy.',
+    'ข้อความสำหรับคัดลอก': 'Text to copy',
+    'วาง JSON ที่ส่งออกไว้ หรือเลือกไฟล์ .json แล้วกด “นำเข้า” ค่าปัจจุบันจะถูกแทนที่': 'Paste exported JSON or choose a .json file, then press “Import”. Current values will be replaced.',
+    'JSON สำหรับนำเข้า': 'JSON to import', 'เลือกไฟล์ JSON': 'Choose a JSON file',
+    'ล้างค่าที่กรอกและรูปประกอบในเครื่องนี้ แล้วเริ่มรอบใหม่ด้วย Record ID ใหม่? ข้อมูลที่ส่งไป Google Sheet แล้วจะยังอยู่ใน Sheet':
+      'Clear the entries and photos on this device and start again with a new Record ID? Data already sent to the Google Sheet stays there.',
+    'เลือกข้อความแล้ว กดคัดลอกได้เลย': 'Text selected, copy it now', 'อ่าน JSON ไม่ได้ ตรวจว่าวางข้อความครบทั้งหมด': 'Could not read the JSON. Check that all of it was pasted.',
+    'ไม่พบข้อมูล “values” ในไฟล์ ใช้ไฟล์ที่ส่งออกจากหน้านี้': 'No “values” in the file. Use a file exported from this page.',
+    'นำเข้าข้อมูลแล้ว': 'Data imported', 'วาง JSON หรือเลือกไฟล์ก่อนกดนำเข้า': 'Paste JSON or choose a file before importing', 'ล้างข้อมูลแล้ว': 'Data cleared',
+    'เบราว์เซอร์นี้ไม่อนุญาตให้บันทึกอัตโนมัติ คัดลอก JSON เก็บไว้ก่อนปิดหน้า': 'This browser does not allow autosave. Copy the JSON before closing the page.',
+    'ค่าที่กรอกบันทึกอัตโนมัติในเบราว์เซอร์นี้': 'Entries are saved automatically in this browser',
+    // sign-in (page and Code.gs)
+    'อ่านข้อมูลบัญชีไม่ได้ ลองเข้าสู่ระบบอีกครั้ง': 'Could not read the account. Try signing in again.',
+    'บัญชีนี้ยังไม่ได้ยืนยันอีเมลกับ Google': 'This account has not verified its email with Google',
+    'โหลดระบบเข้าสู่ระบบของ Google ไม่ได้ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดหน้าใหม่': 'Could not load Google sign-in. Check the internet connection and reload the page.',
+    'ออกจากระบบแล้ว': 'Signed out', 'กำลังตรวจสอบบัญชี Google…': 'Checking your Google account…', 'ยังใช้งานไม่ได้': 'No access yet',
+    'บัญชีนี้ไม่มีสิทธิ์ใช้งาน': 'This account does not have access', 'ตรวจสอบบัญชีไม่สำเร็จ': 'Account check failed',
+    'ระบบจำกัดผู้ใช้ไว้ แต่ไม่ทราบอีเมลของบัญชีนี้ ผู้ดูแลต้องตั้ง Deploy เป็น Execute as: User accessing the web app':
+      'Access is restricted but this account’s email is unknown. An admin must deploy with Execute as: User accessing the web app.',
+    'ข้อมูลที่ส่งมาไม่ถูกต้อง': 'The submitted data is invalid', 'ต้องเข้าสู่ระบบด้วย Google ก่อนส่งข้อมูล': 'Sign in with Google before sending',
+    'การเข้าสู่ระบบหมดอายุ เข้าสู่ระบบอีกครั้งแล้วส่งใหม่': 'Sign-in expired. Sign in again and resend.',
+    'Client ID ไม่ตรงกับที่ตั้งไว้': 'The Client ID does not match the configuration',
+    'เปิดโฟลเดอร์รูป Linac QA Photos ไม่ได้ ติดต่อผู้ดูแลให้แชร์โฟลเดอร์ (Editor) ให้บัญชีนี้': 'Cannot open the Linac QA Photos folder. Ask an admin to share it (Editor) with this account.',
+    'ไม่พบ Google Sheet ใส่ ID ของ Sheet ใน CONFIG.SHEET_ID ที่ด้านบนของ Code.gs': 'Google Sheet not found. Set its ID in CONFIG.SHEET_ID at the top of Code.gs.',
+    // dashboard
+    'ข้อมูลตัวอย่าง สุ่มขึ้นเพื่อแสดงหน้าตา Dashboard ข้อมูลจริงจาก Google Sheet จะแสดงเมื่อเปิดผ่านลิงก์ Apps Script':
+      'Sample data, randomly generated to preview the Dashboard. Real data from the Google Sheet appears when the page is opened through the Apps Script link.',
+    'เครื่อง': 'Machine', 'ช่วงเวลา': 'Period', 'ทั้งหมด': 'All', '30 วันล่าสุด': 'Last 30 days', '90 วันล่าสุด': 'Last 90 days', '1 ปีล่าสุด': 'Last year',
+    'โหลดข้อมูลใหม่': 'Reload data', 'สรุป': 'Summary', 'รายการที่ต้องการดู': 'Item to view',
+    'กราฟ trend ใช้ลูกศรซ้าย/ขวาเพื่อดูค่าแต่ละครั้ง': 'Trend chart. Use the left / right arrow keys to step through the records.',
+    'ดูค่าเป็นตาราง': 'Show values as a table', 'ประวัติการบันทึก': 'Record history', 'กดที่แถวเพื่อดูรายละเอียดของครั้งนั้น': 'Click a row to see that record',
+    'รายละเอียด': 'Details', 'ทุกเครื่อง': 'All machines', 'ทุกความถี่': 'All frequencies',
+    'กำลังโหลดข้อมูลจาก Google Sheet…': 'Loading data from the Google Sheet…',
+    'ยังไม่มีข้อมูลที่บันทึกไว้ใน Google Sheet ส่งผลจากแท็บ “บันทึก QA” แล้วข้อมูลจะแสดงที่นี่': 'No records in the Google Sheet yet. Send results from the “QA form” tab and they will show here.',
+    'บันทึกทั้งหมด': 'Records', 'ตามตัวกรองด้านบน': 'Matching the filters above', 'มีรายการไม่ผ่าน': 'With failed items',
+    'ดูรายละเอียดในประวัติด้านล่าง': 'See the history below', 'ไม่มี': 'None', 'ครั้งล่าสุด': 'Latest',
+    '✓ ผ่าน': '✓ Pass', '✕ ไม่ผ่าน': '✕ Fail', '✕ เกินเกณฑ์': '✕ Out of tolerance', '✓ อยู่ในเกณฑ์': '✓ Within tolerance',
+    'ไม่มีข้อมูลตามตัวกรองนี้': 'No records match these filters',
+    'วันที่ QA': 'QA date', 'ผล': 'Result', 'ความถี่': 'Frequency', 'ผ่าน / ไม่ผ่าน / ค้าง': 'Pass / fail / pending', 'รูป': 'Photos', 'ผู้ส่ง': 'Sent by',
+    'ส่วนต่างจากค่าตั้ง (Δ)': 'Deviation from set value (Δ)', 'ยังไม่มีค่าของรายการนี้ในช่วงที่เลือก': 'No values for this item in the selected period',
+    'กดเพื่อดูรายละเอียดครั้งนี้': 'Click to see this record', 'กำลังโหลด…': 'Loading…', 'โหลดไม่สำเร็จ': 'Could not load',
+    'ผู้ส่ง (Gmail)': 'Sent by (Gmail)', 'ส่งเมื่อ': 'Sent at', 'เปิดในฟอร์ม (แก้ไข / ส่งซ้ำ)': 'Open in form (edit / resend)',
+    'แสดงทุกรายการ': 'Show all items', 'แสดงเฉพาะที่ไม่ผ่าน': 'Show failed only', 'เปิดในฟอร์ม': 'Open in form',
+    'แทนที่ค่าที่กรอกในฟอร์มตอนนี้ด้วยข้อมูลครั้งนี้? รูปที่แนบไว้ในเครื่องจะถูกล้าง รูปเดิมใน Google Drive ยังอยู่ ส่งซ้ำจะอัปเดตแถวเดิมของ Record ID นี้':
+      'Replace what is in the form with this record? Photos attached on this device are cleared; the photos in Google Drive stay. Sending again updates this Record ID’s rows.',
+    'ไม่มีรายการที่ไม่ผ่าน': 'No failed items', 'ไม่มีรายการตรวจ': 'No checked items',
+    'รายการ': 'Item', 'ค่า': 'Value', 'เกณฑ์': 'Tolerance', 'บันทึก': 'Recorded'
+  };
+  const tw = s => (EN[s] != null ? EN[s] : s);
+  const plural = (n, w) => n + ' ' + w + (+n === 1 ? '' : 's');
+  const listTr = s => s.split(', ').map(tw).join(', ');
+  // [pattern, replacement] for text built from pieces; matched against the trimmed text.
+  const EN_RX = [
+    [/^ข้อมูลจำเป็น (\d+\/\d+)$/, (m, a) => 'Required ' + a],
+    [/^กรอกแล้ว (\d+\/\d+)$/, (m, a) => 'Filled ' + a],
+    [/^(✕ )?ไม่ผ่าน (\d+)$/, (m, x, a) => (x || '') + 'Fail ' + a],
+    [/^ไม่ครบ (\d+)$/, (m, a) => 'Incomplete ' + a],
+    [/^รูป (\d+)$/, (m, a) => plural(a, 'photo')],
+    [/^(\d+) รูป$/, (m, a) => plural(a, 'photo')],
+    [/^กลุ่ม (\S+)$/, (m, a) => 'Group ' + a],
+    [/^ไม่ผ่าน (\d+) รายการ$/, (m, a) => plural(a, 'item') + ' failed'],
+    [/^และยังไม่ได้กรอกอีก (\d+) รายการ$/, (m, a) => 'and ' + plural(a, 'item') + ' still empty'],
+    [/^ผ่าน (\d+) รายการ · เหลืออีก (\d+) รายการ$/, (m, a, b) => a + ' passed · ' + b + ' left'],
+    [/^ทั้งหมด (\d+) รายการอยู่ในเกณฑ์$/, (m, a) => 'All ' + plural(a, 'item') + ' within tolerance'],
+    [/^(ส่วนต่างจากค่าตั้ง \(Δ\)|ค่าที่วัดได้) \(([^)]*)\)(?: · เกณฑ์ (.+))?$/, (m, a, u, l) => tw(a) + ' (' + u + ')' + (l ? ' · Tolerance ' + l : '')],
+    [/^(.+) · เกณฑ์ (.+)$/, (m, a, l) => tw(a) + ' · Tolerance ' + l],
+    [/^ยังไม่ระบุเครื่อง(.*)$/, (m, a) => 'No machine selected' + a],
+    [/^(.*)ไม่ระบุเครื่อง$/, (m, a) => a + 'No machine'],
+    [/^คัดลอก (.+) แล้ว$/, (m, a) => 'Copied ' + a],
+    [/^กำลังเพิ่มรูป (\d+) รูป…$/, (m, a) => 'Adding ' + plural(a, 'photo') + '…'],
+    [/^แนบรูปแล้ว (\d+) รูป(?: · เปิดไม่ได้ (\d+) ไฟล์)?$/, (m, a, b) => 'Added ' + plural(a, 'photo') + (b ? ' · ' + plural(b, 'file') + ' could not be opened' : '')],
+    [/^ดูรูป (\d+)(.*)$/, (m, a, b) => 'View photo ' + a + b],
+    [/^ลบรูป (\d+)$/, (m, a) => 'Remove photo ' + a],
+    [/^คำอธิบายรูป (\d+)$/, (m, a) => 'Caption for photo ' + a],
+    [/^รูปประกอบ (.+) (\d+)$/, (m, a, b) => tw(a) + ' photo ' + b],
+    [/^บันทึกอัตโนมัติในเบราว์เซอร์นี้ล่าสุด (.+)$/, (m, a) => 'Saved in this browser · ' + a],
+    [/^ล้างข้อมูลหมวด (.+) แล้ว$/, (m, a) => 'Cleared ' + tw(a)],
+    [/^ล้างข้อมูลหมวด (.+)$/, (m, a) => 'Clear category ' + tw(a)],
+    [/^แนบรูปหมวด (.+)$/, (m, a) => 'Add photos to ' + tw(a)],
+    [/^เลื่อน(?:หมวด)? (.+) (ขึ้น|ลง)$/, (m, a, d) => 'Move ' + tw(a) + (d === 'ขึ้น' ? ' up' : ' down')],
+    [/^ไปที่ (.+) · ลากเพื่อสลับลำดับ$/, (m, a) => 'Go to ' + tw(a) + ' · drag to reorder'],
+    [/^ลากเพื่อย้าย (.+)$/, (m, a) => 'Drag to move ' + tw(a)],
+    [/^ย้าย “(.+)” ไปลำดับที่ (\d+)$/, (m, a, b) => 'Moved “' + tw(a) + '” to position ' + b],
+    [/^ตัวอย่าง (.+)$/, (m, a) => 'Example: ' + a],
+    [/^ภาพตัวอย่างในกรอบ (.+?) cm ที่ isocenter · leaf กว้าง (.+?) mm(.*) · เส้นประคือรูปร่างที่ต้องการ$/,
+      (m, a, b, c) => 'Examples in a ' + a + ' cm field at isocenter · leaf width ' + b + ' mm' + c + ' · the dashed line is the intended shape'],
+    [/^ค่าตั้ง (.+)$/, (m, a) => 'Set value · ' + trAny(a)],
+    [/^ส่ง Record ID (\S+) แล้วเมื่อ (.+?) \((\d+) รายการ(?: · รูป (\d+) รูป)?\) ล้างฟอร์มแล้ว พร้อมบันทึกครั้งใหม่ ดูหรือแก้ครั้งที่ส่งไปได้ที่ Dashboard$/,
+      (m, id, t, n, p) => 'Sent Record ID ' + id + ' at ' + t + ' (' + plural(n, 'item') + (p ? ' · ' + plural(p, 'photo') : '') + '). The form is cleared for the next record; view or edit the sent one in the Dashboard.'],
+    [/^กรอกข้อมูลการตรวจให้ครบก่อนส่ง ยังขาด: (.+)$/, (m, a) => 'Complete the QA details before sending. Missing: ' + listTr(a)],
+    [/^ส่งแล้วเมื่อ (.+) ข้อมูลใน Sheet เป็นปัจจุบัน$/, (m, a) => 'Sent ' + a + ' · the Sheet is up to date'],
+    [/^ส่งล่าสุดเมื่อ (.+) มีการแก้ไขหลังจากนั้น กดส่งอีกครั้งเพื่ออัปเดตแถวเดิม$/, (m, a) => 'Last sent ' + a + ' · edited since; send again to update the same rows'],
+    [/^ส่งไม่สำเร็จ: (.+) \(ข้อมูลยังเก็บอยู่ในเครื่องนี้\)$/, (m, a) => 'Send failed: ' + trAny(a) + ' (your data is still on this device)'],
+    [/^Apps Script ตอบกลับไม่ใช่ข้อมูลที่คาดไว้ \(HTTP (\d+)\) ตรวจว่า Deploy เป็น New version ของโค้ดชุดเต็ม และ Who has access เป็น Anyone$/,
+      (m, a) => 'Apps Script returned unexpected data (HTTP ' + a + '). Check that the full code is deployed as a New version and Who has access is Anyone.'],
+    [/^ส่งไป Google Sheet แล้ว (\d+) รายการ(?: · รูป (\d+) รูป)? · ล้างฟอร์มแล้ว$/, (m, a, b) => 'Sent ' + plural(a, 'item') + (b ? ' · ' + plural(b, 'photo') : '') + ' to the Google Sheet · form cleared'],
+    [/^เข้าสู่ระบบแล้ว: (.+)$/, (m, a) => 'Signed in: ' + a],
+    [/^บัญชี (\S+) ยังใช้งานไม่ได้$/, (m, a) => 'Account ' + a + ' has no access yet'],
+    [/^(\S+) ไม่มีสิทธิ์ใช้งาน ติดต่อผู้ดูแลเพื่อเพิ่มบัญชี$/, (m, a) => a + ' does not have access. Ask an admin to add this account.'],
+    [/^(\S+) ไม่อยู่ในรายชื่อผู้ใช้ ติดต่อผู้ดูแลเพื่อเพิ่มบัญชี$/, (m, a) => a + ' is not on the user list. Ask an admin to add this account.'],
+    [/^(\S+) ยังไม่มีสิทธิ์เข้าถึง Google Sheet ของระบบ ติดต่อผู้ดูแลให้แชร์ Sheet \(Editor\) ให้บัญชีนี้$/, (m, a) => a + ' cannot open the system’s Google Sheet yet. Ask an admin to share the Sheet (Editor) with this account.'],
+    [/^(\S+) ไม่มีสิทธิ์ส่งข้อมูล$/, (m, a) => a + ' is not allowed to send data'],
+    [/^ไม่พบ Record ID (.+)$/, (m, a) => 'Record ID ' + a + ' not found'],
+    [/^(.+) ลองโหลดหน้าใหม่อีกครั้ง$/, (m, a) => trAny(a) + ' Try reloading the page.'],
+    [/^โหลดข้อมูลไม่สำเร็จ: (.+)$/, (m, a) => 'Could not load data: ' + trAny(a)],
+    [/^โหลด trend ไม่สำเร็จ: (.+)$/, (m, a) => 'Could not load the trend: ' + trAny(a)],
+    [/^(\d+)% ของที่บันทึก$/, (m, a) => a + '% of records'],
+    [/^(.+) จำนวน (\d+) ครั้ง$/, (m, a, b) => trAny(a) + ', ' + plural(b, 'record')],
+    [/^เปิดโฟลเดอร์รูป \((\d+)\)$/, (m, a) => 'Open photo folder (' + a + ')'],
+    [/^เปิดข้อมูล (.+) ในฟอร์มแล้ว$/, (m, a) => 'Loaded the ' + a + ' record into the form'],
+    // aria-labels of inputs: "<label> <item>"
+    [/^(ค่าที่วัดได้|Ø ที่เห็น|รัศมีที่วัดได้|สิ่งที่เห็น|ขนาดเล็กสุดที่เห็น) (.+)$/, (m, a, b) => tw(a) + ' · ' + trAny(b)]
+  ];
+  const HAS_TH = /[฀-๿]/;
+  // English for a whole string, or null when there is no Thai or nothing matches.
+  function trAny(k) {
+    if (!HAS_TH.test(k)) return k;
+    if (EN[k] != null) return EN[k];
+    for (const [rx, fn] of EN_RX) { const m = k.match(rx); if (m) return fn(...m); }
+    if (k.includes(' · ')) return k.split(' · ').map(p => trAny(p)).join(' · ');
+    const sp = k.match(/^(.*\S) (กลุ่ม \S+|Max \(ฝั่ง \d+°\))$/);   // grid input labels: "<title> <item>"
+    if (sp) return trAny(sp[1]) + ' ' + trAny(sp[2]);
+    return k;
+  }
+  function trText(s) {
+    const k = s.trim();
+    if (!k || !HAS_TH.test(k)) return null;
+    const t = trAny(k);
+    if (t === k) return null;
+    return s.slice(0, s.indexOf(k)) + t + s.slice(s.indexOf(k) + k.length);
+  }
+
+  const TR_ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'label'];
+  const SKIP_TR = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1 };
+  const textOrig = new WeakMap(), attrOrig = new WeakMap();   // node → original Thai, for switching back
+  function trAttr(el, a) {
+    const v = el.getAttribute(a);
+    const t = v && trText(v);
+    if (t == null) return;
+    const o = attrOrig.get(el) || {};
+    o[a] = [v, t]; attrOrig.set(el, o);
+    el.setAttribute(a, t);
+  }
+  function trTextNode(n) {
+    const p = n.parentNode;
+    if (!p || SKIP_TR[p.nodeName] || (p.closest && p.closest('[lang="th"]'))) return;
+    const t = trText(n.data);
+    if (t == null) return;
+    textOrig.set(n, [n.data, t]);
+    n.data = t;
+  }
+  function trTree(root) {
+    if (root.nodeType === 3) { trTextNode(root); return; }
+    if (root.nodeType !== 1) return;
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    for (let n = root; n; n = w.nextNode()) {
+      if (n.nodeType === 3) trTextNode(n);
+      else TR_ATTRS.forEach(a => { if (n.hasAttribute(a)) trAttr(n, a); });
+    }
+  }
+  function untrTree() {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    for (let n = w.currentNode; n; n = w.nextNode()) {
+      if (n.nodeType === 3) { const o = textOrig.get(n); if (o && n.data === o[1]) n.data = o[0]; continue; }
+      const o = attrOrig.get(n);
+      if (o) Object.keys(o).forEach(a => { if (n.getAttribute(a) === o[a][1]) n.setAttribute(a, o[a][0]); });
+    }
+  }
+  const trObserver = new MutationObserver(list => list.forEach(m => {
+    if (m.type === 'childList') m.addedNodes.forEach(trTree);
+    else if (m.type === 'characterData') trTextNode(m.target);
+    else if (m.target.hasAttribute(m.attributeName)) trAttr(m.target, m.attributeName);
+  }));
+
+  // Re-render the parts that hold dates or numbers formatted for the language.
+  function rerenderForLang() {
+    drawnLeaf = null; drawMlc();
+    updateAll(); showSaved();
+    if (typeof renderDash === 'function' && dashRecords) renderDash();
+    if (drawerData && !drawer.hidden) { const tg = $('[data-dact="toggle"]'); renderRecord(!!tg && tg.getAttribute('aria-pressed') === 'true'); }
+  }
+  function applyLang(l, quiet) {
+    lang = l === 'en' ? 'en' : 'th';
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-lang-set]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.langSet === lang)));
+    trObserver.disconnect();
+    if (lang === 'en') {
+      rerenderForLang();
+      trTree(document.body);
+      trObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
+    } else {
+      untrTree();
+      rerenderForLang();
+    }
+    if (!quiet) toast(lang === 'en' ? 'English' : 'ภาษาไทย');
+  }
+  document.querySelector('.langs').addEventListener('click', e => {
+    const b = e.target.closest('[data-lang-set]'); if (!b || b.dataset.langSet === lang) return;
+    try { localStorage.setItem(LANG_KEY, b.dataset.langSet); } catch (err) { /* storage blocked */ }
+    applyLang(b.dataset.langSet);
+  });
+
   /* ================= boot ================= */
   fillInputs();
   applyOrder();
   setStick();
   showSaved();
+  if (lang === 'en') applyLang('en', true);
   initAuth();
   photoDB.all().then(list => {
     photos = (list || []).filter(x => SEC[x.sec]).sort((a, b) => a.at - b.at);

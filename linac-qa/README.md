@@ -6,7 +6,7 @@
 
 ## หมวดหมู่
 
-ข้อมูลการตรวจ (Machine: Infinity L1 / Precise L2 / VersaHD L3 · Physicist เลือกได้หลายคน + อื่นๆ) · Gantry · Collimator · ODI · Light Field · MLC · Couch · Laser · Light/Radiation & Winston-Lutz · Imaging QA · Flatness/Symmetry/Dose (Profiler) · QA Note · สรุปผล
+ข้อมูลการตรวจ (Machine: Infinity L1 / Precise L2 / VersaHD L3 · Physicist เลือกได้หลายคน + อื่นๆ) · Gantry · Collimator · ODI · Light Field · MLC · Couch · Laser · Light/Radiation & Winston-Lutz · Star Shot · Imaging QA · Flatness/Symmetry/Dose (Profiler) · QA Note · สรุปผล
 
 ## การใช้งาน
 
@@ -18,6 +18,7 @@
   - Light field: ช่อง "ตั้ง" คือค่าที่คาดหวัง แก้ไขได้ (Over-travel ต้องใส่ค่าตั้งเอง)
   - Dose diff (%) = (Measure − Reference) / Reference × 100
 - **รูปประกอบ**: ทุกหมวด QA แนบรูปได้ (ถ่ายจากกล้อง / เลือกจากคลังภาพ / ลากไฟล์มาวาง) ใส่คำอธิบายรูป กดดูรูปขนาดเต็ม และลบแล้วกดเลิกทำได้ รูปถูกย่อเหลือด้านยาวไม่เกิน 1600 px และเก็บใน IndexedDB ของเบราว์เซอร์ ไฟล์ JSON ที่ส่งออกมีรูปติดไปด้วย
+- **ภาษา**: ปุ่ม TH / EN ที่แถบด้านบนสลับหน้าจอเป็นภาษาไทยหรืออังกฤษ (จำไว้ในเบราว์เซอร์) เปลี่ยนเฉพาะข้อความบนหน้าจอ ค่าที่บันทึกและที่ส่งไป Google Sheet เหมือนเดิม คำแปลอยู่ในตาราง `EN` / `EN_RX` ใน `index.html`
 - **บันทึก**: ค่าที่กรอกบันทึกอัตโนมัติใน localStorage ของเบราว์เซอร์ ส่งออกได้เป็น CSV (เปิดใน Excel ได้) หรือ JSON และนำเข้า JSON กลับมาได้ที่หมวด "สรุปผล"
 
 ## เข้าสู่ระบบด้วย Google (Gmail)
