@@ -227,6 +227,7 @@
     'รายงานนี้ส่งไปแล้ว (': 'This report was already sent (',
     ') กด "ยืนยันส่งซ้ำ" ถ้าต้องการบันทึกอีกแถว': ') — press "Confirm resend" to log another row',
     'กำลังส่ง': 'Sending',
+    'บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน:': 'Google account used to read data and save reports:',
     'บันทึกลงแท็บ Log แล้ว:': 'Saved to the Log tab:',
     'รายงานนี้มีอยู่ใน Log แล้ว:': 'This report is already in the Log:',
     'เปิด Log Sheet': 'Open Log Sheet',
