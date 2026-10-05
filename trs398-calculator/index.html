@@ -49,7 +49,9 @@ body {
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; }
 
 header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 22px; }
-@media (min-width: 700px) { .note-field { grid-column: span 2; } }
+.check-list { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+.check-list:focus { outline: none; }
+.lbl small { font-weight: 400; color: var(--muted); }
 .req::after { content: " *"; color: var(--bad); }
 .field-missing { border-color: var(--bad) !important; box-shadow: 0 0 0 1px var(--bad); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -255,16 +257,6 @@ footer p { margin: 6px 0; }
           <div class="field"><label for="electrometerSel" class="req">เครื่องวัดประจุ</label><select id="electrometerSel" required></select>
             <input id="electrometerCustom" type="text" placeholder="รุ่นและ S/N" hidden></div>
           <div class="field"><label for="date" class="req">วันที่วัด</label><input id="date" type="date" required></div>
-          <div class="field"><label for="physicist" class="req">นักฟิสิกส์</label>
-            <select id="physicist" required>
-              <option value="">เลือกนักฟิสิกส์</option>
-              <option>จำเนียรพันธ์ เรือนศรี</option>
-              <option>วันนิตา มะลิลา</option>
-              <option>นัฐวุฒิ ยี่นาง</option>
-              <option>วรรณวนัช สุมนาพันธุ์</option>
-              <option value="__custom">อื่นๆ (กรอกเอง)</option>
-            </select>
-            <input id="physicistCustom" type="text" placeholder="ชื่อ-นามสกุล นักฟิสิกส์" hidden></div>
           <div class="field"><label for="qaType" class="req">ชนิด QA</label>
             <select id="qaType" required>
               <option value="">เลือกชนิด QA</option>
@@ -272,7 +264,18 @@ footer p { margin: 6px 0; }
               <option>Annually</option>
               <option>หลังซ่อม</option>
             </select></div>
-          <div class="field note-field">
+          <div class="field span2">
+            <span class="lbl req" id="physicistLbl">นักฟิสิกส์ <small>(เลือกได้หลายคน)</small></span>
+            <div class="check-list" id="physicist" role="group" aria-labelledby="physicistLbl" tabindex="-1">
+              <label class="check"><input type="checkbox" name="physicist" value="จำเนียรพันธ์ เรือนศรี"><span>จำเนียรพันธ์ เรือนศรี</span></label>
+              <label class="check"><input type="checkbox" name="physicist" value="วันนิตา มะลิลา"><span>วันนิตา มะลิลา</span></label>
+              <label class="check"><input type="checkbox" name="physicist" value="นัฐวุฒิ ยี่นาง"><span>นัฐวุฒิ ยี่นาง</span></label>
+              <label class="check"><input type="checkbox" name="physicist" value="วรรณวนัช สุมนาพันธุ์"><span>วรรณวนัช สุมนาพันธุ์</span></label>
+              <label class="check"><input type="checkbox" name="physicist" value="__custom"><span>อื่นๆ (กรอกเอง)</span></label>
+            </div>
+            <input id="physicistCustom" type="text" placeholder="ชื่อ-นามสกุล คั่นด้วยจุลภาคถ้ามีหลายคน" hidden>
+          </div>
+          <div class="field span2">
             <label for="userNote">หมายเหตุ</label>
             <textarea id="userNote" rows="2" style="min-height:0;font-family:var(--font-body)" placeholder="เช่น ปรับ output หลังเปลี่ยน magnetron, ใช้ phantom ชุดสำรอง"></textarea></div>
         </div>
@@ -534,7 +537,7 @@ footer p { margin: 6px 0; }
   var DEFAULT_INBOX = '18t0FBIWRVNzcZJca09wQXg6uwlQmBkw-';
   var DEFAULT_LOG = 'https://docs.google.com/spreadsheets/d/1UpWd0zPjEDnKIuV1q6j5O4CDemNt0BbYkbFWMIudTL8/edit';
 
-  var FIELDS = ['date', 'physicist', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
+  var FIELDS = ['date', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
     'ndw', 'kelec', 'kcross', 'kvol', 'kqMode', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit',
     'readNormal', 'readOpposite', 'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'zmax', 'expected', 'warnPct', 'tolPct',
     'tempAfter', 'pressureAfter', 'readAfter', 'physicistCustom', 'qaType', 'userNote'];
@@ -574,7 +577,17 @@ footer p { margin: 6px 0; }
   function energyLabel() { var o = $('energySel').selectedOptions[0]; return o ? o.textContent : ''; }
   function chamberRow() { return byName(D.chambers, $('chamberSel').value); }
   function chamberName() { var c = chamberRow(); return c ? c.name : $('chamberCustom').value; }
-  function physicistName() { var v = $('physicist').value; return v === CUSTOM ? $('physicistCustom').value.trim() : v; }
+  function physicistBoxes() { return [].slice.call(document.querySelectorAll('input[name="physicist"]')); }
+  function physicistChecked() { return physicistBoxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); }
+  function customPhysicistOn() { return physicistChecked().indexOf(CUSTOM) >= 0; }
+  // All chosen physicists as one string, e.g. "วันนิตา มะลิลา, นัฐวุฒิ ยี่นาง"
+  function physicistName() {
+    var names = physicistChecked().filter(function (v) { return v !== CUSTOM; });
+    if (customPhysicistOn()) {
+      $('physicistCustom').value.split(/[,،;]+/).forEach(function (n) { n = n.trim(); if (n) names.push(n); });
+    }
+    return names.join(', ');
+  }
   function electrometerName() { var v = $('electrometerSel').value; return v === CUSTOM ? $('electrometerCustom').value : v; }
   function kqLib() { return beam() === 'electron' ? D.kqElectron : D.kqPhoton; }
 
@@ -670,7 +683,7 @@ footer p { margin: 6px 0; }
     $('setupField').hidden = !photon;
     $('chamberCustom').hidden = $('chamberSel').value !== CUSTOM;
     $('electrometerCustom').hidden = $('electrometerSel').value !== CUSTOM;
-    $('physicistCustom').hidden = $('physicist').value !== CUSTOM;
+    $('physicistCustom').hidden = !customPhysicistOn();
     var m = $('qMethod').value;
     $('ratioBlock').hidden = m !== 'ratio';
     $('qValueField').hidden = m === 'ratio';
@@ -719,7 +732,7 @@ footer p { margin: 6px 0; }
     var s = { acc: $('accSel').value, energy: $('energySel').value, chamber: $('chamberSel').value,
       electrometer: $('electrometerSel').value, kqSource: $('kqSource').value,
       setup: document.querySelector('input[name="setup"]:checked').value,
-      usePol: $('usePol').checked, useKs: $('useKs').checked, useAfter: $('useAfter').checked };
+      usePol: $('usePol').checked, useKs: $('useKs').checked, useAfter: $('useAfter').checked, physicists: physicistChecked() };
     FIELDS.forEach(function (k) { s[k] = $(k).value; });
     return s;
   }
@@ -738,6 +751,8 @@ footer p { margin: 6px 0; }
     $('usePol').checked = s.usePol !== false;
     $('useKs').checked = s.useKs !== false;
     $('useAfter').checked = !!s.useAfter;
+    var chosen = s.physicists || (s.physicist ? [s.physicist] : []);
+    physicistBoxes().forEach(function (b) { b.checked = chosen.indexOf(b.value) >= 0; });
   }
 
   function statText(s) {
@@ -771,8 +786,8 @@ footer p { margin: 6px 0; }
       ['electrometerSel', 'เครื่องวัดประจุ', function () { return !!$('electrometerSel').value; }],
       ['electrometerCustom', 'รุ่นและ S/N เครื่องวัดประจุ', function () { return $('electrometerSel').value !== CUSTOM || !!$('electrometerCustom').value.trim(); }],
       ['date', 'วันที่วัด', function () { return !!$('date').value; }],
-      ['physicist', 'นักฟิสิกส์', function () { return !!$('physicist').value; }],
-      ['physicistCustom', 'ชื่อนักฟิสิกส์', function () { return $('physicist').value !== CUSTOM || !!$('physicistCustom').value.trim(); }],
+      ['physicist', 'นักฟิสิกส์ (อย่างน้อย 1 คน)', function () { return physicistChecked().length > 0; }],
+      ['physicistCustom', 'ชื่อนักฟิสิกส์ (อื่นๆ)', function () { return !customPhysicistOn() || !!$('physicistCustom').value.trim(); }],
       ['qaType', 'ชนิด QA', function () { return !!$('qaType').value; }]
     ];
     var missing = [];
