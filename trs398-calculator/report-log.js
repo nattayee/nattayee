@@ -15,7 +15,7 @@
 
   // [key, header]. "Report ID" must stay first: the importer uses it to skip duplicates.
   var COLUMNS = [
-    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['physicist', 'นักฟิสิกส์'],
+    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['qaType', 'ชนิด QA'], ['physicist', 'นักฟิสิกส์'],
     ['accelerator', 'เครื่อง'], ['energy', 'พลังงาน'], ['beam', 'ชนิดลำรังสี'], ['setup', 'Setup'],
     ['chamber', 'หัววัด'], ['electrometer', 'เครื่องวัดประจุ'], ['mu', 'MU'],
     ['qLabel', 'ดัชนีคุณภาพ'], ['q', 'TPR20,10 / R50'], ['zref', 'z_ref (g/cm²)'], ['zmax', 'z_max (g/cm²)'],
@@ -29,7 +29,7 @@
     ['adjusted', 'ปรับเครื่อง'], ['tempAfter', 'T หลังปรับ (°C)'], ['pressureAfter', 'P หลังปรับ'],
     ['m1After', 'M1 หลังปรับ (nC)'], ['ktpAfter', 'k_TP หลังปรับ'], ['outputAfter', 'Output หลังปรับ (cGy/MU)'],
     ['diffAfter', '%Diff หลังปรับ'], ['resultAfter', 'ผลหลังปรับ'],
-    ['source', 'แหล่งข้อมูลหลัก'], ['notes', 'หมายเหตุ']
+    ['source', 'แหล่งข้อมูลหลัก'], ['notes', 'หมายเหตุ'], ['userNote', 'หมายเหตุผู้วัด']
   ];
 
   var RESULT_TEXT = { pass: 'PASS', warn: 'PASS (เกินระดับเฝ้าระวัง)', fail: 'FAIL' };
@@ -46,7 +46,7 @@
   }
 
   /*
-   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, source, now }
+   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, physicist, qaType, userNote, source, now }
    * (inp/r/aft/ra are the calculation inputs/results from TRS398.calculate / calculateAfter)
    */
   function buildRecord(ctx) {
@@ -58,7 +58,7 @@
     var rec = {
       id: makeId(now, ctx.accelerator, ctx.energy),
       savedAt: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()),
-      date: m.date || '', physicist: m.physicist || '',
+      date: m.date || '', qaType: ctx.qaType || '', physicist: ctx.physicist || m.physicist || '',
       accelerator: ctx.accelerator || '', energy: ctx.energy || '', beam: photon ? 'Photon' : 'Electron',
       setup: photon ? i.setup + ' 100 cm' : 'SSD 100 cm',
       chamber: ctx.chamber || '', electrometer: ctx.electrometer || '', mu: isFinite(i.mu) ? i.mu : '',
@@ -76,7 +76,7 @@
       tempAfter: ra && isFinite(a.tempC) ? a.tempC : '', pressureAfter: ra && isFinite(a.pressure) ? a.pressure : '',
       m1After: ra ? a.readNormal || '' : '', ktpAfter: ra ? r4(ra.ktp) : '', outputAfter: ra ? r4(ra.outputPerMU) : '',
       diffAfter: ra ? r2(ra.deviation) : '', resultAfter: ra ? (ra.ok ? RESULT_TEXT[ra.status] || '' : 'ข้อมูลไม่ครบ') : '',
-      source: ctx.source || '', notes: notes.join(' | ')
+      source: ctx.source || '', notes: notes.join(' | '), userNote: ctx.userNote || ''
     };
     return rec;
   }

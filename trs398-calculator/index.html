@@ -49,6 +49,7 @@ body {
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; }
 
 header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 22px; }
+@media (min-width: 700px) { .note-field { grid-column: span 2; } }
 .req::after { content: " *"; color: var(--bad); }
 .field-missing { border-color: var(--bad) !important; box-shadow: 0 0 0 1px var(--bad); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -259,8 +260,21 @@ footer p { margin: 6px 0; }
               <option value="">เลือกนักฟิสิกส์</option>
               <option>จำเนียรพันธ์ เรือนศรี</option>
               <option>วันนิตา มะลิลา</option>
-              <option>วรรณวนัช สุมนาะัน</option>
+              <option>นัฐวุฒิ ยี่นาง</option>
+              <option>วรรณวนัช สุมนาพันธุ์</option>
+              <option value="__custom">อื่นๆ (กรอกเอง)</option>
+            </select>
+            <input id="physicistCustom" type="text" placeholder="ชื่อ-นามสกุล นักฟิสิกส์" hidden></div>
+          <div class="field"><label for="qaType" class="req">ชนิด QA</label>
+            <select id="qaType" required>
+              <option value="">เลือกชนิด QA</option>
+              <option>Monthly</option>
+              <option>Annually</option>
+              <option>หลังซ่อม</option>
             </select></div>
+          <div class="field note-field">
+            <label for="userNote">หมายเหตุ</label>
+            <textarea id="userNote" rows="2" style="min-height:0;font-family:var(--font-body)" placeholder="เช่น ปรับ output หลังเปลี่ยน magnetron, ใช้ phantom ชุดสำรอง"></textarea></div>
         </div>
         <div class="libnote" id="libNote"></div>
       </fieldset>
@@ -523,7 +537,7 @@ footer p { margin: 6px 0; }
   var FIELDS = ['date', 'physicist', 'chamberCustom', 'electrometerCustom', 'qMethod', 'qValue', 'm10', 'm20', 'mu',
     'ndw', 'kelec', 'kcross', 'kvol', 'kqMode', 'kqValue', 'kqTable', 'temp', 'pressure', 'pUnit',
     'readNormal', 'readOpposite', 'v1', 'v2', 'recomb', 'readLow', 'depthDose', 'zmax', 'expected', 'warnPct', 'tolPct',
-    'tempAfter', 'pressureAfter', 'readAfter'];
+    'tempAfter', 'pressureAfter', 'readAfter', 'physicistCustom', 'qaType', 'userNote'];
 
   var Q_METHODS = {
     photon: [['ratio', 'TPR20,10 จาก M20/M10'], ['tpr', 'TPR20,10 (ใส่ค่า)'], ['pdd', 'PDD20,10 → TPR20,10']],
@@ -560,6 +574,7 @@ footer p { margin: 6px 0; }
   function energyLabel() { var o = $('energySel').selectedOptions[0]; return o ? o.textContent : ''; }
   function chamberRow() { return byName(D.chambers, $('chamberSel').value); }
   function chamberName() { var c = chamberRow(); return c ? c.name : $('chamberCustom').value; }
+  function physicistName() { var v = $('physicist').value; return v === CUSTOM ? $('physicistCustom').value.trim() : v; }
   function electrometerName() { var v = $('electrometerSel').value; return v === CUSTOM ? $('electrometerCustom').value : v; }
   function kqLib() { return beam() === 'electron' ? D.kqElectron : D.kqPhoton; }
 
@@ -655,6 +670,7 @@ footer p { margin: 6px 0; }
     $('setupField').hidden = !photon;
     $('chamberCustom').hidden = $('chamberSel').value !== CUSTOM;
     $('electrometerCustom').hidden = $('electrometerSel').value !== CUSTOM;
+    $('physicistCustom').hidden = $('physicist').value !== CUSTOM;
     var m = $('qMethod').value;
     $('ratioBlock').hidden = m !== 'ratio';
     $('qValueField').hidden = m === 'ratio';
@@ -755,7 +771,9 @@ footer p { margin: 6px 0; }
       ['electrometerSel', 'เครื่องวัดประจุ', function () { return !!$('electrometerSel').value; }],
       ['electrometerCustom', 'รุ่นและ S/N เครื่องวัดประจุ', function () { return $('electrometerSel').value !== CUSTOM || !!$('electrometerCustom').value.trim(); }],
       ['date', 'วันที่วัด', function () { return !!$('date').value; }],
-      ['physicist', 'นักฟิสิกส์', function () { return !!$('physicist').value; }]
+      ['physicist', 'นักฟิสิกส์', function () { return !!$('physicist').value; }],
+      ['physicistCustom', 'ชื่อนักฟิสิกส์', function () { return $('physicist').value !== CUSTOM || !!$('physicistCustom').value.trim(); }],
+      ['qaType', 'ชนิด QA', function () { return !!$('qaType').value; }]
     ];
     var missing = [];
     checks.forEach(function (c) {
@@ -892,7 +910,7 @@ footer p { margin: 6px 0; }
     var line = function (k, v) { L.push((k + '                              ').slice(0, 30) + (v == null ? '' : v)); };
     L.push('TRS-398 OUTPUT CALIBRATION WORKSHEET (LPCH)');
     L.push('===========================================');
-    line('Date', m.date); line('Physicist', m.physicist);
+    line('Date', m.date); line('QA type', m.qaType); line('Physicist', physicistName());
     line('Accelerator', acc().name); line('Energy', energyLabel());
     line('Setup', photon ? i.setup + ' 100 cm' : 'SSD 100 cm');
     line('Chamber', chamberName()); line('Electrometer', electrometerName());
@@ -931,6 +949,7 @@ footer p { margin: 6px 0; }
       line('%Difference', isFinite(ra.deviation) ? (ra.deviation >= 0 ? '+' : '') + ra.deviation.toFixed(2) + ' %  [' + (ra.status || '').toUpperCase() + ']' : '—');
     }
     line('Data source', D.source || '');
+    if (m.userNote && m.userNote.trim()) { L.push(''); L.push('Remark: ' + m.userNote.trim()); }
     var notes = r.errors.concat(r.warnings, ra ? ra.errors.concat(ra.warnings) : []);
     if (notes.length) {
       L.push(''); L.push('Notes:');
@@ -1094,6 +1113,7 @@ footer p { margin: 6px 0; }
   function currentRecord() {
     return ReportLog.buildRecord({ inp: last.inp, r: last.r, aft: last.aft, ra: last.ra, meta: last.meta,
       accelerator: acc().name, energy: energyLabel(), chamber: chamberName(), electrometer: electrometerName(),
+      physicist: physicistName(), qaType: $('qaType').value, userNote: $('userNote').value.trim(),
       source: D.source || '', now: new Date() });
   }
   function fingerprint(rec) {
