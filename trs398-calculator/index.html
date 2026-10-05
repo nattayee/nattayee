@@ -49,6 +49,8 @@ body {
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; }
 
 header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 22px; }
+.req::after { content: " *"; color: var(--bad); }
+.field-missing { border-color: var(--bad) !important; box-shadow: 0 0 0 1px var(--bad); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .top-side { display: grid; gap: 10px; justify-items: end; }
 @media (max-width: 600px) { .top-side { justify-items: start; } }
@@ -245,14 +247,20 @@ footer p { margin: 6px 0; }
       <fieldset>
         <legend>เครื่องและอุปกรณ์ <small>จาก Sheet "0. List"</small></legend>
         <div class="grid">
-          <div class="field"><label for="accSel">เครื่องเร่งอนุภาค</label><select id="accSel"></select></div>
-          <div class="field"><label for="energySel">พลังงาน</label><select id="energySel"></select></div>
-          <div class="field"><label for="chamberSel">หัววัด</label><select id="chamberSel"></select>
+          <div class="field"><label for="accSel" class="req">เครื่องเร่งอนุภาค</label><select id="accSel" required></select></div>
+          <div class="field"><label for="energySel" class="req">พลังงาน</label><select id="energySel" required></select></div>
+          <div class="field"><label for="chamberSel" class="req">หัววัด</label><select id="chamberSel" required></select>
             <input id="chamberCustom" type="text" placeholder="รุ่นและ S/N หัววัด" hidden></div>
-          <div class="field"><label for="electrometerSel">เครื่องวัดประจุ</label><select id="electrometerSel"></select>
+          <div class="field"><label for="electrometerSel" class="req">เครื่องวัดประจุ</label><select id="electrometerSel" required></select>
             <input id="electrometerCustom" type="text" placeholder="รุ่นและ S/N" hidden></div>
-          <div class="field"><label for="date">วันที่วัด</label><input id="date" type="date"></div>
-          <div class="field"><label for="physicist">นักฟิสิกส์</label><input id="physicist" type="text" placeholder="ชื่อผู้วัด"></div>
+          <div class="field"><label for="date" class="req">วันที่วัด</label><input id="date" type="date" required></div>
+          <div class="field"><label for="physicist" class="req">นักฟิสิกส์</label>
+            <select id="physicist" required>
+              <option value="">เลือกนักฟิสิกส์</option>
+              <option>จำเนียรพันธ์ เรือนศรี</option>
+              <option>วันนิตา มะลิลา</option>
+              <option>วรรณวนัช สุมนาะัน</option>
+            </select></div>
         </div>
         <div class="libnote" id="libNote"></div>
       </fieldset>
@@ -737,6 +745,34 @@ footer p { margin: 6px 0; }
 
   var last = null;
 
+  // Required fields in "เครื่องและอุปกรณ์": returns the labels still empty and outlines those fields
+  function requiredMissing() {
+    var checks = [
+      ['accSel', 'เครื่องเร่งอนุภาค', function () { return !!$('accSel').value; }],
+      ['energySel', 'พลังงาน', function () { return !!$('energySel').value; }],
+      ['chamberSel', 'หัววัด', function () { return !!$('chamberSel').value; }],
+      ['chamberCustom', 'รุ่นและ S/N หัววัด', function () { return $('chamberSel').value !== CUSTOM || !!$('chamberCustom').value.trim(); }],
+      ['electrometerSel', 'เครื่องวัดประจุ', function () { return !!$('electrometerSel').value; }],
+      ['electrometerCustom', 'รุ่นและ S/N เครื่องวัดประจุ', function () { return $('electrometerSel').value !== CUSTOM || !!$('electrometerCustom').value.trim(); }],
+      ['date', 'วันที่วัด', function () { return !!$('date').value; }],
+      ['physicist', 'นักฟิสิกส์', function () { return !!$('physicist').value; }]
+    ];
+    var missing = [];
+    checks.forEach(function (c) {
+      var ok = c[2]();
+      $(c[0]).classList.toggle('field-missing', !ok);
+      if (!ok) missing.push({ id: c[0], label: c[1] });
+    });
+    return missing;
+  }
+  function blockIfMissing(show) {
+    var missing = requiredMissing();
+    if (!missing.length) return false;
+    show('กรอกหัวข้อ "เครื่องและอุปกรณ์" ให้ครบก่อน: ' + missing.map(function (m) { return m.label; }).join(', '));
+    $(missing[0].id).focus();
+    return true;
+  }
+
   function resetSendConfirm() {
     var b = $('sendBtn');
     if (b && b.dataset.confirm === '1') { b.dataset.confirm = ''; b.textContent = 'ส่งรายงานไปที่ Sheet'; }
@@ -838,7 +874,9 @@ footer p { margin: 6px 0; }
     }
     $('factors').innerHTML = h;
 
-    var errs = r.errors.concat(ra ? ra.errors : []), wrns = r.warnings.concat(ra ? ra.warnings : []);
+    var missing = requiredMissing();
+    var errs = (missing.length ? ['กรอกให้ครบ (เครื่องและอุปกรณ์): ' + missing.map(function (m) { return m.label; }).join(', ')] : [])
+      .concat(r.errors, ra ? ra.errors : []), wrns = r.warnings.concat(ra ? ra.warnings : []);
     var msgs = errs.map(function (m) { return '<li class="err">' + m + '</li>'; })
       .concat(wrns.map(function (m) { return '<li class="wrn">' + m + '</li>'; }));
     $('msgs').innerHTML = msgs.join('');
@@ -942,6 +980,7 @@ footer p { margin: 6px 0; }
     $('temp').focus();
   });
   $('copyBtn').addEventListener('click', function () {
+    if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
     var text = reportText(), ta = $('report');
     ta.value = text;
     var done = function (msg) { $('toast').textContent = msg; setTimeout(function () { $('toast').textContent = ''; }, 2500); };
@@ -1064,6 +1103,7 @@ footer p { margin: 6px 0; }
   function saveDest() { writeStore({ inbox: $('inboxId').value.trim(), log: $('logUrl').value.trim() }, DEST_KEY); $('logLink').href = $('logUrl').value.trim() || DEFAULT_LOG; }
 
   $('sendBtn').addEventListener('click', function () {
+    if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
     if (!last || !last.r.ok) { sendStatus('err', 'ผลการคำนวณยังไม่ครบ แก้รายการใน "ข้อควรตรวจสอบ" ก่อนส่ง'); return; }
     if (last.ra && !last.ra.ok) { sendStatus('err', 'ผลหลังปรับยังไม่ครบ กรอกให้ครบหรือยกเลิกการติ๊ก "ปรับ output แล้ววัดซ้ำ"'); return; }
     if (!mcpNs) { sendStatus('err', 'การส่งไปที่ Sheet ใช้ได้เมื่อเปิดหน้านี้ใน claude.ai ที่เชื่อม Google Drive ไว้ ตอนนี้ใช้ "คัดลอกรายงาน" แทนได้'); return; }
