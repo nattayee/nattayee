@@ -28,7 +28,8 @@
   function str(v) { return v == null ? '' : String(v).replace(/^'/, '').trim(); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-  function thDate(d) { try { return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }); } catch (e) { return ymd(d); } }
+  function loc() { return root.I18N ? root.I18N.locale() : 'th-TH'; }
+  function thDate(d) { try { return d.toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: '2-digit' }); } catch (e) { return ymd(d); } }
   function sgn(v, d) { return isFinite(v) ? (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d == null ? 2 : d) : '—'; }
 
   function toDate(v) {
@@ -263,7 +264,7 @@
     months.forEach(function (md, i) {
       if (i % every) return;
       var tx = svg('text', { x: x(md.getTime()), y: H - 8, 'text-anchor': 'middle', class: 'db-axis' });
-      try { tx.textContent = md.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' }); } catch (e) { tx.textContent = ymd(md).slice(0, 7); }
+      try { tx.textContent = md.toLocaleDateString(loc(), { month: 'short', year: '2-digit' }); } catch (e) { tx.textContent = ymd(md).slice(0, 7); }
       s.appendChild(tx);
     });
     // Band labels (text tokens, not status colours alone)
@@ -372,6 +373,8 @@
       cells.forEach(function (c, i) { tr.appendChild(el('td', i >= 5 ? 'num' : null, c)); });
       var res = el('td'); if (r.result) res.appendChild(el('span', 'chip ' + statusClass(r.result), r.result)); tr.appendChild(res);
       tr.appendChild(el('td', 'num', r.adjusted && isFinite(r.diffAfter) ? sgn(r.diffAfter) + '%' : ''));
+      tr.children[1].setAttribute('translate', 'no');   // machine name
+      tr.children[4].setAttribute('translate', 'no');   // physicist names
       var src = el('td'); src.appendChild(el('span', 'db-src ' + r.source, { log: 'Log', local: 'รอนำเข้า', demo: 'ตัวอย่าง' }[r.source]));
       if (r.note) src.title = r.note;
       tr.appendChild(src);
@@ -381,7 +384,12 @@
   }
 
   // ---- Loading ----
-  function setStatus(kind, text) { var p = $('dbStatus'); p.className = 'src-pill' + (kind ? ' ' + kind : ''); p.textContent = text; }
+  // text may be a function so a status with a time can be rebuilt in the other language
+  function setStatus(kind, text) {
+    S.status = [kind, text];
+    var p = $('dbStatus'); p.className = 'src-pill' + (kind ? ' ' + kind : '');
+    p.textContent = typeof text === 'function' ? text() : text;
+  }
 
   function errorText(err) {
     var code = err && err.code;
@@ -406,7 +414,7 @@
     setStatus('busy', 'กำลังอ่าน Log Sheet…');
     fetchLog(mcp, XLSX, id).then(function (rows) {
       S.log = rows; S.logAt = Date.now(); S.demo = false;
-      setStatus('live', 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }));
+      setStatus('live', function () { return 'Log Sheet · ' + rows.length + ' รายการ · ' + new Date(S.logAt).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' }); });
     }, function (err) {
       setStatus('err', errorText(err));
     }).then(function () { S.loaded = true; render(); });
@@ -442,5 +450,11 @@
     if (!S.loaded || (S.opts.getMcp() && !S.triedMcp)) load(); else render();
   }
 
-  root.Dashboard = { init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
+  // Rebuild language-dependent text (dates, status) after the language changes
+  function relang() {
+    if (S.status) setStatus(S.status[0], S.status[1]);
+    if (S.opts && S.loaded) render();
+  }
+
+  root.Dashboard = { relang: relang, init: init, show: show, refresh: function () { S.demo = false; load(); }, render: render, addLocal: addLocal, parseLogWorkbook: parseLogWorkbook, normalize: normalize };
 })(typeof self !== 'undefined' ? self : this);
