@@ -72,6 +72,12 @@ form > fieldset:nth-of-type(even) { background: var(--sec-purple); border-color:
 form > fieldset legend { background: inherit; border-radius: 4px; }
 input.is-empty, select.is-empty, textarea.is-empty, .check-list.is-empty { background: var(--fill-empty); border-color: var(--fill-empty-line); }
 input.is-filled, select.is-filled, textarea.is-filled, .check-list.is-filled { background: var(--fill-done); border-color: var(--fill-done-line); }
+form > fieldset { position: relative; }
+.sec-tag { position: absolute; top: -.8em; right: 14px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 1px 9px; border: 1px solid var(--line); border-radius: 999px; background: inherit;
+  font: 600 .72rem/1.5 var(--font-body); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sec-tag.inline { position: static; display: block; width: fit-content; max-width: 100%; margin: 0 0 8px auto; }
+@media (max-width: 600px) { .sec-tag { position: static; display: block; width: fit-content; max-width: 100%; margin: 0 0 8px auto; } }
 .req::after { content: " *"; color: var(--bad); }
 .field-missing { border-color: var(--bad) !important; box-shadow: 0 0 0 1px var(--bad); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -964,6 +970,34 @@ footer p { margin: 6px 0; }
     [].forEach.call(document.querySelectorAll('.sheet-name'), function (e) { if (e.textContent !== name) e.textContent = name || 'Google Sheet'; });
   }
 
+  // Machine · energy tag on every section, so the current beam stays in view while scrolling
+  function updateSecTags() {
+    var text = acc().name + ' · ' + energyLabel();
+    [].forEach.call(document.querySelectorAll('form#f > fieldset'), function (fs) {
+      var tag = fs.querySelector(':scope > .sec-tag');
+      if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'sec-tag';
+        tag.setAttribute('aria-hidden', 'true');   // the same information is in the Equipment fields
+        fs.insertBefore(tag, fs.querySelector(':scope > legend').nextSibling);
+      }
+      if (tag.textContent !== text) tag.textContent = text;
+      tag.title = text;
+    });
+    fitSecTags();
+  }
+  // A tag that would touch its section heading (long headings, English) drops to its own line
+  function fitSecTags() {
+    [].forEach.call(document.querySelectorAll('form#f > fieldset > .sec-tag'), function (tag) {
+      tag.classList.remove('inline');
+      if (getComputedStyle(tag).position !== 'absolute') return;
+      var t = tag.getBoundingClientRect(), l = tag.parentNode.querySelector(':scope > legend').getBoundingClientRect();
+      if (t.left < l.right + 8 && t.bottom > l.top && t.top < l.bottom) tag.classList.add('inline');
+    });
+  }
+  var fitTimer;
+  window.addEventListener('resize', function () { clearTimeout(fitTimer); fitTimer = setTimeout(fitSecTags, 120); });
+
   function resetSendConfirm() {
     var b = $('sendBtn');
     if (b && b.dataset.confirm === '1') { b.dataset.confirm = ''; b.textContent = 'ส่งรายงานไปที่ Sheet'; }
@@ -1075,6 +1109,7 @@ footer p { margin: 6px 0; }
 
     markEntryState();
     showSheetName();
+    updateSecTags();
     writeStore(last.meta);
   }
 
@@ -1444,6 +1479,7 @@ footer p { margin: 6px 0; }
     [].forEach.call(document.querySelectorAll('input[name="lang"]'), function (r) { r.checked = r.value === lang; });
     if (lastSource) setSource(lastSource[0], lastSource[1]);
     render();
+    fitSecTags();
     Dashboard.relang();
   });
   [].forEach.call(document.querySelectorAll('input[name="lang"]'), function (r) {
