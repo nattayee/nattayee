@@ -24,12 +24,20 @@
   --font-body: "IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --radius: 6px;
+  --sec-blue: #e8f1fd;  --sec-blue-line: #c4d8f5;
+  --sec-purple: #f0ebfc; --sec-purple-line: #d6cbf2;
+  --fill-empty: #fff4c2; --fill-empty-line: #e6cf6a;
+  --fill-done: #dcf3e2;  --fill-done-line: #8fcca2;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0c121d; --surface: #131b29; --ink: #e2e8f1; --muted: #93a0b4; --line: #26324a;
     --accent: #77a3ff; --accent-soft: #1a2742;
     --ok: #52c78a; --ok-soft: #12301f; --warn: #e3a93f; --warn-soft: #33270f; --bad: #ff7366; --bad-soft: #3a1714;
+    --sec-blue: #13213a;  --sec-blue-line: #253a5e;
+    --sec-purple: #1f1938; --sec-purple-line: #3a2f63;
+    --fill-empty: #3a3112; --fill-empty-line: #7a6522;
+    --fill-done: #123222;  --fill-done-line: #2f7049;
     color-scheme: dark;
   }
 }
@@ -37,6 +45,10 @@
   --bg: #0c121d; --surface: #131b29; --ink: #e2e8f1; --muted: #93a0b4; --line: #26324a;
   --accent: #77a3ff; --accent-soft: #1a2742;
   --ok: #52c78a; --ok-soft: #12301f; --warn: #e3a93f; --warn-soft: #33270f; --bad: #ff7366; --bad-soft: #3a1714;
+  --sec-blue: #13213a;  --sec-blue-line: #253a5e;
+  --sec-purple: #1f1938; --sec-purple-line: #3a2f63;
+  --fill-empty: #3a3112; --fill-empty-line: #7a6522;
+  --fill-done: #123222;  --fill-done-line: #2f7049;
   color-scheme: dark;
 }
 
@@ -52,6 +64,11 @@ header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: 
 .check-list { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
 .check-list:focus { outline: none; }
 .lbl small { font-weight: 400; color: var(--muted); }
+form > fieldset:nth-of-type(odd) { background: var(--sec-blue); border-color: var(--sec-blue-line); }
+form > fieldset:nth-of-type(even) { background: var(--sec-purple); border-color: var(--sec-purple-line); }
+form > fieldset legend { background: inherit; border-radius: 4px; }
+input.is-empty, select.is-empty, textarea.is-empty, .check-list.is-empty { background: var(--fill-empty); border-color: var(--fill-empty-line); }
+input.is-filled, select.is-filled, textarea.is-filled, .check-list.is-filled { background: var(--fill-done); border-color: var(--fill-done-line); }
 .req::after { content: " *"; color: var(--bad); }
 .field-missing { border-color: var(--bad) !important; box-shadow: 0 0 0 1px var(--bad); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -806,6 +823,20 @@ footer p { margin: 6px 0; }
     return true;
   }
 
+  // Entry fields: yellow while empty, green once filled. Optional fields stay neutral until used.
+  var OPTIONAL = { userNote: true };
+  function markEntryState() {
+    var controls = document.querySelectorAll('#f input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), #f select, #f textarea');
+    [].forEach.call(controls, function (el) {
+      var filled = String(el.value).trim() !== '';
+      el.classList.toggle('is-filled', filled);
+      el.classList.toggle('is-empty', !filled && !OPTIONAL[el.id]);
+    });
+    var any = physicistChecked().length > 0;
+    $('physicist').classList.toggle('is-filled', any);
+    $('physicist').classList.toggle('is-empty', !any);
+  }
+
   function resetSendConfirm() {
     var b = $('sendBtn');
     if (b && b.dataset.confirm === '1') { b.dataset.confirm = ''; b.textContent = 'ส่งรายงานไปที่ Sheet'; }
@@ -915,6 +946,7 @@ footer p { margin: 6px 0; }
     $('msgs').innerHTML = msgs.join('');
     $('msgCard').hidden = msgs.length === 0;
 
+    markEntryState();
     writeStore(last.meta);
   }
 
