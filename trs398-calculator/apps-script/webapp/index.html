@@ -2117,6 +2117,7 @@ window.LPCH_DATA = {
     'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่': 'Checking your Gmail sign-in — try again in a moment',
     'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน': 'Sign in with an authorised Gmail account before saving reports',
     'บันทึกลงแท็บ Log แล้ว:': 'Saved to the Log tab:',
+    'ล้างค่าการวัดแล้ว พร้อมวัดครั้งถัดไป': 'Readings cleared, ready for the next measurement',
     'รายงานนี้มีอยู่ใน Log แล้ว:': 'This report is already in the Log:',
     'เปิด Log Sheet': 'Open Log Sheet',
     'ส่งแล้ว:': 'Sent:',
@@ -2869,10 +2870,16 @@ window.LPCH_DATA = {
   $('f').addEventListener('submit', function (e) { e.preventDefault(); });
   $('exPhoton').addEventListener('click', function () { useExample('photon'); });
   $('exElectron').addEventListener('click', function () { useExample('electron'); });
-  $('clearAll').addEventListener('click', function () {
-    ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure', 'readAfter', 'tempAfter', 'pressureAfter'].forEach(function (k) { $(k).value = ''; });
+  // Clears what is measured each time; machine, chamber, physicists, QA type, date and criteria stay
+  var MEASURED = ['m10', 'm20', 'readNormal', 'readOpposite', 'readLow', 'temp', 'pressure', 'readAfter', 'tempAfter', 'pressureAfter'];
+  function clearMeasurements(afterSend) {
+    MEASURED.forEach(function (k) { $(k).value = ''; });
+    if (afterSend) { $('userNote').value = ''; $('useAfter').checked = false; }
     $('noticeText').textContent = 'ล้างค่าการวัดแล้ว ข้อมูลเครื่อง หัววัด และเกณฑ์ยังคงอยู่';
     render();
+  }
+  $('clearAll').addEventListener('click', function () {
+    clearMeasurements(false);
     $('temp').focus();
   });
   $('copyBtn').addEventListener('click', function () {
@@ -3028,14 +3035,18 @@ window.LPCH_DATA = {
       if (res.appended || res.duplicate) {
         // Apps Script web app: the row is already in the Log tab
         Dashboard.invalidate();
+        clearMeasurements(true);
         sendStatus('ok', (res.duplicate ? 'รายงานนี้มีอยู่ใน Log แล้ว: ' : 'บันทึกลงแท็บ Log แล้ว: ') + '<strong>' + escapeHtml(rec.id) + '</strong>' +
-          (res.url ? ' · <a href="' + escapeHtml(res.url) + '" target="_blank" rel="noopener">เปิด Log Sheet</a>' : ''));
+          (res.url ? ' · <a href="' + escapeHtml(res.url) + '" target="_blank" rel="noopener">เปิด Log Sheet</a>' : '') +
+          '<span>ล้างค่าการวัดแล้ว พร้อมวัดครั้งถัดไป</span>');
         return;
       }
       if (window.Dashboard) Dashboard.addLocal(rec);
+      clearMeasurements(true);
       sendStatus('ok', 'ส่งแล้ว: <strong>' + escapeHtml(rec.id) + '</strong>' +
         (res.url ? ' · <a href="' + escapeHtml(res.url) + '" target="_blank" rel="noopener">ดูไฟล์รายงาน</a>' : '') +
-        '<span>จะเข้าแท็บ Log ภายใน 5 นาที (หรือเมนู TRS-398 → นำเข้ารายงานตอนนี้ ใน Log Sheet)</span>');
+        '<span>จะเข้าแท็บ Log ภายใน 5 นาที (หรือเมนู TRS-398 → นำเข้ารายงานตอนนี้ ใน Log Sheet)</span>' +
+        '<span>ล้างค่าการวัดแล้ว พร้อมวัดครั้งถัดไป</span>');
     }, function (err) {
       var e = err && err.code ? err : { code: 'upstream_error', message: err && err.message };
       var msg = driveErrorText(e);

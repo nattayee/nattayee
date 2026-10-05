@@ -234,6 +234,7 @@
     'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่': 'Checking your Gmail sign-in — try again in a moment',
     'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน': 'Sign in with an authorised Gmail account before saving reports',
     'บันทึกลงแท็บ Log แล้ว:': 'Saved to the Log tab:',
+    'ล้างค่าการวัดแล้ว พร้อมวัดครั้งถัดไป': 'Readings cleared, ready for the next measurement',
     'รายงานนี้มีอยู่ใน Log แล้ว:': 'This report is already in the Log:',
     'เปิด Log Sheet': 'Open Log Sheet',
     'ส่งแล้ว:': 'Sent:',
