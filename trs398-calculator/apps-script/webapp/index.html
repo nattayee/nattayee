@@ -1458,7 +1458,9 @@ window.LPCH_DATA = {
   function sgn(v, d) { return isFinite(v) ? (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d == null ? 2 : d) : '—'; }
 
   function toDate(v) {
-    if (v instanceof Date && !isNaN(v)) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+    // Dates are read as spreadsheet serial numbers (SheetJS cellDates shifts them by the 1899 Bangkok
+    // offset, +6:42, so 25 Jan became 24 Jan 23:59 here). A Date that still arrives is rounded to its nearest day.
+    if (v instanceof Date && !isNaN(v)) { var r = new Date(v.getTime() + 12 * 3600 * 1000); return new Date(r.getFullYear(), r.getMonth(), r.getDate()); }
     if (typeof v === 'number' && isFinite(v) && v > 20000 && v < 80000) {   // spreadsheet serial day
       var d = new Date(Math.round((v - 25569) * DAY));
       return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -1508,7 +1510,7 @@ window.LPCH_DATA = {
         if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { /* raw text */ } }
         var b64 = p && typeof p === 'object' ? p.content : null;
         if (!b64) throw { code: 'bad_shape', message: 'ผลลัพธ์จาก Google Drive ไม่มีเนื้อไฟล์' };
-        return parseLogWorkbook(XLSX, XLSX.read(b64, { type: 'base64', cellDates: true }));
+        return parseLogWorkbook(XLSX, XLSX.read(b64, { type: 'base64' }));
       });
   }
 
@@ -1851,7 +1853,7 @@ window.LPCH_DATA = {
     var reader = new FileReader();
     reader.onload = function () {
       try {
-        S.log = parseLogWorkbook(XLSX, XLSX.read(new Uint8Array(reader.result), { type: 'array', cellDates: true }));
+        S.log = parseLogWorkbook(XLSX, XLSX.read(new Uint8Array(reader.result), { type: 'array' }));
         S.demo = false;
         setStatus('file', file.name + ' · ' + S.log.length + ' รายการ');
       } catch (e) { setStatus('err', 'อ่านไฟล์ไม่ได้: ' + e.message); }
