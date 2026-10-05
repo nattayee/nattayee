@@ -15,7 +15,7 @@
 
   // [key, header]. "Report ID" must stay first: the importer uses it to skip duplicates.
   var COLUMNS = [
-    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['qaType', 'ชนิด QA'], ['physicist', 'นักฟิสิกส์'],
+    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['qaType', 'ชนิด QA'], ['physicist', 'นักฟิสิกส์'], ['userEmail', 'ผู้บันทึก (Gmail)'],
     ['accelerator', 'เครื่อง'], ['energy', 'พลังงาน'], ['beam', 'ชนิดลำรังสี'], ['setup', 'Setup'],
     ['chamber', 'หัววัด'], ['electrometer', 'เครื่องวัดประจุ'], ['mu', 'MU'],
     ['qLabel', 'ดัชนีคุณภาพ'], ['q', 'TPR20,10 / R50'], ['zref', 'z_ref (g/cm²)'], ['zmax', 'z_max (g/cm²)'],
@@ -46,7 +46,7 @@
   }
 
   /*
-   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, physicist, qaType, userNote, source, now }
+   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, physicist, qaType, userNote, userEmail, source, now }
    * (inp/r/aft/ra are the calculation inputs/results from TRS398.calculate / calculateAfter)
    */
   function buildRecord(ctx) {
@@ -58,7 +58,7 @@
     var rec = {
       id: makeId(now, ctx.accelerator, ctx.energy),
       savedAt: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()),
-      date: m.date || '', qaType: ctx.qaType || '', physicist: ctx.physicist || m.physicist || '',
+      date: m.date || '', qaType: ctx.qaType || '', userEmail: ctx.userEmail || '', physicist: ctx.physicist || m.physicist || '',
       accelerator: ctx.accelerator || '', energy: ctx.energy || '', beam: photon ? 'Photon' : 'Electron',
       setup: photon ? i.setup + ' 100 cm' : 'SSD 100 cm',
       chamber: ctx.chamber || '', electrometer: ctx.electrometer || '', mu: isFinite(i.mu) ? i.mu : '',

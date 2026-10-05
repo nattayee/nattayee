@@ -84,6 +84,11 @@ form > fieldset { position: relative; }
 .top-side { display: grid; gap: 10px; justify-items: end; }
 @media (max-width: 600px) { .top-side { justify-items: start; } }
 html[lang="en"] legend, html[lang="en"] .card h2, html[lang="en"] .db-card h2, html[lang="en"] .headline .k { text-transform: none; }
+.user-badge { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.user-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.user-badge strong { color: var(--ink); font-weight: 600; word-break: break-all; }
+.user-badge.err::before { background: var(--bad); }
+.user-badge.err strong { color: var(--bad); }
 .top-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 600px) { .top-controls { justify-content: flex-start; } }
 .lang-seg label { padding: 6px 12px; font-weight: 600; }
@@ -306,6 +311,7 @@ footer p { margin: 6px 0; }
       </div>
     </div>
     <div class="top-side">
+      <div class="user-badge" id="userBadge" hidden><span>เข้าสู่ระบบเป็น</span> <strong id="userEmail" translate="no"></strong></div>
       <div class="top-controls">
       <div class="seg lang-seg" role="radiogroup" aria-label="ภาษา" translate="no">
         <label title="ภาษาไทย"><input type="radio" name="lang" value="th" checked>ไทย</label>
@@ -1129,6 +1135,7 @@ footer p { margin: 6px 0; }
     L.push('TRS-398 OUTPUT CALIBRATION WORKSHEET (LPCH)');
     L.push('===========================================');
     line('Date', m.date); line('QA type', m.qaType); line('Physicist', physicistName());
+    if (window.TRS398_USER) line('Recorded by (Gmail)', window.TRS398_USER);
     line('Accelerator', acc().name); line('Energy', energyLabel());
     line('Setup', photon ? i.setup + ' 100 cm' : 'SSD 100 cm');
     line('Chamber', chamberName()); line('Electrometer', electrometerName());
@@ -1335,6 +1342,7 @@ footer p { margin: 6px 0; }
     return ReportLog.buildRecord({ inp: last.inp, r: last.r, aft: last.aft, ra: last.ra, meta: last.meta,
       accelerator: acc().name, energy: energyLabel(), chamber: chamberName(), electrometer: electrometerName(),
       physicist: physicistName(), qaType: $('qaType').value, userNote: $('userNote').value.trim(),
+      userEmail: window.TRS398_USER || '',
       source: D.source || '', now: new Date() });
   }
   function fingerprint(rec) {
@@ -1345,6 +1353,10 @@ footer p { margin: 6px 0; }
 
   $('sendBtn').addEventListener('click', function () {
     if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
+    if (window.TRS398_HOST === 'apps-script' && !window.TRS398_USER) {
+      sendStatus('err', window.TRS398_USER === null ? 'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่' : 'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน');
+      return;
+    }
     if (!last || !last.r.ok) { sendStatus('err', 'ผลการคำนวณยังไม่ครบ แก้รายการใน "ข้อควรตรวจสอบ" ก่อนส่ง'); return; }
     if (last.ra && !last.ra.ok) { sendStatus('err', 'ผลหลังปรับยังไม่ครบ กรอกให้ครบหรือยกเลิกการติ๊ก "ปรับ output แล้ววัดซ้ำ"'); return; }
     if (!mcpNs) { sendStatus('err', 'การส่งไปที่ Sheet ใช้ได้เมื่อเปิดหน้านี้ใน claude.ai ที่เชื่อม Google Drive ไว้ ตอนนี้ใช้ "คัดลอกรายงาน" แทนได้'); return; }

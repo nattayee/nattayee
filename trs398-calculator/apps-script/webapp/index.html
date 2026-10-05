@@ -85,6 +85,11 @@ form > fieldset { position: relative; }
 .top-side { display: grid; gap: 10px; justify-items: end; }
 @media (max-width: 600px) { .top-side { justify-items: start; } }
 html[lang="en"] legend, html[lang="en"] .card h2, html[lang="en"] .db-card h2, html[lang="en"] .headline .k { text-transform: none; }
+.user-badge { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.user-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.user-badge strong { color: var(--ink); font-weight: 600; word-break: break-all; }
+.user-badge.err::before { background: var(--bad); }
+.user-badge.err strong { color: var(--bad); }
 .top-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 600px) { .top-controls { justify-content: flex-start; } }
 .lang-seg label { padding: 6px 12px; font-weight: 600; }
@@ -307,6 +312,7 @@ footer p { margin: 6px 0; }
       </div>
     </div>
     <div class="top-side">
+      <div class="user-badge" id="userBadge" hidden><span>เข้าสู่ระบบเป็น</span> <strong id="userEmail" translate="no"></strong></div>
       <div class="top-controls">
       <div class="seg lang-seg" role="radiogroup" aria-label="ภาษา" translate="no">
         <label title="ภาษาไทย"><input type="radio" name="lang" value="th" checked>ไทย</label>
@@ -693,10 +699,14 @@ footer p { margin: 6px 0; }
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
 
-  // Show the Google account the web app runs as, and point the Log link/field at that account's Log
+  // Signed-in Gmail: shown in the header, stamped on reports; Log link/field point at the shared Log
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the sign-in is confirmed
   google.script.run
     .withSuccessHandler(function (info) {
       if (!info) return;
+      window.TRS398_USER = info.account || '';
+      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
+      if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
       if (logUrl && info.logUrl) {
         logUrl.value = info.logUrl;
@@ -706,15 +716,22 @@ footer p { margin: 6px 0; }
       var foot = document.querySelector('footer');
       if (foot) {
         var p = document.createElement('p');
-        p.appendChild(document.createTextNode('บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน: '));
+        p.appendChild(document.createTextNode('ข้อมูลหลักและ Log เป็นของ '));
         var b = document.createElement('strong');
         b.setAttribute('translate', 'no');
-        b.textContent = info.account || '';
+        b.textContent = info.owner || '';
         p.appendChild(b);
         foot.insertBefore(p, foot.firstChild);
       }
     })
     .withFailureHandler(function (err) {
+      window.TRS398_USER = '';
+      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
+      if (badge && who) {
+        who.textContent = (err && err.message) || String(err);
+        var lead = badge.querySelector('span'); if (lead) lead.hidden = true;   // show only the reason
+        badge.hidden = false; badge.classList.add('err');
+      }
       var foot = document.querySelector('footer');
       if (!foot) return;
       var p = document.createElement('p');
@@ -1295,7 +1312,7 @@ window.LPCH_DATA = {
 
   // [key, header]. "Report ID" must stay first: the importer uses it to skip duplicates.
   var COLUMNS = [
-    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['qaType', 'ชนิด QA'], ['physicist', 'นักฟิสิกส์'],
+    ['id', 'Report ID'], ['savedAt', 'บันทึกเมื่อ'], ['date', 'วันที่วัด'], ['qaType', 'ชนิด QA'], ['physicist', 'นักฟิสิกส์'], ['userEmail', 'ผู้บันทึก (Gmail)'],
     ['accelerator', 'เครื่อง'], ['energy', 'พลังงาน'], ['beam', 'ชนิดลำรังสี'], ['setup', 'Setup'],
     ['chamber', 'หัววัด'], ['electrometer', 'เครื่องวัดประจุ'], ['mu', 'MU'],
     ['qLabel', 'ดัชนีคุณภาพ'], ['q', 'TPR20,10 / R50'], ['zref', 'z_ref (g/cm²)'], ['zmax', 'z_max (g/cm²)'],
@@ -1326,7 +1343,7 @@ window.LPCH_DATA = {
   }
 
   /*
-   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, physicist, qaType, userNote, source, now }
+   * ctx: { inp, r, aft, ra, meta, accelerator, energy, chamber, electrometer, physicist, qaType, userNote, userEmail, source, now }
    * (inp/r/aft/ra are the calculation inputs/results from TRS398.calculate / calculateAfter)
    */
   function buildRecord(ctx) {
@@ -1338,7 +1355,7 @@ window.LPCH_DATA = {
     var rec = {
       id: makeId(now, ctx.accelerator, ctx.energy),
       savedAt: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()),
-      date: m.date || '', qaType: ctx.qaType || '', physicist: ctx.physicist || m.physicist || '',
+      date: m.date || '', qaType: ctx.qaType || '', userEmail: ctx.userEmail || '', physicist: ctx.physicist || m.physicist || '',
       accelerator: ctx.accelerator || '', energy: ctx.energy || '', beam: photon ? 'Photon' : 'Electron',
       setup: photon ? i.setup + ' 100 cm' : 'SSD 100 cm',
       chamber: ctx.chamber || '', electrometer: ctx.electrometer || '', mu: isFinite(i.mu) ? i.mu : '',
@@ -2095,6 +2112,10 @@ window.LPCH_DATA = {
     ') กด "ยืนยันส่งซ้ำ" ถ้าต้องการบันทึกอีกแถว': ') — press "Confirm resend" to log another row',
     'กำลังส่ง': 'Sending',
     'บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน:': 'Google account used to read data and save reports:',
+    'ข้อมูลหลักและ Log เป็นของ': 'Master data and Log belong to',
+    'เข้าสู่ระบบเป็น': 'Signed in as',
+    'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่': 'Checking your Gmail sign-in — try again in a moment',
+    'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน': 'Sign in with an authorised Gmail account before saving reports',
     'บันทึกลงแท็บ Log แล้ว:': 'Saved to the Log tab:',
     'รายงานนี้มีอยู่ใน Log แล้ว:': 'This report is already in the Log:',
     'เปิด Log Sheet': 'Open Log Sheet',
@@ -2766,6 +2787,7 @@ window.LPCH_DATA = {
     L.push('TRS-398 OUTPUT CALIBRATION WORKSHEET (LPCH)');
     L.push('===========================================');
     line('Date', m.date); line('QA type', m.qaType); line('Physicist', physicistName());
+    if (window.TRS398_USER) line('Recorded by (Gmail)', window.TRS398_USER);
     line('Accelerator', acc().name); line('Energy', energyLabel());
     line('Setup', photon ? i.setup + ' 100 cm' : 'SSD 100 cm');
     line('Chamber', chamberName()); line('Electrometer', electrometerName());
@@ -2972,6 +2994,7 @@ window.LPCH_DATA = {
     return ReportLog.buildRecord({ inp: last.inp, r: last.r, aft: last.aft, ra: last.ra, meta: last.meta,
       accelerator: acc().name, energy: energyLabel(), chamber: chamberName(), electrometer: electrometerName(),
       physicist: physicistName(), qaType: $('qaType').value, userNote: $('userNote').value.trim(),
+      userEmail: window.TRS398_USER || '',
       source: D.source || '', now: new Date() });
   }
   function fingerprint(rec) {
@@ -2982,6 +3005,10 @@ window.LPCH_DATA = {
 
   $('sendBtn').addEventListener('click', function () {
     if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
+    if (window.TRS398_HOST === 'apps-script' && !window.TRS398_USER) {
+      sendStatus('err', window.TRS398_USER === null ? 'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่' : 'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน');
+      return;
+    }
     if (!last || !last.r.ok) { sendStatus('err', 'ผลการคำนวณยังไม่ครบ แก้รายการใน "ข้อควรตรวจสอบ" ก่อนส่ง'); return; }
     if (last.ra && !last.ra.ok) { sendStatus('err', 'ผลหลังปรับยังไม่ครบ กรอกให้ครบหรือยกเลิกการติ๊ก "ปรับ output แล้ววัดซ้ำ"'); return; }
     if (!mcpNs) { sendStatus('err', 'การส่งไปที่ Sheet ใช้ได้เมื่อเปิดหน้านี้ใน claude.ai ที่เชื่อม Google Drive ไว้ ตอนนี้ใช้ "คัดลอกรายงาน" แทนได้'); return; }

@@ -2,12 +2,19 @@
  * TRS-398 Output Calibration — Google Apps Script web app. This is the only file the project needs.
  * The page itself (index.html) is loaded from GitHub, so app updates arrive without re-pasting.
  *
- * Everything runs as nattayee@gmail.com: create this project while signed in as nattayee,
- * run setup() once, then Deploy → New deployment → Web app (Execute as: Me).
- * The Output Log lives in nattayee's own Drive; setup() creates it and copies the old log's rows.
+ * Users sign in with their Google (Gmail) account before the page opens, and every report records who saved it.
+ *   1. Create this project signed in as nattayee@gmail.com and run setup() once: it creates the Output Log
+ *      in nattayee's Drive (copying the old log's rows) and shares it with EDITORS.
+ *   2. Deploy → New deployment → Web app
+ *      Execute as: "User accessing the web app"   Who has access: "Anyone with Google account"
+ *   Each user approves the app once. Files stay owned by nattayee; users need edit access to the Log.
  */
 var WEBAPP = {
   OWNER_EMAIL: 'nattayee@gmail.com',
+  // Gmail accounts allowed to save reports. setup()/shareLog() give them edit access to the Log.
+  // Leave empty to allow anyone who already has edit access to the Log.
+  EDITORS: ['nattayee@gmail.com'],
+  USER_HEADER: 'ผู้บันทึก (Gmail)',
   PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/index.html',
   MASTER_SHEET_ID: '1t8KCsJtuv3vVzqRT_uWblHEDWYARuB1KU5gqVUTpt4w',   // TG398 LPCH (master data, owned by nattayee)
   OLD_LOG_SHEET_ID: '1UpWd0zPjEDnKIuV1q6j5O4CDemNt0BbYkbFWMIudTL8',  // first Output Log (other account): rows are copied once
@@ -19,44 +26,54 @@ var WEBAPP = {
   TITLE: 'TRS-398 Output Calibration · Lampang Cancer Hospital',
   CACHE_SECONDS: 600,
   LOG_HEADERS: [
-    'Report ID', 'บันทึกเมื่อ', 'วันที่วัด', 'ชนิด QA', 'นักฟิสิกส์', 'เครื่อง',
-    'พลังงาน', 'ชนิดลำรังสี', 'Setup', 'หัววัด', 'เครื่องวัดประจุ', 'MU',
-    'ดัชนีคุณภาพ', 'TPR20,10 / R50', 'z_ref (g/cm²)', 'z_max (g/cm²)', 'N_D,w (cGy/nC)', 'ที่มาของ k_Q',
-    'k_Q,Q0', 'k_Q,Qcross', 'T (°C)', 'P', 'หน่วย P', 'M1 (nC)',
-    '-M1 (nC)', 'M2 (nC)', 'V1 (V)', 'V2 (V)', 'k_TP', 'k_pol',
-    'k_s', 'k_elec', 'k_vol', 'M_Q (nC)', 'TMR/PDD', 'TMR/PDD(z_ref)',
-    'D_w(z_ref) (cGy/MU)', 'Output (cGy/MU)', 'Expected (cGy/MU)', '%Diff', 'ผล', 'ปรับเครื่อง',
-    'T หลังปรับ (°C)', 'P หลังปรับ', 'M1 หลังปรับ (nC)', 'k_TP หลังปรับ', 'Output หลังปรับ (cGy/MU)', '%Diff หลังปรับ',
-    'ผลหลังปรับ', 'แหล่งข้อมูลหลัก', 'หมายเหตุ', 'หมายเหตุผู้วัด'
+    'Report ID', 'บันทึกเมื่อ', 'วันที่วัด', 'ชนิด QA', 'นักฟิสิกส์', 'ผู้บันทึก (Gmail)',
+    'เครื่อง', 'พลังงาน', 'ชนิดลำรังสี', 'Setup', 'หัววัด', 'เครื่องวัดประจุ',
+    'MU', 'ดัชนีคุณภาพ', 'TPR20,10 / R50', 'z_ref (g/cm²)', 'z_max (g/cm²)', 'N_D,w (cGy/nC)',
+    'ที่มาของ k_Q', 'k_Q,Q0', 'k_Q,Qcross', 'T (°C)', 'P', 'หน่วย P',
+    'M1 (nC)', '-M1 (nC)', 'M2 (nC)', 'V1 (V)', 'V2 (V)', 'k_TP',
+    'k_pol', 'k_s', 'k_elec', 'k_vol', 'M_Q (nC)', 'TMR/PDD',
+    'TMR/PDD(z_ref)', 'D_w(z_ref) (cGy/MU)', 'Output (cGy/MU)', 'Expected (cGy/MU)', '%Diff', 'ผล',
+    'ปรับเครื่อง', 'T หลังปรับ (°C)', 'P หลังปรับ', 'M1 หลังปรับ (nC)', 'k_TP หลังปรับ', 'Output หลังปรับ (cGy/MU)',
+    '%Diff หลังปรับ', 'ผลหลังปรับ', 'แหล่งข้อมูลหลัก', 'หมายเหตุ', 'หมายเหตุผู้วัด'
   ]
 };
 
 // ---------------------------------------------------------------- account
 
+/** The signed-in Gmail of the person using the app (deployed as "User accessing the web app"). */
 function account_() {
-  try { return String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
+  try { return String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
 }
-/** Stops with a clear message when the script runs under any account other than nattayee. */
+/** Every call from the page needs a signed-in Google account, and an allowed one when EDITORS is set. */
+function requireUser_() {
+  var me = account_();
+  if (!me) throw new Error('กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน');
+  var allowed = WEBAPP.EDITORS.map(function (e) { return String(e).toLowerCase(); });
+  if (allowed.length && allowed.indexOf(me) < 0) {
+    throw new Error('บัญชี ' + me + ' ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อ ' + WEBAPP.OWNER_EMAIL + ' เพื่อเพิ่มใน EDITORS');
+  }
+  return me;
+}
+/** Creating and sharing the Output Log is only for nattayee, so it stays in nattayee's Drive. */
 function requireOwner_() {
   var me = account_();
   if (me !== WEBAPP.OWNER_EMAIL) {
-    throw new Error('สคริปต์กำลังทำงานด้วยบัญชี ' + (me || '(ไม่ทราบ)') + ' ต้องใช้ ' + WEBAPP.OWNER_EMAIL +
-      ' : เปิดโปรเจกต์นี้ด้วยบัญชี ' + WEBAPP.OWNER_EMAIL + ' แล้ว Deploy ใหม่ (Execute as: Me)');
+    throw new Error('ต้องรันด้วยบัญชี ' + WEBAPP.OWNER_EMAIL + ' (ตอนนี้คือ ' + (me || 'ไม่ทราบ') + ')');
   }
 }
 
 // ---------------------------------------------------------------- page
 
 function doGet() {
-  var me = account_();
-  if (me !== WEBAPP.OWNER_EMAIL) {
+  if (!account_()) {
+    // Only reached when the deployment does not require sign-in: ask for a Google login first
+    var back = ScriptApp.getService().getUrl();
     return HtmlService.createHtmlOutput(
       '<div style="font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px">' +
-      '<h2>เว็บแอปนี้ถูก Deploy ด้วยบัญชีอื่น</h2>' +
-      '<p>ตอนนี้ทำงานด้วยบัญชี <b>' + (me || '(ไม่ทราบ)') + '</b> แต่ต้องใช้ <b>' + WEBAPP.OWNER_EMAIL + '</b> ในการดึงข้อมูลและบันทึกรายงาน</p>' +
-      '<ol><li>ลงชื่อเข้า script.google.com ด้วย ' + WEBAPP.OWNER_EMAIL + '</li>' +
-      '<li>สร้างโปรเจกต์ใหม่ วางโค้ด WebApp.gs แล้วรันฟังก์ชัน <code>setup</code></li>' +
-      '<li>Deploy → New deployment → Web app → Execute as: <b>Me</b></li></ol></div>'
+      '<h2>กรุณาเข้าสู่ระบบด้วย Gmail</h2>' +
+      '<p>ต้องเข้าสู่ระบบด้วยบัญชี Google ก่อนใช้ TRS-398 Output Calibration เพื่อบันทึกชื่อผู้บันทึกในรายงาน</p>' +
+      '<p><a target="_top" href="https://accounts.google.com/ServiceLogin?continue=' + encodeURIComponent(back) + '">เข้าสู่ระบบ Google</a></p>' +
+      '<p style="color:#666;font-size:14px">ผู้ดูแล: Deploy เป็น Web app แบบ Execute as "User accessing the web app" และ Who has access "Anyone with Google account"</p></div>'
     ).setTitle(WEBAPP.TITLE);
   }
   return HtmlService.createHtmlOutput(loadPage_())
@@ -95,7 +112,7 @@ function setup() {
   requireOwner_();
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty('LOG_SHEET_ID');
-  if (id && ownedByMe_(id)) {
+  if (id && ownerOf_(id) === WEBAPP.OWNER_EMAIL) {
     Logger.log('ใช้ Log ของ ' + WEBAPP.OWNER_EMAIL + ' อยู่แล้ว: ' + SpreadsheetApp.openById(id).getUrl());
     return SpreadsheetApp.openById(id).getUrl();
   }
@@ -119,18 +136,30 @@ function setup() {
   sheet.setFrozenColumns(1);
 
   props.setProperty('LOG_SHEET_ID', ss.getId());
+  shareLog();
   Logger.log('สร้าง Log ใหม่ใน Drive ของ ' + WEBAPP.OWNER_EMAIL + ' (คัดลอก ' + (rows.length - 1) + ' แถว): ' + ss.getUrl());
   return ss.getUrl();
 }
 
-function ownedByMe_(fileId) {
-  try { return DriveApp.getFileById(fileId).getOwner().getEmail().toLowerCase() === WEBAPP.OWNER_EMAIL; } catch (e) { return false; }
+/** Run as nattayee after changing EDITORS: gives every listed Gmail edit access to the Log. */
+function shareLog() {
+  requireOwner_();
+  var id = PropertiesService.getScriptProperties().getProperty('LOG_SHEET_ID');
+  if (!id) throw new Error('ยังไม่มี Log ให้รัน setup ก่อน');
+  var others = WEBAPP.EDITORS.filter(function (e) { return String(e).toLowerCase() !== WEBAPP.OWNER_EMAIL; });
+  if (others.length) DriveApp.getFileById(id).addEditors(others);
+  Logger.log('Log แชร์ให้แก้ไขได้: ' + (others.join(', ') || '(ไม่มีรายชื่อเพิ่ม)'));
+}
+
+function ownerOf_(fileId) {
+  try { return DriveApp.getFileById(fileId).getOwner().getEmail().toLowerCase(); } catch (e) { return ''; }
 }
 
 /** The log the web app writes to: nattayee's own copy, created on first use if setup() was not run. */
 function logId_() {
   var id = PropertiesService.getScriptProperties().getProperty('LOG_SHEET_ID');
-  if (id && ownedByMe_(id)) return id;
+  if (id) return id;
+  if (account_() !== WEBAPP.OWNER_EMAIL) throw new Error('ยังไม่ได้ตั้งค่า Log: ให้ ' + WEBAPP.OWNER_EMAIL + ' รันฟังก์ชัน setup ก่อน');
   setup();
   return PropertiesService.getScriptProperties().getProperty('LOG_SHEET_ID');
 }
@@ -139,39 +168,47 @@ function logId_() {
 
 /** Account and log in use, shown on the page. */
 function apiInfo() {
-  requireOwner_();
+  var me = requireUser_();
   var id = logId_();
-  return { account: account_(), logId: id, logUrl: SpreadsheetApp.openById(id).getUrl(), masterId: WEBAPP.MASTER_SHEET_ID };
+  return { account: me, owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }
 
 /** Master Sheet as .xlsx (base64); any other id is answered with nattayee's Output Log. */
 function apiExportXlsx(fileId) {
-  requireOwner_();
+  requireUser_();
   var id = fileId === WEBAPP.MASTER_SHEET_ID ? WEBAPP.MASTER_SHEET_ID : logId_();
   var title = DriveApp.getFileById(id).getName();   // also grants the Drive scope used below
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + id + '/export?format=xlsx', {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     muteHttpExceptions: true
   });
+  if (res.getResponseCode() === 403 || res.getResponseCode() === 404) {
+    throw new Error('บัญชี ' + account_() + ' ไม่มีสิทธิ์เปิดไฟล์นี้ ขอให้ ' + WEBAPP.OWNER_EMAIL + ' แชร์ Log ให้ (รัน shareLog)');
+  }
   if (res.getResponseCode() !== 200) throw new Error('ส่งออก .xlsx ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
   return { content: Utilities.base64Encode(res.getBlob().getBytes()), title: title, id: id };
 }
 
 /** Appends one report (two-row CSV: headers + values) to the Log tab by header name; skips known Report IDs. */
 function apiAppendReport(csvText) {
-  requireOwner_();
+  var me = requireUser_();
   var rows = Utilities.parseCsv(String(csvText || ''));
   if (rows.length < 2) throw new Error('รายงานว่างเปล่า');
   var unquote = function (v) { return typeof v === 'string' && v.charAt(0) === "'" ? v.slice(1) : v; };
   var headers = rows[0].map(function (h) { return String(unquote(h)).trim(); });
   var values = rows[1].map(unquote);
   if (headers[0] !== WEBAPP.ID_HEADER) throw new Error('รูปแบบรายงานไม่ถูกต้อง');
+  // The saver's Gmail comes from the Google sign-in, never from the page
+  var u = headers.indexOf(WEBAPP.USER_HEADER);
+  if (u < 0) { headers.push(WEBAPP.USER_HEADER); values.push(me); } else values[u] = me;
 
   var logId = logId_();
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var ss = SpreadsheetApp.openById(logId);
+    var ss;
+    try { ss = SpreadsheetApp.openById(logId); }
+    catch (e) { throw new Error('บัญชี ' + me + ' ไม่มีสิทธิ์แก้ไข Log ขอให้ ' + WEBAPP.OWNER_EMAIL + ' เพิ่มใน EDITORS แล้วรัน shareLog'); }
     var sheet = ss.getSheetByName(WEBAPP.LOG_TAB);
     if (!sheet) throw new Error('ไม่พบแท็บ "' + WEBAPP.LOG_TAB + '" ใน Log Sheet');
     var logHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]

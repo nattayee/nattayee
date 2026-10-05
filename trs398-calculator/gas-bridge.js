@@ -29,10 +29,14 @@
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
 
-  // Show the Google account the web app runs as, and point the Log link/field at that account's Log
+  // Signed-in Gmail: shown in the header, stamped on reports; Log link/field point at the shared Log
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the sign-in is confirmed
   google.script.run
     .withSuccessHandler(function (info) {
       if (!info) return;
+      window.TRS398_USER = info.account || '';
+      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
+      if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
       if (logUrl && info.logUrl) {
         logUrl.value = info.logUrl;
@@ -42,15 +46,22 @@
       var foot = document.querySelector('footer');
       if (foot) {
         var p = document.createElement('p');
-        p.appendChild(document.createTextNode('บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน: '));
+        p.appendChild(document.createTextNode('ข้อมูลหลักและ Log เป็นของ '));
         var b = document.createElement('strong');
         b.setAttribute('translate', 'no');
-        b.textContent = info.account || '';
+        b.textContent = info.owner || '';
         p.appendChild(b);
         foot.insertBefore(p, foot.firstChild);
       }
     })
     .withFailureHandler(function (err) {
+      window.TRS398_USER = '';
+      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
+      if (badge && who) {
+        who.textContent = (err && err.message) || String(err);
+        var lead = badge.querySelector('span'); if (lead) lead.hidden = true;   // show only the reason
+        badge.hidden = false; badge.classList.add('err');
+      }
       var foot = document.querySelector('footer');
       if (!foot) return;
       var p = document.createElement('p');

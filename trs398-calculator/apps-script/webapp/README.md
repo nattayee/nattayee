@@ -1,32 +1,30 @@
-# ติดตั้งเป็น Google Apps Script Web App (บัญชี nattayee@gmail.com)
+# ติดตั้งเป็น Google Apps Script Web App (เข้าสู่ระบบด้วย Gmail)
 
-ทุกอย่างทำงานด้วยบัญชี **nattayee@gmail.com**: อ่าน TG398 LPCH, สร้างและบันทึก Output Log ใน Drive ของ nattayee
-ถ้า Deploy จากบัญชีอื่น เว็บแอปจะไม่ทำงานและแสดงหน้าอธิบายวิธีแก้
+- ผู้ใช้ต้อง **เข้าสู่ระบบด้วยบัญชี Gmail** ก่อนเปิดแอป (Google บังคับเอง)
+- หัวหน้าเว็บแสดง "เข้าสู่ระบบเป็น …@gmail.com" และทุกรายงานบันทึกคอลัมน์ **ผู้บันทึก (Gmail)**
+  ซึ่ง `WebApp.gs` ใส่จากบัญชีที่เข้าสู่ระบบจริง (แก้จากหน้าเว็บไม่ได้)
+- ไฟล์ข้อมูลหลักและ Output Log เป็นของ **nattayee@gmail.com** เฉพาะบัญชีใน `EDITORS` บันทึกรายงานได้
 
 โปรเจกต์ Apps Script ต้องมี **ไฟล์เดียว** คือ `Code.gs` (หน้าแอปโหลดจาก GitHub เอง)
 
-## ขั้นตอน
+## ติดตั้ง (ทำด้วยบัญชี nattayee@gmail.com)
 
-1. เปิด https://script.google.com ตรวจรูปโปรไฟล์มุมขวาบนว่าเป็น **nattayee@gmail.com**
-   (ถ้าเบราว์เซอร์มีหลายบัญชี ให้สลับบัญชีหรือใช้หน้าต่าง Chrome profile ของ nattayee)
-2. **New project** ตั้งชื่อเช่น `TRS-398 Web App`
-   (อย่าใช้โปรเจกต์เดิมที่สร้างจากบัญชีอื่น)
-3. เปิดลิงก์นี้ กด Ctrl/⌘+A แล้วคัดลอก วางทับทั้งหมดใน `Code.gs` (ประมาณ 210 บรรทัด บรรทัดสุดท้ายคือ `}`):
+1. เปิด https://script.google.com ตรวจรูปโปรไฟล์ว่าเป็น **nattayee@gmail.com** → **New project**
+2. เปิดลิงก์นี้ กด Ctrl/⌘+A คัดลอก แล้ววางทับทั้งหมดใน `Code.gs`:
    https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/WebApp.gs
-4. บันทึก แล้วเลือกฟังก์ชัน **`setup`** → **Run** → อนุญาตสิทธิ์
-   - สร้างโฟลเดอร์ `TRS-398 Output Reports` และ `TRS-398 Output Log (LPCH)` ใน Drive ของ nattayee
-   - คัดลอกรายงานทุกแถวจาก Log เดิม (ของบัญชี sarayuth3266) มาไว้ใน Log ใหม่
-   - ดูลิงก์ Log ใหม่ได้ใน Execution log
+3. แก้รายชื่อ Gmail ที่ใช้งานได้ใน `EDITORS` เช่น
+   `EDITORS: ['nattayee@gmail.com', 'xxx@gmail.com', 'yyy@gmail.com'],`
+4. บันทึก → เลือกฟังก์ชัน **`setup`** → **Run** → อนุญาตสิทธิ์
+   (สร้าง Log ใน Drive ของ nattayee คัดลอกรายงานเดิม และแชร์ให้ทุกคนใน EDITORS แก้ไขได้)
 5. **Deploy → New deployment → Web app**
-   - Execute as: **Me (nattayee@gmail.com)**
-   - Who has access: **Only myself** หรือ **Anyone with Google account**
-6. เปิด URL ของ Web app ท้ายหน้าจะแสดง "บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน: nattayee@gmail.com"
+   - Execute as: **User accessing the web app**
+   - Who has access: **Anyone with Google account**
+6. ส่ง URL ของ Web app ให้ผู้ใช้ ครั้งแรกแต่ละคนต้องกด Authorize (อาจเห็นคำเตือน "Google hasn't verified this app"
+   ให้กด Advanced → Go to … เพราะเป็นแอปภายในของเราเอง)
 
-## หลังย้ายแล้ว
+## เพิ่มผู้ใช้ภายหลัง
 
-- รายงานใหม่ทั้งหมดเข้า Log ใน Drive ของ nattayee
-- Log เดิม, โฟลเดอร์ Inbox/Imported และ ReportImporter.gs ของบัญชี sarayuth3266 ไม่ถูกใช้แล้ว ลบหรือเลิกแชร์ได้หลังตรวจว่า Log ใหม่ครบ
-- TG398 LPCH เป็นของ nattayee อยู่แล้ว
+แก้ `EDITORS` → บันทึก → รันฟังก์ชัน **`shareLog`** (ด้วยบัญชี nattayee) แล้ว Deploy → Manage deployments → Edit → New version
 
 ## เมื่อแก้โค้ดของแอป
 
