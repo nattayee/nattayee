@@ -1,30 +1,46 @@
 /**
- * TRS-398 Output Calibration — Google Apps Script web app (server side).
- *
- * Serves index.html and answers the page's two data calls (see gas-bridge.js in the page):
- *   apiExportXlsx(fileId)    → the TG398 LPCH master Sheet or the Output Log as .xlsx (base64)
- *   apiAppendReport(csvText) → appends one report straight to the "Log" tab
- *
- * Put this file in the Apps Script project of the TRS-398 Output Log sheet (Extensions → Apps Script),
- * next to ReportImporter.gs, add an HTML file named "index", then Deploy → New deployment → Web app.
+ * TRS-398 Output Calibration — Google Apps Script web app. This is the only file the project needs.
+ * The page itself (index.html) is loaded from GitHub, so app updates arrive without re-pasting.
+ * Deploy → New deployment → Web app (Execute as: Me).
  */
-
 var WEBAPP = {
+  PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/index.html',
   MASTER_SHEET_ID: '1t8KCsJtuv3vVzqRT_uWblHEDWYARuB1KU5gqVUTpt4w',   // TG398 LPCH (master data)
   LOG_SHEET_ID: '1UpWd0zPjEDnKIuV1q6j5O4CDemNt0BbYkbFWMIudTL8',      // TRS-398 Output Log (LPCH)
   LOG_TAB: 'Log',
   ID_HEADER: 'Report ID',
   RESULT_HEADERS: ['ผล', 'ผลหลังปรับ'],
-  TITLE: 'TRS-398 Output Calibration · Lampang Cancer Hospital'
+  TITLE: 'TRS-398 Output Calibration · Lampang Cancer Hospital',
+  CACHE_SECONDS: 600
 };
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
+  return HtmlService.createHtmlOutput(loadPage_())
     .setTitle(WEBAPP.TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
-/** Only the two known spreadsheets can be read through the web app. */
+/** The page from GitHub, cached in ~30k-character pieces (the cache holds at most 100 KB per value). */
+function loadPage_() {
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get('page_n') || 0);
+  if (n) {
+    var keys = [];
+    for (var i = 0; i < n; i++) keys.push('page_' + i);
+    var got = cache.getAll(keys);
+    if (Object.keys(got).length === n) return keys.map(function (k) { return got[k]; }).join('');
+  }
+  var res = UrlFetchApp.fetch(WEBAPP.PAGE_URL, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('โหลดหน้าแอปจาก GitHub ไม่ได้ (HTTP ' + res.getResponseCode() + ')');
+  var html = res.getContentText('UTF-8');
+  var parts = {}, size = 30000;
+  for (var j = 0; j * size < html.length; j++) parts['page_' + j] = html.substr(j * size, size);
+  parts.page_n = String(j);
+  cache.putAll(parts, WEBAPP.CACHE_SECONDS);
+  return html;
+}
+
+/** Master Sheet or Output Log as .xlsx (base64) for the page. Only these two files can be read. */
 function apiExportXlsx(fileId) {
   if (fileId !== WEBAPP.MASTER_SHEET_ID && fileId !== WEBAPP.LOG_SHEET_ID) {
     throw new Error('ไฟล์นี้ไม่ได้อยู่ในรายการที่ web app อ่านได้ (แก้ WEBAPP ใน WebApp.gs)');
@@ -38,10 +54,7 @@ function apiExportXlsx(fileId) {
   return { content: Utilities.base64Encode(res.getBlob().getBytes()), title: title, id: fileId };
 }
 
-/**
- * Appends one report (the app's two-row CSV: headers + values) to the Log tab by header name.
- * New headers are added at the end; a Report ID already in the log is not added twice.
- */
+/** Appends one report (two-row CSV: headers + values) to the Log tab by header name; skips known Report IDs. */
 function apiAppendReport(csvText) {
   var rows = Utilities.parseCsv(String(csvText || ''));
   if (rows.length < 2) throw new Error('รายงานว่างเปล่า');
@@ -56,20 +69,19 @@ function apiAppendReport(csvText) {
     var ss = SpreadsheetApp.openById(WEBAPP.LOG_SHEET_ID);
     var sheet = ss.getSheetByName(WEBAPP.LOG_TAB);
     if (!sheet) throw new Error('ไม่พบแท็บ "' + WEBAPP.LOG_TAB + '" ใน Log Sheet');
-    var lastCol = Math.max(sheet.getLastColumn(), 1);
-    var logHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var logHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
+      .map(function (h) { return String(h).trim(); });
     var col = {};
     logHeaders.forEach(function (h, i) { if (h) col[h] = i; });
 
-    var id = String(values[0]);
-    var idCol = col[WEBAPP.ID_HEADER], lastRow = sheet.getLastRow();
+    var id = String(values[0]), idCol = col[WEBAPP.ID_HEADER], lastRow = sheet.getLastRow();
     if (idCol != null && lastRow > 1) {
       var ids = sheet.getRange(2, idCol + 1, lastRow - 1, 1).getValues();
       for (var i = 0; i < ids.length; i++) {
         if (String(ids[i][0]) === id) return { appended: false, duplicate: true, id: WEBAPP.LOG_SHEET_ID, viewUrl: ss.getUrl() };
       }
     }
-    headers.forEach(function (h) {
+    headers.forEach(function (h) {   // headers the log does not have yet go at the end
       if (h && col[h] == null) {
         logHeaders.push(h);
         col[h] = logHeaders.length - 1;
