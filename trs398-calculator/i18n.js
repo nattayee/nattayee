@@ -23,6 +23,7 @@
     'กลางคืน': 'Dark',
     'อัตโนมัติ (ตามอุปกรณ์)': 'Auto (follow device)',
     'โหมดสี': 'Colour mode',
+    'โลโก้โรงพยาบาลมะเร็งลำปาง': 'Lampang Cancer Hospital logo',
     'ภาษา': 'Language',
     'คำนวณ': 'Calculator',
     'Dashboard ย้อนหลัง': 'History dashboard',
