@@ -8,7 +8,7 @@
  * วิธีติดตั้ง:
  *   1. สร้าง Google Sheet ใหม่ → Extensions → Apps Script
  *   2. วางโค้ดนี้แทนโค้ดเดิมทั้งหมด → Save (ตรวจว่าบรรทัดสุดท้ายของไฟล์ถูกวางมาครบ)
- *   3. เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาตสิทธิ์ Sheets + Drive + เชื่อมต่อภายนอก)
+ *   3. เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาตสิทธิ์ Sheets + Drive + ส่งอีเมล + เชื่อมต่อภายนอก)
  *   4. Deploy → New deployment → Web app
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
@@ -140,8 +140,8 @@ function setup() {
 
 /* ---------------- Actions ---------------- */
 
-// Every file of a split copy starts with this line, so the files can load in any order.
-var ACTIONS = ACTIONS || {};
+// Server actions called from the page: ACTIONS.<name>(req)
+var ACTIONS = {};
 
 /* ----- members ----- */
 

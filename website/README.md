@@ -48,12 +48,9 @@
    <https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/lpch-ro-workspace-website-96j4r6/website/apps-script/Code.gs>
    กด Ctrl+A (มือถือ: เลือกทั้งหมด) → คัดลอก → ลบโค้ดเดิมใน Apps Script แล้ววาง → Save
    ตรวจว่าบรรทัดสุดท้ายคือ `// ----- สิ้นสุดไฟล์ Code.gs ...` (ถ้าไม่มี แสดงว่าวางไม่ครบ และจะขึ้น SyntaxError: Unexpected end of input)
-   **ถ้าคัดลอกแล้วได้แค่ 100 บรรทัด** (Apps Script ขึ้น `SyntaxError: Unexpected end of input บรรทัด: 100`) ให้ใช้ไฟล์ที่แบ่งไว้แล้วใน
-   `apps-script/split/` แทน: `Code1.gs` … `Code10.gs` (ไฟล์ละไม่เกิน 90 บรรทัด ทำงานเหมือน Code.gs ทุกอย่าง)
-   - วาง `Code1.gs` ทับไฟล์ `Code.gs`/`รหัส.gs` เดิม แล้วกด **+ → Script** สร้างไฟล์ `Code2` … `Code10` วางทีละไฟล์
-   - ทุกไฟล์ต้องลงท้ายด้วย `// ----- จบ CodeN.gs ...` และต้องวางให้ครบทั้ง 10 ไฟล์ (ลำดับไฟล์ไม่สำคัญ)
-   - **อย่า** ใช้ Code.gs กับไฟล์ที่แบ่งพร้อมกัน (เลือกอย่างใดอย่างหนึ่ง)
-   - สร้างไฟล์ที่แบ่งใหม่หลังแก้ Code.gs: `python3 website/apps-script/split_code.py`
+   **ถ้าคัดลอกแล้วได้แค่ 100 บรรทัด** (Apps Script ขึ้น `SyntaxError: Unexpected end of input บรรทัด: 100`)
+   แสดงว่าที่ที่คัดลอกมาส่งให้แค่ส่วนต้นของไฟล์ ให้ใช้หน้า "คัดลอก Code.gs" (กล่องโค้ดพร้อมปุ่มคัดลอกทั้งหมด) ที่ส่งให้ในแชท
+   หรือเปิดลิงก์ raw ด้านบนแล้วกด Ctrl+A
 3. **ไม่ต้องวาง Index.html** — Code.gs โหลดหน้าเว็บจาก GitHub ให้เอง (`PAGE_URL`, cache 10 นาที)
    ถ้าต้องการเก็บหน้าเว็บไว้ในโปรเจกต์: กด **+ → HTML** ตั้งชื่อ `Index` แล้ววาง `apps-script/Index.html` (จะใช้ไฟล์นี้ก่อน)
    ถ้าไฟล์ `Index`/`index` ในโปรเจกต์วางมาไม่ครบ (ไม่มี `</html>` ท้ายไฟล์) ระบบจะไม่ใช้ไฟล์นั้นและโหลดจาก GitHub แทน — ลบทิ้งได้เลย
