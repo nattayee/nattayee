@@ -55,13 +55,19 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
-/** The page: an "Index" HTML file in this project if there is one, otherwise the copy on GitHub. */
+/**
+ * The page: an "Index" (or "index") HTML file in this project if it is complete, otherwise the copy on GitHub.
+ * A file pasted only in part (no closing </html>) is ignored, so a truncated paste cannot break the site.
+ */
 function page_() {
-  try {
-    return HtmlService.createHtmlOutputFromFile('Index').getContent();
-  } catch (e) {
-    return loadPage_();
+  var names = ['Index', 'index'];
+  for (var i = 0; i < names.length; i++) {
+    try {
+      var html = HtmlService.createHtmlOutputFromFile(names[i]).getContent();
+      if (/<\/html>\s*$/i.test(html)) return html;
+    } catch (e) { /* no such file */ }
   }
+  return loadPage_();
 }
 
 /** Index.html from GitHub, cached in ~30k-character pieces (the cache holds at most 100 KB per value). */
@@ -134,293 +140,294 @@ function setup() {
 
 /* ---------------- Actions ---------------- */
 
-var ACTIONS = {
-  /* ----- members ----- */
+// Every file of a split copy starts with this line, so the files can load in any order.
+var ACTIONS = ACTIONS || {};
 
-  register: function (req) {
-    var username = normUsername_(req.username);
-    var fullName = String(req.fullName || '').trim();
-    var role = String(req.role || '');
-    var email = normEmail_(req.email);
-    validatePassword_(req.password);
-    if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
-    if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
-    if (ROLES.indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
-    if (findUser_(username)) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
-    if (emailTaken_(email)) throw new Error('อีเมลนี้ถูกใช้สมัครแล้ว');
+/* ----- members ----- */
 
-    var sheet = sheet_('Users', USER_HEADERS);
-    var first = sheet.getLastRow() < 2;
-    var status = first || !REQUIRE_APPROVAL ? 'active' : 'pending';
-    var salt = Utilities.getUuid();
-    sheet.appendRow([
-      username, fullName, role,
-      String(req.phone || '').trim(), email,
-      salt, hash_(req.password, salt), status, first, new Date(), ''
-    ]);
+ACTIONS.register = function (req) {
+  var username = normUsername_(req.username);
+  var fullName = String(req.fullName || '').trim();
+  var role = String(req.role || '');
+  var email = normEmail_(req.email);
+  validatePassword_(req.password);
+  if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
+  if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
+  if (ROLES.indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
+  if (findUser_(username)) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
+  if (emailTaken_(email)) throw new Error('อีเมลนี้ถูกใช้สมัครแล้ว');
 
-    if (status === 'pending') {
-      return { status: status, message: 'สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน' };
-    }
-    var u = findUser_(username);
-    return { status: status, token: createSession_(username), user: publicUser_(u) };
-  },
+  var sheet = sheet_('Users', USER_HEADERS);
+  var first = sheet.getLastRow() < 2;
+  var status = first || !REQUIRE_APPROVAL ? 'active' : 'pending';
+  var salt = Utilities.getUuid();
+  sheet.appendRow([
+    username, fullName, role,
+    String(req.phone || '').trim(), email,
+    salt, hash_(req.password, salt), status, first, new Date(), ''
+  ]);
 
-  login: function (req) {
-    var username = String(req.username || '').trim().toLowerCase();
-    var cache = CacheService.getScriptCache();
-    var failKey = 'fail_' + username;
-    var fails = Number(cache.get(failKey) || 0);
-    if (fails >= MAX_FAILED_LOGINS) throw new Error('เข้าสู่ระบบผิดหลายครั้ง กรุณารอ 15 นาที');
-
-    var u = findUser_(username);
-    if (!u || hash_(req.password || '', u.salt) !== u.hash) {
-      cache.put(failKey, String(fails + 1), 900);
-      throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    }
-    if (u.status === 'pending') throw new Error('บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ');
-    if (u.status !== 'active') throw new Error('บัญชีของคุณถูกระงับการใช้งาน');
-
-    cache.remove(failKey);
-    setUserField_(u, 'lastLogin', new Date());
-    purgeSessions_();
-    return { token: createSession_(username), user: publicUser_(u) };
-  },
-
-  me: function (req) {
-    return { user: publicUser_(requireUser_(req.token)) };
-  },
-
-  logout: function (req) {
-    var sheet = sheet_('Sessions', SESSION_HEADERS);
-    var rows = sheet.getDataRange().getValues();
-    for (var i = rows.length - 1; i >= 1; i--) {
-      if (rows[i][0] === req.token) sheet.deleteRow(i + 1);
-    }
-    return {};
-  },
-
-  changePassword: function (req) {
-    var u = requireUser_(req.token);
-    if (hash_(req.oldPassword || '', u.salt) !== u.hash) throw new Error('รหัสผ่านเดิมไม่ถูกต้อง');
-    validatePassword_(req.newPassword);
-    var salt = Utilities.getUuid();
-    setUserField_(u, 'salt', salt);
-    setUserField_(u, 'hash', hash_(req.newPassword, salt));
-    return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย' };
-  },
-
-  // แก้ไขอีเมลและเบอร์โทรของตัวเอง
-  updateProfile: function (req) {
-    var u = requireUser_(req.token);
-    var email = normEmail_(req.email);
-    if (emailTaken_(email, u.username)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
-    setUserField_(u, 'email', email);
-    setUserField_(u, 'phone', String(req.phone || '').trim().slice(0, 40));
-    return { user: publicUser_(findUser_(u.username)), message: 'บันทึกข้อมูลเรียบร้อย' };
-  },
-
-  // ลืมรหัสผ่าน: ส่งรหัส 6 หลักไปที่อีเมลของบัญชี (ตอบข้อความเดียวกันเสมอ เพื่อไม่บอกว่ามีบัญชีหรือไม่)
-  forgotPassword: function (req) {
-    var login = String(req.login || '').trim().toLowerCase();
-    if (!login) throw new Error('กรุณากรอกชื่อผู้ใช้หรืออีเมล');
-    var cache = CacheService.getScriptCache();
-    var u = findUserByLogin_(login);
-    var limitKey = 'forgot_' + (u ? u.username : login);
-    var count = Number(cache.get(limitKey) || 0);
-    if (count >= RESET_REQUESTS) throw new Error('ขอรหัสบ่อยเกินไป กรุณารอ 15 นาทีแล้วลองใหม่');
-    cache.put(limitKey, String(count + 1), 900);
-
-    if (u && u.email && u.status !== 'disabled') {
-      var code = resetCode_();
-      cache.put('reset_' + u.username, JSON.stringify({
-        hash: hash_(code, u.username), tries: 0, expires: Date.now() + RESET_MINUTES * 60000
-      }), RESET_MINUTES * 60);
-      sendResetEmail_(u, code);
-    }
-    return { message: 'ถ้าข้อมูลตรงกับบัญชีในระบบ ระบบได้ส่งรหัส 6 หลักไปที่อีเมลที่ลงทะเบียนไว้แล้ว ' +
-      '(หมดอายุใน ' + RESET_MINUTES + ' นาที) หากไม่ได้รับ ตรวจสอบโฟลเดอร์สแปม หรือติดต่อผู้ดูแลระบบ' };
-  },
-
-  resetPassword: function (req) {
-    var u = findUserByLogin_(String(req.login || '').trim().toLowerCase());
-    var cache = CacheService.getScriptCache();
-    var key = u ? 'reset_' + u.username : '';
-    var entry = key ? JSON.parse(cache.get(key) || 'null') : null;
-    if (!entry || entry.expires < Date.now()) throw new Error('รหัสหมดอายุหรือไม่ถูกต้อง กรุณาขอรหัสใหม่');
-    if (hash_(String(req.code || '').replace(/\s/g, ''), u.username) !== entry.hash) {
-      entry.tries++;
-      if (entry.tries >= RESET_MAX_TRIES) cache.remove(key);
-      else cache.put(key, JSON.stringify(entry), Math.max(1, Math.round((entry.expires - Date.now()) / 1000)));
-      throw new Error(entry.tries >= RESET_MAX_TRIES ? 'ใส่รหัสผิดหลายครั้ง กรุณาขอรหัสใหม่' : 'รหัสไม่ถูกต้อง');
-    }
-    validatePassword_(req.newPassword);
-    var salt = Utilities.getUuid();
-    setUserField_(u, 'salt', salt);
-    setUserField_(u, 'hash', hash_(req.newPassword, salt));
-    cache.remove(key);
-    cache.remove('fail_' + u.username);
-    dropSessionsOf_(u.username);
-    return { username: u.username, message: 'ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่' };
-  },
-
-  // รายชื่อสมาชิกที่ใช้งานอยู่ (สำหรับเลือกผู้รับข้อความรายบุคคล) — ส่งเฉพาะชื่อและตำแหน่ง
-  directory: function (req) {
-    requireUser_(req.token);
-    return {
-      users: allUsers_().filter(function (u) { return u.status === 'active'; }).map(function (u) {
-        return { username: u.username, fullName: u.fullName, role: u.role };
-      })
-    };
-  },
-
-  listUsers: function (req) {
-    requireAdmin_(req.token);
-    return { users: allUsers_().map(publicUser_) };
-  },
-
-  updateUser: function (req) {
-    var admin = requireAdmin_(req.token);
-    var u = findUser_(String(req.username || '').toLowerCase());
-    if (!u) throw new Error('ไม่พบผู้ใช้');
-    if (u.username === admin.username && (req.isAdmin === false || (req.status && req.status !== 'active'))) {
-      throw new Error('ไม่สามารถยกเลิกสิทธิ์หรือระงับบัญชีของตัวเองได้');
-    }
-    if (req.status) {
-      if (['active', 'pending', 'disabled'].indexOf(req.status) === -1) throw new Error('สถานะไม่ถูกต้อง');
-      setUserField_(u, 'status', req.status);
-      if (req.status !== 'active') dropSessionsOf_(u.username);
-    }
-    if (typeof req.isAdmin === 'boolean') setUserField_(u, 'isAdmin', req.isAdmin);
-    if (req.role) {
-      if (ROLES.indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
-      setUserField_(u, 'role', req.role);
-    }
-    return { user: publicUser_(findUser_(u.username)) };
-  },
-
-  deleteUser: function (req) {
-    var admin = requireAdmin_(req.token);
-    var u = findUser_(String(req.username || '').toLowerCase());
-    if (!u) throw new Error('ไม่พบผู้ใช้');
-    if (u.username === admin.username) throw new Error('ไม่สามารถลบบัญชีของตัวเองได้');
-    sheet_('Users', USER_HEADERS).deleteRow(u._row);
-    dropSessionsOf_(u.username);
-    return {};
-  },
-
-  /* ----- announcement chat (identity always comes from the session, never from the page) ----- */
-
-  chatList: function (req) {
-    requireUser_(req.token);
-    var rows = sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1);
-    rows.sort(function (a, b) { return Number(a[1]) - Number(b[1]); });
-    return { messages: rows.slice(-CHAT_LIMIT).map(function (r) { return JSON.parse(r[3]); }) };
-  },
-
-  chatAdd: function (req) {
-    var u = requireUser_(req.token);
-    var me = person_(u);
-    var text = String(req.text || '').trim();
-    var images = Array.isArray(req.images) ? req.images : [];
-    if (!text && !images.length) throw new Error('พิมพ์ข้อความหรือแนบรูปก่อนส่ง');
-    if (text.length > 5000) throw new Error('ข้อความยาวเกิน 5,000 ตัวอักษร');
-    if (images.length > MAX_IMAGES) throw new Error('แนบรูปได้สูงสุด ' + MAX_IMAGES + ' รูปต่อข้อความ');
-    var targets = cleanTargets_(req.to);
-    if (!targets.to.length) targets = cleanTargets_(['ALL']);
-
-    var id = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
-    var now = Date.now();
-    var msg = {
-      id: id,
-      author: me,
-      text: text,
-      images: images.map(function (d, i) { return 'drive:' + saveImage_(d, id + '-' + (i + 1)); }),
-      to: targets.to,
-      toNames: targets.names,
-      forwards: [],
-      reads: {},
-      reactions: {},
-      reactionLog: [],
-      createdAt: now
-    };
-    msg.reads[key_(me)] = stamp_(me);
-    if (req.replyTo && req.replyTo.id) {
-      var orig = findMessage_(String(req.replyTo.id));
-      if (orig) {
-        msg.replyTo = { id: orig.msg.id, name: orig.msg.author.name, role: orig.msg.author.role,
-          username: orig.msg.author.username || '', text: snippet_(orig.msg.text, 120) ||
-            (orig.msg.images.length ? '(รูปภาพ ' + orig.msg.images.length + ' รูป)' : '') };
-      }
-    }
-    sheet_('Messages', MESSAGE_HEADERS).appendRow([id, now, u.username, JSON.stringify(msg)]);
-    log_(msg.replyTo ? 'ตอบกลับ' : 'ส่งข้อความ', me,
-      'ถึง ' + labels_(msg).join(', ') + (msg.replyTo ? ' · ตอบ ' + msg.replyTo.name + ': ' + msg.replyTo.text : '') +
-      (images.length ? ' · รูป ' + images.length : ''), msg);
-    return { message: msg };
-  },
-
-  chatRead: function (req) {
-    var u = requireUser_(req.token), me = person_(u);
-    return updateMessage_(req.id, function (msg) {
-      if (msg.reads[key_(me)] || !isForUser_(msg, u)) return false;
-      msg.reads[key_(me)] = stamp_(me);
-      log_('อ่าน', me, '', msg);
-    });
-  },
-
-  chatReact: function (req) {
-    var u = requireUser_(req.token), me = person_(u);
-    var type = req.type === 'ok' || req.type === 'no' ? req.type : null;
-    if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
-    return updateMessage_(req.id, function (msg) {
-      var cur = msg.reactions[key_(me)];
-      if (cur && cur.type === type) return false;
-      var rec = stamp_(me);
-      rec.type = type;
-      msg.reactions[key_(me)] = rec;
-      msg.reactionLog.push(rec);
-      log_(type === 'ok' ? '✓ ถูก' : '✗ ผิด', me, cur ? 'เปลี่ยนจาก ' + (cur.type === 'ok' ? '✓ ถูก' : '✗ ผิด') : '', msg);
-    });
-  },
-
-  chatForward: function (req) {
-    var u = requireUser_(req.token), me = person_(u);
-    var targets = cleanTargets_(req.to);
-    if (!targets.to.length) throw new Error('เลือกผู้รับก่อนส่งต่อ');
-    return updateMessage_(req.id, function (msg) {
-      targets.to.forEach(function (t) { if (msg.to.indexOf(t) === -1) msg.to.push(t); });
-      for (var k in targets.names) msg.toNames[k] = targets.names[k];
-      var entry = person_(u);
-      msg.forwards.push({ by: entry, to: targets.to, at: Date.now() });
-      log_('ส่งต่อ', me, 'ให้ ' + targets.to.map(function (t) { return label_(msg, t); }).join(', '), msg);
-    });
-  },
-
-  chatDelete: function (req) {
-    var u = requireUser_(req.token);
-    var found = findMessage_(String(req.id || ''));
-    if (!found) return {};
-    if (found.msg.author.username !== u.username && !u.isAdmin) throw new Error('ลบได้เฉพาะข้อความของตัวเอง');
-    found.msg.images.forEach(function (ref) {
-      try { DriveApp.getFileById(String(ref).replace(/^drive:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
-    });
-    sheet_('Messages', MESSAGE_HEADERS).deleteRow(found.row);
-    log_('ลบข้อความ', person_(u), '', found.msg);
-    return { deleted: found.msg.id };
-  },
-
-  // รูปแนบ: ส่งเป็น data URL ให้เฉพาะผู้ที่เข้าสู่ระบบ และเฉพาะไฟล์ในโฟลเดอร์รูปของแชทนี้
-  chatImage: function (req) {
-    requireUser_(req.token);
-    var file;
-    try { file = DriveApp.getFileById(String(req.fileId || '')); } catch (e) { throw new Error('ไม่พบรูป'); }
-    var folderId = folder_().getId(), parents = file.getParents(), ok = false;
-    while (parents.hasNext()) { if (parents.next().getId() === folderId) { ok = true; break; } }
-    if (!ok) throw new Error('ไม่พบรูป');
-    var blob = file.getBlob();
-    return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
+  if (status === 'pending') {
+    return { status: status, message: 'สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน' };
   }
+  var u = findUser_(username);
+  return { status: status, token: createSession_(username), user: publicUser_(u) };
+};
+
+ACTIONS.login = function (req) {
+  var username = String(req.username || '').trim().toLowerCase();
+  var cache = CacheService.getScriptCache();
+  var failKey = 'fail_' + username;
+  var fails = Number(cache.get(failKey) || 0);
+  if (fails >= MAX_FAILED_LOGINS) throw new Error('เข้าสู่ระบบผิดหลายครั้ง กรุณารอ 15 นาที');
+
+  var u = findUser_(username);
+  if (!u || hash_(req.password || '', u.salt) !== u.hash) {
+    cache.put(failKey, String(fails + 1), 900);
+    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+  }
+  if (u.status === 'pending') throw new Error('บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ');
+  if (u.status !== 'active') throw new Error('บัญชีของคุณถูกระงับการใช้งาน');
+
+  cache.remove(failKey);
+  setUserField_(u, 'lastLogin', new Date());
+  purgeSessions_();
+  return { token: createSession_(username), user: publicUser_(u) };
+};
+
+ACTIONS.me = function (req) {
+  return { user: publicUser_(requireUser_(req.token)) };
+};
+
+ACTIONS.logout = function (req) {
+  var sheet = sheet_('Sessions', SESSION_HEADERS);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][0] === req.token) sheet.deleteRow(i + 1);
+  }
+  return {};
+};
+
+ACTIONS.changePassword = function (req) {
+  var u = requireUser_(req.token);
+  if (hash_(req.oldPassword || '', u.salt) !== u.hash) throw new Error('รหัสผ่านเดิมไม่ถูกต้อง');
+  validatePassword_(req.newPassword);
+  var salt = Utilities.getUuid();
+  setUserField_(u, 'salt', salt);
+  setUserField_(u, 'hash', hash_(req.newPassword, salt));
+  return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย' };
+};
+
+// แก้ไขอีเมลและเบอร์โทรของตัวเอง
+ACTIONS.updateProfile = function (req) {
+  var u = requireUser_(req.token);
+  var email = normEmail_(req.email);
+  if (emailTaken_(email, u.username)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
+  setUserField_(u, 'email', email);
+  setUserField_(u, 'phone', String(req.phone || '').trim().slice(0, 40));
+  return { user: publicUser_(findUser_(u.username)), message: 'บันทึกข้อมูลเรียบร้อย' };
+};
+
+// ลืมรหัสผ่าน: ส่งรหัส 6 หลักไปที่อีเมลของบัญชี (ตอบข้อความเดียวกันเสมอ เพื่อไม่บอกว่ามีบัญชีหรือไม่)
+ACTIONS.forgotPassword = function (req) {
+  var login = String(req.login || '').trim().toLowerCase();
+  if (!login) throw new Error('กรุณากรอกชื่อผู้ใช้หรืออีเมล');
+  var cache = CacheService.getScriptCache();
+  var u = findUserByLogin_(login);
+  var limitKey = 'forgot_' + (u ? u.username : login);
+  var count = Number(cache.get(limitKey) || 0);
+  if (count >= RESET_REQUESTS) throw new Error('ขอรหัสบ่อยเกินไป กรุณารอ 15 นาทีแล้วลองใหม่');
+  cache.put(limitKey, String(count + 1), 900);
+
+  if (u && u.email && u.status !== 'disabled') {
+    var code = resetCode_();
+    cache.put('reset_' + u.username, JSON.stringify({
+      hash: hash_(code, u.username), tries: 0, expires: Date.now() + RESET_MINUTES * 60000
+    }), RESET_MINUTES * 60);
+    sendResetEmail_(u, code);
+  }
+  return { message: 'ถ้าข้อมูลตรงกับบัญชีในระบบ ระบบได้ส่งรหัส 6 หลักไปที่อีเมลที่ลงทะเบียนไว้แล้ว ' +
+    '(หมดอายุใน ' + RESET_MINUTES + ' นาที) หากไม่ได้รับ ตรวจสอบโฟลเดอร์สแปม หรือติดต่อผู้ดูแลระบบ' };
+};
+
+ACTIONS.resetPassword = function (req) {
+  var u = findUserByLogin_(String(req.login || '').trim().toLowerCase());
+  var cache = CacheService.getScriptCache();
+  var key = u ? 'reset_' + u.username : '';
+  var entry = key ? JSON.parse(cache.get(key) || 'null') : null;
+  if (!entry || entry.expires < Date.now()) throw new Error('รหัสหมดอายุหรือไม่ถูกต้อง กรุณาขอรหัสใหม่');
+  if (hash_(String(req.code || '').replace(/\s/g, ''), u.username) !== entry.hash) {
+    entry.tries++;
+    if (entry.tries >= RESET_MAX_TRIES) cache.remove(key);
+    else cache.put(key, JSON.stringify(entry), Math.max(1, Math.round((entry.expires - Date.now()) / 1000)));
+    throw new Error(entry.tries >= RESET_MAX_TRIES ? 'ใส่รหัสผิดหลายครั้ง กรุณาขอรหัสใหม่' : 'รหัสไม่ถูกต้อง');
+  }
+  validatePassword_(req.newPassword);
+  var salt = Utilities.getUuid();
+  setUserField_(u, 'salt', salt);
+  setUserField_(u, 'hash', hash_(req.newPassword, salt));
+  cache.remove(key);
+  cache.remove('fail_' + u.username);
+  dropSessionsOf_(u.username);
+  return { username: u.username, message: 'ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่' };
+};
+
+// รายชื่อสมาชิกที่ใช้งานอยู่ (สำหรับเลือกผู้รับข้อความรายบุคคล) — ส่งเฉพาะชื่อและตำแหน่ง
+ACTIONS.directory = function (req) {
+  requireUser_(req.token);
+  return {
+    users: allUsers_().filter(function (u) { return u.status === 'active'; }).map(function (u) {
+      return { username: u.username, fullName: u.fullName, role: u.role };
+    })
+  };
+};
+
+ACTIONS.listUsers = function (req) {
+  requireAdmin_(req.token);
+  return { users: allUsers_().map(publicUser_) };
+};
+
+ACTIONS.updateUser = function (req) {
+  var admin = requireAdmin_(req.token);
+  var u = findUser_(String(req.username || '').toLowerCase());
+  if (!u) throw new Error('ไม่พบผู้ใช้');
+  if (u.username === admin.username && (req.isAdmin === false || (req.status && req.status !== 'active'))) {
+    throw new Error('ไม่สามารถยกเลิกสิทธิ์หรือระงับบัญชีของตัวเองได้');
+  }
+  if (req.status) {
+    if (['active', 'pending', 'disabled'].indexOf(req.status) === -1) throw new Error('สถานะไม่ถูกต้อง');
+    setUserField_(u, 'status', req.status);
+    if (req.status !== 'active') dropSessionsOf_(u.username);
+  }
+  if (typeof req.isAdmin === 'boolean') setUserField_(u, 'isAdmin', req.isAdmin);
+  if (req.role) {
+    if (ROLES.indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
+    setUserField_(u, 'role', req.role);
+  }
+  return { user: publicUser_(findUser_(u.username)) };
+};
+
+ACTIONS.deleteUser = function (req) {
+  var admin = requireAdmin_(req.token);
+  var u = findUser_(String(req.username || '').toLowerCase());
+  if (!u) throw new Error('ไม่พบผู้ใช้');
+  if (u.username === admin.username) throw new Error('ไม่สามารถลบบัญชีของตัวเองได้');
+  sheet_('Users', USER_HEADERS).deleteRow(u._row);
+  dropSessionsOf_(u.username);
+  return {};
+};
+
+/* ----- announcement chat (identity always comes from the session, never from the page) ----- */
+
+ACTIONS.chatList = function (req) {
+  requireUser_(req.token);
+  var rows = sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1);
+  rows.sort(function (a, b) { return Number(a[1]) - Number(b[1]); });
+  return { messages: rows.slice(-CHAT_LIMIT).map(function (r) { return JSON.parse(r[3]); }) };
+};
+
+ACTIONS.chatAdd = function (req) {
+  var u = requireUser_(req.token);
+  var me = person_(u);
+  var text = String(req.text || '').trim();
+  var images = Array.isArray(req.images) ? req.images : [];
+  if (!text && !images.length) throw new Error('พิมพ์ข้อความหรือแนบรูปก่อนส่ง');
+  if (text.length > 5000) throw new Error('ข้อความยาวเกิน 5,000 ตัวอักษร');
+  if (images.length > MAX_IMAGES) throw new Error('แนบรูปได้สูงสุด ' + MAX_IMAGES + ' รูปต่อข้อความ');
+  var targets = cleanTargets_(req.to);
+  if (!targets.to.length) targets = cleanTargets_(['ALL']);
+
+  var id = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  var now = Date.now();
+  var msg = {
+    id: id,
+    author: me,
+    text: text,
+    images: images.map(function (d, i) { return 'drive:' + saveImage_(d, id + '-' + (i + 1)); }),
+    to: targets.to,
+    toNames: targets.names,
+    forwards: [],
+    reads: {},
+    reactions: {},
+    reactionLog: [],
+    createdAt: now
+  };
+  msg.reads[key_(me)] = stamp_(me);
+  if (req.replyTo && req.replyTo.id) {
+    var orig = findMessage_(String(req.replyTo.id));
+    if (orig) {
+      msg.replyTo = { id: orig.msg.id, name: orig.msg.author.name, role: orig.msg.author.role,
+        username: orig.msg.author.username || '', text: snippet_(orig.msg.text, 120) ||
+          (orig.msg.images.length ? '(รูปภาพ ' + orig.msg.images.length + ' รูป)' : '') };
+    }
+  }
+  sheet_('Messages', MESSAGE_HEADERS).appendRow([id, now, u.username, JSON.stringify(msg)]);
+  log_(msg.replyTo ? 'ตอบกลับ' : 'ส่งข้อความ', me,
+    'ถึง ' + labels_(msg).join(', ') + (msg.replyTo ? ' · ตอบ ' + msg.replyTo.name + ': ' + msg.replyTo.text : '') +
+    (images.length ? ' · รูป ' + images.length : ''), msg);
+  return { message: msg };
+};
+
+ACTIONS.chatRead = function (req) {
+  var u = requireUser_(req.token), me = person_(u);
+  return updateMessage_(req.id, function (msg) {
+    if (msg.reads[key_(me)] || !isForUser_(msg, u)) return false;
+    msg.reads[key_(me)] = stamp_(me);
+    log_('อ่าน', me, '', msg);
+  });
+};
+
+ACTIONS.chatReact = function (req) {
+  var u = requireUser_(req.token), me = person_(u);
+  var type = req.type === 'ok' || req.type === 'no' ? req.type : null;
+  if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
+  return updateMessage_(req.id, function (msg) {
+    var cur = msg.reactions[key_(me)];
+    if (cur && cur.type === type) return false;
+    var rec = stamp_(me);
+    rec.type = type;
+    msg.reactions[key_(me)] = rec;
+    msg.reactionLog.push(rec);
+    log_(type === 'ok' ? '✓ ถูก' : '✗ ผิด', me, cur ? 'เปลี่ยนจาก ' + (cur.type === 'ok' ? '✓ ถูก' : '✗ ผิด') : '', msg);
+  });
+};
+
+ACTIONS.chatForward = function (req) {
+  var u = requireUser_(req.token), me = person_(u);
+  var targets = cleanTargets_(req.to);
+  if (!targets.to.length) throw new Error('เลือกผู้รับก่อนส่งต่อ');
+  return updateMessage_(req.id, function (msg) {
+    targets.to.forEach(function (t) { if (msg.to.indexOf(t) === -1) msg.to.push(t); });
+    for (var k in targets.names) msg.toNames[k] = targets.names[k];
+    var entry = person_(u);
+    msg.forwards.push({ by: entry, to: targets.to, at: Date.now() });
+    log_('ส่งต่อ', me, 'ให้ ' + targets.to.map(function (t) { return label_(msg, t); }).join(', '), msg);
+  });
+};
+
+ACTIONS.chatDelete = function (req) {
+  var u = requireUser_(req.token);
+  var found = findMessage_(String(req.id || ''));
+  if (!found) return {};
+  if (found.msg.author.username !== u.username && !u.isAdmin) throw new Error('ลบได้เฉพาะข้อความของตัวเอง');
+  found.msg.images.forEach(function (ref) {
+    try { DriveApp.getFileById(String(ref).replace(/^drive:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
+  });
+  sheet_('Messages', MESSAGE_HEADERS).deleteRow(found.row);
+  log_('ลบข้อความ', person_(u), '', found.msg);
+  return { deleted: found.msg.id };
+};
+
+// รูปแนบ: ส่งเป็น data URL ให้เฉพาะผู้ที่เข้าสู่ระบบ และเฉพาะไฟล์ในโฟลเดอร์รูปของแชทนี้
+ACTIONS.chatImage = function (req) {
+  requireUser_(req.token);
+  var file;
+  try { file = DriveApp.getFileById(String(req.fileId || '')); } catch (e) { throw new Error('ไม่พบรูป'); }
+  var folderId = folder_().getId(), parents = file.getParents(), ok = false;
+  while (parents.hasNext()) { if (parents.next().getId() === folderId) { ok = true; break; } }
+  if (!ok) throw new Error('ไม่พบรูป');
+  var blob = file.getBlob();
+  return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
 };
 
 /* ---------------- Chat helpers ---------------- */
