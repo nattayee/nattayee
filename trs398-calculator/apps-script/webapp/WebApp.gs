@@ -16,7 +16,7 @@
  *      sends them back to the app (step 2's URL). Then: Project Settings → Script properties →
  *        APP_URL   = the /exec URL of deployment 2 (the app)
  *        LOGIN_URL = the /exec URL of deployment 3 (sign-in)
- *      Until LOGIN_URL is set, the page asks the recorder to type their Gmail instead.
+ *      Until LOGIN_URL is set, only nattayee can send reports (others are told sign-in is not set up).
  *   4. Automatic sign-in: once nattayee has opened the app (which records the app's page origin as
  *      APP_ORIGIN), every page load asks deployment 3 in a hidden frame for the Google account signed in right
  *      now, so the recorder follows whoever is signed in. First use (approval) or browsers that block it fall
@@ -292,14 +292,12 @@ function apiAppendReport(csvText, token) {
   var headers = rows[0].map(function (h) { return String(unquote(h)).trim(); });
   var values = rows[1].map(unquote);
   if (headers[0] !== WEBAPP.ID_HEADER) throw new Error('รูปแบบรายงานไม่ถูกต้อง');
-  // Recorder's Gmail: verified by Google (own account or the Login token). Typed on the page only while
-  // the sign-in button is not set up (no LOGIN_URL).
+  // Recorder's Gmail: only the account Google verified (nattayee's own, or the sign-in token), never typed
   var u = headers.indexOf(WEBAPP.USER_HEADER);
   var me = user_(token);
   if (!me) {
-    if (loginUrl_()) throw new Error('กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน');
-    me = String(u >= 0 ? values[u] : '').trim().toLowerCase();
-    if (!EMAIL_RE.test(me)) throw new Error('กรอกอีเมลผู้บันทึก (Gmail) ด้านบนของหน้าให้ถูกต้องก่อนส่งรายงาน');
+    throw new Error(loginUrl_() ? 'กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน'
+      : 'ยังเข้าสู่ระบบไม่ได้ เพราะผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL แจ้ง ' + WEBAPP.OWNER_EMAIL);
   }
   if (u < 0) { headers.push(WEBAPP.USER_HEADER); values.push(me); } else values[u] = me;
 

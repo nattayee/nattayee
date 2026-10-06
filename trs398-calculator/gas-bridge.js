@@ -4,8 +4,8 @@
  * in claude.ai, backed by the server functions in WebApp.gs:
  *   download_file_content → apiExportXlsx(fileId)
  *   create_file           → apiAppendReport(csvText, token)   (writes straight to the Log tab)
- * It also shows who is signed in: the Google account signed in right now (hidden sign-in frame), a
- * "Sign in with Google" button when that cannot be read, or a typed Gmail when sign-in is not set up.
+ * It also shows who is signed in: the Google account signed in right now (hidden sign-in frame), or a
+ * "Sign in with Google" button when that cannot be read. The recorder is never typed.
  * Errors come back as {code: 'tool_error', message} so the page's existing messages apply.
  */
 (function () {
@@ -46,33 +46,14 @@
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
 
-  // Recorder's Gmail. Deployed "Execute as: Me", Google tells the script the visitor's Gmail only for the
-  // owner, so everyone else types it once (kept in this browser) and the report records it.
-  var RECORDER_KEY = 'trs398-recorder-v1';
-  var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-  function askRecorder() {
-    var box = document.getElementById('recorderBox'), inp = document.getElementById('recorderEmail');
-    if (!box || !inp) return;
-    try { inp.value = localStorage.getItem(RECORDER_KEY) || ''; } catch (e) { /* storage unavailable */ }
-    box.hidden = false;
-    function apply() {
-      var v = inp.value.trim().toLowerCase(), ok = EMAIL_RE.test(v);
-      window.TRS398_USER = ok ? v : '';
-      inp.classList.toggle('is-filled', ok);
-      inp.classList.toggle('is-empty', !ok);
-      if (ok) { try { localStorage.setItem(RECORDER_KEY, v); } catch (e) { /* storage unavailable */ } }
-    }
-    inp.addEventListener('input', apply);
-    apply();
-  }
-
   function el(id) { return document.getElementById(id); }
   var owned = false;   // footer line added once
 
-  // Sign-in state on the page: who is signed in, the sign-in button, or the typed recorder box
+  // Sign-in state on the page: who is signed in (green dot), the sign-in button, or why sign-in is unavailable
   function applyInfo(info, checking) {
     if (!info) return;
     var badge = el('userBadge'), who = el('userEmail'), lead = badge && badge.querySelector('span'), login = el('loginBtn');
+    if (badge) badge.classList.remove('err');
     if (!info.viaToken && token) forgetToken();   // expired or from an old secret
     if (login && info.loginUrl) login.href = info.loginHref || info.loginUrl + '?login=1&back=' + encodeURIComponent(info.appUrl || '');
     if (checking) {   // asking Google for the account signed in right now
@@ -83,7 +64,11 @@
       window.TRS398_USER = info.account || '';
       if (badge && who && lead) { lead.textContent = 'เข้าสู่ระบบเป็น'; who.textContent = info.account || ''; badge.hidden = !info.account; }
       if (login) login.hidden = !!info.account || !info.loginUrl;
-      if (!info.account && !info.loginUrl) askRecorder();   // sign-in not set up yet: the recorder types their Gmail
+      if (!info.account && !info.loginUrl && badge && who && lead) {   // sign-in deployment not set up yet
+        lead.textContent = 'ยังเข้าสู่ระบบไม่ได้ (ผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL)';
+        who.textContent = '';
+        badge.classList.add('err'); badge.hidden = false;
+      }
     }
     var note = el('setupNote');
     if (note) {
