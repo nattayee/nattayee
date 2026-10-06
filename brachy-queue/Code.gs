@@ -4,19 +4,20 @@
  * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
- * - บังคับ login ด้วยบัญชี Google; อนุญาตเฉพาะอีเมลในชีต Users และบันทึกทุกการใช้งานในชีต AccessLog
+ * - ระบบสมาชิกของตัวเอง: สมัคร (ชื่อผู้ใช้ / รหัสผ่าน / อีเมล) แล้วเข้าสู่ระบบ
+ *   ผู้สมัครคนแรกเป็นผู้ดูแลระบบ คนถัดไปรอผู้ดูแลอนุมัติ (ปิดได้ที่ REQUIRE_APPROVAL)
+ *   รหัสผ่านเก็บเป็น hash + salt, ลืมรหัสผ่านใช้รหัสยืนยันทางอีเมล, บันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
  *
  * ต้องผูกสคริปต์นี้กับ Google Sheet (Extensions > Apps Script)
- * และ Deploy เป็น Web app แบบ Execute as: "User accessing the web app",
- * Who has access: "Anyone with Google account"
+ * และ Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone"
  */
 
 const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
 const SHEET_HOLIDAYS = 'Holidays';
 const SHEET_SETTINGS = 'Settings';
-const SHEET_USERS = 'Users';
+const SHEET_ACCOUNTS = 'Accounts';
 const SHEET_LOG = 'AccessLog';
 
 const APPT_HEADERS = [
@@ -32,7 +33,7 @@ const APPT_HEADERS = [
   'หมายเหตุ',           // J
   'สถานะ',              // K  นัดแล้ว / ยกเลิก / มาตามนัด
   'Calendar Event ID', // L
-  'ผู้บันทึก'            // M
+  'ผู้บันทึก'            // M  ชื่อผู้ใช้
 ];
 const COL = {};
 ['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
@@ -42,6 +43,20 @@ const COL = {};
 const STATUS_BOOKED = 'นัดแล้ว';
 const STATUS_CANCELLED = 'ยกเลิก';
 const STATUS_DONE = 'มาตามนัด';
+
+/** บัญชีผู้ใช้ (ชีต Accounts) */
+const ACCOUNT_HEADERS = ['ชื่อผู้ใช้', 'อีเมล', 'รหัสผ่าน (hash)', 'บทบาท', 'สถานะ', 'สมัครเมื่อ', 'เข้าใช้ล่าสุด'];
+const ACOL = { username: 0, email: 1, hash: 2, role: 3, status: 4, createdAt: 5, lastLogin: 6 };
+const ROLE_ADMIN = 'admin';
+const ROLE_USER = 'user';
+const ACC_ACTIVE = 'ใช้งาน';
+const ACC_PENDING = 'รออนุมัติ';
+const ACC_SUSPENDED = 'ระงับ';
+const PW_ITERATIONS = 500;           // รอบการ hash รหัสผ่าน
+const LOGIN_MAX_FAILS = 5;           // ใส่รหัสผิดได้กี่ครั้งก่อนล็อก
+const LOGIN_LOCK_SECONDS = 600;      // ล็อก 10 นาที
+const RESET_CODE_SECONDS = 900;      // รหัสยืนยันลืมรหัสผ่านใช้ได้ 15 นาที
+const AUTH_ERR = 'AUTH_REQUIRED: ';  // ขึ้นต้นข้อความ error เมื่อหน้าเว็บต้องให้เข้าสู่ระบบใหม่
 
 const DEFAULT_DOCTORS = [
   'ทัศน์วรรณ อาษากิจ',
@@ -54,8 +69,20 @@ const OLD_SAMPLE_DOCTORS = ['พญ. ตัวอย่าง หนึ่ง', 
 /** ข้อความแจ้งผู้ใช้จากฝั่งเซิร์ฟเวอร์ (หน้าเว็บส่งภาษาที่เลือกมา: 'th' หรือ 'en') */
 const MSG = {
   th: {
-    login: 'กรุณา login บัญชี Google ก่อนใช้งาน',
-    denied: 'อีเมล {email} ไม่มีสิทธิ์ใช้งาน',
+    sessionExpired: 'กรุณาเข้าสู่ระบบอีกครั้ง',
+    accountSuspended: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
+    accountPending: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ',
+    adminOnly: 'เฉพาะผู้ดูแลระบบเท่านั้น',
+    badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+    locked: 'ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่',
+    usernameRule: 'ชื่อผู้ใช้ต้องยาว 3–30 ตัว ใช้ได้เฉพาะ a-z, 0-9, จุด (.), ขีดล่าง (_) และขีด (-)',
+    usernameTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว',
+    emailRule: 'รูปแบบอีเมลไม่ถูกต้อง',
+    emailTaken: 'อีเมลนี้สมัครไว้แล้ว',
+    passwordRule: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว',
+    badCode: 'รหัสยืนยันไม่ถูกต้องหรือหมดอายุ',
+    cannotChangeSelf: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้',
+    userNotFound: 'ไม่พบบัญชี {username}',
     noData: 'ไม่มีข้อมูล',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
@@ -66,12 +93,24 @@ const MSG = {
     fxDate: 'วันที่ของ Fx {n} ไม่ถูกต้อง',
     calFail: 'สร้างนัดในปฏิทินไม่สำเร็จ: {err}',
     notFound: 'ไม่พบนัด {id}',
-    calMissing: 'ไม่พบปฏิทิน {id} หรือบัญชีนี้ไม่มีสิทธิ์แก้ไขปฏิทิน (ตรวจสอบ CALENDAR_ID และการแชร์ปฏิทิน)',
+    calMissing: 'ไม่พบปฏิทิน {id} หรือเจ้าของสคริปต์ไม่มีสิทธิ์แก้ไขปฏิทิน (ตรวจสอบ CALENDAR_ID และการแชร์ปฏิทิน)',
     sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   },
   en: {
-    login: 'Please sign in with a Google account first',
-    denied: '{email} is not allowed to use this app',
+    sessionExpired: 'Please log in again',
+    accountSuspended: 'This account is suspended. Please contact the administrator',
+    accountPending: 'This account is waiting for administrator approval',
+    adminOnly: 'Administrators only',
+    badLogin: 'Incorrect username or password',
+    locked: 'Too many wrong passwords. Please wait 10 minutes and try again',
+    usernameRule: 'Username must be 3–30 characters: a-z, 0-9, dot (.), underscore (_) or hyphen (-)',
+    usernameTaken: 'This username is already taken',
+    emailRule: 'Invalid email address',
+    emailTaken: 'This email is already registered',
+    passwordRule: 'Password must be at least 8 characters',
+    badCode: 'The verification code is wrong or has expired',
+    cannotChangeSelf: 'You cannot change the status or role of your own account',
+    userNotFound: 'Account {username} not found',
     noData: 'No data',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
@@ -82,7 +121,7 @@ const MSG = {
     fxDate: 'Invalid date for Fx {n}',
     calFail: 'Could not create calendar events: {err}',
     notFound: 'Appointment {id} not found',
-    calMissing: 'Calendar {id} not found or this account cannot edit it (check CALENDAR_ID and calendar sharing)',
+    calMissing: 'Calendar {id} not found or the script owner cannot edit it (check CALENDAR_ID and calendar sharing)',
     sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   }
 };
@@ -92,12 +131,14 @@ function msg_(lang, key, vars) {
 }
 
 const DEFAULT_SETTINGS = [
-  ['CALENDAR_ID', '', 'ID ของปฏิทินที่ใช้ร่วมกัน (ควรตั้งเสมอ เพราะแต่ละคนใช้บัญชีตัวเอง ถ้าว่างนัดจะไปลงปฏิทินส่วนตัวของผู้บันทึก)'],
+  ['CALENDAR_ID', '', 'ID ของปฏิทินที่จะลงนัด (เว้นว่าง = ปฏิทินหลักของเจ้าของสคริปต์)'],
   ['EVENT_PREFIX', '[ใส่แร่]', 'คำนำหน้าชื่อนัดในปฏิทิน'],
   ['SHOW_NAME_IN_CALENDAR', 'TRUE', 'TRUE = แสดงชื่อผู้ป่วยในปฏิทิน, FALSE = แสดงเฉพาะ HN'],
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
   ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
-  ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล']
+  ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล'],
+  ['REQUIRE_APPROVAL', 'TRUE', 'TRUE = ผู้สมัครใหม่ต้องรอผู้ดูแลอนุมัติก่อนเข้าใช้, FALSE = สมัครแล้วเข้าใช้ได้ทันที'],
+  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)']
 ];
 
 /* ------------------------------------------------------------------ */
@@ -105,30 +146,13 @@ const DEFAULT_SETTINGS = [
 /* ------------------------------------------------------------------ */
 
 function doGet() {
-  // Web app ตั้งค่าให้ต้อง login Google ก่อนเสมอ และรันในนามผู้ใช้ จึงได้อีเมลจริงของผู้ใช้
-  const email = currentEmail_();
-  if (!email) return deniedPage_('', 'ไม่พบบัญชี Google ที่ login อยู่ กรุณา login Gmail แล้วเปิดลิงก์ใหม่',
-    'No signed-in Google account found. Please sign in to Gmail and open the link again.');
-
   try {
     ensureSetup_();
   } catch (e) {
-    // แสดงสาเหตุจริงด้วย เพราะข้อผิดพลาดตรงนี้อาจมาจากสิทธิ์ชีต สิทธิ์ของสคริปต์ (scope) หรือการ deploy
-    console.error('doGet: ensureSetup_ failed for ' + email + ': ' + (e && e.stack || e));
-    return deniedPage_(email,
-      'เปิด Google Sheet ของระบบไม่สำเร็จ ถ้าบัญชีนี้ยังไม่ได้รับแชร์ชีต ให้แจ้งผู้ดูแลแชร์สิทธิ์ (ผู้แก้ไข) ให้อีเมลนี้ ' +
-      'ถ้าได้รับแชร์แล้ว ให้ผู้ดูแลตรวจว่า deploy เวอร์ชันล่าสุดและ appsscript.json ใช้สิทธิ์ spreadsheets เต็ม',
-      'Could not open the system\'s Google Sheet. If this account has not been given access, ask the administrator to share it (Editor). ' +
-      'If it has, ask the administrator to deploy the latest version and check that appsscript.json uses the full spreadsheets scope.',
-      String(e && e.message || e));
+    console.error('doGet: ensureSetup_ failed: ' + (e && e.stack || e));
+    return errorPage_('เปิด Google Sheet ของระบบไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบ',
+      'Could not open the system\'s Google Sheet. Please contact the administrator.', String(e && e.message || e));
   }
-  if (!isAllowed_(email)) {
-    log_(email, 'ถูกปฏิเสธ', 'ไม่อยู่ในรายชื่อชีต Users');
-    return deniedPage_(email, 'อีเมลนี้ไม่อยู่ในรายชื่อผู้มีสิทธิ์ใช้งาน กรุณาแจ้งผู้ดูแลให้เพิ่มในชีต Users',
-      'This email is not on the list of allowed users. Ask the administrator to add it to the Users sheet.');
-  }
-  log_(email, 'เข้าใช้งาน', 'เปิดหน้าเว็บ');
-
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('นัดคิวผู้ป่วยใส่แร่')
@@ -153,39 +177,157 @@ function showDialog() {
 /** สร้างชีตและหัวตารางที่จำเป็น (รันซ้ำได้ ไม่ลบข้อมูลเดิม) */
 function setup() {
   ensureSetup_();
+  authSecret_(); // สร้างกุญแจลงชื่อ token ไว้ล่วงหน้า
   // คอลัมน์ HN และวันที่นัดต้องเป็นข้อความ (กันเลข 0 นำหน้า HN หาย และกันชีตแปลงวันที่)
   const ss = SpreadsheetApp.getActive();
   ss.getSheetByName(SHEET_APPTS).getRange('D:D').setNumberFormat('@');
   ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
   ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
+  ss.getSheetByName(SHEET_ACCOUNTS).getRange('A:B').setNumberFormat('@');
   try {
-    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, Users, AccessLog แล้ว\n' +
-      'เพิ่มอีเมลผู้ใช้งานในชีต Users ก่อนแชร์ลิงก์');
+    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, Accounts, AccessLog แล้ว\n' +
+      'Deploy เว็บแอป แล้วสมัครสมาชิกเป็นคนแรกทันที บัญชีแรกจะเป็นผู้ดูแลระบบ');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
 }
 
 /* ------------------------------------------------------------------ */
-/*  API ที่หน้าเว็บเรียกผ่าน google.script.run                          */
+/*  API สมาชิก (ไม่ต้องเข้าสู่ระบบ)                                       */
 /* ------------------------------------------------------------------ */
 
-function getInitData(lang) {
+/** สมัครสมาชิก: form = { username, email, password, lang } */
+function registerAccount(form) {
+  const lang = form && form.lang;
+  const username = normUsername_(form && form.username);
+  const email = String(form && form.email || '').trim().toLowerCase();
+  const password = String(form && form.password || '');
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error(msg_(lang, 'usernameRule'));
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw new Error(msg_(lang, 'emailRule'));
+  if (password.length < 8 || password.length > 200) throw new Error(msg_(lang, 'passwordRule'));
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const accounts = getAccounts_();
+    if (accounts.some(a => a.username === username)) throw new Error(msg_(lang, 'usernameTaken'));
+    if (accounts.some(a => a.email === email)) throw new Error(msg_(lang, 'emailTaken'));
+
+    // บัญชีแรกของระบบเป็นผู้ดูแลและใช้งานได้ทันที
+    const first = accounts.length === 0;
+    const needApproval = !first && String(getSettings_().REQUIRE_APPROVAL).toUpperCase() !== 'FALSE';
+    const role = first ? ROLE_ADMIN : ROLE_USER;
+    const status = needApproval ? ACC_PENDING : ACC_ACTIVE;
+    const sh = getSheet_(SHEET_ACCOUNTS);
+    sh.getRange(sh.getLastRow() + 1, 1, 1, ACCOUNT_HEADERS.length)
+      .setValues([[username, email, hashPassword_(password), role, status, nowStr_(), '']]);
+    SpreadsheetApp.flush();
+    log_(username, 'สมัครสมาชิก', email + ' / ' + role + ' / ' + status);
+    if (needApproval) notifyAdminsNewAccount_(accounts, username, email);
+    return { ok: true, status: status, role: role, needApproval: needApproval };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** เข้าสู่ระบบ: form = { login (ชื่อผู้ใช้หรืออีเมล), password, remember, lang } */
+function login(form) {
+  const lang = form && form.lang;
+  const loginId = String(form && form.login || '').trim().toLowerCase();
+  const password = String(form && form.password || '');
+  const cache = CacheService.getScriptCache();
+  const failKey = 'loginfail_' + loginId;
+  const fails = Number(cache.get(failKey) || 0);
+  if (fails >= LOGIN_MAX_FAILS) throw new Error(msg_(lang, 'locked'));
+
+  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
+  if (!acc || !verifyPassword_(password, acc.hash)) {
+    cache.put(failKey, String(fails + 1), LOGIN_LOCK_SECONDS);
+    log_(loginId || '(ว่าง)', 'เข้าสู่ระบบไม่สำเร็จ', 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (' + (fails + 1) + ')');
+    throw new Error(msg_(lang, 'badLogin'));
+  }
+  cache.remove(failKey);
+  if (acc.status === ACC_PENDING) throw new Error(msg_(lang, 'accountPending'));
+  if (acc.status !== ACC_ACTIVE) throw new Error(msg_(lang, 'accountSuspended'));
+
+  getSheet_(SHEET_ACCOUNTS).getRange(acc.row, ACOL.lastLogin + 1).setValue(nowStr_());
+  log_(acc.username, 'เข้าสู่ระบบ', '');
+  const hours = form && form.remember ? 24 * 7 : Math.max(1, Number(getSettings_().SESSION_HOURS) || 12);
+  return { token: makeToken_(acc.username, hours), user: publicUser_(acc) };
+}
+
+/** ลืมรหัสผ่าน ขั้นที่ 1: ส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี */
+function requestPasswordReset(form) {
+  const loginId = String(form && form.login || '').trim().toLowerCase();
+  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
+  // ตอบเหมือนกันทุกกรณี เพื่อไม่ให้ใช้ตรวจว่ามีบัญชีนี้หรือไม่
+  if (!acc || !acc.email || acc.status === ACC_SUSPENDED) return { ok: true };
+  const cache = CacheService.getScriptCache();
+  const countKey = 'resetcount_' + acc.username;
+  const count = Number(cache.get(countKey) || 0);
+  if (count >= 3) return { ok: true }; // ส่งได้ไม่เกิน 3 ครั้งต่อ 15 นาที
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put('reset_' + acc.username, hashPassword_(code, 1), RESET_CODE_SECONDS);
+  cache.put(countKey, String(count + 1), RESET_CODE_SECONDS);
+  try {
+    MailApp.sendEmail({
+      to: acc.email,
+      subject: '[นัดคิวใส่แร่] รหัสยืนยันสำหรับตั้งรหัสผ่านใหม่',
+      body: 'รหัสยืนยันของบัญชี ' + acc.username + ' คือ ' + code + '\n' +
+        'ใช้ได้ภายใน 15 นาที ถ้าคุณไม่ได้ขอรหัสนี้ ไม่ต้องทำอะไร\n\n' +
+        'Your verification code for ' + acc.username + ' is ' + code + ' (valid for 15 minutes).'
+    });
+    log_(acc.username, 'ขอรหัสตั้งรหัสผ่านใหม่', 'ส่งไปที่ ' + acc.email);
+  } catch (e) {
+    log_(acc.username, 'ส่งรหัสตั้งรหัสผ่านไม่สำเร็จ', e.message);
+  }
+  return { ok: true };
+}
+
+/** ลืมรหัสผ่าน ขั้นที่ 2: form = { login, code, password, lang } */
+function resetPassword(form) {
+  const lang = form && form.lang;
+  const loginId = String(form && form.login || '').trim().toLowerCase();
+  const code = String(form && form.code || '').trim();
+  const password = String(form && form.password || '');
+  if (password.length < 8 || password.length > 200) throw new Error(msg_(lang, 'passwordRule'));
+  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
+  if (!acc) throw new Error(msg_(lang, 'badCode'));
+  const cache = CacheService.getScriptCache();
+  const stored = cache.get('reset_' + acc.username);
+  const tryKey = 'resettry_' + acc.username;
+  const tries = Number(cache.get(tryKey) || 0);
+  if (!stored || tries >= 5 || !verifyPassword_(code, stored)) {
+    cache.put(tryKey, String(tries + 1), RESET_CODE_SECONDS);
+    throw new Error(msg_(lang, 'badCode'));
+  }
+  getSheet_(SHEET_ACCOUNTS).getRange(acc.row, ACOL.hash + 1).setValue(hashPassword_(password));
+  cache.removeAll(['reset_' + acc.username, tryKey, 'loginfail_' + acc.username, 'loginfail_' + acc.email]);
+  log_(acc.username, 'ตั้งรหัสผ่านใหม่', 'ผ่านรหัสยืนยันทางอีเมล');
+  return { ok: true };
+}
+
+/* ------------------------------------------------------------------ */
+/*  API ที่ต้องเข้าสู่ระบบ (ส่ง token มาทุกครั้ง)                          */
+/* ------------------------------------------------------------------ */
+
+function getInitData(token, lang) {
   ensureSetup_();
-  const email = requireUser_(lang);
+  const acc = requireUser_(token, lang);
   const settings = getSettings_();
   return {
-    user: { email: email, name: userName_(email) },
+    user: publicUser_(acc),
     doctors: getDoctors_(),
     holidays: getHolidays_(),
     settings: {
       maxCasesPerDay: maxCases_(settings),
       calendarName: getCalendar_(lang).getName()
     },
-    appointments: listAppointments_()
+    appointments: listAppointments_(),
+    pendingAccounts: acc.role === ROLE_ADMIN ? getAccounts_().filter(a => a.status === ACC_PENDING).length : 0
   };
 }
 
-function listAppointments(lang) {
-  requireUser_(lang);
+function listAppointments(token, lang) {
+  requireUser_(token, lang);
   return listAppointments_();
 }
 
@@ -194,9 +336,9 @@ function listAppointments(lang) {
  * payload = { hn, name, doctor, totalFx, note, force, lang,
  *             sessions: [{ date:'yyyy-MM-dd' }, ...] }
  */
-function createAppointments(payload) {
+function createAppointments(token, payload) {
   const lang = payload && payload.lang;
-  const user = requireUser_(lang);
+  const user = requireUser_(token, lang).username;
   const p = validatePayload_(payload, lang);
 
   const lock = LockService.getScriptLock();
@@ -274,67 +416,184 @@ function createAppointments(payload) {
 }
 
 /** ยกเลิกนัด: scope = 'one' (เฉพาะ fraction นี้) หรือ 'course' (ทั้งคอร์สที่ยังไม่ได้ทำ) */
-function cancelAppointment(apptId, scope, lang) {
-  return updateStatus_(apptId, scope, STATUS_CANCELLED, true, lang);
+function cancelAppointment(token, apptId, scope, lang) {
+  const user = requireUser_(token, lang).username;
+  return updateStatus_(user, apptId, scope, STATUS_CANCELLED, true, lang);
 }
 
 /** บันทึกว่าผู้ป่วยมาตามนัดแล้ว */
-function markDone(apptId, lang) {
-  return updateStatus_(apptId, 'one', STATUS_DONE, false, lang);
+function markDone(token, apptId, lang) {
+  const user = requireUser_(token, lang).username;
+  return updateStatus_(user, apptId, 'one', STATUS_DONE, false, lang);
 }
 
-/* ------------------------------------------------------------------ */
-/*  ผู้ใช้ / สิทธิ์ / log                                               */
-/* ------------------------------------------------------------------ */
-
-function currentEmail_() {
-  try { return String(Session.getActiveUser().getEmail() || '').trim().toLowerCase(); }
-  catch (e) { return ''; }
+/** (ผู้ดูแล) รายชื่อบัญชีทั้งหมด */
+function listAccounts(token, lang) {
+  requireAdmin_(token, lang);
+  return getAccounts_().map(publicUser_);
 }
 
-function requireUser_(lang) {
-  const email = currentEmail_();
-  if (!email) throw new Error(msg_(lang, 'login'));
-  if (!isAllowed_(email)) {
-    log_(email, 'ถูกปฏิเสธ', 'เรียกใช้ API โดยไม่มีสิทธิ์');
-    throw new Error(msg_(lang, 'denied', { email: email }));
+/** (ผู้ดูแล) เปลี่ยนสถานะ/บทบาท: changes = { status?: 'ใช้งาน'|'ระงับ', role?: 'admin'|'user' } */
+function updateAccount(token, username, changes, lang) {
+  const admin = requireAdmin_(token, lang);
+  const target = normUsername_(username);
+  if (target === admin.username) throw new Error(msg_(lang, 'cannotChangeSelf'));
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const acc = getAccounts_().find(a => a.username === target);
+    if (!acc) throw new Error(msg_(lang, 'userNotFound', { username: target }));
+    const sh = getSheet_(SHEET_ACCOUNTS);
+    const done = [];
+    if (changes && [ACC_ACTIVE, ACC_SUSPENDED].indexOf(changes.status) >= 0 && changes.status !== acc.status) {
+      sh.getRange(acc.row, ACOL.status + 1).setValue(changes.status);
+      done.push('สถานะ ' + acc.status + ' → ' + changes.status);
+    }
+    if (changes && [ROLE_ADMIN, ROLE_USER].indexOf(changes.role) >= 0 && changes.role !== acc.role) {
+      sh.getRange(acc.row, ACOL.role + 1).setValue(changes.role);
+      done.push('บทบาท ' + acc.role + ' → ' + changes.role);
+    }
+    SpreadsheetApp.flush();
+    if (done.length) log_(admin.username, 'แก้ไขบัญชี', target + ': ' + done.join(', '));
+    return getAccounts_().map(publicUser_);
+  } finally {
+    lock.releaseLock();
   }
-  return email;
 }
 
-function getUsers_() {
-  const sh = getSheet_(SHEET_USERS);
+/* ------------------------------------------------------------------ */
+/*  บัญชี / รหัสผ่าน / token / log                                      */
+/* ------------------------------------------------------------------ */
+
+function normUsername_(u) {
+  return String(u || '').trim().toLowerCase();
+}
+
+function getAccounts_() {
+  const sh = getSheet_(SHEET_ACCOUNTS);
   const last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, 3).getDisplayValues()
-    .filter(r => r[0].trim())
-    .map(r => ({
-      email: r[0].trim().toLowerCase(),
-      name: r[1].trim(),
-      active: String(r[2]).trim().toUpperCase() !== 'FALSE'
-    }));
+  return sh.getRange(2, 1, last - 1, ACCOUNT_HEADERS.length).getDisplayValues()
+    .map((r, i) => ({
+      row: i + 2,
+      username: normUsername_(r[ACOL.username]),
+      email: String(r[ACOL.email]).trim().toLowerCase(),
+      hash: String(r[ACOL.hash]).trim(),
+      role: String(r[ACOL.role]).trim() === ROLE_ADMIN ? ROLE_ADMIN : ROLE_USER,
+      status: String(r[ACOL.status]).trim(),
+      createdAt: r[ACOL.createdAt],
+      lastLogin: r[ACOL.lastLogin]
+    }))
+    .filter(a => a.username);
 }
 
-function isAllowed_(email) {
-  return getUsers_().some(u => u.active && u.email === email);
+function publicUser_(a) {
+  return { username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin };
 }
 
-function userName_(email) {
-  const u = getUsers_().find(x => x.email === email);
-  return (u && u.name) || email;
+/** ตรวจ token แล้วคืนบัญชี (ต้องสถานะ "ใช้งาน") */
+function requireUser_(token, lang) {
+  const username = parseToken_(token);
+  if (!username) throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
+  const acc = getAccounts_().find(a => a.username === username);
+  if (!acc) throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
+  if (acc.status === ACC_PENDING) throw new Error(AUTH_ERR + msg_(lang, 'accountPending'));
+  if (acc.status !== ACC_ACTIVE) throw new Error(AUTH_ERR + msg_(lang, 'accountSuspended'));
+  return acc;
+}
+
+function requireAdmin_(token, lang) {
+  const acc = requireUser_(token, lang);
+  if (acc.role !== ROLE_ADMIN) throw new Error(msg_(lang, 'adminOnly'));
+  return acc;
+}
+
+function bytesToB64_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ''); }
+
+/** hash รหัสผ่านแบบ salt + SHA-256 วนหลายรอบ เก็บเป็น v1$รอบ$salt$hash */
+function hashPassword_(password, iterations, salt) {
+  const iters = iterations || PW_ITERATIONS;
+  const s = salt || bytesToB64_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random()));
+  const pw = Utilities.newBlob(String(password)).getBytes();
+  let h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s + ':' + password, Utilities.Charset.UTF_8);
+  for (let i = 1; i < iters; i++) h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h.concat(pw));
+  return 'v1$' + iters + '$' + s + '$' + bytesToB64_(h);
+}
+
+function verifyPassword_(password, stored) {
+  const parts = String(stored || '').split('$');
+  if (parts.length !== 4 || parts[0] !== 'v1') return false;
+  return safeEqual_(hashPassword_(password, Number(parts[1]), parts[2]), stored);
+}
+
+function safeEqual_(a, b) {
+  a = String(a); b = String(b);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+/** กุญแจลับสำหรับลงชื่อ token (สร้างครั้งแรกแล้วเก็บใน Script Properties) */
+function authSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  let s = props.getProperty('AUTH_SECRET');
+  if (!s) {
+    s = Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('AUTH_SECRET', s);
+  }
+  return s;
+}
+
+function makeToken_(username, hours) {
+  const payload = username + '|' + (Date.now() + hours * 3600 * 1000);
+  const sig = bytesToB64_(Utilities.computeHmacSha256Signature(payload, authSecret_()));
+  return bytesToB64_(Utilities.newBlob(payload).getBytes()) + '.' + sig;
+}
+
+/** คืนชื่อผู้ใช้จาก token ที่ถูกต้องและยังไม่หมดอายุ ไม่งั้นคืน '' */
+function parseToken_(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 2) return '';
+    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
+    const sig = bytesToB64_(Utilities.computeHmacSha256Signature(payload, authSecret_()));
+    if (!safeEqual_(sig, parts[1])) return '';
+    const i = payload.lastIndexOf('|');
+    if (Number(payload.slice(i + 1)) < Date.now()) return '';
+    return payload.slice(0, i);
+  } catch (e) {
+    return '';
+  }
+}
+
+function notifyAdminsNewAccount_(accounts, username, email) {
+  const to = accounts.filter(a => a.role === ROLE_ADMIN && a.status === ACC_ACTIVE && a.email).map(a => a.email).join(',');
+  if (!to) return;
+  try {
+    MailApp.sendEmail({
+      to: to,
+      subject: '[นัดคิวใส่แร่] มีผู้สมัครใหม่รออนุมัติ: ' + username,
+      body: 'ผู้สมัครใหม่: ' + username + ' (' + email + ')\nเข้าสู่ระบบแล้วไปที่แท็บ "ผู้ใช้" เพื่ออนุมัติหรือระงับ'
+    });
+  } catch (e) {
+    log_(username, 'แจ้งผู้ดูแลไม่สำเร็จ', e.message);
+  }
+}
+
+function nowStr_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 }
 
 /** บันทึกการใช้งานลงชีต AccessLog */
-function log_(email, action, detail) {
+function log_(user, action, detail) {
   try {
     const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOG);
     if (!sh) return;
-    const tz = Session.getScriptTimeZone();
-    sh.appendRow([Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss'), email || '(ไม่ทราบ)', action, detail || '']);
+    sh.appendRow([nowStr_(), user || '(ไม่ทราบ)', action, detail || '']);
   } catch (e) { /* ไม่ให้ log ที่ผิดพลาดทำให้งานหลักล้ม */ }
 }
 
-function deniedPage_(email, message, messageEn, detail) {
+function errorPage_(message, messageEn, detail) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const html =
     '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">' +
@@ -345,14 +604,11 @@ function deniedPage_(email, message, messageEn, detail) {
     'code{background:#efe8f8;padding:2px 6px;border-radius:6px}' +
     '@media (prefers-color-scheme:dark){body{background:#141120;color:#ece8f6}.b{background:#1e1a2c;border-color:#363049}' +
     'h1{color:#ff8f86}code{background:#2f2647}}</style></head><body><div class="b">' +
-    '<h1>🔒 ไม่สามารถเข้าใช้งานได้ · Access denied</h1><p>' + esc(message) + '</p>' +
+    '<h1>⚠️ ระบบยังไม่พร้อมใช้งาน · Not available</h1><p>' + esc(message) + '</p>' +
     '<p lang="en" style="color:#6b6680">' + esc(messageEn) + '</p>' +
-    (email ? '<p>บัญชีที่ login อยู่ / Signed in as: <code>' + esc(email) + '</code></p>' : '') +
     (detail ? '<p style="font-size:13px">รายละเอียด / Details: <code>' + esc(detail) + '</code></p>' : '') +
-    '<p style="font-size:13px;color:#6b6680">ถ้า login ผิดบัญชี ให้ออกจากระบบ Google แล้ว login ใหม่ด้วยบัญชีที่ได้รับสิทธิ์<br>' +
-    'If you are signed in with the wrong account, sign out of Google and sign in with an allowed account.</p>' +
     '</div></body></html>';
-  return HtmlService.createHtmlOutput(html).setTitle('ไม่มีสิทธิ์ใช้งาน · Access denied')
+  return HtmlService.createHtmlOutput(html).setTitle('ระบบยังไม่พร้อมใช้งาน')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -372,8 +628,7 @@ function listAppointments_() {
     .sort(compareAppt_);
 }
 
-function updateStatus_(apptId, scope, newStatus, deleteEvent, lang) {
-  const user = requireUser_(lang);
+function updateStatus_(user, apptId, scope, newStatus, deleteEvent, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -610,20 +865,19 @@ function ensureSetup_() {
     sh.autoResizeColumns(1, 3);
   }
 
-  sh = ss.getSheetByName(SHEET_USERS);
+  sh = ss.getSheetByName(SHEET_ACCOUNTS);
   if (!sh) {
-    sh = ss.insertSheet(SHEET_USERS);
-    sh.getRange(1, 1, 1, 3).setValues([['อีเมล (Gmail)', 'ชื่อ', 'ใช้งาน (TRUE/FALSE)']]).setFontWeight('bold');
+    sh = ss.insertSheet(SHEET_ACCOUNTS);
+    sh.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS])
+      .setFontWeight('bold').setBackground('#ede7f6');
     sh.setFrozenRows(1);
-    const owner = currentEmail_();
-    if (owner) sh.getRange(2, 1, 1, 3).setValues([[owner, 'ผู้ดูแลระบบ', 'TRUE']]);
-    sh.autoResizeColumns(1, 3);
+    sh.getRange('A:B').setNumberFormat('@');
   }
 
   sh = ss.getSheetByName(SHEET_LOG);
   if (!sh) {
     sh = ss.insertSheet(SHEET_LOG);
-    sh.getRange(1, 1, 1, 4).setValues([['เวลา', 'อีเมล', 'การกระทำ', 'รายละเอียด']])
+    sh.getRange(1, 1, 1, 4).setValues([['เวลา', 'ผู้ใช้', 'การกระทำ', 'รายละเอียด']])
       .setFontWeight('bold').setBackground('#ede7f6');
     sh.setFrozenRows(1);
   }

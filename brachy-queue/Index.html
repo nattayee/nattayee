@@ -137,7 +137,7 @@
     header h1 { margin: 0; font-size: 20px; font-weight: 700; }
     header .cal { font-size: 13px; opacity: .85; }
     main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-    main > *, .grid2 > *, #viewBook > *, #viewDash > * { min-width: 0; }
+    main > *, .grid2 > *, #viewBook > *, #viewDash > *, #viewUsers > * { min-width: 0; }
     .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
     @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
     .card {
@@ -151,7 +151,7 @@
     .req::after { content: ' *'; color: var(--bad); }
     .field { margin-bottom: 12px; }
     input, select, textarea, button { font: inherit; color: inherit; }
-    input[type=text], input[type=number], input[type=date], input[type=search], select, textarea {
+    input[type=text], input[type=number], input[type=date], input[type=search], input[type=email], input[type=password], select, textarea {
       width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--field);
     }
     input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
@@ -234,10 +234,10 @@
 
     .toast {
       position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(140%);
-      background: var(--toast-bg); color: var(--toast-ink); padding: 10px 18px; border-radius: 10px; transition: transform .25s;
-      max-width: calc(100% - 32px); z-index: 20; white-space: pre-line;
+      background: var(--toast-bg); color: var(--toast-ink); padding: 10px 18px; border-radius: 10px; transition: transform .25s, visibility .25s;
+      max-width: calc(100% - 32px); z-index: 20; white-space: pre-line; visibility: hidden;
     }
-    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.show { transform: translateX(-50%) translateY(0); visibility: visible; }
     .toast.err { background: var(--bad); color: var(--on-bad); }
     .modal { position: fixed; inset: 0; background: var(--overlay); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
     .modal.show { display: flex; }
@@ -351,6 +351,37 @@
     }
     .daydetail h3 { margin: 0 0 8px; font-size: 16px; }
     .docsum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    /* ---------- เข้าสู่ระบบ / สมัครสมาชิก ---------- */
+    .authwrap { display: flex; justify-content: center; padding-inline: 16px; padding-block: 40px 56px; }
+    .authcard {
+      width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 22px; display: grid; gap: 14px; align-content: start;
+    }
+    .authcard h2 { margin: 0; font-size: 20px; text-wrap: balance; }
+    .authcard p { margin: 4px 0 0; }
+    .authtabs { display: flex; gap: 4px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+    .authtabs button { flex: 1; border: 0; background: transparent; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--muted); }
+    .authtabs button[aria-selected="true"] { background: var(--card); color: var(--accent); }
+    .authcard form { display: grid; gap: 12px; }
+    .authcard .field { margin: 0; }
+    .authmsg { font-size: 14px; padding: 8px 12px; border-radius: 8px; }
+    .authmsg.err { background: var(--bad-soft); color: var(--bad); }
+    .authmsg.ok { background: var(--ok-soft); color: var(--ok); }
+    .linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; justify-self: start; }
+    .pwwrap { position: relative; }
+    .pwwrap input { padding-right: 70px; }
+    .pwwrap button {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: var(--raise);
+      color: var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+    }
+    .authfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .logout {
+      border: 0; background: var(--tab-bg); color: var(--header-ink); padding: 2px 10px; border-radius: 7px;
+      cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px;
+    }
+    .tab .badge { background: var(--bad); color: var(--on-bad); border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 4px; }
+    .tag.pending { background: var(--warn-soft); color: var(--warn); }
+    .tag.admin { background: var(--accent); color: var(--accent-ink); }
     .docsum span { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 600; }
   </style>
 </head>
@@ -360,13 +391,14 @@
   <header>
     <div class="hleft">
       <h1>📅 <span data-i18n="app_title"></span></h1>
-      <nav class="tabs" id="tabs">
+      <nav class="tabs" id="tabs" hidden>
         <button type="button" class="tab on" data-view="book" data-i18n="tab_book"></button>
         <button type="button" class="tab" data-view="dash" data-i18n="tab_dash"></button>
+        <button type="button" class="tab" data-view="users" id="tabUsers" hidden><span data-i18n="tab_users"></span><span class="badge" id="pendBadge" hidden></span></button>
       </nav>
     </div>
     <div class="hright">
-      <div class="who"><span id="userEmail"></span><br><span class="cal" id="calName"></span></div>
+      <div class="who" id="whoBox" hidden><span id="userEmail"></span><button type="button" class="logout" id="logoutBtn" data-i18n="logout"></button><br><span class="cal" id="calName"></span></div>
       <div class="tools">
         <div class="seg" role="group" id="langSeg" data-i18n-aria="lang_group">
           <button type="button" data-lang="th" lang="th" aria-pressed="true">ไทย</button>
@@ -380,7 +412,85 @@
     </div>
   </header>
 
-  <main>
+  <!-- เข้าสู่ระบบ / สมัครสมาชิก / ลืมรหัสผ่าน -->
+  <div class="authwrap" id="viewAuth" hidden>
+    <section class="authcard" aria-labelledby="authTitle">
+      <div>
+        <h2 id="authTitle" data-i18n="auth_title"></h2>
+        <p class="hint" data-i18n="auth_sub"></p>
+      </div>
+      <div class="authtabs" role="tablist" id="authTabs">
+        <button type="button" role="tab" data-auth="login" aria-selected="true" data-i18n="login"></button>
+        <button type="button" role="tab" data-auth="register" aria-selected="false" data-i18n="register"></button>
+      </div>
+      <div class="authmsg" id="authMsg" role="status" hidden></div>
+
+      <form id="loginForm" autocomplete="on" novalidate>
+        <div class="field">
+          <label for="loginId" class="req" data-i18n="login_id"></label>
+          <input type="text" id="loginId" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="loginPw" class="req" data-i18n="password"></label>
+          <div class="pwwrap"><input type="password" id="loginPw" autocomplete="current-password" required><button type="button" data-pw="loginPw" data-i18n="show_pw"></button></div>
+        </div>
+        <label class="check" style="margin:0"><input type="checkbox" id="remember"> <span data-i18n="remember"></span></label>
+        <button type="submit" class="btn primary" id="loginBtn" data-i18n="login_btn"></button>
+        <button type="button" class="linkbtn" data-auth="forgot" data-i18n="forgot_link"></button>
+      </form>
+
+      <form id="registerForm" autocomplete="on" novalidate hidden>
+        <div class="field">
+          <label for="regUser" class="req" data-i18n="username"></label>
+          <input type="text" id="regUser" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30" required>
+          <div class="hint" data-i18n="username_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regEmail" class="req" data-i18n="email"></label>
+          <input type="email" id="regEmail" autocomplete="email" autocapitalize="none" spellcheck="false" required>
+          <div class="hint" data-i18n="email_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regPw" class="req" data-i18n="password"></label>
+          <div class="pwwrap"><input type="password" id="regPw" autocomplete="new-password" minlength="8" required><button type="button" data-pw="regPw" data-i18n="show_pw"></button></div>
+          <div class="hint" data-i18n="password_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regPw2" class="req" data-i18n="confirm_pw"></label>
+          <input type="password" id="regPw2" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn primary" id="registerBtn" data-i18n="register_btn"></button>
+      </form>
+
+      <form id="forgotForm" novalidate hidden>
+        <p class="hint" data-i18n="forgot_hint" style="margin:0"></p>
+        <div class="field">
+          <label for="fgId" class="req" data-i18n="login_id"></label>
+          <input type="text" id="fgId" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <button type="button" class="btn" id="sendCodeBtn" data-i18n="send_code"></button>
+        <div id="resetStep" hidden style="display:grid; gap:12px">
+          <div class="field">
+            <label for="fgCode" class="req" data-i18n="code"></label>
+            <input type="text" id="fgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+          </div>
+          <div class="field">
+            <label for="fgPw" class="req" data-i18n="new_password"></label>
+            <div class="pwwrap"><input type="password" id="fgPw" autocomplete="new-password" required><button type="button" data-pw="fgPw" data-i18n="show_pw"></button></div>
+            <div class="hint" data-i18n="password_hint"></div>
+          </div>
+          <div class="field">
+            <label for="fgPw2" class="req" data-i18n="confirm_pw"></label>
+            <input type="password" id="fgPw2" autocomplete="new-password" required>
+          </div>
+          <button type="submit" class="btn primary" id="resetBtn" data-i18n="reset_btn"></button>
+        </div>
+        <button type="button" class="linkbtn" data-auth="login" data-i18n="back_to_login"></button>
+      </form>
+    </section>
+  </div>
+
+  <main id="appMain" hidden>
     <div class="alertbar" id="alertBar" hidden></div>
 
     <div id="viewBook" style="display:grid; gap:16px">
@@ -513,6 +623,20 @@
 
       <section class="card daydetail" id="dayDetail"></section>
     </div>
+
+    <!-- จัดการผู้ใช้ (เฉพาะผู้ดูแล) -->
+    <div id="viewUsers" hidden style="display:grid; gap:16px">
+      <section class="card">
+        <div class="toolbar">
+          <h2 style="margin:0" data-i18n="users_title"></h2>
+          <button type="button" class="btn sm" id="usersRefresh" data-i18n="refresh"></button>
+        </div>
+        <p class="hint" data-i18n="users_hint" style="margin-top:0"></p>
+        <div class="tablewrap">
+          <table><thead id="usersHead"></thead><tbody id="usersBody"></tbody></table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
@@ -583,7 +707,33 @@
       limit_label: 'สูงสุด {max} เคส/วัน', chart_aria: 'กราฟจำนวนเคสต่อวัน',
       lg_cases: 'จำนวนเคส', lg_over: '⚠️ เกิน {max} เคส', lg_past: 'วันที่ผ่านมาแล้ว', lg_limit: 'เส้นจำนวนเคสสูงสุด',
       more: '+ อีก {n} เคส', dd_over: '⚠️ เกิน {max} เคส ({n})', no_appts_day: 'ไม่มีนัดในวันนี้',
-      cases_one: '{n} เคส', cases_many: '{n} เคส'
+      cases_one: '{n} เคส', cases_many: '{n} เคส',
+      tab_users: 'ผู้ใช้', logout: 'ออกจากระบบ', logged_out: 'ออกจากระบบแล้ว',
+      auth_title: 'นัดคิวผู้ป่วยใส่แร่', auth_sub: 'เข้าสู่ระบบด้วยบัญชีของคุณ หรือสมัครสมาชิกใหม่',
+      login: 'เข้าสู่ระบบ', register: 'สมัครสมาชิก', login_id: 'ชื่อผู้ใช้หรืออีเมล', password: 'รหัสผ่าน',
+      show_pw: 'แสดง', hide_pw: 'ซ่อน', remember: 'จำฉันไว้ในเครื่องนี้ 7 วัน', login_btn: 'เข้าสู่ระบบ', forgot_link: 'ลืมรหัสผ่าน?',
+      username: 'ชื่อผู้ใช้ (username)', username_hint: '3–30 ตัว ใช้ a-z, 0-9, จุด ขีดล่าง หรือขีด',
+      email: 'อีเมล', email_hint: 'ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน', password_hint: 'อย่างน้อย 8 ตัว',
+      confirm_pw: 'ยืนยันรหัสผ่าน', register_btn: 'สมัครสมาชิก',
+      reg_admin: 'สมัครสำเร็จ บัญชีนี้เป็นผู้ดูแลระบบ เข้าสู่ระบบได้เลย',
+      reg_active: 'สมัครสำเร็จ เข้าสู่ระบบได้เลย',
+      reg_pending: 'สมัครสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าสู่ระบบ',
+      forgot_hint: 'กรอกชื่อผู้ใช้หรืออีเมล ระบบจะส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี',
+      send_code: 'ส่งรหัสยืนยัน', code_sent: 'ถ้ามีบัญชีนี้ ระบบส่งรหัสยืนยันไปที่อีเมลแล้ว (ใช้ได้ 15 นาที)',
+      code: 'รหัสยืนยัน 6 หลัก', new_password: 'รหัสผ่านใหม่', reset_btn: 'ตั้งรหัสผ่านใหม่',
+      reset_done: 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย', back_to_login: 'กลับไปหน้าเข้าสู่ระบบ',
+      v_login: 'กรุณากรอกชื่อผู้ใช้หรืออีเมล และรหัสผ่าน', v_username: 'ชื่อผู้ใช้ต้องยาว 3–30 ตัว ใช้ได้เฉพาะ a-z, 0-9, จุด ขีดล่าง และขีด',
+      v_email: 'รูปแบบอีเมลไม่ถูกต้อง', v_pw: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว', v_pw_match: 'รหัสผ่านทั้งสองช่องไม่ตรงกัน',
+      v_code: 'กรุณากรอกรหัสยืนยัน 6 หลัก', working: 'กำลังดำเนินการ…',
+      users_title: 'จัดการผู้ใช้', users_hint: 'อนุมัติผู้สมัครใหม่ ระงับ หรือเปิดใช้งานบัญชี และกำหนดผู้ดูแลระบบ',
+      u_username: 'ชื่อผู้ใช้', u_email: 'อีเมล', u_role: 'บทบาท', u_status: 'สถานะ', u_created: 'สมัครเมื่อ', u_last: 'เข้าใช้ล่าสุด',
+      role_admin: 'ผู้ดูแล', role_user: 'ผู้ใช้', acc_active: 'ใช้งาน', acc_pending: 'รออนุมัติ', acc_suspended: 'ระงับ',
+      a_approve: 'อนุมัติ', a_suspend: 'ระงับ', a_activate: 'เปิดใช้งาน', a_make_admin: 'ตั้งเป็นผู้ดูแล', a_make_user: 'เปลี่ยนเป็นผู้ใช้',
+      you: '(คุณ)', t_user_updated: 'บันทึกการเปลี่ยนแปลงแล้ว', no_users: 'ยังไม่มีผู้ใช้',
+      demo_code: 'โหมดทดลอง: รหัสยืนยันคือ {code}',
+      m_badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', m_pending: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ', m_suspended: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
+      m_userTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว', m_emailTaken: 'อีเมลนี้สมัครไว้แล้ว', m_badCode: 'รหัสยืนยันไม่ถูกต้องหรือหมดอายุ',
+      m_session: 'กรุณาเข้าสู่ระบบอีกครั้ง', m_self: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้'
     },
     en: {
       app_title: 'Brachytherapy Queue',
@@ -635,7 +785,33 @@
       limit_label: 'Max {max} cases/day', chart_aria: 'Cases per day chart',
       lg_cases: 'Cases', lg_over: '⚠️ Over {max}', lg_past: 'Past days', lg_limit: 'Daily limit',
       more: '+ {n} more', dd_over: '⚠️ over {max} by {n}', no_appts_day: 'No appointments on this day',
-      cases_one: '{n} case', cases_many: '{n} cases'
+      cases_one: '{n} case', cases_many: '{n} cases',
+      tab_users: 'Users', logout: 'Log out', logged_out: 'You have logged out',
+      auth_title: 'Brachytherapy Queue', auth_sub: 'Log in with your account, or sign up for a new one',
+      login: 'Log in', register: 'Sign up', login_id: 'Username or email', password: 'Password',
+      show_pw: 'Show', hide_pw: 'Hide', remember: 'Keep me logged in on this device for 7 days', login_btn: 'Log in', forgot_link: 'Forgot password?',
+      username: 'Username', username_hint: '3–30 characters: a-z, 0-9, dot, underscore or hyphen',
+      email: 'Email', email_hint: 'Used to send a verification code if you forget your password', password_hint: 'At least 8 characters',
+      confirm_pw: 'Confirm password', register_btn: 'Sign up',
+      reg_admin: 'Signed up. This account is the administrator. You can log in now',
+      reg_active: 'Signed up. You can log in now',
+      reg_pending: 'Signed up. Please wait for an administrator to approve your account before logging in',
+      forgot_hint: 'Enter your username or email. We will send a 6-digit verification code to the account\'s email',
+      send_code: 'Send code', code_sent: 'If this account exists, a verification code has been sent to its email (valid for 15 minutes)',
+      code: '6-digit code', new_password: 'New password', reset_btn: 'Set new password',
+      reset_done: 'Password changed. Log in with your new password', back_to_login: 'Back to log in',
+      v_login: 'Please enter your username or email and password', v_username: 'Username must be 3–30 characters: a-z, 0-9, dot, underscore or hyphen',
+      v_email: 'Invalid email address', v_pw: 'Password must be at least 8 characters', v_pw_match: 'The two passwords do not match',
+      v_code: 'Please enter the 6-digit code', working: 'Working…',
+      users_title: 'Manage users', users_hint: 'Approve new sign-ups, suspend or reactivate accounts, and choose administrators',
+      u_username: 'Username', u_email: 'Email', u_role: 'Role', u_status: 'Status', u_created: 'Signed up', u_last: 'Last login',
+      role_admin: 'Admin', role_user: 'User', acc_active: 'Active', acc_pending: 'Pending', acc_suspended: 'Suspended',
+      a_approve: 'Approve', a_suspend: 'Suspend', a_activate: 'Reactivate', a_make_admin: 'Make admin', a_make_user: 'Make user',
+      you: '(you)', t_user_updated: 'Changes saved', no_users: 'No users yet',
+      demo_code: 'Demo mode: the verification code is {code}',
+      m_badLogin: 'Incorrect username or password', m_pending: 'This account is waiting for administrator approval', m_suspended: 'This account is suspended. Please contact the administrator',
+      m_userTaken: 'This username is already taken', m_emailTaken: 'This email is already registered', m_badCode: 'The verification code is wrong or has expired',
+      m_session: 'Please log in again', m_self: 'You cannot change the status or role of your own account'
     }
   };
   const DOW = { th: ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
@@ -643,6 +819,9 @@
   // ค่าสถานะในชีตเก็บเป็นภาษาไทยเสมอ แปลเฉพาะตอนแสดงผล
   const ST_BOOKED = 'นัดแล้ว', ST_DONE = 'มาตามนัด', ST_CANCEL = 'ยกเลิก';
   const STATUS_KEY = { [ST_BOOKED]: 'st_booked', [ST_DONE]: 'st_done', [ST_CANCEL]: 'st_cancel' };
+  // สถานะบัญชีในชีต Accounts เก็บเป็นภาษาไทยเช่นกัน
+  const ACC_ACTIVE = 'ใช้งาน', ACC_PENDING = 'รออนุมัติ', ACC_SUSPENDED = 'ระงับ';
+  const ACC_KEY = { [ACC_ACTIVE]: 'acc_active', [ACC_PENDING]: 'acc_pending', [ACC_SUSPENDED]: 'acc_suspended' };
 
   let lang = document.documentElement.lang === 'en' ? 'en' : 'th';
   function t(key, vars) {
@@ -656,21 +835,60 @@
     set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   };
 
+  /* ================= token เข้าสู่ระบบ ================= */
+  // "จำฉันไว้" เก็บใน localStorage ไม่งั้นเก็บใน sessionStorage (ปิดเบราว์เซอร์แล้วต้องเข้าใหม่)
+  const auth = {
+    token: (function () {
+      try { return localStorage.getItem('bq-token') || sessionStorage.getItem('bq-token') || ''; } catch (e) { return ''; }
+    })(),
+    save(tk, remember) {
+      this.token = tk;
+      try {
+        localStorage.removeItem('bq-token'); sessionStorage.removeItem('bq-token');
+        (remember ? localStorage : sessionStorage).setItem('bq-token', tk);
+      } catch (e) { /* ใช้ token ในหน่วยความจำต่อไป */ }
+    },
+    clear() {
+      this.token = '';
+      try { localStorage.removeItem('bq-token'); sessionStorage.removeItem('bq-token'); } catch (e) { /* ignore */ }
+    }
+  };
+  const AUTH_PREFIX = 'AUTH_REQUIRED:';
+
   /* ================= backend: google.script.run หรือ mock ================= */
   const isGas = typeof google !== 'undefined' && google.script && google.script.run;
-  const api = isGas ? gasApi() : mockApi();
+  const api = withAuthCheck(isGas ? gasApi() : mockApi());
   if (!isGas) document.getElementById('demoBanner').hidden = false;
+
+  // ถ้าเซิร์ฟเวอร์ตอบว่าต้องเข้าสู่ระบบใหม่ (token หมดอายุ/บัญชีถูกระงับ) ให้กลับไปหน้าเข้าสู่ระบบ
+  function withAuthCheck(raw) {
+    const wrapped = {};
+    Object.keys(raw).forEach(k => {
+      wrapped[k] = (...args) => raw[k](...args).catch(e => {
+        const m = e && e.message ? e.message : String(e);
+        if (m.indexOf(AUTH_PREFIX) >= 0) onAuthLost(m.slice(m.indexOf(AUTH_PREFIX) + AUTH_PREFIX.length).trim());
+        throw e;
+      });
+    });
+    return wrapped;
+  }
 
   function gasApi() {
     const call = (fn, ...args) => new Promise((resolve, reject) => {
       google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
     });
     return {
-      init: () => call('getInitData', lang),
-      list: () => call('listAppointments', lang),
-      create: (p) => call('createAppointments', Object.assign({ lang: lang }, p)),
-      cancel: (id, scope) => call('cancelAppointment', id, scope, lang),
-      done: (id) => call('markDone', id, lang)
+      register: (f) => call('registerAccount', Object.assign({ lang: lang }, f)),
+      login: (f) => call('login', Object.assign({ lang: lang }, f)),
+      requestReset: (f) => call('requestPasswordReset', Object.assign({ lang: lang }, f)),
+      reset: (f) => call('resetPassword', Object.assign({ lang: lang }, f)),
+      init: () => call('getInitData', auth.token, lang),
+      list: () => call('listAppointments', auth.token, lang),
+      create: (p) => call('createAppointments', auth.token, Object.assign({ lang: lang }, p)),
+      cancel: (id, scope) => call('cancelAppointment', auth.token, id, scope, lang),
+      done: (id) => call('markDone', auth.token, id, lang),
+      accounts: () => call('listAccounts', auth.token, lang),
+      updateAccount: (u, ch) => call('updateAccount', auth.token, u, ch, lang)
     };
   }
 
@@ -683,14 +901,74 @@
     // เรียงตามวันที่ แล้วตามลำดับที่ลงนัด (เหมือนลำดับแถวในชีต)
     const sorted = () => load().map((a, i) => Object.assign(a, { row: i })).sort((a, b) => a.date.localeCompare(b.date) || a.row - b.row);
     const delay = (v) => new Promise(r => setTimeout(() => r(v), 300));
+    const fail = (key) => new Promise((r, rej) => setTimeout(() => rej(new Error(t(key))), 300));
+    // บัญชีในโหมดทดลอง (เก็บในเบราว์เซอร์นี้เท่านั้น ไม่ได้เข้ารหัสจริง)
+    const AKEY = 'brachyQueueDemoAccounts';
+    const loadAcc = () => { try { return JSON.parse(localStorage.getItem(AKEY)) || []; } catch (e) { return []; } };
+    const saveAcc = (a) => store.set(AKEY, JSON.stringify(a));
+    const pub = (a) => ({ username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin });
+    const now = () => { const d = new Date(); return iso(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    const findAcc = (id) => { id = String(id || '').trim().toLowerCase(); return loadAcc().find(a => a.username === id || a.email === id); };
+    const me = () => {
+      if (!auth.token.startsWith('demo.')) return null;
+      const u = auth.token.slice(5); // ชื่อผู้ใช้มีจุดได้ จึงตัดเฉพาะคำนำหน้า
+      return loadAcc().find(x => x.username === u) || null;
+    };
+    const needUser = (fn) => {
+      const a = me();
+      if (!a) return Promise.reject(new Error(AUTH_PREFIX + ' ' + t('m_session')));
+      if (a.status !== ACC_ACTIVE) return Promise.reject(new Error(AUTH_PREFIX + ' ' + t(a.status === ACC_PENDING ? 'm_pending' : 'm_suspended')));
+      return fn(a);
+    };
+    const resetCodes = {};
     return {
-      init: () => delay({
-        user: { email: 'demo.user@gmail.com', name: 'demo.user@gmail.com' },
+      register: (f) => {
+        const all = loadAcc();
+        const u = String(f.username).trim().toLowerCase(), em = String(f.email).trim().toLowerCase();
+        if (all.some(a => a.username === u)) return fail('m_userTaken');
+        if (all.some(a => a.email === em)) return fail('m_emailTaken');
+        const first = all.length === 0;
+        const acc = { username: u, email: em, pw: f.password, role: first ? 'admin' : 'user', status: first ? ACC_ACTIVE : ACC_PENDING, createdAt: now(), lastLogin: '' };
+        all.push(acc); saveAcc(all);
+        return delay({ ok: true, role: acc.role, status: acc.status, needApproval: !first });
+      },
+      login: (f) => {
+        const all = loadAcc(); const id = String(f.login).trim().toLowerCase();
+        const a = all.find(x => x.username === id || x.email === id);
+        if (!a || a.pw !== f.password) return fail('m_badLogin');
+        if (a.status === ACC_PENDING) return fail('m_pending');
+        if (a.status !== ACC_ACTIVE) return fail('m_suspended');
+        a.lastLogin = now(); saveAcc(all);
+        return delay({ token: 'demo.' + a.username, user: pub(a) });
+      },
+      requestReset: (f) => {
+        const a = findAcc(f.login);
+        if (a) { resetCodes[a.username] = String(Math.floor(100000 + Math.random() * 900000)); return delay({ ok: true, demoCode: resetCodes[a.username] }); }
+        return delay({ ok: true });
+      },
+      reset: (f) => {
+        const all = loadAcc(); const id = String(f.login).trim().toLowerCase();
+        const a = all.find(x => x.username === id || x.email === id);
+        if (!a || !resetCodes[a.username] || resetCodes[a.username] !== String(f.code).trim()) return fail('m_badCode');
+        a.pw = f.password; delete resetCodes[a.username]; saveAcc(all);
+        return delay({ ok: true });
+      },
+      accounts: () => needUser(a => a.role === 'admin' ? delay(loadAcc().map(pub)) : fail('m_session')),
+      updateAccount: (u, ch) => needUser(a => {
+        if (u === a.username) return fail('m_self');
+        const all = loadAcc(); const tg = all.find(x => x.username === u);
+        if (tg && ch.status) tg.status = ch.status;
+        if (tg && ch.role) tg.role = ch.role;
+        saveAcc(all); return delay(all.map(pub));
+      }),
+      init: () => needUser(a => delay({
+        user: pub(a),
+        pendingAccounts: a.role === 'admin' ? loadAcc().filter(x => x.status === ACC_PENDING).length : 0,
         doctors: DOCS,
         holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }, { date: '2026-10-23', name: 'วันปิยมหาราช' }],
         settings: { maxCasesPerDay: MAX, calendarName: 'Demo' },
         appointments: sorted()
-      }),
+      })),
       seed: () => {
         // ข้อมูลตัวอย่างสำหรับดูหน้าแดชบอร์ด
         const all = []; const base = new Date(); base.setDate(base.getDate() - 6);
@@ -757,7 +1035,8 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     holidays: {}, sessions: [], appts: [], filter: 'upcoming', busy: false, max: 6,
-    view: 'book', dashMonth: null, dashDay: null, user: null, calName: '', loadError: ''
+    view: 'book', dashMonth: null, dashDay: null, user: null, calName: '', loadError: '',
+    authMode: 'login', accounts: [], pending: 0
   };
 
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -773,7 +1052,7 @@
     const el = $('toast'); el.textContent = msg; el.className = 'toast show' + (isErr ? ' err' : '');
     clearTimeout(toast._t); toast._t = setTimeout(() => { el.className = 'toast' + (isErr ? ' err' : ''); }, isErr ? 6000 : 3500);
   }
-  const errMsg = (e) => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '');
+  const errMsg = (e) => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '').replace(AUTH_PREFIX, '').trim();
 
   /* ================= ภาษา ================= */
   function applyStaticText() {
@@ -786,6 +1065,8 @@
     $('langSeg').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
     $('days').querySelectorAll('label').forEach(l => { l.lastChild.textContent = DOW[lang][Number(l.querySelector('input').value)]; });
     $('thead').innerHTML = theadHtml();
+    $('usersHead').innerHTML = usersHeadHtml();
+    document.querySelectorAll('[data-pw]').forEach(b => { b.textContent = t($(b.dataset.pw).type === 'password' ? 'show_pw' : 'hide_pw'); });
     renderUser();
     updateThemeButton();
   }
@@ -795,16 +1076,183 @@
     applyStaticText();
     renderManual();
     renderAll();
+    if (state.view === 'users') renderUsers();
   }
   $('langSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); });
 
   function renderUser() {
-    if (state.loadError) { $('userEmail').textContent = '🔒 ' + state.loadError; $('calName').textContent = t('load_failed'); return; }
+    if (state.loadError) { $('userEmail').textContent = '⚠️ ' + state.loadError; $('calName').textContent = t('load_failed'); return; }
     if (!state.user) { $('userEmail').textContent = t('checking_user'); $('calName').textContent = ''; return; }
     const u = state.user;
-    $('userEmail').innerHTML = '👤 <b>' + esc(u.name) + '</b>' + (u.name !== u.email ? ' (' + esc(u.email) + ')' : '');
+    $('userEmail').innerHTML = '👤 <b>' + esc(u.username) + '</b>' + (u.role === 'admin' ? ' · ' + esc(t('role_admin')) : '');
     $('calName').textContent = t('calendar', { name: state.calName });
   }
+
+  /* ================= เข้าสู่ระบบ / สมัครสมาชิก ================= */
+  function authMsg(text, ok) {
+    const el = $('authMsg');
+    el.hidden = !text; el.textContent = text || ''; el.className = 'authmsg ' + (ok ? 'ok' : 'err');
+  }
+  function setAuthMode(mode) {
+    state.authMode = mode;
+    $('loginForm').hidden = mode !== 'login';
+    $('registerForm').hidden = mode !== 'register';
+    $('forgotForm').hidden = mode !== 'forgot';
+    $('authTabs').hidden = mode === 'forgot';
+    $('authTabs').querySelectorAll('[data-auth]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.auth === mode)));
+    if (mode !== 'forgot') $('resetStep').hidden = true;
+  }
+  function showAuth(mode, msg, ok) {
+    $('appMain').hidden = true; $('tabs').hidden = true; $('whoBox').hidden = true;
+    $('viewAuth').hidden = false;
+    setAuthMode(mode || 'login');
+    authMsg(msg || '', ok);
+    const first = { login: 'loginId', register: 'regUser', forgot: 'fgId' }[state.authMode];
+    setTimeout(() => { try { $(first).focus(); } catch (e) { /* ignore */ } }, 0);
+  }
+  function showApp() {
+    $('viewAuth').hidden = true;
+    $('appMain').hidden = false; $('tabs').hidden = false; $('whoBox').hidden = false;
+    $('tabUsers').hidden = !(state.user && state.user.role === 'admin');
+    renderPendingBadge();
+    setView(state.view === 'users' && $('tabUsers').hidden ? 'book' : state.view);
+  }
+  function onAuthLost(msg) {
+    auth.clear();
+    state.user = null;
+    showAuth('login', msg || t('m_session'));
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-auth]'); if (!b) return;
+    if (b.dataset.auth === 'forgot') $('fgId').value = $('loginId').value.trim();
+    setAuthMode(b.dataset.auth); authMsg('');
+  });
+  document.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', () => {
+    const inp = $(b.dataset.pw); inp.type = inp.type === 'password' ? 'text' : 'password';
+    b.textContent = t(inp.type === 'password' ? 'show_pw' : 'hide_pw');
+  }));
+  async function busyBtn(id, fn) {
+    const b = $(id), label = b.textContent;
+    b.disabled = true; b.textContent = t('working');
+    try { return await fn(); } finally { b.disabled = false; b.textContent = label; }
+  }
+  const RE_USER = /^[a-z0-9._-]{3,30}$/, RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  $('loginForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = $('loginId').value.trim(), pw = $('loginPw').value;
+    if (!id || !pw) { authMsg(t('v_login')); return; }
+    busyBtn('loginBtn', async () => {
+      try {
+        const r = await api.login({ login: id, password: pw, remember: $('remember').checked });
+        auth.save(r.token, $('remember').checked);
+        $('loginPw').value = '';
+        authMsg('');
+        await loadApp();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('registerForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = $('regUser').value.trim().toLowerCase(), em = $('regEmail').value.trim().toLowerCase();
+    const pw = $('regPw').value, pw2 = $('regPw2').value;
+    if (!RE_USER.test(u)) { authMsg(t('v_username')); $('regUser').focus(); return; }
+    if (!RE_EMAIL.test(em)) { authMsg(t('v_email')); $('regEmail').focus(); return; }
+    if (pw.length < 8) { authMsg(t('v_pw')); $('regPw').focus(); return; }
+    if (pw !== pw2) { authMsg(t('v_pw_match')); $('regPw2').focus(); return; }
+    busyBtn('registerBtn', async () => {
+      try {
+        const r = await api.register({ username: u, email: em, password: pw });
+        ['regUser', 'regEmail', 'regPw', 'regPw2'].forEach(id => { $(id).value = ''; });
+        $('loginId').value = u;
+        showAuth('login', t(r.role === 'admin' ? 'reg_admin' : r.needApproval ? 'reg_pending' : 'reg_active'), true);
+        $('loginPw').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('sendCodeBtn').addEventListener('click', () => {
+    const id = $('fgId').value.trim();
+    if (!id) { authMsg(t('v_login')); $('fgId').focus(); return; }
+    busyBtn('sendCodeBtn', async () => {
+      try {
+        const r = await api.requestReset({ login: id });
+        $('resetStep').hidden = false;
+        authMsg(r && r.demoCode ? t('demo_code', { code: r.demoCode }) : t('code_sent'), true);
+        $('fgCode').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+  $('forgotForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = $('fgId').value.trim(), code = $('fgCode').value.trim(), pw = $('fgPw').value;
+    if (!/^\d{6}$/.test(code)) { authMsg(t('v_code')); $('fgCode').focus(); return; }
+    if (pw.length < 8) { authMsg(t('v_pw')); $('fgPw').focus(); return; }
+    if (pw !== $('fgPw2').value) { authMsg(t('v_pw_match')); $('fgPw2').focus(); return; }
+    busyBtn('resetBtn', async () => {
+      try {
+        await api.reset({ login: id, code: code, password: pw });
+        ['fgCode', 'fgPw', 'fgPw2'].forEach(x => { $(x).value = ''; });
+        $('loginId').value = id;
+        showAuth('login', t('reset_done'), true);
+        $('loginPw').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('logoutBtn').addEventListener('click', () => {
+    auth.clear();
+    state.user = null; state.appts = []; state.accounts = [];
+    showAuth('login', t('logged_out'), true);
+  });
+
+  /* ================= จัดการผู้ใช้ (ผู้ดูแล) ================= */
+  function renderPendingBadge() {
+    const b = $('pendBadge');
+    b.hidden = !state.pending; b.textContent = state.pending || '';
+  }
+  function usersHeadHtml() {
+    return '<tr>' + ['u_username', 'u_email', 'u_role', 'u_status', 'u_created', 'u_last'].map(k => '<th>' + esc(t(k)) + '</th>').join('') + '<th></th></tr>';
+  }
+  async function loadUsers() {
+    try { state.accounts = await api.accounts(); renderUsers(); }
+    catch (e) { toast(errMsg(e), true); }
+  }
+  function renderUsers() {
+    const list = state.accounts.slice().sort((a, b) =>
+      (a.status === ACC_PENDING ? 0 : 1) - (b.status === ACC_PENDING ? 0 : 1) || a.username.localeCompare(b.username));
+    state.pending = list.filter(a => a.status === ACC_PENDING).length;
+    renderPendingBadge();
+    if (!list.length) { $('usersBody').innerHTML = '<tr><td colspan="7" class="empty">' + esc(t('no_users')) + '</td></tr>'; return; }
+    const btn = (u, act, key, cls) => '<button class="btn sm ' + cls + '" data-uact="' + act + '" data-u="' + esc(u) + '">' + esc(t(key)) + '</button>';
+    $('usersBody').innerHTML = list.map(a => {
+      const self = state.user && a.username === state.user.username;
+      const stCls = a.status === ACC_ACTIVE ? 'done' : a.status === ACC_PENDING ? 'pending' : 'cancel';
+      let acts = '';
+      if (!self) {
+        if (a.status === ACC_PENDING) acts += btn(a.username, 'approve', 'a_approve', 'okb') + btn(a.username, 'suspend', 'a_suspend', 'danger');
+        else if (a.status === ACC_ACTIVE) acts += btn(a.username, 'suspend', 'a_suspend', 'danger');
+        else acts += btn(a.username, 'activate', 'a_activate', 'okb');
+        acts += a.role === 'admin' ? btn(a.username, 'user', 'a_make_user', '') : btn(a.username, 'admin', 'a_make_admin', '');
+      }
+      return '<tr><td><b>' + esc(a.username) + '</b>' + (self ? ' <span class="hint">' + esc(t('you')) + '</span>' : '') + '</td>' +
+        '<td>' + esc(a.email) + '</td>' +
+        '<td><span class="tag ' + (a.role === 'admin' ? 'admin' : 'booked') + '">' + esc(t(a.role === 'admin' ? 'role_admin' : 'role_user')) + '</span></td>' +
+        '<td><span class="tag ' + stCls + '">' + esc(ACC_KEY[a.status] ? t(ACC_KEY[a.status]) : a.status) + '</span></td>' +
+        '<td class="hint">' + esc(a.createdAt) + '</td><td class="hint">' + esc(a.lastLogin || '–') + '</td>' +
+        '<td class="act"><div class="acts">' + acts + '</div></td></tr>';
+    }).join('');
+  }
+  $('usersBody').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-uact]'); if (!b) return;
+    const ch = { approve: { status: ACC_ACTIVE }, activate: { status: ACC_ACTIVE }, suspend: { status: ACC_SUSPENDED },
+      admin: { role: 'admin' }, user: { role: 'user' } }[b.dataset.uact];
+    b.disabled = true;
+    try { state.accounts = await api.updateAccount(b.dataset.u, ch); renderUsers(); toast(t('t_user_updated')); }
+    catch (err) { toast(errMsg(err), true); b.disabled = false; }
+  });
+  $('usersRefresh').addEventListener('click', loadUsers);
 
   /* ================= โหมดกลางวัน / กลางคืน ================= */
   const darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -1205,8 +1653,10 @@
     state.view = v;
     $('viewBook').hidden = v !== 'book';
     $('viewDash').hidden = v !== 'dash';
+    $('viewUsers').hidden = v !== 'users';
     $('tabs').querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.view === v));
     if (v === 'dash') renderDash();
+    if (v === 'users') loadUsers();
   }
   $('tabs').addEventListener('click', (e) => { const x = e.target.closest('[data-view]'); if (x) setView(x.dataset.view); });
 
@@ -1382,12 +1832,16 @@
 
   /* ================= init ================= */
   applyStaticText();
-  $('tbody').innerHTML = '<tr><td colspan="' + COLS + '" class="empty">' + esc(t('loading')) + '</td></tr>';
-  (async function init() {
-    $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+  $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+
+  // โหลดข้อมูลหลังเข้าสู่ระบบ (หรือเมื่อเปิดหน้าโดยมี token เดิม)
+  async function loadApp() {
+    $('tbody').innerHTML = '<tr><td colspan="' + COLS + '" class="empty">' + esc(t('loading')) + '</td></tr>';
+    state.loadError = '';
     try {
       const d = await api.init();
       state.user = d.user;
+      state.pending = d.pendingAccounts || 0;
       state.calName = d.settings.calendarName;
       state.max = d.settings.maxCasesPerDay || 6;
       $('doctor').innerHTML = '<option value="" data-i18n="choose_doctor">' + esc(t('choose_doctor')) + '</option>' +
@@ -1396,13 +1850,17 @@
       $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
       state.appts = d.appointments;
     } catch (e) {
+      if (!auth.token) return; // ต้องเข้าสู่ระบบใหม่ (onAuthLost แสดงหน้าเข้าสู่ระบบแล้ว)
       state.loadError = errMsg(e);
       toast(state.loadError, true);
     }
+    showApp();
     renderUser();
     regenerate();
     renderAll();
-  })();
+  }
+
+  if (auth.token) loadApp(); else showAuth('login');
 
   if (!isGas) {
     $('seedBtn').addEventListener('click', async () => { state.appts = await api.seed(); renderAll(); toast(t('seeded')); });
