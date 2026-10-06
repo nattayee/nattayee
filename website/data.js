@@ -10,8 +10,8 @@
  *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
  */
 /*
- * แอป TRS-398 Output Calibration (Apps Script อีกโปรเจกต์) — แสดงในหน้า MP › Machine QA และ MP › Dosimetry
- * sso: true = ลิงก์แนบบัตรผ่าน (ssoTicket ใน Code.gs) แอปจึงเข้าสู่ระบบด้วยบัญชี LPCH ให้อัตโนมัติ
+ * เว็บแอป Apps Script อื่นที่ใช้บัญชีเว็บนี้ (sso: true = ลิงก์แนบบัตรผ่าน ssoTicket ใน Code.gs แอปจึงเข้าสู่ระบบให้อัตโนมัติ)
+ *   TRS398_APP — หน้า MP › Dosimetry      LINAC_QA_APP — หน้า MP › Machine QA
  */
 var TRS398_APP = {
   icon: "📏",
@@ -20,6 +20,15 @@ var TRS398_APP = {
   note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
   sso: true,
   url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
+};
+
+var LINAC_QA_APP = {
+  icon: "⚙️",
+  label: "Linac QA",
+  desc: "แบบบันทึก Machine QA ของเครื่องเร่งอนุภาค (Daily / Monthly / Annual) บันทึกผลลง Google Sheet พร้อม Dashboard ย้อนหลังและกราฟแนวโน้ม",
+  note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
+  sso: true,
+  url: "https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec",
 };
 
 window.SITE = {
@@ -305,13 +314,13 @@ window.SITE = {
     "mp/qa": {
       title: "Machine QA",
       lead: "การควบคุมคุณภาพเครื่องฉายรังสี (อ้างอิง AAPM TG-142)",
-      apps: [TRS398_APP],   // output constancy / calibration (monthly, annual QA)
+      apps: [LINAC_QA_APP],
       groups: [
         { title: "QA logs", icon: "📊", items: [
+          { label: "Linac QA (บันทึกผล / Dashboard)", type: "Web app", sso: true, url: LINAC_QA_APP.url },
           { label: "Daily QA", type: "Sheet", url: "#" },
           { label: "Monthly QA", type: "Sheet", url: "#" },
           { label: "Annual QA", type: "Sheet", url: "#" },
-          { label: "Output calibration (TRS-398)", type: "Web app", sso: true, url: TRS398_APP.url },
         ] },
       ],
     },

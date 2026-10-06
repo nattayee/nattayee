@@ -104,7 +104,7 @@
 | RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
 | Nurse | Patient education, consent, การดูแลผลข้างเคียง |
 | RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator, ตารางงานประจำสัปดาห์ |
-| MP ▾ | **Machine QA** และ **Dosimetry** (เชื่อมแอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้), Treatment Planning, Patient-specific QA, Radiation Safety |
+| MP ▾ | **Machine QA** (แอป [Linac QA](https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec)), **Dosimetry** (แอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec)) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้, Treatment Planning, Patient-specific QA, Radiation Safety |
 | Guideline | แนวทางการรักษาแยกตามโรค และตาราง dose constraints (QUANTEC) |
 
 ## แก้ไขเนื้อหา
@@ -148,14 +148,14 @@
   `LPCH RO Workspace Private Images` และเปิดได้เฉพาะ 2 คนในบทสนทนา ข้อความส่วนตัวไม่ถูกบันทึกลง `ChatLog`
 - หมายเหตุ: เจ้าของ Google Sheet/Drive (บัญชีที่ Deploy สคริปต์) ยังเปิดชีต `DirectMessages` ได้โดยตรงในฐานะเจ้าของไฟล์
 
-## ใช้บัญชีร่วมกับแอป TRS-398 Output Calibration
+## ใช้บัญชีร่วมกับแอป Linac QA และ TRS-398 Output Calibration
 
-- หน้า **MP › Machine QA** หรือ **MP › Dosimetry** → **เปิดแอป ↗** เข้าแอป TRS-398 ได้ทันทีโดยไม่ต้องกรอกรหัสอีก
+- หน้า **MP › Machine QA** (Linac QA) และ **MP › Dosimetry** (TRS-398) → **เปิดแอป ↗** เข้าแอปได้ทันทีโดยไม่ต้องกรอกรหัสอีก
   (ลิงก์แนบบัตรผ่านที่ใช้ได้ครั้งเดียว อายุ 2 นาที — คำสั่ง `ssoTicket` / `ssoRedeem` ใน `Code.gs`; ตั้ง `sso: true` ใน `data.js`)
-- เปิดแอป TRS-398 ตรง ๆ ก็ล็อกอินด้วยชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านเดียวกับเว็บนี้ได้ — รหัสผ่านเก็บที่ชีต `Users` ที่เดียว
-- ใช้ได้เฉพาะ MP และผู้ดูแลระบบ (ตั้งที่ `LPCH_ROLES` ใน WebApp.gs) ระงับบัญชีที่นี่ก็เข้า TRS-398 ไม่ได้ด้วย
+- เปิดแอปตรง ๆ ก็ล็อกอินด้วยชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านเดียวกับเว็บนี้ได้ — รหัสผ่านเก็บที่ชีต `Users` ที่เดียว
+- ใช้ได้เฉพาะ MP และผู้ดูแลระบบ (ตั้งที่ `LPCH_ROLES` ในโค้ดของแต่ละแอป) ระงับบัญชีที่นี่ก็เข้าแอปเหล่านั้นไม่ได้ด้วย
 - ล็อกอินเว็บนี้ด้วยอีเมลแทนชื่อผู้ใช้ก็ได้
-- ไฟล์และขั้นตอนติดตั้งฝั่ง TRS-398 อยู่ที่ [`trs398/README.md`](trs398/README.md) (LPCH ต้อง Deploy แบบ Who has access: **Anyone**)
+- ไฟล์และขั้นตอนติดตั้ง: [`linac-qa/README.md`](linac-qa/README.md) และ [`trs398/README.md`](trs398/README.md) (LPCH ต้อง Deploy แบบ Who has access: **Anyone**)
 
 ## ข้อความด่วน (Quick chat)
 
