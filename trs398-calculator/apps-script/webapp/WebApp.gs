@@ -7,8 +7,11 @@
  *   2. Deploy → New deployment → Web app
  *      Execute as: "Me (nattayee@gmail.com)"   Who has access: "Anyone with Google account"
  *   Google asks users to sign in before the page opens; nobody has to approve the app or get the files shared,
- *   because the script reads and writes as nattayee. In this mode Google does not tell the script which Gmail
- *   opened it, so the page asks for the recorder's Gmail (remembered per browser) and the Log records it.
+ *   because the script reads and writes as nattayee.
+ *   3. "Sign in with Google" button: in this mode Google does not tell the script which Gmail opened it, so a
+ *      second small project (Login.gs, deployed "User accessing the web app") reads the visitor's email and
+ *      returns a signed token. Run setupLogin() here and follow Login.gs; then add the Script property
+ *      LOGIN_URL. Until LOGIN_URL is set, the page asks the recorder to type their Gmail instead.
  */
 var WEBAPP = {
   OWNER_EMAIL: 'nattayee@gmail.com',
@@ -50,6 +53,38 @@ function account_() {
   try { return String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
 }
 var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+function prop_(k) { return PropertiesService.getScriptProperties().getProperty(k) || ''; }
+/** The Login web app's /exec URL (Script property LOGIN_URL); blank = sign-in button not set up. */
+function loginUrl_() { return prop_('LOGIN_URL').trim(); }
+
+/** Email inside a login token from Login.gs, or '' when it is missing, forged or expired. */
+function tokenUser_(token) {
+  var secret = prop_('LOGIN_SECRET'), parts = String(token || '').split('.');
+  if (!secret || parts.length !== 2) return '';
+  var payload;
+  try { payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(); } catch (e) { return ''; }
+  var sig = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret));
+  if (sig !== parts[1]) return '';
+  var m = payload.match(/^(.+)\|(\d+)$/);
+  if (!m || Number(m[2]) < Date.now() || !EMAIL_RE.test(m[1])) return '';
+  return m[1].toLowerCase();
+}
+/** Verified Gmail of the person using the page: Google's own (nattayee) or the signed-in token. */
+function user_(token) { return account_() || tokenUser_(token); }
+
+/** Run once as nattayee: creates the secret shared with the Login project (Login.gs) and prints the steps. */
+function setupLogin() {
+  requireOwner_();
+  var props = PropertiesService.getScriptProperties();
+  var secret = props.getProperty('LOGIN_SECRET');
+  if (!secret) { secret = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); props.setProperty('LOGIN_SECRET', secret); }
+  Logger.log('LOGIN_SECRET = ' + secret);
+  Logger.log('1) สร้างโปรเจกต์ใหม่ วาง Login.gs → Project Settings → Script properties → LOGIN_SECRET = ค่าข้างบน');
+  Logger.log('2) Deploy โปรเจกต์ Login: Execute as "User accessing the web app", Who has access "Anyone with Google account"');
+  Logger.log('3) กลับมาที่โปรเจกต์นี้ → Project Settings → Script properties → LOGIN_URL = URL /exec ของโปรเจกต์ Login');
+  Logger.log('LOGIN_URL ตอนนี้: ' + (loginUrl_() || '(ยังไม่ได้ตั้ง)'));
+}
 /** Creating and sharing the Output Log is only for nattayee, so it stays in nattayee's Drive. */
 function requireOwner_() {
   var me = account_();
@@ -60,9 +95,15 @@ function requireOwner_() {
 
 // ---------------------------------------------------------------- page
 
-function doGet() {
+function doGet(e) {
   // "Who has access: Anyone with Google account" makes Google ask for a sign-in before this runs
-  return HtmlService.createHtmlOutput(loadPage_())
+  var html = loadPage_();
+  // Back from the Login app with a token: hand it to the page, which keeps it in the browser
+  var t = String((e && e.parameter && e.parameter.t) || '');
+  if (t && tokenUser_(t)) {
+    html = html.replace(/<head>/i, '<head><script>window.TRS398_LOGIN_TOKEN = ' + JSON.stringify(t).replace(/</g, '\\u003c') + ';</script>');
+  }
+  return HtmlService.createHtmlOutput(html)
     .setTitle(WEBAPP.TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
@@ -154,9 +195,10 @@ function logId_() {
 // ---------------------------------------------------------------- calls from the page
 
 /** Account and log in use, shown on the page. */
-function apiInfo() {
+function apiInfo(token) {
   var id = logId_();
-  return { account: account_(), owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
+  return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(),
+    appUrl: ScriptApp.getService().getUrl(), owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }
 
 /** Master Sheet as .xlsx (base64); any other id is answered with nattayee's Output Log. */
@@ -175,17 +217,22 @@ function apiExportXlsx(fileId) {
 }
 
 /** Appends one report (two-row CSV: headers + values) to the Log tab by header name; skips known Report IDs. */
-function apiAppendReport(csvText) {
+function apiAppendReport(csvText, token) {
   var rows = Utilities.parseCsv(String(csvText || ''));
   if (rows.length < 2) throw new Error('รายงานว่างเปล่า');
   var unquote = function (v) { return typeof v === 'string' && v.charAt(0) === "'" ? v.slice(1) : v; };
   var headers = rows[0].map(function (h) { return String(unquote(h)).trim(); });
   var values = rows[1].map(unquote);
   if (headers[0] !== WEBAPP.ID_HEADER) throw new Error('รูปแบบรายงานไม่ถูกต้อง');
-  // Recorder's Gmail: from Google when it tells us (nattayee), otherwise as entered on the page
+  // Recorder's Gmail: verified by Google (own account or the Login token). Typed on the page only while
+  // the sign-in button is not set up (no LOGIN_URL).
   var u = headers.indexOf(WEBAPP.USER_HEADER);
-  var me = account_() || String(u >= 0 ? values[u] : '').trim().toLowerCase();
-  if (!EMAIL_RE.test(me)) throw new Error('กรอกอีเมลผู้บันทึก (Gmail) ด้านบนของหน้าให้ถูกต้องก่อนส่งรายงาน');
+  var me = user_(token);
+  if (!me) {
+    if (loginUrl_()) throw new Error('กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน');
+    me = String(u >= 0 ? values[u] : '').trim().toLowerCase();
+    if (!EMAIL_RE.test(me)) throw new Error('กรอกอีเมลผู้บันทึก (Gmail) ด้านบนของหน้าให้ถูกต้องก่อนส่งรายงาน');
+  }
   if (u < 0) { headers.push(WEBAPP.USER_HEADER); values.push(me); } else values[u] = me;
 
   var logId = logId_();

@@ -3,8 +3,10 @@
 - ผู้ใช้ต้อง **เข้าสู่ระบบด้วยบัญชี Google** ก่อนเปิดแอป (Google บังคับเองจากการตั้ง Who has access)
 - สคริปต์ทำงานในนามของ **nattayee@gmail.com** (Execute as: Me) จึงอ่าน Sheet ข้อมูลหลักและเขียน Output Log ได้เลย
   ผู้ใช้ไม่ต้องกด Authorize และไม่ต้องแชร์ไฟล์ให้ใคร
-- ในโหมดนี้ Google ไม่บอกสคริปต์ว่าใครเปิด (ยกเว้น nattayee เอง) หน้าเว็บจึงมีช่อง **อีเมลผู้บันทึก (Gmail)** ที่มุมขวาบน
-  กรอกครั้งเดียว เบราว์เซอร์จำไว้ และทุกรายงานบันทึกลงคอลัมน์ **ผู้บันทึก (Gmail)** (เป็นอีเมลที่ผู้ใช้กรอกเอง ไม่ได้ยืนยันกับ Google)
+- ในโหมดนี้ Google ไม่บอกสคริปต์ว่าใครเปิด (ยกเว้น nattayee เอง) จึงมีปุ่ม **เข้าสู่ระบบด้วย Google** ที่มุมขวาบน
+  ซึ่งพาไปยืนยันตัวตนกับโปรเจกต์เล็ก **TRS-398 Login** (`Login.gs`) แล้วกลับมาที่แอปพร้อมอีเมลที่ Google ยืนยันแล้ว
+  เบราว์เซอร์จำการเข้าสู่ระบบไว้ 30 วัน ทุกรายงานบันทึกอีเมลนี้ลงคอลัมน์ **ผู้บันทึก (Gmail)** และต้องเข้าสู่ระบบก่อนจึงส่งรายงานได้
+- ถ้ายังไม่ได้ตั้งค่าปุ่มเข้าสู่ระบบ (ยังไม่มี `LOGIN_URL`) หน้าเว็บจะให้กรอกอีเมลผู้บันทึกเองแทน
 - ใครก็ตามที่มีลิงก์และบัญชี Google เปิดแอปและส่งรายงานเข้า Log ได้ จึงควรแชร์ลิงก์เฉพาะในทีม
 
 โปรเจกต์ Apps Script ต้องมี **ไฟล์เดียว** คือ `Code.gs` (หน้าแอปโหลดจาก GitHub เอง)
@@ -19,6 +21,24 @@
    - Execute as: **Me (nattayee@gmail.com)**
    - Who has access: **Anyone with Google account**
 5. ส่ง URL ของ Web app ให้ผู้ใช้
+
+## ตั้งค่าปุ่ม "เข้าสู่ระบบด้วย Google" (ทำครั้งเดียวด้วยบัญชี nattayee)
+
+1. โปรเจกต์หลัก: เลือกฟังก์ชัน **`setupLogin`** → **Run** → เปิด **Execution log** คัดลอกค่า `LOGIN_SECRET = …`
+2. สร้าง **New project** ใหม่ ตั้งชื่อ `TRS-398 Login` วางโค้ดจากลิงก์นี้ทับใน `Code.gs` → บันทึก
+   https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/Login.gs
+3. ในโปรเจกต์ Login: ⚙ **Project Settings** → **Script properties** → **Add script property**
+   ชื่อ `LOGIN_SECRET` ค่า = ที่คัดลอกจากข้อ 1 → Save
+4. โปรเจกต์ Login: **Deploy → New deployment → Web app**
+   - Execute as: **User accessing the web app**
+   - Who has access: **Anyone with Google account**
+   คัดลอก URL ที่ลงท้าย `/exec`
+5. กลับมาที่โปรเจกต์หลัก: ⚙ **Project Settings** → **Script properties** → เพิ่ม `LOGIN_URL` = URL จากข้อ 4 → Save
+   (ไม่ต้อง Deploy โปรเจกต์หลักใหม่ แค่รีเฟรชหน้าแอป)
+
+ผู้ใช้กดปุ่มครั้งแรก Google จะถามว่าอนุญาตให้ TRS-398 Login **ดูอีเมลของคุณ** ให้กด Allow (โปรเจกต์ Login ขอสิทธิ์แค่อีเมลเท่านั้น)
+ถ้าขึ้น "Google hasn't verified this app" ให้กด Advanced → Go to TRS-398 Login
+ถ้าเบราว์เซอร์ login Google หลายบัญชี จะใช้บัญชีหลัก (บัญชีแรก) ของเบราว์เซอร์
 
 ## เปิด Log ใน Google Sheets ได้ (ไม่บังคับ)
 

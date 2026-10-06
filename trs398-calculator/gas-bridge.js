@@ -10,18 +10,32 @@
   'use strict';
   if (window.claude || !(window.google && google.script && google.script.run)) return;
 
-  function call(fn, arg) {
+  function call(fn) {
+    var args = [].slice.call(arguments, 1);
     return new Promise(function (resolve, reject) {
-      google.script.run
+      var run = google.script.run
         .withSuccessHandler(function (payload) { resolve({ payload: payload }); })
-        .withFailureHandler(function (err) { reject({ code: 'tool_error', message: (err && err.message) || String(err) }); })[fn](arg);
+        .withFailureHandler(function (err) { reject({ code: 'tool_error', message: (err && err.message) || String(err) }); });
+      run[fn].apply(run, args);
     });
   }
+
+  // Login token from the Login app (TRS-398 Login): arrives once in the page, then kept in this browser
+  var TOKEN_KEY = 'trs398-login-v1';
+  var token = '';
+  try {
+    if (window.TRS398_LOGIN_TOKEN) localStorage.setItem(TOKEN_KEY, window.TRS398_LOGIN_TOKEN);
+    token = localStorage.getItem(TOKEN_KEY) || '';
+  } catch (e) { token = window.TRS398_LOGIN_TOKEN || ''; }
+  if (window.TRS398_LOGIN_TOKEN) {   // drop ?t=… from the address bar
+    try { google.script.history.replace(null, {}); } catch (e) { /* older runtimes */ }
+  }
+  function forgetToken() { token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ } }
 
   var mcp = {
     callTool: function (server, tool, input) {
       if (tool === 'download_file_content') return call('apiExportXlsx', input && input.fileId);
-      if (tool === 'create_file') return call('apiAppendReport', input && input.textContent);
+      if (tool === 'create_file') return call('apiAppendReport', input && input.textContent, token);
       return Promise.reject({ code: 'bad_request', message: tool });
     }
   };
@@ -56,8 +70,23 @@
       if (!info) return;
       window.TRS398_USER = info.account || '';
       var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
+      var login = document.getElementById('loginBtn'), logout = document.getElementById('logoutBtn');
       if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
-      if (!info.account) askRecorder();
+      if (!info.viaToken && token) forgetToken();   // expired or from an old secret
+      if (logout) {
+        logout.hidden = !info.viaToken;
+        logout.onclick = function () {
+          forgetToken();
+          window.TRS398_USER = '';
+          badge.hidden = true; logout.hidden = true;
+          if (login && info.loginUrl) login.hidden = false;
+        };
+      }
+      if (login && info.loginUrl) login.href = info.loginUrl + '?back=' + encodeURIComponent(info.appUrl || '');
+      if (!info.account) {
+        if (login && info.loginUrl) login.hidden = false;   // "Sign in with Google" through the Login app
+        else askRecorder();                                 // not set up yet: the recorder types their Gmail
+      }
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
       if (logUrl && info.logUrl) {
         logUrl.value = info.logUrl;
@@ -90,5 +119,5 @@
       p.textContent = (err && err.message) || String(err);
       foot.insertBefore(p, foot.firstChild);
     })
-    .apiInfo();
+    .apiInfo(token);
 })();
