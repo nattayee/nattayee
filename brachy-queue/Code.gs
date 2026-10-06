@@ -1,7 +1,7 @@
 /**
  * ระบบนัดคิวผู้ป่วยใส่แร่ (Brachytherapy Appointment Queue)
  *
- * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / ชนิด / จำนวน fraction
+ * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
  * - บังคับ login ด้วยบัญชี Google; อนุญาตเฉพาะอีเมลในชีต Users และบันทึกทุกการใช้งานในชีต AccessLog
@@ -29,15 +29,14 @@ const APPT_HEADERS = [
   'Fraction ที่',        // G
   'จำนวน Fraction',     // H
   'วันที่นัด',           // I  yyyy-MM-dd
-  'ชนิด',               // J  Interstitial / ที่กรอกเอง
-  'หมายเหตุ',           // K
-  'สถานะ',              // L  นัดแล้ว / ยกเลิก / มาตามนัด
-  'Calendar Event ID', // M
-  'ผู้บันทึก'            // N
+  'หมายเหตุ',           // J
+  'สถานะ',              // K  นัดแล้ว / ยกเลิก / มาตามนัด
+  'Calendar Event ID', // L
+  'ผู้บันทึก'            // M
 ];
 const COL = {};
 ['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
-  'date', 'type', 'note', 'status', 'eventId', 'createdBy']
+  'date', 'note', 'status', 'eventId', 'createdBy']
   .forEach((k, i) => { COL[k] = i; });
 
 const STATUS_BOOKED = 'นัดแล้ว';
@@ -52,8 +51,45 @@ const DEFAULT_DOCTORS = [
 ];
 const OLD_SAMPLE_DOCTORS = ['พญ. ตัวอย่าง หนึ่ง', 'นพ. ตัวอย่าง สอง'];
 
-/** ชนิดที่เลือกได้ (นอกจากนี้ให้กรอกเองในช่อง "อื่นๆ") */
-const TYPE_OPTIONS = ['Interstitial'];
+/** ข้อความแจ้งผู้ใช้จากฝั่งเซิร์ฟเวอร์ (หน้าเว็บส่งภาษาที่เลือกมา: 'th' หรือ 'en') */
+const MSG = {
+  th: {
+    login: 'กรุณา login บัญชี Google ก่อนใช้งาน',
+    denied: 'อีเมล {email} ไม่มีสิทธิ์ใช้งาน',
+    noData: 'ไม่มีข้อมูล',
+    hn: 'กรุณากรอก HN',
+    name: 'กรุณากรอกชื่อผู้ป่วย',
+    doctor: 'กรุณาเลือกแพทย์',
+    doctorUnknown: 'แพทย์ "{doctor}" ไม่อยู่ในรายชื่อ (ชีต Doctors)',
+    fxRange: 'จำนวน fraction ต้องอยู่ระหว่าง 1–30',
+    fxMismatch: 'จำนวนวันนัดไม่ตรงกับจำนวน fraction',
+    fxDate: 'วันที่ของ Fx {n} ไม่ถูกต้อง',
+    calFail: 'สร้างนัดในปฏิทินไม่สำเร็จ: {err}',
+    notFound: 'ไม่พบนัด {id}',
+    calMissing: 'ไม่พบปฏิทิน {id} หรือบัญชีนี้ไม่มีสิทธิ์แก้ไขปฏิทิน (ตรวจสอบ CALENDAR_ID และการแชร์ปฏิทิน)',
+    sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
+  },
+  en: {
+    login: 'Please sign in with a Google account first',
+    denied: '{email} is not allowed to use this app',
+    noData: 'No data',
+    hn: 'Please enter HN',
+    name: 'Please enter patient name',
+    doctor: 'Please select a doctor',
+    doctorUnknown: 'Doctor "{doctor}" is not in the list (Doctors sheet)',
+    fxRange: 'Fractions must be between 1 and 30',
+    fxMismatch: 'Number of dates does not match number of fractions',
+    fxDate: 'Invalid date for Fx {n}',
+    calFail: 'Could not create calendar events: {err}',
+    notFound: 'Appointment {id} not found',
+    calMissing: 'Calendar {id} not found or this account cannot edit it (check CALENDAR_ID and calendar sharing)',
+    sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
+  }
+};
+function msg_(lang, key, vars) {
+  const dict = MSG[lang] || MSG.th;
+  return String(dict[key] || MSG.th[key] || key).replace(/\{(\w+)\}/g, (m, k) => (vars && k in vars ? vars[k] : m));
+}
 
 const DEFAULT_SETTINGS = [
   ['CALENDAR_ID', '', 'ID ของปฏิทินที่ใช้ร่วมกัน (ควรตั้งเสมอ เพราะแต่ละคนใช้บัญชีตัวเอง ถ้าว่างนัดจะไปลงปฏิทินส่วนตัวของผู้บันทึก)'],
@@ -71,16 +107,19 @@ const DEFAULT_SETTINGS = [
 function doGet() {
   // Web app ตั้งค่าให้ต้อง login Google ก่อนเสมอ และรันในนามผู้ใช้ จึงได้อีเมลจริงของผู้ใช้
   const email = currentEmail_();
-  if (!email) return deniedPage_('', 'ไม่พบบัญชี Google ที่ login อยู่ กรุณา login Gmail แล้วเปิดลิงก์ใหม่');
+  if (!email) return deniedPage_('', 'ไม่พบบัญชี Google ที่ login อยู่ กรุณา login Gmail แล้วเปิดลิงก์ใหม่',
+    'No signed-in Google account found. Please sign in to Gmail and open the link again.');
 
   try {
     ensureSetup_();
   } catch (e) {
-    return deniedPage_(email, 'บัญชีนี้ยังไม่มีสิทธิ์เข้าถึง Google Sheet ของระบบ กรุณาแจ้งผู้ดูแลให้แชร์สิทธิ์ (ผู้แก้ไข) ให้อีเมลนี้');
+    return deniedPage_(email, 'บัญชีนี้ยังไม่มีสิทธิ์เข้าถึง Google Sheet ของระบบ กรุณาแจ้งผู้ดูแลให้แชร์สิทธิ์ (ผู้แก้ไข) ให้อีเมลนี้',
+      'This account cannot access the system\'s Google Sheet yet. Ask the administrator to share it with this email (Editor).');
   }
   if (!isAllowed_(email)) {
     log_(email, 'ถูกปฏิเสธ', 'ไม่อยู่ในรายชื่อชีต Users');
-    return deniedPage_(email, 'อีเมลนี้ไม่อยู่ในรายชื่อผู้มีสิทธิ์ใช้งาน กรุณาแจ้งผู้ดูแลให้เพิ่มในชีต Users');
+    return deniedPage_(email, 'อีเมลนี้ไม่อยู่ในรายชื่อผู้มีสิทธิ์ใช้งาน กรุณาแจ้งผู้ดูแลให้เพิ่มในชีต Users',
+      'This email is not on the list of allowed users. Ask the administrator to add it to the Users sheet.');
   }
   log_(email, 'เข้าใช้งาน', 'เปิดหน้าเว็บ');
 
@@ -118,36 +157,36 @@ function setup() {
 /*  API ที่หน้าเว็บเรียกผ่าน google.script.run                          */
 /* ------------------------------------------------------------------ */
 
-function getInitData() {
+function getInitData(lang) {
   ensureSetup_();
-  const email = requireUser_();
+  const email = requireUser_(lang);
   const settings = getSettings_();
   return {
     user: { email: email, name: userName_(email) },
     doctors: getDoctors_(),
-    types: TYPE_OPTIONS,
     holidays: getHolidays_(),
     settings: {
       maxCasesPerDay: maxCases_(settings),
-      calendarName: getCalendar_().getName()
+      calendarName: getCalendar_(lang).getName()
     },
     appointments: listAppointments_()
   };
 }
 
-function listAppointments() {
-  requireUser_();
+function listAppointments(lang) {
+  requireUser_(lang);
   return listAppointments_();
 }
 
 /**
  * สร้างนัดทั้งคอร์สในคลิกเดียว
- * payload = { hn, name, doctor, type, totalFx, note, force,
+ * payload = { hn, name, doctor, totalFx, note, force, lang,
  *             sessions: [{ date:'yyyy-MM-dd' }, ...] }
  */
 function createAppointments(payload) {
-  const user = requireUser_();
-  const p = validatePayload_(payload);
+  const lang = payload && payload.lang;
+  const user = requireUser_(lang);
+  const p = validatePayload_(payload, lang);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -163,7 +202,7 @@ function createAppointments(payload) {
       }
     }
 
-    const cal = getCalendar_();
+    const cal = getCalendar_(lang);
     const tz = Session.getScriptTimeZone();
     const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
     // ต่อท้ายด้วยรหัสสุ่ม กันรหัสซ้ำเมื่อบันทึกหลายรายการในวินาทีเดียวกัน
@@ -178,13 +217,12 @@ function createAppointments(payload) {
     try {
       p.sessions.forEach((s, i) => {
         const fx = i + 1;
-        const title = [prefix, 'HN ' + p.hn, showName ? p.name : '', '· ' + p.type, '(Fx ' + fx + '/' + p.totalFx + ')']
+        const title = [prefix, 'HN ' + p.hn, showName ? p.name : '', '(Fx ' + fx + '/' + p.totalFx + ')']
           .filter(Boolean).join(' ');
         const desc = [
           'HN: ' + p.hn,
           'ผู้ป่วย: ' + p.name,
           'แพทย์: ' + p.doctor,
-          'ชนิด: ' + p.type,
           'Fraction: ' + fx + ' / ' + p.totalFx,
           p.note ? 'หมายเหตุ: ' + p.note : '',
           'รหัสคอร์ส: ' + courseId,
@@ -197,21 +235,21 @@ function createAppointments(payload) {
 
         rows.push([
           courseId + '-' + fx, courseId, now, p.hn, p.name, p.doctor, fx, p.totalFx,
-          s.date, p.type, p.note, STATUS_BOOKED, ev.getId(), user
+          s.date, p.note, STATUS_BOOKED, ev.getId(), user
         ]);
       });
     } catch (err) {
       // ถ้าสร้าง event ไม่ครบ ให้ลบที่สร้างไปแล้ว เพื่อไม่ให้ปฏิทินกับชีตไม่ตรงกัน
       created.forEach(ev => { try { ev.deleteEvent(); } catch (e) { /* ignore */ } });
       log_(user, 'ลงนัดไม่สำเร็จ', 'HN ' + p.hn + ': ' + err.message);
-      throw new Error('สร้างนัดในปฏิทินไม่สำเร็จ: ' + err.message);
+      throw new Error(msg_(lang, 'calFail', { err: err.message }));
     }
 
     const sh = getSheet_(SHEET_APPTS);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, APPT_HEADERS.length).setValues(rows);
     SpreadsheetApp.flush();
 
-    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + p.type + ' / ' + rows.length + ' Fx (' +
+    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + rows.length + ' Fx (' +
       p.sessions.map(s => s.date).join(', ') + ') คอร์ส ' + courseId);
     if (overDays.length) {
       log_(user, 'แจ้งเตือนเกินเคส', overDays.map(d => d.date + ' = ' + d.total + ' เคส').join(', '));
@@ -225,13 +263,13 @@ function createAppointments(payload) {
 }
 
 /** ยกเลิกนัด: scope = 'one' (เฉพาะ fraction นี้) หรือ 'course' (ทั้งคอร์สที่ยังไม่ได้ทำ) */
-function cancelAppointment(apptId, scope) {
-  return updateStatus_(apptId, scope, STATUS_CANCELLED, true);
+function cancelAppointment(apptId, scope, lang) {
+  return updateStatus_(apptId, scope, STATUS_CANCELLED, true, lang);
 }
 
 /** บันทึกว่าผู้ป่วยมาตามนัดแล้ว */
-function markDone(apptId) {
-  return updateStatus_(apptId, 'one', STATUS_DONE, false);
+function markDone(apptId, lang) {
+  return updateStatus_(apptId, 'one', STATUS_DONE, false, lang);
 }
 
 /* ------------------------------------------------------------------ */
@@ -243,12 +281,12 @@ function currentEmail_() {
   catch (e) { return ''; }
 }
 
-function requireUser_() {
+function requireUser_(lang) {
   const email = currentEmail_();
-  if (!email) throw new Error('กรุณา login บัญชี Google ก่อนใช้งาน');
+  if (!email) throw new Error(msg_(lang, 'login'));
   if (!isAllowed_(email)) {
     log_(email, 'ถูกปฏิเสธ', 'เรียกใช้ API โดยไม่มีสิทธิ์');
-    throw new Error('อีเมล ' + email + ' ไม่มีสิทธิ์ใช้งาน');
+    throw new Error(msg_(lang, 'denied', { email: email }));
   }
   return email;
 }
@@ -285,20 +323,24 @@ function log_(email, action, detail) {
   } catch (e) { /* ไม่ให้ log ที่ผิดพลาดทำให้งานหลักล้ม */ }
 }
 
-function deniedPage_(email, message) {
+function deniedPage_(email, message, messageEn) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const html =
     '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">' +
     '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">' +
-    '<style>body{font-family:Sarabun,sans-serif;background:#f5f3fa;color:#1f1b2e;display:flex;min-height:90vh;' +
+    '<style>:root{color-scheme:light dark}body{font-family:Sarabun,sans-serif;background:#f5f3fa;color:#1f1b2e;display:flex;min-height:90vh;' +
     'align-items:center;justify-content:center;padding:16px;margin:0}.b{background:#fff;border:1px solid #e3dfee;' +
     'border-radius:12px;padding:24px;max-width:460px}h1{font-size:20px;color:#b3261e;margin:0 0 8px}' +
-    'code{background:#efe8f8;padding:2px 6px;border-radius:6px}</style></head><body><div class="b">' +
-    '<h1>🔒 ไม่สามารถเข้าใช้งานได้</h1><p>' + esc(message) + '</p>' +
-    (email ? '<p>บัญชีที่ login อยู่: <code>' + esc(email) + '</code></p>' : '') +
-    '<p style="font-size:13px;color:#6b6680">ถ้า login ผิดบัญชี ให้ออกจากระบบ Google แล้ว login ใหม่ด้วยบัญชีที่ได้รับสิทธิ์</p>' +
+    'code{background:#efe8f8;padding:2px 6px;border-radius:6px}' +
+    '@media (prefers-color-scheme:dark){body{background:#141120;color:#ece8f6}.b{background:#1e1a2c;border-color:#363049}' +
+    'h1{color:#ff8f86}code{background:#2f2647}}</style></head><body><div class="b">' +
+    '<h1>🔒 ไม่สามารถเข้าใช้งานได้ · Access denied</h1><p>' + esc(message) + '</p>' +
+    '<p lang="en" style="color:#6b6680">' + esc(messageEn) + '</p>' +
+    (email ? '<p>บัญชีที่ login อยู่ / Signed in as: <code>' + esc(email) + '</code></p>' : '') +
+    '<p style="font-size:13px;color:#6b6680">ถ้า login ผิดบัญชี ให้ออกจากระบบ Google แล้ว login ใหม่ด้วยบัญชีที่ได้รับสิทธิ์<br>' +
+    'If you are signed in with the wrong account, sign out of Google and sign in with an allowed account.</p>' +
     '</div></body></html>';
-  return HtmlService.createHtmlOutput(html).setTitle('ไม่มีสิทธิ์ใช้งาน')
+  return HtmlService.createHtmlOutput(html).setTitle('ไม่มีสิทธิ์ใช้งาน · Access denied')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -318,19 +360,19 @@ function listAppointments_() {
     .sort(compareAppt_);
 }
 
-function updateStatus_(apptId, scope, newStatus, deleteEvent) {
-  const user = requireUser_();
+function updateStatus_(apptId, scope, newStatus, deleteEvent, lang) {
+  const user = requireUser_(lang);
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const sh = getSheet_(SHEET_APPTS);
     const last = sh.getLastRow();
-    if (last < 2) throw new Error('ไม่พบนัด');
+    if (last < 2) throw new Error(msg_(lang, 'notFound', { id: apptId }));
     const data = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
     const target = data.find(r => r[COL.apptId] === apptId);
-    if (!target) throw new Error('ไม่พบนัด ' + apptId);
+    if (!target) throw new Error(msg_(lang, 'notFound', { id: apptId }));
 
-    const cal = getCalendar_();
+    const cal = getCalendar_(lang);
     const changedIds = [];
     data.forEach((r, i) => {
       const match = scope === 'course'
@@ -358,31 +400,28 @@ function updateStatus_(apptId, scope, newStatus, deleteEvent) {
   }
 }
 
-function validatePayload_(payload) {
-  if (!payload) throw new Error('ไม่มีข้อมูล');
+function validatePayload_(payload, lang) {
+  if (!payload) throw new Error(msg_(lang, 'noData'));
   const p = {
     hn: String(payload.hn || '').trim(),
     name: String(payload.name || '').trim(),
     doctor: String(payload.doctor || '').trim(),
-    type: String(payload.type || '').trim(),
     note: String(payload.note || '').trim(),
     totalFx: parseInt(payload.totalFx, 10),
     force: !!payload.force,
     sessions: Array.isArray(payload.sessions) ? payload.sessions : []
   };
-  if (!p.hn) throw new Error('กรุณากรอก HN');
-  if (!p.name) throw new Error('กรุณากรอกชื่อผู้ป่วย');
-  if (!p.doctor) throw new Error('กรุณาเลือกแพทย์');
-  if (getDoctors_().indexOf(p.doctor) < 0) throw new Error('แพทย์ "' + p.doctor + '" ไม่อยู่ในรายชื่อ (ชีต Doctors)');
-  if (!p.type || p.type === 'อื่นๆ') throw new Error('กรุณาเลือกชนิด หรือกรอกชนิดในช่อง "อื่นๆ"');
-  if (p.type.length > 100) throw new Error('ชนิดยาวเกินไป');
-  if (!(p.totalFx >= 1 && p.totalFx <= 30)) throw new Error('จำนวน fraction ต้องอยู่ระหว่าง 1–30');
-  if (p.sessions.length !== p.totalFx) throw new Error('จำนวนวันนัดไม่ตรงกับจำนวน fraction');
+  if (!p.hn) throw new Error(msg_(lang, 'hn'));
+  if (!p.name) throw new Error(msg_(lang, 'name'));
+  if (!p.doctor) throw new Error(msg_(lang, 'doctor'));
+  if (getDoctors_().indexOf(p.doctor) < 0) throw new Error(msg_(lang, 'doctorUnknown', { doctor: p.doctor }));
+  if (!(p.totalFx >= 1 && p.totalFx <= 30)) throw new Error(msg_(lang, 'fxRange'));
+  if (p.sessions.length !== p.totalFx) throw new Error(msg_(lang, 'fxMismatch'));
 
   const reDate = /^\d{4}-\d{2}-\d{2}$/;
   p.sessions = p.sessions.map((s, i) => {
     const o = { date: String(s && s.date) };
-    if (!reDate.test(o.date)) throw new Error('วันที่ของ Fx ' + (i + 1) + ' ไม่ถูกต้อง');
+    if (!reDate.test(o.date)) throw new Error(msg_(lang, 'fxDate', { n: i + 1 }));
     return o;
   });
   return p;
@@ -397,7 +436,7 @@ function findConflicts_(sessions, hn) {
     if (same.length) {
       out.push({
         fx: i + 1, date: s.date,
-        with: same.map(a => 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx + ' (' + a.type + ')').join(', ')
+        with: same.map(a => 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx).join(', ')
       });
     }
   });
@@ -443,7 +482,7 @@ function rowToObj_(r, row) {
     apptId: r[COL.apptId], courseId: r[COL.courseId], createdAt: r[COL.createdAt],
     hn: r[COL.hn], name: r[COL.name], doctor: r[COL.doctor],
     fx: Number(r[COL.fx]), totalFx: Number(r[COL.totalFx]),
-    date: r[COL.date], type: r[COL.type],
+    date: r[COL.date],
     note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy]
   };
 }
@@ -458,11 +497,11 @@ function toDate_(dateStr) {
   return new Date(d[0], d[1] - 1, d[2]); // ใช้ timezone ของสคริปต์ (Asia/Bangkok)
 }
 
-function getCalendar_() {
+function getCalendar_(lang) {
   const id = String(getSettings_().CALENDAR_ID || '').trim();
   if (!id) return CalendarApp.getDefaultCalendar();
   const cal = CalendarApp.getCalendarById(id);
-  if (!cal) throw new Error('ไม่พบปฏิทิน ' + id + ' หรือบัญชีนี้ไม่มีสิทธิ์แก้ไขปฏิทิน (ตรวจสอบ CALENDAR_ID และการแชร์ปฏิทิน)');
+  if (!cal) throw new Error(msg_(lang, 'calMissing', { id: id }));
   return cal;
 }
 
@@ -501,7 +540,7 @@ function getSettings_() {
 
 function getSheet_(name) {
   const sh = SpreadsheetApp.getActive().getSheetByName(name);
-  if (!sh) throw new Error('ไม่พบชีต ' + name + ' (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)');
+  if (!sh) throw new Error(msg_('th', 'sheetMissing', { name: name }));
   return sh;
 }
 
@@ -517,11 +556,11 @@ function ensureSetup_() {
     // เก็บวันที่เป็นข้อความ เพื่อไม่ให้ชีตแปลง timezone หรือรูปแบบวันที่
     sh.getRange('I:I').setNumberFormat('@');
     sh.getRange('D:D').setNumberFormat('@'); // HN อาจขึ้นต้นด้วย 0
-  } else if (sh.getRange(1, 10).getDisplayValues()[0][0] === 'เวลาเริ่ม') {
-    // อัปเดตจากเวอร์ชันที่มีเวลา: ลบคอลัมน์เวลาสิ้นสุด และเปลี่ยนคอลัมน์เวลาเริ่มเป็น "ชนิด"
-    sh.deleteColumn(11);
-    sh.getRange(1, 10).setValue('ชนิด');
-    if (sh.getLastRow() >= 2) sh.getRange(2, 10, sh.getLastRow() - 1, 1).setValue('-');
+  } else {
+    // อัปเดตจากเวอร์ชันก่อน: ลบคอลัมน์ที่ไม่ใช้แล้ว (เวลาเริ่ม/เวลาสิ้นสุด หรือ ชนิด) ที่อยู่หลัง "วันที่นัด"
+    const h = sh.getRange(1, 10).getDisplayValues()[0][0];
+    if (h === 'เวลาเริ่ม') sh.deleteColumns(10, 2);
+    else if (h === 'ชนิด') sh.deleteColumn(10);
   }
 
   sh = ss.getSheetByName(SHEET_DOCTORS);
