@@ -387,6 +387,8 @@ ACTIONS.chatReact = function (req) {
   var type = req.type === 'ok' || req.type === 'no' ? req.type : null;
   if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
   return updateMessage_(req.id, function (msg) {
+    // Only someone the message was sent to may answer it; the sender cannot.
+    if (!isForUser_(msg, u) || msg.author.username === u.username) throw new Error('กด ✓/✗ ได้เฉพาะผู้ที่ได้รับข้อความนี้');
     var cur = msg.reactions[key_(me)];
     if (cur && cur.type === type) return false;
     var rec = stamp_(me);
@@ -517,6 +519,7 @@ ACTIONS.dmReact = function (req) {
   if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
   var found = findDm_(String(req.id || ''));
   if (!found || !isDmParty_(found.msg, u.username)) throw new Error('ไม่พบข้อความ');
+  if (found.msg.to.username !== u.username) throw new Error('กด ✓/✗ ได้เฉพาะผู้รับข้อความนี้');
   var cur = found.msg.reactions[key_(me)];
   if (!cur || cur.type !== type) {
     var rec = stamp_(me);

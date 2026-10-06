@@ -93,6 +93,9 @@
     return u ? { username: u.username, name: u.fullName, role: u.role } : null;
   }
 
+  // ✓/✗ may be pressed only by someone the message was sent to, never by its sender.
+  function mayReact(m, p) { return !!p && isForMe(m, p) && !samePerson(m.author, p); }
+
   // Is this message addressed to person p (everyone, their profession, or them personally)?
   function isForMe(m, p) {
     return !!p && (m.to.indexOf("ALL") !== -1 || m.to.indexOf(p.role) !== -1 ||
@@ -212,6 +215,8 @@
         });
       },
       react: function (id, p, type) {
+        var target = read().filter(function (x) { return x.id === id; })[0];
+        if (target && !mayReact(normalize(target), p)) return Promise.reject(new Error("กด ✓/✗ ได้เฉพาะผู้ที่ได้รับข้อความนี้"));
         return mutate(id, function (m) {
           var rec = stamp(p, { type: type });
           m.reactions[readerKey(p)] = rec;
@@ -719,7 +724,8 @@
       }
       else if (act === "ok" || act === "no") {
         if (!me) { showError("กรุณาเข้าสู่ระบบก่อน"); return; }
-        var cur = m && m.reactions[readerKey(me)];
+        if (!m || !mayReact(m, me)) { showError("กด ✓/✗ ได้เฉพาะผู้ที่ได้รับข้อความนี้"); return; }
+        var cur = m.reactions[readerKey(me)];
         if (cur && cur.type === act) return; // already recorded
         store.react(id, me, act).catch(function (err) { showError("บันทึกไม่สำเร็จ: " + err.message); });
       }
@@ -786,11 +792,14 @@
       var mineR = me && m.reactions[readerKey(me)];
       var replies = messages.filter(function (x) { return x.replyTo && x.replyTo.id === m.id; }).length;
 
+      var can = mayReact(m, me);
+      var why = byMe(m) ? "ผู้ส่งกด ✓/✗ ข้อความของตัวเองไม่ได้" : "กด ✓/✗ ได้เฉพาะผู้ที่ได้รับข้อความนี้";
       var btns = ["ok", "no"].map(function (type) {
         var n = all.filter(function (r) { return r.type === type; }).length;
         var on = mineR && mineR.type === type;
         return '<button type="button" class="react-btn ' + type + (on ? " on" : "") + '" data-act="' + type + '" data-id="' + esc(m.id) + '"' +
-          ' aria-pressed="' + !!on + '" title="' + (on ? "คุณกด " + REACT[type].label + " เมื่อ " + fmtFull(mineR.at) : "กด " + REACT[type].label) + '">' +
+          (can ? "" : " disabled") + ' aria-pressed="' + !!on + '" title="' +
+          (!can ? why : on ? "คุณกด " + REACT[type].label + " เมื่อ " + fmtFull(mineR.at) : "กด " + REACT[type].label) + '">' +
           REACT[type].icon + " " + REACT[type].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
       }).join("");
 
@@ -802,7 +811,16 @@
         (byMe(m) ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
         '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" aria-expanded="' + !!openLog[m.id] + '">' +
           summary + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
-        "</div>";
+        "</div>" + reactListHtml(all);
+    }
+
+    // Always-visible record of who pressed ✓/✗ (their current answer) with date and time.
+    function reactListHtml(all) {
+      if (!all.length) return "";
+      return '<ul class="react-list">' + all.slice().sort(function (a, b) { return a.at - b.at; }).map(function (r) {
+        return '<li><span class="react-tag ' + r.type + '">' + REACT[r.type].icon + " " + REACT[r.type].label + "</span> " +
+          esc(r.name) + ' <span class="badge">' + esc(r.role) + '</span> <time>' + fmtFull(r.at) + "</time></li>";
+      }).join("") + "</ul>";
     }
 
     // Who pressed ✓/✗ (with history of changes) and who read it, each with date and time.

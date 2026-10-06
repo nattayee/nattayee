@@ -140,6 +140,7 @@
       dmReact: function (r) {
         var u = need(), list = all(), m = find(list, r.id);
         if (!m || (m.from.username !== u.username && m.to.username !== u.username)) throw new Error("ไม่พบข้อความ");
+        if (m.to.username !== u.username) throw new Error("กด ✓/✗ ได้เฉพาะผู้รับข้อความนี้");
         var cur = m.reactions[key(u)];
         if (!cur || cur.type !== r.type) {
           var rec = { username: u.username, name: u.name, role: u.role, at: Date.now(), type: r.type };
@@ -391,13 +392,19 @@
             ["ok", "no"].map(function (t) {
               var on = myR && myR.type === t;
               var n = reacts.filter(function (r) { return r.type === t; }).length;
-              return '<button type="button" class="react-btn ' + t + (on ? " on" : "") + '" data-act="' + t + '" data-id="' + esc(m.id) + '" aria-pressed="' + !!on + '">' +
+              return '<button type="button" class="react-btn ' + t + (on ? " on" : "") + '" data-act="' + t + '" data-id="' + esc(m.id) + '"' +
+                (mine ? ' disabled title="ผู้รับเท่านั้นที่กด ✓/✗ ได้"' : "") + ' aria-pressed="' + !!on + '">' +
                 REACT[t].icon + " " + REACT[t].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
             }).join("") +
             '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ</button>' +
             (mine ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
             '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '">' + (status || "รายละเอียด") + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
-          "</div>" + log + "</article>";
+          "</div>" +
+          (reacts.length ? '<ul class="react-list">' + reacts.map(function (r) {
+            return '<li><span class="react-tag ' + r.type + '">' + REACT[r.type].icon + " " + REACT[r.type].label + "</span> " +
+              esc(r.name) + " <time>" + fmtFull(r.at) + "</time></li>";
+          }).join("") + "</ul>" : "") +
+          log + "</article>";
       }).join("") : '<p class="chat-empty">ยังไม่มีข้อความ — เริ่มพิมพ์ด้านล่างเพื่อส่งถึง ' + esc(partner ? partner.name : "") + "</p>";
 
       feed.scrollTop = scrollToEnd || nearEnd ? feed.scrollHeight : prevTop;
@@ -443,6 +450,7 @@
         void el.offsetWidth;
         el.classList.add("flash");
       } else if ((act === "ok" || act === "no") && m) {
+        if (m.to.username !== self.username) { showError("กด ✓/✗ ได้เฉพาะผู้รับข้อความนี้"); return; }
         var cur = m.reactions[key(self)];
         if (cur && cur.type === act) return;
         api("dmReact", { id: id, type: act }).then(function (r) { upsert(r.message); renderThread(); }, function (err) { showError(err.message); });
