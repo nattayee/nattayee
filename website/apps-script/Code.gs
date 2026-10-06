@@ -13,7 +13,7 @@
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว)
+ * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -45,10 +45,14 @@ var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'h
 var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
+var SETTINGS_HEADERS = ['username', 'quickReplies', 'updatedAt'];
+var QUICK_MAX = 5;             // ข้อความด่วน (quick chat) สูงสุดต่อคน
+var QUICK_LEN = 100;           // ความยาวสูงสุดต่อข้อความด่วน
+var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบคุณครับ/ค่ะ', 'กำลังดำเนินการ', 'เรียบร้อยแล้ว', 'ขอรายละเอียดเพิ่มเติม'];
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -135,6 +139,7 @@ function setup() {
   sheet_('Messages', MESSAGE_HEADERS);
   sheet_('ChatLog', LOG_HEADERS);
   sheet_('DirectMessages', DM_HEADERS);
+  sheet_('Settings', SETTINGS_HEADERS);
   folder_();
   folder_('DM_FOLDER_ID', DM_FOLDER);
   Logger.log('ส่งอีเมลได้อีกวันนี้: ' + MailApp.getRemainingDailyQuota() + ' ฉบับ');
@@ -436,6 +441,33 @@ ACTIONS.chatImage = function (req) {
   var blob = file.getBlob();
   return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
 };
+
+/* ----- quick chat: each member's own preset messages (up to QUICK_MAX) ----- */
+
+ACTIONS.quickGet = function (req) {
+  var u = requireUser_(req.token);
+  var row = settingsRow_(u.username);
+  var items = row ? JSON.parse(row.values[1] || 'null') : null;
+  return { items: Array.isArray(items) ? items : QUICK_DEFAULTS.slice(), custom: !!row, max: QUICK_MAX, maxLength: QUICK_LEN };
+};
+
+ACTIONS.quickSave = function (req) {
+  var u = requireUser_(req.token);
+  var items = (Array.isArray(req.items) ? req.items : []).map(function (t) { return String(t || '').replace(/\s+/g, ' ').trim(); })
+    .filter(function (t) { return t; });
+  if (items.length > QUICK_MAX) throw new Error('ตั้งข้อความด่วนได้สูงสุด ' + QUICK_MAX + ' ข้อความ');
+  items.forEach(function (t) { if (t.length > QUICK_LEN) throw new Error('ข้อความด่วนยาวได้ไม่เกิน ' + QUICK_LEN + ' ตัวอักษร'); });
+  var sh = sheet_('Settings', SETTINGS_HEADERS), row = settingsRow_(u.username);
+  if (row) sh.getRange(row.row, 2, 1, 2).setValues([[JSON.stringify(items), new Date()]]);
+  else sh.appendRow([u.username, JSON.stringify(items), new Date()]);
+  return { items: items, message: 'บันทึกข้อความด่วนแล้ว' };
+};
+
+function settingsRow_(username) {
+  var rows = sheet_('Settings', SETTINGS_HEADERS).getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) if (String(rows[i][0]) === username) return { row: i + 1, values: rows[i] };
+  return null;
+}
 
 /* ----- pop-up notifications ----- */
 

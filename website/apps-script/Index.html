@@ -384,7 +384,7 @@ table.users .chip { padding: 2px 10px; font-size: .8rem; white-space: nowrap; }
 .chat-forward { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; padding: 8px 10px; font-size: .84rem; background: var(--bg); border-radius: 4px; }
 .chat-forward .chip { padding: 2px 12px; font-size: .82rem; }
 
-.chat-compose { padding: 12px 18px 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.chat-compose { padding: 12px 18px 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .chat-compose.drag { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .chat-me, .chat-to { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .86rem; color: var(--muted); }
 .chat-me strong { color: var(--ink); }
@@ -627,6 +627,35 @@ table.users .chip { padding: 2px 10px; font-size: .8rem; white-space: nowrap; }
 .chat-thumb img { width: 56px; height: 56px; }
 .chat-picker { max-height: 38vh; overflow-y: auto; }
 .chat-error { font-size: .78rem; }
+
+/* Quick chat: preset messages above the message box */
+.quick-row { display: flex; align-items: center; gap: 5px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.quick-row::-webkit-scrollbar { display: none; }
+.quick-label { flex: none; font-size: .8rem; }
+.quick-chip {
+  flex: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 3px 11px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font: 500 .76rem var(--font-body); cursor: pointer;
+}
+.quick-chip:hover { background: var(--accent); color: var(--surface); }
+.quick-edit { flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); cursor: pointer; font-size: .8rem; }
+.quick-edit:hover, .quick-edit[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.quick-empty { font-size: .74rem; color: var(--muted); }
+.quick-pop { margin-top: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+.quick-title { margin: 0 0 6px; font: 600 .8rem var(--font-body); color: var(--accent); }
+.quick-help { margin: 0 0 10px; font-size: .84rem; color: var(--muted); }
+.quick-fields { display: grid; gap: 6px; }
+.quick-field { display: flex; align-items: center; gap: 8px; }
+.quick-field span { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 .7rem var(--font-mono); }
+.quick-field input {
+  flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink); font: .86rem var(--font-body);
+}
+.quick-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quick-buttons button { padding: 5px 14px; border-radius: 4px; font: 600 .8rem var(--font-body); cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.quick-buttons .quick-save { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.quick-msg { margin: 6px 0 0; font-size: .78rem; color: var(--ok); }
+.quick-msg.bad { color: var(--bad); }
 
 /* Chat pages fill the screen: no footer, and a compact header on phones. */
 body.chat-page .footer { display: none; }
@@ -1715,6 +1744,7 @@ window.SITE = {
           '<p class="auth-error" role="alert" hidden></p><p class="auth-msg ok" hidden></p>' +
           '<button type="submit" class="auth-submit">บันทึกข้อมูล</button>' +
         "</form></div>" +
+        '<div class="card"><h3>⚡ ข้อความด่วน (Quick chat)</h3><div class="quick-settings" id="quickSettings"></div></div>' +
         '<div class="card"><h3>🔑 เปลี่ยนรหัสผ่าน</h3><form class="auth-form password-form" novalidate>' +
           field("รหัสผ่านเดิม", '<input name="oldPassword" type="password" autocomplete="current-password" required>') +
           field("รหัสผ่านใหม่", '<input name="newPassword" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว" required>') +
@@ -1749,6 +1779,8 @@ window.SITE = {
         if (warn && user.email) warn.remove();
       },
     });
+
+    if (window.QuickChat) window.QuickChat.mountSettings(el.querySelector("#quickSettings"));
 
     wire(el.querySelector(".password-form"), {
       check: function (f) { return f.newPassword.value !== f.confirm.value ? "รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน" : ""; },
@@ -2260,6 +2292,7 @@ window.SITE = {
           '<div class="chat-to" id="chatTo"></div>' +
           '<div class="chat-picker" id="chatPicker" hidden></div>' +
           '<div class="chat-previews" id="chatPreviews"></div>' +
+          '<div class="quick-slot" id="chatQuick"></div>' +
           '<div class="chat-input-row">' +
             '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="chatFile" type="file" accept="image/*" multiple hidden></label>' +
             '<textarea id="chatText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
@@ -2449,6 +2482,8 @@ window.SITE = {
     // The box grows with the text up to a few lines, like a chat app.
     function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
     textIn.addEventListener("input", grow);
+    // Quick chat: each member's preset messages above the box (quick.js).
+    var unmountQuick = window.QuickChat ? window.QuickChat.mountBar(root.querySelector("#chatQuick"), textIn) : null;
 
     function namesFor(targets) {
       var out = {};
@@ -2833,6 +2868,7 @@ window.SITE = {
       if (observer) observer.disconnect();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("lpch:focus-message", onFocusEvent);
+      if (unmountQuick) unmountQuick();
     };
   }
 
@@ -3093,6 +3129,7 @@ window.SITE = {
             '<form class="chat-compose" id="dmForm" autocomplete="off">' +
               '<div class="chat-replying" id="dmReplying" hidden></div>' +
               '<div class="chat-previews" id="dmPreviews"></div>' +
+              '<div class="quick-slot" id="dmQuick"></div>' +
               '<div class="chat-input-row">' +
                 '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="dmFile" type="file" accept="image/*" multiple hidden></label>' +
                 '<textarea id="dmText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
@@ -3386,6 +3423,7 @@ window.SITE = {
     textIn.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
     function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
     textIn.addEventListener("input", grow);
+    var unmountQuick = window.QuickChat ? window.QuickChat.mountBar($("dmQuick"), textIn) : null;
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -3423,6 +3461,7 @@ window.SITE = {
     return function unmount() {
       alive = false;
       activePartner = null;
+      if (unmountQuick) unmountQuick();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -3430,6 +3469,158 @@ window.SITE = {
 
   window.DM = { mount: mount, startBadge: startBadge, stopBadge: stopBadge, refreshBadge: refreshBadge,
     currentPartner: function () { return activePartner; } };
+})();
+
+</script>
+  <script>
+/*
+ * ข้อความด่วน (Quick chat) — ปุ่มข้อความสำเร็จรูปเหนือช่องพิมพ์ ทั้งแชทประกาศและข้อความส่วนตัว
+ * แต่ละคนตั้งข้อความของตัวเองได้สูงสุด 5 ข้อความ (ปุ่ม ⚙ บนแถบ หรือหน้า "บัญชีของฉัน")
+ * เก็บบนเซิร์ฟเวอร์ (Code.gs: quickGet / quickSave → ชีต Settings) จึงใช้ได้ทุกเครื่อง; โหมดทดลองเก็บในเบราว์เซอร์
+ * แตะปุ่มแล้วข้อความจะใส่ลงช่องพิมพ์ (แก้ไขได้ก่อนกดส่ง)
+ */
+(function () {
+  "use strict";
+
+  var MAX = 5, MAX_LEN = 100;
+  var DEFAULTS = ["รับทราบครับ/ค่ะ", "ขอบคุณครับ/ค่ะ", "กำลังดำเนินการ", "เรียบร้อยแล้ว", "ขอรายละเอียดเพิ่มเติม"];
+  var cache = null, cacheUser = null, pending = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function user() { return window.Auth && window.Auth.user; }
+  function localKey() { return "lpch-ro-quick-" + (user() ? user().username : ""); }
+
+  function load() {
+    var u = user();
+    if (!u) return Promise.resolve(DEFAULTS.slice());
+    if (cache && cacheUser === u.username) return Promise.resolve(cache.slice());
+    if (pending) return pending;
+    var p = window.Auth.remote
+      ? window.Auth.call("quickGet").then(function (r) { return r.items; })
+      : Promise.resolve((function () {
+          try { var v = JSON.parse(localStorage.getItem(localKey())); if (Array.isArray(v)) return v; } catch (e) { /* ignore */ }
+          return DEFAULTS.slice();
+        })());
+    pending = p.then(function (items) {
+      cache = items.slice(0, MAX);
+      cacheUser = u.username;
+      pending = null;
+      return cache.slice();
+    }, function (e) { pending = null; throw e; });
+    return pending;
+  }
+
+  function clean(items) {
+    return items.map(function (t) { return String(t || "").replace(/\s+/g, " ").trim(); }).filter(Boolean);
+  }
+
+  function save(items) {
+    items = clean(items);
+    if (items.length > MAX) return Promise.reject(new Error("ตั้งข้อความด่วนได้สูงสุด " + MAX + " ข้อความ"));
+    if (items.some(function (t) { return t.length > MAX_LEN; })) return Promise.reject(new Error("ข้อความด่วนยาวได้ไม่เกิน " + MAX_LEN + " ตัวอักษร"));
+    var p = window.Auth.remote
+      ? window.Auth.call("quickSave", { items: items }).then(function (r) { return r.items; })
+      : Promise.resolve((function () { localStorage.setItem(localKey(), JSON.stringify(items)); return items; })());
+    return p.then(function (saved) {
+      cache = saved.slice();
+      cacheUser = user() && user().username;
+      window.dispatchEvent(new CustomEvent("lpch:quick-changed"));
+      return saved;
+    });
+  }
+
+  /** Five text boxes to edit the list; used in the chat pop-over and on the account page. */
+  function editorHtml(items, withCancel) {
+    var rows = [];
+    for (var i = 0; i < MAX; i++) {
+      rows.push('<label class="quick-field"><span>' + (i + 1) + '</span><input type="text" maxlength="' + MAX_LEN + '" value="' +
+        esc(items[i] || "") + '" placeholder="ข้อความด่วน ' + (i + 1) + ' (เว้นว่างได้)" aria-label="ข้อความด่วน ' + (i + 1) + '"></label>');
+    }
+    return '<div class="quick-fields">' + rows.join("") + "</div>" +
+      '<p class="quick-msg" role="status" hidden></p>' +
+      '<div class="quick-buttons">' +
+        '<button type="button" class="quick-save">บันทึก</button>' +
+        '<button type="button" class="quick-default">ใช้ค่าเริ่มต้น</button>' +
+        (withCancel ? '<button type="button" class="quick-cancel">ปิด</button>' : "") +
+      "</div>";
+  }
+
+  function wireEditor(el, onDone) {
+    var msg = el.querySelector(".quick-msg");
+    function say(text, bad) { msg.textContent = text; msg.hidden = !text; msg.classList.toggle("bad", !!bad); }
+    el.querySelector(".quick-save").addEventListener("click", function () {
+      var vals = Array.prototype.map.call(el.querySelectorAll(".quick-field input"), function (i) { return i.value; });
+      save(vals).then(function (saved) {
+        say("บันทึกแล้ว (" + saved.length + " ข้อความ)");
+        if (onDone) onDone(saved);
+      }, function (e) { say(e.message, true); });
+    });
+    el.querySelector(".quick-default").addEventListener("click", function () {
+      el.querySelectorAll(".quick-field input").forEach(function (inp, i) { inp.value = DEFAULTS[i] || ""; });
+      say("กด “บันทึก” เพื่อใช้ค่าเริ่มต้น");
+    });
+    var cancel = el.querySelector(".quick-cancel");
+    if (cancel) cancel.addEventListener("click", function () { if (onDone) onDone(null); });
+  }
+
+  /**
+   * Quick-chat bar above a message box: one chip per saved message (tap = put it in the box) and ⚙ to edit.
+   * Returns an unmount function.
+   */
+  function mountBar(slot, textarea) {
+    var editing = false;
+
+    function insert(text) {
+      var cur = textarea.value.trim();
+      textarea.value = cur ? cur + " " + text : text;
+      textarea.dispatchEvent(new Event("input", { bubbles: true })); // lets the box grow
+      textarea.focus();
+      try { textarea.setSelectionRange(textarea.value.length, textarea.value.length); } catch (e) { /* ignore */ }
+    }
+
+    function render(items) {
+      slot.innerHTML =
+        '<div class="quick-row" role="toolbar" aria-label="ข้อความด่วน">' +
+          '<span class="quick-label" aria-hidden="true">⚡</span>' +
+          items.map(function (t, i) { return '<button type="button" class="quick-chip" data-q="' + i + '" title="ใส่ข้อความนี้ในช่องพิมพ์">' + esc(t) + "</button>"; }).join("") +
+          (items.length ? "" : '<span class="quick-empty">ยังไม่มีข้อความด่วน</span>') +
+          '<button type="button" class="quick-edit" aria-expanded="' + editing + '" title="ตั้งค่าข้อความด่วน (สูงสุด ' + MAX + ' ข้อความ)" aria-label="ตั้งค่าข้อความด่วน">⚙</button>' +
+        "</div>" +
+        (editing ? '<div class="quick-pop">' + '<p class="quick-title">ข้อความด่วนของฉัน (สูงสุด ' + MAX + " ข้อความ)</p>" + editorHtml(items, true) + "</div>" : "");
+      slot.querySelectorAll(".quick-chip").forEach(function (b) {
+        b.addEventListener("click", function () { insert(items[+b.getAttribute("data-q")]); });
+      });
+      slot.querySelector(".quick-edit").addEventListener("click", function () { editing = !editing; render(items); });
+      var pop = slot.querySelector(".quick-pop");
+      if (pop) wireEditor(pop, function (saved) {
+        editing = false;
+        render(saved || items);
+      });
+    }
+
+    function refresh() { load().then(render, function () { render(DEFAULTS.slice()); }); }
+    window.addEventListener("lpch:quick-changed", refresh);
+    refresh();
+    return function () { window.removeEventListener("lpch:quick-changed", refresh); };
+  }
+
+  /** The editor as a card on the account page. */
+  function mountSettings(el) {
+    el.innerHTML = '<p class="muted">กำลังโหลด…</p>';
+    load().then(function (items) {
+      el.innerHTML = '<p class="quick-help">ปุ่มข้อความสำเร็จรูปเหนือช่องพิมพ์ในแชทและข้อความส่วนตัว — แตะเพื่อใส่ข้อความ แล้วกดส่ง</p>' + editorHtml(items, false);
+      wireEditor(el);
+    }, function (e) { el.innerHTML = '<p class="auth-error">' + esc(e.message) + "</p>"; });
+  }
+
+  // A different member signing in on this browser starts with their own list.
+  if (window.Auth) window.Auth.onChange(function () { cache = null; cacheUser = null; });
+
+  window.QuickChat = { load: load, save: save, mountBar: mountBar, mountSettings: mountSettings, MAX: MAX, DEFAULTS: DEFAULTS };
 })();
 
 </script>

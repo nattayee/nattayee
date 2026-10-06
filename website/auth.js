@@ -522,6 +522,7 @@
           '<p class="auth-error" role="alert" hidden></p><p class="auth-msg ok" hidden></p>' +
           '<button type="submit" class="auth-submit">บันทึกข้อมูล</button>' +
         "</form></div>" +
+        '<div class="card"><h3>⚡ ข้อความด่วน (Quick chat)</h3><div class="quick-settings" id="quickSettings"></div></div>' +
         '<div class="card"><h3>🔑 เปลี่ยนรหัสผ่าน</h3><form class="auth-form password-form" novalidate>' +
           field("รหัสผ่านเดิม", '<input name="oldPassword" type="password" autocomplete="current-password" required>') +
           field("รหัสผ่านใหม่", '<input name="newPassword" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว" required>') +
@@ -556,6 +557,8 @@
         if (warn && user.email) warn.remove();
       },
     });
+
+    if (window.QuickChat) window.QuickChat.mountSettings(el.querySelector("#quickSettings"));
 
     wire(el.querySelector(".password-form"), {
       check: function (f) { return f.newPassword.value !== f.confirm.value ? "รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน" : ""; },

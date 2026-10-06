@@ -250,6 +250,7 @@
             '<form class="chat-compose" id="dmForm" autocomplete="off">' +
               '<div class="chat-replying" id="dmReplying" hidden></div>' +
               '<div class="chat-previews" id="dmPreviews"></div>' +
+              '<div class="quick-slot" id="dmQuick"></div>' +
               '<div class="chat-input-row">' +
                 '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="dmFile" type="file" accept="image/*" multiple hidden></label>' +
                 '<textarea id="dmText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
@@ -543,6 +544,7 @@
     textIn.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
     function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
     textIn.addEventListener("input", grow);
+    var unmountQuick = window.QuickChat ? window.QuickChat.mountBar($("dmQuick"), textIn) : null;
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -580,6 +582,7 @@
     return function unmount() {
       alive = false;
       activePartner = null;
+      if (unmountQuick) unmountQuick();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

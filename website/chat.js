@@ -471,6 +471,7 @@
           '<div class="chat-to" id="chatTo"></div>' +
           '<div class="chat-picker" id="chatPicker" hidden></div>' +
           '<div class="chat-previews" id="chatPreviews"></div>' +
+          '<div class="quick-slot" id="chatQuick"></div>' +
           '<div class="chat-input-row">' +
             '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="chatFile" type="file" accept="image/*" multiple hidden></label>' +
             '<textarea id="chatText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
@@ -660,6 +661,8 @@
     // The box grows with the text up to a few lines, like a chat app.
     function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
     textIn.addEventListener("input", grow);
+    // Quick chat: each member's preset messages above the box (quick.js).
+    var unmountQuick = window.QuickChat ? window.QuickChat.mountBar(root.querySelector("#chatQuick"), textIn) : null;
 
     function namesFor(targets) {
       var out = {};
@@ -1044,6 +1047,7 @@
       if (observer) observer.disconnect();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("lpch:focus-message", onFocusEvent);
+      if (unmountQuick) unmountQuick();
     };
   }
 
