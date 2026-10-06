@@ -117,7 +117,7 @@ const MSG = {
     fxDate: 'วันที่ของ Fx {n} ไม่ถูกต้อง',
     calFail: 'สร้างนัดในปฏิทินไม่สำเร็จ: {err}',
     notFound: 'ไม่พบนัด {id}',
-    calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: ให้เจ้าของปฏิทินแชร์ให้บัญชีที่ Deploy สคริปต์ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" (หรือตรวจสอบ CALENDAR_ID)',
+    calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: สคริปต์รันในนาม {who} ให้ {id} แชร์ปฏิทินให้ {who} ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" แล้วรัน setup อีกครั้ง{detail}',
     sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   },
   en: {
@@ -150,7 +150,7 @@ const MSG = {
     fxDate: 'Invalid date for Fx {n}',
     calFail: 'Could not create calendar events: {err}',
     notFound: 'Appointment {id} not found',
-    calMissing: 'Cannot use calendar {id}: its owner must share it with the account that deployed the script, with "Make changes to events" (or check CALENDAR_ID)',
+    calMissing: 'Cannot use calendar {id}: the script runs as {who}. {id} must share the calendar with {who} with "Make changes to events", then run setup again{detail}',
     sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   }
 };
@@ -215,9 +215,19 @@ function setup() {
   ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
   ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
   ss.getSheetByName(SHEET_ACCOUNTS).getRange('A:B').setNumberFormat('@');
+  // ทดสอบปฏิทิน (และติดตามปฏิทินที่แชร์มาให้) แล้วแสดงผลใน "บันทึกการดำเนินการ"
+  let calMsg;
+  try {
+    const cal = getCalendar_('th');
+    calMsg = 'ปฏิทิน: ใช้งานได้ → ' + cal.getName() + ' (' + cal.getId() + ')';
+  } catch (e) {
+    calMsg = 'ปฏิทิน: ⚠️ ' + e.message;
+  }
+  console.log('สคริปต์รันในนาม: ' + scriptOwner_());
+  console.log(calMsg);
   try {
     SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, Accounts, AccessLog แล้ว\n' +
-      'Deploy เว็บแอป แล้วสมัครสมาชิกเป็นคนแรกทันที บัญชีแรกจะเป็นผู้ดูแลระบบ');
+      calMsg + '\nDeploy เว็บแอป แล้วสมัครสมาชิกเป็นคนแรกทันที บัญชีแรกจะเป็นผู้ดูแลระบบ');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
 }
 
@@ -963,15 +973,21 @@ function calendarNameSafe_(lang) {
   catch (e) { return '⚠️ ' + e.message; }
 }
 
+/** บัญชีที่สคริปต์รันอยู่ (ID ปฏิทินหลัก = อีเมลของบัญชี จึงไม่ต้องขอสิทธิ์อ่านอีเมลเพิ่ม) */
+function scriptOwner_() {
+  try { return CalendarApp.getDefaultCalendar().getId(); } catch (e) { return '(บัญชีที่ Deploy)'; }
+}
+
 function getCalendar_(lang) {
   if (getCalendar_.cache) return getCalendar_.cache;
   const id = String(getSettings_().CALENDAR_ID || CALENDAR_ID || '').trim();
   let cal = id ? CalendarApp.getCalendarById(id) : CalendarApp.getDefaultCalendar();
+  let detail = '';
   if (!cal && id) {
     // ปฏิทินที่แชร์มาแต่ยังไม่อยู่ในรายการปฏิทินของเจ้าของสคริปต์: ติดตามให้อัตโนมัติ
-    try { cal = CalendarApp.subscribeToCalendar(id); } catch (e) { cal = null; }
+    try { cal = CalendarApp.subscribeToCalendar(id); } catch (e) { cal = null; detail = ' (' + e.message + ')'; }
   }
-  if (!cal) throw new Error(msg_(lang, 'calMissing', { id: id }));
+  if (!cal) throw new Error(msg_(lang, 'calMissing', { id: id, who: scriptOwner_(), detail: detail }));
   getCalendar_.cache = cal;
   return cal;
 }
