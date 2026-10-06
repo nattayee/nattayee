@@ -122,6 +122,16 @@ var ACTIONS = {
     return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย' };
   },
 
+  // รายชื่อสมาชิกที่ใช้งานอยู่ (สำหรับเลือกผู้รับข้อความรายบุคคล) — ส่งเฉพาะชื่อและตำแหน่ง
+  directory: function (req) {
+    requireUser_(req.token);
+    return {
+      users: allUsers_().filter(function (u) { return u.status === 'active'; }).map(function (u) {
+        return { username: u.username, fullName: u.fullName, role: u.role };
+      })
+    };
+  },
+
   listUsers: function (req) {
     requireAdmin_(req.token);
     return { users: allUsers_().map(publicUser_) };

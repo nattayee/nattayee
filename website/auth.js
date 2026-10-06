@@ -131,6 +131,12 @@
         u.hash = hash(r.newPassword, u.salt);
         return { message: "เปลี่ยนรหัสผ่านเรียบร้อย" };
       },
+      directory: function (d, r) {
+        requireUser(d, r.token);
+        return { users: d.users.filter(function (u) { return u.status === "active"; }).map(function (u) {
+          return { username: u.username, fullName: u.fullName, role: u.role };
+        }) };
+      },
       listUsers: function (d, r) { requireAdmin(d, r.token); return { users: d.users.map(pub) }; },
       updateUser: function (d, r) {
         var admin = requireAdmin(d, r.token);
@@ -439,6 +445,8 @@
       setSession(null, null);
       if (t) call("logout", { token: t }).catch(function () { /* already signed out locally */ });
     },
+    // Active members (username, fullName, role) for picking individual chat recipients.
+    directory: function () { return call("directory").then(function (res) { return res.users; }); },
     mountAdmin: mountAdmin,
     mountAccount: mountAccount,
     roleName: function (code) { return (ROLES.filter(function (r) { return r[0] === code; })[0] || [0, code])[1]; },

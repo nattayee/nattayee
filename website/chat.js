@@ -1,12 +1,15 @@
 /*
  * ประกาศ / ข่าวสาร แบบช่องแชท
  *  - แนบรูปได้ (ปุ่มแนบ, วาง Ctrl+V, ลากไฟล์มาวาง)
- *  - ระบุผู้รับ (ทุกคน / RO / MP / RTT / Nurse) และส่งต่อให้กลุ่มอื่นได้
- *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ และใครอ่านแล้ว
+ *  - ส่งถึงทุกคน / ตามวิชาชีพ (RO / MP / RTT / Nurse) / รายบุคคล และส่งต่อได้
+ *  - ปุ่ม ✓ ถูก / ✗ ผิด และ ↩ ตอบกลับ ที่ข้อความ — บันทึกผู้กด วันที่ เวลา
+ *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ ใครอ่านแล้ว และดาวน์โหลดบันทึกทั้งหมดเป็น CSV
  *
  * Backend:
  *  - "local"    เก็บใน localStorage ของเบราว์เซอร์นี้ (โหมดทดลอง ไม่แชร์ข้ามเครื่อง)
  *  - "firebase" Cloud Firestore แบบ realtime — ทุกคนเห็นข้อความเดียวกัน (ตั้งค่าใน data.js → chat.firebase)
+ *
+ * ผู้รับ (message.to): "ALL" = ทุกคน, "RO"/"MP"/... = ทั้งวิชาชีพ, "u:<username>" = รายบุคคล
  */
 (function () {
   "use strict";
@@ -14,8 +17,10 @@
   var S = window.SITE;
   var C = S.chat || {};
   var ROLES = C.roles || ["RO", "MP", "RTT", "Nurse"];
+  var ROLE_GROUPS = ROLES.concat(["Other"]);
   var MAX_IMAGES = C.maxImages || 4;
   var useFirebase = !!(C.firebase && C.firebase.projectId);
+  var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
 
   /* ---------------- helpers ---------------- */
 
@@ -37,9 +42,12 @@
     return h.toString(36);
   }
 
-  // Firestore-safe map key for one reader.
+  // Firestore-safe map key for a username (no dots, which would split a field path).
+  function nameKey(username) { return String(username).replace(/\W/g, "_"); }
+
+  // Firestore-safe map key for one person.
   function readerKey(p) {
-    return p.username ? "u_" + p.username.replace(/\W/g, "_") : (p.role || "x").replace(/\W/g, "") + "_" + hash(p.name.trim().toLowerCase());
+    return p.username ? "u_" + nameKey(p.username) : (p.role || "x").replace(/\W/g, "") + "_" + hash(p.name.trim().toLowerCase());
   }
 
   function samePerson(a, b) {
@@ -57,9 +65,25 @@
     return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" }) + " " + t;
   }
 
-  function reader(p) { return { username: p.username || "", name: p.name, role: p.role, at: Date.now() }; }
+  // Full date and time for records: "6 ต.ค. 2569 09:47:12"
+  function fmtFull(ms) {
+    var d = new Date(ms);
+    return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) + " " +
+      d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
 
-  function roleLabel(r) { return r === "ALL" ? "ทุกคน" : r; }
+  function person(p) { return { username: p.username || "", name: p.name, role: p.role }; }
+  function stamp(p, extra) {
+    var o = person(p);
+    o.at = Date.now();
+    for (var k in extra) o[k] = extra[k];
+    return o;
+  }
+
+  function snippet(text, n) {
+    var t = String(text || "").replace(/\s+/g, " ").trim();
+    return t.length > n ? t.slice(0, n) + "…" : t;
+  }
 
   // The signed-in member (from auth.js) is the chat identity.
   function currentMe() {
@@ -67,8 +91,28 @@
     return u ? { username: u.username, name: u.fullName, role: u.role } : null;
   }
 
-  // Is this message addressed to person p (directly, to everyone, or forwarded to their role)?
-  function isForMe(m, p) { return !!p && (m.to.indexOf("ALL") !== -1 || m.to.indexOf(p.role) !== -1); }
+  // Is this message addressed to person p (everyone, their profession, or them personally)?
+  function isForMe(m, p) {
+    return !!p && (m.to.indexOf("ALL") !== -1 || m.to.indexOf(p.role) !== -1 ||
+      (!!p.username && m.to.indexOf("u:" + p.username) !== -1));
+  }
+
+  function targetLabel(m, t) {
+    if (t === "ALL") return "ทุกคน";
+    if (t.indexOf("u:") === 0) return m.toNames[nameKey(t.slice(2))] || t.slice(2);
+    return t;
+  }
+
+  function normalize(m) {
+    m.to = m.to || ["ALL"];
+    m.forwards = m.forwards || [];
+    m.reads = m.reads || {};
+    m.images = m.images || [];
+    m.toNames = m.toNames || {};
+    m.reactions = m.reactions || {};
+    m.reactionLog = m.reactionLog || [];
+    return m;
+  }
 
   // Resize + JPEG-compress an image file to a data URL.
   function compress(file, maxSide, quality) {
@@ -133,8 +177,8 @@
       var list = read();
       var m = list.filter(function (x) { return x.id === id; })[0];
       if (!m) return Promise.resolve();
-      fn(m);
-      write(list);
+      fn(normalize(m));
+      try { write(list); } catch (e) { return Promise.reject(e); }
       return Promise.resolve();
     }
 
@@ -156,16 +200,24 @@
         return Promise.resolve();
       },
       markRead: function (id, p) {
-        return mutate(id, function (m) { m.reads[readerKey(p)] = reader(p); });
+        return mutate(id, function (m) { m.reads[readerKey(p)] = stamp(p); });
       },
-      forward: function (id, entry) {
+      forward: function (id, entry, names) {
         return mutate(id, function (m) {
           entry.to.forEach(function (r) { if (m.to.indexOf(r) === -1) m.to.push(r); });
+          for (var k in names) m.toNames[k] = names[k];
           m.forwards.push(entry);
         });
       },
+      react: function (id, p, type) {
+        return mutate(id, function (m) {
+          var rec = stamp(p, { type: type });
+          m.reactions[readerKey(p)] = rec;
+          m.reactionLog.push(rec);
+        });
+      },
       remove: function (id) {
-        write(read().filter(function (x) { return x.id !== id; }));
+        try { write(read().filter(function (x) { return x.id !== id; })); } catch (e) { return Promise.reject(e); }
         return Promise.resolve();
       },
     };
@@ -208,7 +260,6 @@
             snap.forEach(function (d) {
               var m = d.data();
               m.id = d.id;
-              m.to = m.to || ["ALL"]; m.forwards = m.forwards || []; m.reads = m.reads || {}; m.images = m.images || [];
               list.push(m);
             });
             cb(list.reverse());
@@ -220,16 +271,23 @@
       markRead: function (id, p) {
         return ready.then(function (col) {
           var u = {};
-          u["reads." + readerKey(p)] = reader(p);
+          u["reads." + readerKey(p)] = stamp(p);
           return col.doc(id).update(u);
         });
       },
-      forward: function (id, entry) {
+      forward: function (id, entry, names) {
         return ready.then(function (col) {
-          return col.doc(id).update({
-            to: FV().arrayUnion.apply(null, entry.to),
-            forwards: FV().arrayUnion(entry),
-          });
+          var u = { to: FV().arrayUnion.apply(null, entry.to), forwards: FV().arrayUnion(entry) };
+          for (var k in names) u["toNames." + k] = names[k];
+          return col.doc(id).update(u);
+        });
+      },
+      react: function (id, p, type) {
+        return ready.then(function (col) {
+          var rec = stamp(p, { type: type });
+          var u = { reactionLog: FV().arrayUnion(rec) };
+          u["reactions." + readerKey(p)] = rec;
+          return col.doc(id).update(u);
         });
       },
       remove: function (id) { return ready.then(function (col) { return col.doc(id).delete(); }); },
@@ -238,17 +296,59 @@
 
   var store = useFirebase ? FirebaseStore() : LocalStore();
 
+  /* ---------------- CSV log ---------------- */
+
+  // One row per action (send, reply, read, ✓/✗, forward) with who and when, for record keeping.
+  function exportCsv(messages) {
+    var rows = [];
+    messages.forEach(function (m) {
+      var base = { id: m.id, author: m.author.name + " (" + m.author.role + ")", text: snippet(m.text, 80) || "(รูปภาพ)",
+        to: m.to.map(function (t) { return targetLabel(m, t); }).join(", ") };
+      function add(at, action, p, detail) {
+        rows.push({ t: at, cells: [fmtFull(at), action, p.name, p.role, p.username || "", detail || "", base.author, base.to, base.text, base.id] });
+      }
+      add(m.createdAt, m.replyTo ? "ตอบกลับ" : "ส่งข้อความ", m.author,
+        m.replyTo ? "ตอบ " + m.replyTo.name + ": " + m.replyTo.text : "");
+      m.forwards.forEach(function (f) {
+        add(f.at, "ส่งต่อ", f.by, "ให้ " + f.to.map(function (t) { return targetLabel(m, t); }).join(", "));
+      });
+      Object.keys(m.reads).forEach(function (k) {
+        var r = m.reads[k];
+        if (!samePerson(r, m.author)) add(r.at, "อ่าน", r);
+      });
+      var log = m.reactionLog.length ? m.reactionLog : Object.keys(m.reactions).map(function (k) { return m.reactions[k]; });
+      log.forEach(function (r) { add(r.at, REACT[r.type].icon + " " + REACT[r.type].label, r); });
+    });
+    rows.sort(function (a, b) { return a.t - b.t; });
+
+    var head = ["วันที่เวลา", "การกระทำ", "ผู้กระทำ", "ตำแหน่ง", "Username", "รายละเอียด", "ผู้ส่งข้อความ", "ส่งถึง", "ข้อความ", "Message ID"];
+    var csv = [head].concat(rows.map(function (r) { return r.cells; })).map(function (r) {
+      return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(",");
+    }).join("\r\n");
+    var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM so Excel reads Thai
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "lpch-ro-chat-log-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
   /* ---------------- UI ---------------- */
 
   function mount(root) {
     var me = currentMe();
     var messages = [];
+    var people = [];       // other active members, for individual recipients
+    var names = {};        // nameKey(username) -> "ชื่อ (ตำแหน่ง)"
     var filter = "all";
-    var pending = []; // data URLs waiting to be sent
+    var pending = [];      // data URLs waiting to be sent
     var recipients = ["ALL"];
-    var openReads = {};   // message id -> reader list expanded
+    var replyTo = null;    // message being replied to
+    var pickerOpen = false;
+    var openLog = {};      // message id -> details (reads + ✓/✗) expanded
     var forwardOpen = null;
-    var marked = {};      // ids already marked read this session
+    var marked = {};       // ids already marked read this session
     var firstRender = true;
 
     root.innerHTML =
@@ -259,15 +359,16 @@
             '<button class="chip active" data-filter="all">ทั้งหมด</button>' +
             '<button class="chip" data-filter="mine">ส่งถึงฉัน</button>' +
             '<button class="chip" data-filter="sent">ที่ฉันส่ง</button>' +
+            '<button class="chip" id="chatCsv" title="ดาวน์โหลดบันทึกการส่ง อ่าน ตอบกลับ และการกด ✓/✗">⬇ บันทึก CSV</button>' +
           "</div>" +
         "</div>" +
         (store.label ? '<div class="chat-mode">ℹ️ ' + esc(store.label) + "</div>" : "") +
         '<div class="chat-feed" id="chatFeed" aria-live="polite"><p class="chat-empty">กำลังโหลด…</p></div>' +
         '<form class="chat-compose" id="chatForm" autocomplete="off">' +
           (me ? '<div class="chat-me">ส่งในนาม <strong>' + esc(me.name) + '</strong> <span class="badge">' + esc(me.role) + "</span></div>" : "") +
-          '<div class="chat-to"><span>ส่งถึง:</span>' + ["ALL"].concat(ROLES).map(function (r) {
-            return '<button type="button" class="chip' + (r === "ALL" ? " active" : "") + '" data-to="' + esc(r) + '">' + esc(roleLabel(r)) + "</button>";
-          }).join("") + "</div>" +
+          '<div class="chat-replying" id="chatReplying" hidden></div>' +
+          '<div class="chat-to" id="chatTo"></div>' +
+          '<div class="chat-picker" id="chatPicker" hidden></div>' +
           '<div class="chat-previews" id="chatPreviews"></div>' +
           '<div class="chat-input-row">' +
             '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="chatFile" type="file" accept="image/*" multiple hidden></label>' +
@@ -287,11 +388,119 @@
     var errEl = root.querySelector("#chatError");
     var sendBtn = root.querySelector("#chatSend");
     var lightbox = root.querySelector("#lightbox");
+    var toEl = root.querySelector("#chatTo");
+    var pickerEl = root.querySelector("#chatPicker");
+    var replyEl = root.querySelector("#chatReplying");
 
     function showError(msg) { errEl.textContent = msg || ""; errEl.hidden = !msg; }
 
+    /* ---- member directory (for individual recipients) ---- */
 
-    /* filters */
+    function remember(p) { if (p && p.username) names[nameKey(p.username)] = p.name + " (" + p.role + ")"; }
+
+    if (window.Auth && window.Auth.directory) {
+      window.Auth.directory().then(function (list) {
+        people = list.map(function (u) { return { username: u.username, name: u.fullName, role: u.role }; })
+          .filter(function (p) { return !samePerson(p, me); });
+        people.forEach(remember);
+        renderTo();
+        renderPicker();
+        if (forwardOpen) render();
+      }).catch(function () { /* individual recipients stay unavailable */ });
+    }
+
+    /* ---- recipients ---- */
+
+    function toggleTarget(t, list) {
+      if (t === "ALL") return ["ALL"];
+      list = list.filter(function (x) { return x !== "ALL"; });
+      var i = list.indexOf(t);
+      if (i === -1) list.push(t); else list.splice(i, 1);
+      return list.length ? list : ["ALL"];
+    }
+
+    function renderTo() {
+      var picked = recipients.filter(function (t) { return t.indexOf("u:") === 0; });
+      toEl.innerHTML = "<span>ส่งถึง:</span>" +
+        ["ALL"].concat(ROLES).map(function (r) {
+          return '<button type="button" class="chip' + (recipients.indexOf(r) !== -1 ? " active" : "") + '" data-to="' + esc(r) + '">' +
+            esc(r === "ALL" ? "ทุกคน" : r) + "</button>";
+        }).join("") +
+        '<button type="button" class="chip' + (pickerOpen ? " active" : "") + '" id="pickerToggle" aria-expanded="' + pickerOpen + '"' +
+          (people.length ? "" : ' disabled title="ยังไม่มีสมาชิกคนอื่น"') + '>👤 รายบุคคล ▾</button>' +
+        picked.map(function (t) {
+          return '<span class="person-chip">' + esc(names[nameKey(t.slice(2))] || t.slice(2)) +
+            '<button type="button" data-unpick="' + esc(t) + '" aria-label="เอาออก">×</button></span>';
+        }).join("");
+    }
+
+    // Checkbox list of members grouped by profession; usable for composing and forwarding.
+    function peopleChecklist(selected, exclude) {
+      var groups = ROLE_GROUPS.map(function (r) {
+        var inRole = people.filter(function (p) { return p.role === r && (!exclude || exclude.indexOf("u:" + p.username) === -1); });
+        if (!inRole.length) return "";
+        return '<fieldset><legend>' + esc(r === "Other" ? "อื่นๆ" : r) + "</legend>" + inRole.map(function (p) {
+          var v = "u:" + p.username;
+          return '<label><input type="checkbox" value="' + esc(v) + '"' + (selected.indexOf(v) !== -1 ? " checked" : "") + "> " + esc(p.name) + "</label>";
+        }).join("") + "</fieldset>";
+      }).join("");
+      return groups || '<p class="muted">ยังไม่มีสมาชิกคนอื่นในระบบ</p>';
+    }
+
+    function renderPicker() {
+      pickerEl.hidden = !pickerOpen;
+      if (pickerOpen) pickerEl.innerHTML = '<p class="picker-hint">เลือกผู้รับรายบุคคล แยกตามวิชาชีพ</p>' + peopleChecklist(recipients);
+    }
+
+    toEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      if (b.id === "pickerToggle") { pickerOpen = !pickerOpen; renderTo(); renderPicker(); return; }
+      var t = b.getAttribute("data-to") || b.getAttribute("data-unpick");
+      if (!t) return;
+      recipients = toggleTarget(t, recipients);
+      renderTo();
+      renderPicker();
+    });
+
+    pickerEl.addEventListener("change", function (e) {
+      if (e.target.type !== "checkbox") return;
+      recipients = toggleTarget(e.target.value, recipients);
+      renderTo();
+    });
+
+    /* ---- reply ---- */
+
+    function startReply(m) {
+      replyTo = { id: m.id, name: m.author.name, role: m.author.role, username: m.author.username || "",
+        text: snippet(m.text, 120) || (m.images.length ? "(รูปภาพ " + m.images.length + " รูป)" : "") };
+      remember(m.author);
+      // A reply goes back to the sender by default (personally if they are a member).
+      if (!samePerson(m.author, me)) recipients = m.author.username ? ["u:" + m.author.username] : [m.author.role];
+      renderReply();
+      renderTo();
+      renderPicker();
+      textIn.focus();
+    }
+
+    function renderReply() {
+      replyEl.hidden = !replyTo;
+      if (!replyTo) return;
+      replyEl.innerHTML = '<span class="reply-bar">↩ ตอบกลับ <strong>' + esc(replyTo.name) + "</strong>: " + esc(replyTo.text) + "</span>" +
+        '<button type="button" class="link-btn" id="replyCancel" aria-label="ยกเลิกการตอบกลับ">✕ ยกเลิก</button>';
+    }
+
+    replyEl.addEventListener("click", function (e) {
+      if (e.target.id !== "replyCancel") return;
+      replyTo = null;
+      recipients = ["ALL"];
+      renderReply();
+      renderTo();
+      renderPicker();
+    });
+
+    /* ---- filters, CSV ---- */
+
     root.querySelectorAll("[data-filter]").forEach(function (b) {
       b.addEventListener("click", function () {
         root.querySelectorAll("[data-filter]").forEach(function (x) { x.classList.remove("active"); });
@@ -302,23 +511,10 @@
       });
     });
 
-    /* recipients */
-    var toBtns = root.querySelectorAll("[data-to]");
-    toBtns.forEach(function (b) {
-      b.addEventListener("click", function () {
-        var r = b.getAttribute("data-to");
-        if (r === "ALL") recipients = ["ALL"];
-        else {
-          recipients = recipients.filter(function (x) { return x !== "ALL"; });
-          var i = recipients.indexOf(r);
-          if (i === -1) recipients.push(r); else recipients.splice(i, 1);
-          if (!recipients.length) recipients = ["ALL"];
-        }
-        toBtns.forEach(function (x) { x.classList.toggle("active", recipients.indexOf(x.getAttribute("data-to")) !== -1); });
-      });
-    });
+    root.querySelector("#chatCsv").addEventListener("click", function () { exportCsv(messages); });
 
-    /* attachments */
+    /* ---- attachments ---- */
+
     function renderPreviews() {
       previews.innerHTML = pending.map(function (src, i) {
         return '<div class="chat-thumb"><img src="' + src + '" alt="รูปแนบ ' + (i + 1) + '">' +
@@ -361,7 +557,19 @@
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit();
     });
 
-    /* send */
+    function namesFor(targets) {
+      var out = {};
+      targets.forEach(function (t) {
+        if (t.indexOf("u:") === 0) {
+          var k = nameKey(t.slice(2));
+          if (names[k]) out[k] = names[k];
+        }
+      });
+      return out;
+    }
+
+    /* ---- send ---- */
+
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var text = textIn.value.trim();
@@ -374,26 +582,40 @@
       showError("");
       sendBtn.disabled = true;
       var reads = {};
-      reads[readerKey(me)] = reader(me); // the author has read it
-      store.add({
-        author: { username: me.username, name: me.name, role: me.role },
+      reads[readerKey(me)] = stamp(me); // the author has read it
+      var msg = {
+        author: person(me),
         text: text,
         images: pending.slice(),
         to: recipients.slice(),
+        toNames: namesFor(recipients),
         forwards: [],
         reads: reads,
+        reactions: {},
+        reactionLog: [],
         createdAt: Date.now(),
-      }).then(function () {
+      };
+      if (replyTo) msg.replyTo = replyTo;
+      store.add(msg).then(function () {
         textIn.value = "";
         pending = [];
+        replyTo = null;
+        recipients = ["ALL"];
+        pickerOpen = false;
         renderPreviews();
+        renderReply();
+        renderTo();
+        renderPicker();
         stickToBottom = true;
       }).catch(function (err) {
         showError("ส่งไม่สำเร็จ: " + err.message);
       }).then(function () { sendBtn.disabled = false; });
     });
 
-    /* feed actions (event delegation) */
+    /* ---- feed actions (event delegation) ---- */
+
+    function find(id) { return messages.filter(function (x) { return x.id === id; })[0]; }
+
     feed.addEventListener("click", function (e) {
       var t = e.target.closest("[data-act]");
       if (!t) {
@@ -403,15 +625,32 @@
       }
       var id = t.getAttribute("data-id");
       var act = t.getAttribute("data-act");
-      if (act === "reads") { openReads[id] = !openReads[id]; render(); }
+      var m = find(id);
+
+      if (act === "log") { openLog[id] = !openLog[id]; render(); }
       else if (act === "fwd") { forwardOpen = forwardOpen === id ? null : id; render(); }
+      else if (act === "reply") { if (m) startReply(m); }
+      else if (act === "jump") {
+        var el = feed.querySelector('[data-msg="' + id + '"]');
+        if (!el) { showError("ไม่พบข้อความต้นฉบับ (อาจถูกลบหรือถูกกรองออก)"); return; }
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.remove("flash");
+        void el.offsetWidth; // restart the animation
+        el.classList.add("flash");
+      }
+      else if (act === "ok" || act === "no") {
+        if (!me) { showError("กรุณาเข้าสู่ระบบก่อน"); return; }
+        var cur = m && m.reactions[readerKey(me)];
+        if (cur && cur.type === act) return; // already recorded
+        store.react(id, me, act).catch(function (err) { showError("บันทึกไม่สำเร็จ: " + err.message); });
+      }
       else if (act === "fwd-send") {
         if (!me) { showError("กรุณาเข้าสู่ระบบก่อนส่งต่อ"); return; }
         var box = t.closest(".chat-forward");
         var to = Array.prototype.map.call(box.querySelectorAll("input:checked"), function (c) { return c.value; });
         if (!to.length) return;
         forwardOpen = null;
-        store.forward(id, { by: { username: me.username, name: me.name, role: me.role }, to: to, at: Date.now() })
+        store.forward(id, { by: person(me), to: to, at: Date.now() }, namesFor(to))
           .catch(function (err) { showError("ส่งต่อไม่สำเร็จ: " + err.message); });
       } else if (act === "del") {
         if (confirm("ลบข้อความนี้?")) store.remove(id).catch(function (err) { showError("ลบไม่สำเร็จ: " + err.message); });
@@ -425,7 +664,7 @@
       entries.forEach(function (en) {
         if (!en.isIntersecting || !me || document.hidden) return;
         var id = en.target.getAttribute("data-msg");
-        var m = messages.filter(function (x) { return x.id === id; })[0];
+        var m = find(id);
         if (!m || marked[id] || m.reads[readerKey(me)] || !isForMe(m, me)) return;
         marked[id] = true;
         store.markRead(id, me).catch(function () { delete marked[id]; });
@@ -437,47 +676,101 @@
       stickToBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
     });
 
-    function statusHtml(m) {
-      var readers = Object.keys(m.reads).map(function (k) { return m.reads[k]; })
+    /* ---- message markup ---- */
+
+    function readersOf(m) {
+      return Object.keys(m.reads).map(function (k) { return m.reads[k]; })
         .filter(function (r) { return !samePerson(r, m.author); })
         .sort(function (a, b) { return a.at - b.at; });
+    }
 
-      // A recipient group is "read" once anyone in that role has read it.
-      var chips = m.to.map(function (r) {
-        var done = r === "ALL" ? readers.length > 0 : readers.some(function (x) { return x.role === r; });
-        return '<span class="to-chip' + (done ? " done" : "") + '" title="' + (done ? "มีผู้อ่านแล้ว" : "ยังไม่มีผู้อ่าน") + '">' +
-          (done ? "✓✓ " : "✓ ") + esc(roleLabel(r)) + "</span>";
+    function statusHtml(m, readers) {
+      // Groups are "read" once anyone in them has read it; individuals once that person has.
+      var chips = m.to.map(function (t) {
+        var done = t === "ALL" ? readers.length > 0
+          : t.indexOf("u:") === 0 ? !!m.reads["u_" + nameKey(t.slice(2))]
+          : readers.some(function (x) { return x.role === t; });
+        return '<span class="to-chip' + (done ? " done" : "") + (t.indexOf("u:") === 0 ? " person" : "") +
+          '" title="' + (done ? "อ่านแล้ว" : "ยังไม่ได้อ่าน") + '">' + (done ? "✓✓ " : "✓ ") + esc(targetLabel(m, t)) + "</span>";
       }).join("");
 
       var fwd = m.forwards.map(function (f) {
         return '<div class="chat-fwd-line">↪ ' + esc(f.by.name) + " (" + esc(f.by.role) + ") ส่งต่อให้ " +
-          esc(f.to.map(roleLabel).join(", ")) + " · " + fmtTime(f.at) + "</div>";
+          esc(f.to.map(function (t) { return targetLabel(m, t); }).join(", ")) + " · " + fmtTime(f.at) + "</div>";
       }).join("");
 
-      var readToggle = '<button type="button" class="link-btn" data-act="reads" data-id="' + esc(m.id) + '">' +
-        (readers.length ? "👁 อ่านแล้ว " + readers.length + " คน" : "👁 ยังไม่มีผู้อ่าน") + "</button>";
+      return '<div class="chat-status"><span class="to-label">ส่งถึง</span>' + chips + "</div>" + fwd;
+    }
 
-      var readList = openReads[m.id] && readers.length
-        ? '<ul class="chat-readers">' + readers.map(function (r) {
-            return "<li>" + esc(r.name) + ' <span class="badge">' + esc(r.role) + "</span> · " + fmtTime(r.at) + "</li>";
-          }).join("") + "</ul>"
-        : "";
+    function reactHtml(m, readers) {
+      var all = Object.keys(m.reactions).map(function (k) { return m.reactions[k]; });
+      var mineR = me && m.reactions[readerKey(me)];
+      var replies = messages.filter(function (x) { return x.replyTo && x.replyTo.id === m.id; }).length;
 
-      return '<div class="chat-status"><span class="to-label">ส่งถึง</span>' + chips + readToggle + "</div>" + fwd + readList;
+      var btns = ["ok", "no"].map(function (type) {
+        var n = all.filter(function (r) { return r.type === type; }).length;
+        var on = mineR && mineR.type === type;
+        return '<button type="button" class="react-btn ' + type + (on ? " on" : "") + '" data-act="' + type + '" data-id="' + esc(m.id) + '"' +
+          ' aria-pressed="' + !!on + '" title="' + (on ? "คุณกด " + REACT[type].label + " เมื่อ " + fmtFull(mineR.at) : "กด " + REACT[type].label) + '">' +
+          REACT[type].icon + " " + REACT[type].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
+      }).join("");
+
+      var summary = (readers.length ? "👁 อ่าน " + readers.length : "👁 ยังไม่มีผู้อ่าน") + (all.length ? " · กด " + all.length : "");
+
+      return '<div class="chat-actions">' + btns +
+        '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ' + (replies ? " (" + replies + ")" : "") + "</button>" +
+        '<button type="button" class="link-btn" data-act="fwd" data-id="' + esc(m.id) + '">↪ ส่งต่อ</button>' +
+        (byMe(m) ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
+        '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" aria-expanded="' + !!openLog[m.id] + '">' +
+          summary + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
+        "</div>";
+    }
+
+    // Who pressed ✓/✗ (with history of changes) and who read it, each with date and time.
+    function logHtml(m, readers) {
+      if (!openLog[m.id]) return "";
+      var log = m.reactionLog.length ? m.reactionLog.slice() : Object.keys(m.reactions).map(function (k) { return m.reactions[k]; });
+      log.sort(function (a, b) { return a.at - b.at; });
+      var current = {};
+      Object.keys(m.reactions).forEach(function (k) { current[k] = m.reactions[k]; });
+
+      var reactRows = log.map(function (r) {
+        var cur = current[readerKey(r)];
+        var superseded = cur && (cur.at !== r.at || cur.type !== r.type);
+        return '<li class="' + (superseded ? "old" : "") + '"><span class="react-tag ' + r.type + '">' + REACT[r.type].icon + " " + REACT[r.type].label + "</span> " +
+          esc(r.name) + ' <span class="badge">' + esc(r.role) + "</span> · <time>" + fmtFull(r.at) + "</time>" +
+          (superseded ? ' <em>(เปลี่ยนภายหลัง)</em>' : "") + "</li>";
+      }).join("");
+
+      var readRows = readers.map(function (r) {
+        return "<li>👁 " + esc(r.name) + ' <span class="badge">' + esc(r.role) + "</span> · <time>" + fmtFull(r.at) + "</time></li>";
+      }).join("");
+
+      return '<div class="chat-log">' +
+        '<div><h4>การกด ✓ / ✗</h4>' + (reactRows ? "<ul>" + reactRows + "</ul>" : '<p class="muted">ยังไม่มีผู้กด</p>') + "</div>" +
+        '<div><h4>ผู้อ่าน</h4>' + (readRows ? "<ul>" + readRows + "</ul>" : '<p class="muted">ยังไม่มีผู้อ่าน</p>') + "</div>" +
+        "</div>";
     }
 
     function forwardHtml(m) {
       if (forwardOpen !== m.id) return "";
-      var choices = ["ALL"].concat(ROLES).filter(function (r) { return m.to.indexOf(r) === -1; });
-      if (!choices.length) return '<div class="chat-forward">ส่งถึงทุกกลุ่มแล้ว</div>';
-      return '<div class="chat-forward"><span>ส่งต่อให้:</span>' + choices.map(function (r) {
-        return '<label><input type="checkbox" value="' + esc(r) + '"> ' + esc(roleLabel(r)) + "</label>";
-      }).join("") + '<button type="button" class="chip active" data-act="fwd-send" data-id="' + esc(m.id) + '">ส่งต่อ</button></div>';
+      var roles = ["ALL"].concat(ROLES).filter(function (r) { return m.to.indexOf(r) === -1; });
+      return '<div class="chat-forward"><div class="fwd-roles"><span>ส่งต่อให้:</span>' + roles.map(function (r) {
+        return '<label><input type="checkbox" value="' + esc(r) + '"> ' + esc(r === "ALL" ? "ทุกคน" : r) + "</label>";
+      }).join("") + "</div>" +
+        (people.length ? '<div class="chat-picker inline">' + peopleChecklist([], m.to) + "</div>" : "") +
+        '<button type="button" class="chip active" data-act="fwd-send" data-id="' + esc(m.id) + '">ส่งต่อ</button></div>';
+    }
+
+    function quoteHtml(m) {
+      if (!m.replyTo) return "";
+      return '<button type="button" class="chat-quote" data-act="jump" data-id="' + esc(m.replyTo.id) + '" title="ไปที่ข้อความต้นฉบับ">' +
+        "↩ <strong>" + esc(m.replyTo.name) + "</strong> " + esc(m.replyTo.text) + "</button>";
     }
 
     function render() {
       var list = messages.filter(function (m) {
-        if (filter === "mine") return isForMe(m, me) && !samePerson(m.author, me);
+        if (filter === "mine") return isForMe(m, me) && !byMe(m);
         if (filter === "sent") return byMe(m);
         return true;
       });
@@ -494,6 +787,7 @@
 
       patchFeed(list.map(function (m) {
         var mine = byMe(m);
+        var readers = readersOf(m);
         var images = m.images.length
           ? '<div class="chat-images n' + Math.min(m.images.length, 4) + '">' + m.images.map(function (src, i) {
               return '<img src="' + esc(src) + '" alt="รูปแนบ ' + (i + 1) + '" loading="lazy">';
@@ -502,13 +796,13 @@
         var unreadMine = me && isForMe(m, me) && !mine && !m.reads[readerKey(me)];
         var html = '<article class="chat-msg' + (mine ? " mine" : "") + (unreadMine ? " unread" : "") + '" data-msg="' + esc(m.id) + '">' +
           '<header><strong>' + esc(m.author.name) + '</strong> <span class="badge">' + esc(m.author.role) + "</span>" +
-          '<time>' + fmtTime(m.createdAt) + "</time></header>" +
+          '<time title="' + fmtFull(m.createdAt) + '">' + fmtTime(m.createdAt) + "</time></header>" +
+          quoteHtml(m) +
           (m.text ? '<div class="chat-text">' + linkify(m.text) + "</div>" : "") + images +
-          statusHtml(m) +
-          '<div class="chat-actions">' +
-            '<button type="button" class="link-btn" data-act="fwd" data-id="' + esc(m.id) + '">↪ ส่งต่อ</button>' +
-            (mine ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
-          "</div>" + forwardHtml(m) +
+          statusHtml(m, readers) +
+          reactHtml(m, readers) +
+          logHtml(m, readers) +
+          forwardHtml(m) +
           "</article>";
         return { id: m.id, html: html };
       }));
@@ -559,8 +853,10 @@
       htmlCache = next;
     }
 
+    renderTo();
+
     var unsubscribe = store.subscribe(function (list) {
-      messages = list;
+      messages = list.map(normalize);
       render();
     }, function (err) {
       feed.innerHTML = '<p class="chat-empty">เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + esc(err.message) + "</p>";
