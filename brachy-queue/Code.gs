@@ -1,8 +1,8 @@
 /**
  * ระบบนัดคิวผู้ป่วยใส่แร่ (Brachytherapy Appointment Queue)
  *
- * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction
- * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar + บันทึกลง Google Sheet
+ * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / ชนิด / จำนวน fraction
+ * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
  * - บังคับ login ด้วยบัญชี Google; อนุญาตเฉพาะอีเมลในชีต Users และบันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
@@ -29,16 +29,15 @@ const APPT_HEADERS = [
   'Fraction ที่',        // G
   'จำนวน Fraction',     // H
   'วันที่นัด',           // I  yyyy-MM-dd
-  'เวลาเริ่ม',           // J  HH:mm
-  'เวลาสิ้นสุด',         // K  HH:mm
-  'หมายเหตุ',           // L
-  'สถานะ',              // M  นัดแล้ว / ยกเลิก / มาตามนัด
-  'Calendar Event ID', // N
-  'ผู้บันทึก'            // O
+  'ชนิด',               // J  Interstitial / ที่กรอกเอง
+  'หมายเหตุ',           // K
+  'สถานะ',              // L  นัดแล้ว / ยกเลิก / มาตามนัด
+  'Calendar Event ID', // M
+  'ผู้บันทึก'            // N
 ];
 const COL = {};
 ['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
-  'date', 'start', 'end', 'note', 'status', 'eventId', 'createdBy']
+  'date', 'type', 'note', 'status', 'eventId', 'createdBy']
   .forEach((k, i) => { COL[k] = i; });
 
 const STATUS_BOOKED = 'นัดแล้ว';
@@ -53,14 +52,14 @@ const DEFAULT_DOCTORS = [
 ];
 const OLD_SAMPLE_DOCTORS = ['พญ. ตัวอย่าง หนึ่ง', 'นพ. ตัวอย่าง สอง'];
 
+/** ชนิดที่เลือกได้ (นอกจากนี้ให้กรอกเองในช่อง "อื่นๆ") */
+const TYPE_OPTIONS = ['Interstitial'];
+
 const DEFAULT_SETTINGS = [
   ['CALENDAR_ID', '', 'ID ของปฏิทินที่ใช้ร่วมกัน (ควรตั้งเสมอ เพราะแต่ละคนใช้บัญชีตัวเอง ถ้าว่างนัดจะไปลงปฏิทินส่วนตัวของผู้บันทึก)'],
   ['EVENT_PREFIX', '[ใส่แร่]', 'คำนำหน้าชื่อนัดในปฏิทิน'],
   ['SHOW_NAME_IN_CALENDAR', 'TRUE', 'TRUE = แสดงชื่อผู้ป่วยในปฏิทิน, FALSE = แสดงเฉพาะ HN'],
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
-  ['DEFAULT_START_TIME', '09:00', 'เวลาเริ่มต้นที่ตั้งไว้ในฟอร์ม'],
-  ['DEFAULT_DURATION_MIN', '60', 'ระยะเวลาต่อ fraction (นาที)'],
-  ['MAX_PARALLEL', '1', 'จำนวนผู้ป่วยสูงสุดที่ทำพร้อมกันในช่วงเวลาเดียว (ใช้ตรวจนัดซ้อน)'],
   ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
   ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล']
 ];
@@ -126,10 +125,9 @@ function getInitData() {
   return {
     user: { email: email, name: userName_(email) },
     doctors: getDoctors_(),
+    types: TYPE_OPTIONS,
     holidays: getHolidays_(),
     settings: {
-      defaultStartTime: settings.DEFAULT_START_TIME || '09:00',
-      defaultDurationMin: Number(settings.DEFAULT_DURATION_MIN) || 60,
       maxCasesPerDay: maxCases_(settings),
       calendarName: getCalendar_().getName()
     },
@@ -144,8 +142,8 @@ function listAppointments() {
 
 /**
  * สร้างนัดทั้งคอร์สในคลิกเดียว
- * payload = { hn, name, doctor, totalFx, note, force,
- *             sessions: [{ date:'yyyy-MM-dd', start:'HH:mm', end:'HH:mm' }, ...] }
+ * payload = { hn, name, doctor, type, totalFx, note, force,
+ *             sessions: [{ date:'yyyy-MM-dd' }, ...] }
  */
 function createAppointments(payload) {
   const user = requireUser_();
@@ -159,7 +157,7 @@ function createAppointments(payload) {
     const overDays = findOverCapacity_(p.sessions, max);
 
     if (!p.force) {
-      const conflicts = findConflicts_(p.sessions);
+      const conflicts = findConflicts_(p.sessions, p.hn);
       if (conflicts.length || overDays.length) {
         return { ok: false, needConfirm: true, conflicts: conflicts, overCapacity: overDays, max: max };
       }
@@ -180,26 +178,26 @@ function createAppointments(payload) {
     try {
       p.sessions.forEach((s, i) => {
         const fx = i + 1;
-        const title = [prefix, 'HN ' + p.hn, showName ? p.name : '', '(Fx ' + fx + '/' + p.totalFx + ')']
+        const title = [prefix, 'HN ' + p.hn, showName ? p.name : '', '· ' + p.type, '(Fx ' + fx + '/' + p.totalFx + ')']
           .filter(Boolean).join(' ');
         const desc = [
           'HN: ' + p.hn,
           'ผู้ป่วย: ' + p.name,
           'แพทย์: ' + p.doctor,
+          'ชนิด: ' + p.type,
           'Fraction: ' + fx + ' / ' + p.totalFx,
           p.note ? 'หมายเหตุ: ' + p.note : '',
           'รหัสคอร์ส: ' + courseId,
           'ผู้บันทึก: ' + user
         ].filter(Boolean).join('\n');
 
-        const ev = cal.createEvent(title, toDate_(s.date, s.start), toDate_(s.date, s.end),
-          { description: desc, location: location });
+        const ev = cal.createAllDayEvent(title, toDate_(s.date), { description: desc, location: location });
         try { ev.setColor(CalendarApp.EventColor.MAUVE); } catch (e) { /* ignore */ }
         created.push(ev);
 
         rows.push([
           courseId + '-' + fx, courseId, now, p.hn, p.name, p.doctor, fx, p.totalFx,
-          s.date, s.start, s.end, p.note, STATUS_BOOKED, ev.getId(), user
+          s.date, p.type, p.note, STATUS_BOOKED, ev.getId(), user
         ]);
       });
     } catch (err) {
@@ -213,7 +211,7 @@ function createAppointments(payload) {
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, APPT_HEADERS.length).setValues(rows);
     SpreadsheetApp.flush();
 
-    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + rows.length + ' Fx (' +
+    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + p.type + ' / ' + rows.length + ' Fx (' +
       p.sessions.map(s => s.date).join(', ') + ') คอร์ส ' + courseId);
     if (overDays.length) {
       log_(user, 'แจ้งเตือนเกินเคส', overDays.map(d => d.date + ' = ' + d.total + ' เคส').join(', '));
@@ -315,9 +313,9 @@ function listAppointments_() {
   if (last < 2) return [];
   const rows = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
   return rows
-    .filter(r => r[COL.apptId])
-    .map(rowToObj_)
-    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    .map((r, i) => r[COL.apptId] ? rowToObj_(r, i + 2) : null)
+    .filter(Boolean)
+    .sort(compareAppt_);
 }
 
 function updateStatus_(apptId, scope, newStatus, deleteEvent) {
@@ -366,6 +364,7 @@ function validatePayload_(payload) {
     hn: String(payload.hn || '').trim(),
     name: String(payload.name || '').trim(),
     doctor: String(payload.doctor || '').trim(),
+    type: String(payload.type || '').trim(),
     note: String(payload.note || '').trim(),
     totalFx: parseInt(payload.totalFx, 10),
     force: !!payload.force,
@@ -375,33 +374,30 @@ function validatePayload_(payload) {
   if (!p.name) throw new Error('กรุณากรอกชื่อผู้ป่วย');
   if (!p.doctor) throw new Error('กรุณาเลือกแพทย์');
   if (getDoctors_().indexOf(p.doctor) < 0) throw new Error('แพทย์ "' + p.doctor + '" ไม่อยู่ในรายชื่อ (ชีต Doctors)');
+  if (!p.type || p.type === 'อื่นๆ') throw new Error('กรุณาเลือกชนิด หรือกรอกชนิดในช่อง "อื่นๆ"');
+  if (p.type.length > 100) throw new Error('ชนิดยาวเกินไป');
   if (!(p.totalFx >= 1 && p.totalFx <= 30)) throw new Error('จำนวน fraction ต้องอยู่ระหว่าง 1–30');
   if (p.sessions.length !== p.totalFx) throw new Error('จำนวนวันนัดไม่ตรงกับจำนวน fraction');
 
   const reDate = /^\d{4}-\d{2}-\d{2}$/;
-  const reTime = /^\d{2}:\d{2}$/;
   p.sessions = p.sessions.map((s, i) => {
-    const o = { date: String(s.date), start: String(s.start), end: String(s.end) };
-    if (!reDate.test(o.date) || !reTime.test(o.start) || !reTime.test(o.end)) {
-      throw new Error('วัน/เวลาของ Fx ' + (i + 1) + ' ไม่ถูกต้อง');
-    }
-    if (o.end <= o.start) throw new Error('เวลาสิ้นสุดของ Fx ' + (i + 1) + ' ต้องหลังเวลาเริ่ม');
+    const o = { date: String(s && s.date) };
+    if (!reDate.test(o.date)) throw new Error('วันที่ของ Fx ' + (i + 1) + ' ไม่ถูกต้อง');
     return o;
   });
   return p;
 }
 
-/** หานัดที่ซ้อนเวลากัน (จากชีต) เกินจำนวน MAX_PARALLEL */
-function findConflicts_(sessions) {
-  const maxParallel = Math.max(1, Number(getSettings_().MAX_PARALLEL) || 1);
-  const booked = listAppointments_().filter(a => a.status === STATUS_BOOKED);
+/** HN เดียวกันที่มีนัดอยู่แล้วในวันเดียวกัน (กันลงนัดซ้ำ) */
+function findConflicts_(sessions, hn) {
+  const booked = listAppointments_().filter(a => a.status === STATUS_BOOKED && a.hn === hn);
   const out = [];
   sessions.forEach((s, i) => {
-    const overlap = booked.filter(a => a.date === s.date && a.start < s.end && s.start < a.end);
-    if (overlap.length >= maxParallel) {
+    const same = booked.filter(a => a.date === s.date);
+    if (same.length) {
       out.push({
-        fx: i + 1, date: s.date, start: s.start, end: s.end,
-        with: overlap.map(a => a.hn + ' ' + a.name + ' (' + a.start + '–' + a.end + ')').join(', ')
+        fx: i + 1, date: s.date,
+        with: same.map(a => 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx + ' (' + a.type + ')').join(', ')
       });
     }
   });
@@ -441,20 +437,25 @@ function maxCases_(settings) {
   return Math.max(1, parseInt(settings.MAX_CASES_PER_DAY, 10) || 6);
 }
 
-function rowToObj_(r) {
+function rowToObj_(r, row) {
   return {
+    row: row,
     apptId: r[COL.apptId], courseId: r[COL.courseId], createdAt: r[COL.createdAt],
     hn: r[COL.hn], name: r[COL.name], doctor: r[COL.doctor],
     fx: Number(r[COL.fx]), totalFx: Number(r[COL.totalFx]),
-    date: r[COL.date], start: r[COL.start], end: r[COL.end],
+    date: r[COL.date], type: r[COL.type],
     note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy]
   };
 }
 
-function toDate_(dateStr, timeStr) {
+/** เรียงตามวันที่ แล้วตามลำดับแถวในชีต (= ลำดับที่ลงนัด / ลำดับคิวในวันนั้น) */
+function compareAppt_(a, b) {
+  return a.date.localeCompare(b.date) || a.row - b.row;
+}
+
+function toDate_(dateStr) {
   const d = dateStr.split('-').map(Number);
-  const t = timeStr.split(':').map(Number);
-  return new Date(d[0], d[1] - 1, d[2], t[0], t[1], 0); // ใช้ timezone ของสคริปต์ (Asia/Bangkok)
+  return new Date(d[0], d[1] - 1, d[2]); // ใช้ timezone ของสคริปต์ (Asia/Bangkok)
 }
 
 function getCalendar_() {
@@ -513,9 +514,14 @@ function ensureSetup_() {
     sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS])
       .setFontWeight('bold').setBackground('#ede7f6');
     sh.setFrozenRows(1);
-    // เก็บวัน/เวลาเป็นข้อความ เพื่อไม่ให้ชีตแปลง timezone หรือรูปแบบวันที่
-    sh.getRange('I:K').setNumberFormat('@');
+    // เก็บวันที่เป็นข้อความ เพื่อไม่ให้ชีตแปลง timezone หรือรูปแบบวันที่
+    sh.getRange('I:I').setNumberFormat('@');
     sh.getRange('D:D').setNumberFormat('@'); // HN อาจขึ้นต้นด้วย 0
+  } else if (sh.getRange(1, 10).getDisplayValues()[0][0] === 'เวลาเริ่ม') {
+    // อัปเดตจากเวอร์ชันที่มีเวลา: ลบคอลัมน์เวลาสิ้นสุด และเปลี่ยนคอลัมน์เวลาเริ่มเป็น "ชนิด"
+    sh.deleteColumn(11);
+    sh.getRange(1, 10).setValue('ชนิด');
+    if (sh.getLastRow() >= 2) sh.getRange(2, 10, sh.getLastRow() - 1, 1).setValue('-');
   }
 
   sh = ss.getSheetByName(SHEET_DOCTORS);
