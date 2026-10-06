@@ -1,5 +1,6 @@
 /**
  * ระบบนัดคิวผู้ป่วยใส่แร่ (Brachytherapy Appointment Queue)
+ * กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง
  *
  * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
@@ -176,7 +177,7 @@ function doGet() {
   }
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('นัดคิวผู้ป่วยใส่แร่')
+    .setTitle('ระบบนัดคิวผู้ป่วยใส่แร่ · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -192,7 +193,7 @@ function onOpen() {
 function showDialog() {
   const html = HtmlService.createTemplateFromFile('Index').evaluate()
     .setWidth(1100).setHeight(760);
-  SpreadsheetApp.getUi().showModelessDialog(html, 'นัดคิวผู้ป่วยใส่แร่');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'ระบบนัดคิวผู้ป่วยใส่แร่');
 }
 
 /** สร้างชีตและหัวตารางที่จำเป็น (รันซ้ำได้ ไม่ลบข้อมูลเดิม) */
