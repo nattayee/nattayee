@@ -104,7 +104,7 @@
 | RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
 | Nurse | Patient education, consent, การดูแลผลข้างเคียง |
 | RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator, ตารางงานประจำสัปดาห์ |
-| MP ▾ | Machine QA, Treatment Planning, Patient-specific QA, Radiation Safety |
+| MP ▾ | Machine QA, **Dosimetry** (เชื่อมแอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec) — เปิดในแท็บใหม่), Treatment Planning, Patient-specific QA, Radiation Safety |
 | Guideline | แนวทางการรักษาแยกตามโรค และตาราง dose constraints (QUANTEC) |
 
 ## แก้ไขเนื้อหา
@@ -114,6 +114,8 @@
 - เมนูด้านบนกำหนดที่ `nav` (เพิ่ม `children` เพื่อทำ dropdown) และเนื้อหาแต่ละหน้าอยู่ที่ `pages`
 - ลิงก์ที่เป็น `"#"` คือ placeholder (จะแสดงเป็น "รอใส่ลิงก์") ให้แทนด้วยลิงก์ Google Drive / Docs / Forms จริง
 - ใส่ Google Calendar ได้ที่ `schedule.calendarEmbedUrl` (Google Calendar → Settings → Integrate calendar → ค่า `src` ใน Embed code)
+- เว็บแอปที่ใช้ประจำใส่ใน `apps` ของหน้า (การ์ดใหญ่พร้อมปุ่ม **เปิดแอป ↗** เช่น TRS-398 ในหน้า `mp/dosimetry`) — เปิดในแท็บใหม่
+  เพราะแอป Apps Script อื่นฝังในหน้านี้ไม่ได้ (Google บล็อกการฝังถ้าแอปนั้นไม่ได้ตั้ง `ALLOWALL`) และต้องล็อกอิน Google ของแอปนั้นเอง
 - แต่ละหน้ามี `groups` (กล่องรายการลิงก์) และ `widgets` (`calculators`, `constraints`, `schedule`, `contacts`, `subpages` ฯลฯ)
 
 ## Pop up แจ้งเตือนข้อความใหม่

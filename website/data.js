@@ -6,7 +6,7 @@
  *
  * โครงสร้าง:
  *   nav   — เมนูด้านบน (เรียงตามลำดับ) แต่ละเมนูอ้างถึง key ใน pages; ถ้ามี children จะเป็น dropdown
- *   pages — เนื้อหาแต่ละหน้า: groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
+ *   pages — เนื้อหาแต่ละหน้า: apps = การ์ดเว็บแอป (ปุ่มเปิด), groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
  *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
  */
 window.SITE = {
@@ -45,6 +45,7 @@ window.SITE = {
       page: "mp",
       children: [
         { label: "Machine QA", page: "mp/qa" },
+        { label: "Dosimetry", page: "mp/dosimetry" },
         { label: "Treatment Planning", page: "mp/planning" },
         { label: "Patient-specific QA", page: "mp/psqa" },
         { label: "Radiation Safety", page: "mp/safety" },
@@ -297,8 +298,24 @@ window.SITE = {
           { label: "Monthly QA", type: "Sheet", url: "#" },
           { label: "Annual QA", type: "Sheet", url: "#" },
         ] },
+      ],
+    },
+    "mp/dosimetry": {
+      title: "Dosimetry",
+      lead: "การวัดปริมาณรังสีและสอบเทียบ output ของเครื่องฉายรังสี (IAEA TRS-398)",
+      // apps = เว็บแอปที่ใช้งานประจำ แสดงเป็นการ์ดใหญ่พร้อมปุ่มเปิด (เปิดในแท็บใหม่)
+      apps: [
+        {
+          icon: "📏",
+          label: "TRS-398 Output Calibration",
+          desc: "คำนวณ absorbed dose to water และ output ของ photon / electron beam ตาม IAEA TRS-398 พร้อมบันทึกผลการวัด",
+          note: "เปิดในแท็บใหม่ · เข้าสู่ระบบด้วยบัญชี Google",
+          url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
+        },
+      ],
+      groups: [
         { title: "Dosimetry", icon: "📏", items: [
-          { label: "Output calibration (TRS-398)", type: "Sheet", url: "#" },
+          { label: "Output calibration (TRS-398)", type: "Web app", url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec" },
           { label: "Equipment calibration record", type: "Sheet", url: "#" },
         ] },
       ],

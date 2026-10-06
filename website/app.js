@@ -211,6 +211,18 @@
         "</tbody></table></div>");
     }
 
+    // Web apps used every day (e.g. TRS-398 Output Calibration): big card with an "open" button, new tab
+    if (p.apps) {
+      html += section("", "", '<div class="grid wide">' + p.apps.map(function (a) {
+        return '<a class="card app-card" href="' + esc(a.url) + '"' + (isExternal(a.url) ? ' target="_blank" rel="noopener"' : "") + ">" +
+          '<span class="app-icon" aria-hidden="true">' + (a.icon || "🔗") + "</span>" +
+          '<div class="app-body"><strong>' + esc(a.label) + "</strong>" +
+          (a.desc ? "<span>" + esc(a.desc) + "</span>" : "") +
+          (a.note ? '<small>' + esc(a.note) + "</small>" : "") + "</div>" +
+          '<span class="app-open">เปิดแอป ↗</span></a>';
+      }).join("") + "</div>");
+    }
+
     if (p.groups) {
       html += section("", "", '<div class="grid">' + p.groups.map(function (g) {
         return '<div class="card"><h3>' + (g.icon ? g.icon + " " : "") + esc(g.title) + '</h3><ul class="link-list">' +

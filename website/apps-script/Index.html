@@ -216,6 +216,21 @@ a.tile:hover { border-color: var(--accent); transform: translateY(-1px); }
 .link-list a { text-decoration: none; font-weight: 500; }
 .link-list a:hover { text-decoration: underline; }
 
+/* Web-app cards (page.apps), e.g. MP › Dosimetry › TRS-398 Output Calibration */
+.app-card { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; border-left: 4px solid var(--accent); }
+.grid > .card.app-card:not(.tile):not(.contact-card) { border-left-color: var(--accent); }
+.app-card:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(29, 91, 214, .15); }
+.app-icon { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); font-size: 1.5rem; }
+.app-body { flex: 1; min-width: 0; }
+.app-body strong { display: block; color: var(--accent); font: 600 1.08rem var(--font-display); letter-spacing: .02em; }
+.app-body span { display: block; color: var(--ink); font-size: .86rem; margin-top: 2px; }
+.app-body small { display: block; color: var(--muted); font-size: .76rem; margin-top: 4px; }
+.app-open { flex: none; padding: 7px 14px; border-radius: 999px; background: var(--accent); color: var(--surface); font: 600 .84rem var(--font-body); white-space: nowrap; }
+@media (max-width: 560px) {
+  .app-card { flex-wrap: wrap; }
+  .app-open { width: 100%; text-align: center; }
+}
+
 .badge {
   display: inline-block; align-self: center; white-space: nowrap;
   padding: 1px 8px; border-radius: 999px; font: 600 .72rem/1.5 var(--font-body);
@@ -802,7 +817,7 @@ body.chat-page .secnav { margin-bottom: 10px; }
  *
  * โครงสร้าง:
  *   nav   — เมนูด้านบน (เรียงตามลำดับ) แต่ละเมนูอ้างถึง key ใน pages; ถ้ามี children จะเป็น dropdown
- *   pages — เนื้อหาแต่ละหน้า: groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
+ *   pages — เนื้อหาแต่ละหน้า: apps = การ์ดเว็บแอป (ปุ่มเปิด), groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
  *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
  */
 window.SITE = {
@@ -841,6 +856,7 @@ window.SITE = {
       page: "mp",
       children: [
         { label: "Machine QA", page: "mp/qa" },
+        { label: "Dosimetry", page: "mp/dosimetry" },
         { label: "Treatment Planning", page: "mp/planning" },
         { label: "Patient-specific QA", page: "mp/psqa" },
         { label: "Radiation Safety", page: "mp/safety" },
@@ -1093,8 +1109,24 @@ window.SITE = {
           { label: "Monthly QA", type: "Sheet", url: "#" },
           { label: "Annual QA", type: "Sheet", url: "#" },
         ] },
+      ],
+    },
+    "mp/dosimetry": {
+      title: "Dosimetry",
+      lead: "การวัดปริมาณรังสีและสอบเทียบ output ของเครื่องฉายรังสี (IAEA TRS-398)",
+      // apps = เว็บแอปที่ใช้งานประจำ แสดงเป็นการ์ดใหญ่พร้อมปุ่มเปิด (เปิดในแท็บใหม่)
+      apps: [
+        {
+          icon: "📏",
+          label: "TRS-398 Output Calibration",
+          desc: "คำนวณ absorbed dose to water และ output ของ photon / electron beam ตาม IAEA TRS-398 พร้อมบันทึกผลการวัด",
+          note: "เปิดในแท็บใหม่ · เข้าสู่ระบบด้วยบัญชี Google",
+          url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
+        },
+      ],
+      groups: [
         { title: "Dosimetry", icon: "📏", items: [
-          { label: "Output calibration (TRS-398)", type: "Sheet", url: "#" },
+          { label: "Output calibration (TRS-398)", type: "Web app", url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec" },
           { label: "Equipment calibration record", type: "Sheet", url: "#" },
         ] },
       ],
@@ -4147,6 +4179,18 @@ window.SITE = {
       html += section("ข้อมูลเครื่อง", "", '<div class="card flush"><table class="specs"><tbody>' +
         p.specs.map(function (r) { return "<tr><th>" + esc(r[0]) + "</th><td>" + esc(r[1]) + "</td></tr>"; }).join("") +
         "</tbody></table></div>");
+    }
+
+    // Web apps used every day (e.g. TRS-398 Output Calibration): big card with an "open" button, new tab
+    if (p.apps) {
+      html += section("", "", '<div class="grid wide">' + p.apps.map(function (a) {
+        return '<a class="card app-card" href="' + esc(a.url) + '"' + (isExternal(a.url) ? ' target="_blank" rel="noopener"' : "") + ">" +
+          '<span class="app-icon" aria-hidden="true">' + (a.icon || "🔗") + "</span>" +
+          '<div class="app-body"><strong>' + esc(a.label) + "</strong>" +
+          (a.desc ? "<span>" + esc(a.desc) + "</span>" : "") +
+          (a.note ? '<small>' + esc(a.note) + "</small>" : "") + "</div>" +
+          '<span class="app-open">เปิดแอป ↗</span></a>';
+      }).join("") + "</div>");
     }
 
     if (p.groups) {
