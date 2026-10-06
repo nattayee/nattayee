@@ -15,6 +15,15 @@
   var BADGE_MS = 30000;
   var ROLE_GROUPS = (C.roles || ["RO", "MP", "RTT", "Nurse"]).concat(["Other"]);
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
+  var SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
+  var GROUP_MS = 5 * 60000;
+  function clock(ms) { return new Date(ms).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }); }
+  function dayLabel(ms) {
+    var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 864e5);
+    if (d.toDateString() === t.toDateString()) return "วันนี้";
+    if (d.toDateString() === y.toDateString()) return "เมื่อวาน";
+    return d.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
   var BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
   function esc(s) {
@@ -243,8 +252,8 @@
               '<div class="chat-previews" id="dmPreviews"></div>' +
               '<div class="chat-input-row">' +
                 '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="dmFile" type="file" accept="image/*" multiple hidden></label>' +
-                '<textarea id="dmText" rows="2" placeholder="พิมพ์ข้อความส่วนตัว… (Ctrl+Enter เพื่อส่ง)"></textarea>' +
-                '<button class="chat-send" type="submit" id="dmSend">ส่ง</button>' +
+                '<textarea id="dmText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
+                '<button class="chat-send" type="submit" id="dmSend" aria-label="ส่ง" title="ส่ง (Ctrl+Enter)">' + SEND_ICON + "</button>" +
               "</div>" +
               '<p class="chat-error" id="dmError" hidden></p>' +
             "</form>" +
@@ -375,8 +384,16 @@
       var nearEnd = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       var prevTop = feed.scrollTop;
 
+      var prevMsg = null;
       feed.innerHTML = thread.length ? thread.map(function (m) {
         var mine = m.from.username === self.username;
+        var sep = "";
+        if (!prevMsg || new Date(prevMsg.createdAt).toDateString() !== new Date(m.createdAt).toDateString()) {
+          sep = '<div class="day-sep"><span>' + esc(dayLabel(m.createdAt)) + "</span></div>";
+          prevMsg = null;
+        }
+        var cont = !!prevMsg && prevMsg.from.username === m.from.username && m.createdAt - prevMsg.createdAt < GROUP_MS && !m.replyTo;
+        prevMsg = m;
         var images = m.images.length ? '<div class="chat-images n' + Math.min(m.images.length, 4) + '">' + m.images.map(function (src, i) {
           var priv = /^dm:/.test(src);
           return '<img src="' + esc(priv ? BLANK : src) + '"' + (priv ? ' class="loading" data-dm-img="' + esc(src.slice(3)) + '" data-msg-id="' + esc(m.id) + '"' : "") +
@@ -384,34 +401,39 @@
         }).join("") + "</div>" : "";
         var reacts = Object.keys(m.reactions).map(function (k) { return m.reactions[k]; });
         var myR = m.reactions[key(self)];
-        var status = mine ? '<span class="dm-status' + (m.readAt ? " read" : "") + '">' + (m.readAt ? "✓✓ อ่านแล้ว " + fmtTime(m.readAt) : "✓ ส่งแล้ว") + "</span>" : "";
+        var status = mine ? '<span class="dm-status' + (m.readAt ? " read" : "") + '">' + (m.readAt ? "✓✓ อ่านแล้ว" : "✓ ส่งแล้ว") + "</span>" : "";
         var log = openLog[m.id] ? '<ul class="dm-log">' +
           '<li>ส่งเมื่อ <time>' + fmtFull(m.createdAt) + "</time></li>" +
           (m.readAt ? "<li>👁 " + esc(m.to.name) + " อ่านเมื่อ <time>" + fmtFull(m.readAt) + "</time></li>" : "<li>👁 ยังไม่ได้อ่าน</li>") +
           m.reactionLog.map(function (r) {
             return '<li><span class="react-tag ' + r.type + '">' + REACT[r.type].icon + " " + REACT[r.type].label + "</span> " + esc(r.name) + " · <time>" + fmtFull(r.at) + "</time></li>";
           }).join("") + "</ul>" : "";
-        return '<article class="chat-msg' + (mine ? " mine" : "") + '" data-msg="' + esc(m.id) + '">' +
-          '<header><strong>' + esc(mine ? "คุณ" : m.from.name) + '</strong><time title="' + fmtFull(m.createdAt) + '">' + fmtTime(m.createdAt) + "</time></header>" +
-          (m.replyTo ? '<button type="button" class="chat-quote" data-act="jump" data-id="' + esc(m.replyTo.id) + '">↩ <strong>' + esc(m.replyTo.name) + "</strong> " + esc(m.replyTo.text) + "</button>" : "") +
-          (m.text ? '<div class="chat-text">' + linkify(m.text) + "</div>" : "") + images +
+        return sep + '<article class="chat-msg' + (mine ? " mine" : "") + (cont ? " cont" : "") + '" data-msg="' + esc(m.id) + '">' +
+          (mine ? "" : '<span class="msg-avatar" aria-hidden="true">' + esc(initial(m.from.name)) + "</span>") +
+          '<div class="msg-main">' +
+          '<header class="msg-name"><strong>' + esc(mine ? "คุณ" : m.from.name) + "</strong></header>" +
+          '<div class="bubble">' +
+            (m.replyTo ? '<button type="button" class="chat-quote" data-act="jump" data-id="' + esc(m.replyTo.id) + '">↩ <strong>' + esc(m.replyTo.name) + "</strong> " + esc(m.replyTo.text) + "</button>" : "") +
+            (m.text ? '<div class="chat-text">' + linkify(m.text) + "</div>" : "") + images +
+            '<time class="msg-time" title="' + fmtFull(m.createdAt) + '">' + clock(m.createdAt) + "</time>" +
+          "</div>" +
           '<div class="chat-actions">' +
             ["ok", "no"].map(function (t) {
               var on = myR && myR.type === t;
               var n = reacts.filter(function (r) { return r.type === t; }).length;
               return '<button type="button" class="react-btn ' + t + (on ? " on" : "") + '" data-act="' + t + '" data-id="' + esc(m.id) + '"' +
                 (mine ? ' disabled title="ผู้รับเท่านั้นที่กด ✓/✗ ได้"' : "") + ' aria-pressed="' + !!on + '">' +
-                REACT[t].icon + " " + REACT[t].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
+                REACT[t].icon + (n ? " <b>" + n + "</b>" : "") + "</button>";
             }).join("") +
-            '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ</button>' +
-            (isAdmin() ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)">ลบ</button>' : "") +
-            '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '">' + (status || "รายละเอียด") + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
+            '<button type="button" class="tool-btn" data-act="reply" data-id="' + esc(m.id) + '" title="ตอบกลับ" aria-label="ตอบกลับ">↩</button>' +
+            (isAdmin() ? '<button type="button" class="tool-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)" aria-label="ลบข้อความ">🗑</button>' : "") +
+            '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" title="เวลาส่ง เวลาอ่าน และการกด ✓/✗">' + (status || "ⓘ") + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
           "</div>" +
           (reacts.length ? '<ul class="react-list">' + reacts.map(function (r) {
             return '<li><span class="react-tag ' + r.type + '">' + REACT[r.type].icon + " " + REACT[r.type].label + "</span> " +
               esc(r.name) + " <time>" + fmtFull(r.at) + "</time></li>";
           }).join("") + "</ul>" : "") +
-          log + "</article>";
+          log + "</div></article>";
       }).join("") : '<p class="chat-empty">ยังไม่มีข้อความ — เริ่มพิมพ์ด้านล่างเพื่อส่งถึง ' + esc(partner ? partner.name : "") + "</p>";
 
       feed.scrollTop = scrollToEnd || nearEnd ? feed.scrollHeight : prevTop;
@@ -419,7 +441,7 @@
       var dead = partner && partner.active === false;
       $("dmSend").disabled = dead;
       textIn.disabled = dead;
-      textIn.placeholder = dead ? "บัญชีนี้ไม่ได้ใช้งานแล้ว ส่งข้อความไม่ได้" : "พิมพ์ข้อความส่วนตัว… (Ctrl+Enter เพื่อส่ง)";
+      textIn.placeholder = dead ? "บัญชีนี้ไม่ได้ใช้งานแล้ว ส่งข้อความไม่ได้" : "พิมพ์ข้อความ…";
     }
 
     $("dmBack").addEventListener("click", function () {
@@ -519,6 +541,8 @@
     form.addEventListener("dragleave", function () { form.classList.remove("drag"); });
     form.addEventListener("drop", function (e) { e.preventDefault(); form.classList.remove("drag"); addFiles(e.dataTransfer.files); });
     textIn.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
+    function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
+    textIn.addEventListener("input", grow);
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -530,6 +554,7 @@
       btn.disabled = true;
       api("dmSend", { to: current, text: text, images: pending.slice(), replyTo: replyTo ? replyTo.id : null }).then(function (r) {
         textIn.value = "";
+        grow();
         pending = [];
         replyTo = null;
         renderPreviews();

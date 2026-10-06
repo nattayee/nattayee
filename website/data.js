@@ -26,6 +26,7 @@ window.SITE = {
 
   nav: [
     { label: "Home", page: "home" },
+    { label: "💬 แชท", page: "chat" },
     {
       label: "Machines",
       page: "machines",
@@ -103,6 +104,8 @@ window.SITE = {
   ],
 
   quickLinks: [
+    { icon: "💬", label: "แชทประกาศ", desc: "ประกาศและข่าวสารของหน่วย", url: "#/chat" },
+    { icon: "✉️", label: "ข้อความส่วนตัว", desc: "ส่งข้อความถึงสมาชิกแบบตัวต่อตัว", url: "#/inbox" },
     { icon: "⚙️", label: "Machines", desc: "ข้อมูลเครื่อง สถานะ และ QA", url: "#/machines" },
     { icon: "🧑‍⚕️", label: "RTT", desc: "งานนักรังสีการแพทย์", url: "#/rtt" },
     { icon: "💉", label: "Nurse", desc: "งานพยาบาลรังสีรักษา", url: "#/nurse" },
@@ -113,7 +116,14 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["announcements", "quicklinks", "contacts"],
+      widgets: ["intro", "quicklinks", "contacts"],
+    },
+
+    // แชทประกาศ: แท็บแยก เต็มจอแบบแอปแชท (bare = ไม่มีหัวข้อหน้า/breadcrumb)
+    chat: {
+      title: "แชทประกาศ",
+      bare: true,
+      widgets: ["announcements"],
     },
 
     /* ---------------- Machines ---------------- */

@@ -4,7 +4,7 @@
  *
  *  - ถามเซิร์ฟเวอร์ (Code.gs: notify) ทุก chat.notifySeconds วินาที (ค่าเริ่มต้น 20)
  *  - แสดง pop up มุมขวาล่าง + เสียงเตือนสั้นๆ (ปิดได้ที่เมนูผู้ใช้) + ตัวเลขบนแท็บเมื่อดูหน้าอื่นอยู่
- *  - เด้งทุกครั้งที่มีข้อความใหม่ถึงผู้ใช้ (รวมถึงตอนอยู่หน้า Home) ยกเว้นข้อความส่วนตัวในบทสนทนาที่เปิดดูอยู่
+ *  - เด้งทุกครั้งที่มีข้อความใหม่ถึงผู้ใช้ (รวมถึงตอนอยู่หน้าแชท) ยกเว้นข้อความส่วนตัวในบทสนทนาที่เปิดดูอยู่
  *  - แจ้งเตือนของระบบ (Notification API) เมื่อผู้ใช้อนุญาตและแท็บไม่ได้เปิดอยู่
  */
 (function () {
@@ -153,8 +153,8 @@
 
   function openChat(id) {
     window.__lpchFocusMessage = id;
-    if (currentPage() === "home") window.dispatchEvent(new CustomEvent("lpch:focus-message", { detail: id }));
-    else location.hash = "#/home";
+    if (currentPage() === "chat") window.dispatchEvent(new CustomEvent("lpch:focus-message", { detail: id }));
+    else location.hash = "#/chat";
   }
   function openDm(username) { location.hash = "#/inbox?u=" + encodeURIComponent(username); }
 
@@ -166,7 +166,7 @@
   function setBadges(r) {
     var dmBadge = document.getElementById("dmBadge");
     if (dmBadge) { dmBadge.textContent = r.dmUnread > 99 ? "99+" : String(r.dmUnread); dmBadge.hidden = !r.dmUnread; }
-    var home = document.querySelector('.nav-link[data-page="home"]');
+    var home = document.querySelector('.nav-link[data-page="chat"]');
     if (home) {
       var b = home.querySelector(".nav-count");
       if (!b) { b = document.createElement("span"); b.className = "nav-count"; home.appendChild(b); }
@@ -211,7 +211,7 @@
           if (r.dmUnread) parts.push("ข้อความส่วนตัว " + r.dmUnread + " ข้อความ");
           toast({ kind: "info", title: "คุณมีข้อความที่ยังไม่อ่าน", text: parts.join(" · "),
             action: r.dmUnread && !r.chatUnread ? { label: "เปิดข้อความส่วนตัว", run: function () { location.hash = "#/inbox"; } }
-              : { label: "ไปที่ประกาศ", run: function () { location.hash = "#/home"; } } });
+              : { label: "ไปที่แชทประกาศ", run: function () { location.hash = "#/chat"; } } });
         }
         return;
       }

@@ -23,6 +23,8 @@
   var MAX_IMAGES = C.maxImages || 4;
   var useFirebase = !!(C.firebase && C.firebase.projectId);
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
+  var SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
+  var GROUP_MS = 5 * 60000; // messages from one person within 5 minutes are grouped like a chat app
 
   /* ---------------- helpers ---------------- */
 
@@ -66,6 +68,18 @@
     if (d.toDateString() === now.toDateString()) return "วันนี้ " + t;
     return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" }) + " " + t;
   }
+
+  function clock(ms) { return new Date(ms).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }); }
+
+  // Day separator text: วันนี้ / เมื่อวาน / 6 ต.ค. 2569
+  function dayLabel(ms) {
+    var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 864e5);
+    if (d.toDateString() === t.toDateString()) return "วันนี้";
+    if (d.toDateString() === y.toDateString()) return "เมื่อวาน";
+    return d.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function initialOf(name) { return String(name || "?").trim().replace(/^[\u0e40-\u0e44]/, "").charAt(0) || "?"; }
 
   // Full date and time for records: "6 ต.ค. 2569 09:47:12"
   function fmtFull(ms) {
@@ -442,26 +456,25 @@
     root.innerHTML =
       '<div class="chat card">' +
         '<div class="chat-head">' +
-          '<h3>📣 ประกาศ / ข่าวสาร <span class="chat-unread" id="chatUnread" hidden></span></h3>' +
+          '<h3>📣 แชทประกาศ <span class="chat-unread" id="chatUnread" hidden></span></h3>' +
           '<div class="chat-filters" role="tablist">' +
             '<button class="chip active" data-filter="all">ทั้งหมด</button>' +
-            '<button class="chip" data-filter="mine">ส่งถึงฉัน</button>' +
+            '<button class="chip" data-filter="mine">ถึงฉัน</button>' +
             '<button class="chip" data-filter="sent">ที่ฉันส่ง</button>' +
-            '<button class="chip" id="chatCsv" title="ดาวน์โหลดบันทึกการส่ง อ่าน ตอบกลับ และการกด ✓/✗">⬇ บันทึก CSV</button>' +
+            '<button class="chip icon" id="chatCsv" title="ดาวน์โหลดบันทึก (CSV): การส่ง อ่าน ตอบกลับ และการกด ✓/✗" aria-label="ดาวน์โหลดบันทึก CSV">⬇</button>' +
           "</div>" +
         "</div>" +
         (store.label ? '<div class="chat-mode">ℹ️ ' + esc(store.label) + "</div>" : "") +
         '<div class="chat-feed" id="chatFeed" aria-live="polite"><p class="chat-empty">กำลังโหลด…</p></div>' +
         '<form class="chat-compose" id="chatForm" autocomplete="off">' +
-          (me ? '<div class="chat-me">ส่งในนาม <strong>' + esc(me.name) + '</strong> <span class="badge">' + esc(me.role) + "</span></div>" : "") +
           '<div class="chat-replying" id="chatReplying" hidden></div>' +
           '<div class="chat-to" id="chatTo"></div>' +
           '<div class="chat-picker" id="chatPicker" hidden></div>' +
           '<div class="chat-previews" id="chatPreviews"></div>' +
           '<div class="chat-input-row">' +
             '<label class="chat-attach" title="แนบรูป" aria-label="แนบรูป">📎<input id="chatFile" type="file" accept="image/*" multiple hidden></label>' +
-            '<textarea id="chatText" rows="2" placeholder="พิมพ์ประกาศ… (วางรูปด้วย Ctrl+V หรือลากไฟล์มาวางได้)"></textarea>' +
-            '<button class="chat-send" type="submit" id="chatSend">ส่ง</button>' +
+            '<textarea id="chatText" rows="1" placeholder="พิมพ์ข้อความ…"></textarea>' +
+            '<button class="chat-send" type="submit" id="chatSend" aria-label="ส่ง" title="ส่ง (Ctrl+Enter)">' + SEND_ICON + "</button>" +
           "</div>" +
           '<p class="chat-error" id="chatError" hidden></p>' +
         "</form>" +
@@ -509,13 +522,13 @@
 
     function renderTo() {
       var picked = recipients.filter(function (t) { return t.indexOf("u:") === 0; });
-      toEl.innerHTML = "<span>ส่งถึง:</span>" +
+      toEl.innerHTML = "<span>ถึง</span>" +
         ["ALL"].concat(ROLES).map(function (r) {
           return '<button type="button" class="chip' + (recipients.indexOf(r) !== -1 ? " active" : "") + '" data-to="' + esc(r) + '">' +
             esc(r === "ALL" ? "ทุกคน" : r) + "</button>";
         }).join("") +
         '<button type="button" class="chip' + (pickerOpen ? " active" : "") + '" id="pickerToggle" aria-expanded="' + pickerOpen + '"' +
-          (people.length ? "" : ' disabled title="ยังไม่มีสมาชิกคนอื่น"') + '>👤 รายบุคคล ▾</button>' +
+          (people.length ? "" : ' disabled title="ยังไม่มีสมาชิกคนอื่น"') + '>👤 เลือกคน ▾</button>' +
         picked.map(function (t) {
           return '<span class="person-chip">' + esc(names[nameKey(t.slice(2))] || t.slice(2)) +
             '<button type="button" data-unpick="' + esc(t) + '" aria-label="เอาออก">×</button></span>';
@@ -644,6 +657,9 @@
     textIn.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) form.requestSubmit();
     });
+    // The box grows with the text up to a few lines, like a chat app.
+    function grow() { textIn.style.height = "auto"; textIn.style.height = Math.min(textIn.scrollHeight, 140) + "px"; }
+    textIn.addEventListener("input", grow);
 
     function namesFor(targets) {
       var out = {};
@@ -686,6 +702,7 @@
       if (replyTo) msg.replyTo = replyTo;
       store.add(msg).then(function () {
         textIn.value = "";
+        grow();
         pending = [];
         replyTo = null;
         recipients = ["ALL"];
@@ -789,7 +806,7 @@
           esc(f.to.map(function (t) { return targetLabel(m, t); }).join(", ")) + " · " + fmtTime(f.at) + "</div>";
       }).join("");
 
-      return '<div class="chat-status"><span class="to-label">ส่งถึง</span>' + chips + "</div>" + fwd;
+      return '<div class="chat-status"><span class="to-label">ถึง</span>' + chips + "</div>" + fwd;
     }
 
     function reactHtml(m, readers) {
@@ -805,16 +822,16 @@
         return '<button type="button" class="react-btn ' + type + (on ? " on" : "") + '" data-act="' + type + '" data-id="' + esc(m.id) + '"' +
           (can ? "" : " disabled") + ' aria-pressed="' + !!on + '" title="' +
           (!can ? why : on ? "คุณกด " + REACT[type].label + " เมื่อ " + fmtFull(mineR.at) : "กด " + REACT[type].label) + '">' +
-          REACT[type].icon + " " + REACT[type].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
+          REACT[type].icon + (n ? " <b>" + n + "</b>" : "") + "</button>";
       }).join("");
 
-      var summary = (readers.length ? "👁 อ่าน " + readers.length : "👁 ยังไม่มีผู้อ่าน") + (all.length ? " · กด " + all.length : "");
+      var summary = "👁 " + readers.length + (all.length ? " · ✓✗ " + all.length : "");
 
       return '<div class="chat-actions">' + btns +
-        '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ' + (replies ? " (" + replies + ")" : "") + "</button>" +
-        '<button type="button" class="link-btn" data-act="fwd" data-id="' + esc(m.id) + '">↪ ส่งต่อ</button>' +
-        (isAdmin() ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)">ลบ</button>' : "") +
-        '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" aria-expanded="' + !!openLog[m.id] + '">' +
+        '<button type="button" class="tool-btn" data-act="reply" data-id="' + esc(m.id) + '" title="ตอบกลับ" aria-label="ตอบกลับ">↩' + (replies ? " " + replies : "") + "</button>" +
+        '<button type="button" class="tool-btn" data-act="fwd" data-id="' + esc(m.id) + '" title="ส่งต่อ" aria-label="ส่งต่อ">↪</button>' +
+        (isAdmin() ? '<button type="button" class="tool-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)" aria-label="ลบข้อความ">🗑</button>' : "") +
+        '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" aria-expanded="' + !!openLog[m.id] + '" title="ผู้อ่านและผู้กด ✓/✗ พร้อมเวลา">' +
           summary + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
         "</div>" + reactListHtml(all);
     }
@@ -883,11 +900,37 @@
       var badge = root.querySelector("#chatUnread");
       badge.hidden = !unread;
       badge.textContent = "ยังไม่อ่าน " + unread;
+      // Keep the count on the "แชท" menu tab in step as messages get read here.
+      var navCount = document.querySelector('.nav-link[data-page="chat"] .nav-count');
+      if (navCount) { navCount.textContent = unread > 99 ? "99+" : String(unread); navCount.hidden = !unread; }
 
       var prevTop = feed.scrollTop;
       if (observer) observer.disconnect();
 
-      patchFeed(list.map(function (m) {
+      var items = [], prev = null;
+      list.forEach(function (m) {
+        var day = new Date(m.createdAt).toDateString();
+        if (!prev || new Date(prev.createdAt).toDateString() !== day) {
+          items.push({ id: "day-" + day, html: '<div class="day-sep" data-msg="day-' + esc(day) + '"><span>' + esc(dayLabel(m.createdAt)) + "</span></div>" });
+          prev = null;
+        }
+        var cont = !!prev && samePerson(prev.author, m.author) && m.createdAt - prev.createdAt < GROUP_MS && !m.replyTo;
+        items.push(messageItem(m, cont));
+        prev = m;
+      });
+      patchFeed(items);
+
+      if (firstRender || stickToBottom) feed.scrollTop = feed.scrollHeight;
+      else feed.scrollTop = prevTop;
+      firstRender = false;
+
+      if (observer) feed.querySelectorAll("[data-msg]").forEach(function (el) { observer.observe(el); });
+      hydrateImages(feed);
+      focusPending();
+    }
+
+    // One message, laid out like a chat app: avatar and name for others, a bubble with the time, small tools below.
+    function messageItem(m, cont) {
         var mine = byMe(m);
         var readers = readersOf(m);
         var images = m.images.length
@@ -898,26 +941,22 @@
             }).join("") + "</div>"
           : "";
         var unreadMine = me && isForMe(m, me) && !mine && !m.reads[readerKey(me)];
-        var html = '<article class="chat-msg' + (mine ? " mine" : "") + (unreadMine ? " unread" : "") + '" data-msg="' + esc(m.id) + '">' +
-          '<header><strong>' + esc(m.author.name) + '</strong> <span class="badge">' + esc(m.author.role) + "</span>" +
-          '<time title="' + fmtFull(m.createdAt) + '">' + fmtTime(m.createdAt) + "</time></header>" +
-          quoteHtml(m) +
-          (m.text ? '<div class="chat-text">' + linkify(m.text) + "</div>" : "") + images +
-          statusHtml(m, readers) +
-          reactHtml(m, readers) +
-          logHtml(m, readers) +
-          forwardHtml(m) +
+        var html = '<article class="chat-msg' + (mine ? " mine" : "") + (cont ? " cont" : "") + (unreadMine ? " unread" : "") + '" data-msg="' + esc(m.id) + '">' +
+          (mine ? "" : '<span class="msg-avatar" aria-hidden="true">' + esc(initialOf(m.author.name)) + "</span>") +
+          '<div class="msg-main">' +
+            '<header class="msg-name"><strong>' + esc(mine ? "คุณ" : m.author.name) + '</strong> <span class="badge">' + esc(m.author.role) + "</span></header>" +
+            '<div class="bubble">' +
+              quoteHtml(m) +
+              (m.text ? '<div class="chat-text">' + linkify(m.text) + "</div>" : "") + images +
+              '<time class="msg-time" title="' + fmtFull(m.createdAt) + '">' + clock(m.createdAt) + "</time>" +
+            "</div>" +
+            statusHtml(m, readers) +
+            reactHtml(m, readers) +
+            logHtml(m, readers) +
+            forwardHtml(m) +
+          "</div>" +
           "</article>";
         return { id: m.id, html: html };
-      }));
-
-      if (firstRender || stickToBottom) feed.scrollTop = feed.scrollHeight;
-      else feed.scrollTop = prevTop;
-      firstRender = false;
-
-      if (observer) feed.querySelectorAll("[data-msg]").forEach(function (el) { observer.observe(el); });
-      hydrateImages(feed);
-      focusPending();
     }
 
     function byMe(m) { return samePerson(m.author, me); }

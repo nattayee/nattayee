@@ -9,7 +9,7 @@
 
   // Member pages (not in the top menu).
   S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
-  S.pages.inbox = { title: "ข้อความส่วนตัว", lead: "ส่งข้อความถึงสมาชิกแบบตัวต่อตัว แนบรูปได้ — เห็นเฉพาะผู้ส่งและผู้รับ", widgets: ["inbox"] };
+  S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
   var navEl = document.getElementById("nav");
 
@@ -197,7 +197,7 @@
     var nav = findNav(key);
     var html = "";
 
-    if (key !== "home") {
+    if (key !== "home" && !p.bare) {
       var crumbs = '<a href="#/home">Home</a>' +
         (nav && nav.parent ? ' <span>›</span> <a href="#/' + esc(nav.parent.page) + '">' + esc(nav.parent.label) + "</a>" : "") +
         " <span>›</span> " + esc(p.title);
@@ -330,6 +330,9 @@
       unmountInbox = window.DM.mount(inboxRoot, m ? decodeURIComponent(m[1]) : null);
     }
     document.getElementById("inboxLink").classList.toggle("active", page === "inbox");
+    // Chat pages fill the screen like a chat app (compact header on phones, no footer).
+    document.body.classList.toggle("chat-page", page === "chat" || page === "inbox");
+    fitChat();
     var accountRoot = document.getElementById("accountRoot");
     if (accountRoot) Auth.mountAccount(accountRoot);
     var adminRoot = document.getElementById("adminRoot");
@@ -448,6 +451,16 @@
     if (!userMenu.contains(e.target)) closeUserMenu();
   });
   window.addEventListener("resize", closeUserMenu);
+  window.addEventListener("resize", fitChat);
+
+  // Size the chat panel to the rest of the screen below the header and menu bar.
+  function fitChat() {
+    var el = app.querySelector(".chat, .dm");
+    if (!el) return;
+    var top = el.getBoundingClientRect().top + window.scrollY;
+    var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight) - top - 10;
+    el.style.height = Math.max(420, Math.round(h)) + "px";
+  }
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { closeSubmenus(); closeUserMenu(); }
   });
