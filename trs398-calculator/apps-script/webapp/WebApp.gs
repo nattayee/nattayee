@@ -67,10 +67,29 @@ function requireOwner_() {
 
 function doGet() {
   if (!account_()) {
-    // Only reached when the deployment does not require sign-in: ask for a Google login first
     var back = ScriptApp.getService().getUrl();
-    return HtmlService.createHtmlOutput(
-      '<div style="font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px">' +
+    var runner = '';
+    try { runner = String(Session.getEffectiveUser().getEmail() || ''); } catch (e) { runner = ''; }
+    var box = '<div style="font:16px/1.6 system-ui,sans-serif;max-width:680px;margin:40px auto;padding:0 16px">';
+    if (runner) {
+      // Running as the owner ("Execute as: Me"): Google never tells the script which Gmail opened it,
+      // so signing in again cannot help. Only the deployment setting fixes this.
+      return HtmlService.createHtmlOutput(box +
+        '<h2>ระบบยังระบุบัญชี Gmail ของผู้ใช้ไม่ได้</h2>' +
+        '<p>Web app นี้ถูก Deploy แบบ <b>Execute as: Me</b> ซึ่ง Google จะไม่ส่งอีเมลของผู้เปิดมาให้สคริปต์ ' +
+        'จึงขึ้นหน้านี้แม้เข้าสู่ระบบ Google แล้ว</p>' +
+        '<p><b>ผู้ดูแล (' + WEBAPP.OWNER_EMAIL + ') แก้ได้ดังนี้</b></p><ol>' +
+        '<li>เปิดโปรเจกต์ Apps Script → <b>Deploy</b> → <b>Manage deployments</b></li>' +
+        '<li>กดไอคอนดินสอ (Edit) ของ deployment นี้</li>' +
+        '<li>Version: <b>New version</b></li>' +
+        '<li>Execute as: <b>User accessing the web app</b></li>' +
+        '<li>Who has access: <b>Anyone with Google account</b></li>' +
+        '<li>กด <b>Deploy</b> (ลิงก์ /exec เดิมใช้ต่อได้)</li></ol>' +
+        '<p>ครั้งแรกที่ผู้ใช้แต่ละคนเปิด Google จะขอสิทธิ์ ให้กด Allow / อนุญาต</p></div>'
+      ).setTitle(WEBAPP.TITLE);
+    }
+    // Deployment open to anyone without a Google account: ask for a Google login first
+    return HtmlService.createHtmlOutput(box +
       '<h2>กรุณาเข้าสู่ระบบด้วย Gmail</h2>' +
       '<p>ต้องเข้าสู่ระบบด้วยบัญชี Google ก่อนใช้ TRS-398 Output Calibration เพื่อบันทึกชื่อผู้บันทึกในรายงาน</p>' +
       '<p><a target="_top" href="https://accounts.google.com/ServiceLogin?continue=' + encodeURIComponent(back) + '">เข้าสู่ระบบ Google</a></p>' +

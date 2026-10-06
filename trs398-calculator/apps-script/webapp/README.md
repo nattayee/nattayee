@@ -26,6 +26,17 @@
 
 แก้ `EDITORS` → บันทึก → รันฟังก์ชัน **`shareLog`** (ด้วยบัญชี nattayee) แล้ว Deploy → Manage deployments → Edit → New version
 
+## แก้ปัญหา: ขึ้น "กรุณาเข้าสู่ระบบด้วย Gmail" ทั้งที่ login แล้ว
+
+สาเหตุคือ Deploy เป็น **Execute as: Me** ซึ่ง Google จะไม่ส่งอีเมลของผู้เปิดให้สคริปต์ (บัญชี @gmail.com)
+แก้ที่ Deploy → Manage deployments → ✏ Edit → Version: New version →
+Execute as: **User accessing the web app** · Who has access: **Anyone with Google account** → Deploy (ลิงก์ /exec เดิมใช้ต่อได้)
+
+- ครั้งแรกผู้ใช้แต่ละคนจะเห็นหน้าขอสิทธิ์ของ Google ให้กด Allow
+- ถ้าขึ้น "บัญชี … ยังไม่ได้รับสิทธิ์ใช้งาน" ให้เพิ่ม Gmail นั้นใน `EDITORS` แล้วรัน `shareLog` (หัวข้อด้านบน)
+- ถ้าเปิดแล้วขึ้น "ขออภัย ไม่สามารถเปิดไฟล์ได้ในขณะนี้" มักเกิดจาก login Google หลายบัญชีในเบราว์เซอร์เดียว
+  ให้เปิดในหน้าต่างไม่ระบุตัวตน (Incognito) หรือโปรไฟล์ Chrome ที่ login บัญชีเดียว
+
 ## เมื่อแก้โค้ดของแอป
 
 ```
