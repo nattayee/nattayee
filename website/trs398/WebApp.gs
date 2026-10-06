@@ -205,8 +205,23 @@ function setupLogin() {
   secret_();
   Logger.log('APP_URL   = ' + (prop_('APP_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment แอป Execute as Me)'));
   Logger.log('LOGIN_URL = ' + (prop_('LOGIN_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment เข้าสู่ระบบ User accessing)'));
-  Logger.log('LPCH_URL  = ' + (prop_('LPCH_URL') || '(ไม่บังคับ: URL /exec ของ LPCH RO Workspace เพื่อใช้บัญชีร่วมกัน)'));
-  Logger.log('ตั้งค่าที่ Project Settings → Script properties');
+  Logger.log('LPCH_URL  = ' + (prop_('LPCH_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ LPCH RO Workspace เพื่อใช้บัญชีร่วมกัน)'));
+  Logger.log('ตั้งค่าที่ Project Settings → Script properties (ชื่อต้องตรงตัวพิมพ์ ไม่มีช่องว่าง)');
+  Logger.log(checkLpch_());
+}
+
+/** Can this app reach LPCH RO Workspace and does that copy know the shared-login commands? (text for the log) */
+function checkLpch_() {
+  var url = lpchUrl_();
+  if (!url) return '✗ ยังไม่ได้ตั้ง LPCH_URL — ช่องเข้าสู่ระบบด้วยบัญชี LPCH จะไม่แสดง';
+  if (!BACK_RE.test(url)) return '✗ LPCH_URL ต้องเป็น https://script.google.com/macros/s/…/exec (ตอนนี้: ' + url + ')';
+  try { lpchCall_({ action: 'ssoRedeem', ticket: 'check' }); }
+  catch (e) {
+    if (/หมดอายุ|ถูกใช้ไปแล้ว/.test(e.message)) return '✓ เชื่อมต่อ LPCH RO Workspace ได้ และรองรับการใช้บัญชีร่วมกันแล้ว';
+    if (/ไม่รู้จักคำสั่ง/.test(e.message)) return '✗ LPCH RO Workspace ยังเป็น Code.gs เวอร์ชันเก่า: วาง Code.gs ใหม่แล้ว Deploy → New version';
+    return '✗ ' + e.message;
+  }
+  return '✓ เชื่อมต่อ LPCH RO Workspace ได้';
 }
 /** Creating and sharing the Output Log is only for nattayee, so it stays in nattayee's Drive. */
 function requireOwner_() {
@@ -285,10 +300,12 @@ function infoPage_(title, text, url) {
 /** The page from GitHub, cached in ~30k-character pieces (the cache holds at most 100 KB per value). */
 function loadPage_() {
   var cache = CacheService.getScriptCache();
-  var n = Number(cache.get('page_n') || 0);
+  // Keyed by PAGE_URL: after the address changes (a new WebApp.gs) the new page is fetched at once
+  var pre = 'page_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, WEBAPP.PAGE_URL)).slice(0, 10) + '_';
+  var n = Number(cache.get(pre + 'n') || 0);
   if (n) {
     var keys = [];
-    for (var i = 0; i < n; i++) keys.push('page_' + i);
+    for (var i = 0; i < n; i++) keys.push(pre + i);
     var got = cache.getAll(keys);
     if (Object.keys(got).length === n) return keys.map(function (k) { return got[k]; }).join('');
   }
@@ -296,8 +313,8 @@ function loadPage_() {
   if (res.getResponseCode() !== 200) throw new Error('โหลดหน้าแอปจาก GitHub ไม่ได้ (HTTP ' + res.getResponseCode() + ')');
   var html = res.getContentText('UTF-8');
   var parts = {}, size = 30000;
-  for (var j = 0; j * size < html.length; j++) parts['page_' + j] = html.substr(j * size, size);
-  parts.page_n = String(j);
+  for (var j = 0; j * size < html.length; j++) parts[pre + j] = html.substr(j * size, size);
+  parts[pre + 'n'] = String(j);
   cache.putAll(parts, WEBAPP.CACHE_SECONDS);
   return html;
 }
@@ -378,7 +395,7 @@ function apiInfo(token, pageOrigin) {
   }
   var auto = loginUrl_() && prop_('APP_ORIGIN') && !account_() ? loginUrl_() + '?login=1&embed=1' : '';
   // Shown to nattayee only: what other accounts still need before they see "Signed in as …"
-  var missing = account_() === WEBAPP.OWNER_EMAIL ? ['APP_URL', 'LOGIN_URL'].filter(function (k) { return !prop_(k); }) : [];
+  var missing = account_() === WEBAPP.OWNER_EMAIL ? ['APP_URL', 'LOGIN_URL', 'LPCH_URL'].filter(function (k) { return !prop_(k); }) : [];
   var w = who_(token);
   return { account: w ? w.email : '', name: w && w.name || '', via: w ? w.via : '', notice: WHO_NOTICE_,
     viaToken: !account_() && !!w, lpchLogin: !!lpchUrl_(), loginUrl: loginUrl_(), autoLoginSrc: auto, setupMissing: missing,

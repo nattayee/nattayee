@@ -137,7 +137,7 @@
         : 'กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน'), info.loginHref);
       if (why) el('gateMsg').className = 'gate-msg err';
     }
-    else gate('error', why || 'ยังเข้าสู่ระบบไม่ได้ เพราะผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL แจ้ง ' + ((info && info.owner) || 'ผู้ดูแล'));
+    else gate('error', why || 'ยังเข้าสู่ระบบไม่ได้ เพราะผู้ดูแลยังไม่ได้ตั้งค่า LPCH_URL (บัญชี LPCH RO Workspace) หรือ LOGIN_URL (บัญชี Google) แจ้ง ' + ((info && info.owner) || 'ผู้ดูแล'));
   }
 
   // ---- LPCH RO Workspace sign-in form on the gate
