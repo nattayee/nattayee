@@ -9,6 +9,19 @@
  *   pages — เนื้อหาแต่ละหน้า: apps = การ์ดเว็บแอป (ปุ่มเปิด), groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
  *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
  */
+/*
+ * แอป TRS-398 Output Calibration (Apps Script อีกโปรเจกต์) — แสดงในหน้า MP › Machine QA และ MP › Dosimetry
+ * sso: true = ลิงก์แนบบัตรผ่าน (ssoTicket ใน Code.gs) แอปจึงเข้าสู่ระบบด้วยบัญชี LPCH ให้อัตโนมัติ
+ */
+var TRS398_APP = {
+  icon: "📏",
+  label: "TRS-398 Output Calibration",
+  desc: "คำนวณ absorbed dose to water และ output ของ photon / electron beam ตาม IAEA TRS-398 พร้อมบันทึกผลการวัด",
+  note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
+  sso: true,
+  url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
+};
+
 window.SITE = {
   title: "LPCH RO Workspace",
   // หัวเว็บ: ชื่อสองส่วน (ส่วนหลังเป็นสีน้ำเงิน) + ชื่อโรงพยาบาล + โลโก้ (ตามแบบ TRS-398 Output Calibration)
@@ -292,11 +305,13 @@ window.SITE = {
     "mp/qa": {
       title: "Machine QA",
       lead: "การควบคุมคุณภาพเครื่องฉายรังสี (อ้างอิง AAPM TG-142)",
+      apps: [TRS398_APP],   // output constancy / calibration (monthly, annual QA)
       groups: [
         { title: "QA logs", icon: "📊", items: [
           { label: "Daily QA", type: "Sheet", url: "#" },
           { label: "Monthly QA", type: "Sheet", url: "#" },
           { label: "Annual QA", type: "Sheet", url: "#" },
+          { label: "Output calibration (TRS-398)", type: "Web app", sso: true, url: TRS398_APP.url },
         ] },
       ],
     },
@@ -304,19 +319,10 @@ window.SITE = {
       title: "Dosimetry",
       lead: "การวัดปริมาณรังสีและสอบเทียบ output ของเครื่องฉายรังสี (IAEA TRS-398)",
       // apps = เว็บแอปที่ใช้งานประจำ แสดงเป็นการ์ดใหญ่พร้อมปุ่มเปิด (เปิดในแท็บใหม่)
-      apps: [
-        {
-          icon: "📏",
-          label: "TRS-398 Output Calibration",
-          desc: "คำนวณ absorbed dose to water และ output ของ photon / electron beam ตาม IAEA TRS-398 พร้อมบันทึกผลการวัด",
-          note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
-          sso: true,   // แนบบัตรผ่านเข้าสู่ระบบ (ssoTicket ใน Code.gs) แอปจึงรู้ว่าเป็นใครโดยไม่ต้องกรอกรหัสอีก
-          url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
-        },
-      ],
+      apps: [TRS398_APP],
       groups: [
         { title: "Dosimetry", icon: "📏", items: [
-          { label: "Output calibration (TRS-398)", type: "Web app", sso: true, url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec" },
+          { label: "Output calibration (TRS-398)", type: "Web app", sso: true, url: TRS398_APP.url },
           { label: "Equipment calibration record", type: "Sheet", url: "#" },
         ] },
       ],

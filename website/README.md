@@ -104,7 +104,7 @@
 | RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
 | Nurse | Patient education, consent, การดูแลผลข้างเคียง |
 | RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator, ตารางงานประจำสัปดาห์ |
-| MP ▾ | Machine QA, **Dosimetry** (เชื่อมแอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec) — เปิดในแท็บใหม่), Treatment Planning, Patient-specific QA, Radiation Safety |
+| MP ▾ | **Machine QA** และ **Dosimetry** (เชื่อมแอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้), Treatment Planning, Patient-specific QA, Radiation Safety |
 | Guideline | แนวทางการรักษาแยกตามโรค และตาราง dose constraints (QUANTEC) |
 
 ## แก้ไขเนื้อหา
@@ -150,7 +150,7 @@
 
 ## ใช้บัญชีร่วมกับแอป TRS-398 Output Calibration
 
-- หน้า **MP › Dosimetry** → **เปิดแอป ↗** เข้าแอป TRS-398 ได้ทันทีโดยไม่ต้องกรอกรหัสอีก
+- หน้า **MP › Machine QA** หรือ **MP › Dosimetry** → **เปิดแอป ↗** เข้าแอป TRS-398 ได้ทันทีโดยไม่ต้องกรอกรหัสอีก
   (ลิงก์แนบบัตรผ่านที่ใช้ได้ครั้งเดียว อายุ 2 นาที — คำสั่ง `ssoTicket` / `ssoRedeem` ใน `Code.gs`; ตั้ง `sso: true` ใน `data.js`)
 - เปิดแอป TRS-398 ตรง ๆ ก็ล็อกอินด้วยชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านเดียวกับเว็บนี้ได้ — รหัสผ่านเก็บที่ชีต `Users` ที่เดียว
 - ใช้ได้เฉพาะ MP และผู้ดูแลระบบ (ตั้งที่ `LPCH_ROLES` ใน WebApp.gs) ระงับบัญชีที่นี่ก็เข้า TRS-398 ไม่ได้ด้วย
