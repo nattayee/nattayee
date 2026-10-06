@@ -4,7 +4,7 @@
  *
  *  - ถามเซิร์ฟเวอร์ (Code.gs: notify) ทุก chat.notifySeconds วินาที (ค่าเริ่มต้น 20)
  *  - แสดง pop up มุมขวาล่าง + เสียงเตือนสั้นๆ (ปิดได้ที่เมนูผู้ใช้) + ตัวเลขบนแท็บเมื่อดูหน้าอื่นอยู่
- *  - ไม่เด้งซ้ำถ้ากำลังดูข้อความนั้นอยู่ (แชทประกาศที่หน้า Home / บทสนทนาที่เปิดอยู่ใน Inbox)
+ *  - เด้งทุกครั้งที่มีข้อความใหม่ถึงผู้ใช้ (รวมถึงตอนอยู่หน้า Home) ยกเว้นข้อความส่วนตัวในบทสนทนาที่เปิดดูอยู่
  *  - แจ้งเตือนของระบบ (Notification API) เมื่อผู้ใช้อนุญาตและแท็บไม่ได้เปิดอยู่
  */
 (function () {
@@ -18,7 +18,10 @@
   var SOUND_KEY = "lpch-ro-notify-sound";
   var TITLE_RE = /^\(\d+\) ข้อความใหม่ · /;
 
-  var timer = null, since = null, unseen = 0, audio = null, box = null, running = false;
+  var timer = null, since = null, unseen = 0, audio = null, box = null, running = false, warnedOld = false;
+  var OVERLAP_MS = 2000;  // ask a little further back each time so nothing sent at the edge is missed
+  var seen = {};          // pop-ups already shown (kind:id:time), so the overlap never shows one twice
+  var floor = 0;          // time of the first check: older messages are covered by the sign-in summary
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -42,8 +45,8 @@
     var chat = [], dm = [], chatUnread = 0, dmUnread = 0;
     read("lpch-ro-chat-v1").forEach(function (m) {
       var to = m.to || [], reads = m.reads || {}, fwds = m.forwards || [];
-      if ((m.author && m.author.username === u.username) || !forMe(to) || reads[key]) return;
-      chatUnread++;
+      if ((m.author && m.author.username === u.username) || !forMe(to)) return;
+      if (!reads[key]) chatUnread++;
       var fwd = fwds.filter(function (f) { return f.at > sinceMs && forMe(f.to); }).pop();
       if (m.createdAt > sinceMs || fwd) {
         chat.push({ id: m.id, from: m.author, text: snip(m.text), images: (m.images || []).length,
@@ -51,8 +54,8 @@
       }
     });
     read("lpch-ro-dm-v1").forEach(function (m) {
-      if (m.to.username !== u.username || m.readAt) return;
-      dmUnread++;
+      if (m.to.username !== u.username) return;
+      if (!m.readAt) dmUnread++;
       if (m.createdAt > sinceMs) dm.push({ id: m.id, from: m.from, text: snip(m.text), images: (m.images || []).length, createdAt: m.createdAt });
     });
     return Promise.resolve({ now: Date.now(), chat: chat, chatUnread: chatUnread, dm: dm, dmUnread: dmUnread });
@@ -194,10 +197,11 @@
     // First call only asks for the unread totals (Number.MAX_SAFE_INTEGER = nothing is "new" yet).
     fetchNew(first ? Number.MAX_SAFE_INTEGER : since).then(function (r) {
       if (!running || !user() || user().username !== u.username) return;
-      since = r.now;
+      since = r.now - OVERLAP_MS;
       setBadges(r);
 
       if (first) {
+        floor = r.now;
         var flag = "lpch-ro-notified-" + u.username;
         var told = false;
         try { told = sessionStorage.getItem(flag) === "1"; sessionStorage.setItem(flag, "1"); } catch (e) { /* ignore */ }
@@ -216,8 +220,15 @@
       var openPartner = window.DM && window.DM.currentPartner ? window.DM.currentPartner() : null;
       var shown = 0;
 
+      var fresh = function (kind, n) {
+        var k = kind + ":" + n.id + ":" + n.createdAt;
+        if (seen[k] || n.createdAt <= floor) return false;
+        seen[k] = 1;
+        return true;
+      };
+
       r.chat.forEach(function (n) {
-        if (visible && page === "home") return; // the feed on Home already shows it
+        if (!fresh("chat", n)) return;
         var title = n.forwardedBy ? who(n.forwardedBy) + " ส่งต่อประกาศถึงคุณ"
           : n.personal ? "ประกาศถึงคุณจาก " + who(n.from) : "ประกาศใหม่จาก " + who(n.from);
         toast({ kind: "chat", title: title, text: body(n), meta: "แชทประกาศ · " + fmtTime(n.createdAt),
@@ -227,6 +238,7 @@
       });
 
       r.dm.forEach(function (n) {
+        if (!fresh("dm", n)) return;
         if (visible && page === "inbox" && openPartner === n.from.username) return; // conversation is open
         var title = "ข้อความส่วนตัวจาก " + who(n.from);
         toast({ kind: "dm", title: title, text: body(n), meta: "🔒 ส่วนตัว · " + fmtTime(n.createdAt),
@@ -236,7 +248,14 @@
       });
 
       if (shown) { chime(); bumpTitle(shown); }
-    }).catch(function () { /* try again on the next tick */ });
+    }).catch(function (e) {
+      // An older Code.gs has no "notify" action: say so once instead of failing silently.
+      if (/notify/.test(String(e && e.message)) && !warnedOld) {
+        warnedOld = true;
+        toast({ kind: "info", title: "ระบบแจ้งเตือนยังไม่พร้อม",
+          text: "เซิร์ฟเวอร์ (Code.gs) ยังเป็นเวอร์ชันเก่า — ผู้ดูแลระบบต้องวาง Code.gs เวอร์ชันล่าสุดและ Deploy เวอร์ชันใหม่" });
+      }
+    });
   }
 
   function start() {
@@ -252,6 +271,7 @@
     if (timer) clearInterval(timer);
     timer = null;
     since = null;
+    seen = {};
     unseen = 0;
     document.title = document.title.replace(TITLE_RE, "");
     if (box) box.innerHTML = "";

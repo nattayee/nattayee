@@ -441,8 +441,9 @@ ACTIONS.chatImage = function (req) {
 
 /**
  * New messages for the signed-in member since `since` (server time, ms): announcements addressed to them
- * (everyone, their profession, them personally, or forwarded to them) that they have not read, and unread
- * private messages. Also returns the unread totals and the server time to pass as `since` next time.
+ * (everyone, their profession, them personally, or forwarded to them) and private messages to them —
+ * whether or not the page has already marked them read, so an open chat feed does not swallow the pop-up.
+ * Also returns the unread totals and the server time to pass as `since` next time.
  */
 ACTIONS.notify = function (req) {
   var u = requireUser_(req.token), me = person_(u), since = Number(req.since) || 0;
@@ -451,8 +452,8 @@ ACTIONS.notify = function (req) {
   sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1).forEach(function (r) {
     var m = JSON.parse(r[3]);
     m.to = m.to || []; m.reads = m.reads || {}; m.forwards = m.forwards || []; m.images = m.images || []; m.toNames = m.toNames || {};
-    if (m.author.username === u.username || !isForUser_(m, u) || m.reads[key_(me)]) return;
-    chatUnread++;
+    if (m.author.username === u.username || !isForUser_(m, u)) return;
+    if (!m.reads[key_(me)]) chatUnread++;
     var fwd = m.forwards.filter(function (f) {
       return f.at > since && (f.to.indexOf('ALL') !== -1 || f.to.indexOf(u.role) !== -1 || f.to.indexOf('u:' + u.username) !== -1);
     }).pop();
@@ -465,8 +466,8 @@ ACTIONS.notify = function (req) {
 
   dmRows_(u.username).forEach(function (r) {
     var m = r.msg;
-    if (m.to.username !== u.username || m.readAt) return;
-    dmUnread++;
+    if (m.to.username !== u.username) return;
+    if (!m.readAt) dmUnread++;
     if (m.createdAt > since) dm.push({ id: m.id, from: m.from, text: snippet_(m.text, 140), images: m.images.length, createdAt: m.createdAt });
   });
 
