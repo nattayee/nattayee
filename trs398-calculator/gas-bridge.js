@@ -20,7 +20,7 @@
     });
   }
 
-  // Login token from the Login app (TRS-398 Login): arrives once in the page, then kept in this browser
+  // Login token from the sign-in deployment (?login=1): arrives once in the page, then kept in this browser
   var TOKEN_KEY = 'trs398-login-v1';
   var token = '';
   try {
@@ -82,9 +82,9 @@
           if (login && info.loginUrl) login.hidden = false;
         };
       }
-      if (login && info.loginUrl) login.href = info.loginUrl + '?back=' + encodeURIComponent(info.appUrl || '');
+      if (login && info.loginUrl) login.href = info.loginHref || info.loginUrl + '?login=1&back=' + encodeURIComponent(info.appUrl || '');
       if (!info.account) {
-        if (login && info.loginUrl) login.hidden = false;   // "Sign in with Google" through the Login app
+        if (login && info.loginUrl) login.hidden = false;   // "Sign in with Google" through the sign-in deployment
         else askRecorder();                                 // not set up yet: the recorder types their Gmail
       }
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');

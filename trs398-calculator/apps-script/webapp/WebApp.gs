@@ -8,10 +8,15 @@
  *      Execute as: "Me (nattayee@gmail.com)"   Who has access: "Anyone with Google account"
  *   Google asks users to sign in before the page opens; nobody has to approve the app or get the files shared,
  *   because the script reads and writes as nattayee.
- *   3. "Sign in with Google" button: in this mode Google does not tell the script which Gmail opened it, so a
- *      second small project (Login.gs, deployed "User accessing the web app") reads the visitor's email and
- *      returns a signed token. Run setupLogin() here and follow Login.gs; then add the Script property
- *      LOGIN_URL. Until LOGIN_URL is set, the page asks the recorder to type their Gmail instead.
+ *   3. "Sign in with Google" button. Under "Execute as: Me" Google does not tell the script which Gmail opened
+ *      it, so the same project gets a SECOND deployment that only signs people in:
+ *      Deploy → New deployment → Web app   Execute as: "User accessing the web app"
+ *                                           Who has access: "Anyone with Google account"
+ *      Opened with ?login=1 it reads the visitor's Gmail, signs it with a secret kept in Script properties and
+ *      sends them back to the app (step 2's URL). Then: Project Settings → Script properties →
+ *        APP_URL   = the /exec URL of deployment 2 (the app)
+ *        LOGIN_URL = the /exec URL of deployment 3 (sign-in)
+ *      Until LOGIN_URL is set, the page asks the recorder to type their Gmail instead.
  */
 var WEBAPP = {
   OWNER_EMAIL: 'nattayee@gmail.com',
@@ -55,13 +60,29 @@ function account_() {
 var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 function prop_(k) { return PropertiesService.getScriptProperties().getProperty(k) || ''; }
-/** The Login web app's /exec URL (Script property LOGIN_URL); blank = sign-in button not set up. */
+/** The sign-in deployment's /exec URL (Script property LOGIN_URL); blank = sign-in button not set up. */
 function loginUrl_() { return prop_('LOGIN_URL').trim(); }
+/** The app deployment's /exec URL, where sign-in returns to (Script property APP_URL). */
+function appUrl_() { return prop_('APP_URL').trim() || ScriptApp.getService().getUrl(); }
+var BACK_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/;
+var TOKEN_DAYS = 30;
 
-/** Email inside a login token from Login.gs, or '' when it is missing, forged or expired. */
+/** Secret that signs login tokens; created on first use and shared by every deployment of this project. */
+function secret_() {
+  var props = PropertiesService.getScriptProperties(), s = props.getProperty('LOGIN_SECRET');
+  if (!s) { s = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); props.setProperty('LOGIN_SECRET', s); }
+  return s;
+}
+function sign_(email) {
+  var payload = email + '|' + (Date.now() + TOKEN_DAYS * 86400000);
+  return Utilities.base64EncodeWebSafe(payload) + '.' + Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret_()));
+}
+
+/** Email inside a login token from the sign-in deployment, or '' when it is missing, forged or expired. */
 function tokenUser_(token) {
-  var secret = prop_('LOGIN_SECRET'), parts = String(token || '').split('.');
-  if (!secret || parts.length !== 2) return '';
+  var parts = String(token || '').split('.');
+  if (parts.length !== 2) return '';
+  var secret = secret_();
   var payload;
   try { payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(); } catch (e) { return ''; }
   var sig = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret));
@@ -73,17 +94,13 @@ function tokenUser_(token) {
 /** Verified Gmail of the person using the page: Google's own (nattayee) or the signed-in token. */
 function user_(token) { return account_() || tokenUser_(token); }
 
-/** Run once as nattayee: creates the secret shared with the Login project (Login.gs) and prints the steps. */
+/** Run as nattayee to check the sign-in settings (APP_URL, LOGIN_URL) and create the signing secret. */
 function setupLogin() {
   requireOwner_();
-  var props = PropertiesService.getScriptProperties();
-  var secret = props.getProperty('LOGIN_SECRET');
-  if (!secret) { secret = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); props.setProperty('LOGIN_SECRET', secret); }
-  Logger.log('LOGIN_SECRET = ' + secret);
-  Logger.log('1) สร้างโปรเจกต์ใหม่ วาง Login.gs → Project Settings → Script properties → LOGIN_SECRET = ค่าข้างบน');
-  Logger.log('2) Deploy โปรเจกต์ Login: Execute as "User accessing the web app", Who has access "Anyone with Google account"');
-  Logger.log('3) กลับมาที่โปรเจกต์นี้ → Project Settings → Script properties → LOGIN_URL = URL /exec ของโปรเจกต์ Login');
-  Logger.log('LOGIN_URL ตอนนี้: ' + (loginUrl_() || '(ยังไม่ได้ตั้ง)'));
+  secret_();
+  Logger.log('APP_URL   = ' + (prop_('APP_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment แอป Execute as Me)'));
+  Logger.log('LOGIN_URL = ' + (prop_('LOGIN_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment เข้าสู่ระบบ User accessing)'));
+  Logger.log('ตั้งค่าที่ Project Settings → Script properties');
 }
 /** Creating and sharing the Output Log is only for nattayee, so it stays in nattayee's Drive. */
 function requireOwner_() {
@@ -96,9 +113,11 @@ function requireOwner_() {
 // ---------------------------------------------------------------- page
 
 function doGet(e) {
+  var q = (e && e.parameter) || {};
+  if (q.login) return loginPage_(String(q.back || ''));
   // "Who has access: Anyone with Google account" makes Google ask for a sign-in before this runs
   var html = loadPage_();
-  // Back from the Login app with a token: hand it to the page, which keeps it in the browser
+  // Back from the sign-in deployment with a token: hand it to the page, which keeps it in the browser
   var t = String((e && e.parameter && e.parameter.t) || '');
   if (t && tokenUser_(t)) {
     html = html.replace(/<head>/i, '<head><script>window.TRS398_LOGIN_TOKEN = ' + JSON.stringify(t).replace(/</g, '\\u003c') + ';</script>');
@@ -106,6 +125,27 @@ function doGet(e) {
   return HtmlService.createHtmlOutput(html)
     .setTitle(WEBAPP.TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/**
+ * Sign-in step, on the "User accessing the web app" deployment: Google gives this deployment the visitor's
+ * Gmail; it goes back to the app as a signed token (?t=…), which the app verifies with the same secret.
+ */
+function loginPage_(back) {
+  if (!back) back = appUrl_();
+  var email = account_();
+  if (!BACK_RE.test(back)) return infoPage_('ลิงก์เข้าสู่ระบบไม่ถูกต้อง', 'กรุณาเปิดจากปุ่ม "เข้าสู่ระบบด้วย Google" ในแอป', '');
+  if (!email) return infoPage_('ไม่พบบัญชี Google', 'ผู้ดูแล: LOGIN_URL ต้องเป็น deployment แบบ Execute as "User accessing the web app" และ Who has access "Anyone with Google account"', '');
+  return infoPage_('เข้าสู่ระบบเป็น ' + email, 'กดปุ่มด้านล่างเพื่อกลับไปที่แอป', back + '?t=' + encodeURIComponent(sign_(email)));
+}
+function infoPage_(title, text, url) {
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  return HtmlService.createHtmlOutput(
+    '<div style="font:16px/1.6 system-ui,sans-serif;max-width:560px;margin:48px auto;padding:0 16px">' +
+    '<h2 style="margin:0 0 8px">' + esc(title) + '</h2><p style="color:#555">' + esc(text) + '</p>' +
+    (url ? '<p><a target="_top" href="' + esc(url) + '" style="display:inline-block;background:#1d5bd6;color:#fff;' +
+      'padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">ไปที่ TRS-398 Output Calibration</a></p>' : '') +
+    '</div>').setTitle(WEBAPP.TITLE).addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /** The page from GitHub, cached in ~30k-character pieces (the cache holds at most 100 KB per value). */
@@ -198,7 +238,8 @@ function logId_() {
 function apiInfo(token) {
   var id = logId_();
   return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(),
-    appUrl: ScriptApp.getService().getUrl(), owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
+    appUrl: appUrl_(),
+    loginHref: loginUrl_() ? loginUrl_() + '?login=1&back=' + encodeURIComponent(appUrl_()) : '', owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }
 
 /** Master Sheet as .xlsx (base64); any other id is answered with nattayee's Output Log. */
