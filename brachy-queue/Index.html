@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>นัดคิวผู้ป่วยใส่แร่</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f5f3fa;
+      --card: #ffffff;
+      --ink: #1f1b2e;
+      --muted: #6b6680;
+      --line: #e3dfee;
+      --accent: #6b3fa0;
+      --accent-ink: #ffffff;
+      --accent-soft: #efe8f8;
+      --ok: #1e7f4f;
+      --ok-soft: #e3f4ea;
+      --warn: #a15c00;
+      --warn-soft: #fff3df;
+      --bad: #b3261e;
+      --bad-soft: #fdeceb;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: 'Sarabun', system-ui, sans-serif; font-size: 15px; line-height: 1.5;
+    }
+    header {
+      background: var(--accent); color: var(--accent-ink);
+      padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 8px 16px;
+      align-items: baseline; justify-content: space-between;
+    }
+    header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+    header .cal { font-size: 13px; opacity: .85; }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+    main > *, .grid2 > * { min-width: 0; }
+    .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+    @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; }
+    .row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .row3 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 480px) { .row, .row3 { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    .req::after { content: ' *'; color: var(--bad); }
+    .field { margin-bottom: 12px; }
+    input, select, textarea, button { font: inherit; color: inherit; }
+    input[type=text], input[type=number], input[type=date], input[type=time], input[type=search], select, textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+    textarea { resize: vertical; min-height: 40px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 12px;
+      cursor: pointer; font-size: 14px;
+    }
+    .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .days { display: flex; flex-wrap: wrap; gap: 6px; }
+    .days label {
+      margin: 0; display: inline-flex; align-items: center; justify-content: center; min-width: 40px;
+      padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; color: var(--ink);
+      font-size: 14px;
+    }
+    .days input { display: none; }
+    .days label:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .radio { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+    .radio label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; margin: 0; }
+    .check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; }
+    .hint { font-size: 12px; color: var(--muted); }
+
+    .preview { display: grid; gap: 6px; max-height: 420px; overflow: auto; padding-right: 2px; }
+    .fx {
+      display: grid; gap: 8px; align-items: center;
+      grid-template-columns: 64px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+      padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+    }
+    .fx .no { font-weight: 700; color: var(--accent); }
+    .fx .thai { font-size: 12px; color: var(--muted); grid-column: 2 / -1; margin-top: -4px; }
+    .fx.warn { background: var(--warn-soft); border-color: #f0d3a0; }
+    .fx.warn .thai { color: var(--warn); }
+    @media (max-width: 480px) {
+      .fx { grid-template-columns: 52px 1fr 1fr; }
+      .fx [data-k=date] { grid-column: 2 / -1; }
+      .fx [data-k=start] { grid-column: 2; }
+      .fx .thai { grid-column: 1 / -1; }
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 14px; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary {
+      background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+      font-weight: 700; font-size: 17px; padding: 12px 18px; width: 100%;
+    }
+    .btn.primary:hover { filter: brightness(1.08); }
+    .btn:disabled { opacity: .55; cursor: progress; }
+    .btn.sm { padding: 3px 10px; font-size: 13px; border-radius: 8px; }
+    .btn.danger { color: var(--bad); }
+    .btn.danger:hover { border-color: var(--bad); }
+    .btn.okb { color: var(--ok); }
+    .btn.okb:hover { border-color: var(--ok); }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .toolbar input[type=search] { max-width: 260px; }
+    .tablewrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; background: #faf9fd; position: sticky; top: 0; }
+    td.name { white-space: normal; min-width: 140px; }
+    tr.daysep td { background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; padding: 5px 8px; }
+    tr.cancel td:not(.act) { color: var(--muted); text-decoration: line-through; }
+    .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .tag.booked { background: var(--accent-soft); color: var(--accent); }
+    .tag.done { background: var(--ok-soft); color: var(--ok); }
+    .tag.cancel { background: var(--bad-soft); color: var(--bad); text-decoration: none; }
+    td.act .acts { display: flex; gap: 4px; }
+    .empty { text-align: center; color: var(--muted); padding: 24px; }
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+    .stats b { color: var(--ink); font-size: 16px; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(120%);
+      background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 10px; transition: transform .25s;
+      max-width: calc(100% - 32px); z-index: 20;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.err { background: var(--bad); }
+    .modal { position: fixed; inset: 0; background: rgba(20, 15, 35, .45); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+    .modal.show { display: flex; }
+    .modal .box { background: #fff; border-radius: var(--radius); padding: 18px; max-width: 520px; width: 100%; }
+    .modal h3 { margin: 0 0 8px; color: var(--warn); }
+    .modal ul { padding-left: 18px; margin: 8px 0 14px; font-size: 14px; }
+    .modal .acts { display: flex; gap: 8px; justify-content: flex-end; }
+    .banner { background: var(--warn-soft); color: var(--warn); padding: 6px 16px; font-size: 13px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="demoBanner" class="banner" hidden>โหมดทดลอง: เปิดไฟล์นอก Google Apps Script ข้อมูลเก็บไว้ในเบราว์เซอร์นี้เท่านั้น ยังไม่บันทึกลง Google Sheet หรือปฏิทิน</div>
+  <header>
+    <h1>📅 ตารางนัดคิวผู้ป่วยใส่แร่ (Brachytherapy)</h1>
+    <span class="cal" id="calName">กำลังโหลด…</span>
+  </header>
+
+  <main>
+    <div class="grid2">
+      <!-- ฟอร์มลงนัด -->
+      <section class="card">
+        <h2>ลงนัดผู้ป่วยใหม่</h2>
+        <form id="f" autocomplete="off">
+          <div class="row">
+            <div class="field">
+              <label for="hn" class="req">HN</label>
+              <input type="text" id="hn" required placeholder="เช่น 6512345" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label for="doctor" class="req">แพทย์</label>
+              <input type="text" id="doctor" list="doctorList" required placeholder="เลือกหรือพิมพ์ชื่อแพทย์">
+              <datalist id="doctorList"></datalist>
+            </div>
+          </div>
+          <div class="field">
+            <label for="name" class="req">ชื่อ-สกุลผู้ป่วย</label>
+            <input type="text" id="name" required placeholder="ชื่อ นามสกุล">
+          </div>
+
+          <div class="field">
+            <label for="totalFx" class="req">จำนวน Fraction</label>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+              <input type="number" id="totalFx" min="1" max="30" value="4" required style="width:90px">
+              <div class="chips" id="fxChips"></div>
+            </div>
+          </div>
+
+          <div class="row3">
+            <div class="field">
+              <label for="startDate" class="req">วันเริ่ม Fx 1</label>
+              <input type="date" id="startDate" required>
+            </div>
+            <div class="field">
+              <label for="startTime" class="req">เวลา</label>
+              <input type="time" id="startTime" required value="09:00">
+            </div>
+            <div class="field">
+              <label for="duration">ระยะเวลา (นาที)</label>
+              <input type="number" id="duration" min="10" max="480" step="5" value="60">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>รูปแบบการนัด</label>
+            <div class="radio">
+              <label><input type="radio" name="mode" value="days" checked> ตามวันในสัปดาห์</label>
+              <label><input type="radio" name="mode" value="interval"> ทุก ๆ N วัน</label>
+            </div>
+            <div id="modeDays">
+              <div class="days" id="days"></div>
+              <div class="chips" style="margin-top:6px">
+                <button type="button" class="chip" data-preset="1,2,3,4,5">จ–ศ</button>
+                <button type="button" class="chip" data-preset="1,4">จ / พฤ</button>
+                <button type="button" class="chip" data-preset="2,5">อ / ศ</button>
+                <button type="button" class="chip" data-preset="weekly">สัปดาห์ละครั้ง</button>
+              </div>
+            </div>
+            <div id="modeInterval" hidden>
+              <div style="display:flex; gap:8px; align-items:center">
+                ทุก <input type="number" id="interval" min="1" max="30" value="7" style="width:80px"> วัน
+              </div>
+            </div>
+            <div style="margin-top:8px">
+              <label class="check" style="margin:0"><input type="checkbox" id="skipHoliday" checked> ข้ามวันหยุด (ชีต Holidays) และเลื่อนนัดที่ตกเสาร์–อาทิตย์</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="note">หมายเหตุ</label>
+            <textarea id="note" rows="2" placeholder="เช่น ชนิด applicator, dose/fraction, งดน้ำงดอาหาร"></textarea>
+          </div>
+        </form>
+      </section>
+
+      <!-- ตรวจสอบวันนัดก่อนบันทึก -->
+      <section class="card" style="display:flex; flex-direction:column">
+        <h2>ตรวจสอบวันนัด <span class="hint">(แก้วัน/เวลาแต่ละ Fx ได้ก่อนกดบันทึก)</span></h2>
+        <div class="preview" id="preview"></div>
+        <div style="margin-top:auto; padding-top:14px">
+          <button type="button" class="btn primary" id="saveBtn">📅 บันทึกและลงปฏิทิน</button>
+          <div class="hint" style="text-align:center; margin-top:6px">กดครั้งเดียว ระบบจะลงนัดทุก Fraction ใน Google Calendar และบันทึกลง Google Sheet</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ตารางนัด -->
+    <section class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">ตารางนัดคิว</h2>
+        <div class="chips" id="filters">
+          <button type="button" class="chip" data-f="today">วันนี้</button>
+          <button type="button" class="chip on" data-f="upcoming">นัดที่จะถึง</button>
+          <button type="button" class="chip" data-f="past">ที่ผ่านมา</button>
+          <button type="button" class="chip" data-f="all">ทั้งหมด</button>
+        </div>
+        <input type="search" id="q" placeholder="ค้นหา HN / ชื่อ / แพทย์">
+        <button type="button" class="btn sm" id="refreshBtn" title="โหลดข้อมูลใหม่จากชีต">↻ รีเฟรช</button>
+      </div>
+      <div class="stats" id="stats" style="margin-bottom:8px"></div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>เวลา</th><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th></th></tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="8" class="empty">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <h3 id="mTitle">⚠️ พบนัดซ้อนเวลา</h3>
+      <div id="mBody"></div>
+      <div class="acts">
+        <button type="button" class="btn" id="mCancel">กลับไปแก้ไข</button>
+        <button type="button" class="btn" id="mOk" style="background:var(--warn); color:#fff; border-color:var(--warn)">ยืนยันลงนัด</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- backend: google.script.run หรือ mock ---------------- */
+  const isGas = typeof google !== 'undefined' && google.script && google.script.run;
+  const api = isGas ? gasApi() : mockApi();
+  if (!isGas) document.getElementById('demoBanner').hidden = false;
+
+  function gasApi() {
+    const call = (fn, ...args) => new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+    });
+    return {
+      init: () => call('getInitData'),
+      list: () => call('listAppointments'),
+      create: (p) => call('createAppointments', p),
+      cancel: (id, scope) => call('cancelAppointment', id, scope),
+      done: (id) => call('markDone', id)
+    };
+  }
+
+  function mockApi() {
+    const KEY = 'brachyQueueDemo';
+    const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
+    const save = (a) => { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } };
+    const sorted = () => load().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    const delay = (v) => new Promise(r => setTimeout(() => r(v), 300));
+    return {
+      init: () => delay({
+        doctors: ['พญ. ตัวอย่าง หนึ่ง', 'นพ. ตัวอย่าง สอง'],
+        holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }, { date: '2026-10-23', name: 'วันปิยมหาราช' }],
+        settings: { defaultStartTime: '09:00', defaultDurationMin: 60, calendarName: 'ปฏิทินทดลอง' },
+        appointments: sorted()
+      }),
+      list: () => delay(sorted()),
+      create: (p) => {
+        const all = load();
+        if (!p.force) {
+          const conflicts = [];
+          p.sessions.forEach((s, i) => {
+            const o = all.filter(a => a.status === 'นัดแล้ว' && a.date === s.date && a.start < s.end && s.start < a.end);
+            if (o.length) conflicts.push({ fx: i + 1, date: s.date, start: s.start, end: s.end, with: o.map(a => a.hn + ' ' + a.name + ' (' + a.start + '–' + a.end + ')').join(', ') });
+          });
+          if (conflicts.length) return delay({ ok: false, needConfirm: true, conflicts });
+        }
+        const courseId = 'BT' + Date.now().toString().slice(-10);
+        p.sessions.forEach((s, i) => all.push({
+          apptId: courseId + '-' + (i + 1), courseId, hn: p.hn, name: p.name, doctor: p.doctor,
+          fx: i + 1, totalFx: p.totalFx, date: s.date, start: s.start, end: s.end, note: p.note, status: 'นัดแล้ว'
+        }));
+        save(all);
+        return delay({ ok: true, courseId, count: p.sessions.length, appointments: sorted() });
+      },
+      cancel: (id, scope) => {
+        const all = load(); const t = all.find(a => a.apptId === id); let changed = 0;
+        all.forEach(a => {
+          const m = scope === 'course' ? a.courseId === t.courseId && a.status === 'นัดแล้ว' : a.apptId === id;
+          if (m && a.status !== 'ยกเลิก') { a.status = 'ยกเลิก'; changed++; }
+        });
+        save(all); return delay({ ok: true, changed, appointments: sorted() });
+      },
+      done: (id) => {
+        const all = load(); all.forEach(a => { if (a.apptId === id) a.status = 'มาตามนัด'; });
+        save(all); return delay({ ok: true, changed: 1, appointments: sorted() });
+      }
+    };
+  }
+
+  /* ---------------- state & helpers ---------------- */
+  const $ = (id) => document.getElementById(id);
+  const DAY_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+  const state = { holidays: {}, sessions: [], appts: [], filter: 'upcoming', busy: false };
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const parseIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const todayIso = () => iso(new Date());
+  const thaiDate = (s, opt) => parseIso(s).toLocaleDateString('th-TH', opt || { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const addMin = (hhmm, min) => {
+    const [h, m] = hhmm.split(':').map(Number); const t = Math.min(h * 60 + m + min, 23 * 60 + 59);
+    return pad(Math.floor(t / 60)) + ':' + pad(t % 60);
+  };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function toast(msg, isErr) {
+    const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.className = 'toast' + (isErr ? ' err' : ''); }, isErr ? 6000 : 3500);
+  }
+  const errMsg = (e) => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '');
+
+  /* ---------------- form setup ---------------- */
+  // ปุ่มลัดจำนวน fraction
+  [1, 2, 3, 4, 5, 6].forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = n; b.dataset.fx = n;
+    $('fxChips').appendChild(b);
+  });
+  $('fxChips').addEventListener('click', (e) => {
+    if (!e.target.dataset.fx) return;
+    $('totalFx').value = e.target.dataset.fx; regenerate();
+  });
+
+  // วันในสัปดาห์ (เริ่มจันทร์)
+  [1, 2, 3, 4, 5, 6, 0].forEach(d => {
+    const l = document.createElement('label');
+    l.innerHTML = '<input type="checkbox" value="' + d + '"' + (d >= 1 && d <= 5 ? ' checked' : '') + '>' + DAY_TH[d];
+    $('days').appendChild(l);
+  });
+  document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    let set;
+    if (b.dataset.preset === 'weekly') {
+      const sd = $('startDate').value ? parseIso($('startDate').value).getDay() : 1;
+      set = [sd];
+    } else set = b.dataset.preset.split(',').map(Number);
+    $('days').querySelectorAll('input').forEach(i => { i.checked = set.includes(Number(i.value)); });
+    regenerate();
+  }));
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+    const m = modeVal();
+    $('modeDays').hidden = m !== 'days';
+    $('modeInterval').hidden = m !== 'interval';
+    regenerate();
+  }));
+  const modeVal = () => document.querySelector('input[name=mode]:checked').value;
+
+  ['totalFx', 'startDate', 'startTime', 'duration', 'interval', 'skipHoliday'].forEach(id =>
+    $(id).addEventListener('change', regenerate));
+  $('days').addEventListener('change', regenerate);
+  $('totalFx').addEventListener('input', regenerate);
+
+  /* ---------------- สร้างรายการวันนัด ---------------- */
+  function isBlocked(d) {
+    if (!$('skipHoliday').checked) return false;
+    return d.getDay() === 0 || d.getDay() === 6 || !!state.holidays[iso(d)];
+  }
+  function nextFree(d) {
+    let x = new Date(d), guard = 0;
+    while (isBlocked(x) && guard++ < 60) x = addDays(x, 1);
+    return x;
+  }
+
+  function regenerate() {
+    const n = Math.max(0, Math.min(30, parseInt($('totalFx').value, 10) || 0));
+    const sd = $('startDate').value;
+    const st = $('startTime').value || '09:00';
+    const dur = Math.max(5, parseInt($('duration').value, 10) || 60);
+    const out = [];
+    if (sd && n) {
+      if (modeVal() === 'interval') {
+        const step = Math.max(1, parseInt($('interval').value, 10) || 1);
+        let d = nextFree(parseIso(sd));
+        for (let i = 0; i < n; i++) { out.push(d); d = nextFree(addDays(d, step)); }
+      } else {
+        const allowed = Array.from($('days').querySelectorAll('input:checked')).map(i => Number(i.value));
+        if (allowed.length) {
+          let d = parseIso(sd), guard = 0;
+          while (out.length < n && guard++ < 400) {
+            const holiday = $('skipHoliday').checked && state.holidays[iso(d)];
+            if (allowed.includes(d.getDay()) && !holiday) out.push(new Date(d));
+            d = addDays(d, 1);
+          }
+        }
+      }
+    }
+    state.sessions = out.map(d => ({ date: iso(d), start: st, end: addMin(st, dur) }));
+    renderPreview();
+  }
+
+  function renderPreview() {
+    const box = $('preview');
+    const n = state.sessions.length;
+    $('saveBtn').textContent = n ? '📅 บันทึกและลงปฏิทิน (' + n + ' นัด)' : '📅 บันทึกและลงปฏิทิน';
+    if (!n) {
+      box.innerHTML = '<div class="empty">เลือกวันเริ่ม จำนวน fraction และรูปแบบการนัด<br>เพื่อดูรายการวันนัด</div>';
+      return;
+    }
+    const booked = state.appts.filter(a => a.status === 'นัดแล้ว');
+    box.innerHTML = state.sessions.map((s, i) => {
+      const warns = [];
+      const d = parseIso(s.date);
+      if (state.holidays[s.date]) warns.push('วันหยุด: ' + state.holidays[s.date]);
+      if (d.getDay() === 0 || d.getDay() === 6) warns.push('วันเสาร์–อาทิตย์');
+      if (s.date < todayIso()) warns.push('เป็นวันที่ผ่านมาแล้ว');
+      if (s.end <= s.start) warns.push('เวลาสิ้นสุดต้องหลังเวลาเริ่ม');
+      if (i > 0 && s.date <= state.sessions[i - 1].date) warns.push('ไม่เรียงจาก Fx ก่อนหน้า');
+      const clash = booked.filter(a => a.date === s.date && a.start < s.end && s.start < a.end);
+      if (clash.length) warns.push('ซ้อนกับ ' + clash.map(a => 'HN ' + a.hn + ' ' + a.start + '–' + a.end).join(', '));
+      return '<div class="fx' + (warns.length ? ' warn' : '') + '">' +
+        '<span class="no">Fx ' + (i + 1) + '</span>' +
+        '<input type="date" data-i="' + i + '" data-k="date" value="' + s.date + '" aria-label="วันที่ Fx ' + (i + 1) + '">' +
+        '<input type="time" data-i="' + i + '" data-k="start" value="' + s.start + '" aria-label="เวลาเริ่ม Fx ' + (i + 1) + '">' +
+        '<input type="time" data-i="' + i + '" data-k="end" value="' + s.end + '" aria-label="เวลาสิ้นสุด Fx ' + (i + 1) + '">' +
+        '<span class="thai">' + esc(thaiDate(s.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) +
+        (warns.length ? ' — ⚠️ ' + esc(warns.join(' · ')) : '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+  $('preview').addEventListener('change', (e) => {
+    const i = e.target.dataset.i, k = e.target.dataset.k;
+    if (i == null || !e.target.value) return;
+    const s = state.sessions[Number(i)];
+    if (k === 'start') { // เลื่อนเวลาสิ้นสุดตามระยะเวลาเดิม
+      const [h1, m1] = s.start.split(':').map(Number), [h2, m2] = s.end.split(':').map(Number);
+      s.end = addMin(e.target.value, Math.max(5, (h2 * 60 + m2) - (h1 * 60 + m1)));
+    }
+    s[k] = e.target.value;
+    renderPreview();
+  });
+
+  /* ---------------- บันทึก (คลิกเดียว) ---------------- */
+  function buildPayload(force) {
+    return {
+      hn: $('hn').value.trim(), name: $('name').value.trim(), doctor: $('doctor').value.trim(),
+      totalFx: parseInt($('totalFx').value, 10), note: $('note').value.trim(),
+      sessions: state.sessions.map(s => ({ date: s.date, start: s.start, end: s.end })), force: !!force
+    };
+  }
+
+  function validate(p) {
+    if (!p.hn) return ['hn', 'กรุณากรอก HN'];
+    if (!p.name) return ['name', 'กรุณากรอกชื่อผู้ป่วย'];
+    if (!p.doctor) return ['doctor', 'กรุณาเลือกแพทย์'];
+    if (!(p.totalFx >= 1 && p.totalFx <= 30)) return ['totalFx', 'จำนวน fraction ต้องอยู่ระหว่าง 1–30'];
+    if (!$('startDate').value) return ['startDate', 'กรุณาเลือกวันเริ่ม'];
+    if (p.sessions.length !== p.totalFx) return [null, 'สร้างวันนัดได้ไม่ครบ ' + p.totalFx + ' fraction — ตรวจสอบรูปแบบการนัด'];
+    const bad = p.sessions.findIndex(s => s.end <= s.start);
+    if (bad >= 0) return [null, 'เวลาของ Fx ' + (bad + 1) + ' ไม่ถูกต้อง'];
+    const dupHn = state.appts.find(a => a.hn === p.hn && a.status === 'นัดแล้ว' && a.date >= todayIso());
+    if (dupHn && !p.force && !confirm('HN ' + p.hn + ' มีนัดที่ยังไม่ถึงอยู่แล้ว (' + thaiDate(dupHn.date) + ')\nต้องการลงนัดคอร์สใหม่เพิ่มหรือไม่?')) return [null, null];
+    return null;
+  }
+
+  async function save(force) {
+    if (state.busy) return;
+    const p = buildPayload(force);
+    const v = force ? null : validate(p);
+    if (v) {
+      if (v[0]) $(v[0]).focus();
+      if (v[1]) toast(v[1], true);
+      return;
+    }
+    setBusy(true, 'กำลังลงนัด…');
+    try {
+      const res = await api.create(p);
+      if (res.needConfirm) { showConflicts(res.conflicts); return; }
+      state.appts = res.appointments;
+      renderTable();
+      toast('✅ ลงนัด HN ' + p.hn + ' จำนวน ' + res.count + ' fraction ลงปฏิทินและบันทึกชีตแล้ว');
+      resetForm();
+    } catch (e) {
+      toast('บันทึกไม่สำเร็จ: ' + errMsg(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  $('saveBtn').addEventListener('click', () => save(false));
+  $('f').addEventListener('submit', (e) => { e.preventDefault(); save(false); });
+
+  function setBusy(b, label) {
+    state.busy = b;
+    $('saveBtn').disabled = b;
+    if (b) $('saveBtn').textContent = '⏳ ' + label; else renderPreview();
+  }
+
+  function resetForm() {
+    ['hn', 'name', 'note'].forEach(id => { $(id).value = ''; });
+    regenerate();
+    $('hn').focus();
+  }
+
+  function showConflicts(list) {
+    $('mBody').innerHTML = '<p>ช่วงเวลาต่อไปนี้มีผู้ป่วยนัดไว้แล้ว:</p><ul>' + list.map(c =>
+      '<li><b>Fx ' + c.fx + '</b> ' + esc(thaiDate(c.date)) + ' ' + esc(c.start) + '–' + esc(c.end) + '<br><span class="hint">ซ้อนกับ ' + esc(c.with) + '</span></li>'
+    ).join('') + '</ul>';
+    $('modal').classList.add('show');
+  }
+  $('mCancel').addEventListener('click', () => $('modal').classList.remove('show'));
+  $('mOk').addEventListener('click', () => { $('modal').classList.remove('show'); save(true); });
+
+  /* ---------------- ตารางนัด ---------------- */
+  $('filters').addEventListener('click', (e) => {
+    const f = e.target.dataset.f; if (!f) return;
+    state.filter = f;
+    $('filters').querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.f === f));
+    renderTable();
+  });
+  $('q').addEventListener('input', renderTable);
+  $('refreshBtn').addEventListener('click', async () => {
+    try { state.appts = await api.list(); renderTable(); renderPreview(); toast('โหลดข้อมูลล่าสุดแล้ว'); }
+    catch (e) { toast(errMsg(e), true); }
+  });
+
+  function renderTable() {
+    const today = todayIso();
+    const q = $('q').value.trim().toLowerCase();
+    let list = state.appts.slice();
+    if (state.filter === 'today') list = list.filter(a => a.date === today);
+    else if (state.filter === 'upcoming') list = list.filter(a => a.date >= today);
+    else if (state.filter === 'past') list = list.filter(a => a.date < today).reverse();
+    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor).toLowerCase().includes(q));
+
+    const active = state.appts.filter(a => a.status !== 'ยกเลิก');
+    const todays = active.filter(a => a.date === today).length;
+    const upcoming = active.filter(a => a.date >= today && a.status === 'นัดแล้ว');
+    const patients = new Set(upcoming.map(a => a.hn)).size;
+    $('stats').innerHTML = 'วันนี้ <b>' + todays + '</b> นัด · นัดที่จะถึง <b>' + upcoming.length + '</b> นัด · ผู้ป่วยในคิว <b>' + patients + '</b> ราย';
+
+    if (!list.length) { $('tbody').innerHTML = '<tr><td colspan="8" class="empty">ไม่มีนัด</td></tr>'; return; }
+    let lastDate = '';
+    $('tbody').innerHTML = list.map(a => {
+      let sep = '';
+      if (a.date !== lastDate) {
+        lastDate = a.date;
+        sep = '<tr class="daysep"><td colspan="8">' + esc(thaiDate(a.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + (a.date === today ? ' (วันนี้)' : '') + '</td></tr>';
+      }
+      const cls = a.status === 'ยกเลิก' ? 'cancel' : a.status === 'มาตามนัด' ? 'done' : 'booked';
+      const acts = a.status === 'นัดแล้ว'
+        ? '<button class="btn sm okb" data-act="done" data-id="' + esc(a.apptId) + '" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>' +
+          '<button class="btn sm danger" data-act="cancel" data-id="' + esc(a.apptId) + '" title="ยกเลิกเฉพาะ fraction นี้">ยกเลิก</button>' +
+          (a.totalFx > 1 ? '<button class="btn sm danger" data-act="course" data-id="' + esc(a.apptId) + '" title="ยกเลิกทุก fraction ที่ยังไม่ได้ทำในคอร์สนี้">ยกเลิกทั้งคอร์ส</button>' : '')
+        : '';
+      return sep + '<tr class="' + (cls === 'cancel' ? 'cancel' : '') + '">' +
+        '<td>' + esc(a.start) + '–' + esc(a.end) + '</td>' +
+        '<td><b>' + esc(a.hn) + '</b></td>' +
+        '<td class="name">' + esc(a.name) + '</td>' +
+        '<td>' + esc(a.doctor) + '</td>' +
+        '<td>' + esc(a.fx) + '/' + esc(a.totalFx) + '</td>' +
+        '<td class="name hint">' + esc(a.note) + '</td>' +
+        '<td><span class="tag ' + cls + '">' + esc(a.status) + '</span></td>' +
+        '<td class="act"><div class="acts">' + acts + '</div></td></tr>';
+    }).join('');
+  }
+
+  $('tbody').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const a = state.appts.find(x => x.apptId === b.dataset.id); if (!a) return;
+    const who = 'HN ' + a.hn + ' ' + a.name;
+    let p;
+    if (b.dataset.act === 'done') p = api.done(a.apptId);
+    else if (b.dataset.act === 'cancel') {
+      if (!confirm('ยกเลิกนัด Fx ' + a.fx + ' ของ ' + who + ' วันที่ ' + thaiDate(a.date) + '?\n(นัดในปฏิทินจะถูกลบ)')) return;
+      p = api.cancel(a.apptId, 'one');
+    } else {
+      if (!confirm('ยกเลิกทุก fraction ที่ยังไม่ได้ทำของ ' + who + '?\n(นัดในปฏิทินจะถูกลบ)')) return;
+      p = api.cancel(a.apptId, 'course');
+    }
+    b.disabled = true;
+    try {
+      const res = await p; state.appts = res.appointments; renderTable(); renderPreview();
+      toast(b.dataset.act === 'done' ? 'บันทึกว่ามาตามนัดแล้ว' : 'ยกเลิกแล้ว ' + res.changed + ' นัด');
+    } catch (err) { toast(errMsg(err), true); b.disabled = false; }
+  });
+
+  /* ---------------- init ---------------- */
+  (async function init() {
+    $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+    try {
+      const d = await api.init();
+      $('doctorList').innerHTML = d.doctors.map(x => '<option value="' + esc(x) + '">').join('');
+      d.holidays.forEach(h => { state.holidays[h.date] = h.name || 'วันหยุด'; });
+      $('startTime').value = d.settings.defaultStartTime;
+      $('duration').value = d.settings.defaultDurationMin;
+      $('calName').textContent = 'ปฏิทิน: ' + d.settings.calendarName;
+      $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+      state.appts = d.appointments;
+    } catch (e) {
+      $('calName').textContent = 'โหลดข้อมูลไม่สำเร็จ';
+      toast(errMsg(e), true);
+    }
+    regenerate();
+    renderTable();
+  })();
+})();
+</script>
+</body>
+</html>
