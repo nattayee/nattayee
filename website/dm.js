@@ -43,6 +43,8 @@
   function initial(name) { return String(name || "?").trim().replace(/^[เ-ไ]/, "").charAt(0) || "?"; }
   function me() { var u = window.Auth && window.Auth.user; return u ? { username: u.username, name: u.fullName, role: u.role } : null; }
   function key(p) { return "u_" + String(p.username).replace(/\W/g, "_"); }
+  // Only admins may delete messages (in conversations they are part of — they cannot see others').
+  function isAdmin() { return !!(window.Auth && window.Auth.user && window.Auth.user.isAdmin); }
 
   function compress(file, maxSide, quality) {
     return new Promise(function (resolve, reject) {
@@ -152,7 +154,8 @@
       },
       dmDelete: function (r) {
         var u = need(), list = all(), m = find(list, r.id);
-        if (m && m.from.username !== u.username) throw new Error("ลบได้เฉพาะข้อความที่คุณส่ง");
+        if (!isAdmin()) throw new Error("ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)");
+        if (m && m.from.username !== u.username && m.to.username !== u.username) throw new Error("ไม่พบข้อความ");
         save(list.filter(function (x) { return x.id !== r.id; }));
         return { deleted: r.id };
       },
@@ -397,7 +400,7 @@
                 REACT[t].icon + " " + REACT[t].label + (n ? " <b>" + n + "</b>" : "") + "</button>";
             }).join("") +
             '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ</button>' +
-            (mine ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
+            (isAdmin() ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)">ลบ</button>' : "") +
             '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '">' + (status || "รายละเอียด") + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
           "</div>" +
           (reacts.length ? '<ul class="react-list">' + reacts.map(function (r) {

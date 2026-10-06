@@ -93,6 +93,9 @@
     return u ? { username: u.username, name: u.fullName, role: u.role } : null;
   }
 
+  // Only admins may delete messages.
+  function isAdmin() { return !!(window.Auth && window.Auth.user && window.Auth.user.isAdmin); }
+
   // ✓/✗ may be pressed only by someone the message was sent to, never by its sender.
   function mayReact(m, p) { return !!p && isForMe(m, p) && !samePerson(m.author, p); }
 
@@ -224,6 +227,7 @@
         });
       },
       remove: function (id) {
+        if (!isAdmin()) return Promise.reject(new Error("ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)"));
         try { write(read().filter(function (x) { return x.id !== id; })); } catch (e) { return Promise.reject(e); }
         return Promise.resolve();
       },
@@ -738,7 +742,8 @@
         store.forward(id, { by: person(me), to: to, at: Date.now() }, namesFor(to))
           .catch(function (err) { showError("ส่งต่อไม่สำเร็จ: " + err.message); });
       } else if (act === "del") {
-        if (confirm("ลบข้อความนี้?")) store.remove(id).catch(function (err) { showError("ลบไม่สำเร็จ: " + err.message); });
+        if (!isAdmin()) { showError("ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)"); return; }
+        if (confirm("ลบข้อความนี้? (การลบจะถูกบันทึกไว้)")) store.remove(id).catch(function (err) { showError("ลบไม่สำเร็จ: " + err.message); });
       }
     });
 
@@ -808,7 +813,7 @@
       return '<div class="chat-actions">' + btns +
         '<button type="button" class="link-btn" data-act="reply" data-id="' + esc(m.id) + '">↩ ตอบกลับ' + (replies ? " (" + replies + ")" : "") + "</button>" +
         '<button type="button" class="link-btn" data-act="fwd" data-id="' + esc(m.id) + '">↪ ส่งต่อ</button>' +
-        (byMe(m) ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '">ลบ</button>' : "") +
+        (isAdmin() ? '<button type="button" class="link-btn danger" data-act="del" data-id="' + esc(m.id) + '" title="ลบข้อความ (เฉพาะ admin)">ลบ</button>' : "") +
         '<button type="button" class="link-btn log-toggle" data-act="log" data-id="' + esc(m.id) + '" aria-expanded="' + !!openLog[m.id] + '">' +
           summary + (openLog[m.id] ? " ▴" : " ▾") + "</button>" +
         "</div>" + reactListHtml(all);

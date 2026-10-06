@@ -416,7 +416,7 @@ ACTIONS.chatDelete = function (req) {
   var u = requireUser_(req.token);
   var found = findMessage_(String(req.id || ''));
   if (!found) return {};
-  if (found.msg.author.username !== u.username && !u.isAdmin) throw new Error('ลบได้เฉพาะข้อความของตัวเอง');
+  if (!u.isAdmin) throw new Error('ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)');
   found.msg.images.forEach(function (ref) {
     try { DriveApp.getFileById(String(ref).replace(/^drive:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
   });
@@ -535,7 +535,9 @@ ACTIONS.dmDelete = function (req) {
   var u = requireUser_(req.token);
   var found = findDm_(String(req.id || ''));
   if (!found) return {};
-  if (found.msg.from.username !== u.username) throw new Error('ลบได้เฉพาะข้อความที่คุณส่ง');
+  // Admins only, and only in conversations they are part of (private messages stay private).
+  if (!u.isAdmin) throw new Error('ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)');
+  if (!isDmParty_(found.msg, u.username)) throw new Error('ไม่พบข้อความ');
   found.msg.images.forEach(function (ref) {
     try { DriveApp.getFileById(String(ref).replace(/^dm:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
   });
