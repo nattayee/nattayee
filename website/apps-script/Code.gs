@@ -1,14 +1,14 @@
 /**
  * LPCH RO Workspace — Google Apps Script web app (Code.gs)
  *
- * ไฟล์ในโปรเจกต์ Apps Script มี 2 ไฟล์:
- *   Code.gs     — ไฟล์นี้ (เซิร์ฟเวอร์: หน้าเว็บ, ระบบสมาชิก, แชทประกาศ)
- *   Index.html  — หน้าเว็บทั้งหมด (สร้างจาก website/ ด้วย build_apps_script.py)
+ * โปรเจกต์ Apps Script ต้องการไฟล์นี้ไฟล์เดียว (Code.gs)
+ * หน้าเว็บ (Index.html) โหลดจาก GitHub อัตโนมัติ (PAGE_URL) จึงได้หน้าเว็บเวอร์ชันล่าสุดโดยไม่ต้องวางใหม่
+ * ถ้าต้องการใช้ไฟล์ในโปรเจกต์แทน: กด + → HTML → ตั้งชื่อ "Index" แล้ววางเนื้อหา Index.html (จะใช้ไฟล์นั้นก่อน)
  *
  * วิธีติดตั้ง:
  *   1. สร้าง Google Sheet ใหม่ → Extensions → Apps Script
- *   2. วางโค้ดนี้แทน Code.gs, กด + → HTML → ตั้งชื่อ "Index" แล้ววางเนื้อหา Index.html
- *   3. เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาตสิทธิ์ Sheets + Drive)
+ *   2. วางโค้ดนี้แทนโค้ดเดิมทั้งหมด → Save (ตรวจว่าบรรทัดสุดท้ายของไฟล์ถูกวางมาครบ)
+ *   3. เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาตสิทธิ์ Sheets + Drive + เชื่อมต่อภายนอก)
  *   4. Deploy → New deployment → Web app
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
@@ -31,6 +31,9 @@ var MAX_IMAGES = 4;
 var MAX_IMAGE_CHARS = 1500000; // ~1.1 MB ต่อรูป (หลังย่อขนาดในเบราว์เซอร์แล้ว)
 var TITLE = 'LPCH RO Workspace';
 var IMAGE_FOLDER = 'LPCH RO Workspace Images';
+// หน้าเว็บที่สร้างจาก website/ (build_apps_script.py) — โหลดจาก GitHub และ cache ไว้ 10 นาที
+var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/lpch-ro-workspace-website-96j4r6/website/apps-script/Index.html';
+var PAGE_CACHE_SECONDS = 600;
 
 var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin'];
 var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
@@ -43,9 +46,38 @@ var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1 }
 /* ---------------- Entry points ---------------- */
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createHtmlOutput(page_())
     .setTitle(TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/** The page: an "Index" HTML file in this project if there is one, otherwise the copy on GitHub. */
+function page_() {
+  try {
+    return HtmlService.createHtmlOutputFromFile('Index').getContent();
+  } catch (e) {
+    return loadPage_();
+  }
+}
+
+/** Index.html from GitHub, cached in ~30k-character pieces (the cache holds at most 100 KB per value). */
+function loadPage_() {
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get('page_n') || 0);
+  if (n) {
+    var keys = [];
+    for (var i = 0; i < n; i++) keys.push('page_' + i);
+    var got = cache.getAll(keys);
+    if (Object.keys(got).length === n) return keys.map(function (k) { return got[k]; }).join('');
+  }
+  var res = UrlFetchApp.fetch(PAGE_URL, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('โหลดหน้าเว็บจาก GitHub ไม่ได้ (HTTP ' + res.getResponseCode() + ') ตรวจสอบ PAGE_URL');
+  var html = res.getContentText('UTF-8');
+  var parts = {}, size = 30000, j;
+  for (j = 0; j * size < html.length; j++) parts['page_' + j] = html.substr(j * size, size);
+  parts.page_n = String(j);
+  cache.putAll(parts, PAGE_CACHE_SECONDS);
+  return html;
 }
 
 /** Called from the page with google.script.run.api(req). */
@@ -90,6 +122,7 @@ function setup() {
   sheet_('Messages', MESSAGE_HEADERS);
   sheet_('ChatLog', LOG_HEADERS);
   folder_();
+  Logger.log('หน้าเว็บ: ' + Math.round(page_().length / 1024) + ' KB');
   Logger.log('พร้อมใช้งาน: ' + ss.getUrl());
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
 }
@@ -557,3 +590,5 @@ function dropSessionsOf_(username) {
     if (String(rows[i][1]) === username) sheet.deleteRow(i + 1);
   }
 }
+
+// ----- สิ้นสุดไฟล์ Code.gs (ถ้าไม่เห็นบรรทัดนี้ใน Apps Script แสดงว่าวางโค้ดมาไม่ครบ) -----
