@@ -2,25 +2,26 @@
 
 เว็บไซต์พื้นที่ทำงานกลางของหน่วยรังสีรักษา (Radiation Oncology) — static site (HTML/CSS/JS ล้วน ไม่ต้อง build)
 
-## หน้าในเว็บไซต์
+## เมนูและหน้าในเว็บไซต์
 
-| หน้า | เนื้อหา |
+| เมนู | เนื้อหา |
 | --- | --- |
-| หน้าแรก | แนะนำหน่วยงาน ประกาศ/ข่าวสาร และลิงก์ด่วน |
-| Protocols | แนวทางการรักษาแยกตามตำแหน่งโรค |
-| Dose constraints | ตารางค่าจำกัดปริมาณรังสีอวัยวะ (QUANTEC) พร้อมตัวกรองและช่องค้นหา |
-| เครื่องมือคำนวณ | BED / EQD2 calculator และ fractionation converter (LQ model) |
-| เอกสาร | แบบฟอร์ม, consent, Physics & QA, SOP |
-| ตารางงาน | กิจกรรมประจำสัปดาห์ และ Google Calendar แบบ embed |
-| ติดต่อ | ผู้รับผิดชอบและช่องทางติดต่อ |
+| Home | แนะนำหน่วยงาน ประกาศ/ข่าวสาร ทางลัดไปแต่ละส่วนงาน และผู้ติดต่อ |
+| Machines ▾ | Linac 1, Linac 2, CT Simulator, HDR Brachytherapy — ข้อมูลเครื่อง คู่มือ บันทึก QA |
+| RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
+| Nurse | Patient education, consent, การดูแลผลข้างเคียง |
+| RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator, ตารางงานประจำสัปดาห์ |
+| MP ▾ | Machine QA, Treatment Planning, Patient-specific QA, Radiation Safety |
+| Guideline | แนวทางการรักษาแยกตามโรค และตาราง dose constraints (QUANTEC) |
 
 ## แก้ไขเนื้อหา
 
 เนื้อหาทั้งหมดอยู่ใน **`data.js`** ไฟล์เดียว:
 
+- เมนูด้านบนกำหนดที่ `nav` (เพิ่ม `children` เพื่อทำ dropdown) และเนื้อหาแต่ละหน้าอยู่ที่ `pages`
 - ลิงก์ที่เป็น `"#"` คือ placeholder (จะแสดงเป็น "รอใส่ลิงก์") ให้แทนด้วยลิงก์ Google Drive / Docs / Forms จริง
 - ใส่ Google Calendar ได้ที่ `schedule.calendarEmbedUrl` (Google Calendar → Settings → Integrate calendar → ค่า `src` ใน Embed code)
-- เพิ่ม/ลบ ประกาศ, protocol, เอกสาร, ผู้ติดต่อ ได้โดยแก้ array ที่เกี่ยวข้อง
+- แต่ละหน้ามี `groups` (กล่องรายการลิงก์) และ `widgets` (`calculators`, `constraints`, `schedule`, `contacts`, `subpages` ฯลฯ)
 
 ## เปิดดูในเครื่อง
 

@@ -3,6 +3,7 @@
 
   var S = window.SITE;
   var app = document.getElementById("app");
+  var navEl = document.getElementById("nav");
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -10,15 +11,16 @@
     });
   }
 
+  function isExternal(url) { return /^https?:/i.test(url); }
+
   // A link whose url is "#" or empty is a placeholder waiting for a real Drive/Docs URL.
   function link(label, url) {
     if (!url || url === "#") return '<span class="placeholder">' + esc(label) + "</span>";
-    var external = /^https?:/i.test(url);
-    return '<a href="' + esc(url) + '"' + (external ? ' target="_blank" rel="noopener"' : "") + ">" + esc(label) + "</a>";
+    return '<a href="' + esc(url) + '"' + (isExternal(url) ? ' target="_blank" rel="noopener"' : "") + ">" + esc(label) + "</a>";
   }
 
   function section(title, lead, body) {
-    return '<section class="section"><h2>' + esc(title) + "</h2>" +
+    return '<section class="section">' + (title ? "<h2>" + esc(title) + "</h2>" : "") +
       (lead ? '<p class="lead">' + esc(lead) + "</p>" : "") + body + "</section>";
   }
 
@@ -28,58 +30,101 @@
     return d.toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" });
   }
 
-  /* ---------------- Pages ---------------- */
+  // Find the nav entry (and its parent) for a page key.
+  function findNav(page) {
+    for (var i = 0; i < S.nav.length; i++) {
+      var n = S.nav[i];
+      if (n.page === page) return { item: n, parent: null };
+      var kids = n.children || [];
+      for (var j = 0; j < kids.length; j++) if (kids[j].page === page) return { item: kids[j], parent: n };
+    }
+    return null;
+  }
 
-  var pages = {
-    home: function () {
-      var tiles = S.quickLinks.map(function (q) {
-        var href = q.url && q.url !== "#" ? q.url : "javascript:void(0)";
-        var external = /^https?:/i.test(q.url);
-        return '<a class="card tile" href="' + esc(href) + '"' + (external ? ' target="_blank" rel="noopener"' : "") + ">" +
-          '<span class="tile-icon" aria-hidden="true">' + q.icon + "</span>" +
-          "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc) + "</span></div></a>";
+  /* ---------------- Navigation ---------------- */
+
+  function renderNav() {
+    navEl.innerHTML = S.nav.map(function (n, i) {
+      if (!n.children) return '<a class="nav-link" href="#/' + esc(n.page) + '" data-page="' + esc(n.page) + '">' + esc(n.label) + "</a>";
+      var sub = n.children.map(function (c) {
+        return '<a href="#/' + esc(c.page) + '" data-page="' + esc(c.page) + '">' + esc(c.label) + "</a>";
       }).join("");
+      return '<div class="nav-item has-sub" data-page="' + esc(n.page) + '">' +
+        '<a class="nav-link" href="#/' + esc(n.page) + '" data-page="' + esc(n.page) + '">' + esc(n.label) + "</a>" +
+        '<button class="sub-toggle" aria-label="เปิดเมนูย่อย ' + esc(n.label) + '" aria-expanded="false" aria-controls="sub' + i + '">' +
+        '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>' +
+        '<div class="submenu" id="sub' + i + '">' + sub + "</div></div>";
+    }).join("");
 
+    navEl.querySelectorAll(".sub-toggle").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var item = btn.parentElement;
+        var open = !item.classList.contains("open");
+        closeSubmenus();
+        item.classList.toggle("open", open);
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+    });
+  }
+
+  function closeSubmenus() {
+    navEl.querySelectorAll(".has-sub").forEach(function (i) {
+      i.classList.remove("open");
+      i.querySelector(".sub-toggle").setAttribute("aria-expanded", "false");
+    });
+  }
+
+  /* ---------------- Widgets ---------------- */
+
+  var widgets = {
+    intro: function () {
       var news = S.announcements.map(function (a) {
         return '<div class="news-item"><time datetime="' + esc(a.date) + '">' + formatDate(a.date) + "</time>" +
           "<h4>" + esc(a.title) + "</h4><p>" + esc(a.body) + "</p></div>";
       }).join("");
-
       return '<div class="intro section">' +
-        '<div><h2 style="color:var(--primary);margin-top:0">' + esc(S.organization) + "</h2>" +
-        '<p style="font-size:1.1rem">' + esc(S.description) + "</p></div>" +
-        '<div class="card"><h3>📣 ประกาศ / ข่าวสาร</h3>' + news + "</div></div>" +
-        section("ลิงก์ด่วน", "เครื่องมือและเอกสารที่ใช้บ่อย", '<div class="grid">' + tiles + "</div>");
+        '<div><h2>' + esc(S.organization) + "</h2>" +
+        '<p class="intro-text">' + esc(S.description) + "</p></div>" +
+        '<div class="card"><h3>📣 ประกาศ / ข่าวสาร</h3>' + news + "</div></div>";
     },
 
-    protocols: function () {
-      var cards = S.protocols.map(function (p) {
-        return '<div class="card"><h3>' + p.icon + " " + esc(p.site) + '</h3><ul class="link-list">' +
-          p.items.map(function (i) { return "<li>" + link(i.label, i.url) + "</li>"; }).join("") +
-          "</ul></div>";
+    quicklinks: function () {
+      var tiles = S.quickLinks.map(function (q) {
+        return '<a class="card tile" href="' + esc(q.url) + '"' + (isExternal(q.url) ? ' target="_blank" rel="noopener"' : "") + ">" +
+          '<span class="tile-icon" aria-hidden="true">' + q.icon + "</span>" +
+          "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc) + "</span></div></a>";
       }).join("");
-      return section("Treatment protocols", "แนวทางการรักษาแยกตามตำแหน่งโรค", '<div class="grid">' + cards + "</div>");
+      return section("Workspace", "เลือกส่วนงาน", '<div class="grid">' + tiles + "</div>");
+    },
+
+    subpages: function (page) {
+      var nav = findNav(page);
+      var kids = (nav && nav.item.children) || [];
+      var tiles = kids.map(function (c) {
+        var p = S.pages[c.page] || {};
+        return '<a class="card tile" href="#/' + esc(c.page) + '"><div><strong>' + esc(c.label) + "</strong>" +
+          "<span>" + esc(p.lead || "") + "</span></div></a>";
+      }).join("");
+      return section("", "", '<div class="grid">' + tiles + "</div>");
     },
 
     constraints: function () {
       var regions = ["ทั้งหมด"].concat(S.constraints.map(function (c) { return c.region; })
         .filter(function (r, i, a) { return a.indexOf(r) === i; }));
-
       var chips = regions.map(function (r, i) {
         return '<button class="chip' + (i === 0 ? " active" : "") + '" data-region="' + esc(r) + '">' + esc(r) + "</button>";
       }).join("");
-
-      var html = '<div class="toolbar">' + chips +
+      return section("Dose constraints", "ค่าจำกัดปริมาณรังสีของอวัยวะสำคัญ (Organs at risk)",
+        '<div class="toolbar">' + chips +
         '<input class="search" id="organSearch" type="search" placeholder="ค้นหาอวัยวะ…" aria-label="ค้นหาอวัยวะ"></div>' +
-        '<div class="table-wrap card" style="padding:0"><table><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
+        '<div class="table-wrap card flush"><table><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
         '<tbody id="constraintRows"></tbody></table></div>' +
         '<div class="note">ค่าอ้างอิงจาก QUANTEC (Int J Radiat Oncol Biol Phys 2010; 76(3) Suppl) สำหรับ conventional fractionation 1.8–2 Gy/fx ' +
-        "ไม่ใช้กับ SBRT/SRS — โปรดยึดตาม protocol ของหน่วยงานและดุลยพินิจของแพทย์เป็นหลัก</div>";
-
-      return section("Dose constraints", "ค่าจำกัดปริมาณรังสีของอวัยวะสำคัญ (Organs at risk)", html);
+        "ไม่ใช้กับ SBRT/SRS — โปรดยึดตาม protocol ของหน่วยงานและดุลยพินิจของแพทย์เป็นหลัก</div>");
     },
 
-    tools: function () {
+    calculators: function () {
       var abOptions = [
         ["10", "10 — Tumor / acute-reacting tissue"],
         ["3", "3 — Late-reacting tissue"],
@@ -111,36 +156,23 @@
         '<p class="formula">n = EQD2·(1 + 2/(α/β)) / [d·(1 + d/(α/β))] — ไม่ได้คิดผลของเวลา (time factor / repopulation)</p></div>';
 
       return section("เครื่องมือคำนวณ", "Linear-quadratic model สำหรับการเปรียบเทียบ fractionation schedule",
-        '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' + bed + conv + "</div>" +
+        '<div class="grid wide">' + bed + conv + "</div>" +
         '<div class="note">ผลการคำนวณใช้เพื่อประกอบการตัดสินใจเท่านั้น โปรดตรวจสอบซ้ำก่อนนำไปใช้ทางคลินิก</div>');
     },
 
-    documents: function () {
-      var cards = S.documents.map(function (g) {
-        return '<div class="card"><h3>' + esc(g.group) + '</h3><ul class="link-list">' +
-          g.items.map(function (i) {
-            return "<li>" + link(i.label, i.url) + '<span class="badge">' + esc(i.type) + "</span></li>";
-          }).join("") + "</ul></div>";
-      }).join("");
-      return section("เอกสารและแบบฟอร์ม", "แบบฟอร์ม เอกสารยินยอม QA และ SOP ของหน่วยงาน", '<div class="grid">' + cards + "</div>");
-    },
-
     schedule: function () {
-      var cal = S.schedule.calendarEmbedUrl
-        ? '<iframe class="calendar-frame card" src="' + esc(S.schedule.calendarEmbedUrl) + '" title="Calendar"></iframe>'
-        : '<div class="card muted">ยังไม่ได้เชื่อม Google Calendar — ใส่ลิงก์ embed ที่ <code>schedule.calendarEmbedUrl</code> ใน <code>data.js</code></div>';
-
       var rows = S.schedule.items.map(function (i) {
         return "<tr><td>" + esc(i.day) + "</td><td>" + esc(i.time) + "</td><td>" + esc(i.title) + "</td></tr>";
       }).join("");
-
+      var cal = S.schedule.calendarEmbedUrl
+        ? '<iframe class="calendar-frame card" src="' + esc(S.schedule.calendarEmbedUrl) + '" title="Calendar"></iframe>'
+        : "";
       return section("ตารางงานประจำสัปดาห์", "กิจกรรมวิชาการและงานประจำของหน่วย",
-        '<div class="table-wrap card" style="padding:0"><table><thead><tr><th>วัน</th><th>เวลา</th><th>กิจกรรม</th></tr></thead><tbody>' +
-        rows + "</tbody></table></div>") +
-        section("ปฏิทิน / ตารางเวร", "", cal);
+        '<div class="table-wrap card flush"><table><thead><tr><th>วัน</th><th>เวลา</th><th>กิจกรรม</th></tr></thead><tbody>' +
+        rows + "</tbody></table></div>" + cal);
     },
 
-    contact: function () {
+    contacts: function () {
       var cards = S.contacts.map(function (c) {
         return '<div class="card contact-card"><h3>' + esc(c.role) + "</h3>" +
           "<p>👤 " + esc(c.name) + "</p>" +
@@ -152,10 +184,45 @@
     },
   };
 
-  /* ---------------- Page behaviour ---------------- */
+  /* ---------------- Page rendering ---------------- */
+
+  function renderPage(key) {
+    var p = S.pages[key];
+    var nav = findNav(key);
+    var html = "";
+
+    if (key !== "home") {
+      var crumbs = '<a href="#/home">Home</a>' +
+        (nav && nav.parent ? ' <span>›</span> <a href="#/' + esc(nav.parent.page) + '">' + esc(nav.parent.label) + "</a>" : "") +
+        " <span>›</span> " + esc(p.title);
+      html += '<nav class="breadcrumb" aria-label="breadcrumb">' + crumbs + "</nav>" +
+        '<header class="page-head"><h2>' + esc(p.title) + "</h2>" + (p.lead ? '<p class="lead">' + esc(p.lead) + "</p>" : "") + "</header>";
+    }
+
+    if (p.specs) {
+      html += section("ข้อมูลเครื่อง", "", '<div class="card flush"><table class="specs"><tbody>' +
+        p.specs.map(function (r) { return "<tr><th>" + esc(r[0]) + "</th><td>" + esc(r[1]) + "</td></tr>"; }).join("") +
+        "</tbody></table></div>");
+    }
+
+    if (p.groups) {
+      html += section("", "", '<div class="grid">' + p.groups.map(function (g) {
+        return '<div class="card"><h3>' + (g.icon ? g.icon + " " : "") + esc(g.title) + '</h3><ul class="link-list">' +
+          g.items.map(function (i) {
+            return "<li>" + link(i.label, i.url) + (i.type ? '<span class="badge">' + esc(i.type) + "</span>" : "") + "</li>";
+          }).join("") + "</ul></div>";
+      }).join("") + "</div>");
+    }
+
+    (p.widgets || []).forEach(function (w) { html += widgets[w](key); });
+    return html;
+  }
+
+  /* ---------------- Interactive widgets ---------------- */
 
   function initConstraints() {
     var tbody = document.getElementById("constraintRows");
+    if (!tbody) return;
     var search = document.getElementById("organSearch");
     var region = "ทั้งหมด";
 
@@ -189,8 +256,9 @@
     return isFinite(x) ? (Math.round(x * 100) / 100).toString() : "–";
   }
 
-  function initTools() {
+  function initCalculators() {
     var d = document.getElementById("bedD");
+    if (!d) return;
     var n = document.getElementById("bedN");
     var ab = document.getElementById("bedAB");
     var abCustomRow = document.getElementById("bedABCustomRow");
@@ -228,28 +296,33 @@
     calcConv();
   }
 
-  var after = { constraints: initConstraints, tools: initTools };
-
   /* ---------------- Router ---------------- */
 
   function route() {
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
-    if (!pages[page]) page = "home";
+    if (!S.pages[page]) page = "home";
 
-    app.innerHTML = pages[page]();
-    if (after[page]) after[page]();
+    app.innerHTML = renderPage(page);
+    initConstraints();
+    initCalculators();
 
     document.getElementById("banner").classList.toggle("compact", page !== "home");
-    document.querySelectorAll(".nav a").forEach(function (a) {
+
+    // Highlight the top-level item that owns this page.
+    var nav = findNav(page);
+    var top = nav ? (nav.parent || nav.item).page : "home";
+    navEl.querySelectorAll(".nav-link").forEach(function (a) {
+      a.classList.toggle("active", a.getAttribute("data-page") === top);
+    });
+    navEl.querySelectorAll(".submenu a").forEach(function (a) {
       a.classList.toggle("active", a.getAttribute("data-page") === page);
     });
 
-    var nav = document.getElementById("nav");
-    nav.classList.remove("open");
+    closeSubmenus();
+    navEl.classList.remove("open");
     document.getElementById("menuToggle").setAttribute("aria-expanded", "false");
 
-    var label = document.querySelector('.nav a[data-page="' + page + '"]');
-    document.title = page === "home" ? S.title : label.textContent + " · " + S.title;
+    document.title = page === "home" ? S.title : S.pages[page].title + " · " + S.title;
     window.scrollTo(0, 0);
   }
 
@@ -257,10 +330,17 @@
   document.getElementById("bannerSubtitle").textContent = S.subtitle;
   document.getElementById("footerOrg").textContent = S.organization;
 
+  renderNav();
+
   document.getElementById("menuToggle").addEventListener("click", function () {
-    var nav = document.getElementById("nav");
-    var open = nav.classList.toggle("open");
+    var open = navEl.classList.toggle("open");
     this.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", function (e) {
+    if (!navEl.contains(e.target)) closeSubmenus();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeSubmenus();
   });
 
   window.addEventListener("hashchange", route);

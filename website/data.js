@@ -1,16 +1,49 @@
 /*
  * LPCH RO Workspace — ข้อมูลเนื้อหาทั้งหมดของเว็บไซต์
  *
- * แก้ไขไฟล์นี้ไฟล์เดียวเพื่อเปลี่ยนข้อความ ลิงก์ เอกสาร และผู้ติดต่อ
+ * แก้ไขไฟล์นี้ไฟล์เดียวเพื่อเปลี่ยนเมนู ข้อความ ลิงก์ เอกสาร และผู้ติดต่อ
  * ลิงก์ที่เป็น "#" คือ placeholder — ให้แทนที่ด้วยลิงก์ Google Drive / Docs / Forms จริง
+ *
+ * โครงสร้าง:
+ *   nav   — เมนูด้านบน (เรียงตามลำดับ) แต่ละเมนูอ้างถึง key ใน pages; ถ้ามี children จะเป็น dropdown
+ *   pages — เนื้อหาแต่ละหน้า: groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
+ *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
  */
 window.SITE = {
   title: "LPCH RO Workspace",
   subtitle: "Radiation Oncology Workspace",
   organization: "หน่วยรังสีรักษา (Radiation Oncology)",
   description:
-    "พื้นที่ทำงานกลางสำหรับแพทย์ นักฟิสิกส์การแพทย์ นักรังสีการแพทย์ และพยาบาล " +
-    "รวบรวมแนวทางการรักษา เอกสาร แบบฟอร์ม และเครื่องมือที่ใช้งานประจำวันไว้ในที่เดียว",
+    "พื้นที่ทำงานกลางสำหรับแพทย์รังสีรักษา นักฟิสิกส์การแพทย์ นักรังสีการแพทย์ และพยาบาล " +
+    "รวบรวมข้อมูลเครื่องฉายรังสี แนวทางการรักษา เอกสาร แบบฟอร์ม และเครื่องมือที่ใช้งานประจำวันไว้ในที่เดียว",
+
+  nav: [
+    { label: "Home", page: "home" },
+    {
+      label: "Machines",
+      page: "machines",
+      children: [
+        { label: "Linac 1", page: "machines/linac-1" },
+        { label: "Linac 2", page: "machines/linac-2" },
+        { label: "CT Simulator", page: "machines/ct-sim" },
+        { label: "HDR Brachytherapy", page: "machines/hdr" },
+      ],
+    },
+    { label: "RTT", page: "rtt" },
+    { label: "Nurse", page: "nurse" },
+    { label: "RO", page: "ro" },
+    {
+      label: "MP",
+      page: "mp",
+      children: [
+        { label: "Machine QA", page: "mp/qa" },
+        { label: "Treatment Planning", page: "mp/planning" },
+        { label: "Patient-specific QA", page: "mp/psqa" },
+        { label: "Radiation Safety", page: "mp/safety" },
+      ],
+    },
+    { label: "Guideline", page: "guideline" },
+  ],
 
   announcements: [
     {
@@ -20,77 +53,279 @@ window.SITE = {
     },
     {
       date: "2026-09-15",
-      title: "อัปเดตแนวทาง Dose constraints",
+      title: "อัปเดต Guideline: Dose constraints",
       body: "เพิ่มตารางค่า dose constraints ของอวัยวะสำคัญ (อ้างอิง QUANTEC) สำหรับการรักษาแบบ conventional fractionation",
     },
   ],
 
   quickLinks: [
-    { icon: "📋", label: "RT Request Form", desc: "ใบส่งปรึกษา / สั่งการรักษา", url: "#" },
-    { icon: "🗓️", label: "ตารางเวรแพทย์", desc: "On-call & clinic schedule", url: "#/schedule" },
-    { icon: "🧮", label: "BED / EQD2", desc: "เครื่องคำนวณขนาดรังสี", url: "#/tools" },
-    { icon: "🛡️", label: "Dose constraints", desc: "ค่าจำกัดปริมาณรังสีอวัยวะ", url: "#/constraints" },
-    { icon: "📚", label: "Treatment protocols", desc: "แนวทางการรักษาแยกตามโรค", url: "#/protocols" },
-    { icon: "📁", label: "เอกสาร & แบบฟอร์ม", desc: "Consent, QA, SOP", url: "#/documents" },
+    { icon: "⚙️", label: "Machines", desc: "ข้อมูลเครื่อง สถานะ และ QA", url: "#/machines" },
+    { icon: "🧑‍⚕️", label: "RTT", desc: "งานนักรังสีการแพทย์", url: "#/rtt" },
+    { icon: "💉", label: "Nurse", desc: "งานพยาบาลรังสีรักษา", url: "#/nurse" },
+    { icon: "🩺", label: "RO", desc: "แพทย์รังสีรักษา & เครื่องคำนวณ", url: "#/ro" },
+    { icon: "📐", label: "MP", desc: "ฟิสิกส์การแพทย์", url: "#/mp" },
+    { icon: "📚", label: "Guideline", desc: "Protocols & dose constraints", url: "#/guideline" },
   ],
 
-  protocols: [
-    {
-      site: "Head & Neck",
-      icon: "🗣️",
-      items: [
-        { label: "Nasopharyngeal carcinoma (NPC)", url: "#" },
-        { label: "Oral cavity / Oropharynx", url: "#" },
-        { label: "Larynx / Hypopharynx", url: "#" },
-        { label: "Contouring atlas (H&N)", url: "#" },
+  pages: {
+    home: {
+      widgets: ["intro", "quicklinks", "contacts"],
+    },
+
+    /* ---------------- Machines ---------------- */
+    machines: {
+      title: "Machines",
+      lead: "เครื่องฉายรังสีและอุปกรณ์ในหน่วยรังสีรักษา",
+      widgets: ["subpages"],
+    },
+    "machines/linac-1": {
+      title: "Linac 1",
+      lead: "Linear accelerator — ข้อมูลเครื่อง คู่มือ และบันทึก QA",
+      specs: [
+        ["Model", "—"],
+        ["Photon energies", "—"],
+        ["Electron energies", "—"],
+        ["MLC", "—"],
+        ["IGRT", "—"],
+        ["Techniques", "3D-CRT / IMRT / VMAT"],
+      ],
+      groups: [
+        { title: "Daily operation", icon: "📋", items: [
+          { label: "Morning check / Warm-up checklist", type: "Doc", url: "#" },
+          { label: "Daily QA log", type: "Sheet", url: "#" },
+          { label: "Downtime / Fault report", type: "Form", url: "#" },
+        ] },
+        { title: "Manuals", icon: "📘", items: [
+          { label: "User manual", type: "PDF", url: "#" },
+          { label: "Emergency procedure", type: "PDF", url: "#" },
+        ] },
       ],
     },
-    {
-      site: "Breast",
-      icon: "🎗️",
-      items: [
-        { label: "Whole breast / Post-mastectomy RT", url: "#" },
-        { label: "Hypofractionation 40 Gy / 15 fx", url: "#" },
-        { label: "Regional nodal irradiation", url: "#" },
+    "machines/linac-2": {
+      title: "Linac 2",
+      lead: "Linear accelerator — ข้อมูลเครื่อง คู่มือ และบันทึก QA",
+      specs: [
+        ["Model", "—"],
+        ["Photon energies", "—"],
+        ["Electron energies", "—"],
+        ["MLC", "—"],
+        ["IGRT", "—"],
+        ["Techniques", "3D-CRT / IMRT / VMAT"],
+      ],
+      groups: [
+        { title: "Daily operation", icon: "📋", items: [
+          { label: "Morning check / Warm-up checklist", type: "Doc", url: "#" },
+          { label: "Daily QA log", type: "Sheet", url: "#" },
+          { label: "Downtime / Fault report", type: "Form", url: "#" },
+        ] },
+        { title: "Manuals", icon: "📘", items: [
+          { label: "User manual", type: "PDF", url: "#" },
+          { label: "Emergency procedure", type: "PDF", url: "#" },
+        ] },
       ],
     },
-    {
-      site: "Gynecology",
-      icon: "🌸",
-      items: [
-        { label: "Cervical cancer: EBRT + Brachytherapy", url: "#" },
-        { label: "Endometrial cancer", url: "#" },
-        { label: "Brachytherapy (HDR) workflow", url: "#" },
+    "machines/ct-sim": {
+      title: "CT Simulator",
+      lead: "CT simulation — protocol การสแกนและการจัดท่าผู้ป่วย",
+      specs: [
+        ["Model", "—"],
+        ["Bore size", "—"],
+        ["Laser system", "—"],
+        ["4D-CT", "—"],
+      ],
+      groups: [
+        { title: "Scan protocols", icon: "🖥️", items: [
+          { label: "Head & Neck", type: "Doc", url: "#" },
+          { label: "Thorax / Breast", type: "Doc", url: "#" },
+          { label: "Abdomen / Pelvis", type: "Doc", url: "#" },
+        ] },
+        { title: "Immobilization", icon: "🧷", items: [
+          { label: "Thermoplastic mask", type: "Doc", url: "#" },
+          { label: "Breast board / Vac-lok", type: "Doc", url: "#" },
+        ] },
       ],
     },
-    {
-      site: "Thorax",
-      icon: "🫁",
-      items: [
-        { label: "NSCLC: definitive chemoRT", url: "#" },
-        { label: "SBRT lung", url: "#" },
-        { label: "Esophageal cancer", url: "#" },
+    "machines/hdr": {
+      title: "HDR Brachytherapy",
+      lead: "High dose rate afterloader — workflow และการเปลี่ยนแหล่งกำเนิดรังสี",
+      specs: [
+        ["Afterloader", "—"],
+        ["Source", "Ir-192"],
+        ["Source exchange", "—"],
+        ["Applicators", "Tandem & ovoid / ring / cylinder"],
+      ],
+      groups: [
+        { title: "Procedure", icon: "🩻", items: [
+          { label: "HDR workflow", type: "Doc", url: "#" },
+          { label: "Applicator commissioning", type: "Doc", url: "#" },
+          { label: "Emergency (stuck source) procedure", type: "PDF", url: "#" },
+        ] },
+        { title: "QA", icon: "✅", items: [
+          { label: "Daily HDR QA", type: "Sheet", url: "#" },
+          { label: "Source calibration", type: "Sheet", url: "#" },
+        ] },
       ],
     },
-    {
-      site: "GI & GU",
-      icon: "🩺",
-      items: [
-        { label: "Rectal cancer: short-course / long-course", url: "#" },
-        { label: "Prostate cancer", url: "#" },
-        { label: "Bladder cancer", url: "#" },
+
+    /* ---------------- Roles ---------------- */
+    rtt: {
+      title: "RTT",
+      lead: "นักรังสีการแพทย์ (Radiation Therapy Technologist)",
+      groups: [
+        { title: "SOP", icon: "📋", items: [
+          { label: "SOP: CT simulation", type: "Doc", url: "#" },
+          { label: "SOP: Treatment delivery", type: "Doc", url: "#" },
+          { label: "SOP: IGRT (CBCT / kV-kV)", type: "Doc", url: "#" },
+          { label: "Patient identification & time-out", type: "Doc", url: "#" },
+        ] },
+        { title: "ตารางงาน", icon: "🗓️", items: [
+          { label: "ตารางฉายรังสีประจำวัน", type: "Sheet", url: "#" },
+          { label: "ตารางเวร RTT", type: "Sheet", url: "#" },
+          { label: "ตารางนัด CT simulation", type: "Sheet", url: "#" },
+        ] },
+        { title: "แบบฟอร์ม", icon: "📝", items: [
+          { label: "Setup note / Treatment record", type: "Form", url: "#" },
+          { label: "Incident / near-miss report", type: "Form", url: "#" },
+        ] },
       ],
     },
-    {
-      site: "CNS & Palliative",
-      icon: "🧠",
-      items: [
-        { label: "Glioma / Brain metastases", url: "#" },
-        { label: "Bone metastases (8 Gy / 1 fx, 20 Gy / 5 fx)", url: "#" },
-        { label: "Spinal cord compression", url: "#" },
+    nurse: {
+      title: "Nurse",
+      lead: "พยาบาลรังสีรักษา — การดูแลผู้ป่วยระหว่างและหลังการฉายรังสี",
+      groups: [
+        { title: "Patient education", icon: "📖", items: [
+          { label: "คู่มือผู้ป่วยระหว่างฉายรังสี", type: "PDF", url: "#" },
+          { label: "การดูแลผิวหนังบริเวณที่ฉายรังสี", type: "PDF", url: "#" },
+          { label: "การดูแลช่องปาก (Head & Neck)", type: "PDF", url: "#" },
+          { label: "คำแนะนำก่อน-หลังใส่แร่", type: "PDF", url: "#" },
+        ] },
+        { title: "Consent", icon: "✍️", items: [
+          { label: "หนังสือยินยอมรับการฉายรังสี", type: "PDF", url: "#" },
+          { label: "หนังสือยินยอมใส่แร่ (Brachytherapy)", type: "PDF", url: "#" },
+        ] },
+        { title: "Side-effect management", icon: "🩹", items: [
+          { label: "Radiation dermatitis", type: "Doc", url: "#" },
+          { label: "Oral mucositis", type: "Doc", url: "#" },
+          { label: "Weekly on-treatment assessment", type: "Form", url: "#" },
+        ] },
       ],
     },
-  ],
+    ro: {
+      title: "RO",
+      lead: "แพทย์รังสีรักษา (Radiation Oncologist)",
+      groups: [
+        { title: "Request & Prescription", icon: "📋", items: [
+          { label: "ใบส่งปรึกษารังสีรักษา (RT consult)", type: "Form", url: "#" },
+          { label: "Simulation request", type: "Form", url: "#" },
+          { label: "RT prescription", type: "Doc", url: "#" },
+        ] },
+        { title: "Academic", icon: "🎓", items: [
+          { label: "Chart round / Peer review", type: "Doc", url: "#" },
+          { label: "Tumor board", type: "Doc", url: "#" },
+          { label: "Journal club", type: "Doc", url: "#" },
+        ] },
+      ],
+      widgets: ["calculators", "schedule"],
+    },
+
+    /* ---------------- MP ---------------- */
+    mp: {
+      title: "MP",
+      lead: "นักฟิสิกส์การแพทย์ (Medical Physicist)",
+      widgets: ["subpages"],
+    },
+    "mp/qa": {
+      title: "Machine QA",
+      lead: "การควบคุมคุณภาพเครื่องฉายรังสี (อ้างอิง AAPM TG-142)",
+      groups: [
+        { title: "QA logs", icon: "📊", items: [
+          { label: "Daily QA", type: "Sheet", url: "#" },
+          { label: "Monthly QA", type: "Sheet", url: "#" },
+          { label: "Annual QA", type: "Sheet", url: "#" },
+        ] },
+        { title: "Dosimetry", icon: "📏", items: [
+          { label: "Output calibration (TRS-398)", type: "Sheet", url: "#" },
+          { label: "Equipment calibration record", type: "Sheet", url: "#" },
+        ] },
+      ],
+    },
+    "mp/planning": {
+      title: "Treatment Planning",
+      lead: "การวางแผนการรักษาและการตรวจสอบแผน",
+      groups: [
+        { title: "Planning", icon: "🗺️", items: [
+          { label: "Planning guideline (3D / IMRT / VMAT)", type: "Doc", url: "#" },
+          { label: "Plan naming & structure convention", type: "Doc", url: "#" },
+          { label: "Plan check list", type: "Doc", url: "#" },
+        ] },
+        { title: "TPS", icon: "💻", items: [
+          { label: "TPS commissioning report", type: "PDF", url: "#" },
+          { label: "Beam data", type: "Sheet", url: "#" },
+        ] },
+      ],
+    },
+    "mp/psqa": {
+      title: "Patient-specific QA",
+      lead: "การตรวจสอบแผนการรักษาก่อนฉายจริง (IMRT/VMAT)",
+      groups: [
+        { title: "PSQA", icon: "🎯", items: [
+          { label: "PSQA log", type: "Sheet", url: "#" },
+          { label: "Gamma criteria & action level", type: "Doc", url: "#" },
+          { label: "Independent MU check", type: "Sheet", url: "#" },
+        ] },
+      ],
+    },
+    "mp/safety": {
+      title: "Radiation Safety",
+      lead: "ความปลอดภัยทางรังสี",
+      groups: [
+        { title: "Radiation protection", icon: "☢️", items: [
+          { label: "Personal dosimeter record", type: "Sheet", url: "#" },
+          { label: "Area survey", type: "Sheet", url: "#" },
+          { label: "Radiation emergency plan", type: "PDF", url: "#" },
+        ] },
+      ],
+    },
+
+    /* ---------------- Guideline ---------------- */
+    guideline: {
+      title: "Guideline",
+      lead: "แนวทางการรักษาแยกตามตำแหน่งโรค และค่าจำกัดปริมาณรังสีอวัยวะ",
+      groups: [
+        { title: "Head & Neck", icon: "🗣️", items: [
+          { label: "Nasopharyngeal carcinoma (NPC)", url: "#" },
+          { label: "Oral cavity / Oropharynx", url: "#" },
+          { label: "Larynx / Hypopharynx", url: "#" },
+          { label: "Contouring atlas (H&N)", url: "#" },
+        ] },
+        { title: "Breast", icon: "🎗️", items: [
+          { label: "Whole breast / Post-mastectomy RT", url: "#" },
+          { label: "Hypofractionation 40 Gy / 15 fx", url: "#" },
+          { label: "Regional nodal irradiation", url: "#" },
+        ] },
+        { title: "Gynecology", icon: "🌸", items: [
+          { label: "Cervical cancer: EBRT + Brachytherapy", url: "#" },
+          { label: "Endometrial cancer", url: "#" },
+        ] },
+        { title: "Thorax", icon: "🫁", items: [
+          { label: "NSCLC: definitive chemoRT", url: "#" },
+          { label: "SBRT lung", url: "#" },
+          { label: "Esophageal cancer", url: "#" },
+        ] },
+        { title: "GI & GU", icon: "🩺", items: [
+          { label: "Rectal cancer: short-course / long-course", url: "#" },
+          { label: "Prostate cancer", url: "#" },
+          { label: "Bladder cancer", url: "#" },
+        ] },
+        { title: "CNS & Palliative", icon: "🧠", items: [
+          { label: "Glioma / Brain metastases", url: "#" },
+          { label: "Bone metastases (8 Gy / 1 fx, 20 Gy / 5 fx)", url: "#" },
+          { label: "Spinal cord compression", url: "#" },
+        ] },
+      ],
+      widgets: ["constraints"],
+    },
+  },
 
   // ค่าอ้างอิงจาก QUANTEC (Int J Radiat Oncol Biol Phys 2010) สำหรับ conventional fractionation (1.8–2 Gy/fx)
   constraints: [
@@ -113,42 +348,6 @@ window.SITE = {
     { region: "Pelvis", organ: "Femoral heads", constraint: "V50 < 5%", endpoint: "Necrosis (RTOG)" },
   ],
 
-  documents: [
-    {
-      group: "แบบฟอร์ม (Forms)",
-      items: [
-        { label: "ใบส่งปรึกษารังสีรักษา (RT consult)", type: "Form", url: "#" },
-        { label: "ใบสั่งการรักษา (RT prescription)", type: "Doc", url: "#" },
-        { label: "Simulation request", type: "Form", url: "#" },
-        { label: "Incident / near-miss report", type: "Form", url: "#" },
-      ],
-    },
-    {
-      group: "Consent & Patient education",
-      items: [
-        { label: "หนังสือยินยอมรับการฉายรังสี", type: "PDF", url: "#" },
-        { label: "หนังสือยินยอมใส่แร่ (Brachytherapy)", type: "PDF", url: "#" },
-        { label: "คู่มือผู้ป่วยระหว่างฉายรังสี", type: "PDF", url: "#" },
-      ],
-    },
-    {
-      group: "Physics & QA",
-      items: [
-        { label: "Daily / Monthly machine QA log", type: "Sheet", url: "#" },
-        { label: "Patient-specific QA (IMRT/VMAT)", type: "Sheet", url: "#" },
-        { label: "Plan check list", type: "Doc", url: "#" },
-      ],
-    },
-    {
-      group: "SOP & Guidelines",
-      items: [
-        { label: "SOP: CT simulation", type: "Doc", url: "#" },
-        { label: "SOP: Treatment delivery & IGRT", type: "Doc", url: "#" },
-        { label: "Peer review / Chart round", type: "Doc", url: "#" },
-      ],
-    },
-  ],
-
   schedule: {
     // ใส่ลิงก์ embed ของ Google Calendar (Settings → Integrate calendar → Embed code → src)
     calendarEmbedUrl: "",
@@ -162,10 +361,9 @@ window.SITE = {
   },
 
   contacts: [
-    { role: "แพทย์รังสีรักษา (Radiation oncologist)", name: "—", phone: "ต่อ —", email: "" },
-    { role: "นักฟิสิกส์การแพทย์ (Medical physicist)", name: "—", phone: "ต่อ —", email: "" },
+    { role: "แพทย์รังสีรักษา (RO)", name: "—", phone: "ต่อ —", email: "" },
+    { role: "นักฟิสิกส์การแพทย์ (MP)", name: "—", phone: "ต่อ —", email: "" },
     { role: "นักรังสีการแพทย์ (RTT)", name: "—", phone: "ต่อ —", email: "" },
-    { role: "พยาบาลรังสีรักษา", name: "—", phone: "ต่อ —", email: "" },
-    { role: "ผู้ดูแลเว็บไซต์", name: "—", phone: "", email: "" },
+    { role: "พยาบาลรังสีรักษา (Nurse)", name: "—", phone: "ต่อ —", email: "" },
   ],
 };
