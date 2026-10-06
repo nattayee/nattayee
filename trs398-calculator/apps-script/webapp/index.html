@@ -94,6 +94,21 @@ html[lang="en"] legend, html[lang="en"] .card h2, html[lang="en"] .db-card h2, h
 .login-btn:hover { filter: brightness(1.08); }
 .login-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .login-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gate { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: grid; place-items: center; padding: 24px 16px; overflow: auto; }
+.gate[hidden] { display: none; }
+html.gated, html.gated body { overflow: hidden; }
+.gate-card { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 24px; display: grid; gap: 10px; justify-items: center; text-align: center; }
+.gate-logo { width: 72px; height: 72px; border-radius: 14px; }
+.gate-card h2 { font: 700 1.5rem/1.2 var(--font-display); margin: 6px 0 0; color: var(--ink); }
+.gate-card h2 span { color: var(--accent); }
+.gate-org { font-weight: 600; color: var(--muted); font-size: .9rem; }
+.gate-msg { margin: 6px 0 2px; color: var(--ink); }
+.gate-msg.err { color: var(--bad); }
+.gate-msg:empty { display: none; }
+.gate-note { font-size: .78rem; color: var(--muted); margin: 4px 0 0; }
+.gate-spin { display: inline-block; width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--accent-soft); border-top-color: var(--accent); animation: gate-spin 1s linear infinite; }
+@keyframes gate-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .gate-spin { animation-duration: 3s; } }
 .setup-note { font-size: .74rem; color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 3px 8px; max-width: 360px; }
 .top-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 600px) { .top-controls { justify-content: flex-start; } }
@@ -322,6 +337,17 @@ footer p { margin: 6px 0; }
 })();
 </script>
 
+<div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+  <div class="gate-card">
+    <img class="gate-logo" id="gateLogo" width="72" height="72" alt="">
+    <h2 id="gateTitle">TRS-398 <span>Output Calibration</span></h2>
+    <div class="gate-org">Lampang Cancer Hospital</div>
+    <div class="gate-wait" id="gateWait"><span class="gate-spin" aria-hidden="true"></span></div>
+    <p class="gate-msg" id="gateMsg" role="status"></p>
+    <a class="login-btn" id="gateLogin" target="_top" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg><span>เข้าสู่ระบบด้วย Google</span></a>
+    <p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน</p>
+  </div>
+</div>
 <div class="wrap">
   <header class="top">
     <div class="brand">
@@ -335,7 +361,6 @@ footer p { margin: 6px 0; }
     <div class="top-side">
       <div class="user-badge" id="userBadge" hidden><span>เข้าสู่ระบบเป็น</span> <strong id="userEmail" translate="no"></strong></div>
       <div class="setup-note" id="setupNote" hidden></div>
-      <a class="login-btn" id="loginBtn" target="_top" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg><span>เข้าสู่ระบบด้วย Google</span></a>
       <div class="top-controls">
       <div class="seg lang-seg" role="radiogroup" aria-label="ภาษา" translate="no">
         <label title="ภาษาไทย"><input type="radio" name="lang" value="th" checked>ไทย</label>
@@ -725,27 +750,21 @@ footer p { margin: 6px 0; }
  * Google Apps Script bridge. When the page runs as an Apps Script web app (google.script.run exists
  * and there is no claude.ai viewer), it provides the same claude.use('mcp') interface the page uses
  * in claude.ai, backed by the server functions in WebApp.gs:
- *   download_file_content → apiExportXlsx(fileId)
+ *   download_file_content → apiExportXlsx(fileId, token)
  *   create_file           → apiAppendReport(csvText, token)   (writes straight to the Log tab)
- * It also shows who is signed in: the Google account signed in right now (hidden sign-in frame), or a
- * "Sign in with Google" button when that cannot be read. The recorder is never typed.
  * Errors come back as {code: 'tool_error', message} so the page's existing messages apply.
+ *
+ * Sign-in gate: the app stays covered until the person is signed in with Google (nattayee directly, everyone
+ * else through the sign-in deployment). A sign-in is remembered for 7 days in this browser (the token's own
+ * expiry); after that the gate asks again. Calls to the server wait until the sign-in is confirmed.
  */
 (function () {
   'use strict';
   if (window.claude || !(window.google && google.script && google.script.run)) return;
 
-  function call(fn) {
-    var args = [].slice.call(arguments, 1);
-    return new Promise(function (resolve, reject) {
-      var run = google.script.run
-        .withSuccessHandler(function (payload) { resolve({ payload: payload }); })
-        .withFailureHandler(function (err) { reject({ code: 'tool_error', message: (err && err.message) || String(err) }); });
-      run[fn].apply(run, args);
-    });
-  }
+  function el(id) { return document.getElementById(id); }
 
-  // Login token from the sign-in deployment (?login=1): arrives once in the page, then kept in this browser
+  // ---- Token from the sign-in deployment (?login=1): arrives once in the page, then kept in this browser
   var TOKEN_KEY = 'trs398-login-v1';
   var token = '';
   try {
@@ -757,47 +776,66 @@ footer p { margin: 6px 0; }
   }
   function forgetToken() { token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ } }
   function saveToken(t) { token = t; try { localStorage.setItem(TOKEN_KEY, t); } catch (e) { /* storage unavailable */ } }
+  // The email inside a token (its first part is base64 "email|expiry"); the server checks the signature
+  function tokenEmail(t) {
+    try { return decodeURIComponent(escape(atob(String(t).split('.')[0].replace(/-/g, '+').replace(/_/g, '/')))).split('|')[0]; }
+    catch (e) { return ''; }
+  }
 
+  // ---- Server calls, held until the sign-in is confirmed
+  var markSignedIn;
+  var signedIn = new Promise(function (resolve) { markSignedIn = resolve; });
+  function call(fn) {
+    var args = [].slice.call(arguments, 1);
+    return signedIn.then(function () {
+      return new Promise(function (resolve, reject) {
+        var run = google.script.run
+          .withSuccessHandler(function (payload) { resolve({ payload: payload }); })
+          .withFailureHandler(function (err) { reject({ code: 'tool_error', message: (err && err.message) || String(err) }); });
+        run[fn].apply(run, args.concat([token]));
+      });
+    });
+  }
   var mcp = {
     callTool: function (server, tool, input) {
       if (tool === 'download_file_content') return call('apiExportXlsx', input && input.fileId);
-      if (tool === 'create_file') return call('apiAppendReport', input && input.textContent, token);
+      if (tool === 'create_file') return call('apiAppendReport', input && input.textContent);
       return Promise.reject({ code: 'bad_request', message: tool });
     }
   };
-
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
 
-  function el(id) { return document.getElementById(id); }
-  var owned = false;   // footer line added once
-
-  // Sign-in state on the page: who is signed in (green dot), the sign-in button, or why sign-in is unavailable
-  function applyInfo(info, checking) {
-    if (!info) return;
-    var badge = el('userBadge'), who = el('userEmail'), lead = badge && badge.querySelector('span'), login = el('loginBtn');
-    if (badge) badge.classList.remove('err');
-    if (!info.viaToken && token) forgetToken();   // expired or from an old secret
-    if (login && info.loginUrl) login.href = info.loginHref || info.loginUrl + '?login=1&back=' + encodeURIComponent(info.appUrl || '');
-    if (checking) {   // asking Google for the account signed in right now
-      window.TRS398_USER = null;
-      if (badge && who && lead) { lead.textContent = 'กำลังตรวจสอบบัญชี Google…'; who.textContent = ''; badge.hidden = false; }
-      if (login) login.hidden = true;
-    } else {
-      window.TRS398_USER = info.account || '';
-      if (badge && who && lead) { lead.textContent = 'เข้าสู่ระบบเป็น'; who.textContent = info.account || ''; badge.hidden = !info.account; }
-      if (login) login.hidden = !!info.account || !info.loginUrl;
-      if (!info.account && !info.loginUrl && badge && who && lead) {   // sign-in deployment not set up yet
-        lead.textContent = 'ยังเข้าสู่ระบบไม่ได้ (ผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL)';
-        who.textContent = '';
-        badge.classList.add('err'); badge.hidden = false;
-      }
+  // ---- Gate
+  function gate(state, text, href) {
+    var g = el('gate');
+    if (!g) return;
+    var msg = el('gateMsg'), btn = el('gateLogin'), wait = el('gateWait');
+    if (state === 'open') {
+      g.hidden = true;
+      document.documentElement.classList.remove('gated');
+      return;
     }
-    var note = el('setupNote');
+    g.hidden = false;
+    document.documentElement.classList.add('gated');
+    var logo = el('gateLogo'), brand = document.querySelector('.brand-logo');
+    if (logo && !logo.src && brand) logo.src = brand.src;
+    if (wait) wait.hidden = state !== 'checking';
+    if (msg) { msg.textContent = text || ''; msg.className = 'gate-msg' + (state === 'error' ? ' err' : ''); }
+    if (btn) { btn.hidden = !(state === 'login' && href); if (href) btn.href = href; }
+  }
+  gate('checking', 'กำลังตรวจสอบบัญชี Google…');
+
+  var owned = false;   // footer line added once
+  function enter(info) {
+    window.TRS398_USER = info.account;
+    var badge = el('userBadge'), who = el('userEmail');
+    if (badge && who) { who.textContent = info.account; badge.hidden = false; badge.classList.remove('err'); }
+    var note = el('setupNote'), miss = info.setupMissing || [];
     if (note) {
-      var miss = info.setupMissing || [];
       note.hidden = !miss.length;
-      note.textContent = miss.length ? 'ผู้ใช้อื่นยังเข้าสู่ระบบอัตโนมัติไม่ได้: ตั้งค่า ' + miss.join(', ') + ' ใน Project Settings → Script properties' : '';
+      note.textContent = miss.length ? 'ผู้ใช้อื่นยังเข้าสู่ระบบไม่ได้: ตั้งค่า ' + miss.join(', ') + ' ใน Project Settings → Script properties' : '';
     }
     var logUrl = el('logUrl'), link = el('logLink');
     if (logUrl && info.logUrl && logUrl.value !== info.logUrl) {
@@ -816,31 +854,26 @@ footer p { margin: 6px 0; }
       p.appendChild(b);
       foot.insertBefore(p, foot.firstChild);
     }
+    gate('open');
+    markSignedIn();
   }
 
-  function showError(err) {
+  function askLogin(info) {
     window.TRS398_USER = '';
-    var badge = el('userBadge'), who = el('userEmail');
-    if (badge && who) {
-      who.textContent = (err && err.message) || String(err);
-      var lead = badge.querySelector('span'); if (lead) lead.hidden = true;   // show only the reason
-      badge.hidden = false; badge.classList.add('err');
-    }
-    var foot = document.querySelector('footer');
-    if (!foot) return;
-    var p = document.createElement('p');
-    p.style.color = 'var(--bad)';
-    p.textContent = (err && err.message) || String(err);
-    foot.insertBefore(p, foot.firstChild);
+    if (info && info.loginHref) gate('login', 'กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน', info.loginHref);
+    else gate('error', 'ยังเข้าสู่ระบบไม่ได้ เพราะผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL แจ้ง ' + ((info && info.owner) || 'ผู้ดูแล'));
   }
 
   function info(tok, then) {
-    google.script.run.withSuccessHandler(then).withFailureHandler(showError).apiInfo(tok, location.origin);
+    google.script.run.withSuccessHandler(then).withFailureHandler(function (err) {
+      window.TRS398_USER = '';
+      gate('error', (err && err.message) || String(err));
+    }).apiInfo(tok, location.origin);
   }
 
   // The sign-in deployment in a hidden frame answers with a token for the Google account signed in now.
-  // No answer (first use needs the user's approval, or the browser blocks Google in frames): the button.
-  function autoLogin(src, last) {
+  // onToken(t) gets it; onNone() when nothing comes (first use needs approval, or the browser blocks it).
+  function autoLogin(src, onToken, onNone) {
     var done = false, frame = document.createElement('iframe');
     frame.src = src;
     frame.setAttribute('aria-hidden', 'true');
@@ -851,18 +884,37 @@ footer p { margin: 6px 0; }
       var d = ev.data;
       if (done || !/\.googleusercontent\.com$/.test(ev.origin) || !d || d.trs398 !== 'login' || !d.token) return;
       finish();
-      saveToken(d.token);   // checked by the server like any other token
-      info(token, function (i) { applyInfo(i); });
+      onToken(d.token);
     }
     window.addEventListener('message', onMessage);
     document.body.appendChild(frame);
-    setTimeout(function () { if (!done) { finish(); applyInfo(last); } }, 12000);
+    setTimeout(function () { if (!done) { finish(); onNone(); } }, 12000);
   }
 
-  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
   info(token, function (i) {
-    if (i && i.autoLoginSrc) { applyInfo(i, true); autoLogin(i.autoLoginSrc, i); }
-    else applyInfo(i);
+    if (!i) { askLogin(null); return; }
+    if (!i.viaToken && token) forgetToken();   // expired (7 days) or from an old secret
+    if (i.account) {
+      enter(i);
+      // Still signed in: if the browser's Google account has changed since, follow it (a new 7-day sign-in)
+      if (i.viaToken && i.autoLoginSrc) {
+        autoLogin(i.autoLoginSrc, function (t) {
+          if (tokenEmail(t).toLowerCase() !== String(i.account).toLowerCase()) {
+            saveToken(t);
+            info(token, function (j) { if (j && j.account) enter(j); });
+          }
+        }, function () {});
+      }
+      return;
+    }
+    if (i.autoLoginSrc) {   // signed in to Google already and approved before: no click needed
+      autoLogin(i.autoLoginSrc, function (t) {
+        saveToken(t);
+        info(token, function (j) { if (j && j.account) enter(j); else askLogin(j); });
+      }, function () { askLogin(i); });
+      return;
+    }
+    askLogin(i);
   });
 })();
 </script>
@@ -2657,10 +2709,11 @@ window.LPCH_DATA = {
     'ผู้บันทึก (Gmail)': 'Recorded by (Gmail)',
     'เข้าสู่ระบบด้วย Google': 'Sign in with Google',
     'กำลังตรวจสอบบัญชี Google…': 'Checking your Google account…',
-    'ยังเข้าสู่ระบบไม่ได้ (ผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL)': 'Cannot sign in yet (the admin has not set LOGIN_URL)',
+    'กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน': 'Please sign in with your Gmail account to continue',
+    'ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน': 'You will stay signed in for 7 days',
+    'ผู้ใช้อื่นยังเข้าสู่ระบบไม่ได้: ตั้งค่า': 'Other accounts cannot sign in yet: set',
     'ยังเข้าสู่ระบบไม่ได้ ดูข้อความที่มุมขวาบนของหน้า': 'Not signed in — see the message at the top right of the page',
     'ยังเข้าสู่ระบบไม่ได้ เพราะผู้ดูแลยังไม่ได้ตั้งค่า LOGIN_URL แจ้ง': 'Cannot sign in yet because the admin has not set LOGIN_URL; contact',
-    'ผู้ใช้อื่นยังเข้าสู่ระบบอัตโนมัติไม่ได้: ตั้งค่า': 'Other accounts cannot sign in automatically yet: set',
     'ใน Project Settings → Script properties': 'in Project Settings → Script properties',
     'กดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน': 'Press "Sign in with Google" at the top of the page before sending',
     'กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน': 'Press "Sign in with Google" at the top of the page before sending',
@@ -3474,7 +3527,6 @@ window.LPCH_DATA = {
     if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
     if (window.TRS398_HOST === 'apps-script' && !window.TRS398_USER) {
       if (window.TRS398_USER === null) sendStatus('err', 'กำลังเชื่อมต่อกับ Google ลองอีกครั้งในอีกสักครู่');
-      else if (!$('loginBtn').hidden) { sendStatus('err', 'กดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน'); $('loginBtn').focus(); }
       else sendStatus('err', 'ยังเข้าสู่ระบบไม่ได้ ดูข้อความที่มุมขวาบนของหน้า');
       return;
     }

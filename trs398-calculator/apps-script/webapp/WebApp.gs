@@ -270,7 +270,8 @@ function apiInfo(token, pageOrigin) {
 }
 
 /** Master Sheet as .xlsx (base64); any other id is answered with nattayee's Output Log. */
-function apiExportXlsx(fileId) {
+function apiExportXlsx(fileId, token) {
+  if (!user_(token)) throw new Error('กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน');
   var id = fileId === WEBAPP.MASTER_SHEET_ID ? WEBAPP.MASTER_SHEET_ID : logId_();
   var title = DriveApp.getFileById(id).getName();   // also grants the Drive scope used below
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + id + '/export?format=xlsx', {
