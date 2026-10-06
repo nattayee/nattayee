@@ -262,7 +262,9 @@ function apiInfo(token, pageOrigin) {
     PropertiesService.getScriptProperties().setProperty('APP_ORIGIN', pageOrigin);
   }
   var auto = loginUrl_() && prop_('APP_ORIGIN') && !account_() ? loginUrl_() + '?login=1&embed=1' : '';
-  return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(), autoLoginSrc: auto,
+  // Shown to nattayee only: what other accounts still need before they see "Signed in as …"
+  var missing = account_() === WEBAPP.OWNER_EMAIL ? ['APP_URL', 'LOGIN_URL'].filter(function (k) { return !prop_(k); }) : [];
+  return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(), autoLoginSrc: auto, setupMissing: missing,
     appUrl: appUrl_(),
     loginHref: loginUrl_() ? loginUrl_() + '?login=1&back=' + encodeURIComponent(appUrl_()) : '', owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }

@@ -85,6 +85,12 @@
       if (login) login.hidden = !!info.account || !info.loginUrl;
       if (!info.account && !info.loginUrl) askRecorder();   // sign-in not set up yet: the recorder types their Gmail
     }
+    var note = el('setupNote');
+    if (note) {
+      var miss = info.setupMissing || [];
+      note.hidden = !miss.length;
+      note.textContent = miss.length ? 'ผู้ใช้อื่นยังเข้าสู่ระบบอัตโนมัติไม่ได้: ตั้งค่า ' + miss.join(', ') + ' ใน Project Settings → Script properties' : '';
+    }
     var logUrl = el('logUrl'), link = el('logLink');
     if (logUrl && info.logUrl && logUrl.value !== info.logUrl) {
       logUrl.value = info.logUrl;
