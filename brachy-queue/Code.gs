@@ -19,11 +19,12 @@
 const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
 
 /**
- * ปฏิทินที่จะลงนัด (ปฏิทินหลักของ Gmail ใช้อีเมลเป็น ID ได้เลย)
- * เจ้าของปฏิทินต้องแชร์ให้บัญชีที่ Deploy สคริปต์ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม"
- * ถ้าใส่ CALENDAR_ID ในชีต Settings ไว้ ค่าในชีตจะถูกใช้แทน
+ * ปฏิทินที่จะลงนัด: ใช้ปฏิทินในบัญชีที่ Deploy สคริปต์ ที่ชื่อตรงกับ CALENDAR_NAME
+ * (ปฏิทินใน "ปฏิทินอื่นๆ / Other calendars" ก็ได้ ถ้าบัญชีนั้นมีสิทธิ์แก้ไขกิจกรรม)
+ * ถ้าใส่ CALENDAR_ID (ในชีต Settings หรือที่นี่) ระบบจะใช้ ID แทนชื่อ
  */
-const CALENDAR_ID = 'lpchro86@gmail.com';
+const CALENDAR_NAME = 'คิวใส่แร่';
+const CALENDAR_ID = '';
 
 const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
@@ -118,6 +119,7 @@ const MSG = {
     calFail: 'สร้างนัดในปฏิทินไม่สำเร็จ: {err}',
     notFound: 'ไม่พบนัด {id}',
     calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: สคริปต์รันในนาม {who} ให้ {id} แชร์ปฏิทินให้ {who} ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" แล้วรัน setup อีกครั้ง{detail}',
+    calNameMissing: 'ไม่พบปฏิทินชื่อ "{name}" ในบัญชี {who} (ปฏิทินที่มี: {list}) ตรวจสอบชื่อที่ CALENDAR_NAME',
     sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   },
   en: {
@@ -151,6 +153,7 @@ const MSG = {
     calFail: 'Could not create calendar events: {err}',
     notFound: 'Appointment {id} not found',
     calMissing: 'Cannot use calendar {id}: the script runs as {who}. {id} must share the calendar with {who} with "Make changes to events", then run setup again{detail}',
+    calNameMissing: 'No calendar named "{name}" in {who} (calendars found: {list}). Check CALENDAR_NAME',
     sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   }
 };
@@ -160,7 +163,8 @@ function msg_(lang, key, vars) {
 }
 
 const DEFAULT_SETTINGS = [
-  ['CALENDAR_ID', '', 'ID ของปฏิทินที่จะลงนัด (เว้นว่าง = ใช้ CALENDAR_ID ใน Code.gs ถ้าว่างทั้งคู่ = ปฏิทินหลักของเจ้าของสคริปต์)'],
+  ['CALENDAR_ID', '', 'ID ของปฏิทินที่จะลงนัด (เว้นว่าง = ใช้ชื่อปฏิทินจาก CALENDAR_NAME)'],
+  ['CALENDAR_NAME', '', 'ชื่อปฏิทินที่จะลงนัด (เว้นว่าง = ใช้ CALENDAR_NAME ใน Code.gs ซึ่งตั้งเป็น "คิวใส่แร่")'],
   ['EVENT_PREFIX', '[ใส่แร่]', 'คำนำหน้าชื่อนัดในปฏิทิน'],
   ['SHOW_NAME_IN_CALENDAR', 'TRUE', 'TRUE = แสดงชื่อผู้ป่วยในปฏิทิน, FALSE = แสดงเฉพาะ HN'],
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
@@ -980,7 +984,20 @@ function scriptOwner_() {
 
 function getCalendar_(lang) {
   if (getCalendar_.cache) return getCalendar_.cache;
-  const id = String(getSettings_().CALENDAR_ID || CALENDAR_ID || '').trim();
+  const settings = getSettings_();
+  const id = String(settings.CALENDAR_ID || CALENDAR_ID || '').trim();
+  const name = String(settings.CALENDAR_NAME || CALENDAR_NAME || '').trim();
+  if (!id && name) {
+    // หาปฏิทินตามชื่อ (รวมปฏิทินใน "ปฏิทินอื่นๆ") ถ้ามีหลายอันชื่อซ้ำ เลือกอันที่แก้ไขได้ก่อน
+    const found = CalendarApp.getCalendarsByName(name);
+    if (!found.length) {
+      const list = CalendarApp.getAllCalendars().map(c => c.getName()).join(', ') || '-';
+      throw new Error(msg_(lang, 'calNameMissing', { name: name, who: scriptOwner_(), list: list }));
+    }
+    const owned = found.filter(c => { try { return c.isOwnedByMe(); } catch (e) { return false; } });
+    getCalendar_.cache = owned[0] || found[0];
+    return getCalendar_.cache;
+  }
   let cal = id ? CalendarApp.getCalendarById(id) : CalendarApp.getDefaultCalendar();
   let detail = '';
   if (!cal && id) {
