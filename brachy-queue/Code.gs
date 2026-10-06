@@ -18,6 +18,13 @@
 /** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
 const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
 
+/**
+ * ปฏิทินที่จะลงนัด (ปฏิทินหลักของ Gmail ใช้อีเมลเป็น ID ได้เลย)
+ * เจ้าของปฏิทินต้องแชร์ให้บัญชีที่ Deploy สคริปต์ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม"
+ * ถ้าใส่ CALENDAR_ID ในชีต Settings ไว้ ค่าในชีตจะถูกใช้แทน
+ */
+const CALENDAR_ID = 'lpchro86@gmail.com';
+
 const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
 const SHEET_HOLIDAYS = 'Holidays';
@@ -110,7 +117,7 @@ const MSG = {
     fxDate: 'วันที่ของ Fx {n} ไม่ถูกต้อง',
     calFail: 'สร้างนัดในปฏิทินไม่สำเร็จ: {err}',
     notFound: 'ไม่พบนัด {id}',
-    calMissing: 'ไม่พบปฏิทิน {id} หรือเจ้าของสคริปต์ไม่มีสิทธิ์แก้ไขปฏิทิน (ตรวจสอบ CALENDAR_ID และการแชร์ปฏิทิน)',
+    calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: ให้เจ้าของปฏิทินแชร์ให้บัญชีที่ Deploy สคริปต์ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" (หรือตรวจสอบ CALENDAR_ID)',
     sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   },
   en: {
@@ -143,7 +150,7 @@ const MSG = {
     fxDate: 'Invalid date for Fx {n}',
     calFail: 'Could not create calendar events: {err}',
     notFound: 'Appointment {id} not found',
-    calMissing: 'Calendar {id} not found or the script owner cannot edit it (check CALENDAR_ID and calendar sharing)',
+    calMissing: 'Cannot use calendar {id}: its owner must share it with the account that deployed the script, with "Make changes to events" (or check CALENDAR_ID)',
     sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   }
 };
@@ -153,7 +160,7 @@ function msg_(lang, key, vars) {
 }
 
 const DEFAULT_SETTINGS = [
-  ['CALENDAR_ID', '', 'ID ของปฏิทินที่จะลงนัด (เว้นว่าง = ปฏิทินหลักของเจ้าของสคริปต์)'],
+  ['CALENDAR_ID', '', 'ID ของปฏิทินที่จะลงนัด (เว้นว่าง = ใช้ CALENDAR_ID ใน Code.gs ถ้าว่างทั้งคู่ = ปฏิทินหลักของเจ้าของสคริปต์)'],
   ['EVENT_PREFIX', '[ใส่แร่]', 'คำนำหน้าชื่อนัดในปฏิทิน'],
   ['SHOW_NAME_IN_CALENDAR', 'TRUE', 'TRUE = แสดงชื่อผู้ป่วยในปฏิทิน, FALSE = แสดงเฉพาะ HN'],
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
@@ -347,7 +354,7 @@ function getInitData(token, lang) {
     holidays: getHolidays_(),
     settings: {
       maxCasesPerDay: maxCases_(settings),
-      calendarName: getCalendar_(lang).getName()
+      calendarName: calendarNameSafe_(lang)
     },
     appointments: listAppointments_(),
     pendingAccounts: acc.role === ROLE_ADMIN ? getAccounts_().filter(a => a.status === ACC_PENDING).length : 0
@@ -950,11 +957,22 @@ function toDate_(dateStr) {
   return new Date(d[0], d[1] - 1, d[2]); // ใช้ timezone ของสคริปต์ (Asia/Bangkok)
 }
 
+/** ชื่อปฏิทินสำหรับแสดงบนหน้าเว็บ ถ้ายังใช้ปฏิทินไม่ได้ ให้แสดงคำเตือนแทน (หน้าเว็บยังเปิดได้) */
+function calendarNameSafe_(lang) {
+  try { return getCalendar_(lang).getName(); }
+  catch (e) { return '⚠️ ' + e.message; }
+}
+
 function getCalendar_(lang) {
-  const id = String(getSettings_().CALENDAR_ID || '').trim();
-  if (!id) return CalendarApp.getDefaultCalendar();
-  const cal = CalendarApp.getCalendarById(id);
+  if (getCalendar_.cache) return getCalendar_.cache;
+  const id = String(getSettings_().CALENDAR_ID || CALENDAR_ID || '').trim();
+  let cal = id ? CalendarApp.getCalendarById(id) : CalendarApp.getDefaultCalendar();
+  if (!cal && id) {
+    // ปฏิทินที่แชร์มาแต่ยังไม่อยู่ในรายการปฏิทินของเจ้าของสคริปต์: ติดตามให้อัตโนมัติ
+    try { cal = CalendarApp.subscribeToCalendar(id); } catch (e) { cal = null; }
+  }
   if (!cal) throw new Error(msg_(lang, 'calMissing', { id: id }));
+  getCalendar_.cache = cal;
   return cal;
 }
 
