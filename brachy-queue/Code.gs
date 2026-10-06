@@ -113,8 +113,14 @@ function doGet() {
   try {
     ensureSetup_();
   } catch (e) {
-    return deniedPage_(email, 'บัญชีนี้ยังไม่มีสิทธิ์เข้าถึง Google Sheet ของระบบ กรุณาแจ้งผู้ดูแลให้แชร์สิทธิ์ (ผู้แก้ไข) ให้อีเมลนี้',
-      'This account cannot access the system\'s Google Sheet yet. Ask the administrator to share it with this email (Editor).');
+    // แสดงสาเหตุจริงด้วย เพราะข้อผิดพลาดตรงนี้อาจมาจากสิทธิ์ชีต สิทธิ์ของสคริปต์ (scope) หรือการ deploy
+    console.error('doGet: ensureSetup_ failed for ' + email + ': ' + (e && e.stack || e));
+    return deniedPage_(email,
+      'เปิด Google Sheet ของระบบไม่สำเร็จ ถ้าบัญชีนี้ยังไม่ได้รับแชร์ชีต ให้แจ้งผู้ดูแลแชร์สิทธิ์ (ผู้แก้ไข) ให้อีเมลนี้ ' +
+      'ถ้าได้รับแชร์แล้ว ให้ผู้ดูแลตรวจว่า deploy เวอร์ชันล่าสุดและ appsscript.json ใช้สิทธิ์ spreadsheets เต็ม',
+      'Could not open the system\'s Google Sheet. If this account has not been given access, ask the administrator to share it (Editor). ' +
+      'If it has, ask the administrator to deploy the latest version and check that appsscript.json uses the full spreadsheets scope.',
+      String(e && e.message || e));
   }
   if (!isAllowed_(email)) {
     log_(email, 'ถูกปฏิเสธ', 'ไม่อยู่ในรายชื่อชีต Users');
@@ -328,7 +334,7 @@ function log_(email, action, detail) {
   } catch (e) { /* ไม่ให้ log ที่ผิดพลาดทำให้งานหลักล้ม */ }
 }
 
-function deniedPage_(email, message, messageEn) {
+function deniedPage_(email, message, messageEn, detail) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const html =
     '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">' +
@@ -342,6 +348,7 @@ function deniedPage_(email, message, messageEn) {
     '<h1>🔒 ไม่สามารถเข้าใช้งานได้ · Access denied</h1><p>' + esc(message) + '</p>' +
     '<p lang="en" style="color:#6b6680">' + esc(messageEn) + '</p>' +
     (email ? '<p>บัญชีที่ login อยู่ / Signed in as: <code>' + esc(email) + '</code></p>' : '') +
+    (detail ? '<p style="font-size:13px">รายละเอียด / Details: <code>' + esc(detail) + '</code></p>' : '') +
     '<p style="font-size:13px;color:#6b6680">ถ้า login ผิดบัญชี ให้ออกจากระบบ Google แล้ว login ใหม่ด้วยบัญชีที่ได้รับสิทธิ์<br>' +
     'If you are signed in with the wrong account, sign out of Google and sign in with an allowed account.</p>' +
     '</div></body></html>';
