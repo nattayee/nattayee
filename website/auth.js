@@ -13,7 +13,9 @@
   var TOKEN_KEY = "lpch-ro-token";
   var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
     ["Nurse", "พยาบาล (Nurse)"], ["Other", "อื่นๆ"]];
-  var remote = !!CFG.apiUrl;
+  // Inside a Google Apps Script web app the page talks to Code.gs through google.script.run.
+  var gas = !!(window.google && google.script && google.script.run);
+  var remote = gas || !!CFG.apiUrl;
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -27,6 +29,15 @@
   function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
   /* ---------------- Backend: Google Apps Script ---------------- */
+
+  function gasCall(req) {
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (e) { reject(new Error((e && e.message) || "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้")); })
+        .api(req);
+    });
+  }
 
   function remoteCall(req) {
     // text/plain keeps this a "simple" CORS request, which Apps Script web apps accept.
@@ -187,7 +198,7 @@
 
   function call(action, data) {
     var req = Object.assign({ action: action, token: token }, data || {});
-    return (remote ? remoteCall(req) : LocalBackend(req)).then(function (res) {
+    return (gas ? gasCall(req) : remote ? remoteCall(req) : LocalBackend(req)).then(function (res) {
       if (!res.ok) {
         if (res.error === "session_expired") { setSession(null, null); throw new Error("กรุณาเข้าสู่ระบบใหม่"); }
         throw new Error(res.error || "เกิดข้อผิดพลาด");
@@ -431,6 +442,8 @@
 
   window.Auth = {
     remote: remote,
+    // Raw API call with the session token (used by the chat when it is stored on the server).
+    call: call,
     get user() { return user; },
     onChange: function (cb) { listeners.push(cb); },
     // Resolves with the signed-in user, or null if a login is needed.

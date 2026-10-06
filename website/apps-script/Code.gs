@@ -1,31 +1,59 @@
 /**
- * LPCH RO Workspace — ระบบสมาชิก (Google Apps Script + Google Sheets)
+ * LPCH RO Workspace — Google Apps Script web app (Code.gs)
  *
- * วิธีติดตั้ง (ดูรายละเอียดใน website/README.md):
- *   1. สร้าง Google Sheet ใหม่ → Extensions → Apps Script → วางโค้ดนี้แทน Code.gs
- *   2. Deploy → New deployment → Web app
+ * ไฟล์ในโปรเจกต์ Apps Script มี 2 ไฟล์:
+ *   Code.gs     — ไฟล์นี้ (เซิร์ฟเวอร์: หน้าเว็บ, ระบบสมาชิก, แชทประกาศ)
+ *   Index.html  — หน้าเว็บทั้งหมด (สร้างจาก website/ ด้วย build_apps_script.py)
+ *
+ * วิธีติดตั้ง:
+ *   1. สร้าง Google Sheet ใหม่ → Extensions → Apps Script
+ *   2. วางโค้ดนี้แทน Code.gs, กด + → HTML → ตั้งชื่อ "Index" แล้ววางเนื้อหา Index.html
+ *   3. เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาตสิทธิ์ Sheets + Drive)
+ *   4. Deploy → New deployment → Web app
  *        Execute as: Me   |   Who has access: Anyone
- *   3. คัดลอก Web app URL (.../exec) ไปใส่ที่ auth.apiUrl ใน website/data.js
+ *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ผู้ที่สมัครคนแรกจะเป็นผู้ดูแลระบบ (admin) และใช้งานได้ทันที
- * ผู้สมัครคนต่อไปต้องรอ admin อนุมัติ (ปิดได้ที่ REQUIRE_APPROVAL)
+ * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog
+ * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
+ *
+ * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
  */
 
-var REQUIRE_APPROVAL = true;
+var REQUIRE_APPROVAL = true;   // ผู้สมัครใหม่ต้องรอ admin อนุมัติ
 var SESSION_DAYS = 7;
 var ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
+var CHAT_ROLES = ['RO', 'MP', 'RTT', 'Nurse'];
 var MAX_FAILED_LOGINS = 5;     // ต่อ 15 นาที
 var HASH_ROUNDS = 200;
+var TIME_ZONE = 'Asia/Bangkok';
+var CHAT_LIMIT = 200;          // จำนวนข้อความล่าสุดที่ส่งให้หน้าเว็บ
+var MAX_IMAGES = 4;
+var MAX_IMAGE_CHARS = 1500000; // ~1.1 MB ต่อรูป (หลังย่อขนาดในเบราว์เซอร์แล้ว)
+var TITLE = 'LPCH RO Workspace';
+var IMAGE_FOLDER = 'LPCH RO Workspace Images';
 
 var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin'];
 var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
+var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
+var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
-/* ---------------- HTTP entry points ---------------- */
+// Actions that only read data and can skip the script lock.
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1 };
+
+/* ---------------- Entry points ---------------- */
 
 function doGet() {
-  return json_({ ok: true, service: 'LPCH RO Workspace auth' });
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle(TITLE)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
+/** Called from the page with google.script.run.api(req). */
+function api(req) {
+  return handle_(req || {});
+}
+
+/** JSON API for a static copy of the site hosted elsewhere (auth.apiUrl in data.js). */
 function doPost(e) {
   var req;
   try {
@@ -33,31 +61,51 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: 'คำขอไม่ถูกต้อง' });
   }
-  var fn = ACTIONS[req.action];
-  if (!fn) return json_({ ok: false, error: 'ไม่รู้จักคำสั่ง ' + req.action });
+  return json_(handle_(req));
+}
 
-  var lock = LockService.getScriptLock();
+function handle_(req) {
+  var fn = ACTIONS[req.action];
+  if (!fn) return { ok: false, error: 'ไม่รู้จักคำสั่ง ' + req.action };
+  var lock = READ_ONLY[req.action] ? null : LockService.getScriptLock();
   try {
-    lock.waitLock(15000);
+    if (lock) lock.waitLock(20000);
     var out = fn(req) || {};
     out.ok = true;
-    return json_(out);
+    // google.script.run only carries plain values (no Date objects)
+    return JSON.parse(JSON.stringify(out));
   } catch (err) {
-    return json_({ ok: false, error: err.message });
+    return { ok: false, error: err.message };
   } finally {
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
+}
+
+/** Run once from the editor: creates the sheets and image folder and asks for permissions. */
+function setup() {
+  var ss = ss_();
+  ss.setSpreadsheetTimeZone(TIME_ZONE);
+  sheet_('Users', USER_HEADERS);
+  sheet_('Sessions', SESSION_HEADERS);
+  sheet_('Messages', MESSAGE_HEADERS);
+  sheet_('ChatLog', LOG_HEADERS);
+  folder_();
+  Logger.log('พร้อมใช้งาน: ' + ss.getUrl());
+  Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
 }
 
 /* ---------------- Actions ---------------- */
 
 var ACTIONS = {
+  /* ----- members ----- */
+
   register: function (req) {
     var username = normUsername_(req.username);
     var fullName = String(req.fullName || '').trim();
     var role = String(req.role || '');
     validatePassword_(req.password);
     if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
+    if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
     if (ROLES.indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
     if (findUser_(username)) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
 
@@ -165,23 +213,248 @@ var ACTIONS = {
     sheet_('Users', USER_HEADERS).deleteRow(u._row);
     dropSessionsOf_(u.username);
     return {};
+  },
+
+  /* ----- announcement chat (identity always comes from the session, never from the page) ----- */
+
+  chatList: function (req) {
+    requireUser_(req.token);
+    var rows = sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1);
+    rows.sort(function (a, b) { return Number(a[1]) - Number(b[1]); });
+    return { messages: rows.slice(-CHAT_LIMIT).map(function (r) { return JSON.parse(r[3]); }) };
+  },
+
+  chatAdd: function (req) {
+    var u = requireUser_(req.token);
+    var me = person_(u);
+    var text = String(req.text || '').trim();
+    var images = Array.isArray(req.images) ? req.images : [];
+    if (!text && !images.length) throw new Error('พิมพ์ข้อความหรือแนบรูปก่อนส่ง');
+    if (text.length > 5000) throw new Error('ข้อความยาวเกิน 5,000 ตัวอักษร');
+    if (images.length > MAX_IMAGES) throw new Error('แนบรูปได้สูงสุด ' + MAX_IMAGES + ' รูปต่อข้อความ');
+    var targets = cleanTargets_(req.to);
+    if (!targets.to.length) targets = cleanTargets_(['ALL']);
+
+    var id = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+    var now = Date.now();
+    var msg = {
+      id: id,
+      author: me,
+      text: text,
+      images: images.map(function (d, i) { return 'drive:' + saveImage_(d, id + '-' + (i + 1)); }),
+      to: targets.to,
+      toNames: targets.names,
+      forwards: [],
+      reads: {},
+      reactions: {},
+      reactionLog: [],
+      createdAt: now
+    };
+    msg.reads[key_(me)] = stamp_(me);
+    if (req.replyTo && req.replyTo.id) {
+      var orig = findMessage_(String(req.replyTo.id));
+      if (orig) {
+        msg.replyTo = { id: orig.msg.id, name: orig.msg.author.name, role: orig.msg.author.role,
+          username: orig.msg.author.username || '', text: snippet_(orig.msg.text, 120) ||
+            (orig.msg.images.length ? '(รูปภาพ ' + orig.msg.images.length + ' รูป)' : '') };
+      }
+    }
+    sheet_('Messages', MESSAGE_HEADERS).appendRow([id, now, u.username, JSON.stringify(msg)]);
+    log_(msg.replyTo ? 'ตอบกลับ' : 'ส่งข้อความ', me,
+      'ถึง ' + labels_(msg).join(', ') + (msg.replyTo ? ' · ตอบ ' + msg.replyTo.name + ': ' + msg.replyTo.text : '') +
+      (images.length ? ' · รูป ' + images.length : ''), msg);
+    return { message: msg };
+  },
+
+  chatRead: function (req) {
+    var u = requireUser_(req.token), me = person_(u);
+    return updateMessage_(req.id, function (msg) {
+      if (msg.reads[key_(me)] || !isForUser_(msg, u)) return false;
+      msg.reads[key_(me)] = stamp_(me);
+      log_('อ่าน', me, '', msg);
+    });
+  },
+
+  chatReact: function (req) {
+    var u = requireUser_(req.token), me = person_(u);
+    var type = req.type === 'ok' || req.type === 'no' ? req.type : null;
+    if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
+    return updateMessage_(req.id, function (msg) {
+      var cur = msg.reactions[key_(me)];
+      if (cur && cur.type === type) return false;
+      var rec = stamp_(me);
+      rec.type = type;
+      msg.reactions[key_(me)] = rec;
+      msg.reactionLog.push(rec);
+      log_(type === 'ok' ? '✓ ถูก' : '✗ ผิด', me, cur ? 'เปลี่ยนจาก ' + (cur.type === 'ok' ? '✓ ถูก' : '✗ ผิด') : '', msg);
+    });
+  },
+
+  chatForward: function (req) {
+    var u = requireUser_(req.token), me = person_(u);
+    var targets = cleanTargets_(req.to);
+    if (!targets.to.length) throw new Error('เลือกผู้รับก่อนส่งต่อ');
+    return updateMessage_(req.id, function (msg) {
+      targets.to.forEach(function (t) { if (msg.to.indexOf(t) === -1) msg.to.push(t); });
+      for (var k in targets.names) msg.toNames[k] = targets.names[k];
+      var entry = person_(u);
+      msg.forwards.push({ by: entry, to: targets.to, at: Date.now() });
+      log_('ส่งต่อ', me, 'ให้ ' + targets.to.map(function (t) { return label_(msg, t); }).join(', '), msg);
+    });
+  },
+
+  chatDelete: function (req) {
+    var u = requireUser_(req.token);
+    var found = findMessage_(String(req.id || ''));
+    if (!found) return {};
+    if (found.msg.author.username !== u.username && !u.isAdmin) throw new Error('ลบได้เฉพาะข้อความของตัวเอง');
+    found.msg.images.forEach(function (ref) {
+      try { DriveApp.getFileById(String(ref).replace(/^drive:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
+    });
+    sheet_('Messages', MESSAGE_HEADERS).deleteRow(found.row);
+    log_('ลบข้อความ', person_(u), '', found.msg);
+    return { deleted: found.msg.id };
+  },
+
+  // รูปแนบ: ส่งเป็น data URL ให้เฉพาะผู้ที่เข้าสู่ระบบ และเฉพาะไฟล์ในโฟลเดอร์รูปของแชทนี้
+  chatImage: function (req) {
+    requireUser_(req.token);
+    var file;
+    try { file = DriveApp.getFileById(String(req.fileId || '')); } catch (e) { throw new Error('ไม่พบรูป'); }
+    var folderId = folder_().getId(), parents = file.getParents(), ok = false;
+    while (parents.hasNext()) { if (parents.next().getId() === folderId) { ok = true; break; } }
+    if (!ok) throw new Error('ไม่พบรูป');
+    var blob = file.getBlob();
+    return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
   }
 };
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- Chat helpers ---------------- */
+
+function person_(u) { return { username: u.username, name: u.fullName, role: u.role }; }
+
+function stamp_(p) { return { username: p.username, name: p.name, role: p.role, at: Date.now() }; }
+
+// Same key as readerKey() in chat.js
+function key_(p) { return 'u_' + String(p.username).replace(/\W/g, '_'); }
+
+function snippet_(text, n) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? t.slice(0, n) + '…' : t;
+}
+
+function isForUser_(msg, u) {
+  return msg.to.indexOf('ALL') !== -1 || msg.to.indexOf(u.role) !== -1 || msg.to.indexOf('u:' + u.username) !== -1;
+}
+
+/** Keeps only valid recipients: ALL, a profession, or u:<active member>; names come from the Users sheet. */
+function cleanTargets_(list) {
+  var users = {};
+  allUsers_().forEach(function (u) { if (u.status === 'active') users[u.username] = u; });
+  var to = [], names = {};
+  (Array.isArray(list) ? list : []).forEach(function (t) {
+    t = String(t);
+    if (to.indexOf(t) !== -1) return;
+    if (t === 'ALL' || CHAT_ROLES.indexOf(t) !== -1) to.push(t);
+    else if (t.indexOf('u:') === 0 && users[t.slice(2)]) {
+      var u = users[t.slice(2)];
+      to.push(t);
+      names[t.slice(2).replace(/\W/g, '_')] = u.fullName + ' (' + u.role + ')';
+    }
+  });
+  if (to.indexOf('ALL') !== -1) to = ['ALL'].concat(to.filter(function (t) { return t.indexOf('u:') === 0; }));
+  return { to: to, names: names };
+}
+
+function label_(msg, t) {
+  if (t === 'ALL') return 'ทุกคน';
+  if (t.indexOf('u:') === 0) return msg.toNames[t.slice(2).replace(/\W/g, '_')] || t.slice(2);
+  return t;
+}
+
+function labels_(msg) { return msg.to.map(function (t) { return label_(msg, t); }); }
+
+function findMessage_(id) {
+  if (!id) return null;
+  var sheet = sheet_('Messages', MESSAGE_HEADERS);
+  var ids = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
+  for (var i = ids.length - 1; i >= 1; i--) {
+    if (String(ids[i][0]) === id) {
+      var msg = JSON.parse(sheet.getRange(i + 1, 4).getValue());
+      ['forwards', 'reactionLog', 'images', 'to'].forEach(function (k) { msg[k] = msg[k] || []; });
+      ['reads', 'reactions', 'toNames'].forEach(function (k) { msg[k] = msg[k] || {}; });
+      return { row: i + 1, msg: msg };
+    }
+  }
+  return null;
+}
+
+/** Loads a message, lets fn change it (return false = nothing changed), saves it and returns it. */
+function updateMessage_(id, fn) {
+  var found = findMessage_(String(id || ''));
+  if (!found) throw new Error('ไม่พบข้อความ (อาจถูกลบแล้ว)');
+  if (fn(found.msg) !== false) {
+    sheet_('Messages', MESSAGE_HEADERS).getRange(found.row, 4).setValue(JSON.stringify(found.msg));
+  }
+  return { message: found.msg };
+}
+
+function saveImage_(dataUrl, name) {
+  var m = /^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+\/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) throw new Error('ไฟล์รูปไม่ถูกต้อง');
+  if (m[2].length > MAX_IMAGE_CHARS) throw new Error('รูปใหญ่เกินไป');
+  var ext = m[1].split('/')[1].replace('jpeg', 'jpg');
+  var blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], name + '.' + ext);
+  return folder_().createFile(blob).getId();
+}
+
+function folder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('IMAGE_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) { /* recreate below */ }
+  }
+  var f = DriveApp.createFolder(IMAGE_FOLDER);
+  props.setProperty('IMAGE_FOLDER_ID', f.getId());
+  return f;
+}
+
+/** One row per chat action in the ChatLog sheet: who, what and when (Thailand time). */
+function log_(action, p, detail, msg) {
+  sheet_('ChatLog', LOG_HEADERS).appendRow([
+    Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd HH:mm:ss'),
+    action, p.name, p.role, p.username, detail || '', msg.id, snippet_(msg.text, 100) || '(รูปภาพ)'
+  ]);
+}
+
+/* ---------------- Member helpers ---------------- */
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function sheet_(name, headers) {
+/** The spreadsheet that holds the data: the one this script is bound to, or one it created. */
+function ss_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) return ss;
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  ss = SpreadsheetApp.create('LPCH RO Workspace Data');
+  ss.setSpreadsheetTimeZone(TIME_ZONE);
+  props.setProperty('SHEET_ID', ss.getId());
+  return ss;
+}
+
+function sheet_(name, headers) {
+  var ss = ss_();
   var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
     sh.appendRow(headers);
     sh.setFrozenRows(1);
-    sh.getRange('A:A').setNumberFormat('@');  // keep usernames/tokens as text
+    sh.getRange(1, 1, 1, headers.length).setFontWeight('bold').setFontColor('#ffffff').setBackground('#1d5bd6');
+    sh.getRange('A:A').setNumberFormat('@');  // keep usernames/tokens/ids as text
     if (name === 'Users') sh.getRange('D:D').setNumberFormat('@');
   }
   return sh;

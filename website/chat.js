@@ -5,9 +5,11 @@
  *  - ปุ่ม ✓ ถูก / ✗ ผิด และ ↩ ตอบกลับ ที่ข้อความ — บันทึกผู้กด วันที่ เวลา
  *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ ใครอ่านแล้ว และดาวน์โหลดบันทึกทั้งหมดเป็น CSV
  *
- * Backend:
+ * Backend (เลือกอัตโนมัติตามลำดับ):
+ *  - "firebase" Cloud Firestore แบบ realtime (ตั้งค่าใน data.js → chat.firebase)
+ *  - "sheet"    Google Sheets ผ่าน Apps Script (Code.gs) — เมื่อเปิดเว็บใน Apps Script หรือใส่ auth.apiUrl
+ *               ผู้ส่ง/ผู้อ่าน/ผู้กดถูกบันทึกจาก session ฝั่งเซิร์ฟเวอร์ รูปเก็บใน Google Drive
  *  - "local"    เก็บใน localStorage ของเบราว์เซอร์นี้ (โหมดทดลอง ไม่แชร์ข้ามเครื่อง)
- *  - "firebase" Cloud Firestore แบบ realtime — ทุกคนเห็นข้อความเดียวกัน (ตั้งค่าใน data.js → chat.firebase)
  *
  * ผู้รับ (message.to): "ALL" = ทุกคน, "RO"/"MP"/... = ทั้งวิชาชีพ, "u:<username>" = รายบุคคล
  */
@@ -294,7 +296,84 @@
     };
   }
 
-  var store = useFirebase ? FirebaseStore() : LocalStore();
+  /* ---------------- storage: Google Sheets via Apps Script ---------------- */
+
+  var POLL_MS = (C.pollSeconds || 15) * 1000;
+
+  function SheetStore() {
+    var call = window.Auth.call;
+    var subs = [], list = [], timer = null;
+
+    function emit() {
+      var copy = list.slice();
+      subs.forEach(function (cb) { cb(copy); });
+    }
+    function upsert(m) {
+      var i = list.map(function (x) { return x.id; }).indexOf(m.id);
+      if (i === -1) list.push(m); else list[i] = m;
+      list.sort(function (a, b) { return a.createdAt - b.createdAt; });
+      emit();
+    }
+    function refresh() {
+      return call("chatList").then(function (r) { list = r.messages; emit(); });
+    }
+    function onVisible() { if (!document.hidden) refresh().catch(function () { /* next poll retries */ }); }
+
+    return {
+      label: "",
+      imageSize: [1280, 0.75],
+      subscribe: function (cb, onError) {
+        subs.push(cb);
+        refresh().catch(onError);
+        if (!timer) {
+          timer = setInterval(function () { if (!document.hidden) refresh().catch(function () { /* retry next tick */ }); }, POLL_MS);
+          document.addEventListener("visibilitychange", onVisible);
+        }
+        return function () {
+          subs = subs.filter(function (s) { return s !== cb; });
+          if (!subs.length) {
+            clearInterval(timer);
+            timer = null;
+            document.removeEventListener("visibilitychange", onVisible);
+          }
+        };
+      },
+      // The server takes the sender, readers and presses from the session, not from these arguments.
+      add: function (msg) {
+        return call("chatAdd", { text: msg.text, images: msg.images, to: msg.to, replyTo: msg.replyTo ? { id: msg.replyTo.id } : null })
+          .then(function (r) { upsert(r.message); });
+      },
+      markRead: function (id) { return call("chatRead", { id: id }).then(function (r) { upsert(r.message); }); },
+      forward: function (id, entry) { return call("chatForward", { id: id, to: entry.to }).then(function (r) { upsert(r.message); }); },
+      react: function (id, p, type) { return call("chatReact", { id: id, type: type }).then(function (r) { upsert(r.message); }); },
+      remove: function (id) {
+        return call("chatDelete", { id: id }).then(function () {
+          list = list.filter(function (m) { return m.id !== id; });
+          emit();
+        });
+      },
+      image: function (fileId) { return call("chatImage", { fileId: fileId }).then(function (r) { return r.dataUrl; }); },
+    };
+  }
+
+  var store = useFirebase ? FirebaseStore() : window.Auth && window.Auth.remote ? SheetStore() : LocalStore();
+
+  /* Images stored on the server ("drive:<id>") are fetched once and cached for the session. */
+  var BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  var imageCache = {};
+  function imageSrc(ref) { return /^drive:/.test(ref) ? BLANK : ref; }
+  function hydrateImages(rootEl) {
+    if (!store.image) return;
+    rootEl.querySelectorAll("img[data-img]").forEach(function (img) {
+      var id = img.getAttribute("data-img");
+      if (!imageCache[id]) imageCache[id] = store.image(id);
+      imageCache[id].then(function (src) { img.src = src; img.classList.remove("loading"); }, function () {
+        delete imageCache[id];
+        img.alt = "โหลดรูปไม่สำเร็จ";
+        img.classList.remove("loading");
+      });
+    });
+  }
 
   /* ---------------- CSV log ---------------- */
 
@@ -790,7 +869,9 @@
         var readers = readersOf(m);
         var images = m.images.length
           ? '<div class="chat-images n' + Math.min(m.images.length, 4) + '">' + m.images.map(function (src, i) {
-              return '<img src="' + esc(src) + '" alt="รูปแนบ ' + (i + 1) + '" loading="lazy">';
+              var drive = /^drive:/.test(src);
+              return '<img src="' + esc(imageSrc(src)) + '"' + (drive ? ' data-img="' + esc(src.slice(6)) + '" class="loading"' : "") +
+                ' alt="รูปแนบ ' + (i + 1) + '" loading="lazy">';
             }).join("") + "</div>"
           : "";
         var unreadMine = me && isForMe(m, me) && !mine && !m.reads[readerKey(me)];
@@ -812,6 +893,7 @@
       firstRender = false;
 
       if (observer) feed.querySelectorAll("[data-msg]").forEach(function (el) { observer.observe(el); });
+      hydrateImages(feed);
     }
 
     function byMe(m) { return samePerson(m.author, me); }
