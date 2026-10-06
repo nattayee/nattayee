@@ -147,6 +147,11 @@ function showDialog() {
 /** สร้างชีตและหัวตารางที่จำเป็น (รันซ้ำได้ ไม่ลบข้อมูลเดิม) */
 function setup() {
   ensureSetup_();
+  // คอลัมน์ HN และวันที่นัดต้องเป็นข้อความ (กันเลข 0 นำหน้า HN หาย และกันชีตแปลงวันที่)
+  const ss = SpreadsheetApp.getActive();
+  ss.getSheetByName(SHEET_APPTS).getRange('D:D').setNumberFormat('@');
+  ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
+  ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
   try {
     SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, Users, AccessLog แล้ว\n' +
       'เพิ่มอีเมลผู้ใช้งานในชีต Users ก่อนแชร์ลิงก์');
