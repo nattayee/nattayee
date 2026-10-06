@@ -15,7 +15,7 @@
  */
 
 /** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
-const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1rIBbcrxG41FjSm6V0rht3Um3D9xxdTLqHpn3aV8zlpQ/edit';
+const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
 
 const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
