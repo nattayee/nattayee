@@ -29,14 +29,35 @@
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
 
-  // Signed-in Gmail: shown in the header, stamped on reports; Log link/field point at the shared Log
-  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the sign-in is confirmed
+  // Recorder's Gmail. Deployed "Execute as: Me", Google tells the script the visitor's Gmail only for the
+  // owner, so everyone else types it once (kept in this browser) and the report records it.
+  var RECORDER_KEY = 'trs398-recorder-v1';
+  var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  function askRecorder() {
+    var box = document.getElementById('recorderBox'), inp = document.getElementById('recorderEmail');
+    if (!box || !inp) return;
+    try { inp.value = localStorage.getItem(RECORDER_KEY) || ''; } catch (e) { /* storage unavailable */ }
+    box.hidden = false;
+    function apply() {
+      var v = inp.value.trim().toLowerCase(), ok = EMAIL_RE.test(v);
+      window.TRS398_USER = ok ? v : '';
+      inp.classList.toggle('is-filled', ok);
+      inp.classList.toggle('is-empty', !ok);
+      if (ok) { try { localStorage.setItem(RECORDER_KEY, v); } catch (e) { /* storage unavailable */ } }
+    }
+    inp.addEventListener('input', apply);
+    apply();
+  }
+
+  // Log link/field point at the shared Log
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
   google.script.run
     .withSuccessHandler(function (info) {
       if (!info) return;
       window.TRS398_USER = info.account || '';
       var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
       if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
+      if (!info.account) askRecorder();
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
       if (logUrl && info.logUrl) {
         logUrl.value = info.logUrl;

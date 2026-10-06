@@ -1,41 +1,29 @@
-# ติดตั้งเป็น Google Apps Script Web App (เข้าสู่ระบบด้วย Gmail)
+# ติดตั้งเป็น Google Apps Script Web App (เข้าสู่ระบบด้วย Google)
 
-- ผู้ใช้ต้อง **เข้าสู่ระบบด้วยบัญชี Gmail** ก่อนเปิดแอป (Google บังคับเอง)
-- หัวหน้าเว็บแสดง "เข้าสู่ระบบเป็น …@gmail.com" และทุกรายงานบันทึกคอลัมน์ **ผู้บันทึก (Gmail)**
-  ซึ่ง `WebApp.gs` ใส่จากบัญชีที่เข้าสู่ระบบจริง (แก้จากหน้าเว็บไม่ได้)
-- ไฟล์ข้อมูลหลักและ Output Log เป็นของ **nattayee@gmail.com** เฉพาะบัญชีใน `EDITORS` บันทึกรายงานได้
+- ผู้ใช้ต้อง **เข้าสู่ระบบด้วยบัญชี Google** ก่อนเปิดแอป (Google บังคับเองจากการตั้ง Who has access)
+- สคริปต์ทำงานในนามของ **nattayee@gmail.com** (Execute as: Me) จึงอ่าน Sheet ข้อมูลหลักและเขียน Output Log ได้เลย
+  ผู้ใช้ไม่ต้องกด Authorize และไม่ต้องแชร์ไฟล์ให้ใคร
+- ในโหมดนี้ Google ไม่บอกสคริปต์ว่าใครเปิด (ยกเว้น nattayee เอง) หน้าเว็บจึงมีช่อง **อีเมลผู้บันทึก (Gmail)** ที่มุมขวาบน
+  กรอกครั้งเดียว เบราว์เซอร์จำไว้ และทุกรายงานบันทึกลงคอลัมน์ **ผู้บันทึก (Gmail)** (เป็นอีเมลที่ผู้ใช้กรอกเอง ไม่ได้ยืนยันกับ Google)
+- ใครก็ตามที่มีลิงก์และบัญชี Google เปิดแอปและส่งรายงานเข้า Log ได้ จึงควรแชร์ลิงก์เฉพาะในทีม
 
 โปรเจกต์ Apps Script ต้องมี **ไฟล์เดียว** คือ `Code.gs` (หน้าแอปโหลดจาก GitHub เอง)
 
 ## ติดตั้ง (ทำด้วยบัญชี nattayee@gmail.com)
 
-1. เปิด https://script.google.com ตรวจรูปโปรไฟล์ว่าเป็น **nattayee@gmail.com** → **New project**
+1. เปิด https://script.google.com ตรวจรูปโปรไฟล์ว่าเป็น **nattayee@gmail.com** → เปิดโปรเจกต์เดิมหรือ **New project**
 2. เปิดลิงก์นี้ กด Ctrl/⌘+A คัดลอก แล้ววางทับทั้งหมดใน `Code.gs`:
    https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/WebApp.gs
-3. แก้รายชื่อ Gmail ที่ใช้งานได้ใน `EDITORS` เช่น
-   `EDITORS: ['nattayee@gmail.com', 'xxx@gmail.com', 'yyy@gmail.com'],`
-4. บันทึก → เลือกฟังก์ชัน **`setup`** → **Run** → อนุญาตสิทธิ์
-   (สร้าง Log ใน Drive ของ nattayee คัดลอกรายงานเดิม และแชร์ให้ทุกคนใน EDITORS แก้ไขได้)
-5. **Deploy → New deployment → Web app**
-   - Execute as: **User accessing the web app**
+3. บันทึก → เลือกฟังก์ชัน **`setup`** → **Run** → อนุญาตสิทธิ์ (ทำครั้งเดียว ถ้าเคยรันแล้วจะใช้ Log เดิม)
+4. **Deploy → New deployment → Web app** (หรือ Manage deployments → ✏ Edit → Version: New version ถ้ามีอยู่แล้ว)
+   - Execute as: **Me (nattayee@gmail.com)**
    - Who has access: **Anyone with Google account**
-6. ส่ง URL ของ Web app ให้ผู้ใช้ ครั้งแรกแต่ละคนต้องกด Authorize (อาจเห็นคำเตือน "Google hasn't verified this app"
-   ให้กด Advanced → Go to … เพราะเป็นแอปภายในของเราเอง)
+5. ส่ง URL ของ Web app ให้ผู้ใช้
 
-## เพิ่มผู้ใช้ภายหลัง
+## เปิด Log ใน Google Sheets ได้ (ไม่บังคับ)
 
-แก้ `EDITORS` → บันทึก → รันฟังก์ชัน **`shareLog`** (ด้วยบัญชี nattayee) แล้ว Deploy → Manage deployments → Edit → New version
-
-## แก้ปัญหา: ขึ้น "กรุณาเข้าสู่ระบบด้วย Gmail" ทั้งที่ login แล้ว
-
-สาเหตุคือ Deploy เป็น **Execute as: Me** ซึ่ง Google จะไม่ส่งอีเมลของผู้เปิดให้สคริปต์ (บัญชี @gmail.com)
-แก้ที่ Deploy → Manage deployments → ✏ Edit → Version: New version →
-Execute as: **User accessing the web app** · Who has access: **Anyone with Google account** → Deploy (ลิงก์ /exec เดิมใช้ต่อได้)
-
-- ครั้งแรกผู้ใช้แต่ละคนจะเห็นหน้าขอสิทธิ์ของ Google ให้กด Allow
-- ถ้าขึ้น "บัญชี … ยังไม่ได้รับสิทธิ์ใช้งาน" ให้เพิ่ม Gmail นั้นใน `EDITORS` แล้วรัน `shareLog` (หัวข้อด้านบน)
-- ถ้าเปิดแล้วขึ้น "ขออภัย ไม่สามารถเปิดไฟล์ได้ในขณะนี้" มักเกิดจาก login Google หลายบัญชีในเบราว์เซอร์เดียว
-  ให้เปิดในหน้าต่างไม่ระบุตัวตน (Incognito) หรือโปรไฟล์ Chrome ที่ login บัญชีเดียว
+ใส่ Gmail ใน `EDITORS` → บันทึก → รันฟังก์ชัน **`shareLog`** (ด้วยบัญชี nattayee) คนในรายชื่อจะแก้ไข/ดู Log ใน Google Sheets ได้โดยตรง
+(การใช้งานเว็บแอปไม่ต้องทำขั้นนี้)
 
 ## เมื่อแก้โค้ดของแอป
 

@@ -90,6 +90,8 @@ html[lang="en"] legend, html[lang="en"] .card h2, html[lang="en"] .db-card h2, h
 .user-badge strong { color: var(--ink); font-weight: 600; word-break: break-all; }
 .user-badge.err::before { background: var(--bad); }
 .user-badge.err strong { color: var(--bad); }
+.recorder { display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+.recorder input { width: 230px; max-width: 100%; padding: 4px 8px; font: .85rem var(--font-mono); }
 .top-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 600px) { .top-controls { justify-content: flex-start; } }
 .lang-seg label { padding: 6px 12px; font-weight: 600; }
@@ -329,6 +331,7 @@ footer p { margin: 6px 0; }
     </div>
     <div class="top-side">
       <div class="user-badge" id="userBadge" hidden><span>เข้าสู่ระบบเป็น</span> <strong id="userEmail" translate="no"></strong></div>
+      <div class="recorder" id="recorderBox" hidden><label for="recorderEmail">อีเมลผู้บันทึก (Gmail)</label><input id="recorderEmail" type="email" inputmode="email" autocomplete="email" placeholder="name@gmail.com" spellcheck="false"></div>
       <div class="top-controls">
       <div class="seg lang-seg" role="radiogroup" aria-label="ภาษา" translate="no">
         <label title="ภาษาไทย"><input type="radio" name="lang" value="th" checked>ไทย</label>
@@ -745,14 +748,35 @@ footer p { margin: 6px 0; }
   window.claude = { use: function (name) { return Promise.resolve(name === 'mcp' ? mcp : null); } };
   window.TRS398_HOST = 'apps-script';
 
-  // Signed-in Gmail: shown in the header, stamped on reports; Log link/field point at the shared Log
-  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the sign-in is confirmed
+  // Recorder's Gmail. Deployed "Execute as: Me", Google tells the script the visitor's Gmail only for the
+  // owner, so everyone else types it once (kept in this browser) and the report records it.
+  var RECORDER_KEY = 'trs398-recorder-v1';
+  var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  function askRecorder() {
+    var box = document.getElementById('recorderBox'), inp = document.getElementById('recorderEmail');
+    if (!box || !inp) return;
+    try { inp.value = localStorage.getItem(RECORDER_KEY) || ''; } catch (e) { /* storage unavailable */ }
+    box.hidden = false;
+    function apply() {
+      var v = inp.value.trim().toLowerCase(), ok = EMAIL_RE.test(v);
+      window.TRS398_USER = ok ? v : '';
+      inp.classList.toggle('is-filled', ok);
+      inp.classList.toggle('is-empty', !ok);
+      if (ok) { try { localStorage.setItem(RECORDER_KEY, v); } catch (e) { /* storage unavailable */ } }
+    }
+    inp.addEventListener('input', apply);
+    apply();
+  }
+
+  // Log link/field point at the shared Log
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
   google.script.run
     .withSuccessHandler(function (info) {
       if (!info) return;
       window.TRS398_USER = info.account || '';
       var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
       if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
+      if (!info.account) askRecorder();
       var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
       if (logUrl && info.logUrl) {
         logUrl.value = info.logUrl;
@@ -2445,8 +2469,6 @@ window.LPCH_DATA = {
     'บัญชี Google ที่ใช้ดึงข้อมูลและบันทึกรายงาน:': 'Google account used to read data and save reports:',
     'ข้อมูลหลักและ Log เป็นของ': 'Master data and Log belong to',
     'เข้าสู่ระบบเป็น': 'Signed in as',
-    'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่': 'Checking your Gmail sign-in — try again in a moment',
-    'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน': 'Sign in with an authorised Gmail account before saving reports',
     'บันทึกลงแท็บ Log แล้ว:': 'Saved to the Log tab:',
     'ล้างค่าการวัดแล้ว พร้อมวัดครั้งถัดไป': 'Readings cleared, ready for the next measurement',
     'รายงานนี้มีอยู่ใน Log แล้ว:': 'This report is already in the Log:',
@@ -2579,6 +2601,10 @@ window.LPCH_DATA = {
     'หน่วย P': 'P unit',
     'หมายเหตุผู้วัด': 'Measurement remark',
     'ผู้บันทึก (Gmail)': 'Recorded by (Gmail)',
+    'อีเมลผู้บันทึก (Gmail)': 'Recorder\'s Gmail',
+    'กำลังเชื่อมต่อกับ Google ลองอีกครั้งในอีกสักครู่': 'Connecting to Google — try again in a moment',
+    'กรอกอีเมลผู้บันทึก (Gmail) ที่ด้านบนของหน้าก่อนส่งรายงาน': 'Enter the recorder\'s Gmail at the top of the page before sending',
+    'เชื่อมต่อกับ Google ไม่สำเร็จ ดูข้อความที่ด้านบนของหน้า': 'Could not connect to Google — see the message at the top of the page',
     'ตาราง k_Q': 'k_Q table',
     'สอบเทียบในลำรังสีนี้ (1)': 'Calibrated in this beam (1)',
     'โหลดค่ากลับไปที่หน้าคำนวณ': 'Open in calculator',
@@ -3387,7 +3413,9 @@ window.LPCH_DATA = {
   $('sendBtn').addEventListener('click', function () {
     if (blockIfMissing(function (msg) { sendStatus('err', escapeHtml(msg)); })) return;
     if (window.TRS398_HOST === 'apps-script' && !window.TRS398_USER) {
-      sendStatus('err', window.TRS398_USER === null ? 'กำลังตรวจสอบการเข้าสู่ระบบ Gmail ลองอีกครั้งในอีกสักครู่' : 'ต้องเข้าสู่ระบบด้วยบัญชี Gmail ที่ได้รับสิทธิ์ก่อนบันทึกรายงาน');
+      if (window.TRS398_USER === null) sendStatus('err', 'กำลังเชื่อมต่อกับ Google ลองอีกครั้งในอีกสักครู่');
+      else if (!$('recorderBox').hidden) { sendStatus('err', 'กรอกอีเมลผู้บันทึก (Gmail) ที่ด้านบนของหน้าก่อนส่งรายงาน'); $('recorderEmail').focus(); }
+      else sendStatus('err', 'เชื่อมต่อกับ Google ไม่สำเร็จ ดูข้อความที่ด้านบนของหน้า');
       return;
     }
     if (!last || !last.r.ok) { sendStatus('err', 'ผลการคำนวณยังไม่ครบ แก้รายการใน "ข้อควรตรวจสอบ" ก่อนส่ง'); return; }

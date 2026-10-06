@@ -2,17 +2,18 @@
  * TRS-398 Output Calibration — Google Apps Script web app. This is the only file the project needs.
  * The page itself (index.html) is loaded from GitHub, so app updates arrive without re-pasting.
  *
- * Users sign in with their Google (Gmail) account before the page opens, and every report records who saved it.
  *   1. Create this project signed in as nattayee@gmail.com and run setup() once: it creates the Output Log
- *      in nattayee's Drive (copying the old log's rows) and shares it with EDITORS.
+ *      in nattayee's Drive (copying the old log's rows).
  *   2. Deploy → New deployment → Web app
- *      Execute as: "User accessing the web app"   Who has access: "Anyone with Google account"
- *   Each user approves the app once. Files stay owned by nattayee; users need edit access to the Log.
+ *      Execute as: "Me (nattayee@gmail.com)"   Who has access: "Anyone with Google account"
+ *   Google asks users to sign in before the page opens; nobody has to approve the app or get the files shared,
+ *   because the script reads and writes as nattayee. In this mode Google does not tell the script which Gmail
+ *   opened it, so the page asks for the recorder's Gmail (remembered per browser) and the Log records it.
  */
 var WEBAPP = {
   OWNER_EMAIL: 'nattayee@gmail.com',
-  // Gmail accounts allowed to save reports. setup()/shareLog() give them edit access to the Log.
-  // Leave empty to allow anyone who already has edit access to the Log.
+  // Optional: Gmail accounts that shareLog() gives edit access to the Log, to open it in Google Sheets.
+  // The web app itself does not need this (it writes as nattayee).
   EDITORS: ['nattayee@gmail.com'],
   USER_HEADER: 'ผู้บันทึก (Gmail)',
   PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/brave-volta-pjvcd3/trs398-calculator/apps-script/webapp/index.html',
@@ -41,20 +42,14 @@ var WEBAPP = {
 
 // ---------------------------------------------------------------- account
 
-/** The signed-in Gmail of the person using the app (deployed as "User accessing the web app"). */
+/**
+ * The Gmail Google reports for the person using the app. With "Execute as: Me" this is known only for
+ * nattayee (and Workspace users of the same domain); for other @gmail.com visitors it is blank.
+ */
 function account_() {
   try { return String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
 }
-/** Every call from the page needs a signed-in Google account, and an allowed one when EDITORS is set. */
-function requireUser_() {
-  var me = account_();
-  if (!me) throw new Error('กรุณาเข้าสู่ระบบด้วยบัญชี Gmail ก่อนใช้งาน');
-  var allowed = WEBAPP.EDITORS.map(function (e) { return String(e).toLowerCase(); });
-  if (allowed.length && allowed.indexOf(me) < 0) {
-    throw new Error('บัญชี ' + me + ' ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อ ' + WEBAPP.OWNER_EMAIL + ' เพื่อเพิ่มใน EDITORS');
-  }
-  return me;
-}
+var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 /** Creating and sharing the Output Log is only for nattayee, so it stays in nattayee's Drive. */
 function requireOwner_() {
   var me = account_();
@@ -66,36 +61,7 @@ function requireOwner_() {
 // ---------------------------------------------------------------- page
 
 function doGet() {
-  if (!account_()) {
-    var back = ScriptApp.getService().getUrl();
-    var runner = '';
-    try { runner = String(Session.getEffectiveUser().getEmail() || ''); } catch (e) { runner = ''; }
-    var box = '<div style="font:16px/1.6 system-ui,sans-serif;max-width:680px;margin:40px auto;padding:0 16px">';
-    if (runner) {
-      // Running as the owner ("Execute as: Me"): Google never tells the script which Gmail opened it,
-      // so signing in again cannot help. Only the deployment setting fixes this.
-      return HtmlService.createHtmlOutput(box +
-        '<h2>ระบบยังระบุบัญชี Gmail ของผู้ใช้ไม่ได้</h2>' +
-        '<p>Web app นี้ถูก Deploy แบบ <b>Execute as: Me</b> ซึ่ง Google จะไม่ส่งอีเมลของผู้เปิดมาให้สคริปต์ ' +
-        'จึงขึ้นหน้านี้แม้เข้าสู่ระบบ Google แล้ว</p>' +
-        '<p><b>ผู้ดูแล (' + WEBAPP.OWNER_EMAIL + ') แก้ได้ดังนี้</b></p><ol>' +
-        '<li>เปิดโปรเจกต์ Apps Script → <b>Deploy</b> → <b>Manage deployments</b></li>' +
-        '<li>กดไอคอนดินสอ (Edit) ของ deployment นี้</li>' +
-        '<li>Version: <b>New version</b></li>' +
-        '<li>Execute as: <b>User accessing the web app</b></li>' +
-        '<li>Who has access: <b>Anyone with Google account</b></li>' +
-        '<li>กด <b>Deploy</b> (ลิงก์ /exec เดิมใช้ต่อได้)</li></ol>' +
-        '<p>ครั้งแรกที่ผู้ใช้แต่ละคนเปิด Google จะขอสิทธิ์ ให้กด Allow / อนุญาต</p></div>'
-      ).setTitle(WEBAPP.TITLE);
-    }
-    // Deployment open to anyone without a Google account: ask for a Google login first
-    return HtmlService.createHtmlOutput(box +
-      '<h2>กรุณาเข้าสู่ระบบด้วย Gmail</h2>' +
-      '<p>ต้องเข้าสู่ระบบด้วยบัญชี Google ก่อนใช้ TRS-398 Output Calibration เพื่อบันทึกชื่อผู้บันทึกในรายงาน</p>' +
-      '<p><a target="_top" href="https://accounts.google.com/ServiceLogin?continue=' + encodeURIComponent(back) + '">เข้าสู่ระบบ Google</a></p>' +
-      '<p style="color:#666;font-size:14px">ผู้ดูแล: Deploy เป็น Web app แบบ Execute as "User accessing the web app" และ Who has access "Anyone with Google account"</p></div>'
-    ).setTitle(WEBAPP.TITLE);
-  }
+  // "Who has access: Anyone with Google account" makes Google ask for a sign-in before this runs
   return HtmlService.createHtmlOutput(loadPage_())
     .setTitle(WEBAPP.TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
@@ -189,14 +155,12 @@ function logId_() {
 
 /** Account and log in use, shown on the page. */
 function apiInfo() {
-  var me = requireUser_();
   var id = logId_();
-  return { account: me, owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
+  return { account: account_(), owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }
 
 /** Master Sheet as .xlsx (base64); any other id is answered with nattayee's Output Log. */
 function apiExportXlsx(fileId) {
-  requireUser_();
   var id = fileId === WEBAPP.MASTER_SHEET_ID ? WEBAPP.MASTER_SHEET_ID : logId_();
   var title = DriveApp.getFileById(id).getName();   // also grants the Drive scope used below
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + id + '/export?format=xlsx', {
@@ -204,7 +168,7 @@ function apiExportXlsx(fileId) {
     muteHttpExceptions: true
   });
   if (res.getResponseCode() === 403 || res.getResponseCode() === 404) {
-    throw new Error('บัญชี ' + account_() + ' ไม่มีสิทธิ์เปิดไฟล์นี้ ขอให้ ' + WEBAPP.OWNER_EMAIL + ' แชร์ Log ให้ (รัน shareLog)');
+    throw new Error('บัญชี ' + WEBAPP.OWNER_EMAIL + ' เปิดไฟล์นี้ไม่ได้ (HTTP ' + res.getResponseCode() + ') ตรวจสอบว่า Deploy เป็น Execute as: Me ด้วยบัญชี ' + WEBAPP.OWNER_EMAIL);
   }
   if (res.getResponseCode() !== 200) throw new Error('ส่งออก .xlsx ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
   return { content: Utilities.base64Encode(res.getBlob().getBytes()), title: title, id: id };
@@ -212,15 +176,16 @@ function apiExportXlsx(fileId) {
 
 /** Appends one report (two-row CSV: headers + values) to the Log tab by header name; skips known Report IDs. */
 function apiAppendReport(csvText) {
-  var me = requireUser_();
   var rows = Utilities.parseCsv(String(csvText || ''));
   if (rows.length < 2) throw new Error('รายงานว่างเปล่า');
   var unquote = function (v) { return typeof v === 'string' && v.charAt(0) === "'" ? v.slice(1) : v; };
   var headers = rows[0].map(function (h) { return String(unquote(h)).trim(); });
   var values = rows[1].map(unquote);
   if (headers[0] !== WEBAPP.ID_HEADER) throw new Error('รูปแบบรายงานไม่ถูกต้อง');
-  // The saver's Gmail comes from the Google sign-in, never from the page
+  // Recorder's Gmail: from Google when it tells us (nattayee), otherwise as entered on the page
   var u = headers.indexOf(WEBAPP.USER_HEADER);
+  var me = account_() || String(u >= 0 ? values[u] : '').trim().toLowerCase();
+  if (!EMAIL_RE.test(me)) throw new Error('กรอกอีเมลผู้บันทึก (Gmail) ด้านบนของหน้าให้ถูกต้องก่อนส่งรายงาน');
   if (u < 0) { headers.push(WEBAPP.USER_HEADER); values.push(me); } else values[u] = me;
 
   var logId = logId_();
@@ -229,7 +194,7 @@ function apiAppendReport(csvText) {
   try {
     var ss;
     try { ss = SpreadsheetApp.openById(logId); }
-    catch (e) { throw new Error('บัญชี ' + me + ' ไม่มีสิทธิ์แก้ไข Log ขอให้ ' + WEBAPP.OWNER_EMAIL + ' เพิ่มใน EDITORS แล้วรัน shareLog'); }
+    catch (e) { throw new Error('เปิด Log ไม่ได้: ' + e.message + ' (ตรวจสอบว่า Deploy เป็น Execute as: Me ด้วยบัญชี ' + WEBAPP.OWNER_EMAIL + ')'); }
     if (ss.getSpreadsheetTimeZone() !== WEBAPP.TIME_ZONE) {
       try { ss.setSpreadsheetTimeZone(WEBAPP.TIME_ZONE); } catch (e) { /* editors without that right keep the sheet's zone */ }
     }
