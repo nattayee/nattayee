@@ -241,7 +241,23 @@
     .toast.err { background: var(--bad); color: var(--on-bad); }
     .modal { position: fixed; inset: 0; background: var(--overlay); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
     .modal.show { display: flex; }
-    .modal .box { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; max-width: 520px; width: 100%; }
+    .modal .box { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; max-width: 520px; width: 100%; max-height: 92vh; overflow: auto; }
+    .modal .box.wide { max-width: 600px; }
+    .modal h3.plain { color: var(--ink); }
+    .typepick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .typepick input[type=text] { flex: 1 1 180px; width: auto; }
+    .techtag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; background: var(--raise); border: 1px solid var(--line); }
+    td.stcell { white-space: normal; min-width: 150px; }
+    .stline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .btn.xs { padding: 1px 8px; font-size: 12px; border-radius: 7px; }
+    .edited { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); text-decoration: underline; text-align: left; }
+    .histbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
+    .histbox h4 { margin: 0 0 6px; font-size: 14px; }
+    .histbox ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+    .histbox li { border-left: 3px solid var(--accent-soft); padding-left: 10px; }
+    .histbox li b { font-weight: 600; }
+    .histbox li ul { margin: 2px 0 0; padding-left: 16px; color: var(--muted); }
+    .histbox .ago { color: var(--muted); font-size: 12px; }
     .modal h3 { margin: 0 0 8px; color: var(--warn); }
     .modal ul { padding-left: 18px; margin: 8px 0 14px; font-size: 14px; }
     .modal .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
@@ -525,6 +541,14 @@
           </div>
 
           <div class="field">
+            <label class="req" id="techLabel" data-i18n="technique"></label>
+            <div class="typepick" role="radiogroup" aria-labelledby="techLabel">
+              <div class="chips" id="techChips"></div>
+              <input type="text" id="techOther" maxlength="100" data-i18n-ph="tech_other_ph" hidden>
+            </div>
+          </div>
+
+          <div class="field">
             <label for="totalFx" class="req" data-i18n="fx_count"></label>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
               <input type="number" id="totalFx" min="1" max="30" value="4" required style="width:90px">
@@ -649,6 +673,51 @@
     </div>
   </main>
 
+  <!-- แก้ไขนัด + ประวัติการแก้ไข -->
+  <div class="modal" id="editModal" role="dialog" aria-modal="true" aria-labelledby="eTitle">
+    <div class="box wide">
+      <h3 id="eTitle" class="plain" data-i18n="edit_title"></h3>
+      <p class="hint" id="eWho" style="margin:0 0 12px"></p>
+      <form id="editForm" novalidate>
+        <div class="row">
+          <div class="field">
+            <label for="eDate" data-i18n="e_date"></label>
+            <input type="date" id="eDate" required>
+            <div class="hint" id="eCap"></div>
+          </div>
+          <div class="field">
+            <label for="eStatus" data-i18n="th_status"></label>
+            <select id="eStatus"></select>
+            <div class="hint" id="eStatusHint"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="eDoctor" data-i18n="doctor"></label>
+          <select id="eDoctor"></select>
+        </div>
+        <div class="field">
+          <label id="eTechLabel" data-i18n="technique"></label>
+          <div class="typepick" role="radiogroup" aria-labelledby="eTechLabel">
+            <div class="chips" id="eTechChips"></div>
+            <input type="text" id="eTechOther" maxlength="100" data-i18n-ph="tech_other_ph" hidden>
+          </div>
+        </div>
+        <div class="field">
+          <label for="eNote" data-i18n="note"></label>
+          <textarea id="eNote" rows="2" maxlength="500"></textarea>
+        </div>
+        <div class="acts" style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap">
+          <button type="button" class="btn" id="eClose" data-i18n="e_close"></button>
+          <button type="submit" class="btn" id="eSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700" data-i18n="e_save"></button>
+        </div>
+      </form>
+      <div class="histbox">
+        <h4 data-i18n="e_history"></h4>
+        <ol id="eHistory"></ol>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
     <div class="box">
       <h3 id="mTitle" data-i18n="m_title"></h3>
@@ -701,7 +770,14 @@
       schedule: 'ตารางนัดคิว', f_today: 'วันนี้', f_upcoming: 'นัดที่จะถึง', f_past: 'ที่ผ่านมา', f_all: 'ทั้งหมด',
       search_ph: 'ค้นหา HN / ชื่อ / แพทย์', refresh: '↻ รีเฟรช', refresh_title: 'โหลดข้อมูลใหม่จากชีต', refreshed: 'โหลดข้อมูลล่าสุดแล้ว',
       stats: 'วันนี้ <b>{a}</b> นัด · นัดที่จะถึง <b>{b}</b> นัด · ผู้ป่วยในคิว <b>{c}</b> ราย',
-      th_queue: 'คิว', th_name: 'ชื่อ-สกุล', th_doctor: 'แพทย์', th_note: 'หมายเหตุ', th_status: 'สถานะ',
+      th_queue: 'คิว', th_name: 'ชื่อ-สกุล', th_doctor: 'แพทย์', th_note: 'หมายเหตุ', th_status: 'สถานะ', th_tech: 'รูปแบบการใส่',
+      technique: 'รูปแบบการใส่', tech_other: 'อื่นๆ', tech_other_ph: 'ระบุรูปแบบการใส่', tech_needle: 'เสียบเข็ม',
+      v_tech: 'กรุณาเลือกรูปแบบการใส่', v_tech_other: 'กรุณาระบุรูปแบบการใส่ในช่อง "อื่นๆ"',
+      a_edit: '✏️ แก้ไข', a_edit_title: 'แก้ไขวันนัด แพทย์ รูปแบบการใส่ หมายเหตุ หรือสถานะ', edited_by: 'แก้ไขโดย {name} · {at}',
+      edit_title: 'แก้ไขนัด', e_date: 'วันที่นัด', e_close: 'ปิด', e_save: 'บันทึกการแก้ไข', e_saved: 'บันทึกการแก้ไขแล้ว',
+      e_nochange: 'ไม่มีการเปลี่ยนแปลง', e_history: 'ประวัติการแก้ไข', e_created: 'ลงนัดโดย {name} · {at}', e_none: 'ยังไม่มีการแก้ไข',
+      e_cancel_hint: 'เปลี่ยนเป็น "ยกเลิก" แล้วนัดในปฏิทินจะถูกลบ', e_restore_hint: 'นัดจะถูกสร้างในปฏิทินอีกครั้ง',
+      f_date: 'วันที่นัด', f_doctor: 'แพทย์', f_technique: 'รูปแบบการใส่', f_note: 'หมายเหตุ', f_status: 'สถานะ',
       no_appts: 'ไม่มีนัด', loading: 'กำลังโหลด…', today_tag: ' (วันนี้)', over_max: '⚠️ เกิน {max} เคส',
       st_booked: 'นัดแล้ว', st_done: 'มาตามนัด', st_cancel: 'ยกเลิก',
       a_done: '✓ มาแล้ว', a_done_title: 'บันทึกว่ามาตามนัด', a_cancel: 'ยกเลิก', a_cancel_title: 'ยกเลิกเฉพาะ fraction นี้',
@@ -722,7 +798,7 @@
       auth_title: 'นัดคิวผู้ป่วยใส่แร่', auth_sub: 'เข้าสู่ระบบด้วยบัญชีของคุณ หรือสมัครสมาชิกใหม่',
       login: 'เข้าสู่ระบบ', register: 'สมัครสมาชิก', login_id: 'ชื่อผู้ใช้หรืออีเมล', password: 'รหัสผ่าน',
       show_pw: 'แสดง', hide_pw: 'ซ่อน', remember: 'จำฉันไว้ในเครื่องนี้ 7 วัน', login_btn: 'เข้าสู่ระบบ', forgot_link: 'ลืมรหัสผ่าน?',
-      first_name: 'ชื่อ', last_name: 'นามสกุล', v_name: 'กรุณากรอกชื่อและนามสกุล', u_fullname: 'ชื่อ-นามสกุล',
+      first_name: 'ชื่อ', last_name: 'นามสกุล', v_fullname: 'กรุณากรอกชื่อและนามสกุล', u_fullname: 'ชื่อ-นามสกุล',
       username: 'ชื่อผู้ใช้ (username)', username_hint: '3–30 ตัว ใช้ a-z, 0-9, จุด ขีดล่าง หรือขีด',
       email: 'อีเมล', email_hint: 'ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน', password_hint: 'อย่างน้อย 8 ตัว',
       confirm_pw: 'ยืนยันรหัสผ่าน', register_btn: 'สมัครสมาชิก',
@@ -780,7 +856,14 @@
       schedule: 'Appointment queue', f_today: 'Today', f_upcoming: 'Upcoming', f_past: 'Past', f_all: 'All',
       search_ph: 'Search HN / name / doctor', refresh: '↻ Refresh', refresh_title: 'Reload from the sheet', refreshed: 'Data refreshed',
       stats: 'Today <b>{a}</b> · Upcoming <b>{b}</b> · Patients in queue <b>{c}</b>',
-      th_queue: 'Queue', th_name: 'Name', th_doctor: 'Doctor', th_note: 'Note', th_status: 'Status',
+      th_queue: 'Queue', th_name: 'Name', th_doctor: 'Doctor', th_note: 'Note', th_status: 'Status', th_tech: 'Insertion type',
+      technique: 'Insertion type', tech_other: 'Other', tech_other_ph: 'Specify insertion type', tech_needle: 'Needles (interstitial)',
+      v_tech: 'Please choose an insertion type', v_tech_other: 'Please type the insertion type under "Other"',
+      a_edit: '✏️ Edit', a_edit_title: 'Edit date, doctor, insertion type, note or status', edited_by: 'Edited by {name} · {at}',
+      edit_title: 'Edit appointment', e_date: 'Appointment date', e_close: 'Close', e_save: 'Save changes', e_saved: 'Changes saved',
+      e_nochange: 'Nothing changed', e_history: 'Edit history', e_created: 'Booked by {name} · {at}', e_none: 'No edits yet',
+      e_cancel_hint: 'Changing to "Cancelled" deletes the calendar event', e_restore_hint: 'The calendar event will be created again',
+      f_date: 'Date', f_doctor: 'Doctor', f_technique: 'Insertion type', f_note: 'Note', f_status: 'Status',
       no_appts: 'No appointments', loading: 'Loading…', today_tag: ' (today)', over_max: '⚠️ over {max}',
       st_booked: 'Booked', st_done: 'Attended', st_cancel: 'Cancelled',
       a_done: '✓ Arrived', a_done_title: 'Mark as attended', a_cancel: 'Cancel', a_cancel_title: 'Cancel this fraction only',
@@ -801,7 +884,7 @@
       auth_title: 'Brachytherapy Queue', auth_sub: 'Log in with your account, or sign up for a new one',
       login: 'Log in', register: 'Sign up', login_id: 'Username or email', password: 'Password',
       show_pw: 'Show', hide_pw: 'Hide', remember: 'Keep me logged in on this device for 7 days', login_btn: 'Log in', forgot_link: 'Forgot password?',
-      first_name: 'First name', last_name: 'Last name', v_name: 'Please enter your first and last name', u_fullname: 'Full name',
+      first_name: 'First name', last_name: 'Last name', v_fullname: 'Please enter your first and last name', u_fullname: 'Full name',
       username: 'Username', username_hint: '3–30 characters: a-z, 0-9, dot, underscore or hyphen',
       email: 'Email', email_hint: 'Used to send a verification code if you forget your password', password_hint: 'At least 8 characters',
       confirm_pw: 'Confirm password', register_btn: 'Sign up',
@@ -899,6 +982,7 @@
       create: (p) => call('createAppointments', auth.token, Object.assign({ lang: lang }, p)),
       cancel: (id, scope) => call('cancelAppointment', auth.token, id, scope, lang),
       done: (id) => call('markDone', auth.token, id, lang),
+      edit: (id, ch) => call('updateAppointment', auth.token, id, ch, lang),
       accounts: () => call('listAccounts', auth.token, lang),
       updateAccount: (u, ch) => call('updateAccount', auth.token, u, ch, lang)
     };
@@ -934,6 +1018,12 @@
       return fn(a);
     };
     const resetCodes = {};
+    const label = () => { const a = me(); if (!a) return 'demo'; const f = ((a.firstName || '') + ' ' + (a.lastName || '')).trim(); return f ? f + ' (' + a.username + ')' : a.username; };
+    function addHist(a, changes) {
+      const at = now();
+      a.history = (a.history || []).concat([{ at, by: (me() || {}).username || 'demo', name: label(), changes }]);
+      a.editedBy = label(); a.editedAt = at;
+    }
     return {
       register: (f) => {
         const all = loadAcc();
@@ -978,6 +1068,7 @@
         user: pub(a),
         pendingAccounts: a.role === 'admin' ? loadAcc().filter(x => x.status === ACC_PENDING).length : 0,
         doctors: DOCS,
+        techniques: ['Full', 'Mould', 'เสียบเข็ม'],
         holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }, { date: '2026-10-23', name: 'วันปิยมหาราช' }],
         settings: { maxCasesPerDay: MAX, calendarName: 'Demo' },
         appointments: sorted()
@@ -997,7 +1088,8 @@
               fx++;
               const ds = iso(d);
               all.push({ apptId: courseId + '-' + fx, courseId, hn: String(6500100 + k * 37), name: first[k % first.length] + ' ' + last[k % last.length],
-                doctor: DOCS[k % 4], fx, totalFx: total, date: ds, note: '', status: ds < todayStr ? ST_DONE : ST_BOOKED });
+                doctor: DOCS[k % 4], fx, totalFx: total, date: ds, note: '', status: ds < todayStr ? ST_DONE : ST_BOOKED,
+                technique: ['Full', 'Mould', 'เสียบเข็ม'][k % 3], createdAt: ds + ' 09:00', createdBy: 'demo', history: [] });
             }
             d.setDate(d.getDate() + 1);
           }
@@ -1020,9 +1112,11 @@
           if (conflicts.length || overCapacity.length) return delay({ ok: false, needConfirm: true, conflicts, overCapacity, max: MAX });
         }
         const courseId = 'BT' + Date.now().toString().slice(-10);
+        const by = me();
         p.sessions.forEach((s, i) => all.push({
-          apptId: courseId + '-' + (i + 1), courseId, hn: p.hn, name: p.name, doctor: p.doctor,
-          fx: i + 1, totalFx: p.totalFx, date: s.date, note: p.note, status: ST_BOOKED
+          apptId: courseId + '-' + (i + 1), courseId, hn: p.hn, name: p.name, doctor: p.doctor, technique: p.technique,
+          fx: i + 1, totalFx: p.totalFx, date: s.date, note: p.note, status: ST_BOOKED,
+          createdAt: now(), createdBy: by ? by.username : 'demo', history: []
         }));
         save(all);
         const counts2 = {}; all.forEach(a => { if (a.status !== ST_CANCEL) counts2[a.date] = (counts2[a.date] || 0) + 1; });
@@ -1033,13 +1127,21 @@
         const all = load(); const tg = all.find(a => a.apptId === id); let changed = 0;
         all.forEach(a => {
           const m = scope === 'course' ? a.courseId === tg.courseId && a.status === ST_BOOKED : a.apptId === id;
-          if (m && a.status !== ST_CANCEL) { a.status = ST_CANCEL; changed++; }
+          if (m && a.status !== ST_CANCEL) { addHist(a, [{ f: 'status', from: a.status, to: ST_CANCEL }]); a.status = ST_CANCEL; changed++; }
         });
         save(all); return delay({ ok: true, changed, appointments: sorted() });
       },
       done: (id) => {
-        const all = load(); all.forEach(a => { if (a.apptId === id) a.status = ST_DONE; });
+        const all = load();
+        all.forEach(a => { if (a.apptId === id) { addHist(a, [{ f: 'status', from: a.status, to: ST_DONE }]); a.status = ST_DONE; } });
         save(all); return delay({ ok: true, changed: 1, appointments: sorted() });
+      },
+      edit: (id, ch) => {
+        const all = load(); const a = all.find(x => x.apptId === id);
+        const diff = Object.keys(ch).filter(f => (a[f] || '') !== ch[f]).map(f => ({ f, from: a[f] || '', to: ch[f] }));
+        if (diff.length) { addHist(a, diff); diff.forEach(d => { a[d.f] = d.to; }); save(all); }
+        const total = all.filter(x => x.date === a.date && x.status !== ST_CANCEL).length;
+        return delay({ ok: true, changed: diff.length, overCapacity: total > MAX && ch.date ? [{ date: a.date, total }] : [], appointments: sorted() });
       }
     };
   }
@@ -1088,6 +1190,8 @@
     lang = l; store.set('bq-lang', l);
     applyStaticText();
     renderManual();
+    techPick.render(); ePick.render();
+    if (editing) openEdit(editing);
     renderAll();
     if (state.view === 'users') renderUsers();
   }
@@ -1174,8 +1278,8 @@
     const fn = $('regFirst').value.replace(/\s+/g, ' ').trim(), ln = $('regLast').value.replace(/\s+/g, ' ').trim();
     const u = $('regUser').value.trim().toLowerCase(), em = $('regEmail').value.trim().toLowerCase();
     const pw = $('regPw').value, pw2 = $('regPw2').value;
-    if (!fn) { authMsg(t('v_name')); $('regFirst').focus(); return; }
-    if (!ln) { authMsg(t('v_name')); $('regLast').focus(); return; }
+    if (!fn) { authMsg(t('v_fullname')); $('regFirst').focus(); return; }
+    if (!ln) { authMsg(t('v_fullname')); $('regLast').focus(); return; }
     if (!RE_USER.test(u)) { authMsg(t('v_username')); $('regUser').focus(); return; }
     if (!RE_EMAIL.test(em)) { authMsg(t('v_email')); $('regEmail').focus(); return; }
     if (pw.length < 8) { authMsg(t('v_pw')); $('regPw').focus(); return; }
@@ -1446,7 +1550,7 @@
   /* ================= บันทึก (คลิกเดียว) ================= */
   function buildPayload(force) {
     return {
-      hn: $('hn').value.trim(), name: $('name').value.trim(), doctor: $('doctor').value.trim(),
+      hn: $('hn').value.trim(), name: $('name').value.trim(), doctor: $('doctor').value.trim(), technique: techPick.get(),
       totalFx: parseInt($('totalFx').value, 10), note: $('note').value.trim(),
       sessions: state.sessions.map(s => ({ date: s.date })), force: !!force
     };
@@ -1456,6 +1560,8 @@
     if (!p.hn) return ['hn', t('v_hn')];
     if (!p.name) return ['name', t('v_name')];
     if (!p.doctor) return ['doctor', t('v_doctor')];
+    if (!techPick.selected()) return [null, t('v_tech')];
+    if (!p.technique) return ['techOther', t('v_tech_other')];
     if (!(p.totalFx >= 1 && p.totalFx <= 30)) return ['totalFx', t('v_fx')];
     if (modeVal() !== 'manual' && !$('startDate').value) return ['startDate', t('v_start')];
     if (p.sessions.length !== p.totalFx) return [null, t('v_incomplete', { n: p.totalFx })];
@@ -1509,6 +1615,7 @@
   function resetForm() {
     ['hn', 'name', 'note'].forEach(id => { $(id).value = ''; });
     $('doctor').value = '';
+    techPick.set('');
     state.manual = [];
     regenerate();
     $('hn').focus();
@@ -1550,10 +1657,10 @@
     catch (e) { toast(errMsg(e), true); }
   });
 
-  const COLS = 8;
+  const COLS = 9;
   function theadHtml() {
     return '<tr><th>' + esc(t('th_queue')) + '</th><th>HN</th><th>' + esc(t('th_name')) + '</th><th>' + esc(t('th_doctor')) +
-      '</th><th>Fx</th><th>' + esc(t('th_note')) + '</th><th>' + esc(t('th_status')) + '</th><th></th></tr>';
+      '</th><th>' + esc(t('th_tech')) + '</th><th>Fx</th><th>' + esc(t('th_note')) + '</th><th>' + esc(t('th_status')) + '</th><th></th></tr>';
   }
   function rowHtml(a, queueNo) {
     const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
@@ -1562,9 +1669,13 @@
       '<td><b>' + esc(a.hn) + '</b></td>' +
       '<td class="name">' + esc(a.name) + '</td>' +
       '<td>' + esc(a.doctor) + '</td>' +
+      '<td>' + (a.technique ? '<span class="techtag">' + esc(techText(a.technique)) + '</span>' : '<span class="hint">–</span>') + '</td>' +
       '<td>' + esc(a.fx) + '/' + esc(a.totalFx) + '</td>' +
       '<td class="name hint">' + esc(a.note) + '</td>' +
-      '<td><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span></td>' +
+      '<td class="stcell act"><div class="stline"><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
+        '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></div>' +
+        (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
+          esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '</button>' : '') + '</td>' +
       '<td class="act"><div class="acts">' + actionButtons(a) + '</div></td></tr>';
   }
 
@@ -1575,7 +1686,7 @@
     if (state.filter === 'today') list = list.filter(a => a.date === today);
     else if (state.filter === 'upcoming') list = list.filter(a => a.date >= today);
     else if (state.filter === 'past') list = list.filter(a => a.date < today).reverse();
-    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor).toLowerCase().includes(q));
+    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor + ' ' + (a.technique || '')).toLowerCase().includes(q));
 
     const active = state.appts.filter(a => a.status !== ST_CANCEL);
     const todays = active.filter(a => a.date === today).length;
@@ -1603,6 +1714,7 @@
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const a = state.appts.find(x => x.apptId === b.dataset.id); if (!a) return;
     const who = 'HN ' + a.hn + ' ' + a.name;
+    if (b.dataset.act === 'edit' || b.dataset.act === 'hist') { openEdit(a, b.dataset.act === 'hist'); return; }
     let p;
     if (b.dataset.act === 'done') p = api.done(a.apptId);
     else if (b.dataset.act === 'cancel') {
@@ -1620,6 +1732,123 @@
   }
   $('tbody').addEventListener('click', onActionClick);
   $('dayDetail').addEventListener('click', onActionClick);
+
+  /* ================= รูปแบบการใส่ ================= */
+  state.techniques = ['Full', 'Mould', 'เสียบเข็ม'];
+  const TECH_OTHER = 'อื่นๆ';
+  // ค่าที่เก็บในชีตเป็นคำเดิม (Full / Mould / เสียบเข็ม / ที่กรอกเอง) แปลเฉพาะตอนแสดงผล
+  const techText = (v) => (v === 'เสียบเข็ม' ? t('tech_needle') : v);
+  function makeTechPicker(chipsId, otherId) {
+    let sel = '';
+    const chips = $(chipsId), other = $(otherId);
+    const api = {
+      render() {
+        chips.innerHTML = state.techniques.concat(TECH_OTHER).map(v =>
+          '<button type="button" class="chip' + (v === sel ? ' on' : '') + '" role="radio" aria-checked="' + (v === sel) + '" data-tech="' + esc(v) + '">' +
+          esc(v === TECH_OTHER ? t('tech_other') : techText(v)) + '</button>').join('');
+        other.hidden = sel !== TECH_OTHER;
+      },
+      set(v) {
+        v = String(v || '');
+        if (!v) { sel = ''; other.value = ''; }
+        else if (state.techniques.indexOf(v) >= 0) { sel = v; other.value = ''; }
+        else { sel = TECH_OTHER; other.value = v; }
+        api.render();
+      },
+      get() { return sel === TECH_OTHER ? other.value.replace(/\s+/g, ' ').trim() : sel; },
+      selected() { return sel; }
+    };
+    chips.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tech]'); if (!b) return;
+      sel = b.dataset.tech; api.render();
+      if (sel === TECH_OTHER) other.focus();
+    });
+    return api;
+  }
+  const techPick = makeTechPicker('techChips', 'techOther');
+  const ePick = makeTechPicker('eTechChips', 'eTechOther');
+
+  /* ================= แก้ไขนัด + ประวัติ ================= */
+  let editing = null;
+  function openEdit(a, focusHistory) {
+    editing = a;
+    $('eWho').textContent = 'HN ' + a.hn + ' · ' + a.name + ' · Fx ' + a.fx + '/' + a.totalFx;
+    $('eDate').value = a.date;
+    $('eStatus').innerHTML = [ST_BOOKED, ST_DONE, ST_CANCEL].map(v =>
+      '<option value="' + esc(v) + '"' + (v === a.status ? ' selected' : '') + '>' + esc(statusText(v)) + '</option>').join('');
+    if (a.doctor && !Array.from($('eDoctor').options).some(o => o.value === a.doctor)) {
+      $('eDoctor').insertAdjacentHTML('beforeend', '<option value="' + esc(a.doctor) + '">' + esc(a.doctor) + '</option>');
+    }
+    $('eDoctor').value = a.doctor;
+    ePick.set(a.technique || '');
+    $('eNote').value = a.note || '';
+    renderEditHints();
+    renderHistory(a);
+    $('editModal').classList.add('show');
+    setTimeout(() => {
+      if (focusHistory) $('eHistory').scrollIntoView({ block: 'nearest' }); else $('eDate').focus();
+    }, 0);
+  }
+  function closeEdit() { $('editModal').classList.remove('show'); editing = null; }
+  function renderEditHints() {
+    if (!editing) return;
+    const d = $('eDate').value, st = $('eStatus').value;
+    if (d && st !== ST_CANCEL) {
+      const others = state.appts.filter(x => x.date === d && x.status !== ST_CANCEL && x.apptId !== editing.apptId).length;
+      const after = others + 1;
+      $('eCap').innerHTML = '<span class="cap' + (after > state.max ? ' over' : '') + '">' + esc(t('booked_cap', { n: others, max: state.max })) + '</span>' +
+        (after > state.max ? ' — ⚠️ ' + esc(t('w_over', { n: after, max: state.max })) : '') +
+        (state.holidays[d] ? ' · ' + esc(t('w_holiday', { name: state.holidays[d] })) : '');
+    } else $('eCap').textContent = '';
+    $('eStatusHint').textContent = st === ST_CANCEL && editing.status !== ST_CANCEL ? t('e_cancel_hint')
+      : st !== ST_CANCEL && editing.status === ST_CANCEL ? t('e_restore_hint') : '';
+  }
+  $('eDate').addEventListener('change', renderEditHints);
+  $('eStatus').addEventListener('change', renderEditHints);
+  $('eClose').addEventListener('click', closeEdit);
+  $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) closeEdit(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editing) closeEdit(); });
+
+  function fieldValue(f, v) {
+    if (!v) return '–';
+    if (f === 'status') return statusText(v);
+    if (f === 'date') return fmtDate(v);
+    if (f === 'technique') return techText(v);
+    return v;
+  }
+  function renderHistory(a) {
+    const items = (a.history || []).slice().reverse().map(h =>
+      '<li><b>' + esc(h.name || h.by) + '</b> <span class="ago">· ' + esc(h.at) + '</span><ul>' +
+      (h.changes || []).map(c => '<li>' + esc(t('f_' + c.f)) + ': ' + esc(fieldValue(c.f, c.from)) + ' → <b>' + esc(fieldValue(c.f, c.to)) + '</b></li>').join('') +
+      '</ul></li>');
+    const created = a.createdBy ? '<li><span class="ago">' + esc(t('e_created', { name: a.createdBy, at: a.createdAt || '' })) + '</span></li>' : '';
+    $('eHistory').innerHTML = (items.length ? items.join('') : '<li class="hint">' + esc(t('e_none')) + '</li>') + created;
+  }
+
+  $('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    const a = editing;
+    if (!$('eDate').value) { toast(t('v_fxdate', { n: a.fx }), true); $('eDate').focus(); return; }
+    if (!ePick.selected()) { toast(t('v_tech'), true); return; }
+    const next = { date: $('eDate').value, status: $('eStatus').value, doctor: $('eDoctor').value,
+      technique: ePick.get(), note: $('eNote').value.trim() };
+    if (!next.technique) { toast(t('v_tech_other'), true); $('eTechOther').focus(); return; }
+    const ch = {};
+    Object.keys(next).forEach(k => { if (next[k] !== (a[k] || '')) ch[k] = next[k]; });
+    if (!Object.keys(ch).length) { toast(t('e_nochange')); return; }
+    const btn = $('eSave'); btn.disabled = true;
+    try {
+      const res = await api.edit(a.apptId, ch);
+      state.appts = res.appointments;
+      closeEdit();
+      renderAll();
+      if (res.overCapacity && res.overCapacity.length) {
+        toast(t('e_saved') + ' · ' + t('t_saved_over', { max: state.max, list: res.overCapacity.map(d => fmtDate(d.date) + ' (' + d.total + ')').join(', ') }), true);
+      } else toast(t('e_saved'));
+    } catch (err) { toast(errMsg(err), true); }
+    finally { btn.disabled = false; }
+  });
 
   /* ================= ส่วนกลาง ================= */
   // นัดที่ไม่ถูกยกเลิก จัดกลุ่มตามวัน { 'yyyy-MM-dd': [appt, ...] }
@@ -1814,7 +2043,7 @@
         '<span class="hint" style="font-weight:400"> ' + esc(DOW[lang][parseIso(d).getDay()]) + '</span></span>' +
         (n ? '<span class="cnt">' + (n > state.max ? '⚠️ ' : '') + esc(cases(n)) + '</span>' : '') + '</div>' +
         (hol ? '<div class="hol">🏖 ' + esc(hol) + '</div>' : '') +
-        (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
+        (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
           (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
           (n > show.length ? '<li class="more">' + esc(t('more', { n: n - show.length })) + '</li>' : '') + '</ul>' : '') +
         '</button>';
@@ -1863,6 +2092,9 @@
       state.user = d.user;
       state.pending = d.pendingAccounts || 0;
       state.calName = d.settings.calendarName;
+      state.techniques = d.techniques || ['Full', 'Mould', 'เสียบเข็ม'];
+      techPick.render(); ePick.render();
+      $('eDoctor').innerHTML = d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
       state.max = d.settings.maxCasesPerDay || 6;
       $('doctor').innerHTML = '<option value="" data-i18n="choose_doctor">' + esc(t('choose_doctor')) + '</option>' +
         d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');

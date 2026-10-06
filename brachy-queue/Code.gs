@@ -37,12 +37,18 @@ const APPT_HEADERS = [
   'หมายเหตุ',           // J
   'สถานะ',              // K  นัดแล้ว / ยกเลิก / มาตามนัด
   'Calendar Event ID', // L
-  'ผู้บันทึก'            // M  ชื่อผู้ใช้
+  'ผู้บันทึก',           // M  ชื่อผู้ใช้
+  'รูปแบบการใส่',        // N  Full / Mould / เสียบเข็ม / ที่กรอกเอง
+  'แก้ไขล่าสุดโดย',      // O
+  'แก้ไขล่าสุดเมื่อ',     // P
+  'ประวัติการแก้ไข'      // Q  JSON: [{at, by, name, changes:[{f, from, to}]}]
 ];
 const COL = {};
 ['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
-  'date', 'note', 'status', 'eventId', 'createdBy']
+  'date', 'note', 'status', 'eventId', 'createdBy', 'technique', 'editedBy', 'editedAt', 'history']
   .forEach((k, i) => { COL[k] = i; });
+/** รูปแบบการใส่ที่เลือกได้ (นอกจากนี้กรอกเองในช่อง "อื่นๆ") */
+const TECHNIQUES = ['Full', 'Mould', 'เสียบเข็ม'];
 
 const STATUS_BOOKED = 'นัดแล้ว';
 const STATUS_CANCELLED = 'ยกเลิก';
@@ -90,6 +96,10 @@ const MSG = {
     cannotChangeSelf: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้',
     userNotFound: 'ไม่พบบัญชี {username}',
     noData: 'ไม่มีข้อมูล',
+    technique: 'กรุณาเลือกรูปแบบการใส่ หรือกรอกในช่อง "อื่นๆ" (ไม่เกิน 100 ตัวอักษร)',
+    statusInvalid: 'สถานะไม่ถูกต้อง',
+    dateInvalid: 'วันที่นัดไม่ถูกต้อง',
+    noteTooLong: 'หมายเหตุยาวเกินไป (ไม่เกิน 500 ตัวอักษร)',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
     doctor: 'กรุณาเลือกแพทย์',
@@ -119,6 +129,10 @@ const MSG = {
     cannotChangeSelf: 'You cannot change the status or role of your own account',
     userNotFound: 'Account {username} not found',
     noData: 'No data',
+    technique: 'Please choose an insertion type, or type one under "Other" (up to 100 characters)',
+    statusInvalid: 'Invalid status',
+    dateInvalid: 'Invalid appointment date',
+    noteTooLong: 'Note is too long (up to 500 characters)',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
     doctor: 'Please select a doctor',
@@ -328,6 +342,7 @@ function getInitData(token, lang) {
   return {
     user: publicUser_(acc),
     doctors: getDoctors_(),
+    techniques: TECHNIQUES,
     holidays: getHolidays_(),
     settings: {
       maxCasesPerDay: maxCases_(settings),
@@ -350,7 +365,8 @@ function listAppointments(token, lang) {
  */
 function createAppointments(token, payload) {
   const lang = payload && payload.lang;
-  const user = requireUser_(token, lang).username;
+  const acc = requireUser_(token, lang);
+  const user = acc.username;
   const p = validatePayload_(payload, lang);
 
   const lock = LockService.getScriptLock();
@@ -373,34 +389,19 @@ function createAppointments(token, payload) {
     // ต่อท้ายด้วยรหัสสุ่ม กันรหัสซ้ำเมื่อบันทึกหลายรายการในวินาทีเดียวกัน
     const courseId = 'BT' + Utilities.formatDate(new Date(), tz, 'yyMMddHHmmss') +
       Utilities.getUuid().replace(/-/g, '').slice(0, 4).toUpperCase();
-    const showName = String(settings.SHOW_NAME_IN_CALENDAR).toUpperCase() !== 'FALSE';
-    const prefix = settings.EVENT_PREFIX || '';
-    const location = settings.LOCATION || '';
-
     const rows = [];
     const created = [];
     try {
       p.sessions.forEach((s, i) => {
         const fx = i + 1;
-        const title = [prefix, 'HN ' + p.hn, showName ? p.name : '', '(Fx ' + fx + '/' + p.totalFx + ')']
-          .filter(Boolean).join(' ');
-        const desc = [
-          'HN: ' + p.hn,
-          'ผู้ป่วย: ' + p.name,
-          'แพทย์: ' + p.doctor,
-          'Fraction: ' + fx + ' / ' + p.totalFx,
-          p.note ? 'หมายเหตุ: ' + p.note : '',
-          'รหัสคอร์ส: ' + courseId,
-          'ผู้บันทึก: ' + user
-        ].filter(Boolean).join('\n');
-
-        const ev = cal.createAllDayEvent(title, toDate_(s.date), { description: desc, location: location });
-        try { ev.setColor(CalendarApp.EventColor.MAUVE); } catch (e) { /* ignore */ }
+        const a = { hn: p.hn, name: p.name, doctor: p.doctor, technique: p.technique, note: p.note,
+          fx: fx, totalFx: p.totalFx, date: s.date, courseId: courseId, createdBy: user };
+        const ev = createEvent_(cal, settings, a);
         created.push(ev);
 
         rows.push([
-          courseId + '-' + fx, courseId, now, p.hn, p.name, p.doctor, fx, p.totalFx,
-          s.date, p.note, STATUS_BOOKED, ev.getId(), user
+          courseId + '-' + fx, courseId, now, p.hn, safeCell_(p.name), p.doctor, fx, p.totalFx,
+          s.date, safeCell_(p.note), STATUS_BOOKED, ev.getId(), user, safeCell_(p.technique), '', '', ''
         ]);
       });
     } catch (err) {
@@ -414,7 +415,7 @@ function createAppointments(token, payload) {
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, APPT_HEADERS.length).setValues(rows);
     SpreadsheetApp.flush();
 
-    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + rows.length + ' Fx (' +
+    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + p.technique + ' / ' + rows.length + ' Fx (' +
       p.sessions.map(s => s.date).join(', ') + ') คอร์ส ' + courseId);
     if (overDays.length) {
       log_(user, 'แจ้งเตือนเกินเคส', overDays.map(d => d.date + ' = ' + d.total + ' เคส').join(', '));
@@ -429,14 +430,115 @@ function createAppointments(token, payload) {
 
 /** ยกเลิกนัด: scope = 'one' (เฉพาะ fraction นี้) หรือ 'course' (ทั้งคอร์สที่ยังไม่ได้ทำ) */
 function cancelAppointment(token, apptId, scope, lang) {
-  const user = requireUser_(token, lang).username;
-  return updateStatus_(user, apptId, scope, STATUS_CANCELLED, true, lang);
+  const acc = requireUser_(token, lang);
+  return updateStatus_(acc, apptId, scope, STATUS_CANCELLED, true, lang);
 }
 
 /** บันทึกว่าผู้ป่วยมาตามนัดแล้ว */
 function markDone(token, apptId, lang) {
-  const user = requireUser_(token, lang).username;
-  return updateStatus_(user, apptId, 'one', STATUS_DONE, false, lang);
+  const acc = requireUser_(token, lang);
+  return updateStatus_(acc, apptId, 'one', STATUS_DONE, false, lang);
+}
+
+/**
+ * แก้ไขนัด 1 fraction: changes = { date?, doctor?, technique?, note?, status? }
+ * ปรับนัดในปฏิทินให้ตรง และบันทึกว่าใครแก้อะไร เมื่อไร ในคอลัมน์ประวัติการแก้ไข
+ */
+function updateAppointment(token, apptId, changes, lang) {
+  const acc = requireUser_(token, lang);
+  const c = changes || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = getSheet_(SHEET_APPTS);
+    const last = sh.getLastRow();
+    if (last < 2) throw new Error(msg_(lang, 'notFound', { id: apptId }));
+    const data = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
+    const idx = data.findIndex(r => r[COL.apptId] === apptId);
+    if (idx < 0) throw new Error(msg_(lang, 'notFound', { id: apptId }));
+    const a = rowToObj_(data[idx], idx + 2);
+
+    const next = { date: a.date, doctor: a.doctor, technique: a.technique, note: a.note, status: a.status };
+    if (c.date !== undefined) {
+      next.date = String(c.date).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(next.date)) throw new Error(msg_(lang, 'dateInvalid'));
+    }
+    if (c.doctor !== undefined) {
+      next.doctor = String(c.doctor).trim();
+      if (getDoctors_().indexOf(next.doctor) < 0) throw new Error(msg_(lang, 'doctorUnknown', { doctor: next.doctor }));
+    }
+    if (c.technique !== undefined) {
+      next.technique = cleanText_(c.technique);
+      if (!next.technique || next.technique === 'อื่นๆ' || next.technique.length > 100) throw new Error(msg_(lang, 'technique'));
+    }
+    if (c.note !== undefined) {
+      next.note = cleanText_(c.note);
+      if (next.note.length > 500) throw new Error(msg_(lang, 'noteTooLong'));
+    }
+    if (c.status !== undefined) {
+      next.status = String(c.status).trim();
+      if ([STATUS_BOOKED, STATUS_DONE, STATUS_CANCELLED].indexOf(next.status) < 0) throw new Error(msg_(lang, 'statusInvalid'));
+    }
+
+    const diff = ['date', 'doctor', 'technique', 'note', 'status']
+      .filter(f => next[f] !== a[f])
+      .map(f => ({ f: f, from: a[f], to: next[f] }));
+    if (!diff.length) return { ok: true, changed: 0, appointments: listAppointments_() };
+
+    // ปรับปฏิทินให้ตรงกับข้อมูลใหม่
+    const settings = getSettings_();
+    const cal = getCalendar_(lang);
+    let ev = null;
+    if (a.eventId) { try { ev = cal.getEventById(a.eventId); } catch (e) { ev = null; } }
+    let eventId = a.eventId;
+    const merged = Object.assign({}, a, next);
+    if (next.status === STATUS_CANCELLED) {
+      if (ev) { try { ev.deleteEvent(); } catch (e) { /* ลบไปแล้ว */ } }
+      eventId = '';
+    } else if (!ev) {
+      eventId = createEvent_(cal, settings, merged).getId();
+    } else {
+      if (next.date !== a.date) ev.setAllDayDate(toDate_(next.date));
+      ev.setTitle(eventTitle_(settings, merged));
+      ev.setDescription(eventDesc_(merged));
+    }
+
+    const label = userLabel_(acc);
+    const now = nowStr_();
+    const history = a.history.concat([{ at: now, by: acc.username, name: label, changes: diff }]);
+    const row = data[idx].slice();
+    row[COL.date] = next.date;
+    row[COL.doctor] = next.doctor;
+    row[COL.technique] = safeCell_(next.technique);
+    row[COL.note] = safeCell_(next.note);
+    row[COL.status] = next.status;
+    row[COL.eventId] = eventId;
+    row[COL.editedBy] = label;
+    row[COL.editedAt] = now;
+    row[COL.history] = JSON.stringify(history);
+    row[COL.name] = safeCell_(row[COL.name]);
+    sh.getRange(idx + 2, 1, 1, APPT_HEADERS.length).setValues([row]);
+    SpreadsheetApp.flush();
+
+    log_(acc.username, 'แก้ไขนัด', 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx + ' (' + apptId + '): ' +
+      diff.map(d => d.f + ' ' + (d.from || '-') + ' → ' + (d.to || '-')).join(', '));
+
+    // ย้ายวันหรือกลับมาใช้งาน แล้ววันนั้นเกินจำนวนเคส: แจ้งเตือนเหมือนตอนลงนัด
+    let overCapacity = [];
+    const becameActive = next.status !== STATUS_CANCELLED && (next.date !== a.date || a.status === STATUS_CANCELLED);
+    if (becameActive) {
+      const max = maxCases_(settings);
+      const total = listAppointments_().filter(x => x.date === next.date && x.status !== STATUS_CANCELLED).length;
+      if (total > max) {
+        overCapacity = [{ date: next.date, total: total }];
+        log_(acc.username, 'แจ้งเตือนเกินเคส', next.date + ' = ' + total + ' เคส (จากการแก้ไขนัด)');
+        sendOverCapacityAlert_(settings, overCapacity, max, { hn: a.hn, doctor: next.doctor, totalFx: a.totalFx }, acc.username);
+      }
+    }
+    return { ok: true, changed: diff.length, overCapacity: overCapacity, appointments: listAppointments_() };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** (ผู้ดูแล) รายชื่อบัญชีทั้งหมด */
@@ -651,7 +753,9 @@ function listAppointments_() {
     .sort(compareAppt_);
 }
 
-function updateStatus_(user, apptId, scope, newStatus, deleteEvent, lang) {
+function updateStatus_(acc, apptId, scope, newStatus, deleteEvent, lang) {
+  const user = acc.username;
+  const label = userLabel_(acc);
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -676,7 +780,13 @@ function updateStatus_(user, apptId, scope, newStatus, deleteEvent, lang) {
           if (ev) ev.deleteEvent();
         } catch (e) { /* event อาจถูกลบไปแล้ว */ }
       }
+      // บันทึกสถานะใหม่พร้อมประวัติว่าใครเปลี่ยน
+      const now = nowStr_();
+      const history = parseHistory_(r[COL.history]).concat([{ at: now, by: user, name: label,
+        changes: [{ f: 'status', from: r[COL.status], to: newStatus }] }]);
       sh.getRange(i + 2, COL.status + 1).setValue(newStatus);
+      if (deleteEvent) sh.getRange(i + 2, COL.eventId + 1).setValue('');
+      sh.getRange(i + 2, COL.editedBy + 1, 1, 3).setValues([[label, now, JSON.stringify(history)]]);
       changedIds.push(r[COL.apptId]);
     });
     SpreadsheetApp.flush();
@@ -696,7 +806,8 @@ function validatePayload_(payload, lang) {
     hn: String(payload.hn || '').trim(),
     name: String(payload.name || '').trim(),
     doctor: String(payload.doctor || '').trim(),
-    note: String(payload.note || '').trim(),
+    technique: cleanText_(payload.technique),
+    note: cleanText_(payload.note),
     totalFx: parseInt(payload.totalFx, 10),
     force: !!payload.force,
     sessions: Array.isArray(payload.sessions) ? payload.sessions : []
@@ -705,6 +816,8 @@ function validatePayload_(payload, lang) {
   if (!p.name) throw new Error(msg_(lang, 'name'));
   if (!p.doctor) throw new Error(msg_(lang, 'doctor'));
   if (getDoctors_().indexOf(p.doctor) < 0) throw new Error(msg_(lang, 'doctorUnknown', { doctor: p.doctor }));
+  if (!p.technique || p.technique === 'อื่นๆ' || p.technique.length > 100) throw new Error(msg_(lang, 'technique'));
+  if (p.note.length > 500) throw new Error(msg_(lang, 'noteTooLong'));
   if (!(p.totalFx >= 1 && p.totalFx <= 30)) throw new Error(msg_(lang, 'fxRange'));
   if (p.sessions.length !== p.totalFx) throw new Error(msg_(lang, 'fxMismatch'));
 
@@ -773,8 +886,57 @@ function rowToObj_(r, row) {
     hn: r[COL.hn], name: r[COL.name], doctor: r[COL.doctor],
     fx: Number(r[COL.fx]), totalFx: Number(r[COL.totalFx]),
     date: r[COL.date],
-    note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy]
+    note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy], eventId: r[COL.eventId],
+    technique: r[COL.technique] || '', editedBy: r[COL.editedBy] || '', editedAt: r[COL.editedAt] || '',
+    history: parseHistory_(r[COL.history])
   };
+}
+
+function parseHistory_(v) {
+  if (!v) return [];
+  try { const h = JSON.parse(v); return Array.isArray(h) ? h : []; } catch (e) { return []; }
+}
+
+/** ชื่อที่แสดงในประวัติ: "ชื่อ นามสกุล (username)" */
+function userLabel_(acc) {
+  const full = ((acc.firstName || '') + ' ' + (acc.lastName || '')).trim();
+  return full ? full + ' (' + acc.username + ')' : acc.username;
+}
+
+function cleanText_(v) {
+  return String(v == null ? '' : v).replace(/\r\n?/g, '\n').trim();
+}
+
+/** กันข้อความที่ขึ้นต้นด้วย = + - @ ถูกชีตตีความเป็นสูตร */
+function safeCell_(v) {
+  const s = String(v == null ? '' : v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+function eventTitle_(settings, a) {
+  const showName = String(settings.SHOW_NAME_IN_CALENDAR).toUpperCase() !== 'FALSE';
+  return [settings.EVENT_PREFIX || '', 'HN ' + a.hn, showName ? a.name : '', a.technique ? '· ' + a.technique : '',
+    '(Fx ' + a.fx + '/' + a.totalFx + ')'].filter(Boolean).join(' ');
+}
+
+function eventDesc_(a) {
+  return [
+    'HN: ' + a.hn,
+    'ผู้ป่วย: ' + a.name,
+    'แพทย์: ' + a.doctor,
+    'รูปแบบการใส่: ' + (a.technique || '-'),
+    'Fraction: ' + a.fx + ' / ' + a.totalFx,
+    a.note ? 'หมายเหตุ: ' + a.note : '',
+    'รหัสคอร์ส: ' + a.courseId,
+    'ผู้บันทึก: ' + a.createdBy
+  ].filter(Boolean).join('\n');
+}
+
+function createEvent_(cal, settings, a) {
+  const ev = cal.createAllDayEvent(eventTitle_(settings, a), toDate_(a.date),
+    { description: eventDesc_(a), location: settings.LOCATION || '' });
+  try { ev.setColor(CalendarApp.EventColor.MAUVE); } catch (e) { /* ignore */ }
+  return ev;
 }
 
 /** เรียงตามวันที่ แล้วตามลำดับแถวในชีต (= ลำดับที่ลงนัด / ลำดับคิวในวันนั้น) */
@@ -874,6 +1036,10 @@ function ensureSetup_() {
     const h = sh.getRange(1, 10).getDisplayValues()[0][0];
     if (h === 'เวลาเริ่ม') sh.deleteColumns(10, 2);
     else if (h === 'ชนิด') sh.deleteColumn(10);
+    // เติมหัวคอลัมน์ใหม่ (รูปแบบการใส่ / ประวัติการแก้ไข) ที่ต่อท้าย
+    if (sh.getLastColumn() < APPT_HEADERS.length) {
+      sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
+    }
   }
 
   sh = ss.getSheetByName(SHEET_DOCTORS);
