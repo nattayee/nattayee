@@ -440,6 +440,16 @@
       </form>
 
       <form id="registerForm" autocomplete="on" novalidate hidden>
+        <div class="row">
+          <div class="field">
+            <label for="regFirst" class="req" data-i18n="first_name"></label>
+            <input type="text" id="regFirst" autocomplete="given-name" maxlength="60" required>
+          </div>
+          <div class="field">
+            <label for="regLast" class="req" data-i18n="last_name"></label>
+            <input type="text" id="regLast" autocomplete="family-name" maxlength="60" required>
+          </div>
+        </div>
         <div class="field">
           <label for="regUser" class="req" data-i18n="username"></label>
           <input type="text" id="regUser" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30" required>
@@ -712,6 +722,7 @@
       auth_title: 'นัดคิวผู้ป่วยใส่แร่', auth_sub: 'เข้าสู่ระบบด้วยบัญชีของคุณ หรือสมัครสมาชิกใหม่',
       login: 'เข้าสู่ระบบ', register: 'สมัครสมาชิก', login_id: 'ชื่อผู้ใช้หรืออีเมล', password: 'รหัสผ่าน',
       show_pw: 'แสดง', hide_pw: 'ซ่อน', remember: 'จำฉันไว้ในเครื่องนี้ 7 วัน', login_btn: 'เข้าสู่ระบบ', forgot_link: 'ลืมรหัสผ่าน?',
+      first_name: 'ชื่อ', last_name: 'นามสกุล', v_name: 'กรุณากรอกชื่อและนามสกุล', u_fullname: 'ชื่อ-นามสกุล',
       username: 'ชื่อผู้ใช้ (username)', username_hint: '3–30 ตัว ใช้ a-z, 0-9, จุด ขีดล่าง หรือขีด',
       email: 'อีเมล', email_hint: 'ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน', password_hint: 'อย่างน้อย 8 ตัว',
       confirm_pw: 'ยืนยันรหัสผ่าน', register_btn: 'สมัครสมาชิก',
@@ -790,6 +801,7 @@
       auth_title: 'Brachytherapy Queue', auth_sub: 'Log in with your account, or sign up for a new one',
       login: 'Log in', register: 'Sign up', login_id: 'Username or email', password: 'Password',
       show_pw: 'Show', hide_pw: 'Hide', remember: 'Keep me logged in on this device for 7 days', login_btn: 'Log in', forgot_link: 'Forgot password?',
+      first_name: 'First name', last_name: 'Last name', v_name: 'Please enter your first and last name', u_fullname: 'Full name',
       username: 'Username', username_hint: '3–30 characters: a-z, 0-9, dot, underscore or hyphen',
       email: 'Email', email_hint: 'Used to send a verification code if you forget your password', password_hint: 'At least 8 characters',
       confirm_pw: 'Confirm password', register_btn: 'Sign up',
@@ -906,7 +918,8 @@
     const AKEY = 'brachyQueueDemoAccounts';
     const loadAcc = () => { try { return JSON.parse(localStorage.getItem(AKEY)) || []; } catch (e) { return []; } };
     const saveAcc = (a) => store.set(AKEY, JSON.stringify(a));
-    const pub = (a) => ({ username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin });
+    const pub = (a) => ({ username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin,
+      firstName: a.firstName || '', lastName: a.lastName || '', fullName: ((a.firstName || '') + ' ' + (a.lastName || '')).trim() });
     const now = () => { const d = new Date(); return iso(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
     const findAcc = (id) => { id = String(id || '').trim().toLowerCase(); return loadAcc().find(a => a.username === id || a.email === id); };
     const me = () => {
@@ -928,7 +941,7 @@
         if (all.some(a => a.username === u)) return fail('m_userTaken');
         if (all.some(a => a.email === em)) return fail('m_emailTaken');
         const first = all.length === 0;
-        const acc = { username: u, email: em, pw: f.password, role: first ? 'admin' : 'user', status: first ? ACC_ACTIVE : ACC_PENDING, createdAt: now(), lastLogin: '' };
+        const acc = { username: u, email: em, pw: f.password, firstName: String(f.firstName).trim(), lastName: String(f.lastName).trim(), role: first ? 'admin' : 'user', status: first ? ACC_ACTIVE : ACC_PENDING, createdAt: now(), lastLogin: '' };
         all.push(acc); saveAcc(all);
         return delay({ ok: true, role: acc.role, status: acc.status, needApproval: !first });
       },
@@ -1084,7 +1097,8 @@
     if (state.loadError) { $('userEmail').textContent = '⚠️ ' + state.loadError; $('calName').textContent = t('load_failed'); return; }
     if (!state.user) { $('userEmail').textContent = t('checking_user'); $('calName').textContent = ''; return; }
     const u = state.user;
-    $('userEmail').innerHTML = '👤 <b>' + esc(u.username) + '</b>' + (u.role === 'admin' ? ' · ' + esc(t('role_admin')) : '');
+    $('userEmail').innerHTML = '👤 <b>' + esc(u.fullName || u.username) + '</b>' + (u.fullName ? ' <span style="opacity:.8">(' + esc(u.username) + ')</span>' : '') +
+      (u.role === 'admin' ? ' · ' + esc(t('role_admin')) : '');
     $('calName').textContent = t('calendar', { name: state.calName });
   }
 
@@ -1107,7 +1121,7 @@
     $('viewAuth').hidden = false;
     setAuthMode(mode || 'login');
     authMsg(msg || '', ok);
-    const first = { login: 'loginId', register: 'regUser', forgot: 'fgId' }[state.authMode];
+    const first = { login: 'loginId', register: 'regFirst', forgot: 'fgId' }[state.authMode];
     setTimeout(() => { try { $(first).focus(); } catch (e) { /* ignore */ } }, 0);
   }
   function showApp() {
@@ -1126,6 +1140,8 @@
     const b = e.target.closest('[data-auth]'); if (!b) return;
     if (b.dataset.auth === 'forgot') $('fgId').value = $('loginId').value.trim();
     setAuthMode(b.dataset.auth); authMsg('');
+    const first = { login: 'loginId', register: 'regFirst', forgot: 'fgId' }[b.dataset.auth];
+    if (first) $(first).focus();
   });
   document.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', () => {
     const inp = $(b.dataset.pw); inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -1155,16 +1171,19 @@
 
   $('registerForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    const fn = $('regFirst').value.replace(/\s+/g, ' ').trim(), ln = $('regLast').value.replace(/\s+/g, ' ').trim();
     const u = $('regUser').value.trim().toLowerCase(), em = $('regEmail').value.trim().toLowerCase();
     const pw = $('regPw').value, pw2 = $('regPw2').value;
+    if (!fn) { authMsg(t('v_name')); $('regFirst').focus(); return; }
+    if (!ln) { authMsg(t('v_name')); $('regLast').focus(); return; }
     if (!RE_USER.test(u)) { authMsg(t('v_username')); $('regUser').focus(); return; }
     if (!RE_EMAIL.test(em)) { authMsg(t('v_email')); $('regEmail').focus(); return; }
     if (pw.length < 8) { authMsg(t('v_pw')); $('regPw').focus(); return; }
     if (pw !== pw2) { authMsg(t('v_pw_match')); $('regPw2').focus(); return; }
     busyBtn('registerBtn', async () => {
       try {
-        const r = await api.register({ username: u, email: em, password: pw });
-        ['regUser', 'regEmail', 'regPw', 'regPw2'].forEach(id => { $(id).value = ''; });
+        const r = await api.register({ firstName: fn, lastName: ln, username: u, email: em, password: pw });
+        ['regFirst', 'regLast', 'regUser', 'regEmail', 'regPw', 'regPw2'].forEach(id => { $(id).value = ''; });
         $('loginId').value = u;
         showAuth('login', t(r.role === 'admin' ? 'reg_admin' : r.needApproval ? 'reg_pending' : 'reg_active'), true);
         $('loginPw').focus();
@@ -1213,7 +1232,7 @@
     b.hidden = !state.pending; b.textContent = state.pending || '';
   }
   function usersHeadHtml() {
-    return '<tr>' + ['u_username', 'u_email', 'u_role', 'u_status', 'u_created', 'u_last'].map(k => '<th>' + esc(t(k)) + '</th>').join('') + '<th></th></tr>';
+    return '<tr>' + ['u_fullname', 'u_username', 'u_email', 'u_role', 'u_status', 'u_created', 'u_last'].map(k => '<th>' + esc(t(k)) + '</th>').join('') + '<th></th></tr>';
   }
   async function loadUsers() {
     try { state.accounts = await api.accounts(); renderUsers(); }
@@ -1224,7 +1243,7 @@
       (a.status === ACC_PENDING ? 0 : 1) - (b.status === ACC_PENDING ? 0 : 1) || a.username.localeCompare(b.username));
     state.pending = list.filter(a => a.status === ACC_PENDING).length;
     renderPendingBadge();
-    if (!list.length) { $('usersBody').innerHTML = '<tr><td colspan="7" class="empty">' + esc(t('no_users')) + '</td></tr>'; return; }
+    if (!list.length) { $('usersBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('no_users')) + '</td></tr>'; return; }
     const btn = (u, act, key, cls) => '<button class="btn sm ' + cls + '" data-uact="' + act + '" data-u="' + esc(u) + '">' + esc(t(key)) + '</button>';
     $('usersBody').innerHTML = list.map(a => {
       const self = state.user && a.username === state.user.username;
@@ -1236,7 +1255,8 @@
         else acts += btn(a.username, 'activate', 'a_activate', 'okb');
         acts += a.role === 'admin' ? btn(a.username, 'user', 'a_make_user', '') : btn(a.username, 'admin', 'a_make_admin', '');
       }
-      return '<tr><td><b>' + esc(a.username) + '</b>' + (self ? ' <span class="hint">' + esc(t('you')) + '</span>' : '') + '</td>' +
+      return '<tr><td class="name"><b>' + esc(a.fullName || '–') + '</b>' + (self ? ' <span class="hint">' + esc(t('you')) + '</span>' : '') + '</td>' +
+        '<td>' + esc(a.username) + '</td>' +
         '<td>' + esc(a.email) + '</td>' +
         '<td><span class="tag ' + (a.role === 'admin' ? 'admin' : 'booked') + '">' + esc(t(a.role === 'admin' ? 'role_admin' : 'role_user')) + '</span></td>' +
         '<td><span class="tag ' + stCls + '">' + esc(ACC_KEY[a.status] ? t(ACC_KEY[a.status]) : a.status) + '</span></td>' +

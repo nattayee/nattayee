@@ -4,7 +4,7 @@
  * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
- * - ระบบสมาชิกของตัวเอง: สมัคร (ชื่อผู้ใช้ / รหัสผ่าน / อีเมล) แล้วเข้าสู่ระบบ
+ * - ระบบสมาชิกของตัวเอง: สมัคร (ชื่อ-นามสกุล / ชื่อผู้ใช้ / รหัสผ่าน / อีเมล) แล้วเข้าสู่ระบบ
  *   ผู้สมัครคนแรกเป็นผู้ดูแลระบบ คนถัดไปรอผู้ดูแลอนุมัติ (ปิดได้ที่ REQUIRE_APPROVAL)
  *   รหัสผ่านเก็บเป็น hash + salt, ลืมรหัสผ่านใช้รหัสยืนยันทางอีเมล, บันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
@@ -49,8 +49,9 @@ const STATUS_CANCELLED = 'ยกเลิก';
 const STATUS_DONE = 'มาตามนัด';
 
 /** บัญชีผู้ใช้ (ชีต Accounts) */
-const ACCOUNT_HEADERS = ['ชื่อผู้ใช้', 'อีเมล', 'รหัสผ่าน (hash)', 'บทบาท', 'สถานะ', 'สมัครเมื่อ', 'เข้าใช้ล่าสุด'];
-const ACOL = { username: 0, email: 1, hash: 2, role: 3, status: 4, createdAt: 5, lastLogin: 6 };
+// ชื่อ/นามสกุลต่อท้ายเป็นคอลัมน์ H, I เพื่อไม่ให้คอลัมน์เดิมของชีตที่สร้างไว้แล้วเลื่อน
+const ACCOUNT_HEADERS = ['ชื่อผู้ใช้', 'อีเมล', 'รหัสผ่าน (hash)', 'บทบาท', 'สถานะ', 'สมัครเมื่อ', 'เข้าใช้ล่าสุด', 'ชื่อ', 'นามสกุล'];
+const ACOL = { username: 0, email: 1, hash: 2, role: 3, status: 4, createdAt: 5, lastLogin: 6, firstName: 7, lastName: 8 };
 const ROLE_ADMIN = 'admin';
 const ROLE_USER = 'user';
 const ACC_ACTIVE = 'ใช้งาน';
@@ -79,6 +80,7 @@ const MSG = {
     adminOnly: 'เฉพาะผู้ดูแลระบบเท่านั้น',
     badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
     locked: 'ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่',
+    nameRequired: 'กรุณากรอกชื่อและนามสกุล (ไม่เกิน 60 ตัวอักษร)',
     usernameRule: 'ชื่อผู้ใช้ต้องยาว 3–30 ตัว ใช้ได้เฉพาะ a-z, 0-9, จุด (.), ขีดล่าง (_) และขีด (-)',
     usernameTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว',
     emailRule: 'รูปแบบอีเมลไม่ถูกต้อง',
@@ -107,6 +109,7 @@ const MSG = {
     adminOnly: 'Administrators only',
     badLogin: 'Incorrect username or password',
     locked: 'Too many wrong passwords. Please wait 10 minutes and try again',
+    nameRequired: 'Please enter your first and last name (up to 60 characters each)',
     usernameRule: 'Username must be 3–30 characters: a-z, 0-9, dot (.), underscore (_) or hyphen (-)',
     usernameTaken: 'This username is already taken',
     emailRule: 'Invalid email address',
@@ -200,12 +203,15 @@ function setup() {
 /*  API สมาชิก (ไม่ต้องเข้าสู่ระบบ)                                       */
 /* ------------------------------------------------------------------ */
 
-/** สมัครสมาชิก: form = { username, email, password, lang } */
+/** สมัครสมาชิก: form = { firstName, lastName, username, email, password, lang } */
 function registerAccount(form) {
   const lang = form && form.lang;
+  const firstName = cleanName_(form && form.firstName);
+  const lastName = cleanName_(form && form.lastName);
   const username = normUsername_(form && form.username);
   const email = String(form && form.email || '').trim().toLowerCase();
   const password = String(form && form.password || '');
+  if (!firstName || !lastName || firstName.length > 60 || lastName.length > 60) throw new Error(msg_(lang, 'nameRequired'));
   if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error(msg_(lang, 'usernameRule'));
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw new Error(msg_(lang, 'emailRule'));
   if (password.length < 8 || password.length > 200) throw new Error(msg_(lang, 'passwordRule'));
@@ -224,10 +230,10 @@ function registerAccount(form) {
     const status = needApproval ? ACC_PENDING : ACC_ACTIVE;
     const sh = getSheet_(SHEET_ACCOUNTS);
     sh.getRange(sh.getLastRow() + 1, 1, 1, ACCOUNT_HEADERS.length)
-      .setValues([[username, email, hashPassword_(password), role, status, nowStr_(), '']]);
+      .setValues([[username, email, hashPassword_(password), role, status, nowStr_(), '', firstName, lastName]]);
     SpreadsheetApp.flush();
-    log_(username, 'สมัครสมาชิก', email + ' / ' + role + ' / ' + status);
-    if (needApproval) notifyAdminsNewAccount_(accounts, username, email);
+    log_(username, 'สมัครสมาชิก', firstName + ' ' + lastName + ' / ' + email + ' / ' + role + ' / ' + status);
+    if (needApproval) notifyAdminsNewAccount_(accounts, username, email, firstName + ' ' + lastName);
     return { ok: true, status: status, role: role, needApproval: needApproval };
   } finally {
     lock.releaseLock();
@@ -475,6 +481,11 @@ function normUsername_(u) {
   return String(u || '').trim().toLowerCase();
 }
 
+/** ตัดช่องว่างหัวท้าย/ช่องว่างซ้ำ และตัวอักษรที่อาจทำให้ชีตตีความเป็นสูตร */
+function cleanName_(v) {
+  return String(v || '').replace(/\s+/g, ' ').trim().replace(/^[=+\-@]+/, '');
+}
+
 function getAccounts_() {
   const sh = getSheet_(SHEET_ACCOUNTS);
   const last = sh.getLastRow();
@@ -488,13 +499,18 @@ function getAccounts_() {
       role: String(r[ACOL.role]).trim() === ROLE_ADMIN ? ROLE_ADMIN : ROLE_USER,
       status: String(r[ACOL.status]).trim(),
       createdAt: r[ACOL.createdAt],
-      lastLogin: r[ACOL.lastLogin]
+      lastLogin: r[ACOL.lastLogin],
+      firstName: String(r[ACOL.firstName] || '').trim(),
+      lastName: String(r[ACOL.lastName] || '').trim()
     }))
     .filter(a => a.username);
 }
 
 function publicUser_(a) {
-  return { username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin };
+  return {
+    username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin,
+    firstName: a.firstName, lastName: a.lastName, fullName: (a.firstName + ' ' + a.lastName).trim()
+  };
 }
 
 /** ตรวจ token แล้วคืนบัญชี (ต้องสถานะ "ใช้งาน") */
@@ -572,14 +588,15 @@ function parseToken_(token) {
   }
 }
 
-function notifyAdminsNewAccount_(accounts, username, email) {
+function notifyAdminsNewAccount_(accounts, username, email, fullName) {
   const to = accounts.filter(a => a.role === ROLE_ADMIN && a.status === ACC_ACTIVE && a.email).map(a => a.email).join(',');
   if (!to) return;
   try {
     MailApp.sendEmail({
       to: to,
-      subject: '[นัดคิวใส่แร่] มีผู้สมัครใหม่รออนุมัติ: ' + username,
-      body: 'ผู้สมัครใหม่: ' + username + ' (' + email + ')\nเข้าสู่ระบบแล้วไปที่แท็บ "ผู้ใช้" เพื่ออนุมัติหรือระงับ'
+      subject: '[นัดคิวใส่แร่] มีผู้สมัครใหม่รออนุมัติ: ' + fullName + ' (' + username + ')',
+      body: 'ผู้สมัครใหม่: ' + fullName + '\nชื่อผู้ใช้: ' + username + '\nอีเมล: ' + email +
+        '\nเข้าสู่ระบบแล้วไปที่แท็บ "ผู้ใช้" เพื่ออนุมัติหรือระงับ'
     });
   } catch (e) {
     log_(username, 'แจ้งผู้ดูแลไม่สำเร็จ', e.message);
@@ -901,6 +918,9 @@ function ensureSetup_() {
       .setFontWeight('bold').setBackground('#ede7f6');
     sh.setFrozenRows(1);
     sh.getRange('A:B').setNumberFormat('@');
+  } else if (sh.getLastColumn() < ACCOUNT_HEADERS.length) {
+    // ชีต Accounts จากเวอร์ชันก่อน: เติมหัวคอลัมน์ ชื่อ / นามสกุล
+    sh.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
   }
 
   sh = ss.getSheetByName(SHEET_LOG);
