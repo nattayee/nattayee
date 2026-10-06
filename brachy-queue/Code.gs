@@ -9,9 +9,13 @@
  *   รหัสผ่านเก็บเป็น hash + salt, ลืมรหัสผ่านใช้รหัสยืนยันทางอีเมล, บันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
  *
- * ต้องผูกสคริปต์นี้กับ Google Sheet (Extensions > Apps Script)
- * และ Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone"
+ * สร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet หลังบ้าน (ระบบจะรู้จักชีตเอง)
+ * ถ้าสร้างโปรเจกต์แยกที่ script.google.com ให้ใส่ลิงก์หรือ ID ของชีตที่ SPREADSHEET_ID ด้านล่าง
+ * แล้ว Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone"
  */
+
+/** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
+const SPREADSHEET_ID = '';
 
 const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
@@ -177,9 +181,11 @@ function showDialog() {
 /** สร้างชีตและหัวตารางที่จำเป็น (รันซ้ำได้ ไม่ลบข้อมูลเดิม) */
 function setup() {
   ensureSetup_();
+  // จำ ID ชีตไว้ เผื่อเว็บแอปหาชีตที่ผูกไม่เจอ
+  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss_().getId());
   authSecret_(); // สร้างกุญแจลงชื่อ token ไว้ล่วงหน้า
   // คอลัมน์ HN และวันที่นัดต้องเป็นข้อความ (กันเลข 0 นำหน้า HN หาย และกันชีตแปลงวันที่)
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   ss.getSheetByName(SHEET_APPTS).getRange('D:D').setNumberFormat('@');
   ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
   ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
@@ -587,7 +593,7 @@ function nowStr_() {
 /** บันทึกการใช้งานลงชีต AccessLog */
 function log_(user, action, detail) {
   try {
-    const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOG);
+    const sh = ss_().getSheetByName(SHEET_LOG);
     if (!sh) return;
     sh.appendRow([nowStr_(), user || '(ไม่ทราบ)', action, detail || '']);
   } catch (e) { /* ไม่ให้ log ที่ผิดพลาดทำให้งานหลักล้ม */ }
@@ -806,13 +812,36 @@ function getSettings_() {
 }
 
 function getSheet_(name) {
-  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  const sh = ss_().getSheetByName(name);
   if (!sh) throw new Error(msg_('th', 'sheetMissing', { name: name }));
   return sh;
 }
 
+/**
+ * Google Sheet หลังบ้าน: ใช้ SPREADSHEET_ID ถ้าใส่ไว้ ไม่งั้นใช้ชีตที่สคริปต์ผูกอยู่
+ * หรือ ID ที่ setup() จำไว้ (กรณีเว็บแอปหาชีตที่ผูกไม่เจอ)
+ */
+function ss_() {
+  if (ss_.cache) return ss_.cache;
+  let ss = null;
+  const fixed = String(SPREADSHEET_ID || '').trim();
+  if (fixed) ss = SpreadsheetApp.openById((fixed.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || fixed);
+  if (!ss) { try { ss = SpreadsheetApp.getActive(); } catch (e) { ss = null; } }
+  if (!ss) {
+    const saved = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    if (saved) ss = SpreadsheetApp.openById(saved);
+  }
+  if (!ss) {
+    throw new Error('ไม่พบ Google Sheet ของระบบ: สคริปต์นี้ไม่ได้สร้างจากเมนู ส่วนขยาย > Apps Script ของชีต ' +
+      'ให้ใส่ลิงก์ชีตที่ SPREADSHEET_ID บนสุดของ Code.gs แล้ว Deploy เวอร์ชันใหม่ / ' +
+      'Spreadsheet not found: paste the sheet link into SPREADSHEET_ID at the top of Code.gs and deploy a new version');
+  }
+  ss_.cache = ss;
+  return ss;
+}
+
 function ensureSetup_() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
 
   let sh = ss.getSheetByName(SHEET_APPTS);
   if (!sh) {
