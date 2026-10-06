@@ -104,7 +104,7 @@
 | RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
 | Nurse | Patient education, consent, การดูแลผลข้างเคียง |
 | RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator, ตารางงานประจำสัปดาห์ |
-| MP ▾ | **Machine QA** (แอป [Linac QA](https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec)), **Dosimetry** (แอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec)) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้, Treatment Planning, Patient-specific QA, Radiation Safety |
+| MP ▾ | **Machine QA** (แอป [Linac QA](https://script.google.com/macros/s/AKfycbzbr7zos77u_DMBvXs-JLKsYiCdLXwuzTL0dQugLDLtVGUq47xYPESaWSeakd8k2WWO/exec)), **Dosimetry** (แอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec)) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้, Treatment Planning, Patient-specific QA, Radiation Safety |
 | Guideline | แนวทางการรักษาแยกตามโรค และตาราง dose constraints (QUANTEC) |
 
 ## แก้ไขเนื้อหา
