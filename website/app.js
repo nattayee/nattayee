@@ -24,12 +24,6 @@
       (lead ? '<p class="lead">' + esc(lead) + "</p>" : "") + body + "</section>";
   }
 
-  function formatDate(iso) {
-    var d = new Date(iso + "T00:00:00");
-    if (isNaN(d)) return esc(iso);
-    return d.toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" });
-  }
-
   // Find the nav entry (and its parent) for a page key.
   function findNav(page) {
     for (var i = 0; i < S.nav.length; i++) {
@@ -79,14 +73,12 @@
 
   var widgets = {
     intro: function () {
-      var news = S.announcements.map(function (a) {
-        return '<div class="news-item"><time datetime="' + esc(a.date) + '">' + formatDate(a.date) + "</time>" +
-          "<h4>" + esc(a.title) + "</h4><p>" + esc(a.body) + "</p></div>";
-      }).join("");
-      return '<div class="intro section">' +
-        '<div><h2>' + esc(S.organization) + "</h2>" +
-        '<p class="intro-text">' + esc(S.description) + "</p></div>" +
-        '<div class="card"><h3>📣 ประกาศ / ข่าวสาร</h3>' + news + "</div></div>";
+      return '<div class="intro section"><h2>' + esc(S.organization) + "</h2>" +
+        '<p class="intro-text">' + esc(S.description) + "</p></div>";
+    },
+
+    announcements: function () {
+      return '<section class="section" id="chatRoot"></section>';
     },
 
     quicklinks: function () {
@@ -298,13 +290,18 @@
 
   /* ---------------- Router ---------------- */
 
+  var unmountChat = null;
+
   function route() {
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
     if (!S.pages[page]) page = "home";
 
+    if (unmountChat) { unmountChat(); unmountChat = null; }
     app.innerHTML = renderPage(page);
     initConstraints();
     initCalculators();
+    var chatRoot = document.getElementById("chatRoot");
+    if (chatRoot && window.Chat) unmountChat = window.Chat.mount(chatRoot);
 
     document.getElementById("banner").classList.toggle("compact", page !== "home");
 

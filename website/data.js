@@ -45,14 +45,39 @@ window.SITE = {
     { label: "Guideline", page: "guideline" },
   ],
 
+  /*
+   * ช่องแชทประกาศ / ข่าวสาร (หน้า Home)
+   * ถ้าไม่ได้ใส่ firebase.projectId จะทำงานใน "โหมดทดลอง" — ข้อความเก็บในเบราว์เซอร์ของแต่ละเครื่องเท่านั้น
+   * ใส่ค่า config จาก Firebase console → Project settings → Your apps → Web app เพื่อให้ทุกคนเห็นข้อความร่วมกัน
+   * (วิธีตั้งค่าและ Firestore rules ดูใน README.md)
+   */
+  chat: {
+    roles: ["RO", "MP", "RTT", "Nurse"],
+    maxImages: 4,
+    collection: "announcements",
+    firebase: {
+      apiKey: "",
+      authDomain: "",
+      projectId: "",
+      appId: "",
+    },
+  },
+
+  // ข้อความเริ่มต้นของโหมดทดลอง
   announcements: [
     {
       date: "2026-10-01",
+      from: "ผู้ดูแลเว็บไซต์",
+      role: "Admin",
+      to: ["ALL"],
       title: "ยินดีต้อนรับสู่ LPCH RO Workspace",
       body: "เว็บไซต์นี้รวบรวมลิงก์และเครื่องมือที่ใช้บ่อยในหน่วยรังสีรักษา หากต้องการเพิ่มหรือแก้ไขเนื้อหา โปรดติดต่อผู้ดูแลเว็บไซต์",
     },
     {
       date: "2026-09-15",
+      from: "ผู้ดูแลเว็บไซต์",
+      role: "Admin",
+      to: ["RO", "MP"],
       title: "อัปเดต Guideline: Dose constraints",
       body: "เพิ่มตารางค่า dose constraints ของอวัยวะสำคัญ (อ้างอิง QUANTEC) สำหรับการรักษาแบบ conventional fractionation",
     },
@@ -69,7 +94,7 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["intro", "quicklinks", "contacts"],
+      widgets: ["intro", "announcements", "quicklinks", "contacts"],
     },
 
     /* ---------------- Machines ---------------- */
