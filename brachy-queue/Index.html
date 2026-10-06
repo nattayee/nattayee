@@ -175,6 +175,10 @@
     .radio label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; margin: 0; }
     .check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; }
     .hint { font-size: 12px; color: var(--muted); }
+    .manual { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 6px; }
+    .manual .mrow { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 6px; align-items: center; }
+    .manual .mrow span { font-weight: 700; color: var(--accent); font-size: 14px; }
+    .manual .mrow input:invalid, .manual .mrow input.empty { border-color: var(--warn); }
 
     .preview { display: grid; gap: 6px; max-height: 420px; overflow: auto; padding-right: 2px; }
     .fx {
@@ -408,7 +412,7 @@
             </div>
           </div>
 
-          <div class="field" style="max-width:240px">
+          <div class="field" style="max-width:240px" id="startDateField">
             <label for="startDate" class="req" data-i18n="start_date"></label>
             <input type="date" id="startDate" required>
           </div>
@@ -418,6 +422,7 @@
             <div class="radio">
               <label><input type="radio" name="mode" value="days" checked> <span data-i18n="by_weekday"></span></label>
               <label><input type="radio" name="mode" value="interval"> <span data-i18n="every_n"></span></label>
+              <label><input type="radio" name="mode" value="manual"> <span data-i18n="by_manual"></span></label>
             </div>
             <div id="modeDays">
               <div class="days" id="days"></div>
@@ -433,7 +438,11 @@
                 <span data-i18n="every"></span> <input type="number" id="interval" min="1" max="30" value="7" style="width:80px"> <span data-i18n="days_unit"></span>
               </div>
             </div>
-            <div style="margin-top:8px">
+            <div id="modeManual" hidden>
+              <div class="hint" data-i18n="manual_hint"></div>
+              <div class="manual" id="manualList"></div>
+            </div>
+            <div style="margin-top:8px" id="holidayRow">
               <label class="check" style="margin:0"><input type="checkbox" id="skipHoliday" checked> <span data-i18n="skip_holiday"></span></label>
             </div>
           </div>
@@ -533,7 +542,8 @@
       checking_user: 'กำลังตรวจสอบผู้ใช้…', calendar: 'ปฏิทิน: {name}', load_failed: 'โหลดข้อมูลไม่สำเร็จ',
       new_appt: 'ลงนัดผู้ป่วยใหม่', hn_ph: 'เช่น 6512345', doctor: 'แพทย์', choose_doctor: '— เลือกแพทย์ —',
       name: 'ชื่อ-สกุลผู้ป่วย', name_ph: 'ชื่อ นามสกุล', fx_count: 'จำนวน Fraction', start_date: 'วันเริ่ม Fx 1',
-      pattern: 'รูปแบบการนัด', by_weekday: 'ตามวันในสัปดาห์', every_n: 'ทุก ๆ N วัน',
+      pattern: 'รูปแบบการนัด', by_weekday: 'ตามวันในสัปดาห์', every_n: 'ทุก ๆ N วัน', by_manual: 'เลือกวันเองตาม Fraction',
+      manual_hint: 'เลือกวันที่ของแต่ละ Fraction (จำนวนช่องเท่ากับจำนวน Fraction · วันเดียวกันได้ เช่น ทำวันละ 2 Fx)', w_nodate: 'ยังไม่ได้เลือกวัน',
       p_mf: 'จ–ศ', p_mth: 'จ / พฤ', p_tf: 'อ / ศ', p_weekly: 'สัปดาห์ละครั้ง', every: 'ทุก', days_unit: 'วัน',
       skip_holiday: 'ข้ามวันหยุด (ชีต Holidays) และเลื่อนนัดที่ตกเสาร์–อาทิตย์',
       note: 'หมายเหตุ', note_ph: 'เช่น applicator, dose/fraction, งดน้ำงดอาหาร',
@@ -584,7 +594,8 @@
       checking_user: 'Checking user…', calendar: 'Calendar: {name}', load_failed: 'Failed to load data',
       new_appt: 'New appointment', hn_ph: 'e.g. 6512345', doctor: 'Doctor', choose_doctor: '— Select doctor —',
       name: 'Patient name', name_ph: 'First and last name', fx_count: 'Number of fractions', start_date: 'Fx 1 start date',
-      pattern: 'Schedule pattern', by_weekday: 'By weekday', every_n: 'Every N days',
+      pattern: 'Schedule pattern', by_weekday: 'By weekday', every_n: 'Every N days', by_manual: 'Pick a date for each fraction',
+      manual_hint: 'Choose the date of each fraction (one box per fraction · the same day is allowed, e.g. 2 Fx/day)', w_nodate: 'No date selected',
       p_mf: 'Mon–Fri', p_mth: 'Mon / Thu', p_tf: 'Tue / Fri', p_weekly: 'Weekly', every: 'Every', days_unit: 'days',
       skip_holiday: 'Skip holidays (Holidays sheet) and move dates that fall on weekends',
       note: 'Note', note_ph: 'e.g. applicator, dose/fraction, NPO',
@@ -782,6 +793,7 @@
     if (l === lang) return;
     lang = l; store.set('bq-lang', l);
     applyStaticText();
+    renderManual();
     renderAll();
   }
   $('langSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); });
@@ -846,8 +858,13 @@
   }));
   document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
     const m = modeVal();
+    // เปลี่ยนเป็นเลือกวันเอง: ตั้งต้นจากวันที่ที่สร้างไว้ตอนนี้ แล้วค่อยแก้ทีละ Fx
+    if (m === 'manual') state.manual = state.sessions.map(x => x.date);
     $('modeDays').hidden = m !== 'days';
     $('modeInterval').hidden = m !== 'interval';
+    $('modeManual').hidden = m !== 'manual';
+    $('startDateField').hidden = m === 'manual';
+    $('holidayRow').hidden = m === 'manual';
     regenerate();
   }));
   const modeVal = () => document.querySelector('input[name=mode]:checked').value;
@@ -856,6 +873,20 @@
   $('days').addEventListener('change', regenerate);
   $('totalFx').addEventListener('input', regenerate);
   $('hn').addEventListener('change', renderPreview);
+
+  /* ================= เลือกวันเองตาม Fraction ================= */
+  state.manual = [];
+  function renderManual() {
+    $('manualList').innerHTML = state.manual.map((d, i) =>
+      '<label class="mrow"><span>Fx ' + (i + 1) + '</span><input type="date" data-mi="' + i + '" value="' + esc(d) + '"' +
+      (d ? '' : ' class="empty"') + ' aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '"></label>').join('');
+  }
+  $('manualList').addEventListener('change', (e) => {
+    const i = e.target.dataset.mi; if (i == null) return;
+    state.manual[Number(i)] = e.target.value;
+    e.target.classList.toggle('empty', !e.target.value);
+    regenerate(true);
+  });
 
   /* ================= สร้างรายการวันนัด ================= */
   function isBlocked(d) {
@@ -868,8 +899,17 @@
     return x;
   }
 
-  function regenerate() {
+  function regenerate(keepManualInputs) {
     const n = Math.max(0, Math.min(30, parseInt($('totalFx').value, 10) || 0));
+    if (modeVal() === 'manual') {
+      // ช่องวันที่เท่ากับจำนวน Fraction: เพิ่มช่องว่างหรือตัดช่องท้ายออก
+      state.manual = state.manual.slice(0, n);
+      while (state.manual.length < n) state.manual.push('');
+      if (keepManualInputs !== true) renderManual();
+      state.sessions = state.manual.map(d => ({ date: d }));
+      renderPreview();
+      return;
+    }
     const sd = $('startDate').value;
     const out = [];
     if (sd && n) {
@@ -902,12 +942,18 @@
     const counts = dayCounts();
     const hn = $('hn').value.trim();
     box.innerHTML = state.sessions.map((s, i) => {
+      if (!s.date) {
+        return '<div class="fx warn"><span class="no">Fx ' + (i + 1) + '</span>' +
+          '<input type="date" data-i="' + i + '" value="" aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '">' +
+          '<span class="desc">⚠️ ' + esc(t('w_nodate')) + '</span></div>';
+      }
       const warns = [];
       const d = parseIso(s.date);
       if (state.holidays[s.date]) warns.push(t('w_holiday', { name: state.holidays[s.date] }));
       if (d.getDay() === 0 || d.getDay() === 6) warns.push(t('w_weekend'));
       if (s.date < todayIso()) warns.push(t('w_past'));
-      if (i > 0 && s.date < state.sessions[i - 1].date) warns.push(t('w_order'));
+      const prev = state.sessions.slice(0, i).map(x => x.date).filter(Boolean).pop();
+      if (prev && s.date < prev) warns.push(t('w_order'));
       if (hn && booked.some(a => a.hn === hn && a.date === s.date)) warns.push(t('w_dup'));
       const existing = (counts[s.date] || []).length;
       const after = existing + state.sessions.filter(x => x.date === s.date).length;
@@ -925,6 +971,7 @@
     const i = e.target.dataset.i;
     if (i == null || !e.target.value) return;
     state.sessions[Number(i)].date = e.target.value;
+    if (modeVal() === 'manual') { state.manual[Number(i)] = e.target.value; renderManual(); }
     renderPreview();
   });
 
@@ -942,10 +989,14 @@
     if (!p.name) return ['name', t('v_name')];
     if (!p.doctor) return ['doctor', t('v_doctor')];
     if (!(p.totalFx >= 1 && p.totalFx <= 30)) return ['totalFx', t('v_fx')];
-    if (!$('startDate').value) return ['startDate', t('v_start')];
+    if (modeVal() !== 'manual' && !$('startDate').value) return ['startDate', t('v_start')];
     if (p.sessions.length !== p.totalFx) return [null, t('v_incomplete', { n: p.totalFx })];
     const bad = p.sessions.findIndex(s => !s.date);
-    if (bad >= 0) return [null, t('v_fxdate', { n: bad + 1 })];
+    if (bad >= 0) {
+      const el = modeVal() === 'manual' ? document.querySelector('[data-mi="' + bad + '"]') : null;
+      if (el) el.focus();
+      return [null, t('v_fxdate', { n: bad + 1 })];
+    }
     const dupHn = state.appts.find(a => a.hn === p.hn && a.status === ST_BOOKED && a.date >= todayIso());
     if (dupHn && !confirm(t('c_dup_course', { hn: p.hn, date: fmtDate(dupHn.date) }))) return [null, null];
     return null;
@@ -990,6 +1041,7 @@
   function resetForm() {
     ['hn', 'name', 'note'].forEach(id => { $(id).value = ''; });
     $('doctor').value = '';
+    state.manual = [];
     regenerate();
     $('hn').focus();
   }
