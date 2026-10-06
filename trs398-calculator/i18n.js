@@ -365,7 +365,7 @@
     'ผู้บันทึก (Gmail)': 'Recorded by (Gmail)',
     'อีเมลผู้บันทึก (Gmail)': 'Recorder\'s Gmail',
     'เข้าสู่ระบบด้วย Google': 'Sign in with Google',
-    'ออกจากระบบ': 'Sign out',
+    'กำลังตรวจสอบบัญชี Google…': 'Checking your Google account…',
     'กดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน': 'Press "Sign in with Google" at the top of the page before sending',
     'กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่ด้านบนของหน้าก่อนส่งรายงาน': 'Press "Sign in with Google" at the top of the page before sending',
     'กำลังเชื่อมต่อกับ Google ลองอีกครั้งในอีกสักครู่': 'Connecting to Google — try again in a moment',

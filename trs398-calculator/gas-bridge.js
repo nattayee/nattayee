@@ -3,7 +3,9 @@
  * and there is no claude.ai viewer), it provides the same claude.use('mcp') interface the page uses
  * in claude.ai, backed by the server functions in WebApp.gs:
  *   download_file_content → apiExportXlsx(fileId)
- *   create_file           → apiAppendReport(csvText)   (writes straight to the Log tab)
+ *   create_file           → apiAppendReport(csvText, token)   (writes straight to the Log tab)
+ * It also shows who is signed in: the Google account signed in right now (hidden sign-in frame), a
+ * "Sign in with Google" button when that cannot be read, or a typed Gmail when sign-in is not set up.
  * Errors come back as {code: 'tool_error', message} so the page's existing messages apply.
  */
 (function () {
@@ -31,6 +33,7 @@
     try { google.script.history.replace(null, {}); } catch (e) { /* older runtimes */ }
   }
   function forgetToken() { token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ } }
+  function saveToken(t) { token = t; try { localStorage.setItem(TOKEN_KEY, t); } catch (e) { /* storage unavailable */ } }
 
   var mcp = {
     callTool: function (server, tool, input) {
@@ -63,61 +66,88 @@
     apply();
   }
 
-  // Log link/field point at the shared Log
-  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
-  google.script.run
-    .withSuccessHandler(function (info) {
-      if (!info) return;
+  function el(id) { return document.getElementById(id); }
+  var owned = false;   // footer line added once
+
+  // Sign-in state on the page: who is signed in, the sign-in button, or the typed recorder box
+  function applyInfo(info, checking) {
+    if (!info) return;
+    var badge = el('userBadge'), who = el('userEmail'), lead = badge && badge.querySelector('span'), login = el('loginBtn');
+    if (!info.viaToken && token) forgetToken();   // expired or from an old secret
+    if (login && info.loginUrl) login.href = info.loginHref || info.loginUrl + '?login=1&back=' + encodeURIComponent(info.appUrl || '');
+    if (checking) {   // asking Google for the account signed in right now
+      window.TRS398_USER = null;
+      if (badge && who && lead) { lead.textContent = 'กำลังตรวจสอบบัญชี Google…'; who.textContent = ''; badge.hidden = false; }
+      if (login) login.hidden = true;
+    } else {
       window.TRS398_USER = info.account || '';
-      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
-      var login = document.getElementById('loginBtn'), logout = document.getElementById('logoutBtn');
-      if (badge && who) { who.textContent = info.account || ''; badge.hidden = !info.account; }
-      if (!info.viaToken && token) forgetToken();   // expired or from an old secret
-      if (logout) {
-        logout.hidden = !info.viaToken;
-        logout.onclick = function () {
-          forgetToken();
-          window.TRS398_USER = '';
-          badge.hidden = true; logout.hidden = true;
-          if (login && info.loginUrl) login.hidden = false;
-        };
-      }
-      if (login && info.loginUrl) login.href = info.loginHref || info.loginUrl + '?login=1&back=' + encodeURIComponent(info.appUrl || '');
-      if (!info.account) {
-        if (login && info.loginUrl) login.hidden = false;   // "Sign in with Google" through the sign-in deployment
-        else askRecorder();                                 // not set up yet: the recorder types their Gmail
-      }
-      var logUrl = document.getElementById('logUrl'), link = document.getElementById('logLink');
-      if (logUrl && info.logUrl) {
-        logUrl.value = info.logUrl;
-        logUrl.dispatchEvent(new Event('change', { bubbles: true }));   // the page saves it and updates the link
-      }
-      if (link && info.logUrl) link.href = info.logUrl;
-      var foot = document.querySelector('footer');
-      if (foot) {
-        var p = document.createElement('p');
-        p.appendChild(document.createTextNode('ข้อมูลหลักและ Log เป็นของ '));
-        var b = document.createElement('strong');
-        b.setAttribute('translate', 'no');
-        b.textContent = info.owner || '';
-        p.appendChild(b);
-        foot.insertBefore(p, foot.firstChild);
-      }
-    })
-    .withFailureHandler(function (err) {
-      window.TRS398_USER = '';
-      var badge = document.getElementById('userBadge'), who = document.getElementById('userEmail');
-      if (badge && who) {
-        who.textContent = (err && err.message) || String(err);
-        var lead = badge.querySelector('span'); if (lead) lead.hidden = true;   // show only the reason
-        badge.hidden = false; badge.classList.add('err');
-      }
-      var foot = document.querySelector('footer');
-      if (!foot) return;
+      if (badge && who && lead) { lead.textContent = 'เข้าสู่ระบบเป็น'; who.textContent = info.account || ''; badge.hidden = !info.account; }
+      if (login) login.hidden = !!info.account || !info.loginUrl;
+      if (!info.account && !info.loginUrl) askRecorder();   // sign-in not set up yet: the recorder types their Gmail
+    }
+    var logUrl = el('logUrl'), link = el('logLink');
+    if (logUrl && info.logUrl && logUrl.value !== info.logUrl) {
+      logUrl.value = info.logUrl;
+      logUrl.dispatchEvent(new Event('change', { bubbles: true }));   // the page saves it and updates the link
+    }
+    if (link && info.logUrl) link.href = info.logUrl;
+    var foot = document.querySelector('footer');
+    if (foot && !owned) {
+      owned = true;
       var p = document.createElement('p');
-      p.style.color = 'var(--bad)';
-      p.textContent = (err && err.message) || String(err);
+      p.appendChild(document.createTextNode('ข้อมูลหลักและ Log เป็นของ '));
+      var b = document.createElement('strong');
+      b.setAttribute('translate', 'no');
+      b.textContent = info.owner || '';
+      p.appendChild(b);
       foot.insertBefore(p, foot.firstChild);
-    })
-    .apiInfo(token);
+    }
+  }
+
+  function showError(err) {
+    window.TRS398_USER = '';
+    var badge = el('userBadge'), who = el('userEmail');
+    if (badge && who) {
+      who.textContent = (err && err.message) || String(err);
+      var lead = badge.querySelector('span'); if (lead) lead.hidden = true;   // show only the reason
+      badge.hidden = false; badge.classList.add('err');
+    }
+    var foot = document.querySelector('footer');
+    if (!foot) return;
+    var p = document.createElement('p');
+    p.style.color = 'var(--bad)';
+    p.textContent = (err && err.message) || String(err);
+    foot.insertBefore(p, foot.firstChild);
+  }
+
+  function info(tok, then) {
+    google.script.run.withSuccessHandler(then).withFailureHandler(showError).apiInfo(tok, location.origin);
+  }
+
+  // The sign-in deployment in a hidden frame answers with a token for the Google account signed in now.
+  // No answer (first use needs the user's approval, or the browser blocks Google in frames): the button.
+  function autoLogin(src, last) {
+    var done = false, frame = document.createElement('iframe');
+    frame.src = src;
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+    function finish() { done = true; window.removeEventListener('message', onMessage); if (frame.parentNode) frame.parentNode.removeChild(frame); }
+    function onMessage(ev) {
+      var d = ev.data;
+      if (done || !/\.googleusercontent\.com$/.test(ev.origin) || !d || d.trs398 !== 'login' || !d.token) return;
+      finish();
+      saveToken(d.token);   // checked by the server like any other token
+      info(token, function (i) { applyInfo(i); });
+    }
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(frame);
+    setTimeout(function () { if (!done) { finish(); applyInfo(last); } }, 12000);
+  }
+
+  window.TRS398_USER = null;   // null = not known yet; reports are not sent until the recorder is known
+  info(token, function (i) {
+    if (i && i.autoLoginSrc) { applyInfo(i, true); autoLogin(i.autoLoginSrc, i); }
+    else applyInfo(i);
+  });
 })();

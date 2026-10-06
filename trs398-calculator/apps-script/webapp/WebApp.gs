@@ -17,6 +17,10 @@
  *        APP_URL   = the /exec URL of deployment 2 (the app)
  *        LOGIN_URL = the /exec URL of deployment 3 (sign-in)
  *      Until LOGIN_URL is set, the page asks the recorder to type their Gmail instead.
+ *   4. Automatic sign-in: once nattayee has opened the app (which records the app's page origin as
+ *      APP_ORIGIN), every page load asks deployment 3 in a hidden frame for the Google account signed in right
+ *      now, so the recorder follows whoever is signed in. First use (approval) or browsers that block it fall
+ *      back to the "Sign in with Google" button.
  */
 var WEBAPP = {
   OWNER_EMAIL: 'nattayee@gmail.com',
@@ -65,7 +69,8 @@ function loginUrl_() { return prop_('LOGIN_URL').trim(); }
 /** The app deployment's /exec URL, where sign-in returns to (Script property APP_URL). */
 function appUrl_() { return prop_('APP_URL').trim() || ScriptApp.getService().getUrl(); }
 var BACK_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/;
-var TOKEN_DAYS = 30;
+var TOKEN_DAYS = 7;
+var SANDBOX_ORIGIN_RE = /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/;
 
 /** Secret that signs login tokens; created on first use and shared by every deployment of this project. */
 function secret_() {
@@ -114,7 +119,7 @@ function requireOwner_() {
 
 function doGet(e) {
   var q = (e && e.parameter) || {};
-  if (q.login) return loginPage_(String(q.back || ''));
+  if (q.login) return loginPage_(String(q.back || ''), !!q.embed);
   // "Who has access: Anyone with Google account" makes Google ask for a sign-in before this runs
   var html = loadPage_();
   // Back from the sign-in deployment with a token: hand it to the page, which keeps it in the browser
@@ -131,13 +136,27 @@ function doGet(e) {
  * Sign-in step, on the "User accessing the web app" deployment: Google gives this deployment the visitor's
  * Gmail; it goes back to the app as a signed token (?t=…), which the app verifies with the same secret.
  */
-function loginPage_(back) {
-  if (!back) back = appUrl_();
+function loginPage_(back, embed) {
   var email = account_();
-  if (!BACK_RE.test(back)) return infoPage_('ลิงก์เข้าสู่ระบบไม่ถูกต้อง', 'กรุณาเปิดจากปุ่ม "เข้าสู่ระบบด้วย Google" ในแอป', '');
+  if (embed) return embedLogin_(email);
+  if (!back) back = appUrl_();
+  // Only back to this app: its own URL when APP_URL is set
+  if (!BACK_RE.test(back) || (prop_('APP_URL') && back !== prop_('APP_URL').trim())) return infoPage_('ลิงก์เข้าสู่ระบบไม่ถูกต้อง', 'กรุณาเปิดจากปุ่ม "เข้าสู่ระบบด้วย Google" ในแอป', '');
   if (!email) return infoPage_('ไม่พบบัญชี Google', 'ผู้ดูแล: LOGIN_URL ต้องเป็น deployment แบบ Execute as "User accessing the web app" และ Who has access "Anyone with Google account"', '');
   return infoPage_('เข้าสู่ระบบเป็น ' + email, 'กดปุ่มด้านล่างเพื่อกลับไปที่แอป', back + '?t=' + encodeURIComponent(sign_(email)));
 }
+/**
+ * Hidden-frame sign-in: hands the token to the app's page only (postMessage to APP_ORIGIN, recorded when
+ * nattayee opens the app), so another site that frames this URL gets nothing.
+ */
+function embedLogin_(email) {
+  var origin = prop_('APP_ORIGIN');
+  var msg = { trs398: 'login', token: email && origin ? sign_(email) : '' };
+  var html = '<script>(function(){var m=' + JSON.stringify(msg).replace(/</g, '\\u003c') + ',o=' + JSON.stringify(origin) + ',w=window;' +
+    'for(var i=0;i<4&&o;i++){if(w===w.parent)break;w=w.parent;try{w.postMessage(m,o);}catch(e){}}})();</script>';
+  return HtmlService.createHtmlOutput(html).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
 function infoPage_(title, text, url) {
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   return HtmlService.createHtmlOutput(
@@ -235,9 +254,15 @@ function logId_() {
 // ---------------------------------------------------------------- calls from the page
 
 /** Account and log in use, shown on the page. */
-function apiInfo(token) {
+function apiInfo(token, pageOrigin) {
   var id = logId_();
-  return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(),
+  // nattayee opening the app records where the app's page runs, the only place sign-in tokens are posted to
+  pageOrigin = String(pageOrigin || '');
+  if (account_() === WEBAPP.OWNER_EMAIL && SANDBOX_ORIGIN_RE.test(pageOrigin) && prop_('APP_ORIGIN') !== pageOrigin) {
+    PropertiesService.getScriptProperties().setProperty('APP_ORIGIN', pageOrigin);
+  }
+  var auto = loginUrl_() && prop_('APP_ORIGIN') && !account_() ? loginUrl_() + '?login=1&embed=1' : '';
+  return { account: user_(token), viaToken: !account_() && !!tokenUser_(token), loginUrl: loginUrl_(), autoLoginSrc: auto,
     appUrl: appUrl_(),
     loginHref: loginUrl_() ? loginUrl_() + '?login=1&back=' + encodeURIComponent(appUrl_()) : '', owner: WEBAPP.OWNER_EMAIL, logId: id, logUrl: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', masterId: WEBAPP.MASTER_SHEET_ID };
 }
