@@ -207,16 +207,17 @@
 
   function renderAuthScreen(el, tab, flash) {
     el.innerHTML =
-      '<div class="auth-card">' +
-        '<div class="auth-logo" aria-hidden="true">RO</div>' +
-        "<h1>" + esc(S.title) + "</h1>" +
-        '<p class="auth-sub">' + esc(S.organization) + "</p>" +
+      '<div class="gate-card">' +
+        '<img class="gate-logo" src="' + esc(S.brand.logo) + '" width="72" height="72" alt="">' +
+        '<h2 id="gateTitle">' + esc(S.brand.name) + " <span>" + esc(S.brand.accent) + "</span></h2>" +
+        '<div class="gate-org">' + esc(S.brand.org) + "</div>" +
         '<div class="auth-tabs" role="tablist">' +
           '<button type="button" role="tab" data-tab="login" class="' + (tab === "login" ? "active" : "") + '">เข้าสู่ระบบ</button>' +
           '<button type="button" role="tab" data-tab="register" class="' + (tab === "register" ? "active" : "") + '">สมัครสมาชิก</button>' +
         "</div>" +
         (flash ? '<div class="auth-msg ' + flash.type + '">' + esc(flash.text) + "</div>" : "") +
         (tab === "login" ? loginForm() : registerForm()) +
+        '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน</p>' +
         (remote ? "" : '<p class="auth-demo">ℹ️ โหมดทดลอง — ข้อมูลสมาชิกเก็บในเบราว์เซอร์นี้เท่านั้น ตั้งค่า <code>auth.apiUrl</code> ใน data.js เพื่อเชื่อม Google Sheets</p>') +
       "</div>";
 

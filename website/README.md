@@ -2,6 +2,16 @@
 
 เว็บไซต์พื้นที่ทำงานกลางของหน่วยรังสีรักษา (Radiation Oncology) — static site (HTML/CSS/JS ล้วน ไม่ต้อง build)
 
+## หน้าตา (Design)
+
+ใช้ design เดียวกับเว็บ **TRS-398 Output Calibration** ของโรงพยาบาลมะเร็งลำปาง (`trs398-calculator/index.html`)
+
+- ฟอนต์: **Chakra Petch** (หัวข้อ), **IBM Plex Sans Thai** (เนื้อหา), **IBM Plex Mono** (ตัวเลข)
+- สีหลัก: Cherenkov blue `#1d5bd6`, พื้นหลัง `#eef2f6`, ตัวอักษร `#142033` พร้อมโหมดกลางคืน (สลับ อัตโนมัติ / กลางวัน / กลางคืน ที่มุมขวาบน)
+- หัวเว็บ: โลโก้โรงพยาบาลบนกรอบสีขาว + ชื่อ "LPCH **RO Workspace**" + Lampang Cancer Hospital (แก้ได้ที่ `brand` ใน `data.js`)
+- โลโก้: `assets/lpch-emblem.png` (หัวเว็บ, หน้าเข้าสู่ระบบ) และ `assets/lpch-logo.png` (ท้ายเว็บ)
+- สีทั้งหมดกำหนดเป็นตัวแปรที่ต้นไฟล์ `styles.css`
+
 ## ระบบสมาชิก (ต้องสมัครก่อนใช้งาน)
 
 ทุกหน้าของเว็บไซต์ต้องเข้าสู่ระบบก่อน ผู้ใช้ใหม่กด **สมัครสมาชิก** กรอก ชื่อ-นามสกุล, ตำแหน่ง (RO / MP / RTT / Nurse / อื่นๆ),

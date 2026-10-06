@@ -319,7 +319,6 @@
     var adminRoot = document.getElementById("adminRoot");
     if (adminRoot) Auth.mountAdmin(adminRoot);
 
-    document.getElementById("banner").classList.toggle("compact", page !== "home");
 
     // Highlight the top-level item that owns this page.
     var nav = findNav(page);
@@ -330,6 +329,9 @@
     navEl.querySelectorAll(".submenu a").forEach(function (a) {
       a.classList.toggle("active", a.getAttribute("data-page") === page);
     });
+
+    var cur = nav ? nav.item.label : S.pages[page].title;
+    document.getElementById("menuCurrent").textContent = cur;
 
     closeSubmenus();
     navEl.classList.remove("open");
@@ -343,7 +345,10 @@
 
   function renderUserMenu() {
     var u = Auth.user;
+    var badge = document.getElementById("userBadge");
+    badge.hidden = !u;
     if (!u) { userMenu.innerHTML = ""; return; }
+    document.getElementById("userName").textContent = u.fullName + " (" + u.role + ")";
     // First letter for the avatar, skipping Thai leading vowels (เ แ โ ใ ไ).
     var initial = (u.fullName || u.username).trim().replace(/^[\u0e40-\u0e44]/, "").charAt(0);
     userMenu.innerHTML =
@@ -387,9 +392,18 @@
     }
   }
 
-  document.getElementById("bannerTitle").textContent = S.title;
-  document.getElementById("bannerSubtitle").textContent = S.subtitle;
+  var titleEl = document.getElementById("siteTitle");
+  titleEl.textContent = S.brand.name + " ";
+  titleEl.appendChild(document.createElement("span")).textContent = S.brand.accent;
+  document.getElementById("siteOrg").textContent = S.brand.org;
+  document.getElementById("siteDesc").textContent = S.organization + " — " + S.tagline;
   document.getElementById("footerOrg").textContent = S.organization;
+
+  // Theme switch (auto / light / dark), stored per browser by the snippet in index.html.
+  document.querySelectorAll('input[name="theme"]').forEach(function (r) {
+    r.checked = r.value === window.LPCHTheme.get();
+    r.addEventListener("change", function () { window.LPCHTheme.set(r.value); });
+  });
 
   renderNav();
 

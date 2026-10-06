@@ -11,8 +11,15 @@
  */
 window.SITE = {
   title: "LPCH RO Workspace",
-  subtitle: "Radiation Oncology Workspace",
-  organization: "หน่วยรังสีรักษา (Radiation Oncology)",
+  // หัวเว็บ: ชื่อสองส่วน (ส่วนหลังเป็นสีน้ำเงิน) + ชื่อโรงพยาบาล + โลโก้ (ตามแบบ TRS-398 Output Calibration)
+  brand: {
+    name: "LPCH",
+    accent: "RO Workspace",
+    org: "Lampang Cancer Hospital",
+    logo: "assets/lpch-emblem.png",
+  },
+  organization: "หน่วยรังสีรักษา โรงพยาบาลมะเร็งลำปาง",
+  tagline: "พื้นที่ทำงานกลาง: ข้อมูลเครื่อง แนวทางการรักษา เอกสาร แบบฟอร์ม เครื่องมือคำนวณ และประกาศข่าวสาร",
   description:
     "พื้นที่ทำงานกลางสำหรับแพทย์รังสีรักษา นักฟิสิกส์การแพทย์ นักรังสีการแพทย์ และพยาบาล " +
     "รวบรวมข้อมูลเครื่องฉายรังสี แนวทางการรักษา เอกสาร แบบฟอร์ม และเครื่องมือที่ใช้งานประจำวันไว้ในที่เดียว",
@@ -104,7 +111,7 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["intro", "announcements", "quicklinks", "contacts"],
+      widgets: ["announcements", "quicklinks", "contacts"],
     },
 
     /* ---------------- Machines ---------------- */
