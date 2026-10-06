@@ -13,7 +13,7 @@
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog
+ * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -35,6 +35,8 @@ var MAX_IMAGES = 4;
 var MAX_IMAGE_CHARS = 1500000; // ~1.1 MB ต่อรูป (หลังย่อขนาดในเบราว์เซอร์แล้ว)
 var TITLE = 'LPCH RO Workspace';
 var IMAGE_FOLDER = 'LPCH RO Workspace Images';
+var DM_FOLDER = 'LPCH RO Workspace Private Images';  // รูปในข้อความส่วนตัว (แยกจากแชทประกาศ)
+var DM_LIMIT = 300;            // จำนวนข้อความล่าสุดต่อบทสนทนาที่ส่งให้หน้าเว็บ
 // หน้าเว็บที่สร้างจาก website/ (build_apps_script.py) — โหลดจาก GitHub และ cache ไว้ 10 นาที
 var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/lpch-ro-workspace-website-96j4r6/website/apps-script/Index.html';
 var PAGE_CACHE_SECONDS = 600;
@@ -42,10 +44,11 @@ var PAGE_CACHE_SECONDS = 600;
 var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin'];
 var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
+var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -131,7 +134,9 @@ function setup() {
   sheet_('Sessions', SESSION_HEADERS);
   sheet_('Messages', MESSAGE_HEADERS);
   sheet_('ChatLog', LOG_HEADERS);
+  sheet_('DirectMessages', DM_HEADERS);
   folder_();
+  folder_('DM_FOLDER_ID', DM_FOLDER);
   Logger.log('ส่งอีเมลได้อีกวันนี้: ' + MailApp.getRemainingDailyQuota() + ' ฉบับ');
   Logger.log('หน้าเว็บ: ' + Math.round(page_().length / 1024) + ' KB');
   Logger.log('พร้อมใช้งาน: ' + ss.getUrl());
@@ -430,6 +435,170 @@ ACTIONS.chatImage = function (req) {
   return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
 };
 
+/* ----- private messages: only the sender and the recipient can read a conversation (admins too) ----- */
+
+/** Conversations of the signed-in member, newest first, with unread counts. */
+ACTIONS.dmList = function (req) {
+  var u = requireUser_(req.token);
+  var users = usersByName_(), convos = {}, unread = 0;
+  dmRows_(u.username).forEach(function (r) {
+    var m = r.msg, p = dmPartner_(m, u.username);
+    var c = convos[p.username] || (convos[p.username] = { partner: dmPerson_(p, users), last: null, unread: 0 });
+    if (!c.last || m.createdAt > c.last.createdAt) {
+      c.last = { text: snippet_(m.text, 80) || (m.images.length ? '(รูปภาพ)' : ''), createdAt: m.createdAt,
+        fromMe: m.from.username === u.username };
+    }
+    if (m.to.username === u.username && !m.readAt) { c.unread++; unread++; }
+  });
+  var list = Object.keys(convos).map(function (k) { return convos[k]; });
+  list.sort(function (a, b) { return b.last.createdAt - a.last.createdAt; });
+  return { conversations: list, unread: unread };
+};
+
+ACTIONS.dmThread = function (req) {
+  var u = requireUser_(req.token);
+  var users = usersByName_(), other = users[String(req['with'] || '')];
+  if (!other) throw new Error('ไม่พบสมาชิก');
+  var key = convo_(u.username, other.username);
+  var msgs = dmRows_(u.username).filter(function (r) { return r.convo === key; })
+    .map(function (r) { return r.msg; });
+  msgs.sort(function (a, b) { return a.createdAt - b.createdAt; });
+  return { partner: dmPerson_(person_(other), users), messages: msgs.slice(-DM_LIMIT) };
+};
+
+ACTIONS.dmSend = function (req) {
+  var u = requireUser_(req.token);
+  var to = findUser_(String(req.to || ''));
+  if (!to || to.status !== 'active') throw new Error('ไม่พบผู้รับ หรือบัญชีผู้รับยังไม่เปิดใช้งาน');
+  if (to.username === u.username) throw new Error('ส่งข้อความถึงตัวเองไม่ได้');
+  var text = String(req.text || '').trim();
+  var images = Array.isArray(req.images) ? req.images : [];
+  if (!text && !images.length) throw new Error('พิมพ์ข้อความหรือแนบรูปก่อนส่ง');
+  if (text.length > 5000) throw new Error('ข้อความยาวเกิน 5,000 ตัวอักษร');
+  if (images.length > MAX_IMAGES) throw new Error('แนบรูปได้สูงสุด ' + MAX_IMAGES + ' รูปต่อข้อความ');
+
+  var id = 'dm' + Utilities.getUuid().replace(/-/g, '').slice(0, 14);
+  var key = convo_(u.username, to.username);
+  var folder = folder_('DM_FOLDER_ID', DM_FOLDER);
+  var msg = {
+    id: id, from: person_(u), to: person_(to), text: text,
+    images: images.map(function (d, i) { return 'dm:' + saveImage_(d, id + '-' + (i + 1), folder); }),
+    createdAt: Date.now(), readAt: null, reactions: {}, reactionLog: []
+  };
+  if (req.replyTo) {
+    var orig = findDm_(String(req.replyTo));
+    if (orig && orig.convo === key) {
+      msg.replyTo = { id: orig.msg.id, name: orig.msg.from.name,
+        text: snippet_(orig.msg.text, 120) || (orig.msg.images.length ? '(รูปภาพ ' + orig.msg.images.length + ' รูป)' : '') };
+    }
+  }
+  sheet_('DirectMessages', DM_HEADERS).appendRow([id, key, msg.createdAt, JSON.stringify(msg)]);
+  return { message: msg };
+};
+
+/** Marks every message from `with` to the signed-in member as read. */
+ACTIONS.dmRead = function (req) {
+  var u = requireUser_(req.token);
+  var key = convo_(u.username, String(req['with'] || ''));
+  var sh = sheet_('DirectMessages', DM_HEADERS), now = Date.now(), count = 0;
+  dmRows_(u.username).forEach(function (r) {
+    if (r.convo === key && r.msg.to.username === u.username && !r.msg.readAt) {
+      r.msg.readAt = now;
+      sh.getRange(r.row, 4).setValue(JSON.stringify(r.msg));
+      count++;
+    }
+  });
+  return { count: count };
+};
+
+ACTIONS.dmReact = function (req) {
+  var u = requireUser_(req.token), me = person_(u);
+  var type = req.type === 'ok' || req.type === 'no' ? req.type : null;
+  if (!type) throw new Error('ปุ่มไม่ถูกต้อง');
+  var found = findDm_(String(req.id || ''));
+  if (!found || !isDmParty_(found.msg, u.username)) throw new Error('ไม่พบข้อความ');
+  var cur = found.msg.reactions[key_(me)];
+  if (!cur || cur.type !== type) {
+    var rec = stamp_(me);
+    rec.type = type;
+    found.msg.reactions[key_(me)] = rec;
+    found.msg.reactionLog.push(rec);
+    sheet_('DirectMessages', DM_HEADERS).getRange(found.row, 4).setValue(JSON.stringify(found.msg));
+  }
+  return { message: found.msg };
+};
+
+ACTIONS.dmDelete = function (req) {
+  var u = requireUser_(req.token);
+  var found = findDm_(String(req.id || ''));
+  if (!found) return {};
+  if (found.msg.from.username !== u.username) throw new Error('ลบได้เฉพาะข้อความที่คุณส่ง');
+  found.msg.images.forEach(function (ref) {
+    try { DriveApp.getFileById(String(ref).replace(/^dm:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
+  });
+  sheet_('DirectMessages', DM_HEADERS).deleteRow(found.row);
+  return { deleted: found.msg.id };
+};
+
+/** A private image, only for the two people in that conversation. */
+ACTIONS.dmImage = function (req) {
+  var u = requireUser_(req.token);
+  var found = findDm_(String(req.id || ''));
+  var ref = 'dm:' + String(req.fileId || '');
+  if (!found || !isDmParty_(found.msg, u.username) || found.msg.images.indexOf(ref) === -1) throw new Error('ไม่พบรูป');
+  var blob = DriveApp.getFileById(String(req.fileId)).getBlob();
+  return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
+};
+
+/* ---------------- Private message helpers ---------------- */
+
+function convo_(a, b) { return [String(a), String(b)].sort().join('|'); }
+
+function isDmParty_(msg, username) { return msg.from.username === username || msg.to.username === username; }
+
+function dmPartner_(msg, username) { return msg.from.username === username ? msg.to : msg.from; }
+
+function usersByName_() {
+  var out = {};
+  allUsers_().forEach(function (u) { out[u.username] = u; });
+  return out;
+}
+
+/** Partner as shown on the page, with the current name and role from the Users sheet. */
+function dmPerson_(p, users) {
+  var u = users[p.username];
+  return { username: p.username, name: u ? u.fullName : p.name, role: u ? u.role : p.role,
+    active: !!u && u.status === 'active' };
+}
+
+/** All private messages the member sent or received. */
+function dmRows_(username) {
+  var rows = sheet_('DirectMessages', DM_HEADERS).getDataRange().getValues(), out = [];
+  for (var i = 1; i < rows.length; i++) {
+    var c = String(rows[i][1]).split('|');
+    if (c[0] === username || c[1] === username) {
+      var msg = JSON.parse(rows[i][3]);
+      msg.images = msg.images || []; msg.reactions = msg.reactions || {}; msg.reactionLog = msg.reactionLog || [];
+      out.push({ row: i + 1, convo: String(rows[i][1]), msg: msg });
+    }
+  }
+  return out;
+}
+
+function findDm_(id) {
+  if (!id) return null;
+  var sh = sheet_('DirectMessages', DM_HEADERS);
+  var ids = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 1).getValues();
+  for (var i = ids.length - 1; i >= 1; i--) {
+    if (String(ids[i][0]) === id) {
+      var msg = JSON.parse(sh.getRange(i + 1, 4).getValue());
+      msg.images = msg.images || []; msg.reactions = msg.reactions || {}; msg.reactionLog = msg.reactionLog || [];
+      return { row: i + 1, convo: String(sh.getRange(i + 1, 2).getValue()), msg: msg };
+    }
+  }
+  return null;
+}
+
 /* ---------------- Chat helpers ---------------- */
 
 function person_(u) { return { username: u.username, name: u.fullName, role: u.role }; }
@@ -500,23 +669,25 @@ function updateMessage_(id, fn) {
   return { message: found.msg };
 }
 
-function saveImage_(dataUrl, name) {
+function saveImage_(dataUrl, name, folder) {
   var m = /^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+\/=]+)$/.exec(String(dataUrl || ''));
   if (!m) throw new Error('ไฟล์รูปไม่ถูกต้อง');
   if (m[2].length > MAX_IMAGE_CHARS) throw new Error('รูปใหญ่เกินไป');
   var ext = m[1].split('/')[1].replace('jpeg', 'jpg');
   var blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], name + '.' + ext);
-  return folder_().createFile(blob).getId();
+  return (folder || folder_()).createFile(blob).getId();
 }
 
-function folder_() {
+/** A Drive folder remembered in Script properties (default: the announcement chat's image folder). */
+function folder_(propKey, name) {
+  propKey = propKey || 'IMAGE_FOLDER_ID';
   var props = PropertiesService.getScriptProperties();
-  var id = props.getProperty('IMAGE_FOLDER_ID');
+  var id = props.getProperty(propKey);
   if (id) {
     try { return DriveApp.getFolderById(id); } catch (e) { /* recreate below */ }
   }
-  var f = DriveApp.createFolder(IMAGE_FOLDER);
-  props.setProperty('IMAGE_FOLDER_ID', f.getId());
+  var f = DriveApp.createFolder(name || IMAGE_FOLDER);
+  props.setProperty(propKey, f.getId());
   return f;
 }
 

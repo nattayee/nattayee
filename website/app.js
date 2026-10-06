@@ -9,6 +9,7 @@
 
   // Member pages (not in the top menu).
   S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
+  S.pages.inbox = { title: "ข้อความส่วนตัว", lead: "ส่งข้อความถึงสมาชิกแบบตัวต่อตัว แนบรูปได้ — เห็นเฉพาะผู้ส่งและผู้รับ", widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
   var navEl = document.getElementById("nav");
 
@@ -87,6 +88,8 @@
     account: function () { return '<section class="section" id="accountRoot"></section>'; },
 
     admin: function () { return '<section class="section" id="adminRoot"></section>'; },
+
+    inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
     announcements: function () {
       return '<section class="section" id="chatRoot"></section>';
@@ -302,18 +305,31 @@
   /* ---------------- Router ---------------- */
 
   var unmountChat = null;
+  var unmountInbox = null;
+
+  function unmountWidgets() {
+    if (unmountChat) { unmountChat(); unmountChat = null; }
+    if (unmountInbox) { unmountInbox(); unmountInbox = null; }
+  }
 
   function route() {
     if (!Auth.user) return;
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
     if (!S.pages[page] || (S.pages[page].adminOnly && !Auth.user.isAdmin)) page = "home";
 
-    if (unmountChat) { unmountChat(); unmountChat = null; }
+    unmountWidgets();
     app.innerHTML = renderPage(page);
     initConstraints();
     initCalculators();
     var chatRoot = document.getElementById("chatRoot");
     if (chatRoot && window.Chat) unmountChat = window.Chat.mount(chatRoot);
+    var inboxRoot = document.getElementById("inboxRoot");
+    if (inboxRoot && window.DM) {
+      // #/inbox?u=<username> opens that conversation directly
+      var m = /[?&]u=([^&]+)/.exec(location.hash);
+      unmountInbox = window.DM.mount(inboxRoot, m ? decodeURIComponent(m[1]) : null);
+    }
+    document.getElementById("inboxLink").classList.toggle("active", page === "inbox");
     var accountRoot = document.getElementById("accountRoot");
     if (accountRoot) Auth.mountAccount(accountRoot);
     var adminRoot = document.getElementById("adminRoot");
@@ -358,6 +374,7 @@
       '<div class="user-drop" id="userDrop" hidden>' +
         '<div class="user-info"><strong>' + esc(u.fullName) + "</strong><span>" + esc(Auth.roleName(u.role)) +
           (u.isAdmin ? " · admin" : "") + "</span></div>" +
+        '<a href="#/inbox">✉️ ข้อความส่วนตัว</a>' +
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
         (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
@@ -387,8 +404,10 @@
       // Accounts created before email was required are asked to add one (needed to reset a password).
       if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
+      if (window.DM) window.DM.startBadge();
     } else {
-      if (unmountChat) { unmountChat(); unmountChat = null; }
+      unmountWidgets();
+      if (window.DM) window.DM.stopBadge();
       app.innerHTML = "";
       Auth.showLogin(authScreen);
     }

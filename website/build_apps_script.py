@@ -14,7 +14,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "apps-script" / "Index.html"
-SCRIPTS = ["data.js", "auth.js", "chat.js", "app.js"]
+SCRIPTS = ["data.js", "auth.js", "chat.js", "dm.js", "app.js"]
 IMAGES = ["assets/lpch-emblem.png", "assets/lpch-logo.png"]
 
 
