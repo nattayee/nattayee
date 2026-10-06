@@ -317,6 +317,10 @@ body:not(.locked) .gate { display: none; }
 .auth-submit:hover { filter: brightness(1.08); }
 .auth-submit:disabled { opacity: .6; cursor: wait; }
 .auth-error { margin: 0; color: var(--bad); font-size: .88rem; }
+.auth-help { font-size: .76rem; font-weight: 400; color: var(--muted); }
+.auth-step { margin: 0; font: 600 .86rem var(--font-display); letter-spacing: .02em; color: var(--accent); text-align: center; }
+.auth-field input.code-input { font: 500 1.4rem var(--font-mono); letter-spacing: .5em; text-align: center; }
+.profile-form { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
 .auth-msg { width: 100%; padding: 9px 12px; border-radius: 4px; font-size: .88rem; text-align: left; }
 .auth-msg.ok { background: var(--ok-soft); color: var(--ok); }
 .auth-hint { margin: 2px 0 0; text-align: center; font-size: .86rem; color: var(--muted); }
@@ -1064,6 +1068,21 @@ window.SITE = {
       return u;
     }
 
+    var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+    function normEmail(v) {
+      var e = String(v || "").trim().toLowerCase();
+      if (!e) fail("กรุณากรอกอีเมล (ใช้รับรหัสเมื่อลืมรหัสผ่าน)");
+      if (e.length > 100 || !EMAIL_RE.test(e)) fail("รูปแบบอีเมลไม่ถูกต้อง");
+      return e;
+    }
+    function emailTaken(d, email, except) {
+      return d.users.some(function (u) { return u.username !== except && (u.email || "").toLowerCase() === email; });
+    }
+    function byLogin(d, login) {
+      return login.indexOf("@") === -1 ? find(d, login)
+        : d.users.filter(function (u) { return (u.email || "").toLowerCase() === login; })[0];
+    }
+
     var actions = {
       register: function (d, r) {
         var username = String(r.username || "").trim().toLowerCase();
@@ -1072,10 +1091,12 @@ window.SITE = {
         if (!String(r.fullName || "").trim()) fail("กรุณากรอกชื่อ-นามสกุล");
         if (!ROLES.some(function (x) { return x[0] === r.role; })) fail("กรุณาเลือกตำแหน่ง");
         if (find(d, username)) fail("ชื่อผู้ใช้นี้ถูกใช้แล้ว");
+        var email = normEmail(r.email);
+        if (emailTaken(d, email)) fail("อีเมลนี้ถูกใช้สมัครแล้ว");
         var first = d.users.length === 0;
         var salt = uuid();
         var u = { username: username, fullName: r.fullName.trim(), role: r.role, phone: (r.phone || "").trim(),
-          email: (r.email || "").trim(), salt: salt, hash: hash(r.password, salt),
+          email: email, salt: salt, hash: hash(r.password, salt),
           status: first ? "active" : "pending", isAdmin: first, createdAt: Date.now(), lastLogin: null };
         d.users.push(u);
         if (u.status === "pending") return { status: "pending", message: "สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน" };
@@ -1101,6 +1122,43 @@ window.SITE = {
         u.salt = uuid();
         u.hash = hash(r.newPassword, u.salt);
         return { message: "เปลี่ยนรหัสผ่านเรียบร้อย" };
+      },
+      updateProfile: function (d, r) {
+        var u = requireUser(d, r.token);
+        var email = normEmail(r.email);
+        if (emailTaken(d, email, u.username)) fail("อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว");
+        u.email = email;
+        u.phone = String(r.phone || "").trim().slice(0, 40);
+        return { user: pub(u), message: "บันทึกข้อมูลเรียบร้อย" };
+      },
+      // Demo mode cannot send email, so the code is returned and shown on screen instead.
+      forgotPassword: function (d, r) {
+        var login = String(r.login || "").trim().toLowerCase();
+        if (!login) fail("กรุณากรอกชื่อผู้ใช้หรืออีเมล");
+        var u = byLogin(d, login), demoCode = "";
+        d.resets = d.resets || {};
+        if (u && u.email && u.status !== "disabled") {
+          demoCode = ("00000" + Math.floor(Math.random() * 1e6)).slice(-6);
+          d.resets[u.username] = { hash: hash(demoCode, u.username), tries: 0, expires: Date.now() + 15 * 60000 };
+        }
+        return { demoCode: demoCode, message: "ถ้าข้อมูลตรงกับบัญชีในระบบ ระบบได้ส่งรหัส 6 หลักไปที่อีเมลที่ลงทะเบียนไว้แล้ว (หมดอายุใน 15 นาที)" };
+      },
+      resetPassword: function (d, r) {
+        var u = byLogin(d, String(r.login || "").trim().toLowerCase());
+        var entry = u && d.resets && d.resets[u.username];
+        if (!entry || entry.expires < Date.now()) fail("รหัสหมดอายุหรือไม่ถูกต้อง กรุณาขอรหัสใหม่");
+        if (hash(String(r.code || "").replace(/\s/g, ""), u.username) !== entry.hash) {
+          entry.tries++;
+          if (entry.tries >= 5) delete d.resets[u.username];
+          save(d);
+          fail(entry.tries >= 5 ? "ใส่รหัสผิดหลายครั้ง กรุณาขอรหัสใหม่" : "รหัสไม่ถูกต้อง");
+        }
+        if (!r.newPassword || r.newPassword.length < 8) fail("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
+        u.salt = uuid();
+        u.hash = hash(r.newPassword, u.salt);
+        delete d.resets[u.username];
+        d.sessions = d.sessions.filter(function (x) { return x.username !== u.username; });
+        return { username: u.username, message: "ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่" };
       },
       directory: function (d, r) {
         requireUser(d, r.token);
@@ -1182,7 +1240,13 @@ window.SITE = {
     }).join("");
   }
 
-  function renderAuthScreen(el, tab, flash) {
+  var EMAIL_OK = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  var SUBMIT_LABEL = { login: "เข้าสู่ระบบ", register: "สมัครสมาชิก", forgot: "ส่งรหัสไปที่อีเมล", reset: "ตั้งรหัสผ่านใหม่" };
+
+  // tab: login | register | forgot (ask for a code) | reset (enter code + new password)
+  function renderAuthScreen(el, tab, flash, state) {
+    state = state || {};
+    var forms = { login: loginForm, register: registerForm, forgot: forgotForm, reset: resetForm };
     el.innerHTML =
       '<div class="gate-card">' +
         '<img class="gate-logo" src="' + esc(S.brand.logo) + '" width="72" height="72" alt="">' +
@@ -1193,62 +1257,78 @@ window.SITE = {
           '<button type="button" role="tab" data-tab="register" class="' + (tab === "register" ? "active" : "") + '">สมัครสมาชิก</button>' +
         "</div>" +
         (flash ? '<div class="auth-msg ' + flash.type + '">' + esc(flash.text) + "</div>" : "") +
-        (tab === "login" ? loginForm() : registerForm()) +
+        forms[tab](state) +
         '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน</p>' +
         (remote ? "" : '<p class="auth-demo">ℹ️ โหมดทดลอง — ข้อมูลสมาชิกเก็บในเบราว์เซอร์นี้เท่านั้น ตั้งค่า <code>auth.apiUrl</code> ใน data.js เพื่อเชื่อม Google Sheets</p>') +
       "</div>";
 
     el.querySelectorAll("[data-tab]").forEach(function (b) {
-      b.addEventListener("click", function () { renderAuthScreen(el, b.getAttribute("data-tab")); });
+      b.addEventListener("click", function () {
+        var f = el.querySelector("form");
+        var typed = f && f.elements.username ? f.elements.username.value : f && f.elements.login ? f.elements.login.value : "";
+        renderAuthScreen(el, b.getAttribute("data-tab"), null, { login: typed });
+      });
     });
 
     var form = el.querySelector("form");
     var err = el.querySelector(".auth-error");
     var btn = form.querySelector("button[type=submit]");
+    function showErr(msg) { err.textContent = msg; err.hidden = false; }
+
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var f = form.elements;
       err.hidden = true;
 
-      if (tab === "register" && f.password.value !== f.confirm.value) {
-        err.textContent = "รหัสผ่านทั้งสองช่องไม่ตรงกัน";
-        err.hidden = false;
-        return;
+      if (tab === "register") {
+        if (!EMAIL_OK.test(f.email.value.trim())) return showErr("กรุณากรอกอีเมลให้ถูกต้อง (ใช้รับรหัสเมื่อลืมรหัสผ่าน)");
+        if (f.password.value !== f.confirm.value) return showErr("รหัสผ่านทั้งสองช่องไม่ตรงกัน");
       }
+      if (tab === "reset" && f.newPassword.value !== f.confirm.value) return showErr("รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน");
       btn.disabled = true;
       btn.textContent = "กำลังดำเนินการ…";
 
-      var p = tab === "login"
-        ? call("login", { username: f.username.value, password: f.password.value })
-        : call("register", {
+      var p = tab === "login" ? call("login", { username: f.username.value, password: f.password.value })
+        : tab === "register" ? call("register", {
             username: f.username.value, password: f.password.value, fullName: f.fullName.value,
             role: f.role.value, phone: f.phone.value, email: f.email.value,
-          });
+          })
+        : tab === "forgot" ? call("forgotPassword", { login: f.login.value })
+        : call("resetPassword", { login: f.login.value, code: f.code.value, newPassword: f.newPassword.value });
 
       p.then(function (res) {
         if (res.token) { setSession(res.token, res.user); return; }
-        renderAuthScreen(el, "login", { type: "ok", text: res.message });
+        if (tab === "forgot") {
+          var text = res.message + (res.demoCode ? " — โหมดทดลองส่งอีเมลไม่ได้ รหัสของคุณคือ " + res.demoCode : "");
+          renderAuthScreen(el, "reset", { type: "ok", text: text }, { login: f.login.value.trim() });
+        } else if (tab === "reset") {
+          renderAuthScreen(el, "login", { type: "ok", text: res.message }, { login: res.username });
+        } else {
+          renderAuthScreen(el, "login", { type: "ok", text: res.message });
+        }
       }).catch(function (ex) {
-        err.textContent = ex.message;
-        err.hidden = false;
+        showErr(ex.message);
         btn.disabled = false;
-        btn.textContent = tab === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก";
+        btn.textContent = SUBMIT_LABEL[tab];
       });
     });
 
-    var first = form.querySelector("input");
+    var first = form.querySelector("input:not([value]), input[value='']") || form.querySelector("input");
     if (first) first.focus();
   }
 
-  function field(label, input) { return '<label class="auth-field"><span>' + label + "</span>" + input + "</label>"; }
+  function field(label, input, hint) {
+    return '<label class="auth-field"><span>' + label + "</span>" + input + (hint ? '<small class="auth-help">' + hint + "</small>" : "") + "</label>";
+  }
 
-  function loginForm() {
+  function loginForm(state) {
     return '<form class="auth-form" novalidate>' +
-      field("ชื่อผู้ใช้ (Username)", '<input name="username" autocomplete="username" required>') +
+      field("ชื่อผู้ใช้ (Username)", '<input name="username" autocomplete="username" value="' + esc(state.login && state.login.indexOf("@") === -1 ? state.login : "") + '" required>') +
       field("รหัสผ่าน", '<input name="password" type="password" autocomplete="current-password" required>') +
       '<p class="auth-error" role="alert" hidden></p>' +
       '<button type="submit" class="auth-submit">เข้าสู่ระบบ</button>' +
-      '<p class="auth-hint">ยังไม่มีบัญชี? <button type="button" class="link-btn" data-tab="register">สมัครสมาชิก</button></p>' +
+      '<p class="auth-hint"><button type="button" class="link-btn" data-tab="forgot">ลืมรหัสผ่าน?</button> · ' +
+        'ยังไม่มีบัญชี? <button type="button" class="link-btn" data-tab="register">สมัครสมาชิก</button></p>' +
       "</form>";
   }
 
@@ -1257,18 +1337,45 @@ window.SITE = {
       field("ชื่อ-นามสกุล *", '<input name="fullName" autocomplete="name" required>') +
       field("ตำแหน่ง *", '<select name="role" required>' + roleOptions() + "</select>") +
       field("ชื่อผู้ใช้ (Username) *", '<input name="username" autocomplete="username" placeholder="ภาษาอังกฤษ/ตัวเลข 3–30 ตัว" required>') +
+      field("อีเมล *", '<input name="email" type="email" autocomplete="email" placeholder="name@example.com" required>',
+        "ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน — 1 อีเมลต่อ 1 บัญชี") +
       '<div class="auth-row">' +
         field("รหัสผ่าน *", '<input name="password" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว" required>') +
         field("ยืนยันรหัสผ่าน *", '<input name="confirm" type="password" autocomplete="new-password" required>') +
       "</div>" +
-      '<div class="auth-row">' +
-        field("เบอร์โทร / เบอร์ภายใน", '<input name="phone" type="tel" autocomplete="tel">') +
-        field("อีเมล", '<input name="email" type="email" autocomplete="email">') +
-      "</div>" +
+      field("เบอร์โทร / เบอร์ภายใน", '<input name="phone" type="tel" autocomplete="tel">') +
       '<p class="auth-error" role="alert" hidden></p>' +
       '<button type="submit" class="auth-submit">สมัครสมาชิก</button>' +
       '<p class="auth-hint">' + (CFG.requireApproval === false ? "" : "หลังสมัคร ผู้ดูแลระบบต้องอนุมัติก่อนจึงจะเข้าใช้งานได้ · ") +
         'มีบัญชีแล้ว? <button type="button" class="link-btn" data-tab="login">เข้าสู่ระบบ</button></p>' +
+      "</form>";
+  }
+
+  function forgotForm(state) {
+    return '<form class="auth-form" novalidate>' +
+      '<p class="auth-step">ลืมรหัสผ่าน — ขั้นที่ 1/2</p>' +
+      field("ชื่อผู้ใช้หรืออีเมลที่ใช้สมัคร", '<input name="login" autocomplete="username" value="' + esc(state.login || "") + '" required>',
+        "ระบบจะส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี") +
+      '<p class="auth-error" role="alert" hidden></p>' +
+      '<button type="submit" class="auth-submit">ส่งรหัสไปที่อีเมล</button>' +
+      '<p class="auth-hint"><button type="button" class="link-btn" data-tab="reset">มีรหัสแล้ว</button> · ' +
+        '<button type="button" class="link-btn" data-tab="login">กลับไปเข้าสู่ระบบ</button></p>' +
+      "</form>";
+  }
+
+  function resetForm(state) {
+    return '<form class="auth-form" novalidate>' +
+      '<p class="auth-step">ลืมรหัสผ่าน — ขั้นที่ 2/2</p>' +
+      field("ชื่อผู้ใช้หรืออีเมล", '<input name="login" autocomplete="username" value="' + esc(state.login || "") + '" required>') +
+      field("รหัสยืนยัน 6 หลักจากอีเมล", '<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="code-input" required>') +
+      '<div class="auth-row">' +
+        field("รหัสผ่านใหม่", '<input name="newPassword" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว" required>') +
+        field("ยืนยันรหัสผ่านใหม่", '<input name="confirm" type="password" autocomplete="new-password" required>') +
+      "</div>" +
+      '<p class="auth-error" role="alert" hidden></p>' +
+      '<button type="submit" class="auth-submit">ตั้งรหัสผ่านใหม่</button>' +
+      '<p class="auth-hint"><button type="button" class="link-btn" data-tab="forgot">ขอรหัสใหม่</button> · ' +
+        '<button type="button" class="link-btn" data-tab="login">กลับไปเข้าสู่ระบบ</button></p>' +
       "</form>";
   }
 
@@ -1365,15 +1472,21 @@ window.SITE = {
   function mountAccount(el) {
     var roleName = (ROLES.filter(function (r) { return r[0] === user.role; })[0] || [0, user.role])[1];
     el.innerHTML =
+      (user.email ? "" : '<div class="note">⚠️ บัญชีของคุณยังไม่มีอีเมล กรุณาเพิ่มอีเมลเพื่อใช้รับรหัสเมื่อลืมรหัสผ่าน</div>') +
       '<div class="grid wide">' +
         '<div class="card"><h3>👤 ข้อมูลสมาชิก</h3><table class="specs"><tbody>' +
           "<tr><th>ชื่อ-นามสกุล</th><td>" + esc(user.fullName) + "</td></tr>" +
           "<tr><th>Username</th><td>" + esc(user.username) + "</td></tr>" +
           "<tr><th>ตำแหน่ง</th><td>" + esc(roleName) + (user.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td></tr>" +
-          "<tr><th>เบอร์โทร</th><td>" + esc(user.phone || "—") + "</td></tr>" +
-          "<tr><th>อีเมล</th><td>" + esc(user.email || "—") + "</td></tr>" +
-        "</tbody></table></div>" +
-        '<div class="card"><h3>🔑 เปลี่ยนรหัสผ่าน</h3><form class="auth-form" novalidate>' +
+        "</tbody></table>" +
+        '<form class="auth-form profile-form" novalidate>' +
+          field("อีเมล *", '<input name="email" type="email" autocomplete="email" value="' + esc(user.email || "") + '" required>',
+            "ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน") +
+          field("เบอร์โทร / เบอร์ภายใน", '<input name="phone" type="tel" autocomplete="tel" value="' + esc(user.phone || "") + '">') +
+          '<p class="auth-error" role="alert" hidden></p><p class="auth-msg ok" hidden></p>' +
+          '<button type="submit" class="auth-submit">บันทึกข้อมูล</button>' +
+        "</form></div>" +
+        '<div class="card"><h3>🔑 เปลี่ยนรหัสผ่าน</h3><form class="auth-form password-form" novalidate>' +
           field("รหัสผ่านเดิม", '<input name="oldPassword" type="password" autocomplete="current-password" required>') +
           field("รหัสผ่านใหม่", '<input name="newPassword" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว" required>') +
           field("ยืนยันรหัสผ่านใหม่", '<input name="confirm" type="password" autocomplete="new-password" required>') +
@@ -1382,19 +1495,36 @@ window.SITE = {
         "</form></div>" +
       "</div>";
 
-    var form = el.querySelector("form");
-    var err = form.querySelector(".auth-error");
-    var ok = form.querySelector(".auth-msg");
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var f = form.elements;
-      err.hidden = ok.hidden = true;
-      if (f.newPassword.value !== f.confirm.value) { err.textContent = "รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน"; err.hidden = false; return; }
-      call("changePassword", { oldPassword: f.oldPassword.value, newPassword: f.newPassword.value }).then(function (res) {
-        form.reset();
-        ok.textContent = res.message;
-        ok.hidden = false;
-      }).catch(function (ex) { err.textContent = ex.message; err.hidden = false; });
+    function wire(form, run) {
+      var err = form.querySelector(".auth-error");
+      var ok = form.querySelector(".auth-msg");
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        err.hidden = ok.hidden = true;
+        var bad = run.check(form.elements);
+        if (bad) { err.textContent = bad; err.hidden = false; return; }
+        run.send(form.elements).then(function (res) {
+          ok.textContent = res.message;
+          ok.hidden = false;
+          if (run.done) run.done(res);
+        }).catch(function (ex) { err.textContent = ex.message; err.hidden = false; });
+      });
+    }
+
+    wire(el.querySelector(".profile-form"), {
+      check: function (f) { return EMAIL_OK.test(f.email.value.trim()) ? "" : "รูปแบบอีเมลไม่ถูกต้อง"; },
+      send: function (f) { return call("updateProfile", { email: f.email.value, phone: f.phone.value }); },
+      done: function (res) {
+        user = res.user; // keep the header badge in step without re-rendering this page
+        var warn = el.querySelector(".note");
+        if (warn && user.email) warn.remove();
+      },
+    });
+
+    wire(el.querySelector(".password-form"), {
+      check: function (f) { return f.newPassword.value !== f.confirm.value ? "รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน" : ""; },
+      send: function (f) { return call("changePassword", { oldPassword: f.oldPassword.value, newPassword: f.newPassword.value }); },
+      done: function () { el.querySelector(".password-form").reset(); },
     });
   }
 
@@ -2775,6 +2905,8 @@ window.SITE = {
     renderUserMenu();
     if (user) {
       authScreen.innerHTML = "";
+      // Accounts created before email was required are asked to add one (needed to reset a password).
+      if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
     } else {
       if (unmountChat) { unmountChat(); unmountChat = null; }

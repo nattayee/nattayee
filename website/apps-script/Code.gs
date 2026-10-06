@@ -24,6 +24,10 @@ var SESSION_DAYS = 7;
 var ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
 var CHAT_ROLES = ['RO', 'MP', 'RTT', 'Nurse'];
 var MAX_FAILED_LOGINS = 5;     // ต่อ 15 นาที
+var RESET_MINUTES = 15;        // อายุรหัสรีเซ็ตรหัสผ่านที่ส่งทางอีเมล
+var RESET_MAX_TRIES = 5;       // ใส่รหัสรีเซ็ตผิดได้กี่ครั้ง
+var RESET_REQUESTS = 3;        // ขอรหัสได้กี่ครั้งต่อ 15 นาที ต่อบัญชี
+var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 var HASH_ROUNDS = 200;
 var TIME_ZONE = 'Asia/Bangkok';
 var CHAT_LIMIT = 200;          // จำนวนข้อความล่าสุดที่ส่งให้หน้าเว็บ
@@ -122,6 +126,7 @@ function setup() {
   sheet_('Messages', MESSAGE_HEADERS);
   sheet_('ChatLog', LOG_HEADERS);
   folder_();
+  Logger.log('ส่งอีเมลได้อีกวันนี้: ' + MailApp.getRemainingDailyQuota() + ' ฉบับ');
   Logger.log('หน้าเว็บ: ' + Math.round(page_().length / 1024) + ' KB');
   Logger.log('พร้อมใช้งาน: ' + ss.getUrl());
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
@@ -136,11 +141,13 @@ var ACTIONS = {
     var username = normUsername_(req.username);
     var fullName = String(req.fullName || '').trim();
     var role = String(req.role || '');
+    var email = normEmail_(req.email);
     validatePassword_(req.password);
     if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
     if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
     if (ROLES.indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
     if (findUser_(username)) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
+    if (emailTaken_(email)) throw new Error('อีเมลนี้ถูกใช้สมัครแล้ว');
 
     var sheet = sheet_('Users', USER_HEADERS);
     var first = sheet.getLastRow() < 2;
@@ -148,7 +155,7 @@ var ACTIONS = {
     var salt = Utilities.getUuid();
     sheet.appendRow([
       username, fullName, role,
-      String(req.phone || '').trim(), String(req.email || '').trim(),
+      String(req.phone || '').trim(), email,
       salt, hash_(req.password, salt), status, first, new Date(), ''
     ]);
 
@@ -201,6 +208,60 @@ var ACTIONS = {
     setUserField_(u, 'salt', salt);
     setUserField_(u, 'hash', hash_(req.newPassword, salt));
     return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย' };
+  },
+
+  // แก้ไขอีเมลและเบอร์โทรของตัวเอง
+  updateProfile: function (req) {
+    var u = requireUser_(req.token);
+    var email = normEmail_(req.email);
+    if (emailTaken_(email, u.username)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
+    setUserField_(u, 'email', email);
+    setUserField_(u, 'phone', String(req.phone || '').trim().slice(0, 40));
+    return { user: publicUser_(findUser_(u.username)), message: 'บันทึกข้อมูลเรียบร้อย' };
+  },
+
+  // ลืมรหัสผ่าน: ส่งรหัส 6 หลักไปที่อีเมลของบัญชี (ตอบข้อความเดียวกันเสมอ เพื่อไม่บอกว่ามีบัญชีหรือไม่)
+  forgotPassword: function (req) {
+    var login = String(req.login || '').trim().toLowerCase();
+    if (!login) throw new Error('กรุณากรอกชื่อผู้ใช้หรืออีเมล');
+    var cache = CacheService.getScriptCache();
+    var u = findUserByLogin_(login);
+    var limitKey = 'forgot_' + (u ? u.username : login);
+    var count = Number(cache.get(limitKey) || 0);
+    if (count >= RESET_REQUESTS) throw new Error('ขอรหัสบ่อยเกินไป กรุณารอ 15 นาทีแล้วลองใหม่');
+    cache.put(limitKey, String(count + 1), 900);
+
+    if (u && u.email && u.status !== 'disabled') {
+      var code = resetCode_();
+      cache.put('reset_' + u.username, JSON.stringify({
+        hash: hash_(code, u.username), tries: 0, expires: Date.now() + RESET_MINUTES * 60000
+      }), RESET_MINUTES * 60);
+      sendResetEmail_(u, code);
+    }
+    return { message: 'ถ้าข้อมูลตรงกับบัญชีในระบบ ระบบได้ส่งรหัส 6 หลักไปที่อีเมลที่ลงทะเบียนไว้แล้ว ' +
+      '(หมดอายุใน ' + RESET_MINUTES + ' นาที) หากไม่ได้รับ ตรวจสอบโฟลเดอร์สแปม หรือติดต่อผู้ดูแลระบบ' };
+  },
+
+  resetPassword: function (req) {
+    var u = findUserByLogin_(String(req.login || '').trim().toLowerCase());
+    var cache = CacheService.getScriptCache();
+    var key = u ? 'reset_' + u.username : '';
+    var entry = key ? JSON.parse(cache.get(key) || 'null') : null;
+    if (!entry || entry.expires < Date.now()) throw new Error('รหัสหมดอายุหรือไม่ถูกต้อง กรุณาขอรหัสใหม่');
+    if (hash_(String(req.code || '').replace(/\s/g, ''), u.username) !== entry.hash) {
+      entry.tries++;
+      if (entry.tries >= RESET_MAX_TRIES) cache.remove(key);
+      else cache.put(key, JSON.stringify(entry), Math.max(1, Math.round((entry.expires - Date.now()) / 1000)));
+      throw new Error(entry.tries >= RESET_MAX_TRIES ? 'ใส่รหัสผิดหลายครั้ง กรุณาขอรหัสใหม่' : 'รหัสไม่ถูกต้อง');
+    }
+    validatePassword_(req.newPassword);
+    var salt = Utilities.getUuid();
+    setUserField_(u, 'salt', salt);
+    setUserField_(u, 'hash', hash_(req.newPassword, salt));
+    cache.remove(key);
+    cache.remove('fail_' + u.username);
+    dropSessionsOf_(u.username);
+    return { username: u.username, message: 'ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่' };
   },
 
   // รายชื่อสมาชิกที่ใช้งานอยู่ (สำหรับเลือกผู้รับข้อความรายบุคคล) — ส่งเฉพาะชื่อและตำแหน่ง
@@ -499,6 +560,68 @@ function normUsername_(v) {
     throw new Error('ชื่อผู้ใช้ต้องเป็นภาษาอังกฤษ ตัวเลข หรือ . _ - ความยาว 3–30 ตัวอักษร');
   }
   return u;
+}
+
+function normEmail_(v) {
+  var e = String(v || '').trim().toLowerCase();
+  if (!e) throw new Error('กรุณากรอกอีเมล (ใช้รับรหัสเมื่อลืมรหัสผ่าน)');
+  if (e.length > 100 || !EMAIL_RE.test(e)) throw new Error('รูปแบบอีเมลไม่ถูกต้อง');
+  return e;
+}
+
+function emailTaken_(email, exceptUsername) {
+  return allUsers_().some(function (u) {
+    return u.username !== exceptUsername && String(u.email || '').trim().toLowerCase() === email;
+  });
+}
+
+/** A member by username, or by email when the text contains @. */
+function findUserByLogin_(login) {
+  if (!login) return null;
+  if (login.indexOf('@') === -1) return findUser_(login);
+  return allUsers_().filter(function (u) { return String(u.email || '').trim().toLowerCase() === login; })[0] || null;
+}
+
+/** 6-digit code from a random UUID. */
+function resetCode_() {
+  var n = parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000;
+  return ('000000' + n).slice(-6);
+}
+
+function sendResetEmail_(u, code) {
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { /* not deployed yet */ }
+  var lines = [
+    'เรียน ' + u.fullName,
+    '',
+    'มีการขอตั้งรหัสผ่านใหม่สำหรับบัญชี ' + TITLE,
+    'ชื่อผู้ใช้ (Username): ' + u.username,
+    'รหัสยืนยัน: ' + code,
+    '',
+    'นำรหัสนี้ไปกรอกในหน้า "ลืมรหัสผ่าน" ภายใน ' + RESET_MINUTES + ' นาที',
+    url ? 'เปิดเว็บ: ' + url : '',
+    '',
+    'ถ้าคุณไม่ได้ขอรหัสนี้ ไม่ต้องทำอะไร รหัสผ่านเดิมยังใช้ได้ตามปกติ',
+    '— ' + TITLE + ' · Lampang Cancer Hospital'
+  ];
+  var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var html =
+    '<div style="font:15px/1.6 sans-serif;color:#142033;max-width:520px">' +
+    '<h2 style="margin:0 0 4px;color:#1d5bd6">LPCH RO Workspace</h2>' +
+    '<p style="margin:0 0 16px;color:#5a6679">Lampang Cancer Hospital</p>' +
+    '<p>เรียน ' + esc(u.fullName) + '</p>' +
+    '<p>มีการขอตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ<br>ชื่อผู้ใช้ (Username): <b>' + esc(u.username) + '</b></p>' +
+    '<p style="font:600 32px/1.2 monospace;letter-spacing:8px;background:#e2ebfc;color:#1d5bd6;padding:12px 16px;border-radius:6px;text-align:center">' + code + '</p>' +
+    '<p>นำรหัสนี้ไปกรอกในหน้า "ลืมรหัสผ่าน" ภายใน ' + RESET_MINUTES + ' นาที</p>' +
+    (url ? '<p><a href="' + esc(url) + '" style="color:#1d5bd6">เปิด LPCH RO Workspace</a></p>' : '') +
+    '<p style="color:#5a6679;font-size:13px">ถ้าคุณไม่ได้ขอรหัสนี้ ไม่ต้องทำอะไร รหัสผ่านเดิมยังใช้ได้ตามปกติ</p></div>';
+  MailApp.sendEmail({
+    to: u.email,
+    subject: 'รหัสตั้งรหัสผ่านใหม่ ' + TITLE + ': ' + code,
+    body: lines.filter(function (l, i) { return l || lines[i - 1]; }).join('\n'),
+    htmlBody: html,
+    name: TITLE
+  });
 }
 
 function validatePassword_(p) {

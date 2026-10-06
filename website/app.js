@@ -384,6 +384,8 @@
     renderUserMenu();
     if (user) {
       authScreen.innerHTML = "";
+      // Accounts created before email was required are asked to add one (needed to reset a password).
+      if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
     } else {
       if (unmountChat) { unmountChat(); unmountChat = null; }
