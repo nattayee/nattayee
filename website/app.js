@@ -2,7 +2,14 @@
   "use strict";
 
   var S = window.SITE;
+  var Auth = window.Auth;
   var app = document.getElementById("app");
+  var userMenu = document.getElementById("userMenu");
+  var authScreen = document.getElementById("authScreen");
+
+  // Member pages (not in the top menu).
+  S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
+  S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
   var navEl = document.getElementById("nav");
 
   function esc(s) {
@@ -76,6 +83,10 @@
       return '<div class="intro section"><h2>' + esc(S.organization) + "</h2>" +
         '<p class="intro-text">' + esc(S.description) + "</p></div>";
     },
+
+    account: function () { return '<section class="section" id="accountRoot"></section>'; },
+
+    admin: function () { return '<section class="section" id="adminRoot"></section>'; },
 
     announcements: function () {
       return '<section class="section" id="chatRoot"></section>';
@@ -293,8 +304,9 @@
   var unmountChat = null;
 
   function route() {
+    if (!Auth.user) return;
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
-    if (!S.pages[page]) page = "home";
+    if (!S.pages[page] || (S.pages[page].adminOnly && !Auth.user.isAdmin)) page = "home";
 
     if (unmountChat) { unmountChat(); unmountChat = null; }
     app.innerHTML = renderPage(page);
@@ -302,6 +314,10 @@
     initCalculators();
     var chatRoot = document.getElementById("chatRoot");
     if (chatRoot && window.Chat) unmountChat = window.Chat.mount(chatRoot);
+    var accountRoot = document.getElementById("accountRoot");
+    if (accountRoot) Auth.mountAccount(accountRoot);
+    var adminRoot = document.getElementById("adminRoot");
+    if (adminRoot) Auth.mountAdmin(adminRoot);
 
     document.getElementById("banner").classList.toggle("compact", page !== "home");
 
@@ -323,6 +339,54 @@
     window.scrollTo(0, 0);
   }
 
+  /* ---------------- Signed-in user ---------------- */
+
+  function renderUserMenu() {
+    var u = Auth.user;
+    if (!u) { userMenu.innerHTML = ""; return; }
+    // First letter for the avatar, skipping Thai leading vowels (เ แ โ ใ ไ).
+    var initial = (u.fullName || u.username).trim().replace(/^[\u0e40-\u0e44]/, "").charAt(0);
+    userMenu.innerHTML =
+      '<button class="user-btn" id="userBtn" aria-haspopup="true" aria-expanded="false" aria-controls="userDrop">' +
+        '<span class="avatar" aria-hidden="true">' + esc(initial) + "</span>" +
+        '<span class="user-name">' + esc(u.fullName) + "</span></button>" +
+      '<div class="user-drop" id="userDrop" hidden>' +
+        '<div class="user-info"><strong>' + esc(u.fullName) + "</strong><span>" + esc(Auth.roleName(u.role)) +
+          (u.isAdmin ? " · admin" : "") + "</span></div>" +
+        '<a href="#/account">👤 บัญชีของฉัน</a>' +
+        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
+        '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
+      "</div>";
+    var btn = document.getElementById("userBtn");
+    var drop = document.getElementById("userDrop");
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      drop.hidden = !drop.hidden;
+      btn.setAttribute("aria-expanded", drop.hidden ? "false" : "true");
+    });
+    drop.addEventListener("click", function () { drop.hidden = true; });
+    document.getElementById("logoutBtn").addEventListener("click", function () { Auth.logout(); });
+  }
+
+  function closeUserMenu() {
+    var drop = document.getElementById("userDrop");
+    if (drop) drop.hidden = true;
+  }
+
+  // Show the site for a signed-in member, or the login / sign-up screen.
+  function applyAuth(user) {
+    document.body.classList.toggle("locked", !user);
+    renderUserMenu();
+    if (user) {
+      authScreen.innerHTML = "";
+      route();
+    } else {
+      if (unmountChat) { unmountChat(); unmountChat = null; }
+      app.innerHTML = "";
+      Auth.showLogin(authScreen);
+    }
+  }
+
   document.getElementById("bannerTitle").textContent = S.title;
   document.getElementById("bannerSubtitle").textContent = S.subtitle;
   document.getElementById("footerOrg").textContent = S.organization;
@@ -335,11 +399,13 @@
   });
   document.addEventListener("click", function (e) {
     if (!navEl.contains(e.target)) closeSubmenus();
+    if (!userMenu.contains(e.target)) closeUserMenu();
   });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeSubmenus();
+    if (e.key === "Escape") { closeSubmenus(); closeUserMenu(); }
   });
 
   window.addEventListener("hashchange", route);
-  route();
+  Auth.onChange(applyAuth);
+  Auth.init().then(applyAuth);
 })();

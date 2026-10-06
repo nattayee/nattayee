@@ -15,7 +15,6 @@
   var C = S.chat || {};
   var ROLES = C.roles || ["RO", "MP", "RTT", "Nurse"];
   var MAX_IMAGES = C.maxImages || 4;
-  var ME_KEY = "lpch-ro-chat-me";
   var useFirebase = !!(C.firebase && C.firebase.projectId);
 
   /* ---------------- helpers ---------------- */
@@ -39,9 +38,15 @@
   }
 
   // Firestore-safe map key for one reader.
-  function readerKey(p) { return (p.role || "x").replace(/\W/g, "") + "_" + hash(p.name.trim().toLowerCase()); }
+  function readerKey(p) {
+    return p.username ? "u_" + p.username.replace(/\W/g, "_") : (p.role || "x").replace(/\W/g, "") + "_" + hash(p.name.trim().toLowerCase());
+  }
 
-  function samePerson(a, b) { return a && b && a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && a.role === b.role; }
+  function samePerson(a, b) {
+    if (!a || !b) return false;
+    if (a.username && b.username) return a.username === b.username;
+    return a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && a.role === b.role;
+  }
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
@@ -52,14 +57,15 @@
     return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" }) + " " + t;
   }
 
+  function reader(p) { return { username: p.username || "", name: p.name, role: p.role, at: Date.now() }; }
+
   function roleLabel(r) { return r === "ALL" ? "ทุกคน" : r; }
 
-  function loadMe() {
-    try { var m = JSON.parse(localStorage.getItem(ME_KEY)); if (m && m.name) return m; } catch (e) { /* ignore */ }
-    return null;
+  // The signed-in member (from auth.js) is the chat identity.
+  function currentMe() {
+    var u = window.Auth && window.Auth.user;
+    return u ? { username: u.username, name: u.fullName, role: u.role } : null;
   }
-
-  function saveMe(m) { try { localStorage.setItem(ME_KEY, JSON.stringify(m)); } catch (e) { /* ignore */ } }
 
   // Is this message addressed to person p (directly, to everyone, or forwarded to their role)?
   function isForMe(m, p) { return !!p && (m.to.indexOf("ALL") !== -1 || m.to.indexOf(p.role) !== -1); }
@@ -150,7 +156,7 @@
         return Promise.resolve();
       },
       markRead: function (id, p) {
-        return mutate(id, function (m) { m.reads[readerKey(p)] = { name: p.name, role: p.role, at: Date.now() }; });
+        return mutate(id, function (m) { m.reads[readerKey(p)] = reader(p); });
       },
       forward: function (id, entry) {
         return mutate(id, function (m) {
@@ -214,7 +220,7 @@
       markRead: function (id, p) {
         return ready.then(function (col) {
           var u = {};
-          u["reads." + readerKey(p)] = { name: p.name, role: p.role, at: Date.now() };
+          u["reads." + readerKey(p)] = reader(p);
           return col.doc(id).update(u);
         });
       },
@@ -235,7 +241,7 @@
   /* ---------------- UI ---------------- */
 
   function mount(root) {
-    var me = loadMe();
+    var me = currentMe();
     var messages = [];
     var filter = "all";
     var pending = []; // data URLs waiting to be sent
@@ -258,12 +264,7 @@
         (store.label ? '<div class="chat-mode">ℹ️ ' + esc(store.label) + "</div>" : "") +
         '<div class="chat-feed" id="chatFeed" aria-live="polite"><p class="chat-empty">กำลังโหลด…</p></div>' +
         '<form class="chat-compose" id="chatForm" autocomplete="off">' +
-          '<div class="chat-me">' +
-            '<label>ผู้ส่ง <input id="chatName" type="text" placeholder="ชื่อของคุณ" maxlength="40" required></label>' +
-            '<label>ตำแหน่ง <select id="chatRole">' + ROLES.concat(["Admin"]).map(function (r) {
-              return '<option value="' + esc(r) + '">' + esc(r) + "</option>";
-            }).join("") + "</select></label>" +
-          "</div>" +
+          (me ? '<div class="chat-me">ส่งในนาม <strong>' + esc(me.name) + '</strong> <span class="badge">' + esc(me.role) + "</span></div>" : "") +
           '<div class="chat-to"><span>ส่งถึง:</span>' + ["ALL"].concat(ROLES).map(function (r) {
             return '<button type="button" class="chip' + (r === "ALL" ? " active" : "") + '" data-to="' + esc(r) + '">' + esc(roleLabel(r)) + "</button>";
           }).join("") + "</div>" +
@@ -280,8 +281,6 @@
 
     var feed = root.querySelector("#chatFeed");
     var form = root.querySelector("#chatForm");
-    var nameIn = root.querySelector("#chatName");
-    var roleIn = root.querySelector("#chatRole");
     var textIn = root.querySelector("#chatText");
     var fileIn = root.querySelector("#chatFile");
     var previews = root.querySelector("#chatPreviews");
@@ -289,20 +288,8 @@
     var sendBtn = root.querySelector("#chatSend");
     var lightbox = root.querySelector("#lightbox");
 
-    if (me) { nameIn.value = me.name; roleIn.value = me.role; }
-
     function showError(msg) { errEl.textContent = msg || ""; errEl.hidden = !msg; }
 
-    function updateMe() {
-      var n = nameIn.value.trim();
-      var next = n ? { name: n, role: roleIn.value } : null;
-      if (next ? samePerson(next, me) : !me) return;
-      me = next;
-      if (me) saveMe(me);
-      render();
-    }
-    nameIn.addEventListener("change", updateMe);
-    roleIn.addEventListener("change", updateMe);
 
     /* filters */
     root.querySelectorAll("[data-filter]").forEach(function (b) {
@@ -377,9 +364,8 @@
     /* send */
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      updateMe();
       var text = textIn.value.trim();
-      if (!me) { showError("กรุณาใส่ชื่อผู้ส่ง"); nameIn.focus(); return; }
+      if (!me) { showError("กรุณาเข้าสู่ระบบก่อนส่งข้อความ"); return; }
       if (!text && !pending.length) { showError("พิมพ์ข้อความหรือแนบรูปก่อนส่ง"); textIn.focus(); return; }
       if (useFirebase && pending.join("").length > 900000) {
         showError("รูปแนบรวมกันใหญ่เกินไป (จำกัดประมาณ 900 KB ต่อข้อความ) — ลดจำนวนรูป");
@@ -388,9 +374,9 @@
       showError("");
       sendBtn.disabled = true;
       var reads = {};
-      reads[readerKey(me)] = { name: me.name, role: me.role, at: Date.now() }; // the author has read it
+      reads[readerKey(me)] = reader(me); // the author has read it
       store.add({
-        author: { name: me.name, role: me.role },
+        author: { username: me.username, name: me.name, role: me.role },
         text: text,
         images: pending.slice(),
         to: recipients.slice(),
@@ -420,12 +406,12 @@
       if (act === "reads") { openReads[id] = !openReads[id]; render(); }
       else if (act === "fwd") { forwardOpen = forwardOpen === id ? null : id; render(); }
       else if (act === "fwd-send") {
-        if (!me) { showError("กรุณาใส่ชื่อผู้ส่งก่อนส่งต่อ"); nameIn.focus(); return; }
+        if (!me) { showError("กรุณาเข้าสู่ระบบก่อนส่งต่อ"); return; }
         var box = t.closest(".chat-forward");
         var to = Array.prototype.map.call(box.querySelectorAll("input:checked"), function (c) { return c.value; });
         if (!to.length) return;
         forwardOpen = null;
-        store.forward(id, { by: { name: me.name, role: me.role }, to: to, at: Date.now() })
+        store.forward(id, { by: { username: me.username, name: me.name, role: me.role }, to: to, at: Date.now() })
           .catch(function (err) { showError("ส่งต่อไม่สำเร็จ: " + err.message); });
       } else if (act === "del") {
         if (confirm("ลบข้อความนี้?")) store.remove(id).catch(function (err) { showError("ลบไม่สำเร็จ: " + err.message); });

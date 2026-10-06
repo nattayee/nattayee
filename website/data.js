@@ -46,6 +46,16 @@ window.SITE = {
   ],
 
   /*
+   * ระบบสมาชิก (ต้องสมัครและเข้าสู่ระบบก่อนใช้งานเว็บไซต์)
+   * apiUrl = Web app URL ของ Google Apps Script (โค้ดอยู่ที่ apps-script/Code.gs) เช่น
+   *   "https://script.google.com/macros/s/XXXXXXXX/exec"
+   * ถ้าเว้นว่าง จะเป็น "โหมดทดลอง" — ข้อมูลสมาชิกเก็บในเบราว์เซอร์นี้เท่านั้น
+   */
+  auth: {
+    apiUrl: "",
+  },
+
+  /*
    * ช่องแชทประกาศ / ข่าวสาร (หน้า Home)
    * ถ้าไม่ได้ใส่ firebase.projectId จะทำงานใน "โหมดทดลอง" — ข้อความเก็บในเบราว์เซอร์ของแต่ละเครื่องเท่านั้น
    * ใส่ค่า config จาก Firebase console → Project settings → Your apps → Web app เพื่อให้ทุกคนเห็นข้อความร่วมกัน
