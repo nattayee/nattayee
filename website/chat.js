@@ -917,6 +917,7 @@
 
       if (observer) feed.querySelectorAll("[data-msg]").forEach(function (el) { observer.observe(el); });
       hydrateImages(feed);
+      focusPending();
     }
 
     function byMe(m) { return samePerson(m.author, me); }
@@ -944,6 +945,7 @@
         if (!el || htmlCache[it.id] !== it.html) {
           tpl.innerHTML = it.html;
           var fresh = tpl.content.firstChild;
+          if (el && el.classList.contains("flash")) fresh.classList.add("flash"); // keep a highlight in progress
           if (el) feed.replaceChild(fresh, el);
           el = fresh;
         }
@@ -970,10 +972,39 @@
     function onVisible() { if (!document.hidden) render(); }
     document.addEventListener("visibilitychange", onVisible);
 
+    // "Open" on a notification pop-up: scroll to that message and highlight it once it is in the feed.
+    function focusPending() {
+      var id = window.__lpchFocusMessage;
+      if (!id) return;
+      var el = feed.querySelector('[data-msg="' + id + '"]');
+      if (!el) return;
+      window.__lpchFocusMessage = null;
+      root.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(function () {
+        // Look the message up again: a read receipt may have re-drawn it in the meantime.
+        var cur = feed.querySelector('[data-msg="' + id + '"]');
+        if (!cur) return;
+        cur.scrollIntoView({ behavior: "smooth", block: "center" });
+        cur.classList.remove("flash");
+        void cur.offsetWidth;
+        cur.classList.add("flash");
+      }, 250);
+    }
+    function onFocusEvent() {
+      if (filter !== "all") {
+        filter = "all";
+        root.querySelectorAll("[data-filter]").forEach(function (x) { x.classList.toggle("active", x.getAttribute("data-filter") === "all"); });
+        render();
+      }
+      focusPending();
+    }
+    window.addEventListener("lpch:focus-message", onFocusEvent);
+
     return function unmount() {
       unsubscribe();
       if (observer) observer.disconnect();
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("lpch:focus-message", onFocusEvent);
     };
   }
 

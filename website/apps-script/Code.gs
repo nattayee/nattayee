@@ -48,7 +48,7 @@ var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -435,6 +435,43 @@ ACTIONS.chatImage = function (req) {
   if (!ok) throw new Error('ไม่พบรูป');
   var blob = file.getBlob();
   return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
+};
+
+/* ----- pop-up notifications ----- */
+
+/**
+ * New messages for the signed-in member since `since` (server time, ms): announcements addressed to them
+ * (everyone, their profession, them personally, or forwarded to them) that they have not read, and unread
+ * private messages. Also returns the unread totals and the server time to pass as `since` next time.
+ */
+ACTIONS.notify = function (req) {
+  var u = requireUser_(req.token), me = person_(u), since = Number(req.since) || 0;
+  var chat = [], chatUnread = 0, dm = [], dmUnread = 0;
+
+  sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1).forEach(function (r) {
+    var m = JSON.parse(r[3]);
+    m.to = m.to || []; m.reads = m.reads || {}; m.forwards = m.forwards || []; m.images = m.images || []; m.toNames = m.toNames || {};
+    if (m.author.username === u.username || !isForUser_(m, u) || m.reads[key_(me)]) return;
+    chatUnread++;
+    var fwd = m.forwards.filter(function (f) {
+      return f.at > since && (f.to.indexOf('ALL') !== -1 || f.to.indexOf(u.role) !== -1 || f.to.indexOf('u:' + u.username) !== -1);
+    }).pop();
+    if (m.createdAt > since || fwd) {
+      chat.push({ id: m.id, from: m.author, text: snippet_(m.text, 140), images: m.images.length,
+        personal: m.to.indexOf('u:' + u.username) !== -1, forwardedBy: fwd ? fwd.by : null,
+        createdAt: fwd ? fwd.at : m.createdAt });
+    }
+  });
+
+  dmRows_(u.username).forEach(function (r) {
+    var m = r.msg;
+    if (m.to.username !== u.username || m.readAt) return;
+    dmUnread++;
+    if (m.createdAt > since) dm.push({ id: m.id, from: m.from, text: snippet_(m.text, 140), images: m.images.length, createdAt: m.createdAt });
+  });
+
+  var byTime = function (a, b) { return a.createdAt - b.createdAt; };
+  return { now: Date.now(), chat: chat.sort(byTime).slice(-10), chatUnread: chatUnread, dm: dm.sort(byTime).slice(-10), dmUnread: dmUnread };
 };
 
 /* ----- private messages: only the sender and the recipient can read a conversation (admins too) ----- */

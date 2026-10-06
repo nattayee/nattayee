@@ -71,6 +71,8 @@ window.SITE = {
   chat: {
     roles: ["RO", "MP", "RTT", "Nurse"],
     maxImages: 4,
+    pollSeconds: 15,    // หน้าแชท/ข้อความส่วนตัวดึงข้อความใหม่ทุกกี่วินาที
+    notifySeconds: 20,  // pop up แจ้งเตือนข้อความใหม่ ตรวจทุกกี่วินาที (ทุกหน้า)
     collection: "announcements",
     firebase: {
       apiKey: "",

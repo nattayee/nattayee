@@ -350,6 +350,7 @@
     document.getElementById("menuCurrent").textContent = cur;
 
     closeSubmenus();
+    closeUserMenu();
     navEl.classList.remove("open");
     document.getElementById("menuToggle").setAttribute("aria-expanded", "false");
 
@@ -377,13 +378,22 @@
         '<a href="#/inbox">✉️ ข้อความส่วนตัว</a>' +
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
         (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
+        (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
       "</div>";
     var btn = document.getElementById("userBtn");
     var drop = document.getElementById("userDrop");
+    if (window.Notifier) window.Notifier.bindMenu(drop);
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
       drop.hidden = !drop.hidden;
+      // Keep the menu inside the screen (on phones the button is not at the right edge).
+      drop.style.left = drop.style.right = "";
+      if (!drop.hidden) {
+        var r = drop.getBoundingClientRect(), gap = 12;
+        if (r.right > window.innerWidth - gap) { drop.style.right = "auto"; drop.style.left = (drop.offsetLeft - (r.right - (window.innerWidth - gap))) + "px"; }
+        else if (r.left < gap) { drop.style.right = "auto"; drop.style.left = (drop.offsetLeft + (gap - r.left)) + "px"; }
+      }
       btn.setAttribute("aria-expanded", drop.hidden ? "false" : "true");
     });
     drop.addEventListener("click", function () { drop.hidden = true; });
@@ -404,10 +414,11 @@
       // Accounts created before email was required are asked to add one (needed to reset a password).
       if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
-      if (window.DM) window.DM.startBadge();
+      // Pop-ups for new announcements and private messages (also keeps the unread badges current).
+      if (window.Notifier) window.Notifier.start();
     } else {
       unmountWidgets();
-      if (window.DM) window.DM.stopBadge();
+      if (window.Notifier) window.Notifier.stop();
       app.innerHTML = "";
       Auth.showLogin(authScreen);
     }
@@ -436,6 +447,7 @@
     if (!navEl.contains(e.target)) closeSubmenus();
     if (!userMenu.contains(e.target)) closeUserMenu();
   });
+  window.addEventListener("resize", closeUserMenu);
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { closeSubmenus(); closeUserMenu(); }
   });

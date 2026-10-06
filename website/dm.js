@@ -185,6 +185,9 @@
     });
   }
 
+  // Username of the conversation open on screen (so pop-ups skip messages already in view).
+  var activePartner = null;
+
   /* ---------------- unread badge in the header ---------------- */
 
   var badgeTimer = null;
@@ -329,6 +332,7 @@
 
     function open(username) {
       current = username;
+      activePartner = username;
       partner = null;
       thread = [];
       lastThreadJson = "";
@@ -421,6 +425,7 @@
     $("dmBack").addEventListener("click", function () {
       app.classList.remove("show-conv");
       current = null;
+      activePartner = null;
       $("dmConv").hidden = true;
       $("dmPlaceholder").hidden = false;
       renderList();
@@ -549,10 +554,12 @@
 
     return function unmount() {
       alive = false;
+      activePartner = null;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }
 
-  window.DM = { mount: mount, startBadge: startBadge, stopBadge: stopBadge, refreshBadge: refreshBadge };
+  window.DM = { mount: mount, startBadge: startBadge, stopBadge: stopBadge, refreshBadge: refreshBadge,
+    currentPartner: function () { return activePartner; } };
 })();
