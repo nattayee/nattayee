@@ -17,6 +17,7 @@
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
+ * แอป TRS-398 Output Calibration ใช้บัญชีเดียวกันนี้ได้ (ssoTicket / ssoRedeem / login) — ต้อง Deploy แบบ Who has access: Anyone
  */
 
 var REQUIRE_APPROVAL = true;   // ผู้สมัครใหม่ต้องรอ admin อนุมัติ
@@ -184,14 +185,15 @@ ACTIONS.register = function (req) {
   return { status: status, token: createSession_(username), user: publicUser_(u) };
 };
 
+/** ชื่อผู้ใช้หรืออีเมล + รหัสผ่าน (แอป TRS-398 ก็ตรวจรหัสผ่านผ่านคำสั่งนี้) */
 ACTIONS.login = function (req) {
-  var username = String(req.username || '').trim().toLowerCase();
+  var login = String(req.username || '').trim().toLowerCase();
+  var u = findUserByLogin_(login);
   var cache = CacheService.getScriptCache();
-  var failKey = 'fail_' + username;
+  var failKey = 'fail_' + (u ? u.username : login);
   var fails = Number(cache.get(failKey) || 0);
   if (fails >= MAX_FAILED_LOGINS) throw new Error('เข้าสู่ระบบผิดหลายครั้ง กรุณารอ 15 นาที');
 
-  var u = findUser_(username);
   if (!u || hash_(req.password || '', u.salt) !== u.hash) {
     cache.put(failKey, String(fails + 1), 900);
     throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
@@ -202,7 +204,33 @@ ACTIONS.login = function (req) {
   cache.remove(failKey);
   setUserField_(u, 'lastLogin', new Date());
   purgeSessions_();
-  return { token: createSession_(username), user: publicUser_(u) };
+  return { token: createSession_(u.username), user: publicUser_(u) };
+};
+
+/* ---------------- เข้าแอปอื่นด้วยบัญชีนี้ (TRS-398 Output Calibration) ----------------
+ * หน้าเว็บขอ "บัตรผ่าน" (ssoTicket) แล้วแนบไปกับลิงก์ เช่น .../exec?sso=<บัตร>
+ * แอปปลายทางนำบัตรมาแลกเป็นการเข้าสู่ระบบ (ssoRedeem) ที่เซิร์ฟเวอร์ของแอปเอง
+ * บัตรใช้ได้ครั้งเดียว อายุ SSO_SECONDS วินาที และแลกได้เฉพาะบัญชีที่ยังใช้งานอยู่
+ */
+var SSO_SECONDS = 120;
+
+ACTIONS.ssoTicket = function (req) {
+  var u = requireUser_(req.token);
+  var ticket = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  CacheService.getScriptCache().put('sso_' + ticket, u.username, SSO_SECONDS);
+  return { ticket: ticket, expiresIn: SSO_SECONDS };
+};
+
+ACTIONS.ssoRedeem = function (req) {
+  var key = 'sso_' + String(req.ticket || '').replace(/[^0-9a-f]/gi, '');
+  var cache = CacheService.getScriptCache();
+  var username = key.length > 4 ? cache.get(key) : null;
+  if (!username) throw new Error('ลิงก์เข้าสู่ระบบหมดอายุหรือถูกใช้ไปแล้ว กรุณาเข้าสู่ระบบอีกครั้ง');
+  cache.remove(key);   // ใช้ได้ครั้งเดียว
+  var u = findUser_(username);
+  if (!u || u.status !== 'active') throw new Error('บัญชีของคุณถูกระงับการใช้งาน');
+  purgeSessions_();
+  return { token: createSession_(u.username), user: publicUser_(u) };
 };
 
 ACTIONS.me = function (req) {

@@ -22,9 +22,10 @@
   function isExternal(url) { return /^https?:/i.test(url); }
 
   // A link whose url is "#" or empty is a placeholder waiting for a real Drive/Docs URL.
-  function link(label, url) {
+  function link(label, url, sso) {
     if (!url || url === "#") return '<span class="placeholder">' + esc(label) + "</span>";
-    return '<a href="' + esc(url) + '"' + (isExternal(url) ? ' target="_blank" rel="noopener"' : "") + ">" + esc(label) + "</a>";
+    return '<a href="' + esc(url) + '"' + (isExternal(url) ? ' target="_blank" rel="noopener"' : "") +
+      (sso ? ' data-sso="' + esc(url) + '"' : "") + ">" + esc(label) + "</a>";
   }
 
   function section(title, lead, body) {
@@ -214,7 +215,8 @@
     // Web apps used every day (e.g. TRS-398 Output Calibration): big card with an "open" button, new tab
     if (p.apps) {
       html += section("", "", '<div class="grid wide">' + p.apps.map(function (a) {
-        return '<a class="card app-card" href="' + esc(a.url) + '"' + (isExternal(a.url) ? ' target="_blank" rel="noopener"' : "") + ">" +
+        return '<a class="card app-card" href="' + esc(a.url) + '"' + (isExternal(a.url) ? ' target="_blank" rel="noopener"' : "") +
+          (a.sso ? ' data-sso="' + esc(a.url) + '"' : "") + ">" +
           '<span class="app-icon" aria-hidden="true">' + (a.icon || "🔗") + "</span>" +
           '<div class="app-body"><strong>' + esc(a.label) + "</strong>" +
           (a.desc ? "<span>" + esc(a.desc) + "</span>" : "") +
@@ -227,7 +229,7 @@
       html += section("", "", '<div class="grid">' + p.groups.map(function (g) {
         return '<div class="card"><h3>' + (g.icon ? g.icon + " " : "") + esc(g.title) + '</h3><ul class="link-list">' +
           g.items.map(function (i) {
-            return "<li>" + link(i.label, i.url) + (i.type ? '<span class="badge">' + esc(i.type) + "</span>" : "") + "</li>";
+            return "<li>" + link(i.label, i.url, i.sso) + (i.type ? '<span class="badge">' + esc(i.type) + "</span>" : "") + "</li>";
           }).join("") + "</ul></div>";
       }).join("") + "</div>");
     }
@@ -324,6 +326,29 @@
     if (unmountInbox) { unmountInbox(); unmountInbox = null; }
   }
 
+  /*
+   * Apps that sign in with this site's account (sso: true in data.js, e.g. TRS-398): the link carries a
+   * one-use ticket (?sso=…, from ssoTicket in Code.gs) fetched ahead of time, so a click opens the app in a
+   * new tab straight away (no pop-up blocker) and the app knows who it is. A ticket lasts 2 minutes, so it
+   * is renewed while the page stays open and right after each click.
+   */
+  var ssoTimer = null;
+  function initSso() {
+    clearTimeout(ssoTimer);
+    var links = app.querySelectorAll("a[data-sso]");
+    if (!links.length || !Auth.remote) return;
+    Auth.call("ssoTicket").then(function (r) {
+      links.forEach(function (a) {
+        var base = a.getAttribute("data-sso");
+        a.href = base + (base.indexOf("?") === -1 ? "?" : "&") + "sso=" + encodeURIComponent(r.ticket);
+      });
+      ssoTimer = setTimeout(initSso, Math.max(30, (r.expiresIn || 120) - 30) * 1000);
+    }, function () { /* Code.gs without ssoTicket: plain link, the app asks for a sign-in itself */ });
+  }
+  app.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest("a[data-sso]")) setTimeout(initSso, 300);   // that ticket is used now
+  });
+
   function route() {
     if (!Auth.user) return;
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
@@ -333,6 +358,7 @@
     app.innerHTML = renderPage(page);
     initConstraints();
     initCalculators();
+    initSso();
     var chatRoot = document.getElementById("chatRoot");
     if (chatRoot && window.Chat) unmountChat = window.Chat.mount(chatRoot);
     var inboxRoot = document.getElementById("inboxRoot");

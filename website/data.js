@@ -309,13 +309,14 @@ window.SITE = {
           icon: "📏",
           label: "TRS-398 Output Calibration",
           desc: "คำนวณ absorbed dose to water และ output ของ photon / electron beam ตาม IAEA TRS-398 พร้อมบันทึกผลการวัด",
-          note: "เปิดในแท็บใหม่ · เข้าสู่ระบบด้วยบัญชี Google",
+          note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
+          sso: true,   // แนบบัตรผ่านเข้าสู่ระบบ (ssoTicket ใน Code.gs) แอปจึงรู้ว่าเป็นใครโดยไม่ต้องกรอกรหัสอีก
           url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec",
         },
       ],
       groups: [
         { title: "Dosimetry", icon: "📏", items: [
-          { label: "Output calibration (TRS-398)", type: "Web app", url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec" },
+          { label: "Output calibration (TRS-398)", type: "Web app", sso: true, url: "https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec" },
           { label: "Equipment calibration record", type: "Sheet", url: "#" },
         ] },
       ],

@@ -139,7 +139,7 @@
         return { status: "active", token: session(d, username), user: pub(u) };
       },
       login: function (d, r) {
-        var u = find(d, String(r.username || "").trim().toLowerCase());
+        var u = byLogin(d, String(r.username || "").trim().toLowerCase());
         if (!u || hash(r.password || "", u.salt) !== u.hash) fail("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
         if (u.status === "pending") fail("บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ");
         if (u.status !== "active") fail("บัญชีของคุณถูกระงับการใช้งาน");
@@ -359,7 +359,7 @@
 
   function loginForm(state) {
     return '<form class="auth-form" novalidate>' +
-      field("ชื่อผู้ใช้ (Username)", '<input name="username" autocomplete="username" value="' + esc(state.login && state.login.indexOf("@") === -1 ? state.login : "") + '" required>') +
+      field("ชื่อผู้ใช้ หรืออีเมล", '<input name="username" autocomplete="username" value="' + esc(state.login || "") + '" required>') +
       field("รหัสผ่าน", '<input name="password" type="password" autocomplete="current-password" required>') +
       '<p class="auth-error" role="alert" hidden></p>' +
       '<button type="submit" class="auth-submit">เข้าสู่ระบบ</button>' +
