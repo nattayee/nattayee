@@ -232,6 +232,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .hist-val small { font-size: .72rem; color: var(--muted); font-family: var(--font-body); }
 .hist-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .hist-actions .btn { padding: 4px 10px; font-size: .8rem; }
+.hist-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .hist-empty { color: var(--muted); font-size: .88rem; padding: 12px 2px; }
 .drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
 
@@ -1448,11 +1449,13 @@ body.locked .wrap { display: none; }
         <div class="hist-who">HN ${esc(r.patient.hn || "—")} · ${esc(patientName(r.patient) || "ไม่ระบุชื่อ")}${r.doctor ? `<br><span>แพทย์ ${esc(r.doctor)}</span>` : ""}</div>
         <div class="hist-val">TDF ${fmt(r.tdf, 1)} <small>/ อ้างอิง ${fmt(r.ref, 0)}</small></div>
         <div class="hist-sum">${esc(r.summary)}</div>
+        ${r.status === "approved" ? `<div class="hist-sum">${r.pdf ? "✓ เก็บ PDF ใน Google Drive แล้ว" : backend.shared ? "ยังไม่ได้เก็บ PDF ใน Drive" : ""}</div>` : ""}
         <div class="hist-sum">คำนวณ: ${esc(r.calc.name || "—")} · ${esc(fmtTime(r.calc.at || r.at))}${rv ? `<br>${r.status === "approved" ? "Recheck" : "ตรวจ"}: ${esc(rv.name)} · ${esc(fmtTime(rv.at))}${rv.note ? ` · “${esc(rv.note)}”` : ""}` : ""}</div>
         <div class="hist-actions">
           <button type="button" class="btn" data-act="open">เปิด</button>
           ${canReview(r) ? `<button type="button" class="btn primary" data-act="review">Recheck</button>` : ""}
-          ${r.status === "approved" || r.status === "draft" ? `<button type="button" class="btn" data-act="pdf">PDF${r.status === "draft" ? " ฉบับร่าง" : ""}</button>` : ""}
+          ${r.status === "approved" || r.status === "draft" ? `<button type="button" class="btn" data-act="pdf">PDF${r.status === "draft" ? " ฉบับร่าง" : canArchive(r) ? " + เก็บลง Drive" : ""}</button>` : ""}
+          ${r.pdf && /^https:\/\//.test(r.pdf.url) ? `<a class="btn" href="${esc(r.pdf.url)}" target="_blank" rel="noopener">เปิดใน Drive</a>` : ""}
           ${mine(r) && r.status !== "approved" || r.status === "draft" ? `<button type="button" class="btn ghost" data-act="withdraw">${r.status === "draft" ? "ลบ" : "ถอนคำขอ"}</button>` : ""}
         </div>
       </article>`;
@@ -1545,7 +1548,13 @@ body.locked .wrap { display: none; }
       records = records.map((r) => (r.id === saved.id ? saved : r));
       endReview();
       renderHistory();
-      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
+      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ · กำลังเก็บ PDF ลง Google Drive…` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
+      if (decision === "approved" && canArchive(saved)) {
+        renderPdf(saved).then((pdf) => archivePdf(saved, pdf)).catch((err) => {
+          console.error(err);
+          toast("อนุมัติแล้ว แต่เก็บ PDF ลง Drive ไม่สำเร็จ (" + (err.message || err) + ") กด PDF ในรายการคำนวณเพื่อลองใหม่", 7000);
+        });
+      }
     }).catch((err) => { toast(err.message || String(err), 5000); updateReview(); }).finally(() => { $("rvReject").disabled = false; });
   }
   $("rvApprove").addEventListener("click", () => sendReview("approved"));
@@ -1692,10 +1701,26 @@ body.locked .wrap { display: none; }
       }
     }
     if (backend.shared && rec.status !== "approved") return toast("สร้างรายงานได้เมื่อ recheck และอนุมัติแล้ว", 4000);
-    const report = buildReport(rec);
     const btn = $("pdfBtn");
     btn.disabled = true; btn.textContent = "กำลังสร้าง PDF…";
     try {
+      const pdf = await renderPdf(rec);
+      pdf.save(fileName(rec));
+      if (canArchive(rec)) archivePdf(rec, pdf);
+      else toast(rec.status === "approved" ? "สร้างรายงาน PDF แล้ว" : "สร้างรายงานฉบับร่างแล้ว");
+    } catch (err) {
+      console.error(err);
+      toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
+      setTimeout(() => window.print(), 300);
+    } finally {
+      btn.disabled = false; btn.textContent = "สร้างรายงาน PDF";
+    }
+  }
+
+  /** The A4 report of a record as a jsPDF document (the record's calculation must be on screen for its charts). */
+  async function renderPdf(rec) {
+    const report = buildReport(rec);
+    {
       await loadPdfLibs();
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
       const scale = 2;
@@ -1724,15 +1749,21 @@ body.locked .wrap { display: none; }
         pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, (part.height / part.width) * 210);
       });
       pdf.setProperties({ title: "TDF Dose Calculation Report", subject: rec.title, creator: "TDF Dose Calculator · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง" });
-      pdf.save(fileName(rec));
-      toast(rec.status === "approved" ? "สร้างรายงาน PDF แล้ว" : "สร้างรายงานฉบับร่างแล้ว");
-    } catch (err) {
-      console.error(err);
-      toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
-      setTimeout(() => window.print(), 300);
-    } finally {
-      btn.disabled = false; btn.textContent = "สร้างรายงาน PDF";
+      return pdf;
     }
+  }
+
+  // ----- approved reports are kept in Google Drive (Apps Script build) -----
+  const canArchive = (rec) => backend.shared && rec.status === "approved" && !rec.pdf && !!user &&
+    (user.username === rec.calc.username || (rec.review && user.username === rec.review.username));
+  function archivePdf(rec, pdf) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    return backend.savePdf(rec.id, base64, fileName(rec)).then((saved) => {
+      records = records.map((r) => (r.id === saved.id ? saved : r));
+      renderHistory();
+      toast("บันทึกรายงาน PDF ลง Google Drive แล้ว", 4000);
+      return saved;
+    });
   }
   $("pdfBtn").addEventListener("click", () => makePdf());
 
@@ -1785,6 +1816,7 @@ body.locked .wrap { display: none; }
     submit: function (rec) { return ask("tdfSubmit", [rec]); },
     review: function (id, decision, note, recheckTdf) { return ask("tdfReview", [id, decision, note, isFinite(recheckTdf) ? recheckTdf : null]); },
     withdraw: function (id) { return ask("tdfWithdraw", [id]); },
+    savePdf: function (id, base64, name) { return ask("tdfSavePdf", [id, base64, name]); },
   };
 
   function showForm(message, kind) {

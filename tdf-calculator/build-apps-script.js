@@ -112,6 +112,7 @@ html = replaceOnce(
     submit: function (rec) { return ask("tdfSubmit", [rec]); },
     review: function (id, decision, note, recheckTdf) { return ask("tdfReview", [id, decision, note, isFinite(recheckTdf) ? recheckTdf : null]); },
     withdraw: function (id) { return ask("tdfWithdraw", [id]); },
+    savePdf: function (id, base64, name) { return ask("tdfSavePdf", [id, base64, name]); },
   };
 
   function showForm(message, kind) {
@@ -257,7 +258,7 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
   <ol>
     <li>script.google.com → New project</li>
     <li>คัดลอกทั้ง 2 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
-    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" ไว้เก็บรายการและผล recheck)</li>
+    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" และโฟลเดอร์ Drive "TDF Reports (อนุมัติแล้ว)" · ถ้าเคยรันแล้ว ให้รันอีกครั้งหลังอัปเดตเพื่ออนุญาต Drive)</li>
     <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone (ถ้าเคย deploy แล้ว: Manage deployments → แก้ไข → New version)</li>
   </ol>
   <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>

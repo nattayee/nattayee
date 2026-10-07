@@ -50,7 +50,7 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
   <ol>
     <li>script.google.com → New project</li>
     <li>คัดลอกทั้ง 2 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
-    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" ไว้เก็บรายการและผล recheck)</li>
+    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" และโฟลเดอร์ Drive "TDF Reports (อนุมัติแล้ว)" · ถ้าเคยรันแล้ว ให้รันอีกครั้งหลังอัปเดตเพื่ออนุญาต Drive)</li>
     <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone (ถ้าเคย deploy แล้ว: Manage deployments → แก้ไข → New version)</li>
   </ol>
   <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>
@@ -78,8 +78,10 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
  *   - tdfReview   a medical physicist (Workspace role MP) who did NOT do the calculation approves or rejects it;
  *                 approval needs their own recalculation to match, and is saved automatically with name and time
  *   - The page only builds the final PDF report for approved records
+ *   - On approval the reviewer's page uploads that PDF (tdfSavePdf); it is kept in Google Drive,
+ *     folder "TDF Reports (อนุมัติแล้ว)/&lt;yyyy-MM&gt;", and the link is written to the sheet
  *
- * First time: choose the function  setup  and press Run once (allows Sheets + external requests).
+ * First time (and after this update): choose the function  setup  and press Run once (allows Sheets, Drive and external requests).
  * Deploy: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
  * The Workspace web app must also be deployed with Who has access: Anyone.
  * Open a tab directly with ?tab=frac | gap | brachy | ref
@@ -123,13 +125,17 @@ var REVIEWER_ROLE = 'MP';          // Workspace role allowed to recheck
 var RECHECK_TOLERANCE = 0.05;      // TDF difference allowed between the submitted value and the recheck
 var LIST_LIMIT = 300;
 var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
-  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json'];
+  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json',
+  'pdfFileId', 'pdfUrl'];
+var PDF_FOLDER = 'TDF Reports (อนุมัติแล้ว)';
+var PDF_MAX_BYTES = 15 * 1024 * 1024;
 var TYPES = { frac: 1, gap: 1, brachy: 1 };
 
 /** Run once from the editor: creates the records sheet and asks for permissions. */
 function setup() {
   var sh = records_();
   Logger.log('Records sheet: ' + sh.getParent().getUrl());
+  Logger.log('PDF folder: ' + pdfFolder_().getUrl());
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
 }
 
@@ -159,7 +165,7 @@ function tdfSubmit(token, rec) {
     }
     var id = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
     var row = [id, new Date(), 'pending', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
-      me.username, me.name, me.role, '', '', '', '', '', '', sig, json];
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json, '', ''];
     sh.appendRow(row);
     return record_(row);
   });
@@ -189,6 +195,50 @@ function tdfReview(token, id, decision, note, recheckTdf) {
   });
 }
 
+/**
+ * Keeps the approved report in Google Drive. The page sends the PDF it built (base64); only the calculator or the
+ * reviewer of an approved record may send it, and a record keeps its first file.
+ */
+function tdfSavePdf(token, id, base64, fileName) {
+  var me = user_(token);
+  var bytes;
+  try { bytes = Utilities.base64Decode(String(base64 || '')); } catch (e) { throw new Error('ไฟล์ PDF ไม่ถูกต้อง'); }
+  if (!bytes.length || bytes.length &gt; PDF_MAX_BYTES) throw new Error('ไฟล์ PDF ว่างหรือใหญ่เกินไป');
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== '%PDF') throw new Error('ไฟล์ที่ส่งมาไม่ใช่ PDF');
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) throw new Error('ไม่พบรายการ');
+    var row = found.values;
+    if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่อนุมัติแล้ว');
+    if (me.username !== row[8] &amp;&amp; me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ recheck ของรายการนี้');
+    if (row[19]) return record_(row);
+    var name = String(fileName || '').replace(/[^\w.\-]+/g, '_').slice(0, 120) || ('TDF_' + row[0] + '.pdf');
+    var file = pdfFolder_(row[14] || new Date()).createFile(Utilities.newBlob(bytes, 'application/pdf', name));
+    file.setDescription('TDF ' + Number(row[7]).toFixed(1) + ' · HN ' + row[4] + ' ' + row[5] + ' · แพทย์ ' + row[6] +
+      ' · คำนวณ ' + row[9] + ' · recheck ' + row[12] + ' · เลขที่ ' + row[0]);
+    row[19] = file.getId();
+    row[20] = file.getUrl();
+    sh.getRange(found.row, 1, 1, row.length).setValues([row]);
+    return record_(row);
+  });
+}
+
+/** Drive folder for approved reports, with one subfolder per month (by approval date). */
+function pdfFolder_(date) {
+  var props = PropertiesService.getScriptProperties();
+  var root = null, id = props.getProperty('PDF_FOLDER_ID');
+  if (id) { try { root = DriveApp.getFolderById(id); } catch (e) { root = null; } }
+  if (!root) {
+    root = DriveApp.createFolder(PDF_FOLDER);
+    props.setProperty('PDF_FOLDER_ID', root.getId());
+  }
+  if (!date) return root;
+  var month = Utilities.formatDate(new Date(date), 'Asia/Bangkok', 'yyyy-MM');
+  var it = root.getFoldersByName(month);
+  return it.hasNext() ? it.next() : root.createFolder(month);
+}
+
 /** The calculator withdraws their own record before it is approved. */
 function tdfWithdraw(token, id) {
   var me = user_(token);
@@ -215,7 +265,8 @@ function record_(row) {
     snap: j.snap || {},
     calc: { username: String(row[8]), name: String(row[9]), role: String(row[10]), at: t(row[1]) },
     review: row[11] ? { username: String(row[11]), name: String(row[12]), role: String(row[13]), at: t(row[14]),
-      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null
+      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null,
+    pdf: row[19] ? { id: String(row[19]), url: String(row[20] || '') } : null
   };
 }
 
@@ -256,6 +307,10 @@ function records_() {
     sh.getRange(1, 1, 1, RECORD_HEADERS.length).setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
     sh.getRange('A:A').setNumberFormat('@');
     sh.getRange('E:E').setNumberFormat('@');
+  }
+  if (sh.getLastColumn() &lt; RECORD_HEADERS.length) {
+    sh.getRange(1, 1, 1, RECORD_HEADERS.length).setValues([RECORD_HEADERS])
+      .setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
   }
   return sh;
 }
@@ -305,7 +360,7 @@ function session_(res) {
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
 }
 </textarea>
-    <div class="meta">245 บรรทัด · 11.9 KB</div>
+    <div class="meta">300 บรรทัด · 15.1 KB</div>
   </section>
   <section class="box">
     <div class="box-head">
@@ -546,6 +601,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .hist-val small { font-size: .72rem; color: var(--muted); font-family: var(--font-body); }
 .hist-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .hist-actions .btn { padding: 4px 10px; font-size: .8rem; }
+.hist-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .hist-empty { color: var(--muted); font-size: .88rem; padding: 12px 2px; }
 .drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
 
@@ -1762,11 +1818,13 @@ body.locked .wrap { display: none; }
         &lt;div class="hist-who"&gt;HN ${esc(r.patient.hn || "—")} · ${esc(patientName(r.patient) || "ไม่ระบุชื่อ")}${r.doctor ? `&lt;br&gt;&lt;span&gt;แพทย์ ${esc(r.doctor)}&lt;/span&gt;` : ""}&lt;/div&gt;
         &lt;div class="hist-val"&gt;TDF ${fmt(r.tdf, 1)} &lt;small&gt;/ อ้างอิง ${fmt(r.ref, 0)}&lt;/small&gt;&lt;/div&gt;
         &lt;div class="hist-sum"&gt;${esc(r.summary)}&lt;/div&gt;
+        ${r.status === "approved" ? `&lt;div class="hist-sum"&gt;${r.pdf ? "✓ เก็บ PDF ใน Google Drive แล้ว" : backend.shared ? "ยังไม่ได้เก็บ PDF ใน Drive" : ""}&lt;/div&gt;` : ""}
         &lt;div class="hist-sum"&gt;คำนวณ: ${esc(r.calc.name || "—")} · ${esc(fmtTime(r.calc.at || r.at))}${rv ? `&lt;br&gt;${r.status === "approved" ? "Recheck" : "ตรวจ"}: ${esc(rv.name)} · ${esc(fmtTime(rv.at))}${rv.note ? ` · “${esc(rv.note)}”` : ""}` : ""}&lt;/div&gt;
         &lt;div class="hist-actions"&gt;
           &lt;button type="button" class="btn" data-act="open"&gt;เปิด&lt;/button&gt;
           ${canReview(r) ? `&lt;button type="button" class="btn primary" data-act="review"&gt;Recheck&lt;/button&gt;` : ""}
-          ${r.status === "approved" || r.status === "draft" ? `&lt;button type="button" class="btn" data-act="pdf"&gt;PDF${r.status === "draft" ? " ฉบับร่าง" : ""}&lt;/button&gt;` : ""}
+          ${r.status === "approved" || r.status === "draft" ? `&lt;button type="button" class="btn" data-act="pdf"&gt;PDF${r.status === "draft" ? " ฉบับร่าง" : canArchive(r) ? " + เก็บลง Drive" : ""}&lt;/button&gt;` : ""}
+          ${r.pdf &amp;&amp; /^https:\/\//.test(r.pdf.url) ? `&lt;a class="btn" href="${esc(r.pdf.url)}" target="_blank" rel="noopener"&gt;เปิดใน Drive&lt;/a&gt;` : ""}
           ${mine(r) &amp;&amp; r.status !== "approved" || r.status === "draft" ? `&lt;button type="button" class="btn ghost" data-act="withdraw"&gt;${r.status === "draft" ? "ลบ" : "ถอนคำขอ"}&lt;/button&gt;` : ""}
         &lt;/div&gt;
       &lt;/article&gt;`;
@@ -1859,7 +1917,13 @@ body.locked .wrap { display: none; }
       records = records.map((r) =&gt; (r.id === saved.id ? saved : r));
       endReview();
       renderHistory();
-      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
+      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ · กำลังเก็บ PDF ลง Google Drive…` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
+      if (decision === "approved" &amp;&amp; canArchive(saved)) {
+        renderPdf(saved).then((pdf) =&gt; archivePdf(saved, pdf)).catch((err) =&gt; {
+          console.error(err);
+          toast("อนุมัติแล้ว แต่เก็บ PDF ลง Drive ไม่สำเร็จ (" + (err.message || err) + ") กด PDF ในรายการคำนวณเพื่อลองใหม่", 7000);
+        });
+      }
     }).catch((err) =&gt; { toast(err.message || String(err), 5000); updateReview(); }).finally(() =&gt; { $("rvReject").disabled = false; });
   }
   $("rvApprove").addEventListener("click", () =&gt; sendReview("approved"));
@@ -2006,10 +2070,26 @@ body.locked .wrap { display: none; }
       }
     }
     if (backend.shared &amp;&amp; rec.status !== "approved") return toast("สร้างรายงานได้เมื่อ recheck และอนุมัติแล้ว", 4000);
-    const report = buildReport(rec);
     const btn = $("pdfBtn");
     btn.disabled = true; btn.textContent = "กำลังสร้าง PDF…";
     try {
+      const pdf = await renderPdf(rec);
+      pdf.save(fileName(rec));
+      if (canArchive(rec)) archivePdf(rec, pdf);
+      else toast(rec.status === "approved" ? "สร้างรายงาน PDF แล้ว" : "สร้างรายงานฉบับร่างแล้ว");
+    } catch (err) {
+      console.error(err);
+      toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
+      setTimeout(() =&gt; window.print(), 300);
+    } finally {
+      btn.disabled = false; btn.textContent = "สร้างรายงาน PDF";
+    }
+  }
+
+  /** The A4 report of a record as a jsPDF document (the record's calculation must be on screen for its charts). */
+  async function renderPdf(rec) {
+    const report = buildReport(rec);
+    {
       await loadPdfLibs();
       if (document.fonts &amp;&amp; document.fonts.ready) await document.fonts.ready;
       const scale = 2;
@@ -2038,15 +2118,21 @@ body.locked .wrap { display: none; }
         pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, (part.height / part.width) * 210);
       });
       pdf.setProperties({ title: "TDF Dose Calculation Report", subject: rec.title, creator: "TDF Dose Calculator · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง" });
-      pdf.save(fileName(rec));
-      toast(rec.status === "approved" ? "สร้างรายงาน PDF แล้ว" : "สร้างรายงานฉบับร่างแล้ว");
-    } catch (err) {
-      console.error(err);
-      toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
-      setTimeout(() =&gt; window.print(), 300);
-    } finally {
-      btn.disabled = false; btn.textContent = "สร้างรายงาน PDF";
+      return pdf;
     }
+  }
+
+  // ----- approved reports are kept in Google Drive (Apps Script build) -----
+  const canArchive = (rec) =&gt; backend.shared &amp;&amp; rec.status === "approved" &amp;&amp; !rec.pdf &amp;&amp; !!user &amp;&amp;
+    (user.username === rec.calc.username || (rec.review &amp;&amp; user.username === rec.review.username));
+  function archivePdf(rec, pdf) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    return backend.savePdf(rec.id, base64, fileName(rec)).then((saved) =&gt; {
+      records = records.map((r) =&gt; (r.id === saved.id ? saved : r));
+      renderHistory();
+      toast("บันทึกรายงาน PDF ลง Google Drive แล้ว", 4000);
+      return saved;
+    });
   }
   $("pdfBtn").addEventListener("click", () =&gt; makePdf());
 
@@ -2099,6 +2185,7 @@ body.locked .wrap { display: none; }
     submit: function (rec) { return ask("tdfSubmit", [rec]); },
     review: function (id, decision, note, recheckTdf) { return ask("tdfReview", [id, decision, note, isFinite(recheckTdf) ? recheckTdf : null]); },
     withdraw: function (id) { return ask("tdfWithdraw", [id]); },
+    savePdf: function (id, base64, name) { return ask("tdfSavePdf", [id, base64, name]); },
   };
 
   function showForm(message, kind) {
@@ -2169,7 +2256,7 @@ body.locked .wrap { display: none; }
 &lt;/body&gt;
 &lt;/html&gt;
 </textarea>
-    <div class="meta">1,857 บรรทัด · 123.2 KB</div>
+    <div class="meta">1,889 บรรทัด · 125.2 KB</div>
   </section>
 </main>
 <script>

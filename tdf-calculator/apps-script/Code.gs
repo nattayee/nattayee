@@ -16,8 +16,10 @@
  *   - tdfReview   a medical physicist (Workspace role MP) who did NOT do the calculation approves or rejects it;
  *                 approval needs their own recalculation to match, and is saved automatically with name and time
  *   - The page only builds the final PDF report for approved records
+ *   - On approval the reviewer's page uploads that PDF (tdfSavePdf); it is kept in Google Drive,
+ *     folder "TDF Reports (อนุมัติแล้ว)/<yyyy-MM>", and the link is written to the sheet
  *
- * First time: choose the function  setup  and press Run once (allows Sheets + external requests).
+ * First time (and after this update): choose the function  setup  and press Run once (allows Sheets, Drive and external requests).
  * Deploy: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
  * The Workspace web app must also be deployed with Who has access: Anyone.
  * Open a tab directly with ?tab=frac | gap | brachy | ref
@@ -61,13 +63,17 @@ var REVIEWER_ROLE = 'MP';          // Workspace role allowed to recheck
 var RECHECK_TOLERANCE = 0.05;      // TDF difference allowed between the submitted value and the recheck
 var LIST_LIMIT = 300;
 var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
-  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json'];
+  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json',
+  'pdfFileId', 'pdfUrl'];
+var PDF_FOLDER = 'TDF Reports (อนุมัติแล้ว)';
+var PDF_MAX_BYTES = 15 * 1024 * 1024;
 var TYPES = { frac: 1, gap: 1, brachy: 1 };
 
 /** Run once from the editor: creates the records sheet and asks for permissions. */
 function setup() {
   var sh = records_();
   Logger.log('Records sheet: ' + sh.getParent().getUrl());
+  Logger.log('PDF folder: ' + pdfFolder_().getUrl());
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
 }
 
@@ -97,7 +103,7 @@ function tdfSubmit(token, rec) {
     }
     var id = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
     var row = [id, new Date(), 'pending', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
-      me.username, me.name, me.role, '', '', '', '', '', '', sig, json];
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json, '', ''];
     sh.appendRow(row);
     return record_(row);
   });
@@ -127,6 +133,50 @@ function tdfReview(token, id, decision, note, recheckTdf) {
   });
 }
 
+/**
+ * Keeps the approved report in Google Drive. The page sends the PDF it built (base64); only the calculator or the
+ * reviewer of an approved record may send it, and a record keeps its first file.
+ */
+function tdfSavePdf(token, id, base64, fileName) {
+  var me = user_(token);
+  var bytes;
+  try { bytes = Utilities.base64Decode(String(base64 || '')); } catch (e) { throw new Error('ไฟล์ PDF ไม่ถูกต้อง'); }
+  if (!bytes.length || bytes.length > PDF_MAX_BYTES) throw new Error('ไฟล์ PDF ว่างหรือใหญ่เกินไป');
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== '%PDF') throw new Error('ไฟล์ที่ส่งมาไม่ใช่ PDF');
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) throw new Error('ไม่พบรายการ');
+    var row = found.values;
+    if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่อนุมัติแล้ว');
+    if (me.username !== row[8] && me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ recheck ของรายการนี้');
+    if (row[19]) return record_(row);
+    var name = String(fileName || '').replace(/[^\w.\-]+/g, '_').slice(0, 120) || ('TDF_' + row[0] + '.pdf');
+    var file = pdfFolder_(row[14] || new Date()).createFile(Utilities.newBlob(bytes, 'application/pdf', name));
+    file.setDescription('TDF ' + Number(row[7]).toFixed(1) + ' · HN ' + row[4] + ' ' + row[5] + ' · แพทย์ ' + row[6] +
+      ' · คำนวณ ' + row[9] + ' · recheck ' + row[12] + ' · เลขที่ ' + row[0]);
+    row[19] = file.getId();
+    row[20] = file.getUrl();
+    sh.getRange(found.row, 1, 1, row.length).setValues([row]);
+    return record_(row);
+  });
+}
+
+/** Drive folder for approved reports, with one subfolder per month (by approval date). */
+function pdfFolder_(date) {
+  var props = PropertiesService.getScriptProperties();
+  var root = null, id = props.getProperty('PDF_FOLDER_ID');
+  if (id) { try { root = DriveApp.getFolderById(id); } catch (e) { root = null; } }
+  if (!root) {
+    root = DriveApp.createFolder(PDF_FOLDER);
+    props.setProperty('PDF_FOLDER_ID', root.getId());
+  }
+  if (!date) return root;
+  var month = Utilities.formatDate(new Date(date), 'Asia/Bangkok', 'yyyy-MM');
+  var it = root.getFoldersByName(month);
+  return it.hasNext() ? it.next() : root.createFolder(month);
+}
+
 /** The calculator withdraws their own record before it is approved. */
 function tdfWithdraw(token, id) {
   var me = user_(token);
@@ -153,7 +203,8 @@ function record_(row) {
     snap: j.snap || {},
     calc: { username: String(row[8]), name: String(row[9]), role: String(row[10]), at: t(row[1]) },
     review: row[11] ? { username: String(row[11]), name: String(row[12]), role: String(row[13]), at: t(row[14]),
-      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null
+      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null,
+    pdf: row[19] ? { id: String(row[19]), url: String(row[20] || '') } : null
   };
 }
 
@@ -194,6 +245,10 @@ function records_() {
     sh.getRange(1, 1, 1, RECORD_HEADERS.length).setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
     sh.getRange('A:A').setNumberFormat('@');
     sh.getRange('E:E').setNumberFormat('@');
+  }
+  if (sh.getLastColumn() < RECORD_HEADERS.length) {
+    sh.getRange(1, 1, 1, RECORD_HEADERS.length).setValues([RECORD_HEADERS])
+      .setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
   }
   return sh;
 }
