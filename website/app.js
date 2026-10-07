@@ -132,7 +132,7 @@
       return section("Dose constraints", "ค่าจำกัดปริมาณรังสีของอวัยวะสำคัญ (Organs at risk)",
         '<div class="toolbar">' + chips +
         '<input class="search" id="organSearch" type="search" placeholder="ค้นหาอวัยวะ…" aria-label="ค้นหาอวัยวะ"></div>' +
-        '<div class="table-wrap card flush"><table><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
+        '<div class="table-wrap stack-wrap card flush"><table class="stack"><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
         '<tbody id="constraintRows"></tbody></table></div>' +
         '<div class="note">ค่าอ้างอิงจาก QUANTEC (Int J Radiat Oncol Biol Phys 2010; 76(3) Suppl) สำหรับ conventional fractionation 1.8–2 Gy/fx ' +
         "ไม่ใช้กับ SBRT/SRS — โปรดยึดตาม protocol ของหน่วยงานและดุลยพินิจของแพทย์เป็นหลัก</div>");
@@ -241,8 +241,8 @@
       });
       tbody.innerHTML = rows.length
         ? rows.map(function (c) {
-            return "<tr><td>" + esc(c.region) + "</td><td><strong>" + esc(c.organ) + "</strong></td><td>" +
-              esc(c.constraint) + "</td><td>" + esc(c.endpoint) + "</td></tr>";
+            return '<tr><td data-label="Region">' + esc(c.region) + '</td><td class="cell-name"><strong>' + esc(c.organ) + '</strong></td><td data-label="Constraint">' +
+              esc(c.constraint) + '</td><td data-label="Endpoint">' + esc(c.endpoint) + "</td></tr>";
           }).join("")
         : '<tr><td colspan="4" class="muted">ไม่พบข้อมูล</td></tr>';
     }

@@ -909,6 +909,30 @@ body.chat-page .secnav { margin-bottom: 10px; }
   .menu-acts .chip, .team-chips .chip { min-height: 32px; }
 }
 
+/* Tables that become one card per row on phones (members, dose constraints): no sideways scrolling */
+@media (max-width: 700px) {
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack thead { display: none; }
+  .table-wrap.stack-wrap { overflow: visible; border: 0; background: none; box-shadow: none; }
+  table.stack { background: none; }
+  table.stack tr { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
+  table.stack td { border: 0; padding: 4px 0; display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 8px; align-items: center; overflow-wrap: anywhere; }
+  table.stack td::before { content: attr(data-label); font-size: .74rem; font-weight: 600; color: var(--muted); }
+  table.stack td.cell-name, table.stack td.cell-actions, table.stack td[colspan] { display: block; }
+  table.stack td.cell-name::before, table.stack td.cell-actions::before, table.stack td[colspan]::before { content: none; }
+  table.stack td.cell-name { font-size: 1rem; padding-bottom: 6px; border-bottom: 1px dashed var(--line); margin-bottom: 4px; }
+  table.stack td.cell-actions { padding-top: 8px; }
+  table.users select { width: 100%; padding: 7px 8px; }
+  table.stack td > .status, table.stack td > .badge { justify-self: start; }
+  table.users .chip { padding: 5px 12px; }
+}
+/* Phones: recipients and quick messages wrap instead of scrolling sideways (swiping sideways inside the
+   Apps Script frame does not always work on iPhone) */
+@media (max-width: 600px) {
+  .chat-to, .quick-row { flex-wrap: wrap; overflow-x: visible; row-gap: 5px; }
+  .chat-to .chip, .quick-chip { padding: 3px 10px; font-size: .8rem; }
+}
+
 </style>
   <script>
   /* Day/night mode: "auto" follows the device; light/dark override it. Runs before paint to avoid a flash. */
@@ -1862,7 +1886,7 @@ window.SITE = {
           return '<button class="chip' + (filter === f[0] ? " active" : "") + '" data-filter="' + f[0] + '">' + f[1] + " (" + (counts[f[0]] || 0) + ")</button>";
         }).join("") + "</div>" +
         (msg ? '<div class="note">' + esc(msg) + "</div>" : "") +
-        '<div class="table-wrap card flush"><table class="users"><thead><tr>' +
+        '<div class="table-wrap stack-wrap card flush"><table class="users stack"><thead><tr>' +
         "<th>ชื่อ-นามสกุล</th><th>Username</th><th>ตำแหน่ง</th><th>ติดต่อ</th><th>สถานะ</th><th>สมัครเมื่อ / เข้าล่าสุด</th><th></th></tr></thead><tbody>" +
         (list.length ? list.map(function (u) {
           var st = STATUS[u.status] || [u.status, ""];
@@ -1873,15 +1897,15 @@ window.SITE = {
           if (!self) acts.push('<button class="chip" data-act="admin">' + (u.isAdmin ? "ยกเลิก admin" : "ตั้งเป็น admin") + "</button>");
           if (!self) acts.push('<button class="chip danger" data-act="delete">ลบ</button>');
           return '<tr data-user="' + esc(u.username) + '">' +
-            "<td><strong>" + esc(u.fullName) + "</strong>" + (u.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td>" +
-            "<td>" + esc(u.username) + "</td>" +
-            '<td><select data-act="role" aria-label="ตำแหน่ง">' + ROLES.map(function (r) {
+            '<td class="cell-name"><strong>' + esc(u.fullName) + "</strong>" + (u.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td>" +
+            '<td data-label="Username">' + esc(u.username) + "</td>" +
+            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง">' + ROLES.map(function (r) {
               return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
             }).join("") + "</select></td>" +
-            '<td class="small">' + esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") + "</td>" +
-            '<td><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
-            '<td class="small">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
-            '<td><div class="actions">' + acts.join("") + "</div></td></tr>";
+            '<td class="small" data-label="ติดต่อ">' + (esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") || "—") + "</td>" +
+            '<td data-label="สถานะ"><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
+            '<td class="small" data-label="สมัคร / เข้าล่าสุด">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
+            '<td class="cell-actions"><div class="actions">' + acts.join("") + "</div></td></tr>";
         }).join("") : '<tr><td colspan="7" class="muted">ไม่มีรายการ</td></tr>') +
         "</tbody></table></div>";
     }
@@ -5285,7 +5309,7 @@ window.SITE = {
       return section("Dose constraints", "ค่าจำกัดปริมาณรังสีของอวัยวะสำคัญ (Organs at risk)",
         '<div class="toolbar">' + chips +
         '<input class="search" id="organSearch" type="search" placeholder="ค้นหาอวัยวะ…" aria-label="ค้นหาอวัยวะ"></div>' +
-        '<div class="table-wrap card flush"><table><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
+        '<div class="table-wrap stack-wrap card flush"><table class="stack"><thead><tr><th>Region</th><th>Organ at risk</th><th>Constraint</th><th>Endpoint</th></tr></thead>' +
         '<tbody id="constraintRows"></tbody></table></div>' +
         '<div class="note">ค่าอ้างอิงจาก QUANTEC (Int J Radiat Oncol Biol Phys 2010; 76(3) Suppl) สำหรับ conventional fractionation 1.8–2 Gy/fx ' +
         "ไม่ใช้กับ SBRT/SRS — โปรดยึดตาม protocol ของหน่วยงานและดุลยพินิจของแพทย์เป็นหลัก</div>");
@@ -5394,8 +5418,8 @@ window.SITE = {
       });
       tbody.innerHTML = rows.length
         ? rows.map(function (c) {
-            return "<tr><td>" + esc(c.region) + "</td><td><strong>" + esc(c.organ) + "</strong></td><td>" +
-              esc(c.constraint) + "</td><td>" + esc(c.endpoint) + "</td></tr>";
+            return '<tr><td data-label="Region">' + esc(c.region) + '</td><td class="cell-name"><strong>' + esc(c.organ) + '</strong></td><td data-label="Constraint">' +
+              esc(c.constraint) + '</td><td data-label="Endpoint">' + esc(c.endpoint) + "</td></tr>";
           }).join("")
         : '<tr><td colspan="4" class="muted">ไม่พบข้อมูล</td></tr>';
     }

@@ -450,7 +450,7 @@
           return '<button class="chip' + (filter === f[0] ? " active" : "") + '" data-filter="' + f[0] + '">' + f[1] + " (" + (counts[f[0]] || 0) + ")</button>";
         }).join("") + "</div>" +
         (msg ? '<div class="note">' + esc(msg) + "</div>" : "") +
-        '<div class="table-wrap card flush"><table class="users"><thead><tr>' +
+        '<div class="table-wrap stack-wrap card flush"><table class="users stack"><thead><tr>' +
         "<th>ชื่อ-นามสกุล</th><th>Username</th><th>ตำแหน่ง</th><th>ติดต่อ</th><th>สถานะ</th><th>สมัครเมื่อ / เข้าล่าสุด</th><th></th></tr></thead><tbody>" +
         (list.length ? list.map(function (u) {
           var st = STATUS[u.status] || [u.status, ""];
@@ -461,15 +461,15 @@
           if (!self) acts.push('<button class="chip" data-act="admin">' + (u.isAdmin ? "ยกเลิก admin" : "ตั้งเป็น admin") + "</button>");
           if (!self) acts.push('<button class="chip danger" data-act="delete">ลบ</button>');
           return '<tr data-user="' + esc(u.username) + '">' +
-            "<td><strong>" + esc(u.fullName) + "</strong>" + (u.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td>" +
-            "<td>" + esc(u.username) + "</td>" +
-            '<td><select data-act="role" aria-label="ตำแหน่ง">' + ROLES.map(function (r) {
+            '<td class="cell-name"><strong>' + esc(u.fullName) + "</strong>" + (u.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td>" +
+            '<td data-label="Username">' + esc(u.username) + "</td>" +
+            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง">' + ROLES.map(function (r) {
               return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
             }).join("") + "</select></td>" +
-            '<td class="small">' + esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") + "</td>" +
-            '<td><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
-            '<td class="small">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
-            '<td><div class="actions">' + acts.join("") + "</div></td></tr>";
+            '<td class="small" data-label="ติดต่อ">' + (esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") || "—") + "</td>" +
+            '<td data-label="สถานะ"><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
+            '<td class="small" data-label="สมัคร / เข้าล่าสุด">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
+            '<td class="cell-actions"><div class="actions">' + acts.join("") + "</div></td></tr>";
         }).join("") : '<tr><td colspan="7" class="muted">ไม่มีรายการ</td></tr>') +
         "</tbody></table></div>";
     }
