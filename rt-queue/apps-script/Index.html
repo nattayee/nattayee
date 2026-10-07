@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>นัดคิวเทคนิคพิเศษ รังสีรักษา</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #dfe4ea;
+    --text: #1d2733;
+    --muted: #64707d;
+    --primary: #0f6e8c;
+    --primary-ink: #ffffff;
+    --danger: #c0392b;
+    --today: #fff6d6;
+    --weekend: #fafbfc;
+
+    --c-dibh: #2463c7;
+    --c-srs: #7b3fc4;
+    --c-srt: #0d8a7a;
+    --c-sbrt: #d06a12;
+    --c-other: #5d6b79;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Sarabun", "Leelawadee UI", "Tahoma", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  header.app {
+    background: var(--primary);
+    color: var(--primary-ink);
+    padding: 14px 16px;
+  }
+  header.app .inner { max-width: 1280px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header.app h1 { font-size: 20px; margin: 0; font-weight: 700; }
+  header.app p { margin: 0; opacity: .85; font-size: 14px; }
+  header.app .mode { margin-left: auto; font-size: 13px; background: rgba(255,255,255,.15); padding: 3px 10px; border-radius: 999px; }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px; }
+  .toolbar h2 { margin: 0 8px; font-size: 20px; min-width: 12ch; }
+  .toolbar .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { color: var(--danger); border-color: #efc4bf; }
+  .btn.icon { padding: 6px 10px; }
+  input[type=search] { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 180px; }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 12px; cursor: pointer; background: var(--surface); user-select: none;
+  }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chip .count { font-weight: 700; }
+  .chip[aria-pressed="false"] { opacity: .45; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat { padding: 12px 14px; border-left: 4px solid var(--c); }
+  .stat .label { color: var(--muted); font-size: 13px; }
+  .stat .value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .calendar { overflow: hidden; }
+  .cal-head, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cal-head div { padding: 8px; text-align: center; font-weight: 600; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .cal-head div.sun { color: #c0392b; }
+  .cal-head div.sat { color: #7b3fc4; }
+  .cell {
+    min-height: 118px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 4px 5px 6px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 3px;
+  }
+  .cell:nth-child(7n) { border-right: none; }
+  .cell.weekend { background: var(--weekend); }
+  .cell.outside { background: #f1f3f6; }
+  .cell.outside .daynum { color: #a5adb6; }
+  .cell.today { background: var(--today); }
+  .cell.selected { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .cell .top { display: flex; align-items: center; justify-content: space-between; }
+  .cell .daynum { font-weight: 600; font-size: 14px; }
+  .cell.today .daynum {
+    background: var(--primary); color: #fff; border-radius: 999px; padding: 0 7px;
+  }
+  .cell .add {
+    border: none; background: transparent; color: var(--primary); font-size: 18px; line-height: 1;
+    cursor: pointer; opacity: 0; padding: 0 4px; border-radius: 4px;
+  }
+  .cell:hover .add, .cell.selected .add { opacity: 1; }
+  .cell .add:hover { background: #e3f0f4; }
+  .ev {
+    display: flex; align-items: center; gap: 4px; font-size: 12.5px; border-radius: 5px; padding: 1px 5px;
+    background: color-mix(in srgb, var(--c) 13%, white); border-left: 3px solid var(--c);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  }
+  .ev:hover { background: color-mix(in srgb, var(--c) 22%, white); }
+  .ev .tech { font-weight: 700; color: var(--c); }
+  .ev .nm { overflow: hidden; text-overflow: ellipsis; }
+  .badge-cbct {
+    font-size: 10.5px; font-weight: 700; color: #fff; background: #1d2733; border-radius: 4px; padding: 0 4px; flex: none;
+  }
+  .more { font-size: 12px; color: var(--muted); padding-left: 4px; }
+
+  .side { padding: 14px; display: grid; gap: 10px; }
+  .side h3 { margin: 0; font-size: 17px; }
+  .side .sub { color: var(--muted); font-size: 13px; margin-top: -6px; }
+  .empty { color: var(--muted); text-align: center; padding: 24px 8px; border: 1px dashed var(--border); border-radius: 8px; }
+  .item { border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+  .item .row1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .item .tech { font-weight: 700; color: var(--c); }
+  .item .time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .item .name { font-weight: 600; }
+  .item .meta { color: var(--muted); font-size: 13px; }
+  .item .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+  .pill { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--border); }
+  .pill.yes { background: #1d2733; color: #fff; border-color: #1d2733; }
+
+  dialog {
+    border: none; border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px));
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  }
+  dialog::backdrop { background: rgba(20, 30, 40, .45); }
+  form.booking { display: grid; gap: 12px; padding: 18px 20px 20px; }
+  form.booking h2 { margin: 0 0 4px; font-size: 19px; }
+  .field { display: grid; gap: 4px; }
+  .field > label, .field > .lbl { font-weight: 600; font-size: 14px; }
+  .req { color: var(--danger); }
+  .field input[type=text], .field input[type=date], .field input[type=time], .field input[type=number], .field textarea {
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; background: #fff;
+  }
+  .field textarea { min-height: 64px; resize: vertical; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .techs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .techs label {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
+    padding: 5px 12px; cursor: pointer;
+  }
+  .techs label:has(input:checked) { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); font-weight: 700; }
+  .techs input { accent-color: var(--c); margin: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: fit-content; }
+  .seg label { padding: 6px 16px; cursor: pointer; }
+  .seg label + label { border-left: 1px solid var(--border); }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label:has(input:checked) { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .form-actions .danger { margin-right: auto; }
+  .error { color: var(--danger); font-size: 14px; min-height: 1em; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1d2733; color: #fff;
+    padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 640px) {
+    .cell { min-height: 74px; padding: 3px; }
+    .ev .nm, .badge-cbct { display: none; }
+    .ev { font-size: 11px; padding: 0 3px; }
+    .toolbar h2 { font-size: 17px; }
+    input[type=search] { min-width: 0; width: 100%; order: 10; }
+  }
+
+  @media print {
+    header.app .mode, .toolbar .btn, .toolbar input, .chips, .side, .cell .add { display: none !important; }
+    body { background: #fff; }
+    main { padding: 0; }
+    .layout { grid-template-columns: 1fr; }
+    .card { border-color: #999; }
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="inner">
+    <div>
+      <h1>ระบบนัดคิวเทคนิคพิเศษ</h1>
+      <p>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
+    </div>
+    <span class="mode" id="mode">กำลังโหลดข้อมูล…</span>
+  </div>
+</header>
+
+<main>
+  <section class="stats" id="stats" aria-label="สรุปจำนวนนัดประจำเดือน"></section>
+
+  <section class="card">
+    <div class="toolbar">
+      <button class="btn icon" id="prev" aria-label="เดือนก่อนหน้า">‹</button>
+      <h2 id="monthLabel"></h2>
+      <button class="btn icon" id="next" aria-label="เดือนถัดไป">›</button>
+      <button class="btn" id="today">วันนี้</button>
+      <span class="spacer"></span>
+      <input type="search" id="search" placeholder="ค้นหา HN / ชื่อผู้ป่วย" aria-label="ค้นหา">
+      <button class="btn" id="openSheet" hidden>เปิด Google Sheet</button>
+      <button class="btn" id="print">พิมพ์</button>
+      <button class="btn primary" id="newBooking">+ นัดคิวใหม่</button>
+    </div>
+    <div class="chips" id="chips" aria-label="กรองตามเทคนิค"></div>
+  </section>
+
+  <div class="layout">
+    <section class="card calendar" aria-label="ปฏิทินนัดหมาย">
+      <div class="cal-head" id="calHead"></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+
+    <aside class="card side" id="dayPanel" aria-live="polite"></aside>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <form class="booking" id="form" novalidate>
+    <h2 id="formTitle">นัดคิวเทคนิคพิเศษ</h2>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="f-hn">HN <span class="req">*</span></label>
+        <input type="text" id="f-hn" name="hn" maxlength="20" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="f-name">ชื่อ-สกุล <span class="req">*</span></label>
+        <input type="text" id="f-name" name="name" maxlength="120" required autocomplete="off">
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="lbl">เทคนิค <span class="req">*</span></span>
+      <div class="techs" id="techRadios"></div>
+      <input type="text" id="f-other" name="techniqueOther" maxlength="60" placeholder="ระบุเทคนิคอื่นๆ เช่น VMAT, IMRT, TBI" hidden>
+    </div>
+
+    <div class="field">
+      <label for="f-site">ตำแหน่ง / อวัยวะที่ฉาย</label>
+      <input type="text" id="f-site" name="site" maxlength="120" placeholder="เช่น Lt. breast, Brain mets, Lung" autocomplete="off">
+    </div>
+
+    <div class="grid3">
+      <div class="field">
+        <label for="f-date">วันเริ่มฉายรังสี <span class="req">*</span></label>
+        <input type="date" id="f-date" name="startDate" required>
+      </div>
+      <div class="field">
+        <label for="f-time">เวลา</label>
+        <input type="time" id="f-time" name="time">
+      </div>
+      <div class="field">
+        <label for="f-fx">จำนวนครั้ง (Fx)</label>
+        <input type="number" id="f-fx" name="fractions" min="1" max="100" step="1" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <span class="lbl">CBCT <span class="req">*</span></span>
+        <div class="seg" role="radiogroup" aria-label="CBCT">
+          <label><input type="radio" name="cbct" value="yes">ทำ CBCT</label>
+          <label><input type="radio" name="cbct" value="no">ไม่ทำ</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-md">แพทย์ผู้สั่ง</label>
+        <input type="text" id="f-md" name="physician" maxlength="120" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-note">หมายเหตุ</label>
+      <textarea id="f-note" name="note" maxlength="1000"></textarea>
+    </div>
+
+    <div class="error" id="formError" role="alert"></div>
+
+    <div class="form-actions">
+      <button type="button" class="btn danger" id="deleteBtn" hidden>ลบนัด</button>
+      <button type="button" class="btn" id="cancelBtn">ยกเลิก</button>
+      <button type="submit" class="btn primary" id="saveBtn">บันทึก</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const TECHS = [
+    { key: 'DIBH', desc: 'Deep Inspiration Breath Hold', color: 'var(--c-dibh)' },
+    { key: 'SRS',  desc: 'Stereotactic Radiosurgery',    color: 'var(--c-srs)' },
+    { key: 'SRT',  desc: 'Stereotactic Radiotherapy',    color: 'var(--c-srt)' },
+    { key: 'SBRT', desc: 'Stereotactic Body RT',         color: 'var(--c-sbrt)' },
+    { key: 'อื่นๆ', desc: 'เทคนิคอื่นๆ (ระบุเอง)',          color: 'var(--c-other)' },
+  ];
+  const TECH = Object.fromEntries(TECHS.map(t => [t.key, t]));
+  const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  const DAYS_SHORT = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+  const MAX_PER_CELL = 4;
+  
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const thaiDate = (s, withDay = true) => {
+    const d = parseYmd(s);
+    return `${withDay ? 'วัน' + DAYS[d.getDay()] + 'ที่ ' : ''}${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+  };
+  const techLabel = (b) => b.technique === 'อื่นๆ' ? (b.techniqueOther || 'อื่นๆ') : b.technique;
+  const techColor = (b) => (TECH[b.technique] || TECH['อื่นๆ']).color;
+  const byTime = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || a.name.localeCompare(b.name, 'th');
+
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ---------- storage: Code.gs via google.script.run ----------
+  const gs = (fn, ...args) => new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^Error:\s*/, ''))))
+      [fn](...args);
+  });
+  const store = {
+    list: () => gs('listBookings'),
+    create: (b) => gs('createBooking', b),
+    update: (id, b) => gs('updateBooking', id, b),
+    remove: (id) => gs('deleteBooking', id),
+  };
+  let sheetUrl = '';
+
+  // ---------- state ----------
+  const now = new Date();
+  const state = {
+    bookings: [],
+    year: now.getFullYear(),
+    month: now.getMonth(),
+    selected: ymd(now),
+    filter: new Set(TECHS.map(t => t.key)),
+    query: '',
+    editingId: null,
+  };
+
+  function visibleBookings() {
+    const q = state.query.trim().toLowerCase();
+    return state.bookings.filter(b =>
+      state.filter.has(TECH[b.technique] ? b.technique : 'อื่นๆ') &&
+      (!q || b.hn.toLowerCase().includes(q) || b.name.toLowerCase().includes(q))
+    );
+  }
+
+  function groupByDate(list) {
+    const map = new Map();
+    for (const b of list) {
+      if (!map.has(b.startDate)) map.set(b.startDate, []);
+      map.get(b.startDate).push(b);
+    }
+    for (const arr of map.values()) arr.sort(byTime);
+    return map;
+  }
+
+  // ---------- rendering ----------
+  function renderStats() {
+    const prefix = `${state.year}-${pad(state.month + 1)}-`;
+    const inMonth = state.bookings.filter(b => b.startDate.startsWith(prefix));
+    const count = (k) => inMonth.filter(b => (TECH[b.technique] ? b.technique : 'อื่นๆ') === k).length;
+    const cbct = inMonth.filter(b => b.cbct).length;
+    $('stats').innerHTML =
+      `<div class="card stat" style="--c: var(--primary)"><div class="label">นัดทั้งหมดเดือนนี้</div><div class="value">${inMonth.length}</div></div>` +
+      TECHS.map(t => `<div class="card stat" style="--c:${t.color}"><div class="label">${esc(t.key)}</div><div class="value">${count(t.key)}</div></div>`).join('') +
+      `<div class="card stat" style="--c:#1d2733"><div class="label">ทำ CBCT</div><div class="value">${cbct}</div></div>`;
+  }
+
+  function renderChips() {
+    const prefix = `${state.year}-${pad(state.month + 1)}-`;
+    $('chips').innerHTML = TECHS.map(t => {
+      const n = state.bookings.filter(b => b.startDate.startsWith(prefix) && (TECH[b.technique] ? b.technique : 'อื่นๆ') === t.key).length;
+      return `<button type="button" class="chip" data-tech="${esc(t.key)}" aria-pressed="${state.filter.has(t.key)}" title="${esc(t.desc)}">
+        <span class="dot" style="background:${t.color}"></span>${esc(t.key)} <span class="count">${n}</span></button>`;
+    }).join('');
+  }
+
+  function renderCalendar() {
+    $('monthLabel').textContent = `${MONTHS[state.month]} ${state.year + 543}`;
+    $('calHead').innerHTML = DAYS_SHORT.map((d, i) =>
+      `<div class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" title="${DAYS[i]}">${d}</div>`).join('');
+
+    const first = new Date(state.year, state.month, 1);
+    const daysInMonth = new Date(state.year, state.month + 1, 0).getDate();
+    const lead = first.getDay(); // 0 = Sunday → week starts on Sunday
+    const total = Math.ceil((lead + daysInMonth) / 7) * 7;
+    const start = new Date(state.year, state.month, 1 - lead);
+    const todayStr = ymd(new Date());
+    const groups = groupByDate(visibleBookings());
+
+    let html = '';
+    for (let i = 0; i < total; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const key = ymd(d);
+      const list = groups.get(key) || [];
+      const cls = ['cell'];
+      if (d.getMonth() !== state.month) cls.push('outside');
+      if (d.getDay() === 0 || d.getDay() === 6) cls.push('weekend');
+      if (key === todayStr) cls.push('today');
+      if (key === state.selected) cls.push('selected');
+
+      const evs = list.slice(0, MAX_PER_CELL).map(b =>
+        `<div class="ev" style="--c:${techColor(b)}" data-id="${esc(b.id)}" title="${esc(`${b.time ? b.time + ' ' : ''}${techLabel(b)} · HN ${b.hn} ${b.name}${b.cbct ? ' · CBCT' : ''}`)}">
+          <span class="tech">${esc(techLabel(b))}</span>${b.cbct ? '<span class="badge-cbct">CBCT</span>' : ''}<span class="nm">${esc(b.name)}</span></div>`
+      ).join('');
+      const more = list.length > MAX_PER_CELL ? `<div class="more">+${list.length - MAX_PER_CELL} รายการ</div>` : '';
+
+      html += `<div class="${cls.join(' ')}" data-date="${key}" role="button" tabindex="0" aria-label="${esc(thaiDate(key))} ${list.length} นัด">
+        <div class="top"><span class="daynum">${d.getDate()}</span><button type="button" class="add" data-add="${key}" title="เพิ่มนัดวันนี้" aria-label="เพิ่มนัด ${esc(thaiDate(key, false))}">+</button></div>
+        ${evs}${more}</div>`;
+    }
+    $('calGrid').innerHTML = html;
+  }
+
+  function renderDayPanel() {
+    const list = (groupByDate(visibleBookings()).get(state.selected) || []);
+    const items = list.map(b => `
+      <div class="item" style="--c:${techColor(b)}">
+        <div class="row1">
+          <span class="tech">${esc(techLabel(b))}</span>
+          ${b.cbct ? '<span class="pill yes">CBCT</span>' : '<span class="pill">ไม่ทำ CBCT</span>'}
+          ${b.fractions ? `<span class="pill">${b.fractions} Fx</span>` : ''}
+          <span class="time">${b.time ? esc(b.time) + ' น.' : ''}</span>
+        </div>
+        <div class="name">${esc(b.name)}</div>
+        <div class="meta">HN ${esc(b.hn)}${b.site ? ' · ' + esc(b.site) : ''}${b.physician ? ' · แพทย์: ' + esc(b.physician) : ''}</div>
+        ${b.note ? `<div class="meta">หมายเหตุ: ${esc(b.note)}</div>` : ''}
+        <div class="actions"><button type="button" class="btn" data-edit="${esc(b.id)}">แก้ไข</button></div>
+      </div>`).join('');
+
+    $('dayPanel').innerHTML = `
+      <h3>${esc(thaiDate(state.selected))}</h3>
+      <div class="sub">นัดเริ่มฉายรังสี ${list.length} ราย${list.length ? ` · ทำ CBCT ${list.filter(b => b.cbct).length} ราย` : ''}</div>
+      ${items || '<div class="empty">ยังไม่มีนัดในวันนี้</div>'}
+      <button type="button" class="btn primary" data-add="${state.selected}">+ เพิ่มนัดวันนี้</button>`;
+  }
+
+  function render() {
+    renderStats();
+    renderChips();
+    renderCalendar();
+    renderDayPanel();
+  }
+
+  // ---------- form ----------
+  const form = $('form');
+  const dlg = $('dlg');
+
+  $('techRadios').innerHTML = TECHS.map(t =>
+    `<label style="--c:${t.color}" title="${esc(t.desc)}"><input type="radio" name="technique" value="${esc(t.key)}">${esc(t.key)}</label>`
+  ).join('');
+
+  function syncOther() {
+    const isOther = form.technique.value === 'อื่นๆ';
+    $('f-other').hidden = !isOther;
+    if (isOther) $('f-other').focus();
+  }
+  $('techRadios').addEventListener('change', syncOther);
+
+  function openForm(booking, date) {
+    form.reset();
+    $('formError').textContent = '';
+    state.editingId = booking ? booking.id : null;
+    $('formTitle').textContent = booking ? 'แก้ไขนัดคิว' : 'นัดคิวเทคนิคพิเศษ';
+    $('deleteBtn').hidden = !booking;
+    if (booking) {
+      form.hn.value = booking.hn;
+      $('f-name').value = booking.name;
+      form.technique.value = TECH[booking.technique] ? booking.technique : 'อื่นๆ';
+      form.techniqueOther.value = booking.techniqueOther || '';
+      form.site.value = booking.site || '';
+      form.startDate.value = booking.startDate;
+      form.time.value = booking.time || '';
+      form.fractions.value = booking.fractions ?? '';
+      form.cbct.value = booking.cbct ? 'yes' : 'no';
+      form.physician.value = booking.physician || '';
+      form.note.value = booking.note || '';
+    } else {
+      form.startDate.value = date || state.selected;
+    }
+    $('f-other').hidden = form.technique.value !== 'อื่นๆ';
+    dlg.showModal();
+    form.hn.focus();
+  }
+
+  function readForm() {
+    const b = {
+      hn: form.hn.value.trim(),
+      name: $('f-name').value.trim(),
+      technique: form.technique.value,
+      techniqueOther: form.techniqueOther.value.trim(),
+      site: form.site.value.trim(),
+      startDate: form.startDate.value,
+      time: form.time.value,
+      fractions: form.fractions.value === '' ? null : Number(form.fractions.value),
+      cbct: form.cbct.value === 'yes' ? true : form.cbct.value === 'no' ? false : null,
+      physician: form.physician.value.trim(),
+      note: form.note.value.trim(),
+    };
+    if (!b.hn) return { error: 'กรุณากรอก HN', focus: form.hn };
+    if (!b.name) return { error: 'กรุณากรอกชื่อ-สกุลผู้ป่วย', focus: $('f-name') };
+    if (!b.technique) return { error: 'กรุณาเลือกเทคนิค' };
+    if (b.technique === 'อื่นๆ' && !b.techniqueOther) return { error: 'กรุณาระบุเทคนิคอื่นๆ', focus: form.techniqueOther };
+    if (b.technique !== 'อื่นๆ') b.techniqueOther = '';
+    if (!b.startDate) return { error: 'กรุณาระบุวันเริ่มฉายรังสี', focus: form.startDate };
+    if (b.fractions !== null && !(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= 100)) {
+      return { error: 'จำนวนครั้งต้องเป็นจำนวนเต็ม 1–100', focus: form.fractions };
+    }
+    if (b.cbct === null) return { error: 'กรุณาระบุ CBCT (ทำ / ไม่ทำ)' };
+    return { booking: b };
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { booking, error, focus } = readForm();
+    if (error) { $('formError').textContent = error; focus?.focus(); return; }
+
+    const dup = state.bookings.find(b => b.id !== state.editingId && b.hn === booking.hn && b.startDate === booking.startDate);
+    if (dup && !confirm(`HN ${booking.hn} มีนัดวันที่ ${thaiDate(booking.startDate, false)} อยู่แล้ว (${techLabel(dup)}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
+
+    $('saveBtn').disabled = true;
+    try {
+      if (state.editingId) await store.update(state.editingId, booking);
+      else await store.create(booking);
+      dlg.close();
+      const d = parseYmd(booking.startDate);
+      state.year = d.getFullYear(); state.month = d.getMonth(); state.selected = booking.startDate;
+      await reload();
+      toast(state.editingId ? 'แก้ไขนัดเรียบร้อย' : 'บันทึกนัดเรียบร้อย');
+    } catch (err) {
+      $('formError').textContent = err.message;
+    } finally {
+      $('saveBtn').disabled = false;
+    }
+  });
+
+  $('cancelBtn').addEventListener('click', () => dlg.close());
+  $('deleteBtn').addEventListener('click', async () => {
+    const b = state.bookings.find(x => x.id === state.editingId);
+    if (!b || !confirm(`ยืนยันการลบนัดของ ${b.name} (HN ${b.hn})?`)) return;
+    try {
+      await store.remove(b.id);
+      dlg.close();
+      await reload();
+      toast('ลบนัดเรียบร้อย');
+    } catch (err) {
+      $('formError').textContent = err.message;
+    }
+  });
+
+  // ---------- events ----------
+  function shiftMonth(delta) {
+    const d = new Date(state.year, state.month + delta, 1);
+    state.year = d.getFullYear(); state.month = d.getMonth();
+    render();
+  }
+  $('prev').addEventListener('click', () => shiftMonth(-1));
+  $('next').addEventListener('click', () => shiftMonth(1));
+  $('today').addEventListener('click', () => {
+    const t = new Date();
+    state.year = t.getFullYear(); state.month = t.getMonth(); state.selected = ymd(t);
+    render();
+  });
+  $('newBooking').addEventListener('click', () => openForm(null));
+  $('print').addEventListener('click', () => window.print());
+  $('search').addEventListener('input', (e) => { state.query = e.target.value; render(); });
+
+  $('chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const k = chip.dataset.tech;
+    state.filter.has(k) ? state.filter.delete(k) : state.filter.add(k);
+    render();
+  });
+
+  document.addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add]');
+    if (add) { e.stopPropagation(); openForm(null, add.dataset.add); return; }
+    const edit = e.target.closest('[data-edit], .ev');
+    if (edit) {
+      const id = edit.dataset.edit || edit.dataset.id;
+      const b = state.bookings.find(x => x.id === id);
+      if (b) openForm(b);
+      return;
+    }
+    const cell = e.target.closest('.cell');
+    if (cell) {
+      state.selected = cell.dataset.date;
+      const d = parseYmd(state.selected);
+      if (d.getMonth() !== state.month) { state.year = d.getFullYear(); state.month = d.getMonth(); }
+      render();
+    }
+  });
+  $('calGrid').addEventListener('keydown', (e) => {
+    const cell = e.target.closest('.cell');
+    if (cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cell.click(); }
+  });
+
+  $('openSheet').addEventListener('click', () => window.open(sheetUrl, '_blank'));
+
+  // ---------- boot ----------
+  async function reload() {
+    state.bookings = await store.list();
+    render();
+  }
+
+  (async () => {
+    try {
+      const data = await gs('getInitData');
+      state.bookings = data.bookings;
+      sheetUrl = data.sheetUrl;
+      $('openSheet').hidden = !sheetUrl;
+      $('mode').textContent = 'บันทึกใน Google Sheets';
+    } catch (err) {
+      $('mode').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + err.message;
+    }
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
