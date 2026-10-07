@@ -90,7 +90,58 @@ class Sheet {
   }
 }
 
-export function createGas({ bound = true } = {}) {
+// จำลอง LPCH RO Workspace (doPost: login, ssoRedeem, me, logout)
+export function createWorkspace() {
+  const users = {
+    admin: { username: 'admin', fullName: 'ผู้ดูแล ระบบ', role: 'MP', isAdmin: true, status: 'active', password: 'admin-pass' },
+    rtt1: { username: 'rtt1', fullName: 'นักรังสี หนึ่ง', role: 'RTT', isAdmin: false, status: 'active', password: 'rtt-pass1' },
+    other1: { username: 'other1', fullName: 'อื่น ๆ', role: 'Other', isAdmin: false, status: 'active', password: 'other-pass' },
+  };
+  const sessions = new Map();
+  const tickets = new Map();
+  const pub = (u) => ({ username: u.username, fullName: u.fullName, role: u.role, isAdmin: u.isAdmin, status: u.status });
+  const session = (u) => {
+    const t = randomUUID();
+    sessions.set(t, u.username);
+    return t;
+  };
+  const ws = {
+    users, sessions, calls: [],
+    ticketFor(username) {
+      const t = randomUUID().replace(/-/g, '');
+      tickets.set(t, username);
+      return t;
+    },
+    handle(req) {
+      ws.calls.push(req.action);
+      const u0 = req.token && users[sessions.get(req.token)];
+      switch (req.action) {
+        case 'login': {
+          const u = users[String(req.username).toLowerCase()];
+          if (!u || u.password !== req.password) return { ok: false, error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+          if (u.status !== 'active') return { ok: false, error: 'บัญชีของคุณถูกระงับการใช้งาน' };
+          return { ok: true, token: session(u), user: pub(u) };
+        }
+        case 'ssoRedeem': {
+          const name = tickets.get(req.ticket);
+          if (!name) return { ok: false, error: 'ลิงก์เข้าสู่ระบบหมดอายุหรือถูกใช้ไปแล้ว กรุณาเข้าสู่ระบบอีกครั้ง' };
+          tickets.delete(req.ticket);
+          return { ok: true, token: session(users[name]), user: pub(users[name]) };
+        }
+        case 'me':
+          return u0 && u0.status === 'active' ? { ok: true, user: pub(u0) } : { ok: false, error: 'session_expired' };
+        case 'logout':
+          sessions.delete(req.token);
+          return { ok: true };
+        default:
+          return { ok: false, error: 'ไม่รู้จักคำสั่ง ' + req.action };
+      }
+    },
+  };
+  return ws;
+}
+
+export function createGas({ bound = true, workspace = null } = {}) {
   const sheets = new Map();
   const ss = {
     getSheets: () => [...sheets.values()],
@@ -105,6 +156,7 @@ export function createGas({ bound = true } = {}) {
     },
   };
   const props = new Map();
+  const cache = new Map();
   const context = {
     console,
     SpreadsheetApp: {
@@ -122,18 +174,37 @@ export function createGas({ bound = true } = {}) {
       getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    CacheService: {
+      getScriptCache: () => ({
+        get: (k) => cache.get(k) ?? null,
+        put: (k, v) => cache.set(k, String(v)),
+        remove: (k) => cache.delete(k),
+      }),
+    },
+    UrlFetchApp: {
+      fetch: (url, opts) => {
+        if (!workspace) throw new Error('ไม่ได้ตั้งค่า Workspace จำลอง');
+        const body = JSON.stringify(workspace.handle(JSON.parse(opts.payload)));
+        return { getContentText: () => body, getResponseCode: () => 200 };
+      },
+    },
     Utilities: { getUuid: () => randomUUID() },
     Logger: { log() {} },
     HtmlService: {
       createHtmlOutputFromFile: (n) => ({ getContent: () => readFileSync(path.join(DIR, `${n}.html`), 'utf8') }),
+      createHtmlOutput: (html) => {
+        const out = { html, setTitle: () => out, addMetaTag: () => out, getContent: () => html };
+        return out;
+      },
     },
   };
   vm.createContext(context);
   // Apps Script โหลดทุกไฟล์ .gs เข้าขอบเขต global เดียวกัน
   for (const f of ['Schedule.gs', 'Code.gs']) vm.runInContext(readFileSync(path.join(DIR, f), 'utf8'), context, { filename: f });
+  if (!workspace) context.WORKSPACE_URL = ''; // ทดสอบแบบไม่มีการเข้าสู่ระบบ
   // ค่าที่ส่งผ่าน google.script.run ถูกแปลงเป็น JSON
   const call = (fn, ...args) => JSON.parse(JSON.stringify(context[fn](...JSON.parse(JSON.stringify(args))) ?? null));
-  return { context, sheets, call };
+  return { context, sheets, cache, call };
 }
 
 // หน้าเว็บที่ doGet ส่งออก (HtmlService.createHtmlOutputFromFile('Index'))

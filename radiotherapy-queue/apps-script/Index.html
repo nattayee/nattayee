@@ -312,7 +312,7 @@ label.inline input { width: auto; }
 .dialog::backdrop { background: rgba(10, 10, 10, 0.45); }
 .dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 26px); }
 .dialog-head, .dialog-foot { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
-.dialog-head h2 { margin-right: auto; }
+.dialog-head h2 { margin-right: auto; overflow-wrap: anywhere; }
 .dialog-foot { border-bottom: 0; border-top: 1px solid var(--border); }
 .dialog-foot .spacer { flex: 1; }
 .dialog-body { overflow-y: auto; padding: 8px 20px 16px; }
@@ -406,6 +406,27 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
 .cc-key.off { background: var(--holiday); }
 .cc-key.conflict { box-shadow: inset 0 0 0 2px var(--danger); }
 
+/* ---------- เข้าสู่ระบบ / ผู้ใช้ ---------- */
+.user-chip { display: inline-flex; align-items: center; gap: 8px; padding: 2px 2px 2px 4px; border: 1px solid var(--border); border-radius: 999px; }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+.user-text { display: flex; flex-direction: column; line-height: 1.15; max-width: 180px; }
+.user-text b { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-text small { font-size: 0.7rem; color: var(--muted); }
+.login-screen { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; padding: 16px; background: var(--bg); color: var(--text); overflow-y: auto; }
+.login-screen[open] { display: grid; place-items: center; }
+.login-screen::backdrop { background: var(--bg); }
+.dialog-title { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+.dialog-title small { font-size: 0.78rem; }
+.login-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 28px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
+.login-card .brand-mark { margin: 0 auto; }
+.login-card h2 { text-align: center; font-size: 1.15rem; }
+.login-card > p { margin: -8px 0 0; text-align: center; }
+.login-card .btn.primary { padding: 10px; }
+.login-status { padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 0.88rem; text-align: center; }
+.login-foot { text-align: center; margin: 0; }
+.login-foot a { color: var(--accent); }
+@media (max-width: 860px) { .user-text { display: none; } }
+
 /* ---------- settings ---------- */
 .workdays { margin-top: 14px; }
 .holiday-add { display: grid; grid-template-columns: 160px 1fr auto; gap: 8px; margin-bottom: 10px; }
@@ -482,6 +503,11 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
     </nav>
     <div class="header-actions">
       <span id="mode-badge" class="mode-badge">กำลังโหลดข้อมูล…</span>
+      <span class="user-chip" id="user-chip" hidden>
+        <span class="user-avatar" id="user-avatar" aria-hidden="true"></span>
+        <span class="user-text"><b id="user-name"></b><small id="user-role"></small></span>
+        <button type="button" class="btn small ghost" id="btn-logout">ออกจากระบบ</button>
+      </span>
       <button class="btn primary" id="btn-new">+ นัดผู้ป่วยใหม่</button>
     </div>
   </header>
@@ -650,7 +676,10 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
   <dialog id="appt-dialog" class="dialog">
     <form id="appt-form" method="dialog" novalidate>
       <header class="dialog-head">
-        <h2 id="appt-title">นัดผู้ป่วยใหม่</h2>
+        <div class="dialog-title">
+          <h2 id="appt-title">นัดผู้ป่วยใหม่</h2>
+          <small class="muted" id="appt-meta"></small>
+        </div>
         <button type="button" class="btn ghost icon" data-close aria-label="ปิด">✕</button>
       </header>
       <div class="dialog-body">
@@ -763,6 +792,23 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
         <button type="button" class="btn ghost" data-close>ยกเลิก</button>
         <button type="submit" class="btn primary" id="btn-save">บันทึกนัด</button>
       </footer>
+    </form>
+  </dialog>
+
+  <!-- ================= เข้าสู่ระบบ (บัญชี LPCH RO Workspace) ================= -->
+  <dialog class="login-screen" id="login-screen">
+    <form class="login-card" id="login-form" novalidate>
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5M4.9 4.9l3.5 3.5M15.6 15.6l3.5 3.5M4.9 19.1l3.5-3.5M15.6 8.4l3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <h2>ระบบนัดคิวผู้ป่วยฉายรังสี</h2>
+      <p class="muted">เข้าสู่ระบบด้วยบัญชี <b>LPCH RO Workspace</b></p>
+      <div class="login-status" id="login-status" hidden></div>
+      <label>ชื่อผู้ใช้หรืออีเมล<input id="login-user" name="loginUser" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+      <label>รหัสผ่าน<input id="login-pass" name="loginPass" type="password" autocomplete="current-password" required></label>
+      <div class="form-errors" id="login-error" role="alert" hidden></div>
+      <button type="submit" class="btn primary" id="login-btn">เข้าสู่ระบบ</button>
+      <p class="small muted login-foot">ยังไม่มีบัญชี หรือลืมรหัสผ่าน? <a id="login-ws-link" href="#" target="_top" rel="noopener">เปิด LPCH RO Workspace</a></p>
     </form>
   </dialog>
 
@@ -1404,25 +1450,79 @@ function gas(fn, ...args) {
   );
 }
 
+const TOKEN_KEY = 'rtq-token';
+
+// ทุกคำสั่งส่ง token ของการเข้าสู่ระบบ (บัญชี LPCH RO Workspace) ไปด้วย
 class GasStore {
   mode = 'gas';
+  onExpired = null; // หน้าเว็บตั้งไว้ เพื่อแสดงหน้าเข้าสู่ระบบเมื่อหมดเวลา
+  constructor() {
+    try {
+      this.token = localStorage.getItem(TOKEN_KEY) || '';
+    } catch {
+      this.token = '';
+    }
+  }
+  setToken(token) {
+    this.token = token || '';
+    try {
+      if (this.token) localStorage.setItem(TOKEN_KEY, this.token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* เบราว์เซอร์ไม่ให้เก็บ — ต้องเข้าสู่ระบบใหม่เมื่อเปิดหน้าใหม่ */
+    }
+  }
+  async call(fn, ...args) {
+    try {
+      return await gas(fn, this.token, ...args);
+    } catch (err) {
+      if (err.message !== 'session_expired') throw err;
+      this.setToken('');
+      this.onExpired?.();
+      throw new Error('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่แล้วทำรายการอีกครั้ง');
+    }
+  }
+  /** ข้อมูลทั้งหมด หรือ null ถ้ายังไม่ได้เข้าสู่ระบบ */
+  async loadOrNull() {
+    try {
+      return await gas('getState', this.token);
+    } catch (err) {
+      if (err.message === 'session_expired') return null;
+      throw err;
+    }
+  }
+  async login(username, password) {
+    const res = await gas('login', username, password);
+    this.setToken(res.token);
+    return res.user;
+  }
+  async sso(ticket) {
+    const res = await gas('ssoLogin', ticket);
+    this.setToken(res.token);
+    return res.user;
+  }
+  async logout() {
+    const t = this.token;
+    this.setToken('');
+    await gas('logout', t).catch(() => {});
+  }
   load() {
-    return gas('getState');
+    return this.call('getState');
   }
   create(appt) {
-    return gas('createAppointment', appt);
+    return this.call('createAppointment', appt);
   }
   update(id, appt) {
-    return gas('updateAppointment', id, appt);
+    return this.call('updateAppointment', id, appt);
   }
   remove(id) {
-    return gas('deleteAppointment', id);
+    return this.call('deleteAppointment', id);
   }
   saveSettings(settings) {
-    return gas('saveSettings', settings);
+    return this.call('saveSettings', settings);
   }
   importAll(data) {
-    return gas('importAll', data);
+    return this.call('importAll', data);
   }
 }
 
@@ -1481,8 +1581,9 @@ class LocalStore {
 
 async function openStore() {
   if (globalThis.google?.script?.run) {
+    // ยังไม่ได้เข้าสู่ระบบ: data = null (หน้าเว็บจะแสดงหน้าเข้าสู่ระบบ) / โหลดไม่ได้ด้วยเหตุอื่นให้แจ้งผู้ใช้ ไม่ตกไปโหมดออฟไลน์
     const s = new GasStore();
-    return { store: s, data: await s.load() }; // ถ้าโหลดไม่ได้ให้แจ้งผู้ใช้ ไม่ตกไปโหมดออฟไลน์
+    return { store: s, data: await s.loadOrNull() };
   }
   // ไฟล์ตัวอย่างหรือเปิดไฟล์ตรง ๆ (file://) ไม่มีเซิร์ฟเวอร์ให้เรียก
   if (!globalThis.RTQ_PREVIEW && location.protocol !== 'file:') {
@@ -1501,6 +1602,7 @@ async function openStore() {
 
 // ================= state =================
 const state = {
+  me: null, // ผู้ใช้ที่เข้าสู่ระบบ (เฉพาะเวอร์ชัน Apps Script ที่เชื่อม LPCH RO Workspace)
   store: null,
   appts: [],
   settings: null,
@@ -2015,12 +2117,12 @@ function renderPatients() {
 }
 
 function exportCsv() {
-  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ'];
+  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ', 'ผู้บันทึก', 'ผู้แก้ไขล่าสุด'];
   const lines = patientRows().map(({ a, ss, phase: p }) =>
     [
       a.hn, a.prefix, a.firstName, a.lastName, a.name, a.age, a.sex, a.phone, a.icd10, a.diagnosis, a.site, a.icd9, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
       a.fractions, a.simDate, a.verifyDate, ss[0]?.date, ss[ss.length - 1]?.date, a.time,
-      CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes,
+      CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes, a.createdBy, a.updatedBy,
     ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
   );
   download(`rt-appointments-${todayISO()}.csv`, '\ufeff' + [head.join(','), ...lines].join('\r\n'), 'text/csv');
@@ -2177,7 +2279,12 @@ function openForm(appt = null, defaults = {}) {
     prevMode: a.cbctMode === 'custom' ? 'fx1' : a.cbctMode,
   };
   $('#appt-title').textContent = appt ? `แก้ไขนัด: ${appt.name}` : 'นัดผู้ป่วยใหม่';
-  $('#btn-delete').hidden = !appt;
+  $('#btn-delete').hidden = !appt || !isAdmin();
+  const by = [
+    appt?.createdBy && `บันทึกโดย ${appt.createdBy}`,
+    appt?.updatedBy && appt.updatedBy !== appt.createdBy && `แก้ไขล่าสุดโดย ${appt.updatedBy}`,
+  ].filter(Boolean);
+  $('#appt-meta').textContent = by.join(' · ');
   renderRoomPicker();
   updatePreview();
   dialog.showModal();
@@ -2781,14 +2888,88 @@ function bind() {
   });
 }
 
+// ================= ผู้ใช้และการเข้าสู่ระบบ =================
+const isAdmin = () => !state.me || state.me.isAdmin; // ไม่มีระบบเข้าสู่ระบบ = ใช้ได้ทุกเมนู
+
+function applyData(data) {
+  state.appts = data.appointments || [];
+  state.settings = data.settings;
+  state.settings.physicians ||= [...DEFAULT_PHYSICIANS];
+  state.me = data.me || null;
+  const me = state.me;
+  $('#user-chip').hidden = !me;
+  if (me) {
+    $('#user-name').textContent = me.fullName;
+    $('#user-role').textContent = me.role + (me.isAdmin ? ' · ผู้ดูแลระบบ' : '');
+    $('#user-avatar').textContent = [...me.fullName.replace(/^(นาย|นางสาว|นาง|ดร\.|นพ\.|พญ\.)/, '')][0] || '?';
+  }
+  // เมนูตั้งค่าเฉพาะผู้ดูแลระบบ
+  $('.tabs [data-view="settings"]').hidden = !isAdmin();
+  if (!isAdmin() && state.view === 'settings') setView('dashboard');
+}
+
+let onLogin = null; // เรียกเมื่อเข้าสู่ระบบสำเร็จ (ตอนเปิดหน้าครั้งแรก) — ถ้าไม่มี จะโหลดข้อมูลใหม่แล้ววาดหน้าใหม่
+
+function showLogin({ error = '', status = '', onLogin: cb = null } = {}) {
+  if (cb) onLogin = cb;
+  const d = $('#login-screen');
+  $('#login-error').textContent = error;
+  $('#login-error').hidden = !error;
+  $('#login-status').textContent = status;
+  $('#login-status').hidden = !status;
+  $('#login-form').classList.toggle('busy', !!status);
+  for (const el of $$('#login-form input, #login-form button')) el.disabled = !!status;
+  if (!d.open) d.showModal();
+  if (!status) setTimeout(() => $('#login-user').focus(), 0);
+}
+
+function bindLogin(cfg) {
+  if (cfg.workspaceUrl) $('#login-ws-link').href = cfg.workspaceUrl;
+  else $('#login-ws-link').closest('p').hidden = true;
+  $('#login-screen').addEventListener('cancel', (e) => e.preventDefault()); // Esc ปิดไม่ได้
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = $('#login-user').value.trim();
+    const pass = $('#login-pass').value;
+    if (!user || !pass) return showLogin({ error: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
+    showLogin({ status: 'กำลังเข้าสู่ระบบ…' });
+    try {
+      await state.store.login(user, pass);
+      const data = await state.store.loadOrNull();
+      if (!data) throw new Error('เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่');
+      $('#login-pass').value = '';
+      showLogin(); // ล้างข้อความสถานะ
+      if (onLogin) {
+        const cb = onLogin;
+        onLogin = null;
+        cb(data);
+      } else {
+        applyData(data);
+        render();
+        $('#login-screen').close();
+        toast(`เข้าสู่ระบบแล้ว: ${data.me?.fullName || ''}`);
+      }
+    } catch (err) {
+      showLogin({ error: err.message });
+    }
+  });
+  $('#btn-logout').addEventListener('click', async () => {
+    if (dialog.open) dialog.close();
+    await state.store.logout();
+    state.me = null;
+    $('#user-chip').hidden = true;
+    showLogin({ status: '' });
+    $('#login-user').value = '';
+  });
+}
+
 // ================= init =================
 async function refreshData() {
   if (document.visibilityState !== 'visible' || dialog.open || refreshData.busy) return;
   refreshData.busy = true;
   try {
     const data = await state.store.load();
-    state.appts = data.appointments || [];
-    state.settings = data.settings;
+    applyData(data);
     if (state.view !== 'settings') render();
   } catch {
     /* ใช้ข้อมูลเดิมไปก่อน */
@@ -2817,11 +2998,28 @@ async function init() {
     $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่</div>`;
     return;
   }
-  const { store, data } = opened;
+  const { store } = opened;
+  let { data } = opened;
   state.store = store;
-  state.appts = data.appointments || [];
-  state.settings = data.settings;
-  state.settings.physicians ||= [...DEFAULT_PHYSICIANS];
+  const cfg = globalThis.RTQ_CONFIG || {};
+  if (store.mode === 'gas' && cfg.auth) {
+    bindLogin(cfg);
+    store.onExpired = () => showLogin({ error: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่' });
+    let error = '';
+    if (cfg.sso) {
+      // มาจากปุ่มใน LPCH RO Workspace: แลกบัตรผ่านเป็นการเข้าสู่ระบบ
+      showLogin({ status: 'กำลังเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace…' });
+      try {
+        await store.sso(cfg.sso);
+        data = await store.loadOrNull();
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    if (!data) data = await new Promise((resolve) => showLogin({ error, onLogin: resolve }));
+    $('#login-screen').close();
+  }
+  applyData(data);
   badge.textContent = { server: 'เชื่อมต่อเซิร์ฟเวอร์', gas: 'เชื่อมต่อ Google Sheet', local: 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)' }[store.mode];
   badge.classList.toggle('local', store.mode === 'local');
 

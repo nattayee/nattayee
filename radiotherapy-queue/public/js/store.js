@@ -54,25 +54,79 @@ function gas(fn, ...args) {
   );
 }
 
+const TOKEN_KEY = 'rtq-token';
+
+// ทุกคำสั่งส่ง token ของการเข้าสู่ระบบ (บัญชี LPCH RO Workspace) ไปด้วย
 class GasStore {
   mode = 'gas';
+  onExpired = null; // หน้าเว็บตั้งไว้ เพื่อแสดงหน้าเข้าสู่ระบบเมื่อหมดเวลา
+  constructor() {
+    try {
+      this.token = localStorage.getItem(TOKEN_KEY) || '';
+    } catch {
+      this.token = '';
+    }
+  }
+  setToken(token) {
+    this.token = token || '';
+    try {
+      if (this.token) localStorage.setItem(TOKEN_KEY, this.token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* เบราว์เซอร์ไม่ให้เก็บ — ต้องเข้าสู่ระบบใหม่เมื่อเปิดหน้าใหม่ */
+    }
+  }
+  async call(fn, ...args) {
+    try {
+      return await gas(fn, this.token, ...args);
+    } catch (err) {
+      if (err.message !== 'session_expired') throw err;
+      this.setToken('');
+      this.onExpired?.();
+      throw new Error('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่แล้วทำรายการอีกครั้ง');
+    }
+  }
+  /** ข้อมูลทั้งหมด หรือ null ถ้ายังไม่ได้เข้าสู่ระบบ */
+  async loadOrNull() {
+    try {
+      return await gas('getState', this.token);
+    } catch (err) {
+      if (err.message === 'session_expired') return null;
+      throw err;
+    }
+  }
+  async login(username, password) {
+    const res = await gas('login', username, password);
+    this.setToken(res.token);
+    return res.user;
+  }
+  async sso(ticket) {
+    const res = await gas('ssoLogin', ticket);
+    this.setToken(res.token);
+    return res.user;
+  }
+  async logout() {
+    const t = this.token;
+    this.setToken('');
+    await gas('logout', t).catch(() => {});
+  }
   load() {
-    return gas('getState');
+    return this.call('getState');
   }
   create(appt) {
-    return gas('createAppointment', appt);
+    return this.call('createAppointment', appt);
   }
   update(id, appt) {
-    return gas('updateAppointment', id, appt);
+    return this.call('updateAppointment', id, appt);
   }
   remove(id) {
-    return gas('deleteAppointment', id);
+    return this.call('deleteAppointment', id);
   }
   saveSettings(settings) {
-    return gas('saveSettings', settings);
+    return this.call('saveSettings', settings);
   }
   importAll(data) {
-    return gas('importAll', data);
+    return this.call('importAll', data);
   }
 }
 
@@ -131,8 +185,9 @@ class LocalStore {
 
 export async function openStore() {
   if (globalThis.google?.script?.run) {
+    // ยังไม่ได้เข้าสู่ระบบ: data = null (หน้าเว็บจะแสดงหน้าเข้าสู่ระบบ) / โหลดไม่ได้ด้วยเหตุอื่นให้แจ้งผู้ใช้ ไม่ตกไปโหมดออฟไลน์
     const s = new GasStore();
-    return { store: s, data: await s.load() }; // ถ้าโหลดไม่ได้ให้แจ้งผู้ใช้ ไม่ตกไปโหมดออฟไลน์
+    return { store: s, data: await s.loadOrNull() };
   }
   // ไฟล์ตัวอย่างหรือเปิดไฟล์ตรง ๆ (file://) ไม่มีเซิร์ฟเวอร์ให้เรียก
   if (!globalThis.RTQ_PREVIEW && location.protocol !== 'file:') {

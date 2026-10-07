@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { createGas, renderIndex } from './gas-mock.mjs';
+import { createGas, createWorkspace, renderIndex } from './gas-mock.mjs';
+
+const T = null; // ไม่มีการเข้าสู่ระบบ (WORKSPACE_URL ว่าง)
 
 const appt = {
   hn: '0012345', name: 'ทดสอบ GAS', technique: 'VMAT', room: 'L2', startDate: '2026-10-12', fractions: 10,
@@ -20,7 +22,7 @@ test('setup สร้างแผ่นงานและใส่วันห�
   const { call, sheets } = createGas();
   call('setup');
   assert.deepEqual([...sheets.keys()].sort(), ['Appointments', 'Holidays', 'Settings']);
-  const state = call('getState');
+  const state = call('getState', T);
   assert.equal(state.appointments.length, 0);
   assert.ok(state.settings.holidays.length >= 15);
   assert.deepEqual(state.settings.workdays, [1, 2, 3, 4, 5]);
@@ -28,61 +30,61 @@ test('setup สร้างแผ่นงานและใส่วันห�
 
 test('โปรเจกต์ Apps Script แบบแยก (ไม่ได้เปิดจาก Sheet): setup สร้าง Sheet ใหม่ครั้งเดียว', () => {
   const { call, sheets, context } = createGas({ bound: false });
-  assert.throws(() => call('getState'), /ยังไม่ได้ตั้งค่าระบบ/);
-  assert.match(call('setup'), /^https:\/\/docs\.google\.com\/spreadsheets/);
+  assert.throws(() => call('getState', T), /ยังไม่ได้ตั้งค่าระบบ/);
+  assert.equal(call('setup'), null, 'setup ต้องไม่ส่งลิงก์ Sheet กลับไปให้หน้าเว็บ');
   assert.deepEqual([...sheets.keys()].sort(), ['Appointments', 'Holidays', 'Settings']);
   call('setup'); // รันซ้ำต้องใช้ Sheet เดิม ไม่สร้างใหม่
   assert.equal(context.createdSheets, 1);
-  assert.equal(call('getState').appointments.length, 0);
+  assert.equal(call('getState', T).appointments.length, 0);
 });
 
 test('เพิ่ม แก้ไข ลบ นัดผู้ป่วยใน Sheet', () => {
   const { call, sheets } = createGas();
   call('setup');
-  const created = call('createAppointment', appt);
+  const created = call('createAppointment', T, appt);
   assert.ok(created.id);
-  let [a] = call('getState').appointments;
+  let [a] = call('getState', T).appointments;
   assert.equal(a.hn, '0012345', 'HN ต้องไม่เสียเลข 0 นำหน้า');
   assert.equal(a.fractions, 10);
   assert.equal(a.age, '');
   assert.deepEqual(a.cbctDates, ['2026-10-12', '2026-10-19']);
   assert.equal(sheets.get('Appointments').data[1][1], '0012345');
 
-  call('createAppointment', { ...appt, hn: '2', room: 'L1' });
-  call('updateAppointment', created.id, { ...appt, room: 'L3', notes: 'แก้ไขแล้ว' });
-  a = call('getState').appointments.find((x) => x.id === created.id);
+  call('createAppointment', T, { ...appt, hn: '2', room: 'L1' });
+  call('updateAppointment', T, created.id, { ...appt, room: 'L3', notes: 'แก้ไขแล้ว' });
+  a = call('getState', T).appointments.find((x) => x.id === created.id);
   assert.equal(a.room, 'L3');
   assert.equal(a.notes, 'แก้ไขแล้ว');
   assert.equal(a.createdAt, created.createdAt);
 
-  call('deleteAppointment', created.id);
-  const left = call('getState').appointments;
+  call('deleteAppointment', T, created.id);
+  const left = call('getState', T).appointments;
   assert.equal(left.length, 1);
   assert.equal(left[0].hn, '2');
-  assert.throws(() => call('deleteAppointment', created.id), /ไม่พบ/);
+  assert.throws(() => call('deleteAppointment', T, created.id), /ไม่พบ/);
 });
 
 test('ตรวจสอบข้อมูลไม่ถูกต้อง', () => {
   const { call } = createGas();
   call('setup');
-  assert.throws(() => call('createAppointment', { ...appt, room: 'L9', fractions: 0 }), /ห้องฉายไม่ถูกต้อง[\s\S]*จำนวนครั้ง/);
+  assert.throws(() => call('createAppointment', T, { ...appt, room: 'L9', fractions: 0 }), /ห้องฉายไม่ถูกต้อง[\s\S]*จำนวนครั้ง/);
 });
 
 test('บันทึกการตั้งค่าและนำเข้าไฟล์สำรอง', () => {
   const { call } = createGas();
   call('setup');
-  const s = call('getState').settings;
-  call('saveSettings', { ...s, workdays: [1, 2, 3, 4, 5, 6], holidays: [{ date: '2026-10-30', name: 'ทดสอบ' }], slotMinutes: 10 });
-  let st = call('getState').settings;
+  const s = call('getState', T).settings;
+  call('saveSettings', T, { ...s, workdays: [1, 2, 3, 4, 5, 6], holidays: [{ date: '2026-10-30', name: 'ทดสอบ' }], slotMinutes: 10 });
+  let st = call('getState', T).settings;
   assert.deepEqual(st.workdays, [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(st.holidays, [{ date: '2026-10-30', name: 'ทดสอบ' }]);
   assert.equal(st.slotMinutes, 10);
 
-  call('createAppointment', appt);
-  const res = call('importAll', { appointments: [{ ...appt, id: 'keep-me' }, { ...appt, hn: '9' }] });
+  call('createAppointment', T, appt);
+  const res = call('importAll', T, { appointments: [{ ...appt, id: 'keep-me' }, { ...appt, hn: '9' }] });
   assert.deepEqual(res.appointments.map((x) => x.hn), ['0012345', '9']);
   assert.equal(res.appointments[0].id, 'keep-me');
-  assert.throws(() => call('importAll', { appointments: [{ ...appt, time: 'x' }] }), /รายการที่ 1/);
+  assert.throws(() => call('importAll', T, { appointments: [{ ...appt, time: 'x' }] }), /รายการที่ 1/);
 });
 
 test('doGet ส่งหน้าเว็บไฟล์เดียวที่มีทั้ง CSS และ JS', () => {
@@ -104,13 +106,13 @@ test('ชื่อจากคำนำหน้า และคอลัมน�
   sh.formats = new Map([...Array(26)].flatMap((_, c) => [...Array(5)].map((__, r) => [`${r + 1}:${c + 1}`, '@'])));
   sh.maxColumns = 26;
 
-  assert.equal(call('getState').appointments[0].name, 'นายเก่า ข้อมูล');
-  const created = call('createAppointment', {
+  assert.equal(call('getState', T).appointments[0].name, 'นายเก่า ข้อมูล');
+  const created = call('createAppointment', T, {
     ...appt, prefix: 'พระภิกษุ', firstName: 'สมชาย', lastName: 'ใจดี', name: '',
     icd10: 'C11.9', diagnosis: 'C11.9 Malignant neoplasm of nasopharynx, unspecified', site: 'Nasopharynx', icd9: '92.24',
   });
   assert.equal(created.name, 'พระภิกษุ สมชาย ใจดี');
-  const a = call('getState').appointments.find((x) => x.id === created.id);
+  const a = call('getState', T).appointments.find((x) => x.id === created.id);
   assert.deepEqual([a.prefix, a.firstName, a.lastName, a.icd10, a.site, a.icd9], ['พระภิกษุ', 'สมชาย', 'ใจดี', 'C11.9', 'Nasopharynx', '92.24']);
   assert.ok(sh.maxColumns >= 31, 'ต้องเพิ่มคอลัมน์ให้พอ');
 });
@@ -118,8 +120,8 @@ test('ชื่อจากคำนำหน้า และคอลัมน�
 test('รายชื่อแพทย์เริ่มต้นและบันทึกการแก้ไข', () => {
   const { call } = createGas();
   call('setup');
-  const s = call('getState').settings;
+  const s = call('getState', T).settings;
   assert.deepEqual(s.physicians, ['ทัศน์วรรณ อาษากิจ', 'ศิริรัตน์ เชื้อสำราญ', 'พัฒธิดา มโนรส', 'ทินกร จอมใจ']);
-  call('saveSettings', { ...s, physicians: ['ทินกร จอมใจ', 'แพทย์ใหม่', 'แพทย์ใหม่', ''] });
-  assert.deepEqual(call('getState').settings.physicians, ['ทินกร จอมใจ', 'แพทย์ใหม่']);
+  call('saveSettings', T, { ...s, physicians: ['ทินกร จอมใจ', 'แพทย์ใหม่', 'แพทย์ใหม่', ''] });
+  assert.deepEqual(call('getState', T).settings.physicians, ['ทินกร จอมใจ', 'แพทย์ใหม่']);
 });

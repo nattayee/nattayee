@@ -10,6 +10,7 @@ import { openStore } from './store.js';
 
 // ================= state =================
 const state = {
+  me: null, // ผู้ใช้ที่เข้าสู่ระบบ (เฉพาะเวอร์ชัน Apps Script ที่เชื่อม LPCH RO Workspace)
   store: null,
   appts: [],
   settings: null,
@@ -524,12 +525,12 @@ function renderPatients() {
 }
 
 function exportCsv() {
-  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ'];
+  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ', 'ผู้บันทึก', 'ผู้แก้ไขล่าสุด'];
   const lines = patientRows().map(({ a, ss, phase: p }) =>
     [
       a.hn, a.prefix, a.firstName, a.lastName, a.name, a.age, a.sex, a.phone, a.icd10, a.diagnosis, a.site, a.icd9, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
       a.fractions, a.simDate, a.verifyDate, ss[0]?.date, ss[ss.length - 1]?.date, a.time,
-      CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes,
+      CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes, a.createdBy, a.updatedBy,
     ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
   );
   download(`rt-appointments-${todayISO()}.csv`, '\ufeff' + [head.join(','), ...lines].join('\r\n'), 'text/csv');
@@ -686,7 +687,12 @@ function openForm(appt = null, defaults = {}) {
     prevMode: a.cbctMode === 'custom' ? 'fx1' : a.cbctMode,
   };
   $('#appt-title').textContent = appt ? `แก้ไขนัด: ${appt.name}` : 'นัดผู้ป่วยใหม่';
-  $('#btn-delete').hidden = !appt;
+  $('#btn-delete').hidden = !appt || !isAdmin();
+  const by = [
+    appt?.createdBy && `บันทึกโดย ${appt.createdBy}`,
+    appt?.updatedBy && appt.updatedBy !== appt.createdBy && `แก้ไขล่าสุดโดย ${appt.updatedBy}`,
+  ].filter(Boolean);
+  $('#appt-meta').textContent = by.join(' · ');
   renderRoomPicker();
   updatePreview();
   dialog.showModal();
@@ -1290,14 +1296,88 @@ function bind() {
   });
 }
 
+// ================= ผู้ใช้และการเข้าสู่ระบบ =================
+const isAdmin = () => !state.me || state.me.isAdmin; // ไม่มีระบบเข้าสู่ระบบ = ใช้ได้ทุกเมนู
+
+function applyData(data) {
+  state.appts = data.appointments || [];
+  state.settings = data.settings;
+  state.settings.physicians ||= [...DEFAULT_PHYSICIANS];
+  state.me = data.me || null;
+  const me = state.me;
+  $('#user-chip').hidden = !me;
+  if (me) {
+    $('#user-name').textContent = me.fullName;
+    $('#user-role').textContent = me.role + (me.isAdmin ? ' · ผู้ดูแลระบบ' : '');
+    $('#user-avatar').textContent = [...me.fullName.replace(/^(นาย|นางสาว|นาง|ดร\.|นพ\.|พญ\.)/, '')][0] || '?';
+  }
+  // เมนูตั้งค่าเฉพาะผู้ดูแลระบบ
+  $('.tabs [data-view="settings"]').hidden = !isAdmin();
+  if (!isAdmin() && state.view === 'settings') setView('dashboard');
+}
+
+let onLogin = null; // เรียกเมื่อเข้าสู่ระบบสำเร็จ (ตอนเปิดหน้าครั้งแรก) — ถ้าไม่มี จะโหลดข้อมูลใหม่แล้ววาดหน้าใหม่
+
+function showLogin({ error = '', status = '', onLogin: cb = null } = {}) {
+  if (cb) onLogin = cb;
+  const d = $('#login-screen');
+  $('#login-error').textContent = error;
+  $('#login-error').hidden = !error;
+  $('#login-status').textContent = status;
+  $('#login-status').hidden = !status;
+  $('#login-form').classList.toggle('busy', !!status);
+  for (const el of $$('#login-form input, #login-form button')) el.disabled = !!status;
+  if (!d.open) d.showModal();
+  if (!status) setTimeout(() => $('#login-user').focus(), 0);
+}
+
+function bindLogin(cfg) {
+  if (cfg.workspaceUrl) $('#login-ws-link').href = cfg.workspaceUrl;
+  else $('#login-ws-link').closest('p').hidden = true;
+  $('#login-screen').addEventListener('cancel', (e) => e.preventDefault()); // Esc ปิดไม่ได้
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = $('#login-user').value.trim();
+    const pass = $('#login-pass').value;
+    if (!user || !pass) return showLogin({ error: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
+    showLogin({ status: 'กำลังเข้าสู่ระบบ…' });
+    try {
+      await state.store.login(user, pass);
+      const data = await state.store.loadOrNull();
+      if (!data) throw new Error('เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่');
+      $('#login-pass').value = '';
+      showLogin(); // ล้างข้อความสถานะ
+      if (onLogin) {
+        const cb = onLogin;
+        onLogin = null;
+        cb(data);
+      } else {
+        applyData(data);
+        render();
+        $('#login-screen').close();
+        toast(`เข้าสู่ระบบแล้ว: ${data.me?.fullName || ''}`);
+      }
+    } catch (err) {
+      showLogin({ error: err.message });
+    }
+  });
+  $('#btn-logout').addEventListener('click', async () => {
+    if (dialog.open) dialog.close();
+    await state.store.logout();
+    state.me = null;
+    $('#user-chip').hidden = true;
+    showLogin({ status: '' });
+    $('#login-user').value = '';
+  });
+}
+
 // ================= init =================
 async function refreshData() {
   if (document.visibilityState !== 'visible' || dialog.open || refreshData.busy) return;
   refreshData.busy = true;
   try {
     const data = await state.store.load();
-    state.appts = data.appointments || [];
-    state.settings = data.settings;
+    applyData(data);
     if (state.view !== 'settings') render();
   } catch {
     /* ใช้ข้อมูลเดิมไปก่อน */
@@ -1326,11 +1406,28 @@ async function init() {
     $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่</div>`;
     return;
   }
-  const { store, data } = opened;
+  const { store } = opened;
+  let { data } = opened;
   state.store = store;
-  state.appts = data.appointments || [];
-  state.settings = data.settings;
-  state.settings.physicians ||= [...DEFAULT_PHYSICIANS];
+  const cfg = globalThis.RTQ_CONFIG || {};
+  if (store.mode === 'gas' && cfg.auth) {
+    bindLogin(cfg);
+    store.onExpired = () => showLogin({ error: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่' });
+    let error = '';
+    if (cfg.sso) {
+      // มาจากปุ่มใน LPCH RO Workspace: แลกบัตรผ่านเป็นการเข้าสู่ระบบ
+      showLogin({ status: 'กำลังเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace…' });
+      try {
+        await store.sso(cfg.sso);
+        data = await store.loadOrNull();
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    if (!data) data = await new Promise((resolve) => showLogin({ error, onLogin: resolve }));
+    $('#login-screen').close();
+  }
+  applyData(data);
   badge.textContent = { server: 'เชื่อมต่อเซิร์ฟเวอร์', gas: 'เชื่อมต่อ Google Sheet', local: 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)' }[store.mode];
   badge.classList.toggle('local', store.mode === 'local');
 

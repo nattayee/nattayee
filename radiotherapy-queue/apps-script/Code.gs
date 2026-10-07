@@ -11,6 +11,15 @@
 // ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
 var SPREADSHEET_URL = '';
 
+// ================= เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace =================
+// ใช้บัญชีเดียวกับ LPCH RO Workspace (คำสั่ง login / ssoRedeem / me ของเว็บนั้น) — ไม่ต้องแก้โค้ดของ Workspace
+// ถ้าเว้นว่าง ('') จะไม่มีหน้าเข้าสู่ระบบ (ควบคุมสิทธิ์ด้วยการแชร์ Google Sheet แทน)
+var WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+// ตำแหน่งที่เข้าใช้ระบบนี้ได้ เช่น ['RO', 'MP', 'RTT', 'Nurse'] — ว่าง [] = ทุกคนที่บัญชีใช้งานได้ (ผู้ดูแลระบบเข้าได้เสมอ)
+var ALLOWED_ROLES = [];
+var SESSION_HOURS_ = 6;      // ไม่ได้ใช้งานนานเกินนี้ต้องเข้าสู่ระบบใหม่ (นับใหม่ทุกครั้งที่ใช้งาน; CacheService เก็บได้สูงสุด 6 ชั่วโมง)
+var VERIFY_MINUTES_ = 15;    // ตรวจกับ Workspace ซ้ำทุก ๆ เท่านี้ (บัญชีที่ถูกระงับจะถูกออกจากระบบ)
+
 var SHEET_APPTS_ = 'Appointments';
 var SHEET_HOLIDAYS_ = 'Holidays';
 var SHEET_SETTINGS_ = 'Settings';
@@ -20,13 +29,20 @@ var APPT_COLUMNS_ = [
   'icd10', 'diagnosis', 'site', 'icd9', 'physician',
   'technique', 'room', 'dosePerFx', 'fractions', 'simDate', 'verifyDate', 'verifyTime',
   'startDate', 'time', 'duration', 'cbctMode', 'cbctDates', 'skipDates',
-  'status', 'notes', 'createdAt', 'updatedAt',
+  'status', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
 ];
 
 // ================= หน้าเว็บ =================
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+/** เปิดจากปุ่มใน LPCH RO Workspace จะมี ?sso=<บัตรผ่าน> ติดมา ส่งต่อให้หน้าเว็บนำไปแลกเป็นการเข้าสู่ระบบ */
+function doGet(e) {
+  var sso = String((e && e.parameter && e.parameter.sso) || '').replace(/[^0-9a-f]/gi, '').slice(0, 128);
+  var config = { auth: !!WORKSPACE_URL, workspaceUrl: WORKSPACE_URL, sso: sso };
+  var html = HtmlService.createHtmlOutputFromFile('Index').getContent().replace(
+    '</head>',
+    '<script>window.RTQ_CONFIG = ' + JSON.stringify(config).replace(/</g, '\\u003c') + ';</script>\n</head>'
+  );
+  return HtmlService.createHtmlOutput(html)
     .setTitle('ระบบนัดคิวฉายรังสี')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -60,22 +76,62 @@ function setup() {
   ensureSheets_();
   if (blank) ss.deleteSheet(blank); // แผ่นงานว่างที่ติดมากับ Sheet ใหม่
   Logger.log((created ? 'สร้าง Google Sheet ใหม่สำหรับเก็บข้อมูลแล้ว: ' : 'ใช้ Google Sheet นี้เก็บข้อมูล: ') + ss.getUrl());
-  Logger.log('ขั้นต่อไป: แชร์ Sheet นี้ (ผู้แก้ไข) ให้เจ้าหน้าที่ที่ใช้ระบบ แล้วกด การทำให้ใช้งานได้ › การทำให้ใช้งานได้รายการใหม่ › เว็บแอป');
-  return ss.getUrl();
+  if (WORKSPACE_URL) {
+    // เรียก Workspace หนึ่งครั้งเพื่อขอสิทธิ์ "เชื่อมต่อภายนอก" และตรวจว่าลิงก์ใช้ได้
+    var check = workspace_({ action: 'me', token: '' });
+    Logger.log(check.error === 'session_expired'
+      ? 'เชื่อมต่อ LPCH RO Workspace ได้แล้ว'
+      : 'ตรวจ WORKSPACE_URL: ' + (check.error || 'ตอบกลับไม่ตรงที่คาด'));
+    Logger.log('ขั้นต่อไป: การทำให้ใช้งานได้ › การทำให้ใช้งานได้รายการใหม่ › เว็บแอป (ดำเนินการในฐานะ: ฉัน, ผู้มีสิทธิ์เข้าถึง: ทุกคน)');
+  } else {
+    Logger.log('ขั้นต่อไป: แชร์ Sheet นี้ (ผู้แก้ไข) ให้เจ้าหน้าที่ที่ใช้ระบบ แล้วกด การทำให้ใช้งานได้ › การทำให้ใช้งานได้รายการใหม่ › เว็บแอป');
+  }
+  // ไม่ส่งค่ากลับ: หน้าเว็บเรียกฟังก์ชันนี้ได้ (google.script.run) จึงไม่เปิดเผยลิงก์ Sheet
+}
+
+// ================= เข้าสู่ระบบ =================
+
+/** ชื่อผู้ใช้หรืออีเมล + รหัสผ่านของ LPCH RO Workspace */
+function login(username, password) {
+  if (!WORKSPACE_URL) throw new Error('ระบบนี้ไม่ได้เปิดการเข้าสู่ระบบ');
+  var out = workspace_({ action: 'login', username: String(username || '').slice(0, 100), password: String(password || '') });
+  if (!out.ok) throw new Error(out.error || 'เข้าสู่ระบบไม่สำเร็จ');
+  return startSession_(out.token, out.user);
+}
+
+/** บัตรผ่านจากปุ่มใน LPCH RO Workspace (ใช้ได้ครั้งเดียว อายุ 2 นาที) */
+function ssoLogin(ticket) {
+  if (!WORKSPACE_URL) throw new Error('ระบบนี้ไม่ได้เปิดการเข้าสู่ระบบ');
+  var out = workspace_({ action: 'ssoRedeem', ticket: String(ticket || '') });
+  if (!out.ok) throw new Error(out.error || 'เข้าสู่ระบบไม่สำเร็จ');
+  return startSession_(out.token, out.user);
+}
+
+function logout(token) {
+  var s = token ? sessionGet_(token) : null;
+  if (s) {
+    CacheService.getScriptCache().remove(sessionKey_(token));
+    try { workspace_({ action: 'logout', token: s.ws }); } catch (e) { /* Workspace ลบ session หมดอายุเองอยู่แล้ว */ }
+  }
+  return null;
 }
 
 // ================= API ที่หน้าเว็บเรียก (google.script.run) =================
+// ทุกคำสั่งรับ token ของการเข้าสู่ระบบเป็นค่าแรก
 
-function getState() {
+function getState(token) {
+  var me = requireSession_(token);
   ensureSheets_();
-  return { appointments: readAppointments_(), settings: readSettings_() };
+  return { appointments: readAppointments_(), settings: readSettings_(), me: me ? publicSession_(me) : null };
 }
 
-function createAppointment(input) {
+function createAppointment(token, input) {
+  var me = requireSession_(token);
   var v = validateAppointment_(input || {});
   return withLock_(function () {
     var now = new Date().toISOString();
-    var appt = Object.assign({ id: Utilities.getUuid() }, v, { createdAt: now, updatedAt: now });
+    var by = me ? me.fullName : '';
+    var appt = Object.assign({ id: Utilities.getUuid() }, v, { createdAt: now, updatedAt: now, createdBy: by, updatedBy: by });
     var sh = apptSheet_();
     var headers = headers_(sh);
     writeRow_(sh, sh.getLastRow() + 1, headers, appt);
@@ -83,7 +139,8 @@ function createAppointment(input) {
   });
 }
 
-function updateAppointment(id, input) {
+function updateAppointment(token, id, input) {
+  var me = requireSession_(token);
   var v = validateAppointment_(input || {});
   return withLock_(function () {
     var sh = apptSheet_();
@@ -91,13 +148,14 @@ function updateAppointment(id, input) {
     var row = findRow_(sh, headers, id);
     if (!row) throw new Error('ไม่พบข้อมูลนัด (อาจถูกลบโดยผู้ใช้อื่น)');
     var prev = rowToAppt_(sh.getRange(row, 1, 1, headers.length).getDisplayValues()[0], headers);
-    var appt = Object.assign({}, prev, v, { id: prev.id, updatedAt: new Date().toISOString() });
+    var appt = Object.assign({}, prev, v, { id: prev.id, updatedAt: new Date().toISOString(), updatedBy: me ? me.fullName : '' });
     writeRow_(sh, row, headers, appt);
     return appt;
   });
 }
 
-function deleteAppointment(id) {
+function deleteAppointment(token, id) {
+  requireAdmin_(token);
   return withLock_(function () {
     var sh = apptSheet_();
     var row = findRow_(sh, headers_(sh), id);
@@ -109,7 +167,8 @@ function deleteAppointment(id) {
   });
 }
 
-function saveSettings(input) {
+function saveSettings(token, input) {
+  requireAdmin_(token);
   var s = validateSettings_(input || {});
   return withLock_(function () {
     writeSettings_(s);
@@ -118,7 +177,8 @@ function saveSettings(input) {
 }
 
 /** นำเข้าไฟล์สำรอง: แทนที่ข้อมูลนัดทั้งหมด */
-function importAll(data) {
+function importAll(token, data) {
+  requireAdmin_(token);
   if (!data || !Array.isArray(data.appointments)) throw new Error('ไฟล์สำรองไม่ถูกต้อง');
   var now = new Date().toISOString();
   var appts = data.appointments.map(function (raw, i) {
@@ -131,6 +191,8 @@ function importAll(data) {
     return Object.assign({ id: str_(raw.id, 64) || Utilities.getUuid() }, v, {
       createdAt: str_(raw.createdAt, 30) || now,
       updatedAt: str_(raw.updatedAt, 30) || now,
+      createdBy: str_(raw.createdBy, 100),
+      updatedBy: str_(raw.updatedBy, 100),
     });
   });
   var settings = data.settings ? validateSettings_(data.settings) : null;
@@ -146,6 +208,85 @@ function importAll(data) {
     if (settings) writeSettings_(settings);
     return { appointments: readAppointments_(), settings: readSettings_() };
   });
+}
+
+// ================= session (เก็บใน CacheService) =================
+
+/** เรียกคำสั่งของ LPCH RO Workspace ผ่าน doPost (JSON) */
+function workspace_(req) {
+  var res = UrlFetchApp.fetch(WORKSPACE_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(req),
+    muteHttpExceptions: true,
+    followRedirects: true,
+  });
+  try {
+    return JSON.parse(res.getContentText());
+  } catch (e) {
+    throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') ตรวจสอบ WORKSPACE_URL และการตั้งค่า Deploy ของ Workspace');
+  }
+}
+
+function startSession_(wsToken, user) {
+  if (!user || !wsToken) throw new Error('เข้าสู่ระบบไม่สำเร็จ');
+  if (ALLOWED_ROLES.length && ALLOWED_ROLES.indexOf(user.role) < 0 && !user.isAdmin) {
+    try { workspace_({ action: 'logout', token: wsToken }); } catch (e) { /* ไม่เป็นไร */ }
+    throw new Error('บัญชีตำแหน่ง ' + user.role + ' ยังไม่ได้รับสิทธิ์ใช้ระบบนัดคิว กรุณาติดต่อผู้ดูแลระบบ');
+  }
+  var token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  var s = {
+    username: String(user.username), fullName: String(user.fullName || user.username), role: String(user.role || ''),
+    isAdmin: user.isAdmin === true, ws: String(wsToken), checked: Date.now(),
+  };
+  sessionPut_(token, s);
+  return { token: token, user: publicSession_(s) };
+}
+
+function sessionKey_(token) {
+  return 'rtq_s_' + String(token).replace(/[^0-9a-f]/gi, '').slice(0, 80);
+}
+
+function sessionGet_(token) {
+  var raw = CacheService.getScriptCache().get(sessionKey_(token));
+  return raw ? JSON.parse(raw) : null;
+}
+
+function sessionPut_(token, s) {
+  CacheService.getScriptCache().put(sessionKey_(token), JSON.stringify(s), SESSION_HOURS_ * 3600);
+}
+
+/** ผู้ใช้ที่เข้าสู่ระบบอยู่ (null ถ้าระบบไม่ได้เปิดการเข้าสู่ระบบ) — ไม่พบ/หมดอายุจะส่ง 'session_expired' */
+function requireSession_(token) {
+  if (!WORKSPACE_URL) return null;
+  var s = token ? sessionGet_(token) : null;
+  if (!s) throw new Error('session_expired');
+  if (Date.now() - s.checked > VERIFY_MINUTES_ * 60000) {
+    var out = null;
+    try { out = workspace_({ action: 'me', token: s.ws }); } catch (e) { out = null; } // Workspace ล่ม: ใช้งานต่อได้
+    if (out && !out.ok && out.error === 'session_expired') {
+      CacheService.getScriptCache().remove(sessionKey_(token));
+      throw new Error('session_expired');
+    }
+    if (out && out.ok && out.user) {
+      s.fullName = String(out.user.fullName || s.fullName);
+      s.role = String(out.user.role || s.role);
+      s.isAdmin = out.user.isAdmin === true;
+    }
+    s.checked = Date.now();
+  }
+  sessionPut_(token, s); // ต่ออายุทุกครั้งที่ใช้งาน
+  return s;
+}
+
+function requireAdmin_(token) {
+  var s = requireSession_(token);
+  if (s && !s.isAdmin) throw new Error('คำสั่งนี้ใช้ได้เฉพาะผู้ดูแลระบบของ LPCH RO Workspace');
+  return s;
+}
+
+function publicSession_(s) {
+  return { username: s.username, fullName: s.fullName, role: s.role, isAdmin: s.isAdmin };
 }
 
 // ================= Google Sheet =================
