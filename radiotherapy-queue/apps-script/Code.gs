@@ -8,7 +8,7 @@
  */
 
 // รุ่นของโค้ด (npm run build:gas ใส่ให้อัตโนมัติ) — ต้องตรงกับไฟล์ Index ไม่เช่นนั้นหน้าเว็บจะแจ้งเตือน
-var APP_VERSION = '8bbfcda4';
+var APP_VERSION = 'a29b2d06';
 
 // (ไม่บังคับ) ถ้าต้องการใช้ Google Sheet ที่มีอยู่แล้ว ให้วางลิงก์ของ Sheet ไว้ในเครื่องหมายคำพูดก่อนรัน setup
 // ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
@@ -34,7 +34,7 @@ var SHEET_HOLIDAYS_ = 'Holidays';
 var SHEET_SETTINGS_ = 'Settings';
 
 var APPT_COLUMNS_ = [
-  'id', 'hn', 'prefix', 'firstName', 'lastName', 'name', 'age', 'sex', 'phone',
+  'id', 'hn', 'prefix', 'firstName', 'lastName', 'name', 'age', 'sex', 'phone', 'quota',
   'icd10', 'diagnosis', 'site', 'icd9', 'physician',
   'technique', 'room', 'dosePerFx', 'fractions', 'simDate', 'verifyDate', 'verifyTime',
   'startDate', 'time', 'duration', 'cbctMode', 'cbctDates', 'skipDates',
@@ -239,7 +239,7 @@ function importAll(token, data) {
   var appts = data.appointments.map(function (raw, i) {
     var v;
     try {
-      v = validateAppointment_(raw || {});
+      v = validateAppointment_(raw || {}, false);
     } catch (e) {
       throw new Error('รายการที่ ' + (i + 1) + ': ' + e.message);
     }
@@ -517,7 +517,8 @@ function ids_(list) {
   return list.map(function (x) { return x.id; });
 }
 
-function validateAppointment_(input) {
+// requireQuota (ค่าเริ่มต้น true): นัดใหม่/แก้ไขต้องเลือก Quota — ไฟล์สำรองจากรุ่นก่อนที่ยังไม่มี Quota นำเข้าได้
+function validateAppointment_(input, requireQuota) {
   var errors = [];
   var a = {
     hn: str_(input.hn, 30),
@@ -548,9 +549,11 @@ function validateAppointment_(input) {
     skipDates: Array.isArray(input.skipDates) ? input.skipDates.filter(function (d) { return DATE_RE_.test(d); }) : [],
     status: str_(input.status, 20) || 'active',
     notes: str_(input.notes, 2000),
+    quota: str_(String(input.quota == null ? '' : input.quota), 2),
   };
   if (a.firstName) a.name = composeName(a.prefix, a.firstName, a.lastName);
   if (!a.hn) errors.push('กรุณาระบุ HN');
+  if (a.quota ? QUOTAS.indexOf(a.quota) < 0 : requireQuota !== false) errors.push('กรุณาเลือก Quota (1–5)');
   if (!a.name) errors.push('กรุณาระบุชื่อผู้ป่วย');
   if (ids_(ROOMS).indexOf(a.room) < 0) errors.push('ห้องฉายไม่ถูกต้อง');
   if (ids_(TECHNIQUES).indexOf(a.technique) < 0) errors.push('เทคนิคการฉายไม่ถูกต้อง');

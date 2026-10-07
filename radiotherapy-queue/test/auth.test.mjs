@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createGas, createWorkspace } from './gas-mock.mjs';
 
 const appt = {
+  quota: '1',
   hn: '1', firstName: 'ทดสอบ', technique: 'VMAT', room: 'L1', startDate: '2026-10-12', fractions: 5,
   time: '09:00', duration: 15, cbctMode: 'fx1', status: 'active',
 };

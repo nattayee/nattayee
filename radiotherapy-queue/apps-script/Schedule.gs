@@ -33,6 +33,9 @@ const CBCT_MODES = [
   { id: 'custom', name: 'กำหนดวันเอง' },
 ];
 
+// Quota ของผู้ป่วย (บังคับเลือก 1 ค่า)
+const QUOTAS = ['1', '2', '3', '4', '5'];
+
 const STATUSES = [
   { id: 'active', name: 'ปกติ' },
   { id: 'hold', name: 'พักการฉาย' },

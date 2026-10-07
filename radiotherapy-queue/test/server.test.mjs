@@ -20,6 +20,7 @@ after(async () => {
 });
 
 const appt = {
+  quota: '1',
   hn: '123', name: 'ทดสอบ', technique: 'IMRT', room: 'L3', startDate: '2026-10-12', fractions: 10,
   time: '10:00', duration: 15, cbctMode: 'weekly', status: 'active',
 };
@@ -62,4 +63,11 @@ test('บันทึกนัดได้โดยไม่ระบุเว�
   assert.equal((await res.json()).time, '');
   res = await fetch(`${base}/api/appointments`, { method: 'POST', body: JSON.stringify({ ...appt, time: '25:00' }) });
   assert.equal(res.status, 400);
+});
+
+test('Quota บังคับเลือกที่เซิร์ฟเวอร์', async () => {
+  const { quota, ...noQuota } = appt;
+  const res = await fetch(`${base}/api/appointments`, { method: 'POST', body: JSON.stringify(noQuota) });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).errors.join(), /Quota/);
 });

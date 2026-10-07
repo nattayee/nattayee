@@ -1,5 +1,5 @@
 import {
-  ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, PHASE_LABELS,
+  ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, PHASE_LABELS, QUOTAS,
   addDays, todayISO, startOfWeek, isWorkday, nextWorkday, parseISO,
   buildSessions, phaseOf, eventsByDate, findConflicts, suggestTimes, utilization, DEFAULT_PHYSICIANS,
 } from './schedule.js';
@@ -448,7 +448,7 @@ function renderDayPanel() {
                 .map(
                   (e) => `<div class="slot" data-id="${esc(e.appt.id)}"><span class="t">${tm(e.time)}</span>
                   <div><div class="n">${esc(e.appt.name)}</div>
-                  <div class="m"><span>HN ${esc(e.appt.hn)}</span><span>${esc(techOf(e.appt.technique).name)}</span>
+                  <div class="m"><span>HN ${esc(e.appt.hn)}</span>${e.appt.quota ? `<span>Q${esc(e.appt.quota)}</span>` : ''}<span>${esc(techOf(e.appt.technique).name)}</span>
                   <span>${e.type === 'verify' ? '' : `Fx ${e.fx}/${e.total}`}</span>${eventBadges(e)}</div></div></div>`,
                 )
                 .join('')
@@ -511,7 +511,7 @@ function renderPatients() {
       const pct = ss.length ? Math.round((done / ss.length) * 100) : 0;
       return `<tr data-id="${esc(a.id)}">
         <td class="num">${esc(a.hn)}</td>
-        <td><b>${esc(a.name)}</b><div class="muted small">${esc(a.physician || '')}</div></td>
+        <td><b>${esc(a.name)}</b>${a.quota ? `<span class="quota-badge" title="Quota">Q${esc(a.quota)}</span>` : ''}<div class="muted small">${esc(a.physician || '')}</div></td>
         <td class="dx-cell"><div class="dx" title="${esc(a.diagnosis)}">${esc(a.diagnosis || '-')}</div><div class="muted small">${esc(a.site || '')}</div></td>
         <td>${esc(techOf(a.technique).name)}</td>
         <td>${roomTag(a.room)}</td>
@@ -529,10 +529,10 @@ function renderPatients() {
 }
 
 function exportCsv() {
-  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ', 'ผู้บันทึก', 'ผู้แก้ไขล่าสุด'];
+  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'Quota', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ', 'ผู้บันทึก', 'ผู้แก้ไขล่าสุด'];
   const lines = patientRows().map(({ a, ss, phase: p }) =>
     [
-      a.hn, a.prefix, a.firstName, a.lastName, a.name, a.age, a.sex, a.phone, a.icd10, a.diagnosis, a.site, a.icd9, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
+      a.hn, a.prefix, a.firstName, a.lastName, a.name, a.age, a.sex, a.phone, a.quota, a.icd10, a.diagnosis, a.site, a.icd9, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
       a.fractions, a.simDate, a.verifyDate, ss[0]?.date, ss[ss.length - 1]?.date, a.time,
       CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes, a.createdBy, a.updatedBy,
     ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
@@ -554,7 +554,7 @@ function printSlip(a) {
   $('#print-area').innerHTML = `<h2>ใบนัดฉายรังสี</h2>
     <div>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</div>
     <p><b>${esc(a.name)}</b> HN ${esc(a.hn)} ${a.age !== '' && a.age != null ? `อายุ ${esc(a.age)} ปี` : ''}<br>
-    การวินิจฉัย: ${esc(a.diagnosis || '-')}<br>
+    ${a.quota ? `Quota: ${esc(a.quota)} · ` : ''}การวินิจฉัย: ${esc(a.diagnosis || '-')}<br>
     ตำแหน่งที่ฉาย: ${esc(a.site || '-')} · แพทย์: ${esc(a.physician || '-')}<br>
     ห้องฉาย: ${esc(roomOf(a.room).label)} · เทคนิค: ${esc(techOf(a.technique).name)} · จำนวน ${ss.length} ครั้ง<br>
     เวลานัด: ${a.time ? `${esc(a.time)} น.` : 'ไม่ได้ระบุ'} · ฉายระหว่าง ${esc(fLong(ss[0]?.date))} ถึง ${esc(fLong(ss[ss.length - 1]?.date))}
@@ -673,8 +673,11 @@ function openForm(appt = null, defaults = {}) {
   const icd9 = ICD9_RT.some((r) => r[0] === a.icd9) || !a.icd9 ? ICD9_RT : [...ICD9_RT, [a.icd9, '']];
   $('#f-icd9').innerHTML = '<option value="">- ไม่ระบุ -</option>' + icd9.map(([c, n]) => `<option value="${esc(c)}">${esc(c)} ${esc(n)}</option>`).join('');
   for (const el of form.elements) {
-    if (el.name && a[el.name] != null) el.value = a[el.name];
+    if (!el.name) continue;
+    if (el.type === 'radio') el.checked = el.value === String(a[el.name] ?? '');
+    else if (a[el.name] != null) el.value = a[el.name];
   }
+  $('.quota-field').classList.remove('invalid');
   // คำนำหน้า / ชื่อ (นัดจากเวอร์ชันก่อนมีแค่ชื่อเต็มในช่องเดียว)
   const known = NAME_PREFIXES.some((p) => p.id === a.prefix);
   form.prefixSel.value = !a.prefix ? '' : known ? a.prefix : 'other';
@@ -932,6 +935,8 @@ async function submitForm(ev) {
   const errors = [];
   if (!a.hn?.trim()) errors.push('กรุณาระบุ HN');
   if (!a.firstName?.trim()) errors.push('กรุณาระบุชื่อผู้ป่วย');
+  $('.quota-field').classList.toggle('invalid', !QUOTAS.includes(a.quota));
+  if (!QUOTAS.includes(a.quota)) errors.push('กรุณาเลือก Quota (1–5)');
   if (form.prefixSel.value === 'other' && !a.prefix) errors.push('กรุณาระบุคำนำหน้า หรือเลือกจากรายการ');
   if (!a.startDate) errors.push('กรุณาระบุวันเริ่มฉาย');
   if (!(a.fractions >= 1 && a.fractions <= 60)) errors.push('จำนวนครั้งต้องอยู่ระหว่าง 1–60');
@@ -1014,6 +1019,7 @@ async function loadDemo(silent = false) {
       age: 35 + ((i * 7) % 45),
       sex,
       phone: '',
+      quota: String((i % 5) + 1),
       icd10,
       diagnosis: `${icd10} ${ICD10.find((r) => r[0] === icd10)[1]}`,
       site,
@@ -1181,6 +1187,7 @@ function bind() {
       form.duration.value = techOf(e.target.value).duration;
       if (ICD9_BY_TECHNIQUE[e.target.value]) form.icd9.value = ICD9_BY_TECHNIQUE[e.target.value];
     }
+    if (n === 'quota') $('.quota-field').classList.remove('invalid');
     if (n === 'prefixSel') {
       const p = NAME_PREFIXES.find((x) => x.id === e.target.value);
       if (p) form.sex.value = p.sex;

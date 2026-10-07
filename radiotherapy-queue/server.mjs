@@ -5,7 +5,7 @@ import { readFile, writeFile, rename, mkdir, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, defaultSettings } from './public/js/schedule.js';
+import { ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, QUOTAS, defaultSettings } from './public/js/schedule.js';
 import { composeName } from './public/js/icd.js';
 import { normalizeHisPatient } from './public/js/his.js';
 import { todayISO } from './public/js/schedule.js';
@@ -69,7 +69,8 @@ function str(v, max = 500) {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
-function validateAppointment(input) {
+// requireQuota: นัดใหม่/แก้ไขต้องเลือก Quota — ไฟล์สำรองจากรุ่นก่อนที่ยังไม่มี Quota นำเข้าได้
+function validateAppointment(input, { requireQuota = true } = {}) {
   const errors = [];
   const a = {
     hn: str(input.hn, 30),
@@ -100,9 +101,11 @@ function validateAppointment(input) {
     skipDates: Array.isArray(input.skipDates) ? input.skipDates.filter((d) => DATE_RE.test(d)) : [],
     status: str(input.status, 20) || 'active',
     notes: str(input.notes, 2000),
+    quota: str(String(input.quota ?? ''), 2),
   };
   if (a.firstName) a.name = composeName(a.prefix, a.firstName, a.lastName);
   if (!a.hn) errors.push('กรุณาระบุ HN');
+  if (a.quota ? !QUOTAS.includes(a.quota) : requireQuota) errors.push('กรุณาเลือก Quota (1–5)');
   if (!a.name) errors.push('กรุณาระบุชื่อผู้ป่วย');
   if (!ROOM_IDS.has(a.room)) errors.push('ห้องฉายไม่ถูกต้อง');
   if (!TECH_IDS.has(a.technique)) errors.push('เทคนิคการฉายไม่ถูกต้อง');
@@ -173,7 +176,7 @@ async function handleApi(req, res, url) {
     if (!Array.isArray(body.appointments)) return send(res, 400, { errors: ['ไฟล์สำรองไม่ถูกต้อง'] });
     const appointments = [];
     for (const [i, raw] of body.appointments.entries()) {
-      const { value, errors } = validateAppointment(raw || {});
+      const { value, errors } = validateAppointment(raw || {}, { requireQuota: false });
       if (errors.length) return send(res, 400, { errors: [`รายการที่ ${i + 1}: ${errors.join(', ')}`] });
       const now = new Date().toISOString();
       appointments.push({

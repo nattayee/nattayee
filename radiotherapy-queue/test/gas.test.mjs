@@ -7,6 +7,7 @@ import { createGas, createWorkspace, renderIndex } from './gas-mock.mjs';
 const T = null; // ไม่มีการเข้าสู่ระบบ (WORKSPACE_URL ว่าง)
 
 const appt = {
+  quota: '1',
   hn: '0012345', name: 'ทดสอบ GAS', technique: 'VMAT', room: 'L2', startDate: '2026-10-12', fractions: 10,
   time: '09:00', duration: 15, cbctMode: 'custom', cbctDates: ['2026-10-12', '2026-10-19'], status: 'active', age: '',
 };
@@ -132,4 +133,17 @@ test('Apps Script: บันทึกนัดได้โดยไม่ระ�
   const a = call('createAppointment', T, { ...appt, time: '' });
   assert.equal(call('getState', T).appointments.find((x) => x.id === a.id).time, '');
   assert.throws(() => call('createAppointment', T, { ...appt, time: '9 โมง' }), /เวลานัดไม่ถูกต้อง/);
+});
+
+test('Quota: บังคับเลือก 1–5 ตอนนัด/แก้ไข แต่นำเข้าไฟล์สำรองรุ่นก่อนที่ไม่มี Quota ได้', () => {
+  const { call } = createGas();
+  call('setup');
+  const { quota, ...noQuota } = appt;
+  assert.throws(() => call('createAppointment', T, noQuota), /กรุณาเลือก Quota/);
+  assert.throws(() => call('createAppointment', T, { ...appt, quota: '6' }), /กรุณาเลือก Quota/);
+  const a = call('createAppointment', T, { ...appt, quota: 3 });
+  assert.equal(call('getState', T).appointments.find((x) => x.id === a.id).quota, '3');
+  assert.throws(() => call('updateAppointment', T, a.id, noQuota), /กรุณาเลือก Quota/);
+  const res = call('importAll', T, { appointments: [noQuota] });
+  assert.equal(res.appointments[0].quota, '');
 });
