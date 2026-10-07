@@ -47,13 +47,16 @@ body.locked .wrap { display: none; }
 </style>`
 );
 
+const logoSrc = (html.match(/id="brandLogo" class="logo" src="([^"]+)"/) || [])[1];
+if (!logoSrc) throw new Error("index.html no longer has the brandLogo image");
 html = replaceOnce(
   html,
   '<body>\n<div class="wrap">',
   `<body class="locked">
 <div class="auth" id="auth">
   <main class="auth-card">
-    <h1><span>TDF</span> Dose Calculator</h1>
+    <div class="brand-row"><img class="logo" src="${logoSrc}" alt="โรงพยาบาลมะเร็งลำปาง" width="56" height="56">
+      <div><h1><span>TDF</span> Dose Calculator</h1><div class="org-name">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</div></div></div>
     <p>เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace</p>
     <p class="auth-msg info" id="authBusy">กำลังตรวจสอบการเข้าสู่ระบบ…</p>
     <form id="authForm" hidden autocomplete="on">
@@ -101,6 +104,16 @@ html = replaceOnce(
     r[fn].apply(r, args);
   }
 
+  // Shared calculation records and the physicist recheck, stored by Code.gs in a Google Sheet
+  function ask(fn, args) { return new Promise(function (ok, fail) { call(fn, [token].concat(args || []), ok, function (msg) { fail(new Error(msg)); }); }); }
+  var server = {
+    shared: true,
+    list: function () { return ask("tdfList"); },
+    submit: function (rec) { return ask("tdfSubmit", [rec]); },
+    review: function (id, decision, note, recheckTdf) { return ask("tdfReview", [id, decision, note, isFinite(recheckTdf) ? recheckTdf : null]); },
+    withdraw: function (id) { return ask("tdfWithdraw", [id]); },
+  };
+
   function showForm(message, kind) {
     document.body.classList.add("locked");
     $("auth").hidden = false;
@@ -119,7 +132,7 @@ html = replaceOnce(
     $("whoRole").textContent = res.user.role;
     $("whoRole").hidden = !res.user.role;
     $("authPass").value = "";
-    if (window.TDFApp) TDFApp.setUser(res.user);
+    if (window.TDFApp) { TDFApp.setBackend(server); TDFApp.setUser(res.user); }
     $("auth").hidden = true;
     document.body.classList.remove("locked");
     window.dispatchEvent(new Event("resize")); // draw charts that were laid out while hidden
@@ -244,7 +257,8 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
   <ol>
     <li>script.google.com → New project</li>
     <li>คัดลอกทั้ง 2 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
-    <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone</li>
+    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" ไว้เก็บรายการและผล recheck)</li>
+    <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone (ถ้าเคย deploy แล้ว: Manage deployments → แก้ไข → New version)</li>
   </ol>
   <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>
     แปลว่าวางโค้ด HTML (กล่อง 2) ลงในไฟล์ .gs ให้ลบทุกอย่างใน รหัส.gs แล้ววางกล่อง 1 ใหม่ ส่วนกล่อง 2 ต้องสร้างเป็นไฟล์ <b>HTML</b> (ไม่ใช่ สคริปต์) ชื่อ <b>Index</b></div>

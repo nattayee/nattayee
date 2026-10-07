@@ -11,6 +11,13 @@
  *   - Directly: username (or email) + password  →  login
  *   - Next visits: the saved token is checked with  me ; sign-out calls  logout
  *
+ * Calculation records and the physicist recheck live in a Google Sheet ("TDF Calculator Records", created by setup):
+ *   - tdfSubmit   anyone signed in sends a calculation for recheck (status "pending")
+ *   - tdfReview   a medical physicist (Workspace role MP) who did NOT do the calculation approves or rejects it;
+ *                 approval needs their own recalculation to match, and is saved automatically with name and time
+ *   - The page only builds the final PDF report for approved records
+ *
+ * First time: choose the function  setup  and press Run once (allows Sheets + external requests).
  * Deploy: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
  * The Workspace web app must also be deployed with Who has access: Anyone.
  * Open a tab directly with ?tab=frac | gap | brachy | ref
@@ -44,7 +51,167 @@ function tdfMe(token) {
 
 function tdfLogout(token) {
   try { workspace_({ action: 'logout', token: String(token || '') }); } catch (e) { /* already signed out */ }
+  CacheService.getScriptCache().remove(meKey_(token));
   return true;
+}
+
+/* ----- calculation records & physicist recheck ----- */
+
+var REVIEWER_ROLE = 'MP';          // Workspace role allowed to recheck
+var RECHECK_TOLERANCE = 0.05;      // TDF difference allowed between the submitted value and the recheck
+var LIST_LIMIT = 300;
+var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
+  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json'];
+var TYPES = { frac: 1, gap: 1, brachy: 1 };
+
+/** Run once from the editor: creates the records sheet and asks for permissions. */
+function setup() {
+  var sh = records_();
+  Logger.log('Records sheet: ' + sh.getParent().getUrl());
+  Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
+}
+
+function tdfList(token) {
+  user_(token);
+  var rows = records_().getDataRange().getValues().slice(1);
+  return rows.slice(-LIST_LIMIT).reverse().map(record_);
+}
+
+function tdfSubmit(token, rec) {
+  var me = user_(token);
+  rec = rec || {};
+  var p = rec.patient || {};
+  if (!TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
+  if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
+  if (!p.hn || !p.first || !p.last || !rec.doctor) throw new Error('กรอก HN ชื่อ นามสกุล และแพทย์ผู้รักษาก่อนส่ง recheck');
+  var json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
+  if (json.length > 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
+  return locked_(function () {
+    var sh = records_();
+    var sig = String(rec.sig || '');
+    var rows = sh.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][17] === sig && (rows[i][2] === 'pending' || rows[i][2] === 'approved')) {
+        throw new Error('รายการนี้ส่งไปแล้ว (' + (rows[i][2] === 'approved' ? 'อนุมัติแล้ว' : 'รอ recheck') + ')');
+      }
+    }
+    var id = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
+    var row = [id, new Date(), 'pending', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json];
+    sh.appendRow(row);
+    return record_(row);
+  });
+}
+
+/** Approve or reject a pending record. Only a medical physicist other than the calculator; approval needs a matching recheck. */
+function tdfReview(token, id, decision, note, recheckTdf) {
+  var me = user_(token);
+  if (me.role !== REVIEWER_ROLE) throw new Error('การ recheck ต้องทำโดยนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + REVIEWER_ROLE + ' ใน Workspace)');
+  if (decision !== 'approved' && decision !== 'rejected') throw new Error('ผลการตรวจไม่ถูกต้อง');
+  note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (decision === 'rejected' && !note) throw new Error('ระบุเหตุผลที่ไม่อนุมัติ');
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) throw new Error('ไม่พบรายการ (อาจถูกถอนแล้ว)');
+    var row = found.values;
+    if (row[2] !== 'pending') throw new Error('รายการนี้ถูกตรวจไปแล้ว');
+    if (row[8] === me.username) throw new Error('ผู้คำนวณ recheck งานของตัวเองไม่ได้ ต้องเป็นนักฟิสิกส์อีกท่าน');
+    if (decision === 'approved' && !(Math.abs(Number(recheckTdf) - Number(row[7])) <= RECHECK_TOLERANCE)) {
+      throw new Error('ค่าที่คำนวณซ้ำไม่ตรงกับค่าที่ส่งมา อนุมัติไม่ได้');
+    }
+    row[2] = decision; row[11] = me.username; row[12] = me.name; row[13] = me.role; row[14] = new Date(); row[15] = note;
+    row[16] = isFinite(recheckTdf) ? Number(recheckTdf) : '';
+    sh.getRange(found.row, 1, 1, row.length).setValues([row]);
+    return record_(row);
+  });
+}
+
+/** The calculator withdraws their own record before it is approved. */
+function tdfWithdraw(token, id) {
+  var me = user_(token);
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) return true;
+    if (found.values[8] !== me.username) throw new Error('ถอนได้เฉพาะรายการที่คุณเป็นผู้คำนวณ');
+    if (found.values[2] === 'approved') throw new Error('รายการที่อนุมัติแล้วถอนไม่ได้');
+    sh.deleteRow(found.row);
+    return true;
+  });
+}
+
+/* ----- record helpers ----- */
+
+function record_(row) {
+  var j = {};
+  try { j = JSON.parse(row[18] || '{}'); } catch (e) { j = {}; }
+  var t = function (v) { return v ? new Date(v).getTime() : null; };
+  return {
+    id: String(row[0]), at: t(row[1]), status: String(row[2]), type: String(row[3]), tdf: Number(row[7]), ref: j.ref,
+    title: j.title || '', summary: j.summary || '', sig: String(row[17]), state: j.state, patient: j.patient || {}, doctor: String(row[6]),
+    snap: j.snap || {},
+    calc: { username: String(row[8]), name: String(row[9]), role: String(row[10]), at: t(row[1]) },
+    review: row[11] ? { username: String(row[11]), name: String(row[12]), role: String(row[13]), at: t(row[14]),
+      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null
+  };
+}
+
+function findRecord_(sh, id) {
+  var rows = sh.getDataRange().getValues();
+  for (var i = rows.length - 1; i >= 1; i--) if (String(rows[i][0]) === String(id)) return { row: i + 1, values: rows[i] };
+  return null;
+}
+
+function patientName_(p) {
+  return (String(p.prefix || '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
+}
+
+function locked_(fn) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+/** The records sheet, in a spreadsheet this script created (its id is kept in Script properties). */
+function records_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('RECORDS_SHEET_ID');
+  var ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (!ss) {
+    ss = SpreadsheetApp.create('TDF Calculator Records');
+    ss.setSpreadsheetTimeZone('Asia/Bangkok');
+    props.setProperty('RECORDS_SHEET_ID', ss.getId());
+  }
+  var sh = ss.getSheetByName('Records');
+  if (!sh) {
+    sh = ss.getSheets()[0];
+    sh.setName('Records');
+    sh.clear();
+    sh.appendRow(RECORD_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, RECORD_HEADERS.length).setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
+    sh.getRange('A:A').setNumberFormat('@');
+    sh.getRange('E:E').setNumberFormat('@');
+  }
+  return sh;
+}
+
+/** Who owns this Workspace session token (cached for 5 minutes). */
+function user_(token) {
+  if (!token) throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง');
+  var cache = CacheService.getScriptCache(), key = meKey_(token);
+  var hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  var u = session_(workspace_({ action: 'me', token: String(token) })).user;
+  cache.put(key, JSON.stringify(u), 300);
+  return u;
+}
+
+function meKey_(token) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token || ''));
+  return 'me_' + Utilities.base64EncodeWebSafe(d);
 }
 
 /* ----- Workspace API ----- */

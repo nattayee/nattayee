@@ -50,7 +50,8 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
   <ol>
     <li>script.google.com → New project</li>
     <li>คัดลอกทั้ง 2 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
-    <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone</li>
+    <li>บันทึก แล้วเลือกฟังก์ชัน <b>setup</b> ที่แถบด้านบน กด <b>Run</b> หนึ่งครั้ง และอนุญาตสิทธิ์ (สร้าง Google Sheet "TDF Calculator Records" ไว้เก็บรายการและผล recheck)</li>
+    <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone (ถ้าเคย deploy แล้ว: Manage deployments → แก้ไข → New version)</li>
   </ol>
   <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>
     แปลว่าวางโค้ด HTML (กล่อง 2) ลงในไฟล์ .gs ให้ลบทุกอย่างใน รหัส.gs แล้ววางกล่อง 1 ใหม่ ส่วนกล่อง 2 ต้องสร้างเป็นไฟล์ <b>HTML</b> (ไม่ใช่ สคริปต์) ชื่อ <b>Index</b></div>
@@ -72,6 +73,13 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
  *   - Directly: username (or email) + password  →  login
  *   - Next visits: the saved token is checked with  me ; sign-out calls  logout
  *
+ * Calculation records and the physicist recheck live in a Google Sheet ("TDF Calculator Records", created by setup):
+ *   - tdfSubmit   anyone signed in sends a calculation for recheck (status "pending")
+ *   - tdfReview   a medical physicist (Workspace role MP) who did NOT do the calculation approves or rejects it;
+ *                 approval needs their own recalculation to match, and is saved automatically with name and time
+ *   - The page only builds the final PDF report for approved records
+ *
+ * First time: choose the function  setup  and press Run once (allows Sheets + external requests).
  * Deploy: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
  * The Workspace web app must also be deployed with Who has access: Anyone.
  * Open a tab directly with ?tab=frac | gap | brachy | ref
@@ -105,7 +113,167 @@ function tdfMe(token) {
 
 function tdfLogout(token) {
   try { workspace_({ action: 'logout', token: String(token || '') }); } catch (e) { /* already signed out */ }
+  CacheService.getScriptCache().remove(meKey_(token));
   return true;
+}
+
+/* ----- calculation records &amp; physicist recheck ----- */
+
+var REVIEWER_ROLE = 'MP';          // Workspace role allowed to recheck
+var RECHECK_TOLERANCE = 0.05;      // TDF difference allowed between the submitted value and the recheck
+var LIST_LIMIT = 300;
+var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
+  'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole', 'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json'];
+var TYPES = { frac: 1, gap: 1, brachy: 1 };
+
+/** Run once from the editor: creates the records sheet and asks for permissions. */
+function setup() {
+  var sh = records_();
+  Logger.log('Records sheet: ' + sh.getParent().getUrl());
+  Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
+}
+
+function tdfList(token) {
+  user_(token);
+  var rows = records_().getDataRange().getValues().slice(1);
+  return rows.slice(-LIST_LIMIT).reverse().map(record_);
+}
+
+function tdfSubmit(token, rec) {
+  var me = user_(token);
+  rec = rec || {};
+  var p = rec.patient || {};
+  if (!TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
+  if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
+  if (!p.hn || !p.first || !p.last || !rec.doctor) throw new Error('กรอก HN ชื่อ นามสกุล และแพทย์ผู้รักษาก่อนส่ง recheck');
+  var json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
+  if (json.length &gt; 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
+  return locked_(function () {
+    var sh = records_();
+    var sig = String(rec.sig || '');
+    var rows = sh.getDataRange().getValues();
+    for (var i = 1; i &lt; rows.length; i++) {
+      if (rows[i][17] === sig &amp;&amp; (rows[i][2] === 'pending' || rows[i][2] === 'approved')) {
+        throw new Error('รายการนี้ส่งไปแล้ว (' + (rows[i][2] === 'approved' ? 'อนุมัติแล้ว' : 'รอ recheck') + ')');
+      }
+    }
+    var id = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
+    var row = [id, new Date(), 'pending', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json];
+    sh.appendRow(row);
+    return record_(row);
+  });
+}
+
+/** Approve or reject a pending record. Only a medical physicist other than the calculator; approval needs a matching recheck. */
+function tdfReview(token, id, decision, note, recheckTdf) {
+  var me = user_(token);
+  if (me.role !== REVIEWER_ROLE) throw new Error('การ recheck ต้องทำโดยนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + REVIEWER_ROLE + ' ใน Workspace)');
+  if (decision !== 'approved' &amp;&amp; decision !== 'rejected') throw new Error('ผลการตรวจไม่ถูกต้อง');
+  note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (decision === 'rejected' &amp;&amp; !note) throw new Error('ระบุเหตุผลที่ไม่อนุมัติ');
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) throw new Error('ไม่พบรายการ (อาจถูกถอนแล้ว)');
+    var row = found.values;
+    if (row[2] !== 'pending') throw new Error('รายการนี้ถูกตรวจไปแล้ว');
+    if (row[8] === me.username) throw new Error('ผู้คำนวณ recheck งานของตัวเองไม่ได้ ต้องเป็นนักฟิสิกส์อีกท่าน');
+    if (decision === 'approved' &amp;&amp; !(Math.abs(Number(recheckTdf) - Number(row[7])) &lt;= RECHECK_TOLERANCE)) {
+      throw new Error('ค่าที่คำนวณซ้ำไม่ตรงกับค่าที่ส่งมา อนุมัติไม่ได้');
+    }
+    row[2] = decision; row[11] = me.username; row[12] = me.name; row[13] = me.role; row[14] = new Date(); row[15] = note;
+    row[16] = isFinite(recheckTdf) ? Number(recheckTdf) : '';
+    sh.getRange(found.row, 1, 1, row.length).setValues([row]);
+    return record_(row);
+  });
+}
+
+/** The calculator withdraws their own record before it is approved. */
+function tdfWithdraw(token, id) {
+  var me = user_(token);
+  return locked_(function () {
+    var sh = records_();
+    var found = findRecord_(sh, id);
+    if (!found) return true;
+    if (found.values[8] !== me.username) throw new Error('ถอนได้เฉพาะรายการที่คุณเป็นผู้คำนวณ');
+    if (found.values[2] === 'approved') throw new Error('รายการที่อนุมัติแล้วถอนไม่ได้');
+    sh.deleteRow(found.row);
+    return true;
+  });
+}
+
+/* ----- record helpers ----- */
+
+function record_(row) {
+  var j = {};
+  try { j = JSON.parse(row[18] || '{}'); } catch (e) { j = {}; }
+  var t = function (v) { return v ? new Date(v).getTime() : null; };
+  return {
+    id: String(row[0]), at: t(row[1]), status: String(row[2]), type: String(row[3]), tdf: Number(row[7]), ref: j.ref,
+    title: j.title || '', summary: j.summary || '', sig: String(row[17]), state: j.state, patient: j.patient || {}, doctor: String(row[6]),
+    snap: j.snap || {},
+    calc: { username: String(row[8]), name: String(row[9]), role: String(row[10]), at: t(row[1]) },
+    review: row[11] ? { username: String(row[11]), name: String(row[12]), role: String(row[13]), at: t(row[14]),
+      note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null
+  };
+}
+
+function findRecord_(sh, id) {
+  var rows = sh.getDataRange().getValues();
+  for (var i = rows.length - 1; i &gt;= 1; i--) if (String(rows[i][0]) === String(id)) return { row: i + 1, values: rows[i] };
+  return null;
+}
+
+function patientName_(p) {
+  return (String(p.prefix || '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
+}
+
+function locked_(fn) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+/** The records sheet, in a spreadsheet this script created (its id is kept in Script properties). */
+function records_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('RECORDS_SHEET_ID');
+  var ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (!ss) {
+    ss = SpreadsheetApp.create('TDF Calculator Records');
+    ss.setSpreadsheetTimeZone('Asia/Bangkok');
+    props.setProperty('RECORDS_SHEET_ID', ss.getId());
+  }
+  var sh = ss.getSheetByName('Records');
+  if (!sh) {
+    sh = ss.getSheets()[0];
+    sh.setName('Records');
+    sh.clear();
+    sh.appendRow(RECORD_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, RECORD_HEADERS.length).setFontWeight('bold').setFontColor('#ffffff').setBackground('#126b38');
+    sh.getRange('A:A').setNumberFormat('@');
+    sh.getRange('E:E').setNumberFormat('@');
+  }
+  return sh;
+}
+
+/** Who owns this Workspace session token (cached for 5 minutes). */
+function user_(token) {
+  if (!token) throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง');
+  var cache = CacheService.getScriptCache(), key = meKey_(token);
+  var hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  var u = session_(workspace_({ action: 'me', token: String(token) })).user;
+  cache.put(key, JSON.stringify(u), 300);
+  return u;
+}
+
+function meKey_(token) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token || ''));
+  return 'me_' + Utilities.base64EncodeWebSafe(d);
 }
 
 /* ----- Workspace API ----- */
@@ -137,7 +305,7 @@ function session_(res) {
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
 }
 </textarea>
-    <div class="meta">78 บรรทัด · 3.3 KB</div>
+    <div class="meta">245 บรรทัด · 11.9 KB</div>
   </section>
   <section class="box">
     <div class="box-head">
@@ -338,6 +506,28 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .count { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; padding: 0 .35em; margin-left: 4px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font: 600 .72rem var(--font-mono); }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: .88rem; max-width: calc(100% - 32px); }
 
+/* brand */
+.brand-row { display: flex; align-items: center; gap: 14px; }
+.logo { width: 56px; height: 56px; border-radius: 12px; background: #FFFFFF; padding: 4px; border: 1px solid var(--line); flex: none; }
+.org-name { font-size: .85rem; color: var(--ink-2); font-weight: 500; }
+.org-foot { margin-top: 10px; font-size: .75rem; color: var(--muted); }
+.count.alert { background: var(--warn); color: var(--surface); }
+
+/* recheck bar */
+.review { display: grid; gap: 12px; margin-bottom: 18px; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.review-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.review-head h2 { margin: 0 0 4px; }
+.review-sub { font-size: .85rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.review-grid &gt; div { background: var(--surface-2); border-radius: 8px; padding: 8px 12px; min-width: 0; }
+.review-grid .k { font-size: .75rem; color: var(--muted); }
+.review-grid .v { font: 500 1.4rem var(--font-mono); }
+.review-help { margin: 0; font-size: .82rem; color: var(--ink-2); }
+.review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.review-actions input { flex: 1 1 220px; font-family: var(--font-body); }
+.filters { width: 100%; }
+.filters button { flex: 1; padding: 7px 6px; }
+
 /* history drawer */
 .scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(420px, 100%); background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 12px; box-shadow: -12px 0 32px var(--shadow); }
@@ -370,6 +560,10 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .report .rp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 14px; }
 .report h1 { font-size: 20px; margin: 0; }
 .report h1 span { color: var(--accent); }
+.report .rp-org { display: flex; align-items: center; gap: 12px; }
+.report .rp-org img { width: 52px; height: 52px; }
+.report .rp-draft { border: 2px solid var(--decay); color: var(--decay); font-weight: 600; text-align: center; padding: 6px; border-radius: 6px; }
+.report .rp-sign.three { grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
 .report .rp-sub { color: var(--ink-2); font-size: 13px; }
 .report .rp-meta { text-align: right; font-size: 11.5px; color: var(--ink-2); }
 .report h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
@@ -426,7 +620,8 @@ body.locked .wrap { display: none; }
 &lt;body class="locked"&gt;
 &lt;div class="auth" id="auth"&gt;
   &lt;main class="auth-card"&gt;
-    &lt;h1&gt;&lt;span&gt;TDF&lt;/span&gt; Dose Calculator&lt;/h1&gt;
+    &lt;div class="brand-row"&gt;&lt;img class="logo" src="data:image/png;base64,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" alt="โรงพยาบาลมะเร็งลำปาง" width="56" height="56"&gt;
+      &lt;div&gt;&lt;h1&gt;&lt;span&gt;TDF&lt;/span&gt; Dose Calculator&lt;/h1&gt;&lt;div class="org-name"&gt;กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
     &lt;p&gt;เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace&lt;/p&gt;
     &lt;p class="auth-msg info" id="authBusy"&gt;กำลังตรวจสอบการเข้าสู่ระบบ…&lt;/p&gt;
     &lt;form id="authForm" hidden autocomplete="on"&gt;
@@ -444,7 +639,10 @@ body.locked .wrap { display: none; }
 &lt;div class="wrap"&gt;
   &lt;header class="top"&gt;
     &lt;div class="brand"&gt;
-      &lt;h1&gt;&lt;span class="sym"&gt;TDF&lt;/span&gt; Dose Calculator&lt;/h1&gt;
+      &lt;div class="brand-row"&gt;
+        &lt;img id="brandLogo" class="logo" src="data:image/png;base64,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" alt="โรงพยาบาลมะเร็งลำปาง" width="56" height="56"&gt;
+        &lt;div&gt;&lt;h1&gt;&lt;span class="sym"&gt;TDF&lt;/span&gt; Dose Calculator&lt;/h1&gt;&lt;div class="org-name"&gt;กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง&lt;/div&gt;&lt;/div&gt;
+      &lt;/div&gt;
       &lt;p&gt;คำนวณ Time-Dose-Fractionation (Orton &amp;amp; Ellis) สำหรับการฉายรังสีแบบแบ่ง fraction, การพักฉาย (decay factor) และ brachytherapy ที่แหล่งรังสีสลายตัว&lt;/p&gt;
     &lt;/div&gt;
     &lt;div class="session"&gt;
@@ -462,8 +660,8 @@ body.locked .wrap { display: none; }
       &lt;h2 id="case-title"&gt;ผู้ป่วยและแพทย์ผู้รักษา&lt;/h2&gt;
       &lt;div class="case-actions"&gt;
         &lt;button type="button" class="btn ghost" id="ptClear"&gt;ผู้ป่วยใหม่&lt;/button&gt;
-        &lt;button type="button" class="btn" id="histOpen"&gt;ประวัติ&lt;span class="count" id="histCount"&gt;0&lt;/span&gt;&lt;/button&gt;
-        &lt;button type="button" class="btn" id="histSave"&gt;บันทึกลงประวัติ&lt;/button&gt;
+        &lt;button type="button" class="btn" id="histOpen"&gt;รายการคำนวณ&lt;span class="count" id="histCount"&gt;0&lt;/span&gt;&lt;/button&gt;
+        &lt;button type="button" class="btn" id="histSave"&gt;ส่ง recheck&lt;/button&gt;
         &lt;button type="button" class="btn primary" id="pdfBtn"&gt;สร้างรายงาน PDF&lt;/button&gt;
       &lt;/div&gt;
     &lt;/div&gt;
@@ -474,6 +672,25 @@ body.locked .wrap { display: none; }
       &lt;div class="field"&gt;&lt;label for="pt-first"&gt;ชื่อ&lt;/label&gt;&lt;input id="pt-first" type="text" autocomplete="off" maxlength="60"&gt;&lt;/div&gt;
       &lt;div class="field"&gt;&lt;label for="pt-last"&gt;นามสกุล&lt;/label&gt;&lt;input id="pt-last" type="text" autocomplete="off" maxlength="60"&gt;&lt;/div&gt;
       &lt;div class="field f-doctor"&gt;&lt;label for="pt-doctor"&gt;แพทย์ผู้รักษา&lt;/label&gt;&lt;select id="pt-doctor"&gt;&lt;/select&gt;&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class="card review" id="reviewBar" aria-labelledby="rv-title" hidden&gt;
+    &lt;div class="review-head"&gt;
+      &lt;div&gt;&lt;h2 id="rv-title"&gt;Recheck โดยนักฟิสิกส์การแพทย์&lt;/h2&gt;
+        &lt;div class="review-sub"&gt;คำนวณโดย &lt;b id="rvWho"&gt;&lt;/b&gt; · &lt;span id="rvPatient"&gt;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;button type="button" class="btn ghost" id="rvCancel"&gt;ยกเลิก&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class="review-grid"&gt;
+      &lt;div&gt;&lt;div class="k"&gt;TDF ที่ส่งมา&lt;/div&gt;&lt;div class="v" id="rvSent"&gt;—&lt;/div&gt;&lt;/div&gt;
+      &lt;div&gt;&lt;div class="k"&gt;คำนวณซ้ำได้&lt;/div&gt;&lt;div class="v" id="rvMine"&gt;—&lt;/div&gt;&lt;/div&gt;
+      &lt;div&gt;&lt;div class="k"&gt;ผล&lt;/div&gt;&lt;span class="chip" id="rvMatch"&gt;&lt;/span&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;p class="review-help"&gt;ระบบเปิดข้อมูลที่ส่งมาและคำนวณซ้ำบนเครื่องของคุณแล้ว ตรวจค่าที่ใช้คำนวณในแท็บด้านล่างให้ตรงกับแผนการรักษา เมื่อกดอนุมัติ ระบบจะบันทึกชื่อผู้ recheck เวลา และค่าที่คำนวณซ้ำให้อัตโนมัติ&lt;/p&gt;
+    &lt;div class="review-actions"&gt;
+      &lt;input type="text" id="rvNote" maxlength="200" placeholder="หมายเหตุ (จำเป็นเมื่อไม่อนุมัติ)" aria-label="หมายเหตุการ recheck"&gt;
+      &lt;button type="button" class="btn" id="rvReject"&gt;ไม่อนุมัติ&lt;/button&gt;
+      &lt;button type="button" class="btn primary" id="rvApprove"&gt;อนุมัติ&lt;/button&gt;
     &lt;/div&gt;
   &lt;/section&gt;
 
@@ -627,20 +844,26 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.&lt;br&gt;
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
+    &lt;div class="org-foot"&gt;กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง&lt;/div&gt;
   &lt;/footer&gt;
 &lt;/div&gt;
 
 &lt;div class="scrim" id="histScrim" hidden&gt;&lt;/div&gt;
 &lt;aside class="drawer" id="histDrawer" aria-labelledby="hist-title" hidden&gt;
   &lt;div class="drawer-head"&gt;
-    &lt;h2 id="hist-title"&gt;ประวัติการคำนวณ&lt;/h2&gt;
+    &lt;h2 id="hist-title"&gt;รายการคำนวณ&lt;/h2&gt;
     &lt;button type="button" class="btn ghost" id="histClose"&gt;ปิด&lt;/button&gt;
   &lt;/div&gt;
-  &lt;input type="search" id="histSearch" placeholder="ค้นหา HN, ชื่อ หรือแพทย์" aria-label="ค้นหาประวัติ"&gt;
+  &lt;input type="search" id="histSearch" placeholder="ค้นหา HN, ชื่อ, แพทย์ หรือผู้คำนวณ" aria-label="ค้นหารายการ"&gt;
+  &lt;div class="seg filters" role="group" aria-label="กรองรายการ"&gt;
+    &lt;button type="button" data-filter="all" aria-pressed="true"&gt;ทั้งหมด&lt;/button&gt;
+    &lt;button type="button" data-filter="review" aria-pressed="false"&gt;รอฉัน recheck&lt;/button&gt;
+    &lt;button type="button" data-filter="pending"&gt;รอ recheck&lt;/button&gt;
+    &lt;button type="button" data-filter="mine" aria-pressed="false"&gt;ของฉัน&lt;/button&gt;
+  &lt;/div&gt;
   &lt;div class="hist-list" id="histList"&gt;&lt;/div&gt;
   &lt;div class="drawer-foot"&gt;
-    &lt;span&gt;เก็บไว้ในเบราว์เซอร์นี้เท่านั้น&lt;/span&gt;
-    &lt;button type="button" class="btn ghost" id="histClear"&gt;ลบทั้งหมด&lt;/button&gt;
+    &lt;span id="histFoot"&gt;&lt;/span&gt;
   &lt;/div&gt;
 &lt;/aside&gt;
 &lt;div class="report" id="report" aria-hidden="true"&gt;&lt;/div&gt;
@@ -1420,61 +1643,101 @@ body.locked .wrap { display: none; }
   }
   const activeTab = () =&gt; tabs.map(([k]) =&gt; k).find((k) =&gt; !$("p-" + k).hidden);
 
-  /** The calculation on screen plus patient, physician and signed-in user. Null on the reference tab or after an input error. */
+  /** The calculation on screen plus patient, physician and reference TDF. Null on the reference tab or after an input error. */
   function snapshot() {
     const snap = current[activeTab()];
     if (!snap) return null;
-    return { ...snap, patient: getPatient(), doctor: $("pt-doctor").value, ref: refTdf(), user: user ? user.name : "" };
+    return { ...snap, patient: getPatient(), doctor: $("pt-doctor").value, ref: refTdf() };
   }
+  const sigOf = (s) =&gt; JSON.stringify([s.type, s.state, s.patient, s.doctor, s.ref]);
 
-  // ---------- history (this browser only; one list per signed-in user) ----------
+  // ---------- calculation records &amp; physicist recheck ----------
+  // A record: { id, at, status: "pending" | "approved" | "rejected" | "draft", type, title, tdf, ref, summary, sig, state,
+  //   patient, doctor, snap: { inputs, results, table, notes, formulas, charts },
+  //   calc: { username, name, role, at }, review: { username, name, role, at, note, recheckTdf } | null }
+  // The Apps Script build swaps in a server backend (a Google Sheet shared by the team, recheck enforced there).
+  // Without it, records stay in this browser as drafts and cannot be approved.
   let user = null;
-  const HISTORY_MAX = 300;
-  const histKey = () =&gt; "tdf-history" + (user &amp;&amp; user.username ? ":" + user.username : "");
-  function loadHistory() {
-    try { const v = JSON.parse(localStorage.getItem(histKey()) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
-  }
-  function storeHistory(list) {
-    try { localStorage.setItem(histKey(), JSON.stringify(list.slice(0, HISTORY_MAX))); return true; } catch (e) { return false; }
-  }
-  /** Saves the snapshot; the same calculation for the same patient saved again only moves to the top with a new time. */
-  function saveHistory(snap) {
-    const sig = JSON.stringify([snap.type, snap.state, snap.patient, snap.doctor, snap.ref]);
-    const list = loadHistory().filter((e) =&gt; e.sig !== sig);
-    const entry = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), sig,
-      type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, state: snap.state,
-      patient: snap.patient, doctor: snap.doctor, user: snap.user };
-    list.unshift(entry);
-    const ok = storeHistory(list);
-    renderHistory();
-    return ok ? entry : null;
-  }
+  const RECHECK_TOLERANCE = 0.05;
+  const REVIEWER_ROLE = "MP";
+  const localKey = () =&gt; "tdf-history" + (user &amp;&amp; user.username ? ":" + user.username : "");
+  const localBackend = {
+    shared: false,
+    list() {
+      try { const v = JSON.parse(localStorage.getItem(localKey()) || "[]"); return Promise.resolve(Array.isArray(v) ? v.filter((r) =&gt; r.snap) : []); }
+      catch (e) { return Promise.resolve([]); }
+    },
+    submit(rec) {
+      return this.list().then((list) =&gt; {
+        const full = { ...rec, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), status: "draft",
+          calc: { username: user ? user.username : "", name: user ? user.name : "", role: user ? user.role : "", at: Date.now() }, review: null };
+        const next = [full].concat(list.filter((r) =&gt; r.sig !== rec.sig)).slice(0, 300);
+        try { localStorage.setItem(localKey(), JSON.stringify(next)); } catch (e) { throw new Error("เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล"); }
+        return full;
+      });
+    },
+    withdraw(id) {
+      return this.list().then((list) =&gt; { try { localStorage.setItem(localKey(), JSON.stringify(list.filter((r) =&gt; r.id !== id))); } catch (e) { /* ignore */ } });
+    },
+    review() { return Promise.reject(new Error("การ recheck ต้องใช้งานผ่าน Apps Script ที่เข้าสู่ระบบแล้ว")); },
+  };
+  let backend = localBackend;
+  let records = [];
+  let filter = "all";
+  let reviewing = null;
+
+  const STATUS = {
+    pending: ["รอ recheck", "near"], approved: ["อนุมัติแล้ว", "ok"], rejected: ["ไม่อนุมัติ", "over"], draft: ["ฉบับร่าง", "near"],
+  };
   const TYPE_LABEL = { frac: "Fractionated", gap: "Treatment gap", brachy: "Brachytherapy" };
   const fmtTime = (t) =&gt; new Date(t).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+  const canReview = (r) =&gt; backend.shared &amp;&amp; user &amp;&amp; user.role === REVIEWER_ROLE &amp;&amp; r.status === "pending" &amp;&amp; r.calc.username !== user.username;
+  const mine = (r) =&gt; user &amp;&amp; r.calc.username === user.username;
+
+  function refreshRecords() {
+    return backend.list().then((list) =&gt; {
+      records = list.sort((a, b) =&gt; b.at - a.at);
+      renderHistory();
+    }).catch((err) =&gt; toast(err.message || String(err), 5000));
+  }
+
   function renderHistory() {
-    const list = loadHistory();
-    $("histCount").textContent = list.length;
+    const waiting = records.filter(canReview).length;
+    $("histCount").textContent = waiting ? `รอ recheck ${waiting}` : records.length;
+    $("histCount").classList.toggle("alert", waiting &gt; 0);
+    document.querySelectorAll("[data-filter]").forEach((b) =&gt; b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
+    $("histFoot").textContent = backend.shared
+      ? "บันทึกใน Google Sheet ของกลุ่มงาน · ผู้ recheck ต้องเป็นนักฟิสิกส์ (MP) คนละคนกับผู้คำนวณ"
+      : "โหมดออฟไลน์: เก็บเป็นฉบับร่างในเบราว์เซอร์นี้ การ recheck ต้องใช้ผ่าน Apps Script";
     const q = $("histSearch").value.trim().toLowerCase();
-    const shown = q ? list.filter((e) =&gt; [e.patient.hn, patientName(e.patient), e.doctor, e.summary, TYPE_LABEL[e.type]].join(" ").toLowerCase().includes(q)) : list;
-    $("histList").innerHTML = shown.length ? shown.map((e) =&gt; `
-      &lt;article class="hist-item" data-id="${e.id}"&gt;
-        &lt;div class="hist-top"&gt;&lt;span class="hist-type"&gt;${TYPE_LABEL[e.type] || e.type}&lt;/span&gt;&lt;span class="hist-time"&gt;${esc(fmtTime(e.at))}&lt;/span&gt;&lt;/div&gt;
-        &lt;div class="hist-who"&gt;${e.patient.hn ? "HN " + esc(e.patient.hn) + " · " : ""}${esc(patientName(e.patient) || "ไม่ระบุชื่อผู้ป่วย")}${e.doctor ? `&lt;br&gt;&lt;span&gt;แพทย์ ${esc(e.doctor)}&lt;/span&gt;` : ""}&lt;/div&gt;
-        &lt;div class="hist-val"&gt;TDF ${fmt(e.tdf, 1)} &lt;small&gt;/ อ้างอิง ${fmt(e.ref, 0)}&lt;/small&gt;&lt;/div&gt;
-        &lt;div class="hist-sum"&gt;${esc(e.summary)}&lt;/div&gt;
+    const shown = records.filter((r) =&gt;
+      (filter === "all" || (filter === "pending" &amp;&amp; r.status === "pending") || (filter === "mine" &amp;&amp; mine(r)) || (filter === "review" &amp;&amp; canReview(r))) &amp;&amp;
+      (!q || [r.patient.hn, patientName(r.patient), r.doctor, r.summary, TYPE_LABEL[r.type], r.calc.name].join(" ").toLowerCase().includes(q)));
+    $("histList").innerHTML = shown.length ? shown.map((r) =&gt; {
+      const [label, tone] = STATUS[r.status] || [r.status, "near"];
+      const rv = r.review;
+      return `&lt;article class="hist-item" data-id="${esc(r.id)}"&gt;
+        &lt;div class="hist-top"&gt;&lt;span class="hist-type"&gt;${TYPE_LABEL[r.type] || esc(r.type)}&lt;/span&gt;&lt;span class="chip ${tone}"&gt;${label}&lt;/span&gt;&lt;/div&gt;
+        &lt;div class="hist-who"&gt;HN ${esc(r.patient.hn || "—")} · ${esc(patientName(r.patient) || "ไม่ระบุชื่อ")}${r.doctor ? `&lt;br&gt;&lt;span&gt;แพทย์ ${esc(r.doctor)}&lt;/span&gt;` : ""}&lt;/div&gt;
+        &lt;div class="hist-val"&gt;TDF ${fmt(r.tdf, 1)} &lt;small&gt;/ อ้างอิง ${fmt(r.ref, 0)}&lt;/small&gt;&lt;/div&gt;
+        &lt;div class="hist-sum"&gt;${esc(r.summary)}&lt;/div&gt;
+        &lt;div class="hist-sum"&gt;คำนวณ: ${esc(r.calc.name || "—")} · ${esc(fmtTime(r.calc.at || r.at))}${rv ? `&lt;br&gt;${r.status === "approved" ? "Recheck" : "ตรวจ"}: ${esc(rv.name)} · ${esc(fmtTime(rv.at))}${rv.note ? ` · “${esc(rv.note)}”` : ""}` : ""}&lt;/div&gt;
         &lt;div class="hist-actions"&gt;
           &lt;button type="button" class="btn" data-act="open"&gt;เปิด&lt;/button&gt;
-          &lt;button type="button" class="btn" data-act="pdf"&gt;PDF&lt;/button&gt;
-          &lt;button type="button" class="btn ghost" data-act="del"&gt;ลบ&lt;/button&gt;
+          ${canReview(r) ? `&lt;button type="button" class="btn primary" data-act="review"&gt;Recheck&lt;/button&gt;` : ""}
+          ${r.status === "approved" || r.status === "draft" ? `&lt;button type="button" class="btn" data-act="pdf"&gt;PDF${r.status === "draft" ? " ฉบับร่าง" : ""}&lt;/button&gt;` : ""}
+          ${mine(r) &amp;&amp; r.status !== "approved" || r.status === "draft" ? `&lt;button type="button" class="btn ghost" data-act="withdraw"&gt;${r.status === "draft" ? "ลบ" : "ถอนคำขอ"}&lt;/button&gt;` : ""}
         &lt;/div&gt;
-      &lt;/article&gt;`).join("")
-      : `&lt;p class="hist-empty"&gt;${q ? "ไม่พบรายการที่ค้นหา" : "ยังไม่มีประวัติ กด “บันทึกลงประวัติ” หรือ “สร้างรายงาน PDF” เพื่อเก็บการคำนวณ"}&lt;/p&gt;`;
+      &lt;/article&gt;`;
+    }).join("") : `&lt;p class="hist-empty"&gt;${q || filter !== "all" ? "ไม่พบรายการ" : "ยังไม่มีรายการ กด “ส่ง recheck” เพื่อบันทึกการคำนวณและส่งให้นักฟิสิกส์อีกท่านตรวจ"}&lt;/p&gt;`;
   }
+
   function openHistory(open) {
     $("histDrawer").hidden = !open;
     $("histScrim").hidden = !open;
-    if (open) { renderHistory(); $("histSearch").focus(); } else $("histOpen").focus();
+    if (open) { renderHistory(); refreshRecords(); $("histSearch").focus(); } else $("histOpen").focus();
   }
+
   /** Puts a saved calculation back into the form and shows its tab. */
   function restore(e) {
     const s = e.state;
@@ -1495,43 +1758,98 @@ body.locked .wrap { display: none; }
     }
     selectTab(e.type);
   }
+
+  /** Sends the calculation on screen for recheck (HN, patient name and physician are required). */
+  function submitForRecheck() {
+    const snap = snapshot();
+    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อน");
+    const missing = [!snap.patient.hn &amp;&amp; "HN", !snap.patient.first &amp;&amp; "ชื่อ", !snap.patient.last &amp;&amp; "นามสกุล", !snap.doctor &amp;&amp; "แพทย์ผู้รักษา"].filter(Boolean);
+    if (missing.length) return toast("กรอก " + missing.join(", ") + " ก่อนส่ง recheck", 4000);
+    const sig = sigOf(snap);
+    const dup = records.find((r) =&gt; r.sig === sig &amp;&amp; (r.status === "pending" || r.status === "approved"));
+    if (dup) return toast(`รายการนี้ส่งไปแล้ว (${STATUS[dup.status][0]})`, 4000);
+    const rec = { type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig, state: snap.state,
+      patient: snap.patient, doctor: snap.doctor,
+      snap: { inputs: snap.inputs, results: snap.results, table: snap.table || null, notes: snap.notes || [], formulas: snap.formulas, charts: snap.charts || [] } };
+    const btn = $("histSave");
+    btn.disabled = true;
+    backend.submit(rec).then((saved) =&gt; {
+      toast(backend.shared ? "ส่ง recheck แล้ว รอนักฟิสิกส์อีกท่านตรวจและอนุมัติ" : "บันทึกเป็นฉบับร่างในเบราว์เซอร์นี้แล้ว", 4000);
+      records = [saved].concat(records.filter((r) =&gt; r.id !== saved.id &amp;&amp; r.sig !== saved.sig));
+      renderHistory();
+    }).catch((err) =&gt; toast(err.message || String(err), 5000)).finally(() =&gt; { btn.disabled = false; });
+  }
+
+  // ----- recheck by a second physicist -----
+  function startReview(r) {
+    reviewing = r;
+    restore(r);
+    $("reviewBar").hidden = false;
+    $("rvNote").value = "";
+    $("rvWho").textContent = `${r.calc.name} · ${fmtTime(r.calc.at || r.at)}`;
+    $("rvPatient").textContent = `HN ${r.patient.hn} · ${patientName(r.patient)} · แพทย์ ${r.doctor}`;
+    updateReview();
+    $("reviewBar").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  /** Compares the reviewer's own recalculation with the submitted value; approval needs a match. */
+  function updateReview() {
+    if (!reviewing) return;
+    const snap = snapshot();
+    const same = snap &amp;&amp; snap.type === reviewing.type &amp;&amp; sigOf(snap) === reviewing.sig;
+    const match = snap &amp;&amp; snap.type === reviewing.type &amp;&amp; Math.abs(snap.tdf - reviewing.tdf) &lt;= RECHECK_TOLERANCE;
+    $("rvSent").textContent = fmt(reviewing.tdf, 1);
+    $("rvMine").textContent = snap &amp;&amp; snap.type === reviewing.type ? fmt(snap.tdf, 1) : "—";
+    const el = $("rvMatch");
+    el.className = "chip " + (match &amp;&amp; same ? "ok" : "over");
+    el.textContent = !snap || snap.type !== reviewing.type ? "อยู่คนละแท็บกับรายการที่ตรวจ"
+      : !same ? "ข้อมูลบนหน้าจอถูกแก้ไข ต่างจากที่ส่งมา" : match ? "ตรงกัน" : "ค่าไม่ตรงกัน";
+    $("rvApprove").disabled = !(match &amp;&amp; same);
+  }
+  function endReview() { reviewing = null; $("reviewBar").hidden = true; }
+  function sendReview(decision) {
+    if (!reviewing) return;
+    const note = $("rvNote").value.trim();
+    if (decision === "rejected" &amp;&amp; !note) { toast("ระบุเหตุผลที่ไม่อนุมัติ"); return $("rvNote").focus(); }
+    const snap = snapshot();
+    const recheckTdf = snap &amp;&amp; snap.type === reviewing.type ? snap.tdf : NaN;
+    $("rvApprove").disabled = true; $("rvReject").disabled = true;
+    backend.review(reviewing.id, decision, note, recheckTdf).then((saved) =&gt; {
+      records = records.map((r) =&gt; (r.id === saved.id ? saved : r));
+      endReview();
+      renderHistory();
+      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
+    }).catch((err) =&gt; { toast(err.message || String(err), 5000); updateReview(); }).finally(() =&gt; { $("rvReject").disabled = false; });
+  }
+  $("rvApprove").addEventListener("click", () =&gt; sendReview("approved"));
+  $("rvReject").addEventListener("click", () =&gt; sendReview("rejected"));
+  $("rvCancel").addEventListener("click", endReview);
+  ["f-frac", "f-gap", "f-br", "refTdf", "pt-hn", "pt-prefix", "pt-first", "pt-last", "pt-doctor"].forEach((id) =&gt; $(id).addEventListener("input", () =&gt; setTimeout(updateReview)));
+  document.querySelector("nav.tabs").addEventListener("click", () =&gt; setTimeout(updateReview));
+
   $("histOpen").addEventListener("click", () =&gt; openHistory(true));
   $("histClose").addEventListener("click", () =&gt; openHistory(false));
   $("histScrim").addEventListener("click", () =&gt; openHistory(false));
   document.addEventListener("keydown", (e) =&gt; { if (e.key === "Escape" &amp;&amp; !$("histDrawer").hidden) openHistory(false); });
   $("histSearch").addEventListener("input", renderHistory);
-  $("histSave").addEventListener("click", () =&gt; {
-    const snap = snapshot();
-    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนบันทึก");
-    toast(saveHistory(snap) ? "บันทึกลงประวัติแล้ว" : "บันทึกไม่ได้: เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล");
-  });
+  document.querySelectorAll("[data-filter]").forEach((b) =&gt; b.addEventListener("click", () =&gt; { filter = b.dataset.filter; renderHistory(); }));
+  $("histSave").addEventListener("click", submitForRecheck);
   $("histList").addEventListener("click", (ev) =&gt; {
     const btn = ev.target.closest("button[data-act]");
     if (!btn) return;
-    const id = btn.closest(".hist-item").dataset.id;
-    const list = loadHistory(), e = list.find((x) =&gt; x.id === id);
-    if (!e) return renderHistory();
-    if (btn.dataset.act === "del") {
-      if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "ยืนยันลบ"; return; }
-      storeHistory(list.filter((x) =&gt; x.id !== id));
-      renderHistory();
-    } else {
-      restore(e);
-      openHistory(false);
-      if (btn.dataset.act === "pdf") makePdf(e);
-      else toast("เปิดการคำนวณจากประวัติแล้ว");
-    }
-  });
-  $("histClear").addEventListener("click", () =&gt; {
-    const b = $("histClear");
-    if (b.dataset.armed !== "1") {
-      b.dataset.armed = "1"; b.textContent = "กดอีกครั้งเพื่อลบทั้งหมด";
-      setTimeout(() =&gt; { b.dataset.armed = ""; b.textContent = "ลบทั้งหมด"; }, 4000);
+    const r = records.find((x) =&gt; x.id === btn.closest(".hist-item").dataset.id);
+    if (!r) return renderHistory();
+    const act = btn.dataset.act;
+    if (act === "withdraw") {
+      if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "ยืนยัน"; return; }
+      backend.withdraw(r.id).then(() =&gt; { records = records.filter((x) =&gt; x.id !== r.id); renderHistory(); })
+        .catch((err) =&gt; toast(err.message || String(err), 5000));
       return;
     }
-    b.dataset.armed = ""; b.textContent = "ลบทั้งหมด";
-    storeHistory([]);
-    renderHistory();
+    openHistory(false);
+    if (act === "review") return startReview(r);
+    restore(r);
+    if (act === "pdf") makePdf(r);
+    else toast("เปิดการคำนวณแล้ว");
   });
 
   // ---------- PDF report ----------
@@ -1551,40 +1869,50 @@ body.locked .wrap { display: none; }
   }
 
   const rows2 = (pairs) =&gt; pairs.map(([k, v]) =&gt; `&lt;tr&gt;&lt;td&gt;${esc(k)}&lt;/td&gt;&lt;td class="v"&gt;${esc(v)}&lt;/td&gt;&lt;/tr&gt;`).join("");
-  /** Fills the off-screen A4 report from a snapshot (the live charts are copied in with their styles inlined). */
-  function buildReport(snap, at) {
-    const p = snap.patient, pct = (snap.tdf / snap.ref) * 100;
+  /** Fills the off-screen A4 report from a record (the live charts are copied in with their styles inlined). */
+  function buildReport(rec) {
+    const p = rec.patient, s = rec.snap, pct = (rec.tdf / rec.ref) * 100, rv = rec.review;
     const status = pct &gt; 105 ? "เกินค่าอ้างอิง" : pct &gt;= 90 ? "ใกล้ค่าอ้างอิง" : "ต่ำกว่าค่าอ้างอิง";
-    const charts = (snap.charts || []).map(([id, title]) =&gt; {
+    const approved = rec.status === "approved" &amp;&amp; rv;
+    const charts = (s.charts || []).map(([id, title]) =&gt; {
       const svg = $(id) &amp;&amp; $(id).querySelector("svg");
       return svg ? `&lt;div class="rp-chart chart" data-src="${id}"&gt;&lt;h3&gt;${esc(title)}&lt;/h3&gt;&lt;/div&gt;` : "";
     }).filter(Boolean);
     const r = $("report");
     r.innerHTML = `
       &lt;div class="rp-block rp-head"&gt;
-        &lt;div&gt;&lt;h1&gt;&lt;span&gt;TDF&lt;/span&gt; Dose Calculation Report&lt;/h1&gt;&lt;div class="rp-sub"&gt;รายงานการคำนวณ Time-Dose-Fractionation · ${esc(snap.title)}&lt;/div&gt;&lt;/div&gt;
-        &lt;div class="rp-meta"&gt;วันที่ ${esc(fmtTime(at))}${snap.user ? `&lt;br&gt;ผู้คำนวณ ${esc(snap.user)}` : ""}&lt;/div&gt;
+        &lt;div class="rp-org"&gt;&lt;img src="${$("brandLogo").src}" alt=""&gt;
+          &lt;div&gt;&lt;h1&gt;&lt;span&gt;TDF&lt;/span&gt; Dose Calculation Report&lt;/h1&gt;&lt;div class="rp-sub"&gt;กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง&lt;/div&gt;
+          &lt;div class="rp-sub"&gt;${esc(rec.title)}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div class="rp-meta"&gt;เลขที่ ${esc(rec.id)}&lt;br&gt;พิมพ์ ${esc(fmtTime(Date.now()))}&lt;/div&gt;
       &lt;/div&gt;
+      ${approved ? "" : `&lt;div class="rp-block"&gt;&lt;div class="rp-draft"&gt;ฉบับร่าง · ยังไม่ผ่านการ recheck โดยนักฟิสิกส์การแพทย์ ห้ามใช้ประกอบการรักษา&lt;/div&gt;&lt;/div&gt;`}
       &lt;div class="rp-block"&gt;&lt;h2&gt;ผู้ป่วย&lt;/h2&gt;&lt;div class="rp-patient"&gt;
         &lt;div&gt;&lt;div class="rp-k"&gt;HN&lt;/div&gt;&lt;div class="rp-v"&gt;${esc(p.hn || "—")}&lt;/div&gt;&lt;/div&gt;
         &lt;div&gt;&lt;div class="rp-k"&gt;ชื่อ - นามสกุล&lt;/div&gt;&lt;div class="rp-v"&gt;${esc(patientName(p) || "—")}&lt;/div&gt;&lt;/div&gt;
-        &lt;div&gt;&lt;div class="rp-k"&gt;แพทย์ผู้รักษา&lt;/div&gt;&lt;div class="rp-v"&gt;${esc(snap.doctor || "—")}&lt;/div&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;div class="rp-k"&gt;แพทย์ผู้รักษา&lt;/div&gt;&lt;div class="rp-v"&gt;${esc(rec.doctor || "—")}&lt;/div&gt;&lt;/div&gt;
       &lt;/div&gt;&lt;/div&gt;
-      &lt;div class="rp-block"&gt;&lt;div class="rp-hero"&gt;&lt;div class="n"&gt;${fmt(snap.tdf, 1)}&lt;/div&gt;
-        &lt;div class="s"&gt;&lt;b&gt;TDF&lt;/b&gt; · ค่าอ้างอิง (tolerance) ${fmt(snap.ref, 0)} · ${fmt(pct, 0)}% (${status})&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
-      &lt;div class="rp-block"&gt;&lt;h2&gt;ข้อมูลที่ใช้คำนวณ&lt;/h2&gt;&lt;table class="kv"&gt;${rows2(snap.inputs)}&lt;/table&gt;&lt;/div&gt;
-      &lt;div class="rp-block"&gt;&lt;h2&gt;ผลการคำนวณ&lt;/h2&gt;&lt;table class="kv"&gt;${rows2(snap.results)}&lt;/table&gt;&lt;/div&gt;
-      ${snap.table ? `&lt;div class="rp-block"&gt;&lt;h2&gt;รายละเอียดแต่ละ course&lt;/h2&gt;&lt;table&gt;&lt;tr&gt;${snap.table.head.map((h) =&gt; `&lt;th&gt;${esc(h)}&lt;/th&gt;`).join("")}&lt;/tr&gt;
-        ${snap.table.rows.map((row) =&gt; `&lt;tr&gt;${row.map((c, i) =&gt; `&lt;td${i ? ' class="v"' : ""}&gt;${esc(c)}&lt;/td&gt;`).join("")}&lt;/tr&gt;`).join("")}&lt;/table&gt;&lt;/div&gt;` : ""}
+      &lt;div class="rp-block"&gt;&lt;div class="rp-hero"&gt;&lt;div class="n"&gt;${fmt(rec.tdf, 1)}&lt;/div&gt;
+        &lt;div class="s"&gt;&lt;b&gt;TDF&lt;/b&gt; · ค่าอ้างอิง (tolerance) ${fmt(rec.ref, 0)} · ${fmt(pct, 0)}% (${status})&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;div class="rp-block"&gt;&lt;h2&gt;ข้อมูลที่ใช้คำนวณ&lt;/h2&gt;&lt;table class="kv"&gt;${rows2(s.inputs)}&lt;/table&gt;&lt;/div&gt;
+      &lt;div class="rp-block"&gt;&lt;h2&gt;ผลการคำนวณ&lt;/h2&gt;&lt;table class="kv"&gt;${rows2(s.results)}&lt;/table&gt;&lt;/div&gt;
+      ${s.table ? `&lt;div class="rp-block"&gt;&lt;h2&gt;รายละเอียดแต่ละ course&lt;/h2&gt;&lt;table&gt;&lt;tr&gt;${s.table.head.map((h) =&gt; `&lt;th&gt;${esc(h)}&lt;/th&gt;`).join("")}&lt;/tr&gt;
+        ${s.table.rows.map((row) =&gt; `&lt;tr&gt;${row.map((c, i) =&gt; `&lt;td${i ? ' class="v"' : ""}&gt;${esc(c)}&lt;/td&gt;`).join("")}&lt;/tr&gt;`).join("")}&lt;/table&gt;&lt;/div&gt;` : ""}
       ${charts.length ? `&lt;div class="rp-block ${charts.length &gt; 1 ? "rp-two" : ""}"&gt;${charts.join("")}&lt;/div&gt;` : ""}
-      ${(snap.notes || []).map((n) =&gt; `&lt;div class="rp-block"&gt;&lt;div class="rp-note"&gt;${esc(n)}&lt;/div&gt;&lt;/div&gt;`).join("")}
-      &lt;div class="rp-block"&gt;&lt;h2&gt;สูตรที่ใช้&lt;/h2&gt;${snap.formulas.map((f) =&gt; `&lt;div class="rp-eq"&gt;${esc(f)}&lt;/div&gt;`).join("")}&lt;/div&gt;
-      &lt;div class="rp-block rp-sign"&gt;
-        &lt;div&gt;&lt;div class="line"&gt;ผู้คำนวณ${snap.user ? `&lt;br&gt;(${esc(snap.user)})` : "&lt;br&gt;(.................................................)"}&lt;/div&gt;&lt;/div&gt;
-        &lt;div&gt;&lt;div class="line"&gt;แพทย์ผู้รักษา&lt;br&gt;(${esc(snap.doctor || ".................................................")})&lt;/div&gt;&lt;/div&gt;
+      ${(s.notes || []).map((n) =&gt; `&lt;div class="rp-block"&gt;&lt;div class="rp-note"&gt;${esc(n)}&lt;/div&gt;&lt;/div&gt;`).join("")}
+      &lt;div class="rp-block"&gt;&lt;h2&gt;สูตรที่ใช้&lt;/h2&gt;${s.formulas.map((f) =&gt; `&lt;div class="rp-eq"&gt;${esc(f)}&lt;/div&gt;`).join("")}&lt;/div&gt;
+      &lt;div class="rp-block"&gt;&lt;h2&gt;การคำนวณและการ recheck&lt;/h2&gt;&lt;table class="kv"&gt;
+        &lt;tr&gt;&lt;td&gt;ผู้คำนวณ&lt;/td&gt;&lt;td class="v"&gt;${esc(rec.calc.name || "—")}${rec.calc.role ? ` (${esc(rec.calc.role)})` : ""} · ${esc(fmtTime(rec.calc.at || rec.at))}&lt;/td&gt;&lt;/tr&gt;
+        &lt;tr&gt;&lt;td&gt;ผู้ recheck (นักฟิสิกส์การแพทย์)&lt;/td&gt;&lt;td class="v"&gt;${approved ? `${esc(rv.name)} (${esc(rv.role)}) · ${esc(fmtTime(rv.at))}` : "ยังไม่ได้ recheck"}&lt;/td&gt;&lt;/tr&gt;
+        ${approved ? `&lt;tr&gt;&lt;td&gt;ผล recheck&lt;/td&gt;&lt;td class="v"&gt;คำนวณซ้ำได้ TDF ${fmt(rv.recheckTdf, 1)} ตรงกับค่าที่ส่ง ${fmt(rec.tdf, 1)} · อนุมัติ${rv.note ? ` · ${esc(rv.note)}` : ""}&lt;/td&gt;&lt;/tr&gt;` : ""}
+      &lt;/table&gt;&lt;/div&gt;
+      &lt;div class="rp-block rp-sign three"&gt;
+        &lt;div&gt;&lt;div class="line"&gt;ผู้คำนวณ&lt;br&gt;(${esc(rec.calc.name || "................................................")})&lt;/div&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;div class="line"&gt;ผู้ recheck&lt;br&gt;(${esc(approved ? rv.name : "................................................")})&lt;/div&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;div class="line"&gt;แพทย์ผู้รักษา&lt;br&gt;(${esc(rec.doctor || "................................................")})&lt;/div&gt;&lt;/div&gt;
       &lt;/div&gt;
       &lt;div class="rp-block rp-foot"&gt;Orton CG, Ellis F. Br J Radiol 1973;46:529–537 · Orton CG. Br J Radiol 1974;47:603–607 · Ellis F. Clin Radiol 1969;20:1–7.
-        ผลการคำนวณใช้ประกอบการพิจารณาของแพทย์และนักฟิสิกส์การแพทย์ ไม่ใช้แทนการวางแผนการรักษา · สร้างโดย TDF Dose Calculator&lt;/div&gt;`;
+        ผลการคำนวณใช้ประกอบการพิจารณาของแพทย์และนักฟิสิกส์การแพทย์ ไม่ใช้แทนการวางแผนการรักษา · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง&lt;/div&gt;`;
     // copy each live chart, then freeze the report's light colours into inline styles (html2canvas draws SVG as a standalone image)
     r.querySelectorAll(".rp-chart").forEach((box) =&gt; {
       const svg = $(box.dataset.src).querySelector("svg").cloneNode(true);
@@ -1610,19 +1938,33 @@ body.locked .wrap { display: none; }
     return r;
   }
 
-  const fileName = (snap, at) =&gt; {
-    const d = new Date(at), pad = (n) =&gt; String(n).padStart(2, "0");
+  const fileName = (rec) =&gt; {
+    const d = new Date(rec.at), pad = (n) =&gt; String(n).padStart(2, "0");
     const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-    return `TDF_${(snap.patient.hn || "report").replace(/[^\w.-]+/g, "_")}_${snap.type}_${stamp}.pdf`;
+    return `TDF_${(rec.patient.hn || "report").replace(/[^\w.-]+/g, "_")}_${rec.type}_${stamp}${rec.status === "approved" ? "" : "_DRAFT"}.pdf`;
   };
 
-  /** Builds the report, saves the calculation to history, and downloads an A4 PDF (falls back to the print dialog). */
-  async function makePdf() {
-    const snap = snapshot();
-    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนสร้างรายงาน");
-    const at = Date.now();
-    saveHistory(snap);
-    const report = buildReport(snap, at);
+  /** Downloads the A4 report of a record (falls back to the print dialog). Shared records need an approved recheck first. */
+  async function makePdf(rec) {
+    if (!rec) {
+      const snap = snapshot();
+      if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนสร้างรายงาน");
+      const sig = sigOf(snap);
+      rec = records.find((r) =&gt; r.sig === sig &amp;&amp; r.status === "approved") || (backend.shared ? null : records.find((r) =&gt; r.sig === sig));
+      if (!rec &amp;&amp; backend.shared) {
+        const sent = records.find((r) =&gt; r.sig === sig);
+        return toast(sent ? `รายการนี้ยัง${STATUS[sent.status][0]} สร้างรายงานได้เมื่อนักฟิสิกส์อีกท่าน recheck และอนุมัติแล้ว`
+          : "ต้องกด “ส่ง recheck” และได้รับการอนุมัติจากนักฟิสิกส์อีกท่านก่อน จึงสร้างรายงานได้", 5000);
+      }
+      if (!rec) {
+        try { rec = await localBackend.submit({ type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig, state: snap.state,
+          patient: snap.patient, doctor: snap.doctor, snap: { inputs: snap.inputs, results: snap.results, table: snap.table || null, notes: snap.notes || [], formulas: snap.formulas, charts: snap.charts || [] } }); }
+        catch (err) { return toast(err.message, 5000); }
+        refreshRecords();
+      }
+    }
+    if (backend.shared &amp;&amp; rec.status !== "approved") return toast("สร้างรายงานได้เมื่อ recheck และอนุมัติแล้ว", 4000);
+    const report = buildReport(rec);
     const btn = $("pdfBtn");
     btn.disabled = true; btn.textContent = "กำลังสร้าง PDF…";
     try {
@@ -1653,9 +1995,9 @@ body.locked .wrap { display: none; }
         if (i) pdf.addPage();
         pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, (part.height / part.width) * 210);
       });
-      pdf.setProperties({ title: "TDF Dose Calculation Report", subject: snap.title, creator: "TDF Dose Calculator" });
-      pdf.save(fileName(snap, at));
-      toast("สร้างรายงาน PDF แล้ว และบันทึกลงประวัติ");
+      pdf.setProperties({ title: "TDF Dose Calculation Report", subject: rec.title, creator: "TDF Dose Calculator · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง" });
+      pdf.save(fileName(rec));
+      toast(rec.status === "approved" ? "สร้างรายงาน PDF แล้ว" : "สร้างรายงานฉบับร่างแล้ว");
     } catch (err) {
       console.error(err);
       toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
@@ -1666,19 +2008,21 @@ body.locked .wrap { display: none; }
   }
   $("pdfBtn").addEventListener("click", () =&gt; makePdf());
 
-  // The Apps Script build signs people in; history is kept per user.
+  // The Apps Script build signs people in and supplies the shared backend.
   window.TDFApp = {
     setUser(u) {
-      user = u &amp;&amp; u.username ? { username: String(u.username), name: String(u.name || u.username) } : null;
-      if (!user) { openHistory(false); setPatient({}, ""); }
+      user = u &amp;&amp; u.username ? { username: String(u.username), name: String(u.name || u.username), role: String(u.role || "") } : null;
+      if (!user) { openHistory(false); endReview(); setPatient({}, ""); records = []; }
       renderHistory();
+      if (user) refreshRecords();
     },
+    setBackend(b) { backend = b || localBackend; records = []; renderHistory(); },
   };
 
   renderCourses();
   syncBrachyUI();
   buildTable();
-  renderHistory();
+  refreshRecords();
   let start = "frac";
   const hash = (location.hash || "").slice(1);
   if (tabs.some(([k]) =&gt; k === hash)) start = hash;
@@ -1705,6 +2049,16 @@ body.locked .wrap { display: none; }
     r[fn].apply(r, args);
   }
 
+  // Shared calculation records and the physicist recheck, stored by Code.gs in a Google Sheet
+  function ask(fn, args) { return new Promise(function (ok, fail) { call(fn, [token].concat(args || []), ok, function (msg) { fail(new Error(msg)); }); }); }
+  var server = {
+    shared: true,
+    list: function () { return ask("tdfList"); },
+    submit: function (rec) { return ask("tdfSubmit", [rec]); },
+    review: function (id, decision, note, recheckTdf) { return ask("tdfReview", [id, decision, note, isFinite(recheckTdf) ? recheckTdf : null]); },
+    withdraw: function (id) { return ask("tdfWithdraw", [id]); },
+  };
+
   function showForm(message, kind) {
     document.body.classList.add("locked");
     $("auth").hidden = false;
@@ -1723,7 +2077,7 @@ body.locked .wrap { display: none; }
     $("whoRole").textContent = res.user.role;
     $("whoRole").hidden = !res.user.role;
     $("authPass").value = "";
-    if (window.TDFApp) TDFApp.setUser(res.user);
+    if (window.TDFApp) { TDFApp.setBackend(server); TDFApp.setUser(res.user); }
     $("auth").hidden = true;
     document.body.classList.remove("locked");
     window.dispatchEvent(new Event("resize")); // draw charts that were laid out while hidden
@@ -1773,7 +2127,7 @@ body.locked .wrap { display: none; }
 &lt;/body&gt;
 &lt;/html&gt;
 </textarea>
-    <div class="meta">1,629 บรรทัด · 95.7 KB</div>
+    <div class="meta">1,815 บรรทัด · 119.6 KB</div>
   </section>
 </main>
 <script>
