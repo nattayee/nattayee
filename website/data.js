@@ -7,7 +7,7 @@
  * โครงสร้าง:
  *   nav   — เมนูด้านบน (เรียงตามลำดับ) แต่ละเมนูอ้างถึง key ใน pages; ถ้ามี children จะเป็น dropdown
  *   pages — เนื้อหาแต่ละหน้า: apps = การ์ดเว็บแอป (ปุ่มเปิด), groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
- *           (widgets ที่มี: "calculators", "constraints", "schedule", "contacts", "announcements", "quicklinks")
+ *           (widgets ที่มี: "calculators", "constraints", "announcements", "quicklinks", "subpages")
  */
 /*
  * เว็บแอป Apps Script อื่นที่ใช้บัญชีเว็บนี้ (sso: true = ลิงก์แนบบัตรผ่าน ssoTicket ใน Code.gs แอปจึงเข้าสู่ระบบให้อัตโนมัติ)
@@ -135,7 +135,7 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["quicklinks", "contacts"],
+      widgets: ["quicklinks"],
       sidebar: "team",   // แถบขวา: สถานะทีม (status.js)
     },
 
@@ -299,7 +299,7 @@ window.SITE = {
           { label: "Journal club", type: "Doc", url: "#" },
         ] },
       ],
-      widgets: ["calculators", "schedule"],
+      widgets: ["calculators"],
     },
 
     /* ---------------- MP ---------------- */
@@ -416,24 +416,5 @@ window.SITE = {
     { region: "Pelvis", organ: "Rectum", constraint: "V50 < 50%, V60 < 35%, V65 < 25%, V70 < 20%, V75 < 15%", endpoint: "Late rectal toxicity ≥ G2" },
     { region: "Pelvis", organ: "Bladder", constraint: "V65 ≤ 50%, V70 ≤ 35%, V75 ≤ 25%, V80 ≤ 15%", endpoint: "Late toxicity ≥ G3" },
     { region: "Pelvis", organ: "Femoral heads", constraint: "V50 < 5%", endpoint: "Necrosis (RTOG)" },
-  ],
-
-  schedule: {
-    // ใส่ลิงก์ embed ของ Google Calendar (Settings → Integrate calendar → Embed code → src)
-    calendarEmbedUrl: "",
-    items: [
-      { day: "จันทร์", time: "08:00–09:00", title: "Chart round / Peer review" },
-      { day: "อังคาร", time: "13:00–16:00", title: "Brachytherapy" },
-      { day: "พุธ", time: "08:00–09:00", title: "Tumor board (Head & Neck)" },
-      { day: "พฤหัสบดี", time: "13:00–14:00", title: "Physics–Physician plan review" },
-      { day: "ศุกร์", time: "08:00–09:00", title: "Journal club / Topic review" },
-    ],
-  },
-
-  contacts: [
-    { role: "แพทย์รังสีรักษา (RO)", name: "—", phone: "ต่อ —", email: "" },
-    { role: "นักฟิสิกส์การแพทย์ (MP)", name: "—", phone: "ต่อ —", email: "" },
-    { role: "นักรังสีการแพทย์ (RTT)", name: "—", phone: "ต่อ —", email: "" },
-    { role: "พยาบาลรังสีรักษา (Nurse)", name: "—", phone: "ต่อ —", email: "" },
   ],
 };

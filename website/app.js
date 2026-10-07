@@ -173,29 +173,6 @@
         '<div class="grid wide">' + bed + conv + "</div>" +
         '<div class="note">ผลการคำนวณใช้เพื่อประกอบการตัดสินใจเท่านั้น โปรดตรวจสอบซ้ำก่อนนำไปใช้ทางคลินิก</div>');
     },
-
-    schedule: function () {
-      var rows = S.schedule.items.map(function (i) {
-        return "<tr><td>" + esc(i.day) + "</td><td>" + esc(i.time) + "</td><td>" + esc(i.title) + "</td></tr>";
-      }).join("");
-      var cal = S.schedule.calendarEmbedUrl
-        ? '<iframe class="calendar-frame card" src="' + esc(S.schedule.calendarEmbedUrl) + '" title="Calendar"></iframe>'
-        : "";
-      return section("ตารางงานประจำสัปดาห์", "กิจกรรมวิชาการและงานประจำของหน่วย",
-        '<div class="table-wrap card flush"><table><thead><tr><th>วัน</th><th>เวลา</th><th>กิจกรรม</th></tr></thead><tbody>' +
-        rows + "</tbody></table></div>" + cal);
-    },
-
-    contacts: function () {
-      var cards = S.contacts.map(function (c) {
-        return '<div class="card contact-card"><h3>' + esc(c.role) + "</h3>" +
-          "<p>👤 " + esc(c.name) + "</p>" +
-          (c.phone ? "<p>📞 " + esc(c.phone) + "</p>" : "") +
-          (c.email ? '<p>✉️ <a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a></p>" : "") +
-          "</div>";
-      }).join("");
-      return section("ติดต่อ", "ผู้รับผิดชอบและช่องทางติดต่อภายในหน่วย", '<div class="grid">' + cards + "</div>");
-    },
   };
 
   /* ---------------- Page rendering ---------------- */
