@@ -494,13 +494,16 @@ ACTIONS.quickSave = function (req) {
   return { items: items, message: 'บันทึกข้อความด่วนแล้ว' };
 };
 
-/* ---------------- เมนูย่อยที่ผู้ดูแลระบบเพิ่มเอง (หน้า "จัดการเมนู") ----------------
- * แต่ละแถวในชีต Menus คือเมนูย่อย 1 รายการใต้หัวข้อหลัก (เช่น MP, RTT) พร้อมเนื้อหาของหน้านั้น
- * (คำอธิบาย การ์ดแอป และรายการลิงก์) หรือแถวที่ซ่อนเมนูย่อยเดิมของเว็บ (json = {"hidden":true})
+/* ---------------- เมนูที่ผู้ดูแลระบบจัดการเองจากหน้าเว็บ (หน้า "จัดการเมนู") ----------------
+ * ชีต Menus มี 3 แบบ:
+ *   เมนูย่อยที่เพิ่มเอง  id = "<หัวข้อ>/m<8 หลัก>", parent = หัวข้อ, json = ชื่อ คำอธิบาย การ์ดแอป และลิงก์
+ *   ปรับเมนูเดิมของเว็บ  id = หน้าเดิม เช่น "mp" หรือ "mp/psqa", parent ว่าง, json = {title: ชื่อใหม่, hidden: ซ่อน}
+ *   ลำดับเมนู           id = "order:<หัวข้อ>" (หรือ "order:_top" สำหรับหัวข้อหลัก), json = {order: [หน้า, …]}
  */
 var MENU_MAX_APPS = 5;
 var MENU_MAX_LINKS = 40;
 var MENU_KEY_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+var MENU_PAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}(\/[a-z0-9][a-z0-9-]{0,40})?$/;
 var APPS_SCRIPT_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/;
 
 ACTIONS.menuList = function (req) {
@@ -512,12 +515,13 @@ ACTIONS.menuSave = function (req) {
   var admin = requireAdmin_(req.token);
   var m = cleanMenu_(req.item || {});
   var sh = sheet_('Menus', MENU_HEADERS), rows = menuRows_();
-  var old = m.id ? rows.filter(function (r) { return r.item.id === m.id && !r.item.builtin; })[0] : null;
+  var custom = rows.filter(function (r) { return r.item.kind === 'custom'; });
+  var old = m.id ? custom.filter(function (r) { return r.item.id === m.id; })[0] : null;
   if (m.id && !old) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
-  var siblings = rows.filter(function (r) { return r.item.parent === m.parent && !r.item.builtin; }).length;
-  if (!old && siblings >= 30) throw new Error('หัวข้อนี้มีเมนูย่อยครบ 30 รายการแล้ว');
+  if (!old && custom.filter(function (r) { return r.item.parent === m.parent; }).length >= 30) throw new Error('หัวข้อนี้มีเมนูย่อยที่เพิ่มเองครบ 30 รายการแล้ว');
   if (!old) m.id = m.parent + '/m' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
-  var order = old && old.item.parent === m.parent ? old.item.order : nextOrder_(rows, m.parent);
+  var order = old && old.item.parent === m.parent ? old.item.order
+    : custom.reduce(function (n, r) { return r.item.parent === m.parent ? Math.max(n, r.item.order) : n; }, 0) + 1;
   var json = JSON.stringify({ title: m.title, lead: m.lead, icon: m.icon, apps: m.apps, links: m.links });
   var values = [m.id, m.parent, order, json, new Date(), admin.username];
   if (old) sh.getRange(old.row, 1, 1, values.length).setValues([values]);
@@ -527,42 +531,44 @@ ACTIONS.menuSave = function (req) {
 
 ACTIONS.menuDelete = function (req) {
   requireAdmin_(req.token);
-  var r = menuRows_().filter(function (x) { return x.item.id === String(req.id) && !x.item.builtin; })[0];
+  var r = menuRows_().filter(function (x) { return x.item.kind === 'custom' && x.item.id === String(req.id); })[0];
   if (!r) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
   sheet_('Menus', MENU_HEADERS).deleteRow(r.row);
   return { message: 'ลบเมนู "' + r.item.title + '" แล้ว' };
 };
 
-/** Move a custom menu one place up (-1) or down (+1) among the custom menus of its section. */
-ACTIONS.menuMove = function (req) {
-  var admin = requireAdmin_(req.token);
-  var rows = menuRows_(), me = rows.filter(function (x) { return x.item.id === String(req.id) && !x.item.builtin; })[0];
-  if (!me) throw new Error('ไม่พบเมนูนี้');
-  var sibs = rows.filter(function (x) { return x.item.parent === me.item.parent && !x.item.builtin; })
-    .sort(function (a, b) { return a.item.order - b.item.order; });
-  var i = sibs.indexOf(me), j = i + (Number(req.dir) < 0 ? -1 : 1);
-  if (j < 0 || j >= sibs.length) return { moved: false };
-  var sh = sheet_('Menus', MENU_HEADERS), other = sibs[j];
-  // renumber the section so equal or missing orders cannot get stuck
-  sibs.splice(i, 1); sibs.splice(j, 0, me);
-  sibs.forEach(function (x, k) { if (x.item.order !== k + 1) sh.getRange(x.row, 3).setValue(k + 1); });
-  sh.getRange(me.row, 5, 1, 2).setValues([[new Date(), admin.username]]);
-  return { moved: true, swappedWith: other.item.id };
-};
-
-/** Hide (or show again) one of the site's own sub-menus, e.g. "mp/psqa". */
-ACTIONS.menuHide = function (req) {
+/** Rename (title; '' = original name) or hide one of the site's own menus, e.g. "mp" or "mp/psqa". */
+ACTIONS.menuBuiltin = function (req) {
   var admin = requireAdmin_(req.token);
   var id = String(req.id || '');
-  if (!/^[a-z0-9][a-z0-9-]{0,40}\/[a-z0-9][a-z0-9-]{0,40}$/.test(id)) throw new Error('เมนูไม่ถูกต้อง');
+  if (!MENU_PAGE_RE.test(id) || id === 'home' || id === 'chat' || /\/m[0-9a-f]{8}$/.test(id)) throw new Error('เมนูไม่ถูกต้อง');
+  var title = String(req.title == null ? '' : req.title).replace(/\s+/g, ' ').trim().slice(0, 60);
+  var hidden = !!req.hidden && id.indexOf('/') > 0;   // a main heading cannot be hidden
   var sh = sheet_('Menus', MENU_HEADERS);
-  var r = menuRows_().filter(function (x) { return x.item.id === id && x.item.builtin; })[0];
-  if (req.hidden) {
-    if (!r) sh.appendRow([id, '', 0, JSON.stringify({ hidden: true }), new Date(), admin.username]);
-  } else if (r) {
-    sh.deleteRow(r.row);
+  var r = menuRows_().filter(function (x) { return x.item.kind === 'builtin' && x.item.id === id; })[0];
+  if (!title && !hidden) {
+    if (r) sh.deleteRow(r.row);
+  } else {
+    var values = [id, '', 0, JSON.stringify({ title: title, hidden: hidden }), new Date(), admin.username];
+    if (r) sh.getRange(r.row, 1, 1, values.length).setValues([values]);
+    else sh.appendRow(values);
   }
-  return { message: req.hidden ? 'ซ่อนเมนูแล้ว' : 'แสดงเมนูแล้ว' };
+  return { message: hidden ? 'ซ่อนเมนูแล้ว' : title ? 'เปลี่ยนชื่อเป็น "' + title + '" แล้ว' : 'ใช้ชื่อเดิมและแสดงเมนูแล้ว' };
+};
+
+/** The order of the menus under one heading (parent), or of the main headings (parent "_top"). */
+ACTIONS.menuOrder = function (req) {
+  var admin = requireAdmin_(req.token);
+  var parent = String(req.parent || '');
+  if (parent !== '_top' && (!MENU_KEY_RE.test(parent) || parent === 'home' || parent === 'chat')) throw new Error('หัวข้อไม่ถูกต้อง');
+  var order = Array.isArray(req.order) ? req.order.map(String) : [];
+  if (order.length > 80 || order.some(function (k) { return !MENU_PAGE_RE.test(k); })) throw new Error('ลำดับเมนูไม่ถูกต้อง');
+  var sh = sheet_('Menus', MENU_HEADERS), id = 'order:' + parent;
+  var r = menuRows_().filter(function (x) { return x.item.id === id; })[0];
+  var values = [id, '', 0, JSON.stringify({ order: order }), new Date(), admin.username];
+  if (r) sh.getRange(r.row, 1, 1, values.length).setValues([values]);
+  else sh.appendRow(values);
+  return { message: 'บันทึกลำดับแล้ว' };
 };
 
 function menuRows_() {
@@ -572,16 +578,13 @@ function menuRows_() {
 }
 
 function menuItem_(r) {
-  var j = {};
+  var j = {}, id = String(r[0]);
   try { j = JSON.parse(r[3] || '{}') || {}; } catch (e) { j = {}; }
-  if (j.hidden) return { id: String(r[0]), builtin: true, hidden: true };
-  return { id: String(r[0]), parent: String(r[1]), order: Number(r[2]) || 0, title: j.title || '', lead: j.lead || '',
+  if (id.indexOf('order:') === 0) return { id: id, kind: 'order', parent: id.slice(6), order: j.order || [] };
+  if (!r[1]) return { id: id, kind: 'builtin', builtin: true, title: j.title || '', hidden: !!j.hidden };
+  return { id: id, kind: 'custom', parent: String(r[1]), order: Number(r[2]) || 0, title: j.title || '', lead: j.lead || '',
     icon: j.icon || '', apps: j.apps || [], links: j.links || [],
     updatedAt: r[4] ? new Date(r[4]).getTime() : null, updatedBy: String(r[5] || '') };
-}
-
-function nextOrder_(rows, parent) {
-  return rows.reduce(function (n, r) { return r.item.parent === parent && !r.item.builtin ? Math.max(n, r.item.order) : n; }, 0) + 1;
 }
 
 /** A menu as sent by the editor, checked and trimmed. Throws a message the admin can act on. */
