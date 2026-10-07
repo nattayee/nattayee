@@ -80,9 +80,11 @@ class Sheet {
   }
 }
 
-export function createGas() {
+export function createGas({ bound = true } = {}) {
   const sheets = new Map();
   const ss = {
+    getSheets: () => [...sheets.values()],
+    deleteSheet: (s) => sheets.delete(s.name),
     getId: () => 'SHEET-ID',
     getUrl: () => 'https://docs.google.com/spreadsheets/d/SHEET-ID',
     getSheetByName: (n) => sheets.get(n) || null,
@@ -95,7 +97,17 @@ export function createGas() {
   const props = new Map();
   const context = {
     console,
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: () => ss, flush() {} },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => (bound ? ss : null),
+      openById: () => ss,
+      openByUrl: () => ss,
+      create: () => {
+        context.createdSheets = (context.createdSheets || 0) + 1;
+        ss.insertSheet('แผ่น1');
+        return ss;
+      },
+      flush() {},
+    },
     PropertiesService: {
       getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }),
     },

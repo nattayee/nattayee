@@ -26,6 +26,16 @@ test('setup สร้างแผ่นงานและใส่วันห�
   assert.deepEqual(state.settings.workdays, [1, 2, 3, 4, 5]);
 });
 
+test('โปรเจกต์ Apps Script แบบแยก (ไม่ได้เปิดจาก Sheet): setup สร้าง Sheet ใหม่ครั้งเดียว', () => {
+  const { call, sheets, context } = createGas({ bound: false });
+  assert.throws(() => call('getState'), /ยังไม่ได้ตั้งค่าระบบ/);
+  assert.match(call('setup'), /^https:\/\/docs\.google\.com\/spreadsheets/);
+  assert.deepEqual([...sheets.keys()].sort(), ['Appointments', 'Holidays', 'Settings']);
+  call('setup'); // รันซ้ำต้องใช้ Sheet เดิม ไม่สร้างใหม่
+  assert.equal(context.createdSheets, 1);
+  assert.equal(call('getState').appointments.length, 0);
+});
+
 test('เพิ่ม แก้ไข ลบ นัดผู้ป่วยใน Sheet', () => {
   const { call, sheets } = createGas();
   call('setup');

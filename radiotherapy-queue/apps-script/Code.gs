@@ -7,6 +7,10 @@
  * ค่าคงที่และตรรกะการคำนวณวันฉาย (ROOMS, TECHNIQUES, defaultSettings, …) อยู่ในไฟล์ Schedule.gs
  */
 
+// (ไม่บังคับ) ถ้าต้องการใช้ Google Sheet ที่มีอยู่แล้ว ให้วางลิงก์ของ Sheet ไว้ในเครื่องหมายคำพูดก่อนรัน setup
+// ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
+var SPREADSHEET_URL = '';
+
 var SHEET_APPTS_ = 'Appointments';
 var SHEET_HOLIDAYS_ = 'Holidays';
 var SHEET_SETTINGS_ = 'Settings';
@@ -27,15 +31,36 @@ function doGet() {
 }
 
 /**
- * รันครั้งเดียวจากหน้าแก้ไขสคริปต์ (เลือกฟังก์ชัน setup แล้วกด Run)
- * เพื่อผูกสคริปต์กับ Google Sheet นี้และสร้างแผ่นงานที่จำเป็น
+ * รันครั้งเดียวจากหน้าแก้ไขสคริปต์ (เลือกฟังก์ชัน setup แล้วกด เรียกใช้)
+ * เลือก Google Sheet ที่ใช้เก็บข้อมูลตามลำดับ: ลิงก์ใน SPREADSHEET_URL › Sheet ที่ตั้งไว้แล้ว
+ * › Sheet ที่เปิด Apps Script นี้ (ส่วนขยาย › Apps Script) › ถ้าไม่มีเลยจะสร้าง Sheet ใหม่
+ * แล้วสร้างแผ่นงานที่จำเป็น ลิงก์ของ Sheet จะแสดงในบันทึกการดำเนินการ
  */
 function setup() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('กรุณาเปิด Apps Script จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet ที่จะใช้เก็บข้อมูล');
-  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
+  var props = PropertiesService.getScriptProperties();
+  var ss = null;
+  var created = false;
+  if (SPREADSHEET_URL) {
+    ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  } else if (props.getProperty('SPREADSHEET_ID')) {
+    try {
+      ss = SpreadsheetApp.openById(props.getProperty('SPREADSHEET_ID'));
+    } catch (e) {
+      ss = null; // Sheet เดิมถูกลบหรือเข้าไม่ได้ — สร้างใหม่
+    }
+  }
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    ss = SpreadsheetApp.create('ฐานข้อมูลนัดคิวฉายรังสี');
+    created = true;
+  }
+  props.setProperty('SPREADSHEET_ID', ss.getId());
+  var blank = created ? ss.getSheets()[0] : null;
   ensureSheets_();
-  Logger.log('ตั้งค่าเรียบร้อย: ' + ss.getUrl());
+  if (blank) ss.deleteSheet(blank); // แผ่นงานว่างที่ติดมากับ Sheet ใหม่
+  Logger.log((created ? 'สร้าง Google Sheet ใหม่สำหรับเก็บข้อมูลแล้ว: ' : 'ใช้ Google Sheet นี้เก็บข้อมูล: ') + ss.getUrl());
+  Logger.log('ขั้นต่อไป: แชร์ Sheet นี้ (ผู้แก้ไข) ให้เจ้าหน้าที่ที่ใช้ระบบ แล้วกด การทำให้ใช้งานได้ › การทำให้ใช้งานได้รายการใหม่ › เว็บแอป');
+  return ss.getUrl();
 }
 
 // ================= API ที่หน้าเว็บเรียก (google.script.run) =================
@@ -129,7 +154,7 @@ function spreadsheet_() {
   if (id) return SpreadsheetApp.openById(id);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (ss) return ss;
-  throw new Error('ยังไม่ได้ตั้งค่าระบบ: เปิดหน้าแก้ไขสคริปต์แล้วรันฟังก์ชัน setup หนึ่งครั้ง');
+  throw new Error('ยังไม่ได้ตั้งค่าระบบ: ผู้ดูแลต้องเปิดหน้าแก้ไขสคริปต์ เลือกฟังก์ชัน setup แล้วกด เรียกใช้ หนึ่งครั้ง');
 }
 
 function ensureSheets_() {
