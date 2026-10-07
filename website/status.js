@@ -17,9 +17,12 @@
       { id: "meeting", label: "ประชุม", icon: "🗓️", color: "orange" },
       { id: "leave", label: "ลา", icon: "🏖️", color: "red" }
     ],
+    // type "machine" = เครื่อง, "room" = ห้อง (listed apart in the dialog and on the settings page)
     locations: [
-      { id: "linac-1", label: "Linac 1" }, { id: "linac-2", label: "Linac 2" },
-      { id: "ct-sim", label: "CT Simulator" }, { id: "hdr", label: "HDR Brachytherapy" }
+      { id: "linac-1", label: "Linac 1", type: "machine" }, { id: "linac-2", label: "Linac 2", type: "machine" },
+      { id: "ct-sim", label: "CT Simulator", type: "machine" }, { id: "hdr", label: "HDR Brachytherapy", type: "machine" },
+      { id: "opd", label: "ห้องตรวจ OPD", type: "room" }, { id: "tps", label: "ห้องวางแผนการรักษา", type: "room" },
+      { id: "meeting-room", label: "ห้องประชุม", type: "room" }, { id: "office", label: "สำนักงาน", type: "room" }
     ]
   };
 
@@ -43,6 +46,7 @@
   }
   function statusOf(id) { return data.config.statuses.filter(function (x) { return x.id === id; })[0] || null; }
   function locationOf(id) { return data.config.locations.filter(function (x) { return x.id === id; })[0] || null; }
+  function isRoom(l) { return l.type === "room"; }   // older settings have no type: machines
   function mine() {
     var u = me();
     return u ? data.people.filter(function (p) { return p.username === u.username; })[0] || null : null;
@@ -147,10 +151,15 @@
             }).join("") +
             '<button type="button" class="st-choice st-gray' + (!pick.status ? " on" : "") + '" data-s="" aria-pressed="' + !pick.status + '">ไม่ระบุ</button>' +
           "</div></div>" +
-          '<label class="st-field"><span>สถานที่ / เครื่อง</span><select id="stLoc"><option value="">— ไม่ระบุ —</option>' +
-            data.config.locations.map(function (l) {
-              return '<option value="' + esc(l.id) + '"' + (pick.location === l.id ? " selected" : "") + ">" + esc(l.label) + "</option>";
-            }).join("") + "</select></label>" +
+          '<label class="st-field"><span>สถานที่ (เครื่อง / ห้อง)' +
+            (me().isAdmin ? ' <a class="st-edit-list" href="#/status-settings" data-close>⚙️ แก้ไขรายการ</a>' : "") +
+            '</span><select id="stLoc"><option value="">— ไม่ระบุ —</option>' +
+            [["เครื่อง", data.config.locations.filter(function (l) { return !isRoom(l); })], ["ห้อง", data.config.locations.filter(isRoom)]]
+              .filter(function (g) { return g[1].length; }).map(function (g) {
+                return '<optgroup label="' + g[0] + '">' + g[1].map(function (l) {
+                  return '<option value="' + esc(l.id) + '"' + (pick.location === l.id ? " selected" : "") + ">" + esc(l.label) + "</option>";
+                }).join("") + "</optgroup>";
+              }).join("") + "</select></label>" +
           '<label class="st-field"><span>ข้อความสั้น ๆ (ไม่บังคับ)</span><input id="stNote" maxlength="80" placeholder="เช่น กลับ 13:00, ติดต่อทางไลน์" value="' + esc(pick.note != null ? pick.note : cur.note || "") + '"></label>' +
           '<p class="auth-error" id="stErr" role="alert" hidden></p>' +
           '<div class="st-buttons"><button type="button" class="auth-submit" id="stSave">บันทึก</button>' +
@@ -166,6 +175,8 @@
         });
       });
       wrap.querySelector("#stCancel").addEventListener("click", close);
+      var edit = wrap.querySelector("[data-close]");
+      if (edit) edit.addEventListener("click", close);
       wrap.querySelector("#stClear").addEventListener("click", function () { save({ status: "", location: "", note: "" }); });
       wrap.querySelector("#stSave").addEventListener("click", function () {
         save({ status: pick.status, location: wrap.querySelector("#stLoc").value, note: wrap.querySelector("#stNote").value.trim() });
@@ -277,12 +288,21 @@
   function mountSettings(root) {
     var cfg = null, busy = false;
 
+    // working copy: statuses, and the locations split into machines and rooms
+    function split(c) {
+      return { statuses: JSON.parse(JSON.stringify(c.statuses)),
+        machine: c.locations.filter(function (l) { return !isRoom(l); }).map(function (l) { return { id: l.id, label: l.label }; }),
+        room: c.locations.filter(isRoom).map(function (l) { return { id: l.id, label: l.label }; }) };
+    }
+    function listOf(kind) { return kind === "st" ? cfg.statuses : cfg[kind]; }
+
     function row(kind, x, i, n) {
       var move = '<button type="button" class="chip" data-mv="' + kind + '" data-i="' + i + '" data-d="-1"' + (i === 0 ? " disabled" : "") + ' aria-label="เลื่อนขึ้น">↑</button>' +
         '<button type="button" class="chip" data-mv="' + kind + '" data-i="' + i + '" data-d="1"' + (i === n - 1 ? " disabled" : "") + ' aria-label="เลื่อนลง">↓</button>' +
         '<button type="button" class="chip danger" data-rm="' + kind + '" data-i="' + i + '" aria-label="ลบ">✕</button>';
-      if (kind === "loc") {
-        return '<li class="st-set-row loc" data-row="loc" data-i="' + i + '"><input data-k="label" maxlength="40" value="' + esc(x.label) + '" placeholder="เช่น Linac 3, ห้องตรวจ OPD" aria-label="ชื่อสถานที่ ' + (i + 1) + '">' +
+      if (kind !== "st") {
+        return '<li class="st-set-row loc" data-row="' + kind + '" data-i="' + i + '"><input data-k="label" maxlength="40" value="' + esc(x.label) + '" placeholder="' +
+          (kind === "room" ? "เช่น ห้องตรวจ OPD, ห้องพักแพทย์" : "เช่น Linac 3, CT Simulator") + '" aria-label="ชื่อ' + (kind === "room" ? "ห้อง " : "เครื่อง ") + (i + 1) + '">' +
           '<span class="menu-acts">' + move + "</span></li>";
       }
       return '<li class="st-set-row" data-row="st" data-i="' + i + '">' +
@@ -297,7 +317,7 @@
 
     function read() {
       root.querySelectorAll("[data-row]").forEach(function (li) {
-        var list = li.getAttribute("data-row") === "loc" ? cfg.locations : cfg.statuses, x = list[+li.getAttribute("data-i")];
+        var x = listOf(li.getAttribute("data-row"))[+li.getAttribute("data-i")];
         li.querySelectorAll("[data-k]").forEach(function (el) { x[el.getAttribute("data-k")] = el.value; });
       });
     }
@@ -309,9 +329,12 @@
           '<div class="card"><h3>ตัวเลือกสถานะ</h3><p class="muted">สมาชิกเลือกได้ 1 สถานะ เช่น อยู่ ลา ประชุม</p><ul class="st-set-list">' +
             cfg.statuses.map(function (x, i) { return row("st", x, i, cfg.statuses.length); }).join("") + "</ul>" +
             '<button type="button" class="chip" data-add="st"' + (cfg.statuses.length >= 20 ? " disabled" : "") + ">＋ เพิ่มสถานะ</button></div>" +
-          '<div class="card"><h3>สถานที่ / เครื่อง</h3><p class="muted">เช่น เครื่องฉายรังสี ห้องตรวจ ห้องจำลองการรักษา</p><ul class="st-set-list">' +
-            cfg.locations.map(function (x, i) { return row("loc", x, i, cfg.locations.length); }).join("") + "</ul>" +
-            '<button type="button" class="chip" data-add="loc"' + (cfg.locations.length >= 60 ? " disabled" : "") + ">＋ เพิ่มสถานที่</button></div>" +
+          [["machine", "เครื่อง", "เครื่องฉายรังสีและอุปกรณ์ เช่น Linac, CT Simulator"], ["room", "ห้อง", "เช่น ห้องตรวจ OPD, ห้องวางแผนการรักษา, ห้องประชุม"]].map(function (k) {
+            var list = cfg[k[0]], full = cfg.machine.length + cfg.room.length >= 60;
+            return '<div class="card"><h3>' + k[1] + '</h3><p class="muted">' + k[2] + '</p><ul class="st-set-list">' +
+              list.map(function (x, i) { return row(k[0], x, i, list.length); }).join("") + "</ul>" +
+              '<button type="button" class="chip" data-add="' + k[0] + '"' + (full ? " disabled" : "") + ">＋ เพิ่ม" + k[1] + "</button></div>";
+          }).join("") +
         "</div>" +
         '<div class="menu-buttons st-save-row"><button type="button" class="auth-submit" id="stCfgSave">บันทึก</button>' +
           '<button type="button" class="chip" id="stCfgDefault">ใช้ค่าเริ่มต้น</button>' +
@@ -333,9 +356,9 @@
       if (!b || busy || b.disabled || !cfg) return;
       read();
       var kind = b.getAttribute("data-add") || b.getAttribute("data-mv") || b.getAttribute("data-rm");
-      var list = kind === "loc" ? cfg.locations : cfg.statuses;
+      var list = kind ? listOf(kind) : null;
       if (b.hasAttribute("data-add")) {
-        list.push(kind === "loc" ? { id: "", label: "" } : { id: "", label: "", icon: "", color: "blue" });
+        list.push(kind === "st" ? { id: "", label: "", icon: "", color: "blue" } : { id: "", label: "" });
         render();
         var rows = root.querySelectorAll('[data-row="' + kind + '"]');
         rows[rows.length - 1].querySelector('[data-k="label"]').focus();
@@ -347,16 +370,19 @@
         list.splice(+b.getAttribute("data-i"), 1);
         render();
       } else if (b.id === "stCfgDefault") {
-        cfg = JSON.parse(JSON.stringify(DEFAULTS));
+        cfg = split(DEFAULTS);
         render('กด "บันทึก" เพื่อใช้ค่าเริ่มต้น');
       } else if (b.id === "stCfgSave") {
         var st = cfg.statuses.filter(function (x) { return x.label.trim(); });
         if (!st.length) { render("ต้องมีสถานะอย่างน้อย 1 รายการ", true); return; }
         busy = true;
         b.disabled = true;
-        call("statusConfigSave", { statuses: st, locations: cfg.locations.filter(function (x) { return x.label.trim(); }) }).then(function (r) {
+        var locs = ["machine", "room"].reduce(function (all, k) {
+          return all.concat(cfg[k].filter(function (x) { return x.label.trim(); }).map(function (x) { return { id: x.id, label: x.label, type: k }; }));
+        }, []);
+        call("statusConfigSave", { statuses: st, locations: locs }).then(function (r) {
           busy = false;
-          cfg = JSON.parse(JSON.stringify(r.config));
+          cfg = split(r.config);
           data.config = r.config;
           window.dispatchEvent(new CustomEvent("lpch:status"));
           render(r.message || "บันทึกแล้ว");
@@ -365,7 +391,7 @@
     });
 
     root.innerHTML = '<p class="muted">กำลังโหลด…</p>';
-    load().then(function () { cfg = JSON.parse(JSON.stringify(data.config)); render(); },
+    load().then(function () { cfg = split(data.config); render(); },
       function (e) { root.innerHTML = '<p class="auth-error">' + esc(e.message) + "</p>"; });
   }
 

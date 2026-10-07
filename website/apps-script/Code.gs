@@ -664,7 +664,7 @@ function cleanMenu_(m) {
 
 /* ---------------- สถานะของสมาชิก (อยู่ / ลา / ประชุม …) และสถานที่ (เครื่อง) ----------------
  * แต่ละคนตั้งสถานะของตัวเอง (statusSet) ทุกคนเห็นสถานะของทุกคน (statusList → แถบขวาในหน้า Home)
- * ผู้ดูแลระบบกำหนดตัวเลือกสถานะและรายชื่อสถานที่ได้ (statusConfigSave → ชีต Config แถว "status")
+ * ผู้ดูแลระบบกำหนดตัวเลือกสถานะและรายชื่อสถานที่ (เครื่อง / ห้อง) ได้ (statusConfigSave → ชีต Config แถว "status")
  * "ออนไลน์" = เปิดเว็บอยู่ (หน้าเว็บถามข้อความใหม่ทุก 20 วินาที) ภายใน ONLINE_SECONDS วินาทีที่ผ่านมา
  */
 var ONLINE_SECONDS = 120;
@@ -675,11 +675,16 @@ var STATUS_DEFAULTS = {
     { id: 'meeting', label: 'ประชุม', icon: '🗓️', color: 'orange' },
     { id: 'leave', label: 'ลา', icon: '🏖️', color: 'red' }
   ],
+  // type: 'machine' = เครื่อง, 'room' = ห้อง
   locations: [
-    { id: 'linac-1', label: 'Linac 1' },
-    { id: 'linac-2', label: 'Linac 2' },
-    { id: 'ct-sim', label: 'CT Simulator' },
-    { id: 'hdr', label: 'HDR Brachytherapy' }
+    { id: 'linac-1', label: 'Linac 1', type: 'machine' },
+    { id: 'linac-2', label: 'Linac 2', type: 'machine' },
+    { id: 'ct-sim', label: 'CT Simulator', type: 'machine' },
+    { id: 'hdr', label: 'HDR Brachytherapy', type: 'machine' },
+    { id: 'opd', label: 'ห้องตรวจ OPD', type: 'room' },
+    { id: 'tps', label: 'ห้องวางแผนการรักษา', type: 'room' },
+    { id: 'meeting-room', label: 'ห้องประชุม', type: 'room' },
+    { id: 'office', label: 'สำนักงาน', type: 'room' }
   ]
 };
 
@@ -736,7 +741,7 @@ ACTIONS.statusConfigSave = function (req) {
     statuses: statuses.map(function (x) {
       return { id: id(x, 's'), label: clean(x.label, 30), icon: clean(x.icon, 8), color: STATUS_COLORS.indexOf(x.color) === -1 ? 'gray' : x.color };
     }),
-    locations: locations.map(function (x) { return { id: id(x, 'l'), label: clean(x.label, 40) }; })
+    locations: locations.map(function (x) { return { id: id(x, 'l'), label: clean(x.label, 40), type: x.type === 'room' ? 'room' : 'machine' }; })
   };
   var sh = sheet_('Config', CONFIG_HEADERS), rows = sh.getDataRange().getValues(), values = ['status', JSON.stringify(cfg), new Date(), admin.username];
   var done = false;
