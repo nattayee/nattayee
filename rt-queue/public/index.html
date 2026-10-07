@@ -444,8 +444,8 @@
   // ค่าเริ่มต้นเมื่อเลือกเทคนิค (เทคนิคที่ไม่มีในนี้ใช้ DEFAULT_PATTERN)
   const TECH_DEFAULTS = {
     DIBH: { pattern: 'dibh', site: 'Lt Breast' },
-    SRS: { pattern: 'daily' },
-    SRT: { pattern: 'daily' },
+    SRS: { pattern: 'daily', site: 'Head' },
+    SRT: { pattern: 'daily', site: 'Head' },
     SBRT: { pattern: 'daily' },
   };
   const FREQUENCIES = [
@@ -885,14 +885,19 @@
     form.cbctPattern.value = p;
   }
 
-  // Choosing a technique applies its default CBCT pattern (and site for DIBH).
+  // Choosing a technique applies its default CBCT pattern and site. A site the user picked is kept;
+  // a site filled in by an earlier technique choice follows the new technique.
+  const isAutoSite = (site) => !site || site === form.site.dataset.auto;
   $('techRadios').addEventListener('change', () => {
     const tech = form.technique.value;
     const isOther = tech === 'อื่นๆ';
     $('f-other').hidden = !isOther;
     const def = TECH_DEFAULTS[tech] || {};
     setPattern(def.pattern || DEFAULT_PATTERN);
-    if (def.site && !form.site.value) form.site.value = def.site;
+    if (isAutoSite(form.site.value)) {
+      form.site.value = def.site || '';
+      form.site.dataset.auto = def.site || '';
+    }
     renderSchedule();
     if (isOther) $('f-other').focus();
   });
@@ -1060,6 +1065,7 @@
 
   function openForm(booking, date) {
     form.reset();
+    form.site.dataset.auto = '';
     $('formError').textContent = '';
     state.editingId = booking ? booking.id : null;
     $('formTitle').textContent = booking ? 'แก้ไขนัดคิว' : 'นัดคิวเทคนิคพิเศษ';
