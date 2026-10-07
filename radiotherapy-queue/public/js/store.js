@@ -94,37 +94,38 @@ class LocalStore {
       /* เบราว์เซอร์ไม่อนุญาตให้บันทึก — ข้อมูลจะอยู่เฉพาะหน้านี้ */
     }
   }
+  // คืนสำเนาเสมอ — ถ้าคืนอาร์เรย์ตัวเดียวกัน หน้าเว็บที่ push รายการใหม่เองจะทำให้ข้อมูลซ้ำ
   async load() {
     this.db = this.read();
-    return this.db;
+    return structuredClone(this.db);
   }
   async create(appt) {
     const now = new Date().toISOString();
     const rec = { ...appt, id: uuid(), createdAt: now, updatedAt: now };
     this.db.appointments.push(rec);
     this.write(this.db);
-    return rec;
+    return structuredClone(rec);
   }
   async update(id, appt) {
     const i = this.db.appointments.findIndex((a) => a.id === id);
     if (i === -1) throw new Error('ไม่พบข้อมูลนัด');
     this.db.appointments[i] = { ...this.db.appointments[i], ...appt, id, updatedAt: new Date().toISOString() };
     this.write(this.db);
-    return this.db.appointments[i];
+    return structuredClone(this.db.appointments[i]);
   }
   async remove(id) {
     this.db.appointments = this.db.appointments.filter((a) => a.id !== id);
     this.write(this.db);
   }
   async saveSettings(settings) {
-    this.db.settings = settings;
+    this.db.settings = structuredClone(settings);
     this.write(this.db);
-    return settings;
+    return structuredClone(settings);
   }
   async importAll(data) {
-    this.db = { appointments: data.appointments, settings: data.settings || this.db.settings };
+    this.db = structuredClone({ appointments: data.appointments, settings: data.settings || this.db.settings });
     this.write(this.db);
-    return this.db;
+    return structuredClone(this.db);
   }
 }
 

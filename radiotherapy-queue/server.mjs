@@ -77,7 +77,7 @@ function validateAppointment(input) {
     phone: str(input.phone, 50),
     icd10: str(input.icd10, 10),
     diagnosis: str(input.diagnosis, 200),
-    site: str(input.site, 200),
+    site: str(input.site, 500),
     icd9: str(input.icd9, 10),
     physician: str(input.physician, 100),
     technique: str(input.technique, 20),

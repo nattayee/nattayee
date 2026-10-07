@@ -334,7 +334,7 @@ function validateAppointment_(input) {
     phone: str_(input.phone, 50),
     icd10: str_(input.icd10, 10),
     diagnosis: str_(input.diagnosis, 200),
-    site: str_(input.site, 200),
+    site: str_(input.site, 500),
     icd9: str_(input.icd9, 10),
     physician: str_(input.physician, 100),
     technique: str_(input.technique, 20),

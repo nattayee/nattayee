@@ -354,6 +354,24 @@ legend { font-weight: 600; font-size: 0.95rem; padding: 0; margin-bottom: 10px; 
 .dx-cell { max-width: 260px; }
 .dx-cell .dx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- ตำแหน่งที่ฉาย (เลือกได้หลายตำแหน่ง) ---------- */
+.form-grid .span-4 { grid-column: 1 / -1; }
+.site-picker { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.field-label { font-size: 0.88rem; color: var(--text-2); }
+.site-selected { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
+.site-selected .empty-hint { font-size: 0.82rem; color: var(--muted); }
+.site-tag {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-size: 0.82rem; font-weight: 500;
+}
+.site-tag button { border: 0; background: transparent; color: inherit; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; font-size: 0.85rem; line-height: 1; }
+.site-tag button:hover { background: rgba(255, 255, 255, 0.22); }
+.site-options { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.site-options .chip { background: var(--surface); }
+.site-options .chip[aria-pressed="true"] { background: var(--accent-soft); }
+.site-custom { display: flex; gap: 8px; }
+.site-custom input { flex: 1; }
+
 /* ---------- CBCT: ตาราง / ปฏิทินรายเดือน ---------- */
 .cbct-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .cbct-head p { margin: 0; flex: 1 1 260px; }
@@ -664,12 +682,18 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
               <input type="hidden" name="icd10" id="f-icd10">
               <ul class="combo-list" id="icd-list" role="listbox" hidden></ul>
             </div>
-            <label class="span-2">ตำแหน่งที่ฉาย
-              <input name="site" list="site-list" autocomplete="off" placeholder="เช่น Whole pelvis, Breast (Lt), Whole brain">
-              <datalist id="site-list"></datalist>
-            </label>
-            <label class="span-2">หัตถการ (ICD-9-CM)<select name="icd9" id="f-icd9"></select></label>
             <label class="span-2">แพทย์ผู้รักษา<select name="physician" id="f-physician"></select></label>
+            <div class="span-4 site-picker" role="group" aria-labelledby="site-label">
+              <span class="field-label" id="site-label">ตำแหน่งที่ฉาย <span class="muted">· เลือกได้หลายตำแหน่ง</span></span>
+              <input type="hidden" name="site" id="f-site">
+              <div class="site-selected" id="site-selected" aria-live="polite"></div>
+              <div class="site-options" id="site-options"></div>
+              <div class="site-custom">
+                <input id="site-custom" placeholder="ตำแหน่งอื่นที่ไม่มีในรายการ" autocomplete="off" aria-label="เพิ่มตำแหน่งที่ฉายเอง">
+                <button type="button" class="btn" id="site-add">เพิ่มตำแหน่ง</button>
+              </div>
+            </div>
+            <label class="span-2">หัตถการ (ICD-9-CM)<select name="icd9" id="f-icd9"></select></label>
           </div>
         </fieldset>
 
@@ -1281,14 +1305,25 @@ const ICD9_BY_TECHNIQUE = {
   ELECTRON: '92.25', SRS: '92.31', SRT: '92.31', SBRT: '92.31',
 };
 
-// ตำแหน่งที่ฉายที่ใช้บ่อย (พิมพ์ตำแหน่งอื่นเองได้)
+// ตำแหน่งที่ฉายที่ใช้บ่อย — เลือกได้หลายตำแหน่ง และพิมพ์ตำแหน่งอื่นเพิ่มเองได้
+// เก็บเป็นข้อความเดียวคั่นด้วย ", " (เช่น "Breast (Lt), Supraclavicular (Lt)")
 const TREATMENT_SITES = [
-  'Whole brain', 'Brain (partial)', 'Head and neck', 'Nasopharynx', 'Oral cavity', 'Larynx', 'Thyroid bed',
+  'Whole brain', 'Brain (partial)', 'Head and neck', 'Nasopharynx', 'Oral cavity', 'Larynx', 'Neck nodes', 'Thyroid bed',
   'Esophagus', 'Lung', 'Mediastinum', 'Breast (Lt)', 'Breast (Rt)', 'Chest wall (Lt)', 'Chest wall (Rt)',
-  'Breast + Supraclavicular (Lt)', 'Breast + Supraclavicular (Rt)', 'Abdomen', 'Liver', 'Pancreas', 'Stomach',
-  'Whole pelvis', 'Pelvis + Para-aortic', 'Cervix', 'Vaginal cuff', 'Prostate', 'Prostate bed', 'Rectum',
-  'Bladder', 'C-spine', 'T-spine', 'L-spine', 'Bone (palliative)', 'Skin', 'Whole body (TBI)',
+  'Supraclavicular (Lt)', 'Supraclavicular (Rt)', 'Axilla (Lt)', 'Axilla (Rt)', 'Internal mammary nodes',
+  'Abdomen', 'Liver', 'Pancreas', 'Stomach', 'Whole pelvis', 'Para-aortic', 'Inguinal nodes', 'Cervix', 'Vaginal cuff',
+  'Prostate', 'Prostate bed', 'Seminal vesicles', 'Rectum', 'Bladder', 'C-spine', 'T-spine', 'L-spine', 'Sacrum',
+  'Pelvic bone', 'Femur', 'Rib', 'Bone (palliative)', 'Skin', 'Whole body (TBI)',
 ];
+
+const SITE_SEP = ', ';
+
+function parseSites(text) {
+  return String(text || '')
+    .split(/\s*,\s*/)
+    .map((x) => x.trim())
+    .filter((x, i, arr) => x && arr.indexOf(x) === i);
+}
 
 // ค้นหา ICD-10 จากรหัส ชื่อภาษาอังกฤษ หรือคำภาษาไทย
 function searchIcd10(query, limit = 30) {
@@ -1409,37 +1444,38 @@ class LocalStore {
       /* เบราว์เซอร์ไม่อนุญาตให้บันทึก — ข้อมูลจะอยู่เฉพาะหน้านี้ */
     }
   }
+  // คืนสำเนาเสมอ — ถ้าคืนอาร์เรย์ตัวเดียวกัน หน้าเว็บที่ push รายการใหม่เองจะทำให้ข้อมูลซ้ำ
   async load() {
     this.db = this.read();
-    return this.db;
+    return structuredClone(this.db);
   }
   async create(appt) {
     const now = new Date().toISOString();
     const rec = { ...appt, id: uuid(), createdAt: now, updatedAt: now };
     this.db.appointments.push(rec);
     this.write(this.db);
-    return rec;
+    return structuredClone(rec);
   }
   async update(id, appt) {
     const i = this.db.appointments.findIndex((a) => a.id === id);
     if (i === -1) throw new Error('ไม่พบข้อมูลนัด');
     this.db.appointments[i] = { ...this.db.appointments[i], ...appt, id, updatedAt: new Date().toISOString() };
     this.write(this.db);
-    return this.db.appointments[i];
+    return structuredClone(this.db.appointments[i]);
   }
   async remove(id) {
     this.db.appointments = this.db.appointments.filter((a) => a.id !== id);
     this.write(this.db);
   }
   async saveSettings(settings) {
-    this.db.settings = settings;
+    this.db.settings = structuredClone(settings);
     this.write(this.db);
-    return settings;
+    return structuredClone(settings);
   }
   async importAll(data) {
-    this.db = { appointments: data.appointments, settings: data.settings || this.db.settings };
+    this.db = structuredClone({ appointments: data.appointments, settings: data.settings || this.db.settings });
     this.write(this.db);
-    return this.db;
+    return structuredClone(this.db);
   }
 }
 
@@ -2132,6 +2168,8 @@ function openForm(appt = null, defaults = {}) {
   if (!a.firstName && a.name) form.firstName.value = a.name;
   $('#prefix-other-wrap').hidden = form.prefixSel.value !== 'other';
   $('#icd-list').hidden = true;
+  $('#site-custom').value = '';
+  setSites(parseSites(a.site));
   fState = {
     room: a.room || 'L1',
     cbctDates: [...(a.cbctDates || [])],
@@ -2200,6 +2238,30 @@ function updatePreview() {
         .join('')}</ul>`;
   }
   return { a, ss, conflicts };
+}
+
+// ---------- ตำแหน่งที่ฉาย (เลือกได้หลายตำแหน่ง) ----------
+let sites = [];
+
+function setSites(list) {
+  sites = list;
+  $('#f-site').value = sites.join(SITE_SEP);
+  $('#site-selected').innerHTML = sites.length
+    ? sites
+        .map((x) => `<span class="site-tag">${esc(x)}<button type="button" data-site-remove="${esc(x)}" aria-label="เอา ${esc(x)} ออก">✕</button></span>`)
+        .join('')
+    : '<span class="empty-hint">ยังไม่ได้เลือก — คลิกตำแหน่งด้านล่าง</span>';
+  $('#site-options').innerHTML = TREATMENT_SITES.map(
+    (x) => `<button type="button" class="chip" data-site="${esc(x)}" aria-pressed="${sites.includes(x)}">${esc(x)}</button>`,
+  ).join('');
+}
+
+function addCustomSite() {
+  const v = $('#site-custom').value.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!v) return;
+  if (!sites.includes(v)) setSites([...sites, v]);
+  $('#site-custom').value = '';
+  $('#site-custom').focus();
 }
 
 // ---------- ปฏิทิน CBCT รายเดือนในฟอร์ม ----------
@@ -2350,8 +2412,8 @@ async function loadDemo(silent = false) {
   const last = ['ใจดี', 'มีสุข', 'แก้วมา', 'ทองคำ', 'ศรีวงศ์', 'คำแสน', 'อินต๊ะ', 'ปัญญาดี', 'บุญเรือง', 'จันทร์แก้ว'];
   // [ICD-10, ตำแหน่งที่ฉาย, เทคนิค, จำนวนครั้ง, เพศ]
   const cases = [
-    ['C53.9', 'Whole pelvis', 'VMAT', 25, 'หญิง'], ['C50.4', 'Breast (Lt)', '3DCRT', 15, 'หญิง'],
-    ['C50.9', 'Chest wall (Rt)', '3DCRT', 15, 'หญิง'], ['C11.9', 'Nasopharynx', 'IMRT', 35, ''],
+    ['C53.9', 'Whole pelvis, Para-aortic', 'VMAT', 25, 'หญิง'], ['C50.4', 'Breast (Lt), Supraclavicular (Lt)', '3DCRT', 15, 'หญิง'],
+    ['C50.9', 'Chest wall (Rt), Supraclavicular (Rt), Axilla (Rt)', '3DCRT', 15, 'หญิง'], ['C11.9', 'Nasopharynx', 'IMRT', 35, ''],
     ['C34.1', 'Lung', 'SBRT', 5, ''], ['C20', 'Whole pelvis', 'VMAT', 25, ''], ['C61', 'Prostate', 'VMAT', 28, 'ชาย'],
     ['C79.3', 'Brain (partial)', 'SRS', 1, ''], ['C15.4', 'Esophagus', 'IMRT', 25, ''], ['C79.5', 'Bone (palliative)', '2D', 10, ''],
   ];
@@ -2583,6 +2645,24 @@ function bind() {
     }
   });
 
+  // ตำแหน่งที่ฉาย: คลิกเพื่อเลือก/ยกเลิก
+  $('#site-options').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-site]');
+    if (!b) return;
+    const x = b.dataset.site;
+    setSites(sites.includes(x) ? sites.filter((s) => s !== x) : [...sites, x]);
+  });
+  $('#site-selected').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-site-remove]');
+    if (b) setSites(sites.filter((s) => s !== b.dataset.siteRemove));
+  });
+  $('#site-add').addEventListener('click', addCustomSite);
+  $('#site-custom').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); // ไม่ให้ Enter ส่งฟอร์ม
+    addCustomSite();
+  });
+
   // การวินิจฉัย ICD-10: ค้นหาแล้วเลือกจากรายการ
   const dxInput = $('#f-diagnosis');
   const dxList = $('#icd-list');
@@ -2723,7 +2803,6 @@ async function init() {
   fillSelect($('#f-status'), STATUSES);
   $('#f-prefix').innerHTML =
     '<option value="">- ไม่ระบุ -</option>' + NAME_PREFIXES.map((p) => `<option>${p.id}</option>`).join('') + '<option value="other">อื่นๆ (กรอกเอง)</option>';
-  $('#site-list').innerHTML = TREATMENT_SITES.map((x) => `<option value="${esc(x)}"></option>`).join('');
   setCbctView(cbctView);
   $('#pt-room').innerHTML += ROOMS.map((r) => `<option value="${r.id}">${r.label}</option>`).join('');
   $('#pt-tech').innerHTML += TECHNIQUES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');

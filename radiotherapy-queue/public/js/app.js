@@ -4,7 +4,7 @@ import {
   buildSessions, phaseOf, eventsByDate, findConflicts, suggestTimes, utilization, DEFAULT_PHYSICIANS,
 } from './schedule.js';
 import {
-  NAME_PREFIXES, composeName, ICD10, ICD9_RT, ICD9_BY_TECHNIQUE, TREATMENT_SITES, searchIcd10,
+  NAME_PREFIXES, composeName, ICD10, ICD9_RT, ICD9_BY_TECHNIQUE, TREATMENT_SITES, SITE_SEP, parseSites, searchIcd10,
 } from './icd.js';
 import { openStore } from './store.js';
 
@@ -677,6 +677,8 @@ function openForm(appt = null, defaults = {}) {
   if (!a.firstName && a.name) form.firstName.value = a.name;
   $('#prefix-other-wrap').hidden = form.prefixSel.value !== 'other';
   $('#icd-list').hidden = true;
+  $('#site-custom').value = '';
+  setSites(parseSites(a.site));
   fState = {
     room: a.room || 'L1',
     cbctDates: [...(a.cbctDates || [])],
@@ -745,6 +747,30 @@ function updatePreview() {
         .join('')}</ul>`;
   }
   return { a, ss, conflicts };
+}
+
+// ---------- ตำแหน่งที่ฉาย (เลือกได้หลายตำแหน่ง) ----------
+let sites = [];
+
+function setSites(list) {
+  sites = list;
+  $('#f-site').value = sites.join(SITE_SEP);
+  $('#site-selected').innerHTML = sites.length
+    ? sites
+        .map((x) => `<span class="site-tag">${esc(x)}<button type="button" data-site-remove="${esc(x)}" aria-label="เอา ${esc(x)} ออก">✕</button></span>`)
+        .join('')
+    : '<span class="empty-hint">ยังไม่ได้เลือก — คลิกตำแหน่งด้านล่าง</span>';
+  $('#site-options').innerHTML = TREATMENT_SITES.map(
+    (x) => `<button type="button" class="chip" data-site="${esc(x)}" aria-pressed="${sites.includes(x)}">${esc(x)}</button>`,
+  ).join('');
+}
+
+function addCustomSite() {
+  const v = $('#site-custom').value.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!v) return;
+  if (!sites.includes(v)) setSites([...sites, v]);
+  $('#site-custom').value = '';
+  $('#site-custom').focus();
 }
 
 // ---------- ปฏิทิน CBCT รายเดือนในฟอร์ม ----------
@@ -895,8 +921,8 @@ async function loadDemo(silent = false) {
   const last = ['ใจดี', 'มีสุข', 'แก้วมา', 'ทองคำ', 'ศรีวงศ์', 'คำแสน', 'อินต๊ะ', 'ปัญญาดี', 'บุญเรือง', 'จันทร์แก้ว'];
   // [ICD-10, ตำแหน่งที่ฉาย, เทคนิค, จำนวนครั้ง, เพศ]
   const cases = [
-    ['C53.9', 'Whole pelvis', 'VMAT', 25, 'หญิง'], ['C50.4', 'Breast (Lt)', '3DCRT', 15, 'หญิง'],
-    ['C50.9', 'Chest wall (Rt)', '3DCRT', 15, 'หญิง'], ['C11.9', 'Nasopharynx', 'IMRT', 35, ''],
+    ['C53.9', 'Whole pelvis, Para-aortic', 'VMAT', 25, 'หญิง'], ['C50.4', 'Breast (Lt), Supraclavicular (Lt)', '3DCRT', 15, 'หญิง'],
+    ['C50.9', 'Chest wall (Rt), Supraclavicular (Rt), Axilla (Rt)', '3DCRT', 15, 'หญิง'], ['C11.9', 'Nasopharynx', 'IMRT', 35, ''],
     ['C34.1', 'Lung', 'SBRT', 5, ''], ['C20', 'Whole pelvis', 'VMAT', 25, ''], ['C61', 'Prostate', 'VMAT', 28, 'ชาย'],
     ['C79.3', 'Brain (partial)', 'SRS', 1, ''], ['C15.4', 'Esophagus', 'IMRT', 25, ''], ['C79.5', 'Bone (palliative)', '2D', 10, ''],
   ];
@@ -1128,6 +1154,24 @@ function bind() {
     }
   });
 
+  // ตำแหน่งที่ฉาย: คลิกเพื่อเลือก/ยกเลิก
+  $('#site-options').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-site]');
+    if (!b) return;
+    const x = b.dataset.site;
+    setSites(sites.includes(x) ? sites.filter((s) => s !== x) : [...sites, x]);
+  });
+  $('#site-selected').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-site-remove]');
+    if (b) setSites(sites.filter((s) => s !== b.dataset.siteRemove));
+  });
+  $('#site-add').addEventListener('click', addCustomSite);
+  $('#site-custom').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); // ไม่ให้ Enter ส่งฟอร์ม
+    addCustomSite();
+  });
+
   // การวินิจฉัย ICD-10: ค้นหาแล้วเลือกจากรายการ
   const dxInput = $('#f-diagnosis');
   const dxList = $('#icd-list');
@@ -1268,7 +1312,6 @@ async function init() {
   fillSelect($('#f-status'), STATUSES);
   $('#f-prefix').innerHTML =
     '<option value="">- ไม่ระบุ -</option>' + NAME_PREFIXES.map((p) => `<option>${p.id}</option>`).join('') + '<option value="other">อื่นๆ (กรอกเอง)</option>';
-  $('#site-list').innerHTML = TREATMENT_SITES.map((x) => `<option value="${esc(x)}"></option>`).join('');
   setCbctView(cbctView);
   $('#pt-room').innerHTML += ROOMS.map((r) => `<option value="${r.id}">${r.label}</option>`).join('');
   $('#pt-tech').innerHTML += TECHNIQUES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');

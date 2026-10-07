@@ -225,14 +225,25 @@ export const ICD9_BY_TECHNIQUE = {
   ELECTRON: '92.25', SRS: '92.31', SRT: '92.31', SBRT: '92.31',
 };
 
-// ตำแหน่งที่ฉายที่ใช้บ่อย (พิมพ์ตำแหน่งอื่นเองได้)
+// ตำแหน่งที่ฉายที่ใช้บ่อย — เลือกได้หลายตำแหน่ง และพิมพ์ตำแหน่งอื่นเพิ่มเองได้
+// เก็บเป็นข้อความเดียวคั่นด้วย ", " (เช่น "Breast (Lt), Supraclavicular (Lt)")
 export const TREATMENT_SITES = [
-  'Whole brain', 'Brain (partial)', 'Head and neck', 'Nasopharynx', 'Oral cavity', 'Larynx', 'Thyroid bed',
+  'Whole brain', 'Brain (partial)', 'Head and neck', 'Nasopharynx', 'Oral cavity', 'Larynx', 'Neck nodes', 'Thyroid bed',
   'Esophagus', 'Lung', 'Mediastinum', 'Breast (Lt)', 'Breast (Rt)', 'Chest wall (Lt)', 'Chest wall (Rt)',
-  'Breast + Supraclavicular (Lt)', 'Breast + Supraclavicular (Rt)', 'Abdomen', 'Liver', 'Pancreas', 'Stomach',
-  'Whole pelvis', 'Pelvis + Para-aortic', 'Cervix', 'Vaginal cuff', 'Prostate', 'Prostate bed', 'Rectum',
-  'Bladder', 'C-spine', 'T-spine', 'L-spine', 'Bone (palliative)', 'Skin', 'Whole body (TBI)',
+  'Supraclavicular (Lt)', 'Supraclavicular (Rt)', 'Axilla (Lt)', 'Axilla (Rt)', 'Internal mammary nodes',
+  'Abdomen', 'Liver', 'Pancreas', 'Stomach', 'Whole pelvis', 'Para-aortic', 'Inguinal nodes', 'Cervix', 'Vaginal cuff',
+  'Prostate', 'Prostate bed', 'Seminal vesicles', 'Rectum', 'Bladder', 'C-spine', 'T-spine', 'L-spine', 'Sacrum',
+  'Pelvic bone', 'Femur', 'Rib', 'Bone (palliative)', 'Skin', 'Whole body (TBI)',
 ];
+
+export const SITE_SEP = ', ';
+
+export function parseSites(text) {
+  return String(text || '')
+    .split(/\s*,\s*/)
+    .map((x) => x.trim())
+    .filter((x, i, arr) => x && arr.indexOf(x) === i);
+}
 
 // ค้นหา ICD-10 จากรหัส ชื่อภาษาอังกฤษ หรือคำภาษาไทย
 export function searchIcd10(query, limit = 30) {
