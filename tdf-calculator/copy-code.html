@@ -747,9 +747,20 @@ body.locked .wrap { display: none; }
         &lt;/div&gt;
         &lt;input id="gap-target" type="number" min="1" step="0.5" value="98" hidden&gt;
       &lt;/div&gt;
-      &lt;div class="row2"&gt;
-        &lt;div class="field"&gt;&lt;label for="gap-d"&gt;Dose/fx ของ course สุดท้าย&lt;/label&gt;&lt;div class="unit-input"&gt;&lt;input id="gap-d" type="number" min="0.1" step="0.1" value="2"&gt;&lt;span&gt;Gy&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
-        &lt;div class="field"&gt;&lt;label for="gap-f"&gt;Fx/สัปดาห์&lt;/label&gt;&lt;select id="gap-f"&gt;&lt;/select&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;
+        &lt;span class="lbl" id="comp-label"&gt;เพิ่ม fraction ชดเชย&lt;/span&gt;
+        &lt;div class="seg" role="group" aria-labelledby="comp-label"&gt;
+          &lt;button type="button" id="comp-add" aria-pressed="false"&gt;เพิ่ม&lt;/button&gt;
+          &lt;button type="button" id="comp-none" aria-pressed="false"&gt;ไม่เพิ่ม&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;span class="hint" id="comp-hint"&gt;&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div class="stack" id="comp-wrap" hidden&gt;
+        &lt;div class="field"&gt;&lt;label for="comp-n"&gt;จำนวน fraction ที่เพิ่ม&lt;/label&gt;&lt;div class="unit-input"&gt;&lt;input id="comp-n" type="number" min="1" step="1" placeholder="กรอกจำนวน"&gt;&lt;span&gt;fx&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div class="row2"&gt;
+          &lt;div class="field"&gt;&lt;label for="gap-d"&gt;Dose/fx ที่เพิ่ม&lt;/label&gt;&lt;div class="unit-input"&gt;&lt;input id="gap-d" type="number" min="0.1" step="0.1" value="2"&gt;&lt;span&gt;Gy&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;div class="field"&gt;&lt;label for="gap-f"&gt;Fx/สัปดาห์&lt;/label&gt;&lt;select id="gap-f"&gt;&lt;/select&gt;&lt;/div&gt;
+        &lt;/div&gt;
       &lt;/div&gt;
     &lt;/form&gt;
     &lt;div class="results" id="r-gap"&gt;&lt;/div&gt;
@@ -1329,6 +1340,18 @@ body.locked .wrap { display: none; }
   }
   ["plan", "ref", "custom"].forEach((k) =&gt; $("tgt-" + k).addEventListener("click", () =&gt; { setTargetMode(k); calcGap(); }));
 
+  // Compensation after the break: "add" needs the number of added fractions, "none" needs nothing. One must be chosen.
+  let compMode = "";
+  let gapIssue = "";
+  function setCompMode(k) {
+    compMode = k;
+    $("comp-add").setAttribute("aria-pressed", String(k === "add"));
+    $("comp-none").setAttribute("aria-pressed", String(k === "none"));
+    $("comp-wrap").hidden = k !== "add";
+  }
+  $("comp-add").addEventListener("click", () =&gt; { setCompMode("add"); calcGap(); if (!$("comp-n").value) $("comp-n").focus(); });
+  $("comp-none").addEventListener("click", () =&gt; { setCompMode("none"); calcGap(); });
+
   function calcGap() {
     const out = $("r-gap");
     resetCharts();
@@ -1342,35 +1365,48 @@ body.locked .wrap { display: none; }
       const target = targetMode === "plan" ? planned : targetMode === "ref" ? refTdf() : num("gap-target");
       if (!(target &gt; 0)) throw new Error("TDF เป้าหมายต้องมากกว่า 0");
       const lost = planned - res.total;
-      const totalDose = res.rows.reduce((a, r) =&gt; a + r.dose, 0);
-      const eq = TDF.equivalentSchedule(res.total, 2, 5);
 
-      let solver = "", solverRows = [];
-      if (courses.length &gt;= 2) {
-        const beforeLast = res.rows[res.rows.length - 2].after;
-        const dL = num("gap-d"), fL = +$("gap-f").value;
-        const s = TDF.fractionsToTarget(beforeLast, target, dL, fL);
-        const lastN = courses[courses.length - 1].N;
-        const diff = s.fractions - (courses[courses.length - 1].d === dL &amp;&amp; courses[courses.length - 1].perWeek === fL ? lastN : NaN);
-        solverRows = s.need &lt;= 0
-          ? [["Course สุดท้าย", `TDF สะสมก่อน course สุดท้าย (${fmt(beforeLast, 1)}) ถึงเป้าหมายแล้ว`]]
-          : [["TDF สะสมหลังพัก (ก่อน course สุดท้าย)", fmt(beforeLast, 1)], ["TDF ที่ยังต้องการ", fmt(s.need, 1)],
-             ["Course สุดท้ายต้องฉาย", `${s.fractions} fx × ${fmt(dL, 2)} Gy = ${fmt(s.dose, 1)} Gy (${fL}/สัปดาห์)`], ["TDF รวมที่ได้", fmt(s.reached, 1)]];
-        solver = `&lt;div class="card"&gt;&lt;h3&gt;Course สุดท้ายต้องฉายเท่าไรจึงถึง TDF ${fmt(target, 1)}&lt;/h3&gt;` +
-          (s.need &lt;= 0
-            ? `&lt;p style="margin:0"&gt;TDF สะสมก่อน course สุดท้าย (${fmt(beforeLast, 1)}) ถึงเป้าหมายแล้ว&lt;/p&gt;`
-            : stats([
-                ["TDF สะสมหลังพัก", fmt(beforeLast, 1)],
-                ["TDF ที่ยังต้องการ", fmt(s.need, 1)],
-                ["จำนวน fraction", `${s.fractions}`, `fx (คำนวณได้ ${fmt(s.exact, 2)})`],
-                ["Dose", fmt(s.dose, 1), `Gy @ ${fmt(dL, 2)} Gy/fx`],
-                ["TDF รวมที่ได้", fmt(s.reached, 1)],
-                ...(Number.isFinite(diff) ? [["เทียบกับแผน course สุดท้าย", (diff &gt; 0 ? "+" : "") + diff, "fx"]] : []),
-              ])) + `&lt;/div&gt;`;
-      }
+      // ----- compensation: suggestion, then the user's decision (add n fractions / add none)
+      const dA = num("gap-d"), fA = +$("gap-f").value;
+      const lastC = courses[courses.length - 1];
+      if (compMode === "add" &amp;&amp; !(dA &gt; 0)) throw new Error("Dose/fx ที่เพิ่มต้องมากกว่า 0");
+      const sug = TDF.fractionsToTarget(res.total, target, dA &gt; 0 ? dA : lastC.d, compMode === "add" ? fA : lastC.perWeek);
+      const sugText = sug.need &lt;= 0 ? `TDF หลังพัก (${fmt(res.total, 1)}) ถึงเป้าหมาย ${fmt(target, 1)} แล้ว ไม่จำเป็นต้องเพิ่ม`
+        : `แนะนำเพิ่ม ${sug.fractions} fx × ${fmt(dA &gt; 0 ? dA : lastC.d, 2)} Gy เพื่อให้ถึง TDF เป้าหมาย ${fmt(target, 1)} (ได้ ${fmt(sug.reached, 1)})`;
+      $("comp-hint").textContent = sugText;
+      const nAdd = num("comp-n");
+      gapIssue = !compMode ? "เลือกว่าจะ “เพิ่ม” หรือ “ไม่เพิ่ม” fraction ชดเชยก่อน"
+        : compMode === "add" &amp;&amp; !(Number.isInteger(nAdd) &amp;&amp; nAdd &gt;= 1) ? "กรอกจำนวน fraction ที่เพิ่ม (จำนวนเต็มตั้งแต่ 1)" : "";
+      const adding = compMode === "add" &amp;&amp; !gapIssue;
+      // same dose and schedule as the last course: the added fractions extend it; otherwise they follow as their own course
+      const merged = adding &amp;&amp; lastC.d === dA &amp;&amp; lastC.perWeek === fA;
+      const finalCourses = !adding ? courses
+        : merged ? courses.map((c, i) =&gt; (i === courses.length - 1 ? { ...c, N: c.N + nAdd } : c))
+        : courses.map((c, i) =&gt; (i === courses.length - 1 ? { ...c, gapAfter: 0 } : c)).concat([{ d: dA, N: nAdd, perWeek: fA, gapAfter: 0 }]);
+      const fin = adding ? TDF.splitCourse(finalCourses) : res;
+      const finalDose = fin.rows.reduce((a, r) =&gt; a + r.dose, 0);
+      const vsTarget = fin.total - target;
+      const decisionText = compMode === "add"
+        ? (adding ? `เพิ่ม ${nAdd} fx × ${fmt(dA, 2)} Gy (${fA}/สัปดาห์) = ${fmt(nAdd * dA, 1)} Gy` : "เพิ่ม (ยังไม่ได้กรอกจำนวน fraction)")
+        : compMode === "none" ? "ไม่เพิ่ม fraction" : "ยังไม่ได้เลือก";
+      const compRows = [["คำแนะนำ", sugText], ["การชดเชย", decisionText],
+        ["TDF รวมหลังการตัดสินใจ", `${fmt(fin.total, 1)} (${vsTarget &gt;= 0 ? "+" : ""}${fmt(vsTarget, 1)} จากเป้าหมาย)`]];
+      const solver = `&lt;div class="card"&gt;&lt;h3&gt;การชดเชยหลังพักฉาย&lt;/h3&gt;` +
+        (gapIssue ? `&lt;div class="note" style="margin-bottom:12px"&gt;${esc(gapIssue)}&lt;/div&gt;` : "") +
+        stats([
+          ["คำแนะนำ", sug.need &lt;= 0 ? "ไม่ต้องเพิ่ม" : `+${sug.fractions}`, sug.need &lt;= 0 ? "" : `fx × ${fmt(dA &gt; 0 ? dA : lastC.d, 2)} Gy`],
+          ["การตัดสินใจ", compMode === "add" ? (adding ? `เพิ่ม ${nAdd}` : "เพิ่ม") : compMode === "none" ? "ไม่เพิ่ม" : "—", adding ? "fx" : ""],
+          ["TDF รวม", fmt(fin.total, 1)],
+          ["เทียบเป้าหมาย", `${vsTarget &gt;= 0 ? "+" : ""}${fmt(vsTarget, 1)}`, `(เป้าหมาย ${fmt(target, 1)})`],
+          ["Total dose", fmt(finalDose, 1), "Gy"],
+        ]) + `&lt;p style="margin:10px 0 0;font-size:.82rem;color:var(--ink-2)"&gt;${esc(sugText)}&lt;/p&gt;&lt;/div&gt;`;
 
-      const rows = res.rows.map((r) =&gt; `&lt;tr&gt;
-          &lt;td&gt;Course ${r.index}&lt;/td&gt;&lt;td&gt;${fmt(r.d, 2)} × ${r.N}&lt;/td&gt;&lt;td&gt;${fmt(r.dose, 1)}&lt;/td&gt;
+      const rowLabel = (r) =&gt; {
+        if (!adding || r.index &lt; fin.rows.length) return `Course ${r.index}`;
+        return merged ? `Course ${r.index} (+${nAdd} fx)` : "เพิ่มชดเชย";
+      };
+      const rows = fin.rows.map((r) =&gt; `&lt;tr&gt;
+          &lt;td&gt;${rowLabel(r)}&lt;/td&gt;&lt;td&gt;${fmt(r.d, 2)} × ${r.N}&lt;/td&gt;&lt;td&gt;${fmt(r.dose, 1)}&lt;/td&gt;
           &lt;td&gt;${r.startDay}–${r.endDay}&lt;/td&gt;&lt;td&gt;${fmt(r.tdf, 1)}&lt;/td&gt;
           &lt;td&gt;${r.gap ? fmt(r.gap, 0) : "—"}&lt;/td&gt;
           &lt;td class="${r.gap ? "decay" : ""}"&gt;${r.gap ? fmt(r.factor, 4) : "—"}&lt;/td&gt;
@@ -1378,25 +1414,29 @@ body.locked .wrap { display: none; }
 
       const gapStats = [
         ["TDF ตามแผน (ไม่พัก)", fmt(planned, 1)],
+        ["TDF หลังพัก (ก่อนชดเชย)", fmt(res.total, 1)],
         ["TDF ที่สูญเสียจากการพัก", fmt(lost, 1), `(${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`],
-        ["Total dose", fmt(totalDose, 1), "Gy"],
-        ["ระยะเวลารวม", fmt(res.rows[res.rows.length - 1].endDay, 0), "วัน"],
-        ["เทียบเท่า 2 Gy × 5/wk", fmt(eq.dose, 1), "Gy"],
+        ["Total dose", fmt(finalDose, 1), "Gy"],
+        ["ระยะเวลารวม", fmt(fin.rows[fin.rows.length - 1].endDay, 0), "วัน"],
+        ["เทียบเท่า 2 Gy × 5/wk", fmt(TDF.equivalentSchedule(fin.total, 2, 5).dose, 1), "Gy"],
       ];
-      current.gap = {
-        type: "gap", title: "Treatment gap (พักฉาย · decay factor)", tdf: res.total,
-        state: { courses: courses.map((c) =&gt; ({ ...c })), targetMode, target: num("gap-target"), dL: num("gap-d"), fL: +$("gap-f").value },
-        summary: res.rows.map((r) =&gt; `${fmt(r.d, 2)}×${r.N}`).join(" + ") + ` · พัก ${res.rows.reduce((a, r) =&gt; a + r.gap, 0)} วัน`,
+      current.gap = gapIssue ? null : {
+        type: "gap", title: "Treatment gap (พักฉาย · decay factor)", tdf: fin.total,
+        state: { courses: courses.map((c) =&gt; ({ ...c })), targetMode, target: num("gap-target"), dL: num("gap-d"), fL: +$("gap-f").value,
+          comp: { mode: compMode, n: adding ? nAdd : null } },
+        summary: res.rows.map((r) =&gt; `${fmt(r.d, 2)}×${r.N}`).join(" + ") + ` · พัก ${res.rows.reduce((a, r) =&gt; a + r.gap, 0)} วัน · ` +
+          (adding ? `เพิ่ม ${nAdd} fx` : "ไม่เพิ่ม fx"),
         inputs: res.rows.map((r) =&gt; [`Course ${r.index}`, `${fmt(r.d, 2)} Gy × ${r.N} fx, ${courses[r.index - 1].perWeek}/สัปดาห์` + (r.gap ? ` → พัก ${fmt(r.gap, 0)} วัน` : "")])
-          .concat([["TDF เป้าหมาย", `${fmt(target, 1)} (${targetMode === "plan" ? "ตามแผนเดิม" : targetMode === "ref" ? "TDF อ้างอิง" : "กำหนดเอง"})`]]),
-        results: [...gapStats.map(unitJoin), ...solverRows],
+          .concat([["TDF เป้าหมาย", `${fmt(target, 1)} (${targetMode === "plan" ? "ตามแผนเดิม" : targetMode === "ref" ? "TDF อ้างอิง" : "กำหนดเอง"})`],
+            ["เพิ่ม fraction ชดเชย", decisionText]]),
+        results: [...gapStats.map(unitJoin), ...compRows],
         table: { head: ["Course", "Gy × fx", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
-          rows: res.rows.map((r) =&gt; [`Course ${r.index}`, `${fmt(r.d, 2)} × ${r.N}`, fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
+          rows: fin.rows.map((r) =&gt; [rowLabel(r), `${fmt(r.d, 2)} × ${r.N}`, fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
             r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]) },
         charts: [["gapChart", "TDF สะสมตามวันรักษา (เส้นประ = ลดลงจากช่วงพัก)"]],
         formulas: ["TDF = 1.19 · N · d^1.538 · X^−0.169", "TDF หลังพัก = TDF ก่อนพัก · (T / (T + R))^0.11"],
       };
-      out.innerHTML = headline("TDF รวม (หลัง decay)", res.total) +
+      out.innerHTML = headline(adding ? `TDF รวม (หลังเพิ่ม ${nAdd} fx)` : compMode === "none" ? "TDF รวม (ไม่เพิ่ม fraction)" : "TDF รวม (หลัง decay)", fin.total) +
         `&lt;div class="card"&gt;${stats(gapStats)}&lt;/div&gt;` +
         `&lt;div class="card"&gt;&lt;h3&gt;TDF สะสมตามวันรักษา&lt;/h3&gt;&lt;div id="gapChart"&gt;&lt;/div&gt;
           &lt;div class="legend"&gt;&lt;span&gt;&lt;i&gt;&lt;/i&gt;TDF สะสม&lt;/span&gt;&lt;span&gt;&lt;i class="decay"&gt;&lt;/i&gt;ลดลงจากช่วงพัก (decay)&lt;/span&gt;&lt;span&gt;&lt;i class="ref"&gt;&lt;/i&gt;TDF เป้าหมาย&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;` +
@@ -1404,14 +1444,14 @@ body.locked .wrap { display: none; }
         `&lt;div class="card"&gt;&lt;h3&gt;รายละเอียดแต่ละ course&lt;/h3&gt;&lt;div class="tbl-wrap"&gt;&lt;table&gt;
           &lt;tr&gt;&lt;th&gt;Course&lt;/th&gt;&lt;th&gt;Gy × fx&lt;/th&gt;&lt;th&gt;Dose (Gy)&lt;/th&gt;&lt;th&gt;วัน&lt;/th&gt;&lt;th&gt;TDF&lt;/th&gt;&lt;th&gt;พัก R (วัน)&lt;/th&gt;&lt;th&gt;Decay factor&lt;/th&gt;&lt;th&gt;TDF สะสม&lt;/th&gt;&lt;/tr&gt;
           ${rows}
-          &lt;tr class="total"&gt;&lt;td&gt;รวม&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(totalDose, 1)}&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(planned, 1)}&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(res.total, 1)}&lt;/td&gt;&lt;/tr&gt;
+          &lt;tr class="total"&gt;&lt;td&gt;รวม&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(finalDose, 1)}&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(fin.rows.reduce((a, r) =&gt; a + r.tdf, 0), 1)}&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;${fmt(fin.total, 1)}&lt;/td&gt;&lt;/tr&gt;
         &lt;/table&gt;&lt;/div&gt;&lt;/div&gt;`;
 
       // chart segments: treatment runs solid, gaps dashed amber
       mountChart($("gapChart"), () =&gt; {
         const segs = [], marks = [];
         let cur = [{ x: 0, y: 0 }];
-        res.timeline.slice(1).forEach((p) =&gt; {
+        fin.timeline.slice(1).forEach((p) =&gt; {
           if (p.gapEnd) {
             const last = cur[cur.length - 1];
             segs.push({ points: cur, kind: "main" });
@@ -1427,7 +1467,7 @@ body.locked .wrap { display: none; }
           tipFor: (p) =&gt; p.kind === "decay" ? `หลังพัก · วัน &lt;b&gt;${fmt(p.x, 0)}&lt;/b&gt; · TDF &lt;b&gt;${fmt(p.y, 1)}&lt;/b&gt;` : `วัน &lt;b&gt;${fmt(p.x, 1)}&lt;/b&gt; · TDF &lt;b&gt;${fmt(p.y, 1)}&lt;/b&gt;`,
         };
       });
-    } catch (e) { current.gap = null; out.innerHTML = errorCard(e); }
+    } catch (e) { current.gap = null; gapIssue = ""; out.innerHTML = errorCard(e); }
   }
 
   // ---------- Tab 3: brachytherapy ----------
@@ -1649,6 +1689,7 @@ body.locked .wrap { display: none; }
     if (!snap) return null;
     return { ...snap, patient: getPatient(), doctor: $("pt-doctor").value, ref: refTdf() };
   }
+  const notReady = () =&gt; (activeTab() === "gap" &amp;&amp; gapIssue) || "เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อน";
   const sigOf = (s) =&gt; JSON.stringify([s.type, s.state, s.patient, s.doctor, s.ref]);
 
   // ---------- calculation records &amp; physicist recheck ----------
@@ -1750,6 +1791,7 @@ body.locked .wrap { display: none; }
       courses = s.courses.map((c) =&gt; ({ ...c }));
       setTargetMode(s.targetMode);
       $("gap-target").value = s.target; $("gap-d").value = s.dL; $("gap-f").value = s.fL;
+      setCompMode((s.comp &amp;&amp; s.comp.mode) || ""); $("comp-n").value = s.comp &amp;&amp; s.comp.n ? s.comp.n : "";
       renderCourses();
     } else if (e.type === "brachy") {
       isoSel.value = s.iso; $("br-hl").value = s.hl; brPermanent = s.permanent; brByDose = s.byDose;
@@ -1762,7 +1804,7 @@ body.locked .wrap { display: none; }
   /** Sends the calculation on screen for recheck (HN, patient name and physician are required). */
   function submitForRecheck() {
     const snap = snapshot();
-    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อน");
+    if (!snap) return toast(notReady(), 4000);
     const missing = [!snap.patient.hn &amp;&amp; "HN", !snap.patient.first &amp;&amp; "ชื่อ", !snap.patient.last &amp;&amp; "นามสกุล", !snap.doctor &amp;&amp; "แพทย์ผู้รักษา"].filter(Boolean);
     if (missing.length) return toast("กรอก " + missing.join(", ") + " ก่อนส่ง recheck", 4000);
     const sig = sigOf(snap);
@@ -1948,7 +1990,7 @@ body.locked .wrap { display: none; }
   async function makePdf(rec) {
     if (!rec) {
       const snap = snapshot();
-      if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนสร้างรายงาน");
+      if (!snap) return toast(notReady(), 4000);
       const sig = sigOf(snap);
       rec = records.find((r) =&gt; r.sig === sig &amp;&amp; r.status === "approved") || (backend.shared ? null : records.find((r) =&gt; r.sig === sig));
       if (!rec &amp;&amp; backend.shared) {
@@ -2127,7 +2169,7 @@ body.locked .wrap { display: none; }
 &lt;/body&gt;
 &lt;/html&gt;
 </textarea>
-    <div class="meta">1,815 บรรทัด · 119.6 KB</div>
+    <div class="meta">1,857 บรรทัด · 123.2 KB</div>
   </section>
 </main>
 <script>

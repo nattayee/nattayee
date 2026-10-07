@@ -47,6 +47,7 @@ Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **
 |---|---|
 | **Fractionated** | TDF, TDF ต่อ fraction, X, overall time, NSD (ret), dose เทียบเท่า 2 Gy × 5/สัปดาห์ และเทียบ BED/EQD2 (LQ) |
 | **Treatment gap** | หลาย course พร้อมช่วงพัก ใช้ decay factor `(T/(T+R))^0.11` กับ TDF สะสม, TDF ที่สูญเสีย, กราฟ TDF ตามวัน และจำนวน fraction ที่ต้องฉายเพิ่มใน course สุดท้ายเพื่อให้ถึง TDF เป้าหมาย |
+|  | **เพิ่ม fraction ชดเชย** (ต้องเลือก): *เพิ่ม* → กรอกจำนวน fraction ที่เพิ่ม (dose/fx และ fx/สัปดาห์) แล้ว TDF รวมคิดรวม fraction ที่เพิ่ม · *ไม่เพิ่ม* → ไม่ต้องกรอก ระบบแสดงจำนวน fraction ที่แนะนำเพื่อให้ถึง TDF เป้าหมายเสมอ |
 | **Brachytherapy** | LDR dose rate คงที่ และแหล่งรังสีที่สลายตัว (I-125, Pd-103, Cs-131, Au-198, Ir-192, Cs-137, Co-60 หรือกำหนด half-life เอง) ทั้ง permanent และ temporary implant พร้อมกราฟ dose rate และ TDF สะสม |
 | **สูตร & ตาราง** | สูตรทั้งหมดและตาราง TDF ต่อ fraction |
 
