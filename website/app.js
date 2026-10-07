@@ -97,11 +97,14 @@
 
     quicklinks: function () {
       var tiles = S.quickLinks.map(function (q) {
-        return '<a class="card tile" href="' + esc(q.url) + '"' + (isExternal(q.url) ? ' target="_blank" rel="noopener"' : "") + ">" +
-          '<span class="tile-icon" aria-hidden="true">' + q.icon + "</span>" +
-          "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc) + "</span></div></a>";
+        return '<a class="card tile" href="' + esc(q.url) + '"' + (isExternal(q.url) ? ' target="_blank" rel="noopener"' : "") +
+          (q.sso ? ' data-sso="' + esc(q.url) + '"' : "") + ">" +
+          '<span class="tile-icon" aria-hidden="true">' + esc(q.icon || "") + "</span>" +
+          "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc || "") + "</span></div></a>";
       }).join("");
-      return section("Workspace", "เลือกส่วนงาน", '<div class="grid">' + tiles + "</div>");
+      // admins edit these buttons on the "จัดการเมนู" page (menus.js)
+      var manage = Auth.user && Auth.user.isAdmin && window.Menus ? '<div class="menu-adminbar"><a class="chip" href="#/menus">⚙️ จัดการปุ่ม Workspace</a></div>' : "";
+      return section("Workspace", "เลือกส่วนงาน", manage + '<div class="grid">' + tiles + "</div>");
     },
 
     subpages: function (page) {

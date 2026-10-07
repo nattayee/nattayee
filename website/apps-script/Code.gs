@@ -498,12 +498,15 @@ ACTIONS.quickSave = function (req) {
  * ชีต Menus มี 3 แบบ:
  *   เมนูย่อยที่เพิ่มเอง  id = "<หัวข้อ>/m<8 หลัก>", parent = หัวข้อ, json = ชื่อ คำอธิบาย การ์ดแอป และลิงก์
  *   ปรับเมนูเดิมของเว็บ  id = หน้าเดิม เช่น "mp" หรือ "mp/psqa", parent ว่าง, json = {title: ชื่อใหม่, hidden: ซ่อน}
- *   ลำดับเมนู           id = "order:<หัวข้อ>" (หรือ "order:_top" สำหรับหัวข้อหลัก), json = {order: [หน้า, …]}
+ *   ลำดับเมนู           id = "order:<หัวข้อ>" (หรือ "order:_top" สำหรับหัวข้อหลัก, "order:_home" สำหรับปุ่ม Workspace), json = {order: [หน้า, …]}
+ *   ปุ่ม Workspace (หน้า Home): ปุ่มเดิม id = "tile:<หน้า>" (ชื่อ คำอธิบาย ไอคอน ซ่อน แบบเดียวกับเมนูเดิม),
+ *                       ปุ่มที่เพิ่มเอง id = "tile:t<8 หลัก>", parent = "_home", json = {label, desc, icon, url, sso}
  */
 var MENU_MAX_APPS = 5;
 var MENU_MAX_LINKS = 40;
 var MENU_KEY_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 var MENU_PAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}(\/[a-z0-9][a-z0-9-]{0,40})?$/;
+var TILE_RE = /^tile:[a-z0-9][a-z0-9-]{0,40}$/;
 var APPS_SCRIPT_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/;
 
 ACTIONS.menuList = function (req) {
@@ -531,38 +534,64 @@ ACTIONS.menuSave = function (req) {
 
 ACTIONS.menuDelete = function (req) {
   requireAdmin_(req.token);
-  var r = menuRows_().filter(function (x) { return x.item.kind === 'custom' && x.item.id === String(req.id); })[0];
+  var r = menuRows_().filter(function (x) { return (x.item.kind === 'custom' || x.item.kind === 'tile') && x.item.id === String(req.id); })[0];
   if (!r) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
   sheet_('Menus', MENU_HEADERS).deleteRow(r.row);
-  return { message: 'ลบเมนู "' + r.item.title + '" แล้ว' };
+  return { message: (r.item.kind === 'tile' ? 'ลบปุ่ม "' : 'ลบเมนู "') + (r.item.title || r.item.label) + '" แล้ว' };
 };
 
 /** Rename (title; '' = original name) or hide one of the site's own menus, e.g. "mp" or "mp/psqa". */
 ACTIONS.menuBuiltin = function (req) {
   var admin = requireAdmin_(req.token);
-  var id = String(req.id || '');
-  if (!MENU_PAGE_RE.test(id) || id === 'home' || id === 'chat' || /\/m[0-9a-f]{8}$/.test(id)) throw new Error('เมนูไม่ถูกต้อง');
-  var title = String(req.title == null ? '' : req.title).replace(/\s+/g, ' ').trim().slice(0, 60);
-  var hidden = !!req.hidden && id.indexOf('/') > 0;   // a main heading cannot be hidden
+  var id = String(req.id || ''), tile = TILE_RE.test(id) && !/^tile:t[0-9a-f]{8}$/.test(id);
+  if (!tile && (!MENU_PAGE_RE.test(id) || id === 'home' || id === 'chat' || /\/m[0-9a-f]{8}$/.test(id))) throw new Error('เมนูไม่ถูกต้อง');
+  var clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
+  var title = clean(req.title, 60);
+  var desc = tile ? clean(req.desc, 120) : '', icon = tile ? clean(req.icon, 8) : '';
+  var hidden = !!req.hidden && (tile || id.indexOf('/') > 0);   // a main heading cannot be hidden
   var sh = sheet_('Menus', MENU_HEADERS);
   var r = menuRows_().filter(function (x) { return x.item.kind === 'builtin' && x.item.id === id; })[0];
-  if (!title && !hidden) {
+  if (!title && !hidden && !desc && !icon) {
     if (r) sh.deleteRow(r.row);
   } else {
-    var values = [id, '', 0, JSON.stringify({ title: title, hidden: hidden }), new Date(), admin.username];
+    var values = [id, '', 0, JSON.stringify(tile ? { title: title, desc: desc, icon: icon, hidden: hidden } : { title: title, hidden: hidden }), new Date(), admin.username];
     if (r) sh.getRange(r.row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
   }
-  return { message: hidden ? 'ซ่อนเมนูแล้ว' : title ? 'เปลี่ยนชื่อเป็น "' + title + '" แล้ว' : 'ใช้ชื่อเดิมและแสดงเมนูแล้ว' };
+  return { message: hidden ? 'ซ่อนแล้ว' : tile ? 'บันทึกปุ่มแล้ว' : title ? 'เปลี่ยนชื่อเป็น "' + title + '" แล้ว' : 'ใช้ชื่อเดิมและแสดงเมนูแล้ว' };
+};
+
+/** A Workspace button on the Home page added by an admin: {id?, label, desc, icon, url ("#/page" or https), sso}. */
+ACTIONS.tileSave = function (req) {
+  var admin = requireAdmin_(req.token);
+  var t = req.tile || {}, clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
+  var label = clean(t.label, 60), url = String(t.url || '').trim();
+  if (!label) throw new Error('กรุณาใส่ชื่อปุ่ม');
+  if (!/^#\/[a-z0-9][a-z0-9-]{0,40}(\/[a-z0-9][a-z0-9-]{0,40})?$/.test(url) && !(/^https?:\/\/[^\s<>"]+$/i.test(url) && url.length <= 1000)) {
+    throw new Error('ลิงก์ของปุ่มต้องเป็นหน้าในเว็บนี้ (เช่น #/mp) หรือขึ้นต้นด้วย https://');
+  }
+  if (t.sso && !APPS_SCRIPT_RE.test(url)) throw new Error('เข้าสู่ระบบอัตโนมัติได้เฉพาะลิงก์เว็บแอป Apps Script (https://script.google.com/macros/s/…/exec)');
+  var sh = sheet_('Menus', MENU_HEADERS), rows = menuRows_();
+  var id = t.id ? String(t.id) : '';
+  var old = id ? rows.filter(function (r) { return r.item.kind === 'tile' && r.item.id === id; })[0] : null;
+  if (id && !old) throw new Error('ไม่พบปุ่มนี้ (อาจถูกลบไปแล้ว)');
+  if (!old && rows.filter(function (r) { return r.item.kind === 'tile'; }).length >= 30) throw new Error('เพิ่มปุ่มได้สูงสุด 30 ปุ่ม');
+  if (!old) id = 'tile:t' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  var json = JSON.stringify({ label: label, desc: clean(t.desc, 120), icon: clean(t.icon, 8), url: url, sso: !!t.sso });
+  var values = [id, '_home', 0, json, new Date(), admin.username];
+  if (old) sh.getRange(old.row, 1, 1, values.length).setValues([values]);
+  else sh.appendRow(values);
+  return { item: menuItem_(values), message: 'บันทึกปุ่ม "' + label + '" แล้ว' };
 };
 
 /** The order of the menus under one heading (parent), or of the main headings (parent "_top"). */
 ACTIONS.menuOrder = function (req) {
   var admin = requireAdmin_(req.token);
   var parent = String(req.parent || '');
-  if (parent !== '_top' && (!MENU_KEY_RE.test(parent) || parent === 'home' || parent === 'chat')) throw new Error('หัวข้อไม่ถูกต้อง');
+  if (parent !== '_top' && parent !== '_home' && (!MENU_KEY_RE.test(parent) || parent === 'home' || parent === 'chat')) throw new Error('หัวข้อไม่ถูกต้อง');
   var order = Array.isArray(req.order) ? req.order.map(String) : [];
-  if (order.length > 80 || order.some(function (k) { return !MENU_PAGE_RE.test(k); })) throw new Error('ลำดับเมนูไม่ถูกต้อง');
+  var keyRe = parent === '_home' ? TILE_RE : MENU_PAGE_RE;
+  if (order.length > 80 || order.some(function (k) { return !keyRe.test(k); })) throw new Error('ลำดับเมนูไม่ถูกต้อง');
   var sh = sheet_('Menus', MENU_HEADERS), id = 'order:' + parent;
   var r = menuRows_().filter(function (x) { return x.item.id === id; })[0];
   var values = [id, '', 0, JSON.stringify({ order: order }), new Date(), admin.username];
@@ -581,7 +610,8 @@ function menuItem_(r) {
   var j = {}, id = String(r[0]);
   try { j = JSON.parse(r[3] || '{}') || {}; } catch (e) { j = {}; }
   if (id.indexOf('order:') === 0) return { id: id, kind: 'order', parent: id.slice(6), order: j.order || [] };
-  if (!r[1]) return { id: id, kind: 'builtin', builtin: true, title: j.title || '', hidden: !!j.hidden };
+  if (String(r[1]) === '_home') return { id: id, kind: 'tile', label: j.label || '', desc: j.desc || '', icon: j.icon || '', url: j.url || '#', sso: !!j.sso };
+  if (!r[1]) return { id: id, kind: 'builtin', builtin: true, title: j.title || '', desc: j.desc || '', icon: j.icon || '', hidden: !!j.hidden };
   return { id: id, kind: 'custom', parent: String(r[1]), order: Number(r[2]) || 0, title: j.title || '', lead: j.lead || '',
     icon: j.icon || '', apps: j.apps || [], links: j.links || [],
     updatedAt: r[4] ? new Date(r[4]).getTime() : null, updatedBy: String(r[5] || '') };

@@ -19,7 +19,11 @@
   var baseNav = JSON.parse(JSON.stringify(S.nav));
   var baseWidgets = {}, baseTitles = {};
   Object.keys(S.pages).forEach(function (k) { baseWidgets[k] = S.pages[k].widgets; baseTitles[k] = S.pages[k].title; });
-  var baseTiles = (S.quickLinks || []).map(function (q) { return q.label; });   // Home tiles follow renamed headings
+  // Workspace buttons on the Home page (SITE.quickLinks), keyed "tile:<page>" like "tile:mp"
+  var baseTiles = (S.quickLinks || []).map(function (q, i) {
+    var m = /^#\/([a-z0-9][a-z0-9-]*)$/.exec(q.url || "");
+    return { key: "tile:" + (m ? m[1] : "link" + i), page: m ? m[1] : "", icon: q.icon, label: q.label, desc: q.desc, url: q.url };
+  });
 
   var items = [];          // from the server: custom menus, changes to the site's own menus, and orders
   var customKeys = [];     // page keys added by the last apply()
@@ -34,6 +38,7 @@
 
   // Rows from the server (or demo storage) by kind. Old rows had no "kind".
   function kindOf(m) { return m.kind || (String(m.id).indexOf("order:") === 0 ? "order" : m.builtin ? "builtin" : "custom"); }
+  function customTiles() { return items.filter(function (m) { return kindOf(m) === "tile"; }); }
   function customs() { return items.filter(function (m) { return kindOf(m) === "custom"; }); }
   function builtinFix(key) { return items.filter(function (m) { return kindOf(m) === "builtin" && m.id === key; })[0] || null; }
   function orderOf(parent) {
@@ -59,6 +64,22 @@
       return { key: n.page, orig: n.label, label: fix && fix.title || n.label, renamed: !!(fix && fix.title) };
     }), orderOf("_top"));
   }
+  /** Workspace buttons, hidden ones included: [{key, icon, label, desc, url, sso, builtin, hidden, changed, orig, tile}]. */
+  function tiles() {
+    var heads = {};
+    headings().forEach(function (h) { heads[h.key] = h; });
+    var own = baseTiles.map(function (b) {
+      var fix = builtinFix(b.key) || {}, h = b.page && heads[b.page];
+      var label = fix.title || (h && h.renamed ? h.label : b.label);   // follows a renamed heading unless renamed itself
+      return { key: b.key, icon: fix.icon || b.icon, label: label, desc: fix.desc || b.desc, url: b.url, builtin: true,
+        hidden: !!fix.hidden, changed: !!(fix.title || fix.desc || fix.icon), orig: b };
+    });
+    var added = customTiles().map(function (t) {
+      return { key: t.id, icon: t.icon || "🔗", label: t.label, desc: t.desc, url: t.url, sso: !!t.sso, tile: t };
+    });
+    return byOrder(own.concat(added), orderOf("_home"));
+  }
+
   /** Kept for callers that list headings as nav items. */
   function sections() { return headings().map(function (h) { return { page: h.key, label: h.label }; }); }
 
@@ -98,11 +119,22 @@
     },
     menuDelete: function (r) { saveLocal(local().filter(function (x) { return x.id !== r.id; })); return { message: "ลบเมนูแล้ว" }; },
     menuBuiltin: function (r) {
-      var title = String(r.title || "").trim(), hidden = !!r.hidden && r.id.indexOf("/") > 0;
+      var tile = r.id.indexOf("tile:") === 0;
+      var title = String(r.title || "").trim(), desc = tile ? String(r.desc || "").trim() : "", icon = tile ? String(r.icon || "").trim() : "";
+      var hidden = !!r.hidden && (tile || r.id.indexOf("/") > 0);
       var list = local().filter(function (x) { return !(kindOf(x) === "builtin" && x.id === r.id); });
-      if (title || hidden) list.push({ id: r.id, kind: "builtin", builtin: true, title: title, hidden: hidden });
+      if (title || hidden || desc || icon) list.push({ id: r.id, kind: "builtin", builtin: true, title: title, desc: desc, icon: icon, hidden: hidden });
       saveLocal(list);
-      return { message: hidden ? "ซ่อนเมนูแล้ว" : title ? 'เปลี่ยนชื่อเป็น "' + title + '" แล้ว' : "ใช้ชื่อเดิมและแสดงเมนูแล้ว" };
+      return { message: hidden ? "ซ่อนแล้ว" : tile ? "บันทึกปุ่มแล้ว" : title ? 'เปลี่ยนชื่อเป็น "' + title + '" แล้ว' : "ใช้ชื่อเดิมและแสดงเมนูแล้ว" };
+    },
+    tileSave: function (r) {
+      var list = local(), t = r.tile, old = t.id && list.filter(function (x) { return x.id === t.id; })[0];
+      if (!String(t.label || "").trim()) throw new Error("กรุณาใส่ชื่อปุ่ม");
+      var row = { id: old ? t.id : "tile:t" + Math.random().toString(16).slice(2, 10), kind: "tile", label: t.label.trim(), desc: (t.desc || "").trim(),
+        icon: (t.icon || "").trim(), url: t.url, sso: !!t.sso };
+      if (old) list[list.indexOf(old)] = row; else list.push(row);
+      saveLocal(list);
+      return { item: row, message: 'บันทึกปุ่ม "' + row.label + '" แล้ว' };
     },
     menuOrder: function (r) {
       var id = "order:" + r.parent, list = local().filter(function (x) { return x.id !== id; });
@@ -150,7 +182,6 @@
       var n = JSON.parse(JSON.stringify(baseNav.filter(function (x) { return x.page === h.key; })[0]));
       n.label = h.label;
       if (h.renamed && S.pages[h.key]) S.pages[h.key].title = h.label;
-      (S.quickLinks || []).forEach(function (q, i) { if (q.url === "#/" + h.key) q.label = h.renamed ? h.label : baseTiles[i]; });
       var kids = entries(h.key).filter(function (e) { return !e.hidden && (!e.custom || S.pages[e.key]); });
       kids.forEach(function (e) { if (e.renamed && S.pages[e.key]) S.pages[e.key].title = e.label; });
       if (kids.length) {
@@ -166,6 +197,11 @@
 
     S.nav.length = 0;
     nav.forEach(function (n) { S.nav.push(n); });
+    if (S.quickLinks) {
+      var shown = tiles().filter(function (t) { return !t.hidden; });
+      S.quickLinks.length = 0;
+      shown.forEach(function (t) { S.quickLinks.push({ icon: t.icon, label: t.label, desc: t.desc, url: t.url, sso: !!t.sso }); });
+    }
     listeners.forEach(function (cb) { cb(); });
   }
 
@@ -195,6 +231,7 @@
     opts = opts || {};
     var editing = null;    // the custom menu in the editor (a copy), or null
     var renaming = null;   // key of the site's own menu being renamed in its row
+    var tileEdit = null;   // key of the Workspace button being edited in its row ("__new" = a new one)
     var busy = false;
 
     function moveButtons(parent, key, i, n) {
@@ -219,6 +256,47 @@
         "</span></li>";
     }
 
+    // Workspace button: edit in place (icon, name, description; link too for added ones), move, hide / delete.
+    function tileForm(t) {
+      var custom = !t || !t.builtin, pages = [];
+      headings().forEach(function (h) {
+        pages.push({ url: "#/" + h.key, label: h.label });
+        entries(h.key).forEach(function (e) { if (!e.hidden) pages.push({ url: "#/" + e.key, label: h.label + " › " + e.label }); });
+      });
+      pages = [{ url: "#/chat", label: "แชทประกาศ" }, { url: "#/inbox", label: "ข้อความส่วนตัว" }].concat(pages);
+      var url = t ? t.url : "";
+      return '<form class="menu-tile-form" data-key="' + esc(t ? t.key : "__new") + '">' +
+        '<div class="menu-grid">' +
+          field("ชื่อปุ่ม *", '<input data-t="label" maxlength="60" value="' + esc(t ? t.label : "") + '" placeholder="' + esc(t && t.orig ? t.orig.label : "เช่น Linac QA") + '">') +
+          field("ไอคอน", '<input data-t="icon" maxlength="8" value="' + esc(t ? t.icon : "") + '" placeholder="📁">', "narrow") +
+        "</div>" +
+        field("คำอธิบาย", '<input data-t="desc" maxlength="120" value="' + esc(t ? t.desc : "") + '">') +
+        (custom ?
+          field("ไปที่", '<select data-t="page"><option value="">— ลิงก์ภายนอก (กรอกด้านล่าง) —</option>' + pages.map(function (pg) {
+            return '<option value="' + esc(pg.url) + '"' + (pg.url === url ? " selected" : "") + ">" + esc(pg.label) + "</option>";
+          }).join("") + "</select>") +
+          field("ลิงก์ภายนอก (URL)", '<input data-t="url" maxlength="1000" inputmode="url" placeholder="https://…" value="' + esc(/^https?:/i.test(url) ? url : "") + '">') +
+          '<label class="menu-check"><input type="checkbox" data-t="sso"' + (t && t.sso ? " checked" : "") + "> เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH (เฉพาะเว็บแอป Apps Script ที่เชื่อมไว้แล้ว)</label>"
+          : '<p class="muted menu-note">ปุ่มเดิมของเว็บ: ลิงก์ไปที่ ' + esc(url) + "</p>") +
+        '<p class="auth-error menu-err" role="alert" hidden></p>' +
+        '<div class="menu-buttons"><button type="submit" class="chip primary">บันทึก</button>' +
+          (t && t.builtin && t.changed ? '<button type="button" class="chip" data-tile-reset="' + esc(t.key) + '">คืนค่าเดิม</button>' : "") +
+          '<button type="button" class="chip" data-tile-cancel>ยกเลิก</button></div></form>';
+    }
+
+    function tileRow(t, i, n) {
+      if (tileEdit === t.key) return '<li class="menu-row renaming">' + tileForm(t) + "</li>";
+      return '<li class="menu-row' + (t.hidden ? " is-hidden" : "") + '"><span class="menu-name">' + esc((t.icon ? t.icon + " " : "") + t.label) +
+          (t.desc ? ' <small class="menu-desc">' + esc(t.desc) + "</small>" : "") + "</span>" +
+        (t.builtin ? '<span class="menu-tag">ปุ่มเดิม' + (t.changed ? " · แก้ไขแล้ว" : "") + (t.hidden ? " · ซ่อนอยู่" : "") + "</span>"
+          : '<span class="menu-tag custom">เพิ่มเอง</span>') +
+        '<span class="menu-acts">' + moveButtons("_home", t.key, i, n) +
+          '<button type="button" class="chip" data-tile-edit="' + esc(t.key) + '">✏️ แก้ไข</button>' +
+          (t.builtin ? '<button type="button" class="chip" data-tile-hide="' + esc(t.key) + '" data-to="' + (t.hidden ? "0" : "1") + '">' + (t.hidden ? "👁 แสดง" : "🙈 ซ่อน") + "</button>"
+            : '<button type="button" class="chip danger" data-tile-del="' + esc(t.key) + '">🗑 ลบ</button>') +
+        "</span></li>";
+    }
+
     function customRow(parent, e, i, n) {
       var m = e.custom;
       return '<li class="menu-row"><a class="menu-name" href="#/' + esc(m.id) + '">' + esc((m.icon ? m.icon + " " : "") + m.title) + "</a>" +
@@ -234,6 +312,11 @@
         '(แต่ละเมนูเป็นหน้าใหม่ที่มีคำอธิบาย การ์ดแอป และรายการลิงก์) · เมนูย่อยเดิมของเว็บซ่อนได้ · ทุกคนเห็นเมนูเดียวกันทันทีที่บันทึก</p>' +
         '<p class="menus-msg" role="status" hidden></p>';
       if (editing) html += editorHtml();
+      var ts = tiles();
+      html += '<div class="card menu-section menu-tiles" id="workspaceTiles"><div class="menu-head"><h3>Workspace (ปุ่มในหน้า Home)</h3>' +
+        '<button type="button" class="chip primary" data-tile-add>＋ เพิ่มปุ่ม</button></div><ul class="menu-list">' +
+        (tileEdit === "__new" ? '<li class="menu-row renaming">' + tileForm(null) + "</li>" : "") +
+        ts.map(function (t, i) { return tileRow(t, i, ts.length); }).join("") + "</ul></div>";
       var heads = headings();
       html += '<div class="card menu-section menu-top"><div class="menu-head"><h3>หัวข้อหลัก (แถบเมนูด้านบน)</h3></div>' +
         '<p class="muted menu-note">Home และ แชท อยู่หน้าสุดเสมอ</p><ul class="menu-list">' +
@@ -247,6 +330,35 @@
       }).join("");
       root.innerHTML = html;
       if (editing) wireEditor();
+      var tf = root.querySelector(".menu-tile-form");
+      if (tf) {
+        tf.querySelector('[data-t="label"]').focus();
+        tf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var key = tf.getAttribute("data-key"), val = function (k) { var el = tf.querySelector('[data-t="' + k + '"]'); return el ? (el.type === "checkbox" ? el.checked : el.value.trim()) : ""; };
+          var err = tf.querySelector(".menu-err"), t = key === "__new" ? null : tiles().filter(function (x) { return x.key === key; })[0];
+          var label = val("label");
+          if (!label) { err.textContent = "กรุณาใส่ชื่อปุ่ม"; err.hidden = false; return; }
+          if (t && t.builtin) {
+            var o = t.orig, fix = builtinFix(key);
+            tileEdit = null;
+            // a value equal to the original is stored as "no change"
+            act(call("menuBuiltin", { id: key, title: label === o.label ? "" : label, desc: val("desc") === o.desc ? "" : val("desc"),
+              icon: val("icon") === o.icon ? "" : val("icon"), hidden: !!(fix && fix.hidden) }));
+            return;
+          }
+          var url = val("page") || val("url");
+          if (!/^#\/[a-z0-9]/.test(url) && !/^https?:\/\/\S+$/i.test(url)) { err.textContent = "เลือกหน้าที่จะไป หรือกรอกลิงก์ที่ขึ้นต้นด้วย https://"; err.hidden = false; return; }
+          if (val("sso") && !APPS_SCRIPT_RE.test(url)) { err.textContent = "เข้าสู่ระบบอัตโนมัติได้เฉพาะลิงก์เว็บแอป Apps Script (https://script.google.com/macros/s/…/exec)"; err.hidden = false; return; }
+          tileEdit = null;
+          act(call("tileSave", { tile: { id: t ? t.key : "", label: label, desc: val("desc"), icon: val("icon"), url: url, sso: !!val("sso") } }));
+        });
+        var sel = tf.querySelector('[data-t="page"]'), ext = tf.querySelector('[data-t="url"]');
+        if (sel && ext) {
+          var sync = function () { ext.closest(".menu-field").hidden = !!sel.value; };
+          sel.addEventListener("change", sync); sync();
+        }
+      }
       var rn = root.querySelector(".menu-rename");
       if (rn) {
         var input = rn.querySelector("input");
@@ -428,13 +540,34 @@
       else if ((id = b.getAttribute("data-edit")) !== null) startEdit(customs().filter(function (m) { return m.id === id; })[0]);
       else if ((id = b.getAttribute("data-move")) !== null) {
         var parent = b.getAttribute("data-parent");
-        var keys = (parent === "_top" ? headings() : entries(parent)).map(function (e) { return e.key; });
+        var keys = (parent === "_top" ? headings() : parent === "_home" ? tiles() : entries(parent)).map(function (e) { return e.key; });
         var i = keys.indexOf(id), j = i + (+b.getAttribute("data-dir") < 0 ? -1 : 1);
         if (i < 0 || j < 0 || j >= keys.length) return;
         keys.splice(i, 1); keys.splice(j, 0, id);
         act(call("menuOrder", { parent: parent, order: keys }), "เลื่อนลำดับแล้ว");
       }
-      else if ((id = b.getAttribute("data-rename")) !== null) { renaming = id; render(); }
+      else if ((id = b.getAttribute("data-rename")) !== null) { renaming = id; tileEdit = null; render(); }
+      else if ((id = b.getAttribute("data-tile-edit")) !== null) { tileEdit = id; renaming = null; render(); }
+      else if (b.hasAttribute("data-tile-add")) { tileEdit = "__new"; renaming = null; render(); }
+      else if (b.hasAttribute("data-tile-cancel")) { tileEdit = null; render(); }
+      else if ((id = b.getAttribute("data-tile-reset")) !== null) {
+        var tf0 = builtinFix(id);
+        tileEdit = null;
+        act(call("menuBuiltin", { id: id, title: "", desc: "", icon: "", hidden: !!(tf0 && tf0.hidden) }));
+      }
+      else if ((id = b.getAttribute("data-tile-hide")) !== null) {
+        var tf1 = builtinFix(id) || {};
+        act(call("menuBuiltin", { id: id, title: tf1.title || "", desc: tf1.desc || "", icon: tf1.icon || "", hidden: b.getAttribute("data-to") === "1" }));
+      }
+      else if ((id = b.getAttribute("data-tile-del")) !== null) {
+        if (b.getAttribute("data-sure") !== "1") {
+          b.setAttribute("data-sure", "1");
+          b.textContent = "ยืนยันลบ?";
+          setTimeout(function () { if (b.isConnected) { b.removeAttribute("data-sure"); b.textContent = "🗑 ลบ"; } }, 4000);
+          return;
+        }
+        act(call("menuDelete", { id: id }));
+      }
       else if (b.hasAttribute("data-rename-cancel")) { renaming = null; render(); }
       else if ((id = b.getAttribute("data-reset")) !== null) {
         var f = builtinFix(id);
