@@ -136,6 +136,7 @@ window.SITE = {
   pages: {
     home: {
       widgets: ["quicklinks", "contacts"],
+      sidebar: "team",   // แถบขวา: สถานะทีม (status.js)
     },
 
     // แชทประกาศ: แท็บแยก เต็มจอแบบแอปแชท (bare = ไม่มีหัวข้อหน้า/breadcrumb)

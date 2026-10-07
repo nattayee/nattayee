@@ -11,6 +11,7 @@
   S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
+  S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และสถานที่ / เครื่อง ที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true };
   S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true };
   var navEl = document.getElementById("nav");
 
@@ -88,6 +89,10 @@
     admin: function () { return '<section class="section" id="adminRoot"></section>'; },
 
     menus: function () { return '<section class="section" id="menusRoot"></section>'; },
+
+    team: function () { return '<section class="section team-wrap" id="teamRoot" aria-label="สถานะทีม"></section>'; },
+
+    statusSettings: function () { return '<section class="section" id="statusSettingsRoot"></section>'; },
 
     inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
@@ -238,6 +243,8 @@
     }
 
     (p.widgets || []).forEach(function (w) { html += widgets[w](key); });
+    // A page with a sidebar (Home: สถานะทีม) gets two columns on wide screens; the sidebar goes below on phones.
+    if (p.sidebar && widgets[p.sidebar]) html = '<div class="with-side"><div class="main-col">' + html + '</div><aside class="side-col">' + widgets[p.sidebar](key) + "</aside></div>";
     return html;
   }
 
@@ -324,7 +331,9 @@
   var unmountChat = null;
   var unmountInbox = null;
 
+  var unmountTeam = null;
   function unmountWidgets() {
+    if (unmountTeam) { unmountTeam(); unmountTeam = null; }
     if (unmountChat) { unmountChat(); unmountChat = null; }
     if (unmountInbox) { unmountInbox(); unmountInbox = null; }
   }
@@ -379,6 +388,10 @@
     if (accountRoot) Auth.mountAccount(accountRoot);
     var adminRoot = document.getElementById("adminRoot");
     if (adminRoot) Auth.mountAdmin(adminRoot);
+    var teamRoot = document.getElementById("teamRoot");
+    if (teamRoot && window.Status) unmountTeam = window.Status.mountTeam(teamRoot);
+    var stSet = document.getElementById("statusSettingsRoot");
+    if (stSet && window.Status) window.Status.mountSettings(stSet);
     var menusRoot = document.getElementById("menusRoot");
     if (menusRoot && window.Menus) {
       // #/menus?add=<heading> opens the editor for a new sub-menu, ?edit=<page> for an existing one
@@ -429,7 +442,8 @@
           (u.isAdmin ? " · admin" : "") + "</span></div>" +
         '<a href="#/inbox">✉️ ข้อความส่วนตัว</a>' +
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
-        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a><a href="#/menus">🧭 จัดการเมนู</a>' : "") +
+        (window.Status ? '<button type="button" id="statusBtn">📍 ตั้งสถานะของฉัน</button>' : "") +
+        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a><a href="#/menus">🧭 จัดการเมนู</a><a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
       "</div>";
@@ -450,6 +464,9 @@
     });
     drop.addEventListener("click", function () { drop.hidden = true; });
     document.getElementById("logoutBtn").addEventListener("click", function () { Auth.logout(); });
+    var stBtn = document.getElementById("statusBtn");
+    if (stBtn) stBtn.addEventListener("click", function () { window.Status.openEditor(); });
+    if (window.Status) window.Status.renderPill();
   }
 
   function closeUserMenu() {
@@ -466,6 +483,7 @@
       // Accounts created before email was required are asked to add one (needed to reset a password).
       if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
+      if (window.Status) window.Status.load().catch(function () { /* the pill says "ตั้งสถานะ" until it loads */ });
       // Sub-menus added by admins (Menus sheet): once loaded, draw the page again so a custom page opened by
       // link, or a heading's list of sub-menus, shows them (chat pages keep running as they are).
       if (window.Menus) window.Menus.load().then(function () {

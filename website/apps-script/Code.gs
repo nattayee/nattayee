@@ -14,7 +14,7 @@
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
  * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
- *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ)
+ *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -49,13 +49,15 @@ var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
 var SETTINGS_HEADERS = ['username', 'quickReplies', 'updatedAt'];
 var MENU_HEADERS = ['id', 'parent', 'order', 'json', 'updatedAt', 'updatedBy'];
+var STATUS_HEADERS = ['username', 'status', 'location', 'note', 'updatedAt'];
+var CONFIG_HEADERS = ['key', 'json', 'updatedAt', 'updatedBy'];
 var QUICK_MAX = 5;             // ข้อความด่วน (quick chat) สูงสุดต่อคน
 var QUICK_LEN = 100;           // ความยาวสูงสุดต่อข้อความด่วน
 var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบคุณครับ/ค่ะ', 'กำลังดำเนินการ', 'เรียบร้อยแล้ว', 'ขอรายละเอียดเพิ่มเติม'];
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -144,6 +146,8 @@ function setup() {
   sheet_('DirectMessages', DM_HEADERS);
   sheet_('Settings', SETTINGS_HEADERS);
   sheet_('Menus', MENU_HEADERS);
+  sheet_('Status', STATUS_HEADERS);
+  sheet_('Config', CONFIG_HEADERS);
   folder_();
   folder_('DM_FOLDER_ID', DM_FOLDER);
   Logger.log('ส่งอีเมลได้อีกวันนี้: ' + MailApp.getRemainingDailyQuota() + ' ฉบับ');
@@ -658,6 +662,105 @@ function cleanMenu_(m) {
   return out;
 }
 
+/* ---------------- สถานะของสมาชิก (อยู่ / ลา / ประชุม …) และสถานที่ (เครื่อง) ----------------
+ * แต่ละคนตั้งสถานะของตัวเอง (statusSet) ทุกคนเห็นสถานะของทุกคน (statusList → แถบขวาในหน้า Home)
+ * ผู้ดูแลระบบกำหนดตัวเลือกสถานะและรายชื่อสถานที่ได้ (statusConfigSave → ชีต Config แถว "status")
+ * "ออนไลน์" = เปิดเว็บอยู่ (หน้าเว็บถามข้อความใหม่ทุก 20 วินาที) ภายใน ONLINE_SECONDS วินาทีที่ผ่านมา
+ */
+var ONLINE_SECONDS = 120;
+var STATUS_COLORS = ['green', 'blue', 'orange', 'red', 'purple', 'gray'];
+var STATUS_DEFAULTS = {
+  statuses: [
+    { id: 'in', label: 'อยู่', icon: '🟢', color: 'green' },
+    { id: 'meeting', label: 'ประชุม', icon: '🗓️', color: 'orange' },
+    { id: 'leave', label: 'ลา', icon: '🏖️', color: 'red' }
+  ],
+  locations: [
+    { id: 'linac-1', label: 'Linac 1' },
+    { id: 'linac-2', label: 'Linac 2' },
+    { id: 'ct-sim', label: 'CT Simulator' },
+    { id: 'hdr', label: 'HDR Brachytherapy' }
+  ]
+};
+
+ACTIONS.statusList = function (req) {
+  var me = requireUser_(req.token);
+  markSeen_(me.username);
+  var rows = sheet_('Status', STATUS_HEADERS).getDataRange().getValues(), mine = {};
+  for (var i = 1; i < rows.length; i++) mine[String(rows[i][0])] = rows[i];
+  var users = allUsers_().filter(function (u) { return u.status === 'active'; });
+  var seen = CacheService.getScriptCache().getAll(users.map(function (u) { return 'seen_' + u.username; }));
+  var now = Date.now();
+  return {
+    config: statusConfig_(),
+    people: users.map(function (u) {
+      var r = mine[u.username] || [], last = Number(seen['seen_' + u.username]) || 0;
+      return { username: u.username, fullName: u.fullName, role: u.role,
+        status: String(r[1] || ''), location: String(r[2] || ''), note: String(r[3] || ''),
+        updatedAt: r[4] ? new Date(r[4]).getTime() : null, lastSeen: last || null, online: now - last < ONLINE_SECONDS * 1000 };
+    })
+  };
+};
+
+ACTIONS.statusSet = function (req) {
+  var u = requireUser_(req.token), cfg = statusConfig_();
+  var status = String(req.status || ''), location = String(req.location || '');
+  var note = String(req.note || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (status && !cfg.statuses.some(function (x) { return x.id === status; })) throw new Error('ไม่มีสถานะนี้ (ผู้ดูแลระบบอาจลบไปแล้ว) กรุณาโหลดหน้าใหม่');
+  if (location && !cfg.locations.some(function (x) { return x.id === location; })) throw new Error('ไม่มีสถานที่นี้ (ผู้ดูแลระบบอาจลบไปแล้ว) กรุณาโหลดหน้าใหม่');
+  var sh = sheet_('Status', STATUS_HEADERS), rows = sh.getDataRange().getValues(), values = [u.username, status, location, note, new Date()];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === u.username) { sh.getRange(i + 1, 1, 1, values.length).setValues([values]); return { message: 'อัปเดตสถานะแล้ว' }; }
+  }
+  sh.appendRow(values);
+  return { message: 'อัปเดตสถานะแล้ว' };
+};
+
+/** Admins: the status choices and the locations (machines, rooms). Ids of kept entries stay the same. */
+ACTIONS.statusConfigSave = function (req) {
+  var admin = requireAdmin_(req.token);
+  var clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
+  var ids = {};
+  var id = function (x, prefix) {
+    var v = String(x.id || '');
+    if (!/^[a-z0-9-]{1,40}$/.test(v) || ids[v]) v = prefix + Utilities.getUuid().replace(/-/g, '').slice(0, 6);
+    ids[v] = true;
+    return v;
+  };
+  var statuses = (req.statuses || []).filter(function (x) { return x && clean(x.label, 30); });
+  var locations = (req.locations || []).filter(function (x) { return x && clean(x.label, 40); });
+  if (!statuses.length) throw new Error('ต้องมีสถานะอย่างน้อย 1 รายการ');
+  if (statuses.length > 20) throw new Error('ตั้งสถานะได้สูงสุด 20 รายการ');
+  if (locations.length > 60) throw new Error('ตั้งสถานที่ได้สูงสุด 60 รายการ');
+  var cfg = {
+    statuses: statuses.map(function (x) {
+      return { id: id(x, 's'), label: clean(x.label, 30), icon: clean(x.icon, 8), color: STATUS_COLORS.indexOf(x.color) === -1 ? 'gray' : x.color };
+    }),
+    locations: locations.map(function (x) { return { id: id(x, 'l'), label: clean(x.label, 40) }; })
+  };
+  var sh = sheet_('Config', CONFIG_HEADERS), rows = sh.getDataRange().getValues(), values = ['status', JSON.stringify(cfg), new Date(), admin.username];
+  var done = false;
+  for (var i = 1; i < rows.length && !done; i++) {
+    if (String(rows[i][0]) === 'status') { sh.getRange(i + 1, 1, 1, values.length).setValues([values]); done = true; }
+  }
+  if (!done) sh.appendRow(values);
+  return { config: cfg, message: 'บันทึกตัวเลือกสถานะและสถานที่แล้ว' };
+};
+
+function statusConfig_() {
+  var rows = sheet_('Config', CONFIG_HEADERS).getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === 'status') {
+      try { var c = JSON.parse(rows[i][1]); if (c && c.statuses) return c; } catch (e) { /* fall back to defaults */ }
+    }
+  }
+  return JSON.parse(JSON.stringify(STATUS_DEFAULTS));
+}
+
+function markSeen_(username) {
+  try { CacheService.getScriptCache().put('seen_' + username, String(Date.now()), ONLINE_SECONDS * 3); } catch (e) { /* cache full */ }
+}
+
 function settingsRow_(username) {
   var rows = sheet_('Settings', SETTINGS_HEADERS).getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) if (String(rows[i][0]) === username) return { row: i + 1, values: rows[i] };
@@ -674,6 +777,7 @@ function settingsRow_(username) {
  */
 ACTIONS.notify = function (req) {
   var u = requireUser_(req.token), me = person_(u), since = Number(req.since) || 0;
+  markSeen_(u.username);
   var chat = [], chatUnread = 0, dm = [], dmUnread = 0;
 
   sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1).forEach(function (r) {
