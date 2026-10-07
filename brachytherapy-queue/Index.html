@@ -398,6 +398,7 @@
       position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: var(--raise);
       color: var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
     }
+    .authalt { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 6px; text-align: center; }
     .authfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
     .logout {
       border: 0; background: var(--tab-bg); color: var(--header-ink); padding: 2px 10px; border-radius: 7px;
@@ -529,6 +530,12 @@
         </div>
         <button type="button" class="linkbtn" data-auth="login" data-i18n="back_to_login"></button>
       </form>
+
+      <!-- ดูแดชบอร์ดโดยไม่ต้องเข้าสู่ระบบ -->
+      <div class="authalt">
+        <button type="button" class="btn" id="publicBtn" data-i18n="view_public"></button>
+        <span class="hint" data-i18n="view_public_hint"></span>
+      </div>
     </section>
   </div>
 
@@ -836,7 +843,11 @@
       demo_code: 'โหมดทดลอง: รหัสยืนยันคือ {code}',
       m_badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', m_pending: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ', m_suspended: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
       m_userTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว', m_emailTaken: 'อีเมลนี้สมัครไว้แล้ว', m_badCode: 'รหัสยืนยันไม่ถูกต้องหรือหมดอายุ',
-      m_session: 'กรุณาเข้าสู่ระบบอีกครั้ง', m_self: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้'
+      m_session: 'กรุณาเข้าสู่ระบบอีกครั้ง', m_self: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้',
+      view_public: '📊 ดูแดชบอร์ด (ไม่ต้องเข้าสู่ระบบ)', view_public_hint: 'ดูจำนวนเคสรายวันได้อย่างเดียว ลงนัดหรือแก้ไขต้องเข้าสู่ระบบ',
+      public_view: 'ดูแบบไม่เข้าสู่ระบบ',
+      public_hint_mask: 'ซ่อนข้อมูลผู้ป่วยบางส่วน · อัปเดตทุก 5 นาที', public_hint_full: 'อัปเดตทุก 5 นาที',
+      public_hint_counts: 'แสดงเฉพาะจำนวนเคส · อัปเดตทุก 5 นาที'
     },
     en: {
       app_title: 'Brachytherapy Appointment Queue', app_org: 'Radiation Oncology Department, Lampang Cancer Hospital', logo_alt: 'Lampang Cancer Hospital logo',
@@ -922,7 +933,11 @@
       demo_code: 'Demo mode: the verification code is {code}',
       m_badLogin: 'Incorrect username or password', m_pending: 'This account is waiting for administrator approval', m_suspended: 'This account is suspended. Please contact the administrator',
       m_userTaken: 'This username is already taken', m_emailTaken: 'This email is already registered', m_badCode: 'The verification code is wrong or has expired',
-      m_session: 'Please log in again', m_self: 'You cannot change the status or role of your own account'
+      m_session: 'Please log in again', m_self: 'You cannot change the status or role of your own account',
+      view_public: '📊 View dashboard (no login)', view_public_hint: 'Read-only view of daily cases. Log in to book or edit',
+      public_view: 'Viewing without login',
+      public_hint_mask: 'Patient details partly hidden · updates every 5 minutes', public_hint_full: 'Updates every 5 minutes',
+      public_hint_counts: 'Case counts only · updates every 5 minutes'
     }
   };
   const DOW = { th: ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
@@ -993,6 +1008,7 @@
       login: (f) => call('login', Object.assign({ lang: lang }, f)),
       requestReset: (f) => call('requestPasswordReset', Object.assign({ lang: lang }, f)),
       reset: (f) => call('resetPassword', Object.assign({ lang: lang }, f)),
+      publicDash: () => call('getPublicDashboard', lang),
       init: () => call('getInitData', auth.token, lang),
       list: () => call('listAppointments', auth.token, lang),
       create: (p) => call('createAppointments', auth.token, Object.assign({ lang: lang }, p)),
@@ -1072,6 +1088,15 @@
         a.pw = f.password; delete resetCodes[a.username]; saveAcc(all);
         return delay({ ok: true });
       },
+      publicDash: () => delay({
+        holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }, { date: '2026-10-23', name: 'วันปิยมหาราช' }],
+        settings: { maxCasesPerDay: MAX, patientInfo: 'MASK' },
+        appointments: sorted().filter(a => a.status !== ST_CANCEL).map((a, i) => ({
+          apptId: 'P' + i, date: a.date, status: a.status, doctor: a.doctor, technique: a.technique, fx: a.fx, totalFx: a.totalFx,
+          hn: String(a.hn).length > 3 ? '*'.repeat(String(a.hn).length - 3) + String(a.hn).slice(-3) : '***',
+          name: String(a.name).split(/\s+/).filter(Boolean).map(w => (/^[เแโใไ]/.test(w) ? w.slice(0, 2) : w.charAt(0)) + '.').join(' ')
+        }))
+      }),
       accounts: () => needUser(a => a.role === 'admin' ? delay(loadAcc().map(pub)) : fail('m_session')),
       updateAccount: (u, ch) => needUser(a => {
         if (u === a.username) return fail('m_self');
@@ -1167,7 +1192,7 @@
   const state = {
     holidays: {}, sessions: [], appts: [], filter: 'upcoming', busy: false, max: 6,
     view: 'book', dashMonth: null, dashDay: null, user: null, calName: '', loadError: '',
-    authMode: 'login', accounts: [], pending: 0
+    authMode: 'login', accounts: [], pending: 0, publicMode: false, patientInfo: 'MASK'
   };
 
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -1215,6 +1240,12 @@
   $('langSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); });
 
   function renderUser() {
+    $('logoutBtn').textContent = t(state.publicMode ? 'login' : 'logout');
+    if (state.publicMode) {
+      $('userEmail').innerHTML = '👁 <b>' + esc(t('public_view')) + '</b>';
+      $('calName').textContent = t(state.patientInfo === 'FULL' ? 'public_hint_full' : state.patientInfo === 'COUNTS' ? 'public_hint_counts' : 'public_hint_mask');
+      return;
+    }
     if (state.loadError) { $('userEmail').textContent = '⚠️ ' + state.loadError; $('calName').textContent = t('load_failed'); return; }
     if (!state.user) { $('userEmail').textContent = t('checking_user'); $('calName').textContent = ''; return; }
     const u = state.user;
@@ -1249,8 +1280,11 @@
     $('viewAuth').hidden = true;
     $('appMain').hidden = false; $('tabs').hidden = false; $('whoBox').hidden = false;
     $('tabUsers').hidden = !(state.user && state.user.role === 'admin');
+    // ดูแบบไม่เข้าสู่ระบบ: มีแต่แดชบอร์ด จึงซ่อนแถบแท็บ
+    $('tabs').hidden = state.publicMode;
     renderPendingBadge();
-    setView(state.view === 'users' && $('tabUsers').hidden ? 'book' : state.view);
+    if (state.publicMode) setView('dash');
+    else setView(state.view === 'users' && $('tabUsers').hidden ? 'book' : state.view);
   }
   function onAuthLost(msg) {
     auth.clear();
@@ -1342,6 +1376,8 @@
   });
 
   $('logoutBtn').addEventListener('click', () => {
+    // ดูแบบไม่เข้าสู่ระบบ: ปุ่มนี้คือ "เข้าสู่ระบบ"
+    if (state.publicMode) { leavePublic(); showAuth('login'); return; }
     auth.clear();
     state.user = null; state.appts = []; state.accounts = [];
     showAuth('login', t('logged_out'), true);
@@ -1681,19 +1717,20 @@
   }
   function rowHtml(a, queueNo) {
     const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
+    const ro = state.publicMode; // ดูแบบไม่เข้าสู่ระบบ: ไม่มีปุ่มแก้ไข/ยกเลิก
     return '<tr class="' + (cls === 'cancel' ? 'cancel' : '') + '">' +
       '<td>' + (a.status === ST_CANCEL ? '–' : queueNo[a.apptId]) + '</td>' +
-      '<td><b>' + esc(a.hn) + '</b></td>' +
-      '<td class="name">' + esc(a.name) + '</td>' +
+      '<td><b>' + esc(a.hn || '–') + '</b></td>' +
+      '<td class="name">' + esc(a.name || '–') + '</td>' +
       '<td>' + esc(a.doctor) + '</td>' +
       '<td>' + (a.technique ? '<span class="techtag">' + esc(techText(a.technique)) + '</span>' : '<span class="hint">–</span>') + '</td>' +
       '<td>' + esc(a.fx) + '/' + esc(a.totalFx) + '</td>' +
       '<td class="name hint">' + esc(a.note) + '</td>' +
       '<td class="stcell act"><div class="stline"><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
-        '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></div>' +
-        (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
+        (ro ? '' : '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button>') + '</div>' +
+        (!ro && a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
           esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '</button>' : '') + '</td>' +
-      '<td class="act"><div class="acts">' + actionButtons(a) + '</div></td></tr>';
+      '<td class="act"><div class="acts">' + (ro ? '' : actionButtons(a)) + '</div></td></tr>';
   }
 
   function renderTable() {
@@ -1755,6 +1792,11 @@
   const TECH_OTHER = 'อื่นๆ';
   // ค่าที่เก็บในชีตเป็นคำเดิม (Full / Mould / เสียบเข็ม / ที่กรอกเอง) แปลเฉพาะตอนแสดงผล
   const techText = (v) => (v === 'เสียบเข็ม' ? t('tech_needle') : v);
+  // ชื่อผู้ป่วยในแดชบอร์ด: ถ้าไม่มีข้อมูลผู้ป่วย (ดูแบบไม่เข้าสู่ระบบ, COUNTS) แสดงแพทย์และรูปแบบการใส่แทน
+  function patientLabel(a, prefix) {
+    if (!a.hn && !a.name) return a.doctor + (a.technique ? ' · ' + techText(a.technique) : '');
+    return ((prefix ? 'HN ' : '') + a.hn + ' ' + a.name).trim();
+  }
   function makeTechPicker(chipsId, otherId) {
     let sel = '';
     const chips = $(chipsId), other = $(otherId);
@@ -2027,7 +2069,7 @@
     if (!r) { tip.style.display = 'none'; return; }
     const d = r.dataset.d, list = dayCounts()[d] || [];
     tip.innerHTML = '<b>' + esc(fmtDate(d)) + '</b><br>' + esc(cases(list.length)) + (list.length > state.max ? ' · ' + esc(t('over_max', { max: state.max })) : '') +
-      (list.length ? '<br>' + list.slice(0, 8).map((a, i) => esc((i + 1) + '. HN ' + a.hn + ' ' + a.name)).join('<br>') + (list.length > 8 ? '<br>…' : '') : '');
+      (list.length ? '<br>' + list.slice(0, 8).map((a, i) => esc((i + 1) + '. ' + patientLabel(a, true))).join('<br>') + (list.length > 8 ? '<br>…' : '') : '');
     tip.style.display = 'block';
     const box = $('chart').getBoundingClientRect();
     let x = e.clientX - box.left + 12; if (x + 260 > box.width) x = e.clientX - box.left - tip.offsetWidth - 12;
@@ -2060,8 +2102,8 @@
         '<span class="hint" style="font-weight:400"> ' + esc(DOW[lang][parseIso(d).getDay()]) + '</span></span>' +
         (n ? '<span class="cnt">' + (n > state.max ? '⚠️ ' : '') + esc(cases(n)) + '</span>' : '') + '</div>' +
         (hol ? '<div class="hol">🏖 ' + esc(hol) + '</div>' : '') +
-        (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
-          (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
+        (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc((a.hn || a.name ? 'HN ' + a.hn + ' ' + a.name + ' · ' : '') + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
+          (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + esc(patientLabel(a)) + '</li>').join('') +
           (n > show.length ? '<li class="more">' + esc(t('more', { n: n - show.length })) + '</li>' : '') + '</ul>' : '') +
         '</button>';
     });
@@ -2129,11 +2171,54 @@
     renderAll();
   }
 
-  if (auth.token) loadApp(); else showAuth('login');
+  /* ================= ดูแดชบอร์ดโดยไม่ต้องเข้าสู่ระบบ ================= */
+  const PUBLIC_REFRESH_MS = 5 * 60 * 1000;
+  let publicTimer = null;
+  // silent = รีเฟรชอัตโนมัติ: ถ้าโหลดไม่สำเร็จให้แสดงข้อมูลเดิมต่อไป
+  async function loadPublic(silent) {
+    let d;
+    try { d = await api.publicDash(); }
+    catch (e) { if (!silent) showAuth('login', errMsg(e)); return; }
+    if (silent && !state.publicMode) return; // ระหว่างรอ ผู้ใช้กดไปหน้าเข้าสู่ระบบแล้ว
+    state.publicMode = true; state.user = null; state.loadError = '';
+    state.patientInfo = d.settings.patientInfo || 'MASK';
+    state.max = d.settings.maxCasesPerDay || 6;
+    state.holidays = {};
+    d.holidays.forEach(h => { state.holidays[h.date] = h.name || t('holiday_default'); });
+    state.appts = d.appointments;
+    if (!silent) { showApp(); renderUser(); }
+    renderAll();
+    clearInterval(publicTimer);
+    publicTimer = setInterval(() => loadPublic(true), PUBLIC_REFRESH_MS);
+  }
+  function leavePublic() {
+    state.publicMode = false; state.appts = [];
+    clearInterval(publicTimer); publicTimer = null;
+  }
+  $('publicBtn').addEventListener('click', () => busyBtn('publicBtn', () => loadPublic(false)));
+
+  // พารามิเตอร์ในลิงก์ เช่น ...?view=dashboard (เว็บแอปอยู่ใน iframe จึงต้องถามผ่าน google.script.url)
+  function readParams() {
+    return new Promise(resolve => {
+      try {
+        if (isGas && google.script.url) { google.script.url.getLocation(loc => resolve((loc && loc.parameter) || {})); return; }
+      } catch (e) { /* เปิดใน dialog ของชีต: ไม่มีพารามิเตอร์ */ }
+      const o = {};
+      try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) { /* ignore */ }
+      resolve(o);
+    });
+  }
+
+  readParams().then(p => {
+    const wantDash = /^(dash|dashboard|public)$/i.test(String(p.view || ''));
+    if (auth.token) { if (wantDash) state.view = 'dash'; loadApp(); }
+    else if (wantDash) loadPublic(false);
+    else showAuth('login');
+  });
 
   if (!isGas) {
-    $('seedBtn').addEventListener('click', async () => { state.appts = await api.seed(); renderAll(); toast(t('seeded')); });
-    $('clearBtn').addEventListener('click', async () => { state.appts = await api.clear(); renderAll(); toast(t('cleared')); });
+    $('seedBtn').addEventListener('click', async () => { state.appts = await api.seed(); if (state.publicMode) await loadPublic(true); renderAll(); toast(t('seeded')); });
+    $('clearBtn').addEventListener('click', async () => { state.appts = await api.clear(); if (state.publicMode) await loadPublic(true); renderAll(); toast(t('cleared')); });
   }
 })();
 </script>
