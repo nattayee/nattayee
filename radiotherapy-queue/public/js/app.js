@@ -754,8 +754,8 @@ function openById(id) {
 }
 
 // ================= demo data =================
-async function loadDemo() {
-  if (!confirm('เพิ่มข้อมูลผู้ป่วยตัวอย่าง (สมมติ) 30 รายเพื่อทดลองใช้งาน?')) return;
+async function loadDemo(silent = false) {
+  if (!silent && !confirm('เพิ่มข้อมูลผู้ป่วยตัวอย่าง (สมมติ) 30 รายเพื่อทดลองใช้งาน?')) return;
   const first = ['สมชาย', 'สมศรี', 'บุญมี', 'จันทร์เพ็ญ', 'ประเสริฐ', 'มาลี', 'วิไล', 'สุดา', 'ทองดี', 'คำปุ่น', 'แสงเดือน', 'อินทร', 'บัวผัน', 'ศรีนวล', 'ปัญญา'];
   const last = ['ใจดี', 'มีสุข', 'แก้วมา', 'ทองคำ', 'ศรีวงศ์', 'คำแสน', 'อินต๊ะ', 'ปัญญาดี', 'บุญเรือง', 'จันทร์แก้ว'];
   const dx = ['CA Cervix', 'CA Breast (Lt)', 'CA Breast (Rt)', 'CA Nasopharynx', 'CA Lung', 'CA Rectum', 'CA Prostate', 'Brain metastasis', 'CA Esophagus', 'Bone metastasis'];
@@ -802,7 +802,7 @@ async function loadDemo() {
   }
   try {
     for (const { id, ...a } of created) state.appts.push(await state.store.create(a));
-    toast('เพิ่มข้อมูลตัวอย่างแล้ว');
+    if (!silent) toast('เพิ่มข้อมูลตัวอย่างแล้ว');
     render();
   } catch (err) {
     alert(err.message);
@@ -931,7 +931,7 @@ function bind() {
       alert(err.message);
     }
   });
-  $('#demo-load').addEventListener('click', loadDemo);
+  $('#demo-load').addEventListener('click', () => loadDemo());
 
   // form
   for (const b of $$('[data-close]', dialog)) b.addEventListener('click', () => dialog.close());
@@ -1030,6 +1030,8 @@ async function init() {
   bind();
   const v = location.hash.slice(1);
   setView($(`#view-${v}`) ? v : 'dashboard');
+  // ไฟล์ตัวอย่าง (preview.html): ใส่ข้อมูลสมมติให้อัตโนมัติเมื่อยังไม่มีข้อมูล
+  if (window.RTQ_PREVIEW && !state.appts.length) await loadDemo(true);
 }
 
 init();

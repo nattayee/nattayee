@@ -95,12 +95,15 @@ class LocalStore {
 }
 
 export async function openStore() {
-  try {
-    const s = new ServerStore();
-    const data = await s.load();
-    if (data && Array.isArray(data.appointments)) return { store: s, data };
-  } catch {
-    /* ไม่มีเซิร์ฟเวอร์ — ใช้โหมดออฟไลน์ */
+  // ไฟล์ตัวอย่างหรือเปิดไฟล์ตรง ๆ (file://) ไม่มีเซิร์ฟเวอร์ให้เรียก
+  if (!globalThis.RTQ_PREVIEW && location.protocol !== 'file:') {
+    try {
+      const s = new ServerStore();
+      const data = await s.load();
+      if (data && Array.isArray(data.appointments)) return { store: s, data };
+    } catch {
+      /* ไม่มีเซิร์ฟเวอร์ — ใช้โหมดออฟไลน์ */
+    }
   }
   const s = new LocalStore();
   return { store: s, data: await s.load() };
