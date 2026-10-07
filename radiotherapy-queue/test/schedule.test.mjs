@@ -94,3 +94,12 @@ test('ประกอบชื่อเต็มจากคำนำหน้�
   assert.equal(searchIcd10('C53')[0][0], 'C53.0');
   assert.ok(searchIcd10('มะเร็งปากมดลูก').every((r) => r[0].startsWith('C53') || r[0].startsWith('D06')));
 });
+
+test('เวลานัดไม่บังคับ: นัดที่ไม่ระบุเวลาไม่นับว่าชน และอยู่ท้ายรายการของวัน', async () => {
+  const noTime = { ...base, id: 'n', time: '' };
+  assert.equal(findConflicts(noTime, [base], settings).length, 0);
+  assert.equal(findConflicts(base, [noTime], settings).length, 0);
+  const day = eventsByDate([noTime, { ...base, id: 'late', time: '15:00' }, base], settings).get('2026-10-09');
+  assert.deepEqual(day.map((e) => e.appt.id), ['a', 'late', 'n']);
+  assert.ok(suggestTimes({ ...base, id: 'x' }, [noTime], settings, 1)[0], 'หาเวลาว่างได้แม้มีนัดที่ไม่ระบุเวลา');
+});

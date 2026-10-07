@@ -45,6 +45,7 @@ const fLong = (iso) => fmt(F_LONG, iso);
 const roomOf = (id) => ROOMS.find((r) => r.id === id) || { id, name: id, label: id };
 const techOf = (id) => TECHNIQUES.find((t) => t.id === id) || { id, name: id, duration: 15 };
 const roomTag = (id) => `<span class="room-tag"><i class="dot ${esc(id)}"></i>${esc(id)}</span>`;
+const tm = (t) => (t ? esc(t) : '<span class="muted" title="ไม่ได้ระบุเวลานัด">--:--</span>'); // เวลานัดไม่บังคับ
 const holidayName = (iso) => state.settings.holidays.find((h) => h.date === iso)?.name;
 
 function toast(msg) {
@@ -159,7 +160,7 @@ function renderDashboard() {
         shown.length
           ? shown
               .map(
-                (e) => `<li data-id="${esc(e.appt.id)}"><span class="t">${esc(e.time)}</span><span class="n">${esc(e.appt.name)}</span>${eventBadges(e)}</li>`,
+                (e) => `<li data-id="${esc(e.appt.id)}"><span class="t">${tm(e.time)}</span><span class="n">${esc(e.appt.name)}</span>${eventBadges(e)}</li>`,
               )
               .join('') + (re.length > shown.length ? `<li class="muted">และอีก ${re.length - shown.length} ราย</li>` : '')
           : '<li class="muted">ไม่มีนัด</li>'
@@ -182,7 +183,7 @@ function renderDashboard() {
     items.length
       ? `<ul class="mini-list">${items
           .map(
-            (e) => `<li data-id="${esc(e.appt.id)}"><span class="date">${fShort(e.date)} ${esc(e.time)}</span>
+            (e) => `<li data-id="${esc(e.appt.id)}"><span class="date">${fShort(e.date)}${e.time ? ` ${esc(e.time)}` : ''}</span>
               <span class="name">${esc(e.appt.name)} <span class="muted small">HN ${esc(e.appt.hn)}</span></span>
               <span class="meta">${metaFn(e)}</span></li>`,
           )
@@ -442,7 +443,7 @@ function renderDayPanel() {
           re.length
             ? re
                 .map(
-                  (e) => `<div class="slot" data-id="${esc(e.appt.id)}"><span class="t">${esc(e.time)}</span>
+                  (e) => `<div class="slot" data-id="${esc(e.appt.id)}"><span class="t">${tm(e.time)}</span>
                   <div><div class="n">${esc(e.appt.name)}</div>
                   <div class="m"><span>HN ${esc(e.appt.hn)}</span><span>${esc(techOf(e.appt.technique).name)}</span>
                   <span>${e.type === 'verify' ? '' : `Fx ${e.fx}/${e.total}`}</span>${eventBadges(e)}</div></div></div>`,
@@ -467,7 +468,7 @@ function printDay() {
         <table><thead><tr><th>เวลา</th><th>HN</th><th>ชื่อ-สกุล</th><th>เทคนิค</th><th>ครั้งที่</th><th>CBCT</th><th>หมายเหตุ</th></tr></thead><tbody>
         ${re
           .map(
-            (e) => `<tr><td>${esc(e.time)}</td><td>${esc(e.appt.hn)}</td><td>${esc(e.appt.name)}</td><td>${esc(techOf(e.appt.technique).name)}</td>
+            (e) => `<tr><td>${esc(e.time || '-')}</td><td>${esc(e.appt.hn)}</td><td>${esc(e.appt.name)}</td><td>${esc(techOf(e.appt.technique).name)}</td>
             <td>${e.type === 'verify' ? 'ก่อนฉาย' : `${e.fx}/${e.total}${e.start ? ' (เริ่ม)' : ''}`}</td><td>${e.cbct ? '✓' : ''}</td><td>${esc(e.appt.notes)}</td></tr>`,
           )
           .join('')}</tbody></table></div>`;
@@ -511,8 +512,8 @@ function renderPatients() {
         <td class="dx-cell"><div class="dx" title="${esc(a.diagnosis)}">${esc(a.diagnosis || '-')}</div><div class="muted small">${esc(a.site || '')}</div></td>
         <td>${esc(techOf(a.technique).name)}</td>
         <td>${roomTag(a.room)}</td>
-        <td class="num">${a.verifyDate ? `${fMed(a.verifyDate)} ${esc(a.verifyTime || a.time)}` : '-'}</td>
-        <td class="num">${fMed(ss[0]?.date)} ${esc(a.time)}</td>
+        <td class="num">${a.verifyDate ? `${fMed(a.verifyDate)} ${esc(a.verifyTime || a.time || '')}` : '-'}</td>
+        <td class="num">${fMed(ss[0]?.date)} ${esc(a.time || '')}</td>
         <td><div class="progress"><div class="meter"><i style="width:${pct}%"></i></div><span class="num small">${done}/${ss.length}</span></div></td>
         <td class="num">${fMed(ss[ss.length - 1]?.date)}</td>
         <td><span class="badge ${p}">${PHASE_LABELS[p]}</span></td>
@@ -553,10 +554,10 @@ function printSlip(a) {
     การวินิจฉัย: ${esc(a.diagnosis || '-')}<br>
     ตำแหน่งที่ฉาย: ${esc(a.site || '-')} · แพทย์: ${esc(a.physician || '-')}<br>
     ห้องฉาย: ${esc(roomOf(a.room).label)} · เทคนิค: ${esc(techOf(a.technique).name)} · จำนวน ${ss.length} ครั้ง<br>
-    เวลานัด: ${esc(a.time)} น. · ฉายระหว่าง ${esc(fLong(ss[0]?.date))} ถึง ${esc(fLong(ss[ss.length - 1]?.date))}
-    ${a.verifyDate ? `<br><b>นัดทำ CBCT ก่อนเริ่มฉาย: ${esc(fLong(a.verifyDate))} เวลา ${esc(a.verifyTime || a.time)} น.</b>` : ''}</p>
+    เวลานัด: ${a.time ? `${esc(a.time)} น.` : 'ไม่ได้ระบุ'} · ฉายระหว่าง ${esc(fLong(ss[0]?.date))} ถึง ${esc(fLong(ss[ss.length - 1]?.date))}
+    ${a.verifyDate ? `<br><b>นัดทำ CBCT ก่อนเริ่มฉาย: ${esc(fLong(a.verifyDate))} ${a.verifyTime || a.time ? `เวลา ${esc(a.verifyTime || a.time)} น.` : ''}</b>` : ''}</p>
     <table><thead><tr><th>ครั้งที่</th><th>วันที่</th><th>เวลา</th><th>CBCT</th><th>ลงชื่อผู้ฉาย</th></tr></thead><tbody>
-    ${ss.map((s) => `<tr><td>${s.fx}</td><td>${esc(fLong(s.date))}</td><td>${esc(a.time)}</td><td>${s.cbct ? '✓' : ''}</td><td></td></tr>`).join('')}
+    ${ss.map((s) => `<tr><td>${s.fx}</td><td>${esc(fLong(s.date))}</td><td>${esc(a.time || '-')}</td><td>${s.cbct ? '✓' : ''}</td><td></td></tr>`).join('')}
     </tbody></table>
     <p>หมายเหตุ: ${esc(a.notes || '-')}</p>`;
   window.print();
@@ -711,7 +712,7 @@ function updatePreview() {
   const others = state.appts;
   const valid = a.startDate && a.fractions > 0;
   const ss = valid ? buildSessions(a, state.settings) : [];
-  const conflicts = valid && /^\d\d:\d\d$/.test(a.time) && a.duration > 0 ? findConflicts(a, others, state.settings) : [];
+  const conflicts = valid && a.duration > 0 ? findConflicts(a, others, state.settings) : [];
   const conflictDates = new Set(conflicts.map((c) => c.date));
 
   // สรุปคอร์ส
@@ -722,6 +723,7 @@ function updatePreview() {
     );
     if (ss[0].date !== a.startDate) notes.push(`<span class="muted">วันที่เลือก (${fMed(a.startDate)}) เป็นวันหยุด ระบบเลื่อนวันเริ่มฉายเป็น ${fMed(ss[0].date)}</span>`);
   }
+  if (valid && !a.time) notes.push('<span class="muted">ยังไม่ได้ระบุเวลานัด — ระบบจะไม่ตรวจเวลาซ้อนกับผู้ป่วยรายอื่น (กด “หาเวลาว่างอัตโนมัติ” เพื่อเลือกเวลาได้)</span>');
   if (a.verifyDate) {
     if (!isWorkday(a.verifyDate, state.settings)) notes.push('<span class="muted">⚠ วันนัดทำ CBCT ก่อนฉายตรงกับวันหยุด</span>');
     if (ss.length && a.verifyDate > ss[0].date) notes.push('<span class="muted">⚠ วันนัดทำ CBCT ก่อนฉายอยู่หลังวันเริ่มฉาย</span>');
@@ -730,7 +732,7 @@ function updatePreview() {
 
   const rows = [];
   if (a.verifyDate)
-    rows.push(`<tr class="verify${conflictDates.has(a.verifyDate) ? ' conflict' : ''}"><td>—</td><td>${fLong(a.verifyDate)} · ${esc(a.verifyTime || a.time)}</td><td>✓ ก่อนฉาย</td><td></td></tr>`);
+    rows.push(`<tr class="verify${conflictDates.has(a.verifyDate) ? ' conflict' : ''}"><td>—</td><td>${fLong(a.verifyDate)}${a.verifyTime || a.time ? ` · ${esc(a.verifyTime || a.time)}` : ''}</td><td>✓ ก่อนฉาย</td><td></td></tr>`);
   for (const s of ss) {
     rows.push(`<tr class="${conflictDates.has(s.date) ? 'conflict' : ''}"><td>${s.fx}</td><td>${fLong(s.date)}</td>
       <td><input type="checkbox" class="cbct-toggle" data-date="${s.date}" ${s.cbct ? 'checked' : ''} aria-label="ทำ CBCT วันที่ ${fMed(s.date)}"></td>
@@ -874,7 +876,7 @@ async function submitForm(ev) {
   if (form.prefixSel.value === 'other' && !a.prefix) errors.push('กรุณาระบุคำนำหน้า หรือเลือกจากรายการ');
   if (!a.startDate) errors.push('กรุณาระบุวันเริ่มฉาย');
   if (!(a.fractions >= 1 && a.fractions <= 60)) errors.push('จำนวนครั้งต้องอยู่ระหว่าง 1–60');
-  if (!/^\d\d:\d\d$/.test(a.time || '')) errors.push('กรุณาระบุเวลานัด');
+  if (a.time && !/^\d\d:\d\d$/.test(a.time)) errors.push('รูปแบบเวลานัดไม่ถูกต้อง');
   if (!(a.duration >= 5)) errors.push('กรุณาระบุระยะเวลาต่อครั้ง');
   const dup = state.appts.find((x) => x.id !== a.id && x.hn === a.hn?.trim() && x.status === 'active' && phase(x) !== 'completed');
   if (errors.length) {

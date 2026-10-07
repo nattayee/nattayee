@@ -55,3 +55,11 @@ test('ให้บริการหน้าเว็บและกัน path
   const bad = await fetch(`${base}/..%2fserver.mjs`);
   assert.notEqual(bad.status, 200);
 });
+
+test('บันทึกนัดได้โดยไม่ระบุเวลานัด แต่เวลาที่ผิดรูปแบบถูกปฏิเสธ', async () => {
+  let res = await fetch(`${base}/api/appointments`, { method: 'POST', body: JSON.stringify({ ...appt, time: '' }) });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).time, '');
+  res = await fetch(`${base}/api/appointments`, { method: 'POST', body: JSON.stringify({ ...appt, time: '25:00' }) });
+  assert.equal(res.status, 400);
+});

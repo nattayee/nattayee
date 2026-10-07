@@ -105,7 +105,7 @@ function validateAppointment(input) {
   if (!STATUS_IDS.has(a.status)) errors.push('สถานะไม่ถูกต้อง');
   if (!DATE_RE.test(a.startDate)) errors.push('วันเริ่มฉายไม่ถูกต้อง');
   for (const k of ['simDate', 'verifyDate']) if (a[k] && !DATE_RE.test(a[k])) errors.push(`${k} ไม่ถูกต้อง`);
-  if (!TIME_RE.test(a.time)) errors.push('เวลานัดไม่ถูกต้อง');
+  if (a.time && !TIME_RE.test(a.time)) errors.push('เวลานัดไม่ถูกต้อง');
   if (a.verifyTime && !TIME_RE.test(a.verifyTime)) errors.push('เวลานัด CBCT ไม่ถูกต้อง');
   if (!Number.isInteger(a.fractions) || a.fractions < 1 || a.fractions > 60) errors.push('จำนวนครั้ง (Fx) ต้องอยู่ระหว่าง 1–60');
   if (!Number.isInteger(a.duration) || a.duration < 5 || a.duration > 240) errors.push('ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที');

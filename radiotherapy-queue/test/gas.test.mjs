@@ -125,3 +125,11 @@ test('รายชื่อแพทย์เริ่มต้นและบ�
   call('saveSettings', T, { ...s, physicians: ['ทินกร จอมใจ', 'แพทย์ใหม่', 'แพทย์ใหม่', ''] });
   assert.deepEqual(call('getState', T).settings.physicians, ['ทินกร จอมใจ', 'แพทย์ใหม่']);
 });
+
+test('Apps Script: บันทึกนัดได้โดยไม่ระบุเวลานัด', () => {
+  const { call } = createGas();
+  call('setup');
+  const a = call('createAppointment', T, { ...appt, time: '' });
+  assert.equal(call('getState', T).appointments.find((x) => x.id === a.id).time, '');
+  assert.throws(() => call('createAppointment', T, { ...appt, time: '9 โมง' }), /เวลานัดไม่ถูกต้อง/);
+});

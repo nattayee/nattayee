@@ -8,7 +8,7 @@
  */
 
 // รุ่นของโค้ด (npm run build:gas ใส่ให้อัตโนมัติ) — ต้องตรงกับไฟล์ Index ไม่เช่นนั้นหน้าเว็บจะแจ้งเตือน
-var APP_VERSION = 'e7d18e58';
+var APP_VERSION = '885564d4';
 
 // (ไม่บังคับ) ถ้าต้องการใช้ Google Sheet ที่มีอยู่แล้ว ให้วางลิงก์ของ Sheet ไว้ในเครื่องหมายคำพูดก่อนรัน setup
 // ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
@@ -516,7 +516,7 @@ function validateAppointment_(input) {
   if (!DATE_RE_.test(a.startDate)) errors.push('วันเริ่มฉายไม่ถูกต้อง');
   if (a.simDate && !DATE_RE_.test(a.simDate)) errors.push('วันทำ CT Sim ไม่ถูกต้อง');
   if (a.verifyDate && !DATE_RE_.test(a.verifyDate)) errors.push('วันนัดทำ CBCT ไม่ถูกต้อง');
-  if (!TIME_RE_.test(a.time)) errors.push('เวลานัดไม่ถูกต้อง');
+  if (a.time && !TIME_RE_.test(a.time)) errors.push('เวลานัดไม่ถูกต้อง');
   if (a.verifyTime && !TIME_RE_.test(a.verifyTime)) errors.push('เวลานัด CBCT ไม่ถูกต้อง');
   if (!(a.fractions % 1 === 0 && a.fractions >= 1 && a.fractions <= 60)) errors.push('จำนวนครั้ง (Fx) ต้องอยู่ระหว่าง 1–60');
   if (!(a.duration % 1 === 0 && a.duration >= 5 && a.duration <= 240)) errors.push('ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที');

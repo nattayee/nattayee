@@ -220,7 +220,7 @@ export function eventsOf(appt, settings) {
     total: sessions.length,
     cbct: s.cbct,
     start: s.fx === 1,
-    time: appt.time,
+    time: appt.time || '', // ไม่บังคับระบุเวลานัด
     duration: Number(appt.duration),
     room: appt.room,
     appt,
@@ -233,7 +233,7 @@ export function eventsOf(appt, settings) {
       total: sessions.length,
       cbct: true,
       start: false,
-      time: appt.verifyTime || appt.time,
+      time: appt.verifyTime || appt.time || '',
       duration: Number(appt.verifyDuration || 20),
       room: appt.room,
       appt,
@@ -256,11 +256,16 @@ export function eventsByDate(appts, settings) {
       map.get(ev.date).push(ev);
     }
   }
-  for (const list of map.values()) list.sort((x, y) => x.time.localeCompare(y.time) || x.room.localeCompare(y.room));
+  for (const list of map.values()) list.sort(byTime);
   return map;
 }
 
-// หาการนัดที่ซ้อนเวลากันในห้องเดียวกัน
+// เรียงตามเวลา — นัดที่ไม่ได้ระบุเวลาอยู่ท้ายสุด
+export function byTime(x, y) {
+  return (x.time ? 0 : 1) - (y.time ? 0 : 1) || x.time.localeCompare(y.time) || x.room.localeCompare(y.room);
+}
+
+// หาการนัดที่ซ้อนเวลากันในห้องเดียวกัน (นัดที่ไม่ได้ระบุเวลาไม่นับว่าชน)
 export function findConflicts(appt, others, settings) {
   const mine = eventsOf(appt, settings);
   const conflicts = [];
@@ -274,7 +279,7 @@ export function findConflicts(appt, others, settings) {
     }
     for (const m of mine) {
       for (const t of byDate.get(m.date) || []) {
-        if (overlaps(m.time, m.duration, t.time, t.duration)) {
+        if (m.time && t.time && overlaps(m.time, m.duration, t.time, t.duration)) {
           conflicts.push({ date: m.date, time: t.time, duration: t.duration, with: o });
         }
       }
