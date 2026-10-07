@@ -2,11 +2,14 @@
  * ระบบนัดคิวเทคนิคพิเศษ กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง
  * Google Apps Script version — data is stored in a Google Sheet.
  *
- * ถ้าสร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet ให้เว้น SPREADSHEET_ID ว่างไว้
- * ถ้าเป็นสคริปต์แยก (standalone) ให้ใส่ ID ของ Google Sheet ที่ใช้เก็บข้อมูล
+ * ที่เก็บข้อมูล (เลือกอย่างใดอย่างหนึ่ง):
+ * - เว้น SPREADSHEET_ID ว่างไว้: ถ้าสคริปต์สร้างจาก Google Sheet จะใช้ชีตนั้น
+ *   ถ้าเป็นสคริปต์แยก ระบบจะสร้าง Google Sheet ใหม่ใน Drive ให้อัตโนมัติในครั้งแรก
+ * - หรือใส่ ID ของ Google Sheet ที่ต้องการใช้ (ส่วนที่อยู่ระหว่าง /d/ และ /edit ใน URL)
  */
 const SPREADSHEET_ID = '';
 const SHEET_NAME = 'นัดเทคนิคพิเศษ';
+const AUTO_SPREADSHEET_TITLE = 'ระบบนัดคิวเทคนิคพิเศษ รังสีรักษา รพ.มะเร็งลำปาง';
 const TECHNIQUES = ['DIBH', 'SRS', 'SRT', 'SBRT', 'อื่นๆ'];
 
 // [key, หัวคอลัมน์ในชีต] — ห้ามสลับลำดับหลังจากเริ่มใช้งานแล้ว
@@ -37,11 +40,12 @@ function doGet() {
 // ---------- functions called from Index.html via google.script.run ----------
 
 function getInitData() {
-  return { bookings: listBookings(), sheetUrl: getSpreadsheet_().getUrl() };
+  const ss = getSpreadsheet_();
+  return { bookings: listBookings(), sheetUrl: ss.getUrl() };
 }
 
 function listBookings() {
-  const sheet = getSheet_();
+  const sheet = getSheet_(getSpreadsheet_());
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   return sheet.getRange(2, 1, lastRow - 1, KEYS.length).getValues()
@@ -51,8 +55,9 @@ function listBookings() {
 
 function createBooking(input) {
   const booking = validate_(input);
+  const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_();
+    const sheet = getSheet_(ss);
     const now = new Date().toISOString();
     booking.id = Utilities.getUuid();
     booking.createdAt = now;
@@ -64,8 +69,9 @@ function createBooking(input) {
 
 function updateBooking(id, input) {
   const booking = validate_(input);
+  const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_();
+    const sheet = getSheet_(ss);
     const row = findRow_(sheet, id);
     const existing = rowToBooking_(sheet.getRange(row, 1, 1, KEYS.length).getValues()[0]);
     booking.id = id;
@@ -77,8 +83,9 @@ function updateBooking(id, input) {
 }
 
 function deleteBooking(id) {
+  const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_();
+    const sheet = getSheet_(ss);
     sheet.deleteRow(findRow_(sheet, id));
     return true;
   });
@@ -87,11 +94,22 @@ function deleteBooking(id) {
 // ---------- helpers ----------
 
 function getSpreadsheet_() {
-  return SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+
+  // สคริปต์แยก (standalone): ใช้ชีตที่สร้างไว้แล้ว หรือสร้างใหม่ครั้งแรก
+  const props = PropertiesService.getScriptProperties();
+  return withLock_(function () {
+    const id = props.getProperty('SPREADSHEET_ID');
+    if (id) return SpreadsheetApp.openById(id);
+    const created = SpreadsheetApp.create(AUTO_SPREADSHEET_TITLE);
+    props.setProperty('SPREADSHEET_ID', created.getId());
+    return created;
+  });
 }
 
-function getSheet_() {
-  const ss = getSpreadsheet_();
+function getSheet_(ss) {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
