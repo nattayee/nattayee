@@ -15,15 +15,17 @@ node --test tdf-calculator/tdf.test.js
 โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script
 ใช้บัญชีผู้ใช้ของ LPCH RO Workspace ผ่าน JSON API (`doPost`) ที่ Workspace มีอยู่แล้ว **ไม่ต้องแก้โปรเจกต์ Workspace**
 
-| ไฟล์ | ใส่ใน Apps Script เป็น |
-|---|---|
-| `Code.gs` | Script file ชื่อ `Code` (URL ของ Workspace อยู่ใน `WORKSPACE_URL`) |
-| `Index.html` | HTML file ชื่อ `Index` (หน้าเข้าสู่ระบบ + เครื่องคำนวณ + สูตรคำนวณ) |
-| `appsscript.json` | manifest (ถ้าใช้ `clasp`) |
+**โปรเจกต์ Apps Script ใช้ไฟล์เดียว คือ `Code.gs`** หน้าเว็บ (`apps-script/Index.html` ~130 KB) โหลดจาก GitHub (`PAGE_URL`)
+และแคชไว้ 10 นาที จึงไม่มีปัญหาการวางไฟล์ใหญ่ไม่ครบในตัวแก้ไข และอัปเดตหน้าเว็บได้โดยไม่ต้องวางใหม่
+(ไฟล์ `Index` ในโปรเจกต์ใช้เป็นสำรองเฉพาะเมื่อโหลดจาก GitHub ไม่ได้และไฟล์ครบเท่านั้น)
 
-Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone**
+1. วาง `Code.gs` ในไฟล์ `Code` (รหัส.gs) ลบไฟล์ `Index` / `Tdf` เดิมออก
+2. เลือกฟังก์ชัน `setup` แล้วกด Run หนึ่งครั้ง (อนุญาต Sheets, Drive และการเชื่อมต่อภายนอก)
+3. Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone** (อัปเดต: Manage deployments → New version)
+4. ท้ายหน้าเว็บแสดง "เวอร์ชัน xxxxxxx" ให้ตรงกับ `copy-code.html` · หลังอัปเดตหน้าเว็บบน GitHub รัน `clearPageCache` เพื่อเห็นทันที
 
-เปิด `copy-code.html` เพื่อคัดลอกโค้ดทั้ง 2 ไฟล์ทีละกล่องด้วยปุ่มเดียว
+ถ้าสคริปต์ในหน้าเว็บไม่ทำงาน (เช่น ไฟล์ถูกตัด) จะมีแถบสีแดงแจ้งที่ด้านบนของหน้า แทนที่ปุ่มจะกดไม่ได้เงียบ ๆ
+เปิด `copy-code.html` เพื่อคัดลอก `Code.gs` ด้วยปุ่มเดียว
 
 ### วิธีเข้าสู่ระบบ
 

@@ -1,9 +1,10 @@
 /**
  * TDF Dose Calculator — Google Apps Script web app, signed in with LPCH RO Workspace accounts.
  *
- * Files in this project:
- *   Code.gs     this file (server side)
- *   Index.html  the page (sign-in screen + calculator, with the TDF formulas built in)
+ * The project needs only this file (Code.gs). The page (Index.html, ~130 KB) is loaded from GitHub (PAGE_URL) and cached
+ * for 10 minutes, so a large paste cannot be cut off in the editor and updates arrive without pasting again.
+ * An "Index" HTML file in the project is only a fallback for when GitHub cannot be reached, and only if complete.
+ * After updating the page on GitHub, run  clearPageCache  to see it at once.
  *
  * Sign-in uses the Workspace web app's own JSON API (doPost there), so the Workspace project needs no changes:
  *   - From the Workspace: a Home button / menu card with this app's /exec URL and "เข้าสู่ระบบอัตโนมัติ" (sso) on
@@ -25,14 +26,71 @@
  * Open a tab directly with ?tab=frac | gap | brachy | ref
  */
 var WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/practical-cerf-k0tdhp/tdf-calculator/apps-script/Index.html';
+var PAGE_CACHE_SECONDS = 600;
 
 function doGet() {
-  var page = HtmlService.createTemplateFromFile('Index');
-  page.workspaceUrl = WORKSPACE_URL;
-  return page.evaluate()
+  var output;
+  try {
+    var page = HtmlService.createTemplate(pageSource_());
+    page.workspaceUrl = WORKSPACE_URL;
+    output = page.evaluate();
+  } catch (err) {
+    output = HtmlService.createHtmlOutput('<div style="font:16px/1.6 sans-serif;padding:24px;max-width:640px">' +
+      '<h2 style="color:#b3261e">เปิด TDF Dose Calculator ไม่ได้</h2><p>' + String(err.message || err).replace(/[<>&]/g, '') +
+      '</p><p>ลองโหลดหน้าใหม่อีกครั้ง หรือแจ้งผู้ดูแลระบบ</p></div>');
+  }
+  return output
     .setTitle('TDF Dose Calculator')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/** The page template: the copy on GitHub, or a complete "Index" file in this project when GitHub cannot be reached. */
+function pageSource_() {
+  try {
+    return loadPage_();
+  } catch (err) {
+    var names = ['Index', 'index'];
+    for (var i = 0; i < names.length; i++) {
+      try {
+        var html = HtmlService.createHtmlOutputFromFile(names[i]).getContent();
+        if (/<\/html>\s*$/i.test(html)) return html;
+      } catch (e) { /* no such file */ }
+    }
+    throw err;
+  }
+}
+
+/** Index.html from GitHub, cached in 30,000-character pieces (the cache holds at most 100 KB per value). */
+function loadPage_() {
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get('page_n') || 0);
+  if (n) {
+    var keys = [];
+    for (var i = 0; i < n; i++) keys.push('page_' + i);
+    var got = cache.getAll(keys);
+    if (Object.keys(got).length === n) return keys.map(function (k) { return got[k]; }).join('');
+  }
+  var res = UrlFetchApp.fetch(PAGE_URL, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('โหลดหน้าเว็บจาก GitHub ไม่ได้ (HTTP ' + res.getResponseCode() + ') ตรวจสอบ PAGE_URL');
+  var html = res.getContentText('UTF-8');
+  if (!/<\/html>\s*$/i.test(html)) throw new Error('หน้าเว็บที่โหลดจาก GitHub ไม่ครบ');
+  var parts = {}, size = 30000, j;
+  for (j = 0; j * size < html.length; j++) parts['page_' + j] = html.substr(j * size, size);
+  parts.page_n = String(j);
+  cache.putAll(parts, PAGE_CACHE_SECONDS);
+  return html;
+}
+
+/** Run from the editor after updating the page on GitHub, to serve the new version at once. */
+function clearPageCache() {
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get('page_n') || 0);
+  var keys = ['page_n'];
+  for (var i = 0; i < n; i++) keys.push('page_' + i);
+  cache.removeAll(keys);
+  Logger.log('ล้างแคชหน้าเว็บแล้ว (' + n + ' ส่วน) · หน้าเว็บ ' + Math.round(loadPage_().length / 1024) + ' KB');
 }
 
 /* ----- called from the page with google.script.run ----- */
@@ -74,6 +132,7 @@ function setup() {
   var sh = records_();
   Logger.log('Records sheet: ' + sh.getParent().getUrl());
   Logger.log('PDF folder: ' + pdfFolder_().getUrl());
+  Logger.log('หน้าเว็บ: ' + Math.round(pageSource_().length / 1024) + ' KB');
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)');
 }
 
