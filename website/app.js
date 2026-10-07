@@ -109,7 +109,7 @@
       }).join("");
       // admins edit these buttons on the "จัดการเมนู" page (menus.js)
       var manage = Auth.user && Auth.user.isAdmin && window.Menus ? '<div class="menu-adminbar"><a class="chip" href="#/menus">⚙️ จัดการปุ่ม Workspace</a></div>' : "";
-      return section("Workspace", "เลือกส่วนงาน", manage + '<div class="grid">' + tiles + "</div>");
+      return section("Workspace", "เลือกส่วนงาน", manage + '<div class="grid tiles">' + tiles + "</div>");
     },
 
     subpages: function (page) {
@@ -120,7 +120,7 @@
         return '<a class="card tile" href="#/' + esc(c.page) + '"><div><strong>' + esc(c.label) + "</strong>" +
           "<span>" + esc(p.lead || "") + "</span></div></a>";
       }).join("");
-      return section("", "", '<div class="grid">' + tiles + "</div>");
+      return section("", "", '<div class="grid tiles">' + tiles + "</div>");
     },
 
     constraints: function () {
@@ -358,6 +358,13 @@
       unmountInbox = window.DM.mount(inboxRoot, m ? decodeURIComponent(m[1]) : null);
     }
     document.getElementById("inboxLink").classList.toggle("active", page === "inbox");
+    // bottom bar on phones: highlight where we are; "ทีม" opens Home at the สถานะทีม list
+    var team = page === "home" && /[?&]team\b|\?team$/.test(location.hash);
+    document.querySelectorAll("#tabbar [data-tab]").forEach(function (t) {
+      var k = t.getAttribute("data-tab");
+      t.classList.toggle("active", team ? k === "team" : k === page);
+    });
+    if (team) setTimeout(function () { var t = document.getElementById("teamRoot"); if (t) t.scrollIntoView({ block: "start" }); }, 60);
     // Chat pages fill the screen like a chat app (compact header on phones, no footer).
     document.body.classList.toggle("chat-page", page === "chat" || page === "inbox");
     fitChat();
@@ -421,6 +428,7 @@
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
         (window.Status ? '<button type="button" id="statusBtn">📍 ตั้งสถานะของฉัน</button>' : "") +
         (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a><a href="#/menus">🧭 จัดการเมนู</a><a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
+        '<button type="button" id="themeBtn" class="phone-only">' + themeLabel() + "</button>" +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
       "</div>";
@@ -441,9 +449,22 @@
     });
     drop.addEventListener("click", function () { drop.hidden = true; });
     document.getElementById("logoutBtn").addEventListener("click", function () { Auth.logout(); });
+    document.getElementById("themeBtn").addEventListener("click", function (e) {
+      // phones: the theme switch lives here instead of the header
+      e.stopPropagation();
+      var order = ["auto", "light", "dark"], next = order[(order.indexOf(window.LPCHTheme.get()) + 1) % 3];
+      window.LPCHTheme.set(next);
+      document.querySelectorAll('input[name="theme"]').forEach(function (r) { r.checked = r.value === next; });
+      this.textContent = themeLabel();
+    });
     var stBtn = document.getElementById("statusBtn");
     if (stBtn) stBtn.addEventListener("click", function () { window.Status.openEditor(); });
     if (window.Status) window.Status.renderPill();
+  }
+
+  function themeLabel() {
+    var m = window.LPCHTheme.get();
+    return "🌓 โหมดสี: " + (m === "light" ? "กลางวัน" : m === "dark" ? "กลางคืน" : "อัตโนมัติ");
   }
 
   function closeUserMenu() {
@@ -489,6 +510,23 @@
   });
 
   renderNav();
+
+  // Bottom bar (phones): status button, and unread counts copied from the header badges.
+  document.getElementById("tabStatus").addEventListener("click", function () { if (window.Status) window.Status.openEditor(); });
+  function syncTabBadges() {
+    [["dmBadge", "tabDm"], [null, "tabChat"]].forEach(function (p) {
+      var from = p[0] ? document.getElementById(p[0]) : navEl.querySelector('.nav-link[data-page="chat"] .nav-count');
+      var to = document.getElementById(p[1]);
+      var n = from && !from.hidden ? from.textContent.trim() : "";
+      to.textContent = n; to.hidden = !n || n === "0";
+    });
+  }
+  if (window.MutationObserver) {
+    var watch = { subtree: true, childList: true, characterData: true, attributes: true };
+    new MutationObserver(syncTabBadges).observe(document.getElementById("dmBadge"), watch);
+    new MutationObserver(syncTabBadges).observe(navEl, watch);
+  }
+
   if (window.Menus) window.Menus.onChange(function () {
     renderNav();
     // keep the active item highlighted after the menu is drawn again

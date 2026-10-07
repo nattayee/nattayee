@@ -127,6 +127,8 @@
       ? (st ? (st.icon ? esc(st.icon) + " " : "") + esc(st.label) : "") + (loc ? (st ? " · " : "📍 ") + esc(loc.label) : "")
       : "＋ ตั้งสถานะ";
     host.title = "ตั้งสถานะของฉัน";
+    var dot = document.getElementById("tabStatusDot");   // bottom bar on phones
+    if (dot) { dot.hidden = !st; dot.className = "tab-dot" + (st ? " st-" + st.color : ""); }
   }
 
   /* ---------------- "my status" dialog ---------------- */
