@@ -1427,6 +1427,7 @@ async function init() {
   let { data } = opened;
   state.store = store;
   const cfg = globalThis.RTQ_CONFIG || {};
+  if (cfg.workspaceUrl) $('#btn-home').href = cfg.workspaceUrl; // ปุ่ม Home ตาม WORKSPACE_URL ใน Code.gs
   // !data: เซิร์ฟเวอร์บอกให้เข้าสู่ระบบ — แสดงหน้าเข้าสู่ระบบแม้ doGet จะไม่ได้ส่ง RTQ_CONFIG มา
   if (store.mode === 'gas' && (cfg.auth || !data)) {
     bindLogin(cfg);
