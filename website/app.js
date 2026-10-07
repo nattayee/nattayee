@@ -81,10 +81,6 @@
   /* ---------------- Widgets ---------------- */
 
   var widgets = {
-    intro: function () {
-      return '<div class="intro section"><h2>' + esc(S.organization) + "</h2>" +
-        '<p class="intro-text">' + esc(S.description) + "</p></div>";
-    },
 
     account: function () { return '<section class="section" id="accountRoot"></section>'; },
 
@@ -469,7 +465,6 @@
   titleEl.textContent = S.brand.name + " ";
   titleEl.appendChild(document.createElement("span")).textContent = S.brand.accent;
   document.getElementById("siteOrg").textContent = S.brand.org;
-  document.getElementById("siteDesc").textContent = S.organization + " — " + S.tagline;
   document.getElementById("footerOrg").textContent = S.organization;
 
   // Theme switch (auto / light / dark), stored per browser by the snippet in index.html.
