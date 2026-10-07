@@ -4,7 +4,7 @@
 // Keeps generated parts in sync:
 //  - holidays.json → DEFAULT_HOLIDAYS in public/index.html and HOLIDAYS_SEED in apps-script/Code.gs
 //  - physicians.json / sites.json → PHYSICIANS / SITES in public/index.html and apps-script/Code.gs
-//  - public/index.html → apps-script/Index.html (storage swapped for google.script.run)
+//  - public/index.html → apps-script/Index.html (storage swapped for scripts/gas-storage.js)
 // Usage: node scripts/build.js          (write files)
 //        node scripts/build.js --check  (exit 1 if anything is out of date)
 
@@ -18,25 +18,8 @@ const GAS_HTML = path.join(ROOT, 'apps-script', 'Index.html');
 const HOLIDAYS = path.join(ROOT, 'holidays.json');
 const LISTS = [['PHYSICIANS', 'physicians.json'], ['SITES', 'sites.json']];
 
-const GAS_STORAGE = `
-  // Google Apps Script: Code.gs functions via google.script.run.
-  const gs = (fn, ...args) => new Promise((resolve, reject) => {
-    google.script.run
-      .withSuccessHandler(resolve)
-      .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^(Error|Exception):\\s*/, ''))))
-      [fn](...args);
-  });
-  const store = {
-    list: () => gs('listBookings'),
-    create: (b) => gs('createBooking', b),
-    update: (id, b) => gs('updateBooking', id, b),
-    remove: (id) => gs('deleteBooking', id),
-  };
-  async function initStore() {
-    const data = await gs('getInitData');
-    return { bookings: data.bookings, holidays: data.holidays, sheetUrl: data.sheetUrl, mode: 'บันทึกใน Google Sheets', csv: false };
-  }
-  `;
+// Storage layer for the Apps Script page (google.script.run + LPCH RO Workspace sign-in).
+const GAS_STORAGE = fs.readFileSync(path.join(__dirname, 'gas-storage.js'), 'utf8');
 
 function replaceBetween(src, start, end, body, file) {
   const i = src.indexOf(start);

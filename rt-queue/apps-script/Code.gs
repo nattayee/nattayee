@@ -8,8 +8,17 @@
  * - หรือใส่ ID ของ Google Sheet ที่ต้องการใช้ (ส่วนที่อยู่ระหว่าง /d/ และ /edit ใน URL)
  *
  * วันหยุด: แก้ไข/เพิ่มได้ในชีต "วันหยุด" (คอลัมน์ วันที่ แบบ yyyy-mm-dd และชื่อวันหยุด)
+ *
+ * การเข้าสู่ระบบ: ใช้บัญชีของ LPCH RO Workspace (AUTH_API_URL)
+ * - เปิดจากปุ่ม/เมนูใน Workspace ที่ตั้ง "เข้าสู่ระบบอัตโนมัติ" → เข้าได้ทันที (?sso=<บัตรผ่าน>)
+ * - เปิดลิงก์นี้ตรงๆ → กรอกชื่อผู้ใช้และรหัสผ่านของ Workspace
+ * - Workspace ต้อง Deploy แบบ Who has access: Anyone (เพื่อให้สคริปต์นี้เรียก API ได้)
+ * - หลังวางโค้ดครั้งแรก ให้เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง เพื่ออนุญาตสิทธิ์เชื่อมต่อภายนอก
  */
 const SPREADSHEET_ID = '';
+// เว็บแอป LPCH RO Workspace (.../exec) ที่ใช้ตรวจชื่อผู้ใช้ รหัสผ่าน และบัตรผ่าน SSO
+const AUTH_API_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+const AUTH_CACHE_SECONDS = 600;   // ตรวจสถานะบัญชีกับ Workspace ซ้ำทุก 10 นาที
 const SHEET_NAME = 'นัดเทคนิคพิเศษ';
 const HOLIDAY_SHEET_NAME = 'วันหยุด';
 const AUTO_SPREADSHEET_TITLE = 'ระบบนัดคิวเทคนิคพิเศษ รังสีรักษา รพ.มะเร็งลำปาง';
@@ -79,6 +88,8 @@ const COLUMNS = [
   ['frequency', 'ความถี่ในการฉาย'],
   ['time2', 'เวลานัดรอบ 2 (BID)'],
   ['cbctFx', 'Fx ที่ทำ CBCT'],
+  ['createdBy', 'บันทึกโดย'],
+  ['updatedBy', 'แก้ไขล่าสุดโดย'],
 ];
 const KEYS = COLUMNS.map(function (c) { return c[0]; });
 const LIST_KEYS = ['cbctDates', 'treatmentDates', 'skipDates'];
@@ -133,22 +144,54 @@ function doGet() {
 }
 
 // ---------- functions called from Index.html via google.script.run ----------
+// ทุกฟังก์ชันที่อ่าน/เขียนข้อมูลรับ token ของ LPCH RO Workspace เป็นอาร์กิวเมนต์แรก
 
-function getInitData() {
+/** Run once from the editor after pasting: grants permissions and checks the Workspace connection. */
+function setup() {
   const ss = getSpreadsheet_();
-  return { bookings: listBookings(), holidays: listHolidays_(ss), sheetUrl: ss.getUrl() };
+  getSheet_(ss);
+  listHolidays_(ss);
+  const res = UrlFetchApp.fetch(AUTH_API_URL, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify({ action: 'me', token: '' }), muteHttpExceptions: true,
+  });
+  let ok = false;
+  try { ok = JSON.parse(res.getContentText()).error === 'session_expired'; } catch (e) { /* not JSON */ }
+  Logger.log('ชีตข้อมูล: ' + ss.getUrl());
+  Logger.log(ok ? 'เชื่อมต่อ LPCH RO Workspace ได้' :
+    'เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') — ตรวจ AUTH_API_URL และให้ Workspace Deploy แบบ Who has access: Anyone');
 }
 
-function listBookings() {
-  const sheet = getSheet_(getSpreadsheet_());
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  return sheet.getRange(2, 1, lastRow - 1, KEYS.length).getValues()
-    .filter(function (row) { return row[0]; })
-    .map(rowToBooking_);
+function login(username, password) {
+  const out = authCall_({ action: 'login', username: String(username || ''), password: String(password || '') });
+  return { token: out.token, user: rememberUser_(out.token, out.user) };
 }
 
-function createBooking(input) {
+/** Exchanges a one-time ticket from LPCH RO Workspace (?sso=…) for a session. */
+function ssoLogin(ticket) {
+  const out = authCall_({ action: 'ssoRedeem', ticket: String(ticket || '') });
+  return { token: out.token, user: rememberUser_(out.token, out.user) };
+}
+
+function logout(token) {
+  if (!token) return true;
+  CacheService.getScriptCache().remove(authKey_(token));
+  try { authCall_({ action: 'logout', token: String(token) }); } catch (e) { /* already gone */ }
+  return true;
+}
+
+function getInitData(token) {
+  const user = requireUser_(token);
+  const ss = getSpreadsheet_();
+  return { user: user, bookings: readBookings_(ss), holidays: listHolidays_(ss), sheetUrl: ss.getUrl() };
+}
+
+function listBookings(token) {
+  requireUser_(token);
+  return readBookings_(getSpreadsheet_());
+}
+
+function createBooking(token, input) {
+  const by = userLabel_(requireUser_(token));
   const booking = validate_(input);
   const ss = getSpreadsheet_();
   return withLock_(function () {
@@ -157,12 +200,15 @@ function createBooking(input) {
     booking.id = Utilities.getUuid();
     booking.createdAt = now;
     booking.updatedAt = now;
+    booking.createdBy = by;
+    booking.updatedBy = by;
     writeRow_(sheet, sheet.getLastRow() + 1, booking);
     return booking;
   });
 }
 
-function updateBooking(id, input) {
+function updateBooking(token, id, input) {
+  const by = userLabel_(requireUser_(token));
   const booking = validate_(input);
   const ss = getSpreadsheet_();
   return withLock_(function () {
@@ -171,19 +217,78 @@ function updateBooking(id, input) {
     const existing = rowToBooking_(sheet.getRange(row, 1, 1, KEYS.length).getValues()[0]);
     booking.id = id;
     booking.createdAt = existing.createdAt;
+    booking.createdBy = existing.createdBy;
     booking.updatedAt = new Date().toISOString();
+    booking.updatedBy = by;
     writeRow_(sheet, row, booking);
     return booking;
   });
 }
 
-function deleteBooking(id) {
+function deleteBooking(token, id) {
+  requireUser_(token);
   const ss = getSpreadsheet_();
   return withLock_(function () {
     const sheet = getSheet_(ss);
     sheet.deleteRow(findRow_(sheet, id));
     return true;
   });
+}
+
+// ---------- sign-in via LPCH RO Workspace ----------
+
+/** POSTs an action to the Workspace JSON API; throws its Thai error message (or 'session_expired'). */
+function authCall_(req) {
+  let res;
+  try {
+    res = UrlFetchApp.fetch(AUTH_API_URL, {
+      method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true,
+    });
+  } catch (e) {
+    throw new Error('เชื่อมต่อระบบล็อกอิน LPCH RO Workspace ไม่ได้ กรุณาลองใหม่');
+  }
+  let out;
+  try {
+    out = JSON.parse(res.getContentText());
+  } catch (e) {
+    throw new Error('ระบบล็อกอิน LPCH RO Workspace ตอบกลับไม่ถูกต้อง (ผู้ดูแลระบบ: ตรวจ AUTH_API_URL และให้ Workspace Deploy แบบ Who has access: Anyone)');
+  }
+  if (!out || !out.ok) throw new Error((out && out.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+  return out;
+}
+
+function authKey_(token) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token), Utilities.Charset.UTF_8);
+  return 'auth_' + Utilities.base64EncodeWebSafe(digest);
+}
+
+function rememberUser_(token, user) {
+  const u = { username: String(user.username || ''), fullName: String(user.fullName || user.username || ''),
+    role: String(user.role || ''), isAdmin: !!user.isAdmin };
+  CacheService.getScriptCache().put(authKey_(token), JSON.stringify(u), AUTH_CACHE_SECONDS);
+  return u;
+}
+
+/** The signed-in user for a Workspace token (checked with the Workspace at most every AUTH_CACHE_SECONDS). */
+function requireUser_(token) {
+  if (!token) throw new Error('session_expired');
+  const hit = CacheService.getScriptCache().get(authKey_(token));
+  if (hit) return JSON.parse(hit);
+  const out = authCall_({ action: 'me', token: String(token) });
+  return rememberUser_(token, out.user);
+}
+
+function userLabel_(u) {
+  return u.fullName + (u.role ? ' (' + u.role + ')' : '') + ' · ' + u.username;
+}
+
+function readBookings_(ss) {
+  const sheet = getSheet_(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, 1, lastRow - 1, KEYS.length).getValues()
+    .filter(function (row) { return row[0]; })
+    .map(rowToBooking_);
 }
 
 // ---------- helpers ----------

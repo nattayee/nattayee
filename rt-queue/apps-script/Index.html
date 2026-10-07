@@ -55,10 +55,18 @@
   }
   header.app .home:hover { background: rgba(255,255,255,.14); }
   header.app .home:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  header.app .user { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+  header.app .user[hidden] { display: none; }
+  header.app .user .logout {
+    border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff; border-radius: 8px;
+    padding: 3px 10px; cursor: pointer; font-size: 13px;
+  }
+  header.app .user .logout:hover { background: rgba(255,255,255,.14); }
   @media (max-width: 640px) {
     header.app .inner > div { flex: 1; min-width: 0; }
     header.app .home { order: 2; padding: 6px 12px; }
     header.app .mode { order: 3; margin-left: 0; }
+    header.app .user { order: 4; }
   }
 
   main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
@@ -239,6 +247,13 @@
   .form-actions .danger { margin-right: auto; }
   .error { color: var(--danger); font-size: 14px; min-height: 1em; }
 
+  dialog.login { width: min(400px, calc(100vw - 24px)); }
+  .login-form { display: grid; gap: 12px; padding: 22px 22px 18px; }
+  .login-form h2 { margin: 0; font-size: 20px; }
+  .login-form .sub { margin: -8px 0 4px; color: var(--muted); font-size: 14px; }
+  .login-form .btn.primary { padding: 9px 12px; }
+  .login-form a { color: var(--primary); }
+
   .toast {
     position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1d2733; color: #fff;
     padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10;
@@ -254,7 +269,7 @@
   }
 
   @media print {
-    header.app .mode, header.app .home, .toolbar .btn, .toolbar input, .toolbar select, .chips, .side, .cell .add { display: none !important; }
+    header.app .mode, header.app .home, header.app .user, .toolbar .btn, .toolbar input, .toolbar select, .chips, .side, .cell .add { display: none !important; }
     body { background: #fff; }
     main { padding: 0; }
     .layout { grid-template-columns: 1fr; }
@@ -270,7 +285,11 @@
       <p>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
     </div>
     <span class="mode" id="mode">กำลังโหลดข้อมูล…</span>
-    <a class="home" href="https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec" target="_top" title="กลับหน้าหลัก">
+    <span class="user" id="userBox" hidden>
+      <span id="userName"></span>
+      <button type="button" class="logout" id="logoutBtn">ออกจากระบบ</button>
+    </span>
+    <a class="home" id="homeLink" href="https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec" target="_top" title="กลับหน้าหลัก">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
       <span>Home</span>
     </a>
@@ -392,6 +411,24 @@
       <button type="button" class="btn" id="cancelBtn">ยกเลิก</button>
       <button type="submit" class="btn primary" id="saveBtn">บันทึกนัด</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="loginDlg" class="login" aria-labelledby="loginTitle">
+  <form class="login-form" id="loginForm" novalidate>
+    <h2 id="loginTitle">เข้าสู่ระบบ</h2>
+    <p class="sub">ใช้บัญชีเดียวกับ LPCH RO Workspace</p>
+    <div class="field">
+      <label for="l-user">ชื่อผู้ใช้หรืออีเมล</label>
+      <input type="text" id="l-user" autocomplete="username" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="l-pass">รหัสผ่าน</label>
+      <input type="password" id="l-pass" autocomplete="current-password">
+    </div>
+    <div class="error" id="loginError" role="alert"></div>
+    <button type="submit" class="btn primary" id="loginBtn">เข้าสู่ระบบ</button>
+    <p class="hint">ยังไม่มีบัญชี หรือลืมรหัสผ่าน: สมัครหรือรีเซ็ตที่ <a id="workspaceLink" target="_top">LPCH RO Workspace</a></p>
   </form>
 </dialog>
 
@@ -607,24 +644,118 @@
   }
 
   /* generated from public/index.html by scripts/build.js — edit that file instead */
-  // Google Apps Script: Code.gs functions via google.script.run.
+  // Google Apps Script: Code.gs functions via google.script.run, signed in with LPCH RO Workspace.
+  // Inserted into apps-script/Index.html by scripts/build.js.
+  const TOKEN_KEY = 'rtq-workspace-token';
   const gs = (fn, ...args) => new Promise((resolve, reject) => {
     google.script.run
       .withSuccessHandler(resolve)
       .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^(Error|Exception):\s*/, ''))))
       [fn](...args);
   });
-  const store = {
-    list: () => gs('listBookings'),
-    create: (b) => gs('createBooking', b),
-    update: (id, b) => gs('updateBooking', id, b),
-    remove: (id) => gs('deleteBooking', id),
-  };
-  async function initStore() {
-    const data = await gs('getInitData');
-    return { bookings: data.bookings, holidays: data.holidays, sheetUrl: data.sheetUrl, mode: 'บันทึกใน Google Sheets', csv: false };
+
+  let token = '';
+  try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch { /* storage blocked: sign in each visit */ }
+  function saveToken(t) {
+    token = t;
+    try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
   }
-  /* STORAGE:END */
+
+  // Shows the sign-in dialog; resolves with the user once the Workspace accepts the password.
+  let pendingSignIn = null;
+  function signIn(message) {
+    if (!pendingSignIn) {
+      pendingSignIn = new Promise((resolve) => {
+        $('loginForm').onsubmit = async (e) => {
+          e.preventDefault();
+          const login = $('l-user').value.trim(), password = $('l-pass').value;
+          if (!login || !password) { $('loginError').textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'; return; }
+          $('loginBtn').disabled = true;
+          $('loginError').textContent = '';
+          try {
+            const res = await gs('login', login, password);
+            saveToken(res.token);
+            $('l-pass').value = '';
+            $('loginDlg').close();
+            pendingSignIn = null;
+            resolve(res.user);
+          } catch (err) {
+            $('loginError').textContent = err.message;
+          } finally {
+            $('loginBtn').disabled = false;
+          }
+        };
+      });
+    }
+    $('loginError').textContent = message || '';
+    if (!$('loginDlg').open) $('loginDlg').showModal();
+    ($('l-user').value ? $('l-pass') : $('l-user')).focus();
+    return pendingSignIn;
+  }
+  $('loginDlg').addEventListener('cancel', (e) => e.preventDefault());
+
+  async function afterSignIn(user) {
+    setUser(user);
+    try { await reload(); } catch (err) { toast(err.message); }
+  }
+
+  // Calls a Code.gs function with the session token; an expired session asks to sign in again.
+  async function call(fn, ...args) {
+    try {
+      return await gs(fn, token, ...args);
+    } catch (err) {
+      if (err.message !== 'session_expired') throw err;
+      saveToken('');
+      signIn('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง').then(afterSignIn);
+      throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบแล้วลองอีกครั้ง');
+    }
+  }
+
+  $('logoutBtn').addEventListener('click', async () => {
+    const old = token;
+    saveToken('');
+    gs('logout', old).catch(() => { /* the session is dropped locally either way */ });
+    setUser(null);
+    state.bookings = [];
+    render();
+    afterSignIn(await signIn());
+  });
+
+  const store = {
+    list: () => call('listBookings'),
+    create: (b) => call('createBooking', b),
+    update: (id, b) => call('updateBooking', id, b),
+    remove: (id) => call('deleteBooking', id),
+  };
+
+  async function initStore() {
+    // Opened from LPCH RO Workspace with ?sso=<ticket>: exchange it for a session, then drop it from the URL.
+    const params = await new Promise((resolve) => {
+      try { google.script.url.getLocation((loc) => resolve((loc && loc.parameter) || {})); } catch { resolve({}); }
+    });
+    let message = '';
+    if (params.sso) {
+      try {
+        const res = await gs('ssoLogin', params.sso);
+        saveToken(res.token);
+      } catch (err) {
+        message = err.message;
+      }
+      try { google.script.history.replace(null, {}, ''); } catch { /* not available */ }
+    }
+    for (;;) {
+      if (!token) await signIn(message);
+      try {
+        const data = await gs('getInitData', token);
+        return { ...data, mode: 'บันทึกใน Google Sheets', csv: false };
+      } catch (err) {
+        if (err.message !== 'session_expired') throw err;
+        saveToken('');
+        message = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง';
+      }
+    }
+  }
+/* STORAGE:END */
 
   // ---------- state ----------
   const now = new Date();
@@ -765,6 +896,7 @@
         <div class="meta">HN ${esc(b.hn)}${b.site ? ' · ' + esc(b.site) : ''}${b.physician ? ' · แพทย์: ' + esc(b.physician) : ''}</div>
         <div class="meta">ฉาย ${b.treatmentDates.length} ครั้ง ${esc(shortDate(b.startDate))} – ${esc(shortDate(b.endDate))} ${b.endDate.slice(0, 4) * 1 + 543} · ${esc(FREQ_LABEL[b.frequency].split(' ')[0])} · CBCT ${esc(PATTERN_LABEL[b.cbctPattern])}</div>
         ${b.note ? `<div class="meta">หมายเหตุ: ${esc(b.note)}</div>` : ''}
+        ${b.updatedBy ? `<div class="meta">บันทึกโดย ${esc(b.createdBy || b.updatedBy)}${b.createdBy && b.updatedBy !== b.createdBy ? ` · แก้ไขล่าสุดโดย ${esc(b.updatedBy)}` : ''}</div>` : ''}
         <div class="actions"><button type="button" class="btn" data-edit="${esc(b.id)}">แก้ไข</button></div>
       </div>`;
     }).join('');
@@ -1165,6 +1297,13 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
+  // ---------- signed-in user (the Apps Script version signs in with LPCH RO Workspace) ----------
+  $('workspaceLink').href = $('homeLink').href;
+  function setUser(u) {
+    $('userBox').hidden = !u;
+    $('userName').textContent = u ? `${u.fullName}${u.role ? ` (${u.role})` : ''}` : '';
+  }
+
   // ---------- boot ----------
   async function reload() {
     state.bookings = (await store.list()).map(normalize);
@@ -1180,6 +1319,7 @@
       $('openSheet').hidden = !sheetUrl;
       $('exportCsv').hidden = !data.csv;
       $('mode').textContent = data.mode;
+      setUser(data.user || null);
     } catch (err) {
       setHolidays(DEFAULT_HOLIDAYS);
       $('mode').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + err.message;
