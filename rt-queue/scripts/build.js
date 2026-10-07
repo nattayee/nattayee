@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+'use strict';
+
+// Keeps generated parts in sync:
+//  - holidays.json → DEFAULT_HOLIDAYS in public/index.html and HOLIDAYS_SEED in apps-script/Code.gs
+//  - public/index.html → apps-script/Index.html (storage swapped for google.script.run)
+// Usage: node scripts/build.js          (write files)
+//        node scripts/build.js --check  (exit 1 if anything is out of date)
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+const HTML = path.join(ROOT, 'public', 'index.html');
+const GS = path.join(ROOT, 'apps-script', 'Code.gs');
+const GAS_HTML = path.join(ROOT, 'apps-script', 'Index.html');
+const HOLIDAYS = path.join(ROOT, 'holidays.json');
+
+const GAS_STORAGE = `
+  // Google Apps Script: Code.gs functions via google.script.run.
+  const gs = (fn, ...args) => new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^(Error|Exception):\\s*/, ''))))
+      [fn](...args);
+  });
+  const store = {
+    list: () => gs('listBookings'),
+    create: (b) => gs('createBooking', b),
+    update: (id, b) => gs('updateBooking', id, b),
+    remove: (id) => gs('deleteBooking', id),
+  };
+  async function initStore() {
+    const data = await gs('getInitData');
+    return { bookings: data.bookings, holidays: data.holidays, sheetUrl: data.sheetUrl, mode: 'บันทึกใน Google Sheets', csv: false };
+  }
+  `;
+
+function replaceBetween(src, start, end, body, file) {
+  const i = src.indexOf(start);
+  const j = src.indexOf(end);
+  if (i === -1 || j === -1 || j < i) throw new Error(`markers ${start} / ${end} not found in ${file}`);
+  return src.slice(0, i + start.length) + body + src.slice(j);
+}
+
+const q = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+const holidays = JSON.parse(fs.readFileSync(HOLIDAYS, 'utf8'));
+
+const html = replaceBetween(fs.readFileSync(HTML, 'utf8'), '/* HOLIDAYS:START */', '/* HOLIDAYS:END */',
+  `\n  const DEFAULT_HOLIDAYS = [\n${holidays.map(h => `    [${q(h.date)}, ${q(h.name)}],`).join('\n')}\n  ];\n  `, HTML);
+const gsCode = replaceBetween(fs.readFileSync(GS, 'utf8'), '// HOLIDAYS:START', '// HOLIDAYS:END',
+  `\nconst HOLIDAYS_SEED = [\n${holidays.map(h => `  [${q(h.date)}, ${q(h.name)}],`).join('\n')}\n];\n`, GS);
+const gasHtml = replaceBetween(html, '/* STORAGE:START */', '/* STORAGE:END */', GAS_STORAGE, HTML)
+  .replace('/* STORAGE:START */', '/* generated from public/index.html by scripts/build.js — edit that file instead */');
+
+const outputs = [[HTML, html], [GS, gsCode], [GAS_HTML, gasHtml]];
+if (process.argv.includes('--check')) {
+  const stale = outputs.filter(([file, body]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== body);
+  if (stale.length) {
+    console.error('Out of date (run `npm run build`): ' + stale.map(([f]) => path.relative(ROOT, f)).join(', '));
+    process.exit(1);
+  }
+  console.log('Generated files are up to date.');
+} else {
+  for (const [file, body] of outputs) fs.writeFileSync(file, body);
+  console.log('Built ' + outputs.map(([f]) => path.relative(ROOT, f)).join(', '));
+}

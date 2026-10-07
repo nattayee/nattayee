@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>นัดคิวเทคนิคพิเศษ รังสีรักษา</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230f6e8c%22/%3E%3Crect x=%227%22 y=%229%22 width=%2218%22 height=%2216%22 rx=%222%22 fill=%22white%22/%3E%3Crect x=%227%22 y=%229%22 width=%2218%22 height=%225%22 fill=%22%23cde6ee%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -18,8 +17,11 @@
     --primary: #0f6e8c;
     --primary-ink: #ffffff;
     --danger: #c0392b;
+    --ok: #1e8e4e;
+    --warn: #9a6400;
     --today: #fff6d6;
     --weekend: #fafbfc;
+    --holiday: #fdf1ef;
 
     --c-dibh: #2463c7;
     --c-srs: #7b3fc4;
@@ -64,7 +66,11 @@
   .btn.primary:hover { filter: brightness(1.08); }
   .btn.danger { color: var(--danger); border-color: #efc4bf; }
   .btn.icon { padding: 6px 10px; }
-  input[type=search] { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 180px; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  input[type=search], select.view {
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--surface);
+  }
+  input[type=search] { min-width: 180px; }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 12px; }
   .chip {
@@ -90,33 +96,37 @@
   .cal-head div.sat { color: #7b3fc4; }
   .cell {
     min-height: 118px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    padding: 4px 5px 6px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 3px;
+    padding: 4px 5px 6px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0;
   }
   .cell:nth-child(7n) { border-right: none; }
   .cell.weekend { background: var(--weekend); }
+  .cell.holiday { background: var(--holiday); }
   .cell.outside { background: #f1f3f6; }
   .cell.outside .daynum { color: #a5adb6; }
   .cell.today { background: var(--today); }
   .cell.selected { outline: 2px solid var(--primary); outline-offset: -2px; }
-  .cell .top { display: flex; align-items: center; justify-content: space-between; }
-  .cell .daynum { font-weight: 600; font-size: 14px; }
+  .cell .top { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .cell .daynum { font-weight: 600; font-size: 14px; flex: none; }
   .cell.today .daynum {
     background: var(--primary); color: #fff; border-radius: 999px; padding: 0 7px;
   }
+  .cell .hol { font-size: 11px; color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
   .cell .add {
     border: none; background: transparent; color: var(--primary); font-size: 18px; line-height: 1;
-    cursor: pointer; opacity: 0; padding: 0 4px; border-radius: 4px;
+    cursor: pointer; opacity: 0; padding: 0 4px; border-radius: 4px; flex: none;
   }
   .cell:hover .add, .cell.selected .add { opacity: 1; }
   .cell .add:hover { background: #e3f0f4; }
   .ev {
-    display: flex; align-items: center; gap: 4px; font-size: 12.5px; border-radius: 5px; padding: 1px 5px;
+    display: grid; font-size: 12.5px; line-height: 1.35; border-radius: 5px; padding: 2px 5px;
     background: color-mix(in srgb, var(--c) 13%, white); border-left: 3px solid var(--c);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    white-space: nowrap; overflow: hidden; cursor: pointer; min-width: 0;
   }
+  .ev .l1 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
   .ev:hover { background: color-mix(in srgb, var(--c) 22%, white); }
   .ev .tech { font-weight: 700; color: var(--c); }
-  .ev .nm { overflow: hidden; text-overflow: ellipsis; }
+  .ev .tag { font-size: 11px; color: var(--muted); flex: none; }
+  .ev .nm { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .badge-cbct {
     font-size: 10.5px; font-weight: 700; color: #fff; background: #1d2733; border-radius: 4px; padding: 0 4px; flex: none;
   }
@@ -125,6 +135,7 @@
   .side { padding: 14px; display: grid; gap: 10px; }
   .side h3 { margin: 0; font-size: 17px; }
   .side .sub { color: var(--muted); font-size: 13px; margin-top: -6px; }
+  .side .holname { color: var(--danger); font-size: 13px; margin-top: -6px; }
   .empty { color: var(--muted); text-align: center; padding: 24px 8px; border: 1px dashed var(--border); border-radius: 8px; }
   .item { border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
   .item .row1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -133,26 +144,37 @@
   .item .name { font-weight: 600; }
   .item .meta { color: var(--muted); font-size: 13px; }
   .item .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
-  .pill { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--border); }
+  .pill { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--border); white-space: nowrap; }
   .pill.yes { background: #1d2733; color: #fff; border-color: #1d2733; }
+  .pill.start { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .pill.bad { background: #fdecea; color: var(--danger); border-color: #f3c3bd; }
 
+  /* ---------- booking dialog ---------- */
   dialog {
-    border: none; border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px));
+    border: none; border-radius: 12px; padding: 0; width: min(880px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,.25);
   }
   dialog::backdrop { background: rgba(20, 30, 40, .45); }
-  form.booking { display: grid; gap: 12px; padding: 18px 20px 20px; }
-  form.booking h2 { margin: 0 0 4px; font-size: 19px; }
-  .field { display: grid; gap: 4px; }
+  form.booking { display: flex; flex-direction: column; max-height: calc(100vh - 24px); }
+  .form-body { overflow: auto; padding: 18px 20px 8px; display: grid; gap: 12px; }
+  form.booking h2 { margin: 0; font-size: 20px; }
+  .sec { margin: 8px 0 -2px; font-size: 16px; font-weight: 700; }
+  .field { display: grid; gap: 4px; align-content: start; }
   .field > label, .field > .lbl { font-weight: 600; font-size: 14px; }
+  .opt { color: var(--muted); font-weight: 400; }
   .req { color: var(--danger); }
-  .field input[type=text], .field input[type=date], .field input[type=time], .field input[type=number], .field textarea {
-    border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; background: #fff;
+  .field input[type=text], .field input[type=date], .field input[type=time], .field input[type=number], .field textarea, .field select {
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; background: #fff; min-height: 40px;
   }
   .field textarea { min-height: 64px; resize: vertical; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .grid3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
-  @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .grid3 { display: grid; grid-template-columns: 1.3fr .7fr 1fr; gap: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; }
+  .grid-cbct { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; align-items: end; }
+  .grid4 .btn, .grid-cbct .btn { min-height: 40px; width: 100%; }
+  @media (max-width: 760px) { .grid4, .grid-cbct { grid-template-columns: 1fr 1fr; } .grid-cbct .wide { grid-column: 1 / -1; } }
+  @media (max-width: 520px) { .grid2, .grid3, .grid4, .grid-cbct { grid-template-columns: 1fr; } }
   .techs { display: flex; flex-wrap: wrap; gap: 6px; }
   .techs label {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
@@ -160,16 +182,57 @@
   }
   .techs label:has(input:checked) { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); font-weight: 700; }
   .techs input { accent-color: var(--c); margin: 0; }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: fit-content; }
-  .seg label { padding: 6px 16px; cursor: pointer; }
-  .seg label + label { border-left: 1px solid var(--border); }
-  .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .seg label:has(input:checked) { background: var(--primary); color: #fff; font-weight: 600; }
-  .seg label:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: -2px; }
-  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+  .sched-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 13.5px; margin: 0; }
+  .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .toggle button { border: none; background: var(--surface); padding: 6px 14px; cursor: pointer; }
+  .toggle button + button { border-left: 1px solid var(--border); }
+  .toggle button[aria-pressed="true"] { background: #e3f0f4; color: var(--primary); font-weight: 700; }
+  .summary { display: grid; gap: 2px; font-size: 14.5px; }
+  .msg { font-size: 13.5px; }
+  .msg.muted { color: var(--muted); }
+  .msg.warn { color: var(--warn); }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+
+  .sched-table-wrap { border: 1px solid var(--border); border-radius: 10px; max-height: 360px; overflow: auto; }
+  table.sched { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  table.sched th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-weight: 700; padding: 8px 12px; border-bottom: 1px solid var(--border); z-index: 1; }
+  table.sched td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  table.sched tr:last-child td { border-bottom: none; }
+  table.sched .c-fx { width: 56px; }
+  table.sched .c-cbct { width: 80px; text-align: center; }
+  table.sched .c-act { width: 100px; text-align: center; }
+  table.sched input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer; }
+  table.sched tr.skipped td { color: var(--muted); background: var(--surface-2); }
+  table.sched tr.skipped .d { text-decoration: line-through; }
+  table.sched tr.newweek td { border-top: 2px solid var(--border); }
+  .linkbtn { border: none; background: transparent; color: var(--primary); cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+  .linkbtn:hover { background: #e3f0f4; }
+
+  .months { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .mon { border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+  .mon h4 { margin: 0 0 6px; font-size: 14.5px; text-align: center; }
+  .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .mgrid .dh { text-align: center; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .mc { min-height: 42px; border-radius: 6px; padding: 2px 3px; font-size: 12px; display: grid; align-content: start; justify-items: center; position: relative; }
+  .mc .n { font-weight: 600; }
+  .mc .s { font-size: 10.5px; line-height: 1.2; }
+  .mc.off { color: #b0b7bf; }
+  .mc.hol { background: var(--holiday); color: var(--danger); }
+  .mc.tx { background: #e3f0f4; color: var(--primary); cursor: pointer; }
+  .mc.tx:hover { outline: 1px solid var(--primary); }
+  .mc.tx.cb { background: var(--primary); color: #fff; }
+  .mc.skip { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+  .mc.ver { box-shadow: inset 0 0 0 2px #1d2733; }
+  .mc.clash::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface); }
   .form-actions .danger { margin-right: auto; }
   .error { color: var(--danger); font-size: 14px; min-height: 1em; }
-  .hint { color: var(--muted); font-size: 12.5px; }
 
   .toast {
     position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1d2733; color: #fff;
@@ -179,14 +242,14 @@
 
   @media (max-width: 640px) {
     .cell { min-height: 74px; padding: 3px; }
-    .ev .nm, .badge-cbct { display: none; }
+    .ev .nm, .ev .tag, .badge-cbct, .cell .hol { display: none; }
     .ev { font-size: 11px; padding: 0 3px; }
     .toolbar h2 { font-size: 17px; }
     input[type=search] { min-width: 0; width: 100%; order: 10; }
   }
 
   @media print {
-    header.app .mode, .toolbar .btn, .toolbar input, .chips, .side, .cell .add { display: none !important; }
+    header.app .mode, .toolbar .btn, .toolbar input, .toolbar select, .chips, .side, .cell .add { display: none !important; }
     body { background: #fff; }
     main { padding: 0; }
     .layout { grid-template-columns: 1fr; }
@@ -201,7 +264,7 @@
       <h1>ระบบนัดคิวเทคนิคพิเศษ</h1>
       <p>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
     </div>
-    <span class="mode" id="mode">กำลังเชื่อมต่อ…</span>
+    <span class="mode" id="mode">กำลังโหลดข้อมูล…</span>
   </div>
 </header>
 
@@ -214,9 +277,15 @@
       <h2 id="monthLabel"></h2>
       <button class="btn icon" id="next" aria-label="เดือนถัดไป">›</button>
       <button class="btn" id="today">วันนี้</button>
+      <select class="view" id="viewMode" aria-label="รายการที่แสดงในปฏิทิน">
+        <option value="key">แสดง: วันเริ่มฉาย + CBCT</option>
+        <option value="all">แสดง: ทุกวันที่ฉาย</option>
+        <option value="start">แสดง: เฉพาะวันเริ่มฉาย</option>
+      </select>
       <span class="spacer"></span>
       <input type="search" id="search" placeholder="ค้นหา HN / ชื่อผู้ป่วย" aria-label="ค้นหา">
-      <button class="btn" id="exportCsv">ส่งออก CSV</button>
+      <button class="btn" id="exportCsv" hidden>ส่งออก CSV</button>
+      <button class="btn" id="openSheet" hidden>เปิด Google Sheet</button>
       <button class="btn" id="print">พิมพ์</button>
       <button class="btn primary" id="newBooking">+ นัดคิวใหม่</button>
     </div>
@@ -235,70 +304,97 @@
 
 <dialog id="dlg">
   <form class="booking" id="form" novalidate>
-    <h2 id="formTitle">นัดคิวเทคนิคพิเศษ</h2>
+    <div class="form-body">
+      <h2 id="formTitle">นัดคิวเทคนิคพิเศษ</h2>
 
-    <div class="grid2">
-      <div class="field">
-        <label for="f-hn">HN <span class="req">*</span></label>
-        <input type="text" id="f-hn" name="hn" maxlength="20" required autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="f-name">ชื่อ-สกุล <span class="req">*</span></label>
-        <input type="text" id="f-name" name="name" maxlength="120" required autocomplete="off">
-      </div>
-    </div>
-
-    <div class="field">
-      <span class="lbl">เทคนิค <span class="req">*</span></span>
-      <div class="techs" id="techRadios"></div>
-      <input type="text" id="f-other" name="techniqueOther" maxlength="60" placeholder="ระบุเทคนิคอื่นๆ เช่น VMAT, IMRT, TBI" hidden>
-    </div>
-
-    <div class="field">
-      <label for="f-site">ตำแหน่ง / อวัยวะที่ฉาย</label>
-      <input type="text" id="f-site" name="site" maxlength="120" placeholder="เช่น Lt. breast, Brain mets, Lung" autocomplete="off">
-    </div>
-
-    <div class="grid3">
-      <div class="field">
-        <label for="f-date">วันเริ่มฉายรังสี <span class="req">*</span></label>
-        <input type="date" id="f-date" name="startDate" required>
-      </div>
-      <div class="field">
-        <label for="f-time">เวลา</label>
-        <input type="time" id="f-time" name="time">
-      </div>
-      <div class="field">
-        <label for="f-fx">จำนวนครั้ง (Fx)</label>
-        <input type="number" id="f-fx" name="fractions" min="1" max="100" step="1" inputmode="numeric">
-      </div>
-    </div>
-
-    <div class="grid2">
-      <div class="field">
-        <span class="lbl">CBCT <span class="req">*</span></span>
-        <div class="seg" role="radiogroup" aria-label="CBCT">
-          <label><input type="radio" name="cbct" value="yes">ทำ CBCT</label>
-          <label><input type="radio" name="cbct" value="no">ไม่ทำ</label>
+      <h3 class="sec">ข้อมูลผู้ป่วยและแผนการรักษา</h3>
+      <div class="grid2">
+        <div class="field">
+          <label for="f-hn">HN <span class="req">*</span></label>
+          <input type="text" id="f-hn" name="hn" maxlength="20" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-name">ชื่อ-สกุล <span class="req">*</span></label>
+          <input type="text" id="f-name" name="name" maxlength="120" required autocomplete="off">
         </div>
       </div>
+
       <div class="field">
-        <label for="f-md">แพทย์ผู้สั่ง</label>
-        <input type="text" id="f-md" name="physician" maxlength="120" autocomplete="off">
+        <span class="lbl">เทคนิค <span class="req">*</span></span>
+        <div class="techs" id="techRadios"></div>
+        <input type="text" id="f-other" name="techniqueOther" maxlength="60" placeholder="ระบุเทคนิคอื่นๆ เช่น VMAT, IMRT, TBI" hidden>
       </div>
-    </div>
 
-    <div class="field">
-      <label for="f-note">หมายเหตุ</label>
-      <textarea id="f-note" name="note" maxlength="1000"></textarea>
-    </div>
+      <div class="grid3">
+        <div class="field">
+          <label for="f-site">ตำแหน่ง / อวัยวะที่ฉาย</label>
+          <input type="text" id="f-site" name="site" maxlength="120" placeholder="เช่น Lt. breast, Brain mets, Lung" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-fx">จำนวนครั้ง (Fx) <span class="req">*</span></label>
+          <input type="number" id="f-fx" name="fractions" min="1" max="100" step="1" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="f-md">แพทย์ผู้สั่ง</label>
+          <input type="text" id="f-md" name="physician" maxlength="120" autocomplete="off">
+        </div>
+      </div>
 
-    <div class="error" id="formError" role="alert"></div>
+      <h3 class="sec">วันเริ่มฉายและเวลานัด</h3>
+      <div class="grid4">
+        <div class="field">
+          <label for="f-date">วันเริ่มฉาย <span class="req">*</span></label>
+          <input type="date" id="f-date" name="startDate" required>
+        </div>
+        <div class="field">
+          <label for="f-time">เวลานัด <span class="opt">(ไม่บังคับ)</span></label>
+          <input type="time" id="f-time" name="time">
+        </div>
+        <div class="field">
+          <label for="f-dur">ระยะเวลาต่อครั้ง (นาที)</label>
+          <input type="number" id="f-dur" name="duration" min="5" max="240" step="5" inputmode="numeric">
+        </div>
+        <button type="button" class="btn" id="findSlot">หาเวลาว่างอัตโนมัติ</button>
+      </div>
+
+      <h3 class="sec">การทำ CBCT</h3>
+      <div class="grid-cbct">
+        <div class="field">
+          <label for="f-vdate">วันนัดทำ CBCT ก่อนเริ่มฉาย (Verification)</label>
+          <input type="date" id="f-vdate" name="verifyDate">
+        </div>
+        <div class="field">
+          <label for="f-vtime">เวลานัดทำ CBCT</label>
+          <input type="time" id="f-vtime" name="verifyTime">
+        </div>
+        <div class="field wide">
+          <label for="f-pattern">รูปแบบ CBCT ระหว่างฉาย</label>
+          <select id="f-pattern" name="cbctPattern"></select>
+        </div>
+      </div>
+
+      <div class="sched-head">
+        <p class="hint">คลิกช่อง CBCT ในตารางเพื่อกำหนดวันทำ CBCT เอง หรือกด “งด” เพื่อเลื่อนวันฉายนั้นออกไป</p>
+        <div class="toggle" role="group" aria-label="รูปแบบการแสดงตารางฉาย">
+          <button type="button" data-sview="table" aria-pressed="true">ตาราง</button>
+          <button type="button" data-sview="month" aria-pressed="false">ปฏิทินรายเดือน</button>
+        </div>
+      </div>
+      <div class="summary" id="schedSummary"></div>
+      <div id="schedView"></div>
+
+      <h3 class="sec">หมายเหตุ</h3>
+      <div class="field">
+        <textarea id="f-note" name="note" maxlength="1000" aria-label="หมายเหตุ"></textarea>
+      </div>
+
+      <div class="error" id="formError" role="alert"></div>
+    </div>
 
     <div class="form-actions">
       <button type="button" class="btn danger" id="deleteBtn" hidden>ลบนัด</button>
       <button type="button" class="btn" id="cancelBtn">ยกเลิก</button>
-      <button type="submit" class="btn primary" id="saveBtn">บันทึก</button>
+      <button type="submit" class="btn primary" id="saveBtn">บันทึกนัด</button>
     </div>
   </form>
 </dialog>
@@ -309,6 +405,13 @@
 (() => {
   'use strict';
 
+  // ---------- settings ----------
+  const WORK_START = '08:00';     // ช่วงเวลาที่ใช้ "หาเวลาว่างอัตโนมัติ"
+  const WORK_END = '16:30';
+  const SLOT_STEP = 5;            // นาที
+  const DEFAULT_DURATION = 15;    // นาทีต่อครั้ง
+  const DEFAULT_PATTERN = 'first3_weekly';
+
   const TECHS = [
     { key: 'DIBH', desc: 'Deep Inspiration Breath Hold', color: 'var(--c-dibh)' },
     { key: 'SRS',  desc: 'Stereotactic Radiosurgery',    color: 'var(--c-srs)' },
@@ -316,26 +419,84 @@
     { key: 'SBRT', desc: 'Stereotactic Body RT',         color: 'var(--c-sbrt)' },
     { key: 'อื่นๆ', desc: 'เทคนิคอื่นๆ (ระบุเอง)',          color: 'var(--c-other)' },
   ];
+  const CBCT_PATTERNS = [
+    ['first3_weekly', '3 ครั้งแรก แล้วสัปดาห์ละครั้ง'],
+    ['weekly', 'สัปดาห์ละครั้ง'],
+    ['daily', 'ทุกครั้ง'],
+    ['first', 'เฉพาะครั้งแรก'],
+    ['none', 'ไม่ทำ CBCT ระหว่างฉาย'],
+    ['custom', 'กำหนดเอง (เลือกในตาราง)'],
+  ];
+  // วันหยุดเริ่มต้น ใช้เมื่อไม่ได้โหลดรายการวันหยุดจากเซิร์ฟเวอร์/ชีต
+  /* HOLIDAYS:START */
+  const DEFAULT_HOLIDAYS = [
+    ['2026-01-01', 'วันขึ้นปีใหม่'],
+    ['2026-01-02', 'วันหยุดพิเศษ (มติ ครม.)'],
+    ['2026-03-03', 'วันมาฆบูชา'],
+    ['2026-04-06', 'วันจักรี'],
+    ['2026-04-13', 'วันสงกรานต์'],
+    ['2026-04-14', 'วันสงกรานต์'],
+    ['2026-04-15', 'วันสงกรานต์'],
+    ['2026-05-04', 'วันฉัตรมงคล'],
+    ['2026-05-31', 'วันวิสาขบูชา'],
+    ['2026-06-01', 'ชดเชยวันวิสาขบูชา'],
+    ['2026-06-03', 'วันเฉลิมพระชนมพรรษา สมเด็จพระราชินี'],
+    ['2026-07-28', 'วันเฉลิมพระชนมพรรษา ร.10'],
+    ['2026-07-29', 'วันอาสาฬหบูชา'],
+    ['2026-07-30', 'วันเข้าพรรษา'],
+    ['2026-08-12', 'วันแม่แห่งชาติ'],
+    ['2026-10-13', 'วันนวมินทรมหาราช'],
+    ['2026-10-23', 'วันปิยมหาราช'],
+    ['2026-12-05', 'วันพ่อแห่งชาติ'],
+    ['2026-12-07', 'ชดเชยวันพ่อแห่งชาติ'],
+    ['2026-12-10', 'วันรัฐธรรมนูญ'],
+    ['2026-12-31', 'วันสิ้นปี'],
+    ['2027-01-01', 'วันขึ้นปีใหม่'],
+    ['2027-04-06', 'วันจักรี'],
+    ['2027-04-13', 'วันสงกรานต์'],
+    ['2027-04-14', 'วันสงกรานต์'],
+    ['2027-04-15', 'วันสงกรานต์'],
+    ['2027-05-04', 'วันฉัตรมงคล'],
+    ['2027-06-03', 'วันเฉลิมพระชนมพรรษา สมเด็จพระราชินี'],
+    ['2027-07-28', 'วันเฉลิมพระชนมพรรษา ร.10'],
+    ['2027-08-12', 'วันแม่แห่งชาติ'],
+    ['2027-10-13', 'วันนวมินทรมหาราช'],
+    ['2027-10-23', 'วันปิยมหาราช'],
+    ['2027-10-25', 'ชดเชยวันปิยมหาราช'],
+    ['2027-12-05', 'วันพ่อแห่งชาติ'],
+    ['2027-12-06', 'ชดเชยวันพ่อแห่งชาติ'],
+    ['2027-12-10', 'วันรัฐธรรมนูญ'],
+    ['2027-12-31', 'วันสิ้นปี'],
+  ];
+  /* HOLIDAYS:END */
+
   const TECH = Object.fromEntries(TECHS.map(t => [t.key, t]));
+  const PATTERN_LABEL = Object.fromEntries(CBCT_PATTERNS);
   const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
   const DAYS_SHORT = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
   const MAX_PER_CELL = 4;
-  const LS_KEY = 'rt-special-queue-v1';
+  const KIND_ORDER = { verify: 0, start: 1, fx: 2 };
 
   // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
   const pad = (n) => String(n).padStart(2, '0');
   const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+  const weekKey = (s) => { const d = parseYmd(s); d.setDate(d.getDate() - d.getDay()); return ymd(d); };
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const fromMin = (n) => `${pad(Math.floor(n / 60))}:${pad(n % 60)}`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const thaiDate = (s, withDay = true) => {
     const d = parseYmd(s);
     return `${withDay ? 'วัน' + DAYS[d.getDay()] + 'ที่ ' : ''}${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
   };
+  const shortDate = (s) => { const d = parseYmd(s); return `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}.`; };
+  const techKey = (b) => TECH[b.technique] ? b.technique : 'อื่นๆ';
   const techLabel = (b) => b.technique === 'อื่นๆ' ? (b.techniqueOther || 'อื่นๆ') : b.technique;
-  const techColor = (b) => (TECH[b.technique] || TECH['อื่นๆ']).color;
-  const byTime = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || a.name.localeCompare(b.name, 'th');
+  const techColor = (b) => TECH[techKey(b)].color;
+  const timeRange = (t, dur) => t ? `${t}–${fromMin(toMin(t) + dur)} น.` : '';
 
   function toast(msg) {
     const t = $('toast');
@@ -345,7 +506,98 @@
     toast._t = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
-  // ---------- storage: server API, falling back to this browser's localStorage ----------
+  // ---------- holidays & schedule ----------
+  let holidays = new Map();
+  function setHolidays(list) {
+    holidays = new Map((list || []).map(h => Array.isArray(h) ? h : [h.date, h.name]).filter(h => h[0]));
+  }
+  const isWorkday = (s) => { const g = parseYmd(s).getDay(); return g !== 0 && g !== 6 && !holidays.has(s); };
+
+  // วันฉายตามลำดับ: ข้ามเสาร์-อาทิตย์ วันหยุด และวันที่กด "งด"
+  function buildSchedule(start, n, skips) {
+    const dates = [];
+    let d = start;
+    for (let guard = 0; dates.length < n && guard < 1000; guard++) {
+      if (isWorkday(d) && !skips.has(d)) dates.push(d);
+      d = addDays(d, 1);
+    }
+    return dates;
+  }
+
+  function patternDates(pattern, dates) {
+    if (pattern === 'daily') return dates.slice();
+    if (pattern === 'first') return dates.slice(0, 1);
+    if (pattern === 'weekly' || pattern === 'first3_weekly') {
+      const out = pattern === 'first3_weekly' ? dates.slice(0, 3) : [];
+      const weeks = new Set(out.map(weekKey));
+      for (const d of dates) {
+        const w = weekKey(d);
+        if (!weeks.has(w)) { weeks.add(w); out.push(d); }
+      }
+      return out.sort();
+    }
+    return [];
+  }
+
+  // Fill defaults for records saved by older versions (start date + CBCT yes/no only).
+  function normalize(b) {
+    const legacy = !(Array.isArray(b.treatmentDates) && b.treatmentDates.length);
+    const treatmentDates = legacy ? [b.startDate] : b.treatmentDates;
+    const cbctDates = legacy ? (b.cbct ? [b.startDate] : []) : (b.cbctDates || []);
+    return {
+      ...b,
+      time: b.time || '',
+      duration: Number(b.duration) || DEFAULT_DURATION,
+      fractions: Number(b.fractions) || treatmentDates.length,
+      treatmentDates,
+      cbctDates,
+      skipDates: Array.isArray(b.skipDates) ? b.skipDates : [],
+      cbctPattern: PATTERN_LABEL[b.cbctPattern] ? b.cbctPattern : (cbctDates.length ? 'custom' : 'none'),
+      verifyDate: b.verifyDate || '',
+      verifyTime: b.verifyTime || '',
+      startDate: treatmentDates[0],
+      endDate: treatmentDates[treatmentDates.length - 1],
+      cbctSet: new Set(cbctDates),
+    };
+  }
+
+  // Time slots a booking occupies on the machine (only when a time is set).
+  function slotsOf(b) {
+    const out = [];
+    if (b.time) {
+      const s = toMin(b.time);
+      for (const date of b.treatmentDates) out.push({ date, s, e: s + b.duration, b });
+    }
+    if (b.verifyDate && b.verifyTime) {
+      const s = toMin(b.verifyTime);
+      out.push({ date: b.verifyDate, s, e: s + b.duration, b, verify: true });
+    }
+    return out;
+  }
+  function occupancy(excludeId) {
+    const map = new Map();
+    for (const b of state.bookings) {
+      if (b.id === excludeId) continue;
+      for (const slot of slotsOf(b)) {
+        if (!map.has(slot.date)) map.set(slot.date, []);
+        map.get(slot.date).push(slot);
+      }
+    }
+    return map;
+  }
+  function findConflicts(mine, occ) {
+    const out = [];
+    for (const m of mine) {
+      for (const o of occ.get(m.date) || []) {
+        if (o.s < m.e && m.s < o.e) out.push({ date: m.date, mine: m, other: o });
+      }
+    }
+    return out;
+  }
+
+  /* STORAGE:START */
+  // Server API (node server.js), falling back to this browser's localStorage.
+  const LS_KEY = 'rt-special-queue-v1';
   const api = {
     async req(method, url, body) {
       const res = await fetch(url, {
@@ -363,7 +615,6 @@
     update(id, b) { return this.req('PUT', 'api/bookings/' + encodeURIComponent(id), b); },
     remove(id) { return this.req('DELETE', 'api/bookings/' + encodeURIComponent(id)); },
   };
-
   const local = {
     read() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { return []; } },
     write(list) {
@@ -374,7 +625,7 @@
     async list() { return this.read(); },
     async create(b) {
       const now = new Date().toISOString();
-      const rec = { id: this.newId(), ...b, createdAt: now, updatedAt: now };
+      const rec = { id: this.newId(), ...b, endDate: b.treatmentDates[b.treatmentDates.length - 1], createdAt: now, updatedAt: now };
       this.write([...this.read(), rec]);
       return rec;
     },
@@ -382,14 +633,25 @@
       const list = this.read();
       const i = list.findIndex(x => x.id === id);
       if (i === -1) throw new Error('ไม่พบรายการนัด');
-      list[i] = { ...list[i], ...b, updatedAt: new Date().toISOString() };
+      list[i] = { ...list[i], ...b, endDate: b.treatmentDates[b.treatmentDates.length - 1], updatedAt: new Date().toISOString() };
       this.write(list);
       return list[i];
     },
     async remove(id) { this.write(this.read().filter(x => x.id !== id)); return null; },
   };
-
   let store = api;
+  async function initStore() {
+    try {
+      if (location.protocol === 'file:') throw new Error('offline');
+      const [bookings, holidays] = await Promise.all([api.list(), api.req('GET', 'api/holidays')]);
+      if (!Array.isArray(bookings)) throw new Error('bad response');
+      return { bookings, holidays, mode: 'เชื่อมต่อเซิร์ฟเวอร์ · ข้อมูลใช้ร่วมกัน', csv: true };
+    } catch {
+      store = local;
+      return { bookings: local.read(), holidays: null, mode: 'โหมดออฟไลน์ · บันทึกในเครื่องนี้เท่านั้น', csv: true };
+    }
+  }
+  /* STORAGE:END */
 
   // ---------- state ----------
   const now = new Date();
@@ -400,44 +662,71 @@
     selected: ymd(now),
     filter: new Set(TECHS.map(t => t.key)),
     query: '',
+    view: 'key',
     editingId: null,
   };
 
   function visibleBookings() {
     const q = state.query.trim().toLowerCase();
     return state.bookings.filter(b =>
-      state.filter.has(TECH[b.technique] ? b.technique : 'อื่นๆ') &&
+      state.filter.has(techKey(b)) &&
       (!q || b.hn.toLowerCase().includes(q) || b.name.toLowerCase().includes(q))
     );
   }
 
-  function groupByDate(list) {
+  function eventsOf(b) {
+    const ev = [];
+    if (b.verifyDate) ev.push({ b, date: b.verifyDate, kind: 'verify', cbct: true, time: b.verifyTime });
+    b.treatmentDates.forEach((date, i) => ev.push({ b, date, kind: i === 0 ? 'start' : 'fx', fx: i + 1, cbct: b.cbctSet.has(date), time: b.time }));
+    return ev;
+  }
+  function eventShown(e) {
+    if (state.view === 'all') return true;
+    if (state.view === 'start') return e.kind === 'start';
+    return e.kind !== 'fx' || e.cbct;
+  }
+  const byEvent = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.b.name.localeCompare(b.b.name, 'th');
+
+  function eventsByDate(all = false) {
     const map = new Map();
-    for (const b of list) {
-      if (!map.has(b.startDate)) map.set(b.startDate, []);
-      map.get(b.startDate).push(b);
+    for (const b of visibleBookings()) {
+      for (const e of eventsOf(b)) {
+        if (!all && !eventShown(e)) continue;
+        if (!map.has(e.date)) map.set(e.date, []);
+        map.get(e.date).push(e);
+      }
     }
-    for (const arr of map.values()) arr.sort(byTime);
+    for (const arr of map.values()) arr.sort(byEvent);
     return map;
   }
 
+  const kindTag = (e) => e.kind === 'verify' ? 'V-CBCT' : e.kind === 'start' ? 'เริ่ม' : `Fx ${e.fx}`;
+  const kindText = (e) => e.kind === 'verify' ? 'CBCT ก่อนเริ่มฉาย (Verification)'
+    : `${e.kind === 'start' ? 'เริ่มฉาย · ' : ''}Fx ${e.fx}/${e.b.treatmentDates.length}`;
+
   // ---------- rendering ----------
+  function monthPrefix() { return `${state.year}-${pad(state.month + 1)}-`; }
+
   function renderStats() {
-    const prefix = `${state.year}-${pad(state.month + 1)}-`;
-    const inMonth = state.bookings.filter(b => b.startDate.startsWith(prefix));
-    const count = (k) => inMonth.filter(b => (TECH[b.technique] ? b.technique : 'อื่นๆ') === k).length;
-    const cbct = inMonth.filter(b => b.cbct).length;
+    const prefix = monthPrefix();
+    const starts = state.bookings.filter(b => b.startDate.startsWith(prefix));
+    const count = (k) => starts.filter(b => techKey(b) === k).length;
+    let cbct = 0;
+    for (const b of state.bookings) {
+      if (b.verifyDate.startsWith(prefix)) cbct++;
+      for (const d of b.cbctSet) if (d.startsWith(prefix)) cbct++;
+    }
     $('stats').innerHTML =
-      `<div class="card stat" style="--c: var(--primary)"><div class="label">นัดทั้งหมดเดือนนี้</div><div class="value">${inMonth.length}</div></div>` +
+      `<div class="card stat" style="--c: var(--primary)"><div class="label">เริ่มฉายเดือนนี้</div><div class="value">${starts.length}</div></div>` +
       TECHS.map(t => `<div class="card stat" style="--c:${t.color}"><div class="label">${esc(t.key)}</div><div class="value">${count(t.key)}</div></div>`).join('') +
-      `<div class="card stat" style="--c:#1d2733"><div class="label">ทำ CBCT</div><div class="value">${cbct}</div></div>`;
+      `<div class="card stat" style="--c:#1d2733"><div class="label">CBCT เดือนนี้ (ครั้ง)</div><div class="value">${cbct}</div></div>`;
   }
 
   function renderChips() {
-    const prefix = `${state.year}-${pad(state.month + 1)}-`;
+    const prefix = monthPrefix();
     $('chips').innerHTML = TECHS.map(t => {
-      const n = state.bookings.filter(b => b.startDate.startsWith(prefix) && (TECH[b.technique] ? b.technique : 'อื่นๆ') === t.key).length;
-      return `<button type="button" class="chip" data-tech="${esc(t.key)}" aria-pressed="${state.filter.has(t.key)}" title="${esc(t.desc)}">
+      const n = state.bookings.filter(b => b.startDate.startsWith(prefix) && techKey(b) === t.key).length;
+      return `<button type="button" class="chip" data-tech="${esc(t.key)}" aria-pressed="${state.filter.has(t.key)}" title="${esc(t.desc)} · เริ่มฉายเดือนนี้">
         <span class="dot" style="background:${t.color}"></span>${esc(t.key)} <span class="count">${n}</span></button>`;
     }).join('');
   }
@@ -453,52 +742,65 @@
     const total = Math.ceil((lead + daysInMonth) / 7) * 7;
     const start = new Date(state.year, state.month, 1 - lead);
     const todayStr = ymd(new Date());
-    const groups = groupByDate(visibleBookings());
+    const groups = eventsByDate();
 
     let html = '';
     for (let i = 0; i < total; i++) {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
       const key = ymd(d);
       const list = groups.get(key) || [];
+      const hol = holidays.get(key);
       const cls = ['cell'];
       if (d.getMonth() !== state.month) cls.push('outside');
       if (d.getDay() === 0 || d.getDay() === 6) cls.push('weekend');
+      if (hol) cls.push('holiday');
       if (key === todayStr) cls.push('today');
       if (key === state.selected) cls.push('selected');
 
-      const evs = list.slice(0, MAX_PER_CELL).map(b =>
-        `<div class="ev" style="--c:${techColor(b)}" data-id="${esc(b.id)}" title="${esc(`${b.time ? b.time + ' ' : ''}${techLabel(b)} · HN ${b.hn} ${b.name}${b.cbct ? ' · CBCT' : ''}`)}">
-          <span class="tech">${esc(techLabel(b))}</span>${b.cbct ? '<span class="badge-cbct">CBCT</span>' : ''}<span class="nm">${esc(b.name)}</span></div>`
-      ).join('');
+      const evs = list.slice(0, MAX_PER_CELL).map(e => {
+        const b = e.b;
+        return `<div class="ev" style="--c:${techColor(b)}" data-id="${esc(b.id)}" title="${esc(`${e.time ? e.time + ' ' : ''}${techLabel(b)} · ${kindText(e)} · HN ${b.hn} ${b.name}${e.cbct ? ' · CBCT' : ''}`)}">
+          <span class="l1"><span class="tech">${esc(techLabel(b))}</span><span class="tag">${esc(kindTag(e))}</span>${e.cbct && e.kind !== 'verify' ? '<span class="badge-cbct">CBCT</span>' : ''}</span><span class="nm">${esc(b.name)}</span></div>`;
+      }).join('');
       const more = list.length > MAX_PER_CELL ? `<div class="more">+${list.length - MAX_PER_CELL} รายการ</div>` : '';
 
-      html += `<div class="${cls.join(' ')}" data-date="${key}" role="button" tabindex="0" aria-label="${esc(thaiDate(key))} ${list.length} นัด">
-        <div class="top"><span class="daynum">${d.getDate()}</span><button type="button" class="add" data-add="${key}" title="เพิ่มนัดวันนี้" aria-label="เพิ่มนัด ${esc(thaiDate(key, false))}">+</button></div>
+      html += `<div class="${cls.join(' ')}" data-date="${key}" role="button" tabindex="0" aria-label="${esc(thaiDate(key))}${hol ? ' ' + esc(hol) : ''} ${list.length} รายการ">
+        <div class="top"><span class="daynum">${d.getDate()}</span>${hol ? `<span class="hol" title="${esc(hol)}">${esc(hol)}</span>` : ''}<button type="button" class="add" data-add="${key}" title="เพิ่มนัดวันนี้" aria-label="เพิ่มนัด ${esc(thaiDate(key, false))}">+</button></div>
         ${evs}${more}</div>`;
     }
     $('calGrid').innerHTML = html;
   }
 
   function renderDayPanel() {
-    const list = (groupByDate(visibleBookings()).get(state.selected) || []);
-    const items = list.map(b => `
+    const list = eventsByDate(true).get(state.selected) || [];
+    const shown = list.filter(eventShown);
+    const hol = holidays.get(state.selected);
+    const items = shown.map(e => {
+      const b = e.b;
+      return `
       <div class="item" style="--c:${techColor(b)}">
         <div class="row1">
           <span class="tech">${esc(techLabel(b))}</span>
-          ${b.cbct ? '<span class="pill yes">CBCT</span>' : '<span class="pill">ไม่ทำ CBCT</span>'}
-          ${b.fractions ? `<span class="pill">${b.fractions} Fx</span>` : ''}
-          <span class="time">${b.time ? esc(b.time) + ' น.' : ''}</span>
+          <span class="pill${e.kind === 'start' ? ' start' : ''}">${esc(kindText(e))}</span>
+          ${e.cbct ? '<span class="pill yes">CBCT</span>' : ''}
+          <span class="time">${esc(timeRange(e.time, b.duration))}</span>
         </div>
         <div class="name">${esc(b.name)}</div>
         <div class="meta">HN ${esc(b.hn)}${b.site ? ' · ' + esc(b.site) : ''}${b.physician ? ' · แพทย์: ' + esc(b.physician) : ''}</div>
+        <div class="meta">ฉาย ${b.treatmentDates.length} ครั้ง ${esc(shortDate(b.startDate))} – ${esc(shortDate(b.endDate))} ${b.endDate.slice(0, 4) * 1 + 543} · ${esc(PATTERN_LABEL[b.cbctPattern])}</div>
         ${b.note ? `<div class="meta">หมายเหตุ: ${esc(b.note)}</div>` : ''}
         <div class="actions"><button type="button" class="btn" data-edit="${esc(b.id)}">แก้ไข</button></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
+    const starts = list.filter(e => e.kind === 'start').length;
+    const cbct = list.filter(e => e.cbct).length;
+    const treating = list.filter(e => e.kind !== 'verify').length;
     $('dayPanel').innerHTML = `
       <h3>${esc(thaiDate(state.selected))}</h3>
-      <div class="sub">นัดเริ่มฉายรังสี ${list.length} ราย${list.length ? ` · ทำ CBCT ${list.filter(b => b.cbct).length} ราย` : ''}</div>
-      ${items || '<div class="empty">ยังไม่มีนัดในวันนี้</div>'}
+      ${hol ? `<div class="holname">วันหยุด: ${esc(hol)}</div>` : ''}
+      <div class="sub">เริ่มฉาย ${starts} ราย · CBCT ${cbct} ครั้ง · ฉายทั้งหมด ${treating} ราย</div>
+      ${items || `<div class="empty">${list.length ? 'ไม่มีรายการในมุมมองนี้ — เลือก “แสดง: ทุกวันที่ฉาย”' : 'ยังไม่มีนัดในวันนี้'}</div>`}
       <button type="button" class="btn primary" data-add="${state.selected}">+ เพิ่มนัดวันนี้</button>`;
   }
 
@@ -509,20 +811,224 @@
     renderDayPanel();
   }
 
-  // ---------- form ----------
+  // ---------- booking form ----------
   const form = $('form');
   const dlg = $('dlg');
+  // fs = form schedule state. `manual` holds hand-picked CBCT days for the "custom" pattern.
+  const fs = { dates: [], skips: new Set(), manual: new Set(), pattern: DEFAULT_PATTERN, view: 'table' };
 
   $('techRadios').innerHTML = TECHS.map(t =>
     `<label style="--c:${t.color}" title="${esc(t.desc)}"><input type="radio" name="technique" value="${esc(t.key)}">${esc(t.key)}</label>`
   ).join('');
+  $('f-pattern').innerHTML = CBCT_PATTERNS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('');
 
-  function syncOther() {
+  $('techRadios').addEventListener('change', () => {
     const isOther = form.technique.value === 'อื่นๆ';
     $('f-other').hidden = !isOther;
     if (isOther) $('f-other').focus();
+  });
+
+  const fxCount = () => { const n = Number(form.fractions.value); return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 0; };
+  const duration = () => { const n = Number(form.duration.value); return Number.isInteger(n) && n >= 5 && n <= 240 ? n : DEFAULT_DURATION; };
+
+  function computeSchedule() {
+    const start = form.startDate.value;
+    const n = fxCount();
+    fs.dates = start && n ? buildSchedule(start, n, fs.skips) : [];
   }
-  $('techRadios').addEventListener('change', syncOther);
+  function effectiveCbct() {
+    if (fs.pattern === 'custom') return new Set(fs.dates.filter(d => fs.manual.has(d)));
+    return new Set(patternDates(fs.pattern, fs.dates));
+  }
+  function visibleSkips() {
+    if (!fs.dates.length) return [];
+    const from = form.startDate.value, to = fs.dates[fs.dates.length - 1];
+    return [...fs.skips].filter(d => d >= from && d <= to && isWorkday(d)).sort();
+  }
+  function mySlots() {
+    const out = [];
+    const dur = duration();
+    if (form.time.value) {
+      const s = toMin(form.time.value);
+      for (const date of fs.dates) out.push({ date, s, e: s + dur });
+    }
+    if (form.verifyDate.value && form.verifyTime.value) {
+      const s = toMin(form.verifyTime.value);
+      out.push({ date: form.verifyDate.value, s, e: s + dur, verify: true });
+    }
+    return out;
+  }
+
+  function renderSchedule() {
+    computeSchedule();
+    const dates = fs.dates;
+    const cbct = effectiveCbct();
+    const start = form.startDate.value;
+    const vDate = form.verifyDate.value;
+    const lines = [];
+
+    if (!dates.length) {
+      $('schedSummary').innerHTML = `<div class="msg muted">กรอกวันเริ่มฉายและจำนวนครั้ง (Fx) เพื่อสร้างตารางวันฉาย</div>`;
+      $('schedView').innerHTML = '';
+      return;
+    }
+    const first = dates[0], last = dates[dates.length - 1];
+    lines.push(`<div>ฉาย <b>${dates.length}</b> ครั้ง ตั้งแต่ <b>${esc(thaiDate(first))}</b> ถึง <b>${esc(thaiDate(last))}</b> · CBCT ระหว่างฉาย <b>${cbct.size}</b> ครั้ง${vDate ? ' + ก่อนเริ่มฉาย 1 ครั้ง' : ''}</div>`);
+    if (start !== first) {
+      const why = holidays.get(start) || (fs.skips.has(start) ? 'วันที่งดฉาย' : 'วันเสาร์-อาทิตย์');
+      lines.push(`<div class="msg warn">วันที่เลือก (${esc(thaiDate(start, false))}) เป็น${esc(why)} — Fx 1 จะเริ่ม${esc(thaiDate(first))}</div>`);
+    }
+    if (vDate && vDate >= first) lines.push(`<div class="msg warn">วันนัดทำ CBCT (Verification) ควรอยู่ก่อนวันเริ่มฉาย</div>`);
+    if (vDate && !isWorkday(vDate)) lines.push(`<div class="msg warn">วันนัดทำ CBCT ตรงกับ${esc(holidays.get(vDate) || 'วันเสาร์-อาทิตย์')}</div>`);
+    if (form.verifyTime.value && !vDate) lines.push(`<div class="msg warn">ระบุเวลานัดทำ CBCT แล้ว แต่ยังไม่ได้ระบุวัน</div>`);
+
+    const conflicts = findConflicts(mySlots(), occupancy(state.editingId));
+    const clashDates = new Set(conflicts.map(c => c.date));
+    if (!form.time.value) {
+      lines.push(`<div class="msg muted">ยังไม่ได้ระบุเวลานัด — ระบบจะไม่ตรวจเวลาซ้อนกับผู้ป่วยรายอื่น (กด “หาเวลาว่างอัตโนมัติ” เพื่อเลือกเวลาได้)</div>`);
+    }
+    if (conflicts.length) {
+      const sample = conflicts.slice(0, 4).map(c =>
+        `${shortDate(c.date)} ${c.other.b.name} (${fromMin(c.other.s)}–${fromMin(c.other.e)}${c.other.verify ? ' CBCT' : ''})`).join(', ');
+      lines.push(`<div class="msg err">เวลาซ้อนกับผู้ป่วยรายอื่น ${clashDates.size} วัน: ${esc(sample)}${conflicts.length > 4 ? ' …' : ''}</div>`);
+    } else if (form.time.value) {
+      lines.push(`<div class="msg ok">ไม่พบเวลาซ้อนกับผู้ป่วยรายอื่น (${esc(timeRange(form.time.value, duration()))})</div>`);
+    }
+    $('schedSummary').innerHTML = lines.join('');
+    $('schedView').innerHTML = fs.view === 'table'
+      ? scheduleTable(dates, cbct, clashDates)
+      : scheduleMonths(dates, cbct, clashDates);
+  }
+
+  function scheduleTable(dates, cbct, clashDates) {
+    const rows = [
+      ...dates.map((d, i) => ({ d, fx: i + 1 })),
+      ...visibleSkips().map(d => ({ d, skip: true })),
+    ].sort((a, b) => a.d.localeCompare(b.d));
+    let prevWeek = null;
+    const body = rows.map(r => {
+      const wk = weekKey(r.d);
+      const cls = [r.skip ? 'skipped' : '', prevWeek && wk !== prevWeek ? 'newweek' : ''].filter(Boolean).join(' ');
+      prevWeek = wk;
+      const clash = clashDates.has(r.d) ? ' <span class="pill bad">เวลาซ้อน</span>' : '';
+      return `<tr class="${cls}">
+        <td class="c-fx">${r.skip ? '–' : r.fx}</td>
+        <td><span class="d">${esc(thaiDate(r.d))}</span>${r.skip ? ' <span class="pill">งด</span>' : ''}${clash}</td>
+        <td class="c-cbct">${r.skip ? '' : `<input type="checkbox" data-cbct="${r.d}" ${cbct.has(r.d) ? 'checked' : ''} aria-label="CBCT Fx ${r.fx}">`}</td>
+        <td class="c-act"><button type="button" class="linkbtn" data-skip="${r.d}">${r.skip ? 'ยกเลิกงด' : 'งด'}</button></td>
+      </tr>`;
+    }).join('');
+    return `<div class="sched-table-wrap"><table class="sched">
+      <thead><tr><th class="c-fx">Fx</th><th>วันที่</th><th class="c-cbct">CBCT</th><th class="c-act"></th></tr></thead>
+      <tbody>${body}</tbody></table></div>`;
+  }
+
+  function scheduleMonths(dates, cbct, clashDates) {
+    const fxOf = new Map(dates.map((d, i) => [d, i + 1]));
+    const skips = new Set(visibleSkips());
+    const vDate = form.verifyDate.value;
+    const from = [dates[0], form.startDate.value, vDate].filter(Boolean).sort()[0];
+    const to = [dates[dates.length - 1], vDate].filter(Boolean).sort().pop();
+    const months = [];
+    let y = parseYmd(from).getFullYear(), m = parseYmd(from).getMonth();
+    const endKey = to.slice(0, 7);
+    for (let guard = 0; guard < 24; guard++) {
+      months.push([y, m]);
+      if (`${y}-${pad(m + 1)}` >= endKey) break;
+      m++; if (m > 11) { m = 0; y++; }
+    }
+    const html = months.map(([yy, mm]) => {
+      const lead = new Date(yy, mm, 1).getDay();
+      const days = new Date(yy, mm + 1, 0).getDate();
+      let cells = DAYS_SHORT.map(d => `<div class="dh">${d.replace('.', '')}</div>`).join('');
+      for (let i = 0; i < lead; i++) cells += '<div></div>';
+      for (let day = 1; day <= days; day++) {
+        const key = `${yy}-${pad(mm + 1)}-${pad(day)}`;
+        const fx = fxOf.get(key);
+        const cls = ['mc'];
+        let sub = '';
+        let title = thaiDate(key);
+        if (fx) {
+          cls.push('tx'); sub = `Fx ${fx}`;
+          if (cbct.has(key)) { cls.push('cb'); sub += ' ·CB'; title += ' · CBCT'; }
+          title += ` · Fx ${fx} (คลิกเพื่อเปิด/ปิด CBCT)`;
+        } else if (skips.has(key)) {
+          cls.push('skip'); sub = 'งด'; title += ' · งด';
+        } else if (holidays.has(key)) {
+          cls.push('hol'); sub = 'หยุด'; title += ' · ' + holidays.get(key);
+        } else if (!isWorkday(key)) {
+          cls.push('off');
+        }
+        if (key === vDate) { cls.push('ver'); sub = sub ? sub + ' ·V' : 'V-CBCT'; title += ' · CBCT ก่อนเริ่มฉาย'; }
+        if (clashDates.has(key)) { cls.push('clash'); title += ' · เวลาซ้อน'; }
+        cells += `<div class="${cls.join(' ')}" ${fx ? `data-cbct-cell="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
+      }
+      return `<div class="mon"><h4>${MONTHS[mm]} ${yy + 543}</h4><div class="mgrid">${cells}</div></div>`;
+    }).join('');
+    return `<div class="months">${html}</div>
+      <div class="legend">
+        <span><i style="background:#e3f0f4"></i>วันฉาย</span>
+        <span><i style="background:var(--primary)"></i>วันฉาย + CBCT</span>
+        <span><i style="box-shadow:inset 0 0 0 2px #1d2733"></i>CBCT ก่อนเริ่มฉาย</span>
+        <span><i style="background:var(--holiday)"></i>วันหยุด</span>
+        <span><i style="background:var(--surface-2);border:1px solid var(--border)"></i>งด</span>
+        <span><i style="background:var(--danger);border-radius:50%"></i>เวลาซ้อน</span>
+      </div>`;
+  }
+
+  function toggleCbct(date) {
+    fs.manual = effectiveCbct();
+    fs.manual.has(date) ? fs.manual.delete(date) : fs.manual.add(date);
+    fs.pattern = 'custom';
+    form.cbctPattern.value = 'custom';
+    renderSchedule();
+  }
+
+  ['f-date', 'f-fx', 'f-time', 'f-dur', 'f-vdate', 'f-vtime'].forEach(id => $(id).addEventListener('input', renderSchedule));
+  $('f-pattern').addEventListener('change', () => {
+    if (form.cbctPattern.value === 'custom') fs.manual = effectiveCbct();
+    fs.pattern = form.cbctPattern.value;
+    renderSchedule();
+  });
+  form.addEventListener('click', (e) => {
+    const view = e.target.closest('[data-sview]');
+    if (view) {
+      fs.view = view.dataset.sview;
+      form.querySelectorAll('[data-sview]').forEach(b => b.setAttribute('aria-pressed', String(b === view)));
+      renderSchedule();
+      return;
+    }
+    const skip = e.target.closest('[data-skip]');
+    if (skip) {
+      const d = skip.dataset.skip;
+      fs.skips.has(d) ? fs.skips.delete(d) : fs.skips.add(d);
+      renderSchedule();
+      return;
+    }
+    const cell = e.target.closest('[data-cbct-cell]');
+    if (cell) toggleCbct(cell.dataset.cbctCell);
+  });
+  form.addEventListener('change', (e) => {
+    if (e.target.matches('[data-cbct]')) toggleCbct(e.target.dataset.cbct);
+  });
+
+  $('findSlot').addEventListener('click', () => {
+    computeSchedule();
+    $('formError').textContent = '';
+    if (!fs.dates.length) { $('formError').textContent = 'กรุณากรอกวันเริ่มฉายและจำนวนครั้ง (Fx) ก่อน'; return; }
+    const dur = duration();
+    const occ = occupancy(state.editingId);
+    for (let t = toMin(WORK_START); t + dur <= toMin(WORK_END); t += SLOT_STEP) {
+      const mine = fs.dates.map(date => ({ date, s: t, e: t + dur }));
+      if (!findConflicts(mine, occ).length) {
+        form.time.value = fromMin(t);
+        renderSchedule();
+        toast(`พบเวลาว่าง ${fromMin(t)} น. ตรงกันทุกวันฉาย`);
+        return;
+      }
+    }
+    $('formError').textContent = `ไม่พบเวลาว่างที่ตรงกันทุกวันฉายในช่วง ${WORK_START}–${WORK_END} น. ลองลดระยะเวลาหรือเลือกเวลาเอง`;
+  });
 
   function openForm(booking, date) {
     form.reset();
@@ -530,38 +1036,53 @@
     state.editingId = booking ? booking.id : null;
     $('formTitle').textContent = booking ? 'แก้ไขนัดคิว' : 'นัดคิวเทคนิคพิเศษ';
     $('deleteBtn').hidden = !booking;
+    fs.skips = new Set(booking ? booking.skipDates : []);
+    fs.manual = new Set(booking ? booking.cbctDates : []);
+    fs.pattern = booking ? booking.cbctPattern : DEFAULT_PATTERN;
+    form.cbctPattern.value = fs.pattern;
+    form.duration.value = booking ? booking.duration : DEFAULT_DURATION;
     if (booking) {
       form.hn.value = booking.hn;
       $('f-name').value = booking.name;
-      form.technique.value = TECH[booking.technique] ? booking.technique : 'อื่นๆ';
+      form.technique.value = techKey(booking);
       form.techniqueOther.value = booking.techniqueOther || '';
       form.site.value = booking.site || '';
+      form.fractions.value = booking.treatmentDates.length;
+      form.physician.value = booking.physician || '';
       form.startDate.value = booking.startDate;
       form.time.value = booking.time || '';
-      form.fractions.value = booking.fractions ?? '';
-      form.cbct.value = booking.cbct ? 'yes' : 'no';
-      form.physician.value = booking.physician || '';
+      form.verifyDate.value = booking.verifyDate || '';
+      form.verifyTime.value = booking.verifyTime || '';
       form.note.value = booking.note || '';
     } else {
       form.startDate.value = date || state.selected;
     }
     $('f-other').hidden = form.technique.value !== 'อื่นๆ';
+    renderSchedule();
     dlg.showModal();
+    form.querySelector('.form-body').scrollTop = 0;
     form.hn.focus();
   }
 
   function readForm() {
+    computeSchedule();
     const b = {
       hn: form.hn.value.trim(),
       name: $('f-name').value.trim(),
       technique: form.technique.value,
       techniqueOther: form.techniqueOther.value.trim(),
       site: form.site.value.trim(),
-      startDate: form.startDate.value,
-      time: form.time.value,
       fractions: form.fractions.value === '' ? null : Number(form.fractions.value),
-      cbct: form.cbct.value === 'yes' ? true : form.cbct.value === 'no' ? false : null,
       physician: form.physician.value.trim(),
+      startDate: fs.dates[0] || '',
+      time: form.time.value,
+      duration: Number(form.duration.value) || DEFAULT_DURATION,
+      treatmentDates: fs.dates.slice(),
+      cbctPattern: fs.pattern,
+      cbctDates: [...effectiveCbct()].sort(),
+      skipDates: visibleSkips(),
+      verifyDate: form.verifyDate.value,
+      verifyTime: form.verifyTime.value,
       note: form.note.value.trim(),
     };
     if (!b.hn) return { error: 'กรุณากรอก HN', focus: form.hn };
@@ -569,11 +1090,15 @@
     if (!b.technique) return { error: 'กรุณาเลือกเทคนิค' };
     if (b.technique === 'อื่นๆ' && !b.techniqueOther) return { error: 'กรุณาระบุเทคนิคอื่นๆ', focus: form.techniqueOther };
     if (b.technique !== 'อื่นๆ') b.techniqueOther = '';
-    if (!b.startDate) return { error: 'กรุณาระบุวันเริ่มฉายรังสี', focus: form.startDate };
-    if (b.fractions !== null && !(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= 100)) {
-      return { error: 'จำนวนครั้งต้องเป็นจำนวนเต็ม 1–100', focus: form.fractions };
+    if (!(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= 100)) {
+      return { error: 'กรุณาระบุจำนวนครั้ง (Fx) เป็นจำนวนเต็ม 1–100', focus: form.fractions };
     }
-    if (b.cbct === null) return { error: 'กรุณาระบุ CBCT (ทำ / ไม่ทำ)' };
+    if (!form.startDate.value) return { error: 'กรุณาระบุวันเริ่มฉาย', focus: form.startDate };
+    if (b.treatmentDates.length !== b.fractions) return { error: 'สร้างตารางวันฉายไม่ครบตามจำนวนครั้ง', focus: form.startDate };
+    if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) {
+      return { error: 'ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที', focus: form.duration };
+    }
+    if (b.verifyTime && !b.verifyDate) return { error: 'กรุณาระบุวันนัดทำ CBCT', focus: form.verifyDate };
     return { booking: b };
   }
 
@@ -582,8 +1107,11 @@
     const { booking, error, focus } = readForm();
     if (error) { $('formError').textContent = error; focus?.focus(); return; }
 
-    const dup = state.bookings.find(b => b.id !== state.editingId && b.hn === booking.hn && b.startDate === booking.startDate);
-    if (dup && !confirm(`HN ${booking.hn} มีนัดวันที่ ${thaiDate(booking.startDate, false)} อยู่แล้ว (${techLabel(dup)}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
+    const mine = new Set(booking.treatmentDates);
+    const dup = state.bookings.find(b => b.id !== state.editingId && b.hn === booking.hn && b.treatmentDates.some(d => mine.has(d)));
+    if (dup && !confirm(`HN ${booking.hn} มีคอร์สฉาย ${techLabel(dup)} ที่วันฉายทับกันอยู่แล้ว (เริ่ม ${thaiDate(dup.startDate, false)}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
+    const conflicts = findConflicts(mySlots(), occupancy(state.editingId));
+    if (conflicts.length && !confirm(`เวลานัดซ้อนกับผู้ป่วยรายอื่น ${new Set(conflicts.map(c => c.date)).size} วัน ต้องการบันทึกต่อหรือไม่?`)) return;
 
     $('saveBtn').disabled = true;
     try {
@@ -615,7 +1143,7 @@
     }
   });
 
-  // ---------- events ----------
+  // ---------- dashboard events ----------
   function shiftMonth(delta) {
     const d = new Date(state.year, state.month + delta, 1);
     state.year = d.getFullYear(); state.month = d.getMonth();
@@ -628,6 +1156,7 @@
     state.year = t.getFullYear(); state.month = t.getMonth(); state.selected = ymd(t);
     render();
   });
+  $('viewMode').addEventListener('change', (e) => { state.view = e.target.value; render(); });
   $('newBooking').addEventListener('click', () => openForm(null));
   $('print').addEventListener('click', () => window.print());
   $('search').addEventListener('input', (e) => { state.query = e.target.value; render(); });
@@ -641,6 +1170,7 @@
   });
 
   document.addEventListener('click', (e) => {
+    if (e.target.closest('dialog')) return;
     const add = e.target.closest('[data-add]');
     if (add) { e.stopPropagation(); openForm(null, add.dataset.add); return; }
     const edit = e.target.closest('[data-edit], .ev');
@@ -663,15 +1193,21 @@
     if (cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cell.click(); }
   });
 
+  let sheetUrl = '';
+  $('openSheet').addEventListener('click', () => window.open(sheetUrl, '_blank'));
+
   $('exportCsv').addEventListener('click', () => {
-    const prefix = `${state.year}-${pad(state.month + 1)}-`;
+    const prefix = monthPrefix();
     const rows = visibleBookings().filter(b => b.startDate.startsWith(prefix))
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || byTime(a, b));
-    const head = ['วันเริ่มฉายรังสี', 'เวลา', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง', 'CBCT', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.time || '99').localeCompare(b.time || '99'));
+    const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'เวลานัด', 'ระยะเวลา (นาที)', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
+      'รูปแบบ CBCT', 'วันทำ CBCT ก่อนฉาย', 'เวลาทำ CBCT', 'วัน CBCT ระหว่างฉาย', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const list = (arr) => arr.map(d => thaiDate(d, false)).join(', ');
     const lines = [head, ...rows.map(b => [
-      thaiDate(b.startDate, false), b.time, b.hn, b.name, techLabel(b), b.site, b.fractions ?? '',
-      b.cbct ? 'ทำ' : 'ไม่ทำ', b.physician, b.note,
+      thaiDate(b.startDate, false), thaiDate(b.endDate, false), b.time, b.duration, b.hn, b.name, techLabel(b), b.site,
+      b.treatmentDates.length, PATTERN_LABEL[b.cbctPattern], b.verifyDate ? thaiDate(b.verifyDate, false) : '', b.verifyTime,
+      list(b.cbctDates), list(b.skipDates), b.physician, b.note,
     ])].map(r => r.map(cell).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
@@ -683,20 +1219,22 @@
 
   // ---------- boot ----------
   async function reload() {
-    state.bookings = await store.list();
+    state.bookings = (await store.list()).map(normalize);
     render();
   }
 
   (async () => {
     try {
-      if (location.protocol === 'file:') throw new Error('offline');
-      state.bookings = await api.list();
-      if (!Array.isArray(state.bookings)) throw new Error('bad response');
-      $('mode').textContent = 'เชื่อมต่อเซิร์ฟเวอร์ · ข้อมูลใช้ร่วมกัน';
-    } catch {
-      store = local;
-      state.bookings = await local.list();
-      $('mode').textContent = 'โหมดออฟไลน์ · บันทึกในเครื่องนี้เท่านั้น';
+      const data = await initStore();
+      setHolidays(data.holidays && data.holidays.length ? data.holidays : DEFAULT_HOLIDAYS);
+      state.bookings = (data.bookings || []).map(normalize);
+      sheetUrl = data.sheetUrl || '';
+      $('openSheet').hidden = !sheetUrl;
+      $('exportCsv').hidden = !data.csv;
+      $('mode').textContent = data.mode;
+    } catch (err) {
+      setHolidays(DEFAULT_HOLIDAYS);
+      $('mode').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + err.message;
     }
     render();
   })();
