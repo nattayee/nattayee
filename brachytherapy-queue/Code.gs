@@ -9,8 +9,6 @@
  *   ผู้สมัครคนแรกเป็นผู้ดูแลระบบ คนถัดไปรอผู้ดูแลอนุมัติ (ปิดได้ที่ REQUIRE_APPROVAL)
  *   รหัสผ่านเก็บเป็น hash + salt, ลืมรหัสผ่านใช้รหัสยืนยันทางอีเมล, บันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
- * - ดูแดชบอร์ดได้โดยไม่ต้องเข้าสู่ระบบ: ปุ่ม "ดูแดชบอร์ด" ที่หน้าเข้าสู่ระบบ หรือเปิดลิงก์เว็บแอปต่อท้ายด้วย ?view=dashboard
- *   (เปิด/ปิดที่ PUBLIC_DASHBOARD และเลือกการซ่อนข้อมูลผู้ป่วยที่ PUBLIC_PATIENT_INFO ในชีต Settings)
  *
  * สร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet หลังบ้าน (ระบบจะรู้จักชีตเอง)
  * ถ้าสร้างโปรเจกต์แยกที่ script.google.com ให้ใส่ลิงก์หรือ ID ของชีตที่ SPREADSHEET_ID ด้านล่าง
@@ -122,8 +120,7 @@ const MSG = {
     notFound: 'ไม่พบนัด {id}',
     calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: สคริปต์รันในนาม {who} ให้ {id} แชร์ปฏิทินให้ {who} ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" แล้วรัน setup อีกครั้ง{detail}',
     calNameMissing: 'ไม่พบปฏิทินชื่อ "{name}" ในบัญชี {who} (ปฏิทินที่มี: {list}) ตรวจสอบชื่อที่ CALENDAR_NAME',
-    sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)',
-    publicOff: 'ผู้ดูแลระบบปิดการดูแดชบอร์ดแบบไม่เข้าสู่ระบบ กรุณาเข้าสู่ระบบ'
+    sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   },
   en: {
     sessionExpired: 'Please log in again',
@@ -157,8 +154,7 @@ const MSG = {
     notFound: 'Appointment {id} not found',
     calMissing: 'Cannot use calendar {id}: the script runs as {who}. {id} must share the calendar with {who} with "Make changes to events", then run setup again{detail}',
     calNameMissing: 'No calendar named "{name}" in {who} (calendars found: {list}). Check CALENDAR_NAME',
-    sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)',
-    publicOff: 'Viewing the dashboard without logging in has been turned off. Please log in'
+    sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
   }
 };
 function msg_(lang, key, vars) {
@@ -175,9 +171,7 @@ const DEFAULT_SETTINGS = [
   ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
   ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล'],
   ['REQUIRE_APPROVAL', 'TRUE', 'TRUE = ผู้สมัครใหม่ต้องรอผู้ดูแลอนุมัติก่อนเข้าใช้, FALSE = สมัครแล้วเข้าใช้ได้ทันที'],
-  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)'],
-  ['PUBLIC_DASHBOARD', 'TRUE', 'TRUE = ดูแดชบอร์ดได้โดยไม่ต้องเข้าสู่ระบบ (ปุ่มที่หน้าเข้าสู่ระบบ หรือลิงก์เว็บแอป + ?view=dashboard), FALSE = ต้องเข้าสู่ระบบ'],
-  ['PUBLIC_PATIENT_INFO', 'MASK', 'ข้อมูลผู้ป่วยในแดชบอร์ดแบบไม่เข้าสู่ระบบ: MASK = แสดง HN เต็ม ชื่อเป็น ***, FULL = แสดง HN และชื่อเต็ม, COUNTS = ไม่แสดงผู้ป่วย (เฉพาะจำนวนเคส แพทย์ รูปแบบการใส่)']
+  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)']
 ];
 
 /* ------------------------------------------------------------------ */
@@ -357,31 +351,6 @@ function resetPassword(form) {
   cache.removeAll(['reset_' + acc.username, tryKey, 'loginfail_' + acc.username, 'loginfail_' + acc.email]);
   log_(acc.username, 'ตั้งรหัสผ่านใหม่', 'ผ่านรหัสยืนยันทางอีเมล');
   return { ok: true };
-}
-
-/**
- * แดชบอร์ดแบบไม่ต้องเข้าสู่ระบบ (อ่านอย่างเดียว)
- * ส่งเฉพาะข้อมูลที่แดชบอร์ดใช้ ไม่ส่งหมายเหตุ ผู้บันทึก ประวัติ และนัดที่ยกเลิก
- * ข้อมูลผู้ป่วยซ่อนตาม PUBLIC_PATIENT_INFO (ค่าเริ่มต้น MASK)
- */
-function getPublicDashboard(lang) {
-  ensureSetup_();
-  const settings = getSettings_();
-  if (String(settings.PUBLIC_DASHBOARD).trim().toUpperCase() !== 'TRUE') throw new Error(msg_(lang, 'publicOff'));
-  const mode = String(settings.PUBLIC_PATIENT_INFO || '').trim().toUpperCase();
-  const info = mode === 'FULL' || mode === 'COUNTS' ? mode : 'MASK';
-  return {
-    holidays: getHolidays_(),
-    settings: { maxCasesPerDay: maxCases_(settings), patientInfo: info },
-    appointments: listAppointments_()
-      .filter(a => a.status !== STATUS_CANCELLED)
-      .map((a, i) => ({
-        apptId: 'P' + i, date: a.date, status: a.status, doctor: a.doctor, technique: a.technique,
-        fx: a.fx, totalFx: a.totalFx,
-        hn: info === 'COUNTS' ? '' : a.hn,
-        name: info === 'FULL' ? a.name : info === 'MASK' ? '***' : ''
-      }))
-  };
 }
 
 /* ------------------------------------------------------------------ */
