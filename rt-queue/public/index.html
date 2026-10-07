@@ -335,8 +335,8 @@
           <input type="number" id="f-fx" name="fractions" min="1" max="100" step="1" inputmode="numeric">
         </div>
         <div class="field">
-          <label for="f-md">แพทย์ผู้สั่ง</label>
-          <input type="text" id="f-md" name="physician" maxlength="120" autocomplete="off">
+          <label for="f-md">แพทย์ผู้สั่ง <span class="req">*</span></label>
+          <select id="f-md" name="physician" required></select>
         </div>
       </div>
 
@@ -427,6 +427,15 @@
     ['none', 'ไม่ทำ CBCT ระหว่างฉาย'],
     ['custom', 'กำหนดเอง (เลือกในตาราง)'],
   ];
+  // รายชื่อแพทย์ผู้สั่ง — แก้ที่ physicians.json แล้วรัน npm run build
+  /* PHYSICIANS:START */
+  const PHYSICIANS = [
+    'ทัศน์วรรณ อาษากิจ',
+    'ศิริรัตน์ เชื้อสำราญ',
+    'พัฒธิดา มโนรส',
+    'ทินกร จอมใจ',
+  ];
+  /* PHYSICIANS:END */
   // วันหยุดเริ่มต้น ใช้เมื่อไม่ได้โหลดรายการวันหยุดจากเซิร์ฟเวอร์/ชีต
   /* HOLIDAYS:START */
   const DEFAULT_HOLIDAYS = [
@@ -820,6 +829,8 @@
   $('techRadios').innerHTML = TECHS.map(t =>
     `<label style="--c:${t.color}" title="${esc(t.desc)}"><input type="radio" name="technique" value="${esc(t.key)}">${esc(t.key)}</label>`
   ).join('');
+  $('f-md').innerHTML = '<option value="">— เลือกแพทย์ —</option>' +
+    PHYSICIANS.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   $('f-pattern').innerHTML = CBCT_PATTERNS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('');
 
   $('techRadios').addEventListener('change', () => {
@@ -1093,6 +1104,7 @@
     if (!(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= 100)) {
       return { error: 'กรุณาระบุจำนวนครั้ง (Fx) เป็นจำนวนเต็ม 1–100', focus: form.fractions };
     }
+    if (!PHYSICIANS.includes(b.physician)) return { error: 'กรุณาเลือกแพทย์ผู้สั่ง', focus: form.physician };
     if (!form.startDate.value) return { error: 'กรุณาระบุวันเริ่มฉาย', focus: form.startDate };
     if (b.treatmentDates.length !== b.fractions) return { error: 'สร้างตารางวันฉายไม่ครบตามจำนวนครั้ง', focus: form.startDate };
     if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) {

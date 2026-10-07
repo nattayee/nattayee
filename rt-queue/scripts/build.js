@@ -3,6 +3,7 @@
 
 // Keeps generated parts in sync:
 //  - holidays.json → DEFAULT_HOLIDAYS in public/index.html and HOLIDAYS_SEED in apps-script/Code.gs
+//  - physicians.json → PHYSICIANS in public/index.html and apps-script/Code.gs
 //  - public/index.html → apps-script/Index.html (storage swapped for google.script.run)
 // Usage: node scripts/build.js          (write files)
 //        node scripts/build.js --check  (exit 1 if anything is out of date)
@@ -15,6 +16,7 @@ const HTML = path.join(ROOT, 'public', 'index.html');
 const GS = path.join(ROOT, 'apps-script', 'Code.gs');
 const GAS_HTML = path.join(ROOT, 'apps-script', 'Index.html');
 const HOLIDAYS = path.join(ROOT, 'holidays.json');
+const PHYSICIANS = path.join(ROOT, 'physicians.json');
 
 const GAS_STORAGE = `
   // Google Apps Script: Code.gs functions via google.script.run.
@@ -45,11 +47,16 @@ function replaceBetween(src, start, end, body, file) {
 
 const q = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 const holidays = JSON.parse(fs.readFileSync(HOLIDAYS, 'utf8'));
+const physicians = JSON.parse(fs.readFileSync(PHYSICIANS, 'utf8'));
 
-const html = replaceBetween(fs.readFileSync(HTML, 'utf8'), '/* HOLIDAYS:START */', '/* HOLIDAYS:END */',
+let html = replaceBetween(fs.readFileSync(HTML, 'utf8'), '/* HOLIDAYS:START */', '/* HOLIDAYS:END */',
   `\n  const DEFAULT_HOLIDAYS = [\n${holidays.map(h => `    [${q(h.date)}, ${q(h.name)}],`).join('\n')}\n  ];\n  `, HTML);
-const gsCode = replaceBetween(fs.readFileSync(GS, 'utf8'), '// HOLIDAYS:START', '// HOLIDAYS:END',
+html = replaceBetween(html, '/* PHYSICIANS:START */', '/* PHYSICIANS:END */',
+  `\n  const PHYSICIANS = [\n${physicians.map(n => `    ${q(n)},`).join('\n')}\n  ];\n  `, HTML);
+let gsCode = replaceBetween(fs.readFileSync(GS, 'utf8'), '// HOLIDAYS:START', '// HOLIDAYS:END',
   `\nconst HOLIDAYS_SEED = [\n${holidays.map(h => `  [${q(h.date)}, ${q(h.name)}],`).join('\n')}\n];\n`, GS);
+gsCode = replaceBetween(gsCode, '// PHYSICIANS:START', '// PHYSICIANS:END',
+  `\nconst PHYSICIANS = [\n${physicians.map(n => `  ${q(n)},`).join('\n')}\n];\n`, GS);
 const gasHtml = replaceBetween(html, '/* STORAGE:START */', '/* STORAGE:END */', GAS_STORAGE, HTML)
   .replace('/* STORAGE:START */', '/* generated from public/index.html by scripts/build.js — edit that file instead */');
 

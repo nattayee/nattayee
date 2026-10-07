@@ -24,6 +24,16 @@ const CBCT_PATTERNS = [
 ];
 const MAX_FRACTIONS = 100;
 
+// รายชื่อแพทย์ผู้สั่ง (ต้องเลือกจากรายชื่อนี้)
+// PHYSICIANS:START
+const PHYSICIANS = [
+  'ทัศน์วรรณ อาษากิจ',
+  'ศิริรัตน์ เชื้อสำราญ',
+  'พัฒธิดา มโนรส',
+  'ทินกร จอมใจ',
+];
+// PHYSICIANS:END
+
 // [key, หัวคอลัมน์ในชีต] — ห้ามสลับลำดับ คอลัมน์ใหม่ให้เพิ่มต่อท้ายเท่านั้น
 const COLUMNS = [
   ['id', 'ID'],
@@ -352,6 +362,7 @@ function validate_(input) {
   if (!(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= MAX_FRACTIONS)) {
     throw new Error('จำนวนครั้ง (Fx) ต้องเป็นจำนวนเต็ม 1–100');
   }
+  if (PHYSICIANS.indexOf(b.physician) === -1) throw new Error('กรุณาเลือกแพทย์ผู้สั่ง');
   const dates = b.treatmentDates;
   if (!dates || dates.length === 0) throw new Error('กรุณาระบุวันเริ่มฉายรังสีและตารางวันฉาย');
   if (dates.length !== b.fractions) throw new Error('จำนวนวันฉายไม่ตรงกับจำนวนครั้ง (Fx)');
