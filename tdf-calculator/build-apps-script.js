@@ -171,16 +171,16 @@ console.log("Wrote apps-script/Index.html and apps-script/Tdf.html");
 // copy-code.html: one box per Apps Script file with a copy button, for pasting into the Apps Script editor.
 const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const files = [
-  { name: "Code.gs", as: "ไฟล์ Code (มีอยู่แล้ว) วางทับทั้งหมด", file: "Code.gs" },
-  { name: "Index", as: "กด + → HTML → ตั้งชื่อ Index", file: "Index.html" },
-  { name: "Tdf", as: "กด + → HTML → ตั้งชื่อ Tdf", file: "Tdf.html" },
+  { name: "รหัส.gs (Code.gs)", as: "ไฟล์สคริปต์ที่มีอยู่แล้ว ลบของเดิมทั้งหมดแล้ววาง", first: "/**", file: "Code.gs" },
+  { name: "Index.html", as: "กด + → HTML → ตั้งชื่อ Index", first: "<!--", file: "Index.html" },
+  { name: "Tdf.html", as: "กด + → HTML → ตั้งชื่อ Tdf", first: "<!--", file: "Tdf.html" },
 ];
 const boxes = files.map((f, i) => {
   const text = fs.readFileSync(path.join(out, f.file), "utf8");
   const lines = text.split("\n").length;
   return `  <section class="box">
     <div class="box-head">
-      <div><span class="step">${i + 1}</span><b>${f.name}</b><span class="as">${f.as}</span></div>
+      <div><span class="step">${i + 1}</span><b>${f.name}</b><span class="as">${f.as}</span><span class="first">บรรทัดแรกต้องเป็น <code>${escapeHtml(f.first)}</code></span></div>
       <button type="button" class="copy" data-target="code${i}">คัดลอก</button>
     </div>
     <textarea id="code${i}" readonly spellcheck="false" aria-label="โค้ด ${f.name}">${escapeHtml(text)}</textarea>
@@ -198,16 +198,16 @@ const copyPage = `<!doctype html>
 <style>
 :root {
   --bg: #EEF1F6; --surface: #FFFFFF; --code-bg: #F6F8FB; --ink: #152033; --ink-2: #4B5A70; --muted: #6E7C90; --line: #D6DDE8;
-  --accent: #2747B0; --accent-ink: #2747B0; --on-accent: #FFFFFF; --good: #1E7A4C;
+  --accent: #2747B0; --accent-ink: #2747B0; --on-accent: #FFFFFF; --good: #1E7A4C; --warn: #B4570A;
   --font-body: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --bg: #10151F; --surface: #171E2A; --code-bg: #121822; --ink: #E7ECF4; --ink-2: #B3BECF; --muted: #8592A6; --line: #2B3546;
-    --accent: #6A86EE; --accent-ink: #9DB0FF; --on-accent: #0E1424; --good: #5CC08A; color-scheme: dark; }
+    --accent: #6A86EE; --accent-ink: #9DB0FF; --on-accent: #0E1424; --good: #5CC08A; --warn: #E3A94B; color-scheme: dark; }
 }
 :root[data-theme="dark"] { --bg: #10151F; --surface: #171E2A; --code-bg: #121822; --ink: #E7ECF4; --ink-2: #B3BECF; --muted: #8592A6; --line: #2B3546;
-  --accent: #6A86EE; --accent-ink: #9DB0FF; --on-accent: #0E1424; --good: #5CC08A; color-scheme: dark; }
+  --accent: #6A86EE; --accent-ink: #9DB0FF; --on-accent: #0E1424; --good: #5CC08A; --warn: #E3A94B; color-scheme: dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--font-body); padding: 0 16px; padding-block: 24px 48px; }
@@ -227,6 +227,10 @@ ol { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: .9rem; }
 .copy:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 400 12px/1.5 var(--font-mono); white-space: pre; overflow: auto; }
 .meta { font-size: .75rem; color: var(--muted); }
+.first { flex-basis: 100%; font-size: .78rem; color: var(--ink-2); }
+.first code { font-family: var(--font-mono); background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.warn { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: .88rem; color: var(--ink-2); }
+.warn b { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -238,6 +242,8 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
     <li>คัดลอกทั้ง 3 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
     <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone</li>
   </ol>
+  <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>
+    แปลว่าวางโค้ด HTML (กล่อง 2 หรือ 3) ลงในไฟล์ .gs ให้ลบทุกอย่างใน รหัส.gs แล้ววางกล่อง 1 ใหม่ ส่วนกล่อง 2 และ 3 ต้องสร้างเป็นไฟล์ <b>HTML</b> (ไม่ใช่ สคริปต์)</div>
 ${boxes}
 </main>
 <script>
