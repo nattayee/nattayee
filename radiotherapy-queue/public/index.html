@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบนัดคิวฉายรังสี</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5M4.9 4.9l3.5 3.5M15.6 15.6l3.5 3.5M4.9 19.1l3.5-3.5M15.6 8.4l3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <h1>ระบบนัดคิวผู้ป่วยฉายรังสี</h1>
+        <p>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-view="dashboard" aria-selected="true">แดชบอร์ด</button>
+      <button role="tab" data-view="calendar">ปฏิทินนัด</button>
+      <button role="tab" data-view="patients">รายชื่อผู้ป่วย</button>
+      <button role="tab" data-view="settings">ตั้งค่า</button>
+    </nav>
+    <div class="header-actions">
+      <span id="mode-badge" class="mode-badge"></span>
+      <button class="btn primary" id="btn-new">+ นัดผู้ป่วยใหม่</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= แดชบอร์ด ================= -->
+    <section id="view-dashboard" class="view">
+      <div class="toolbar">
+        <h2>ภาพรวมการนัด</h2>
+        <label class="inline">ข้อมูล ณ วันที่
+          <input type="date" id="dash-date">
+        </label>
+        <button class="btn ghost" id="dash-today">วันนี้</button>
+      </div>
+      <div id="dash-holiday" class="notice" hidden></div>
+      <div class="kpis" id="kpis"></div>
+      <div class="room-cards" id="room-cards"></div>
+      <div class="grid-2">
+        <article class="card">
+          <header class="card-head">
+            <h3>จำนวนผู้ป่วยที่นัดฉายต่อวัน</h3>
+            <span class="muted">10 วันทำการถัดไป แยกตามห้อง</span>
+          </header>
+          <div id="chart-daily" class="chart"></div>
+        </article>
+        <article class="card">
+          <header class="card-head">
+            <h3>เทคนิคการฉาย</h3>
+            <span class="muted">ผู้ป่วยที่กำลังฉายและรอเริ่มฉาย</span>
+          </header>
+          <div id="chart-tech" class="chart"></div>
+        </article>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <header class="card-head"><h3>เริ่มฉายใหม่ 7 วันข้างหน้า</h3></header>
+          <div id="list-starts"></div>
+        </article>
+        <article class="card">
+          <header class="card-head"><h3>นัดทำ CBCT 7 วันข้างหน้า</h3></header>
+          <div id="list-cbct"></div>
+        </article>
+        <article class="card">
+          <header class="card-head"><h3>ใกล้ฉายครบ (เหลือ ≤ 3 ครั้ง)</h3></header>
+          <div id="list-ending"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= ปฏิทิน ================= -->
+    <section id="view-calendar" class="view" hidden>
+      <div class="toolbar">
+        <div class="month-nav">
+          <button class="btn ghost icon" id="cal-prev" aria-label="เดือนก่อนหน้า">‹</button>
+          <h2 id="cal-title"></h2>
+          <button class="btn ghost icon" id="cal-next" aria-label="เดือนถัดไป">›</button>
+          <button class="btn ghost" id="cal-today">เดือนนี้</button>
+        </div>
+        <div class="filters">
+          <div class="seg" id="cal-rooms" role="group" aria-label="กรองห้องฉาย"></div>
+          <select id="cal-type" aria-label="ประเภทนัด">
+            <option value="all">ทุกนัด</option>
+            <option value="start">เฉพาะวันเริ่มฉาย</option>
+            <option value="cbct">เฉพาะ CBCT</option>
+          </select>
+        </div>
+      </div>
+      <div class="legend" id="cal-legend"></div>
+      <div class="calendar" id="calendar"></div>
+      <article class="card day-panel" id="day-panel">
+        <header class="card-head">
+          <h3 id="day-title"></h3>
+          <span class="muted" id="day-sub"></span>
+          <button class="btn ghost" id="day-print">พิมพ์ตารางวันนี้</button>
+        </header>
+        <div class="day-rooms" id="day-rooms"></div>
+      </article>
+    </section>
+
+    <!-- ================= รายชื่อผู้ป่วย ================= -->
+    <section id="view-patients" class="view" hidden>
+      <div class="toolbar">
+        <h2>รายชื่อผู้ป่วย</h2>
+        <div class="filters">
+          <input type="search" id="pt-search" placeholder="ค้นหา HN / ชื่อ / การวินิจฉัย">
+          <select id="pt-room"><option value="">ทุกห้อง</option></select>
+          <select id="pt-tech"><option value="">ทุกเทคนิค</option></select>
+          <select id="pt-phase">
+            <option value="">ทุกสถานะ</option>
+            <option value="waiting">รอเริ่มฉาย</option>
+            <option value="treating">กำลังฉาย</option>
+            <option value="completed">ฉายครบ</option>
+            <option value="hold">พักการฉาย</option>
+            <option value="cancelled">ยกเลิก</option>
+          </select>
+          <button class="btn ghost" id="pt-export">ส่งออก CSV</button>
+        </div>
+      </div>
+      <div class="card table-wrap">
+        <table class="table" id="pt-table">
+          <thead>
+            <tr>
+              <th>HN</th><th>ชื่อ-สกุล</th><th>เทคนิค</th><th>ห้อง</th><th>CBCT ก่อนฉาย</th>
+              <th>วันเริ่มฉาย</th><th>ความคืบหน้า</th><th>วันสุดท้าย</th><th>สถานะ</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty" id="pt-empty" hidden>ยังไม่มีข้อมูลผู้ป่วย</p>
+      </div>
+    </section>
+
+    <!-- ================= ตั้งค่า ================= -->
+    <section id="view-settings" class="view" hidden>
+      <div class="toolbar"><h2>ตั้งค่าระบบ</h2></div>
+      <div class="grid-2">
+        <article class="card">
+          <header class="card-head"><h3>เวลาให้บริการของห้องฉาย</h3></header>
+          <div id="set-rooms" class="form-grid"></div>
+          <label>ช่วงเวลานัด (นาที)
+            <select id="set-slot">
+              <option>5</option><option>10</option><option>15</option><option>20</option><option>30</option>
+            </select>
+          </label>
+          <fieldset class="workdays">
+            <legend>วันทำการ</legend>
+            <div id="set-workdays" class="chips"></div>
+          </fieldset>
+        </article>
+        <article class="card">
+          <header class="card-head"><h3>วันหยุด (ไม่นัดฉาย)</h3></header>
+          <p class="muted small">วันหยุดที่ตรงกับวันที่เดิมทุกปีถูกใส่ไว้ให้แล้ว กรุณาเพิ่มวันหยุดทางจันทรคติ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา) และวันหยุดชดเชยตามประกาศแต่ละปี</p>
+          <div class="holiday-add">
+            <input type="date" id="hol-date" aria-label="วันที่">
+            <input type="text" id="hol-name" placeholder="ชื่อวันหยุด">
+            <button class="btn" id="hol-add">เพิ่ม</button>
+          </div>
+          <ul class="holiday-list" id="hol-list"></ul>
+        </article>
+      </div>
+      <div class="settings-actions">
+        <button class="btn primary" id="set-save">บันทึกการตั้งค่า</button>
+        <span class="muted small">การเปลี่ยนวันหยุดจะคำนวณวันฉายของผู้ป่วยทุกรายใหม่อัตโนมัติ</span>
+      </div>
+      <article class="card">
+        <header class="card-head"><h3>สำรอง / นำเข้าข้อมูล</h3></header>
+        <div class="row-actions">
+          <button class="btn" id="backup-export">ดาวน์โหลดไฟล์สำรอง (JSON)</button>
+          <label class="btn">นำเข้าไฟล์สำรอง<input type="file" id="backup-import" accept="application/json" hidden></label>
+          <button class="btn ghost" id="demo-load">ใส่ข้อมูลตัวอย่าง</button>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <!-- ================= ฟอร์มนัดผู้ป่วย ================= -->
+  <dialog id="appt-dialog" class="dialog">
+    <form id="appt-form" method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="appt-title">นัดผู้ป่วยใหม่</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="ปิด">✕</button>
+      </header>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>ข้อมูลผู้ป่วย</legend>
+          <div class="form-grid">
+            <label><span>HN <span class="req">*</span></span><input name="hn" required autocomplete="off"></label>
+            <label class="span-2"><span>ชื่อ-สกุล <span class="req">*</span></span><input name="name" required autocomplete="off"></label>
+            <label>อายุ (ปี)<input name="age" type="number" min="0" max="120"></label>
+            <label>เพศ
+              <select name="sex"><option value="">-</option><option value="ชาย">ชาย</option><option value="หญิง">หญิง</option></select>
+            </label>
+            <label>โทรศัพท์<input name="phone" type="tel"></label>
+            <label class="span-2">การวินิจฉัย / ตำแหน่งที่ฉาย<input name="diagnosis" placeholder="เช่น CA Cervix, Whole pelvis"></label>
+            <label>แพทย์ผู้รักษา<input name="physician"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>ห้องฉายและเทคนิค</legend>
+          <div class="room-picker" id="room-picker" role="radiogroup" aria-label="ห้องฉาย"></div>
+          <div class="form-grid">
+            <label><span>ชนิดเทคนิคการฉาย <span class="req">*</span></span><select name="technique" id="f-technique"></select></label>
+            <label>ปริมาณรังสีต่อครั้ง<input name="dosePerFx" placeholder="เช่น 200 cGy"></label>
+            <label><span>จำนวนครั้ง (Fx) <span class="req">*</span></span><input name="fractions" type="number" min="1" max="60" required></label>
+            <label>วันทำ CT Simulation<input name="simDate" type="date"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>วันเริ่มฉายและเวลานัด</legend>
+          <div class="form-grid">
+            <label><span>วันเริ่มฉาย <span class="req">*</span></span><input name="startDate" type="date" required></label>
+            <label><span>เวลานัด <span class="req">*</span></span><input name="time" type="time" step="300" required></label>
+            <label>ระยะเวลาต่อครั้ง (นาที)<input name="duration" type="number" min="5" max="240" step="5"></label>
+            <div class="suggest">
+              <button type="button" class="btn" id="btn-suggest">หาเวลาว่างอัตโนมัติ</button>
+              <div id="suggest-list" class="chips"></div>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>การทำ CBCT</legend>
+          <div class="form-grid">
+            <label>วันนัดทำ CBCT ก่อนเริ่มฉาย (Verification)<input name="verifyDate" type="date"></label>
+            <label>เวลานัดทำ CBCT<input name="verifyTime" type="time" step="300"></label>
+            <label class="span-2">รูปแบบ CBCT ระหว่างฉาย<select name="cbctMode" id="f-cbct"></select></label>
+          </div>
+          <p class="muted small">คลิกช่อง CBCT ในตารางด้านล่างเพื่อกำหนดวันทำ CBCT เอง หรือกด “งด” เพื่อเลื่อนวันฉายนั้นออกไป</p>
+          <div id="session-summary" class="session-summary"></div>
+          <div class="session-table-wrap">
+            <table class="table compact" id="session-table">
+              <thead><tr><th>Fx</th><th>วันที่</th><th>CBCT</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="skip-list" class="chips"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>สถานะและหมายเหตุ</legend>
+          <div class="form-grid">
+            <label>สถานะ<select name="status" id="f-status"></select></label>
+            <label class="span-3">หมายเหตุ<textarea name="notes" rows="2"></textarea></label>
+          </div>
+        </fieldset>
+
+        <div id="conflicts" class="conflicts" hidden></div>
+        <div id="form-errors" class="form-errors" role="alert" hidden></div>
+      </div>
+      <footer class="dialog-foot">
+        <button type="button" class="btn danger ghost" id="btn-delete" hidden>ลบนัดนี้</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>ยกเลิก</button>
+        <button type="submit" class="btn primary" id="btn-save">บันทึกนัด</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="print-area" class="print-area"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

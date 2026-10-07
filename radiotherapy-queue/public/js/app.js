@@ -1,0 +1,1035 @@
+import {
+  ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, PHASE_LABELS,
+  addDays, todayISO, startOfWeek, isWorkday, nextWorkday, parseISO,
+  buildSessions, phaseOf, eventsByDate, findConflicts, suggestTimes, utilization,
+} from './schedule.js';
+import { openStore } from './store.js';
+
+// ================= state =================
+const state = {
+  store: null,
+  appts: [],
+  settings: null,
+  evMap: new Map(),
+  sessions: new Map(),
+  view: 'dashboard',
+  dashDate: todayISO(),
+  calMonth: todayISO().slice(0, 7),
+  calRooms: new Set(ROOMS.map((r) => r.id)),
+  calType: 'all',
+  selectedDay: todayISO(),
+};
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+// ================= helpers =================
+const esc = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+const dtf = (opts) => new Intl.DateTimeFormat('th-TH', { timeZone: 'UTC', ...opts });
+const F_SHORT = dtf({ day: 'numeric', month: 'short' });
+const F_MED = dtf({ day: 'numeric', month: 'short', year: '2-digit' });
+const F_LONG = dtf({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const F_MONTH = dtf({ month: 'long', year: 'numeric' });
+const DOW = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+const fmt = (f, iso) => (iso ? f.format(parseISO(iso)) : '-');
+const fShort = (iso) => fmt(F_SHORT, iso);
+const fMed = (iso) => fmt(F_MED, iso);
+const fLong = (iso) => fmt(F_LONG, iso);
+
+const roomOf = (id) => ROOMS.find((r) => r.id === id) || { id, name: id, label: id };
+const techOf = (id) => TECHNIQUES.find((t) => t.id === id) || { id, name: id, duration: 15 };
+const roomTag = (id) => `<span class="room-tag"><i class="dot ${esc(id)}"></i>${esc(id)}</span>`;
+const holidayName = (iso) => state.settings.holidays.find((h) => h.date === iso)?.name;
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => (el.hidden = true), 2600);
+}
+
+const tip = $('#tooltip');
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.hidden = false;
+  const pad = 14;
+  const { innerWidth: w, innerHeight: h } = window;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + pad;
+  let y = ev.clientY + pad;
+  if (x + r.width > w - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > h - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${Math.max(8, y)}px`;
+}
+const hideTip = () => (tip.hidden = true);
+
+function recompute() {
+  state.sessions = new Map(state.appts.map((a) => [a.id, buildSessions(a, state.settings)]));
+  state.evMap = eventsByDate(state.appts, state.settings);
+}
+
+function sessionsOf(a) {
+  return state.sessions.get(a.id) || buildSessions(a, state.settings);
+}
+
+function phase(a, day = todayISO()) {
+  return phaseOf(a, sessionsOf(a), day);
+}
+
+function eventsOn(date, filter = () => true) {
+  return (state.evMap.get(date) || []).filter(filter);
+}
+
+function render() {
+  recompute();
+  ({ dashboard: renderDashboard, calendar: renderCalendar, patients: renderPatients, settings: renderSettings })[
+    state.view
+  ]();
+}
+
+// ================= navigation =================
+function setView(view) {
+  if (view === 'settings') draftSettings = null;
+  state.view = view;
+  for (const b of $$('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
+  for (const s of $$('.view')) s.hidden = s.id !== `view-${view}`;
+  if (location.hash !== `#${view}`) history.replaceState(null, '', `#${view}`);
+  render();
+}
+
+// ================= dashboard =================
+function renderDashboard() {
+  const day = state.dashDate;
+  $('#dash-date').value = day;
+  const hol = holidayName(day);
+  const off = !isWorkday(day, state.settings);
+  $('#dash-holiday').hidden = !off;
+  $('#dash-holiday').textContent = off ? `${fLong(day)} เป็น${hol ? `วันหยุด (${hol})` : 'วันหยุด'} — ไม่มีการนัดฉายตามปกติ` : '';
+
+  const evs = eventsOn(day);
+  const fxEvs = evs.filter((e) => e.type === 'fx');
+  const cbctEvs = evs.filter((e) => e.cbct);
+  const starts = fxEvs.filter((e) => e.start);
+  const phases = state.appts.map((a) => phase(a, day));
+  const treating = phases.filter((p) => p === 'treating').length;
+  const waiting = phases.filter((p) => p === 'waiting').length;
+  const wk = startOfWeek(day);
+  let weekStarts = 0;
+  for (let i = 0; i < 7; i++) weekStarts += eventsOn(addDays(wk, i), (e) => e.type === 'fx' && e.start).length;
+
+  const kpi = (label, value, sub = '') =>
+    `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+  $('#kpis').innerHTML = [
+    kpi('นัดฉายวันนี้', fxEvs.length, `ราย · ${fShort(day)}`),
+    kpi('ทำ CBCT วันนี้', cbctEvs.length, `ก่อนฉาย ${evs.filter((e) => e.type === 'verify').length} · ระหว่างฉาย ${fxEvs.filter((e) => e.cbct).length}`),
+    kpi('เริ่มฉายใหม่วันนี้', starts.length, 'ราย'),
+    kpi('เริ่มฉายสัปดาห์นี้', weekStarts, `${fShort(wk)} – ${fShort(addDays(wk, 6))}`),
+    kpi('ผู้ป่วยกำลังฉาย', treating, 'อยู่ระหว่างคอร์ส'),
+    kpi('รอเริ่มฉาย', waiting, 'นัดแล้ว ยังไม่ถึงวันเริ่ม'),
+  ].join('');
+
+  $('#room-cards').innerHTML = ROOMS.map((r) => {
+    const re = evs.filter((e) => e.room === r.id);
+    const u = utilization(re, state.settings.rooms[r.id]);
+    const pct = Math.round(u * 100);
+    const shown = re.slice(0, 6);
+    return `<article class="card room-card" style="--rc: var(--room-${r.id})">
+      <div class="room-title"><i class="dot ${r.id}"></i><h3>${esc(r.name)}</h3><span class="code">ห้อง ${r.id}</span></div>
+      <div class="room-stats">
+        <div><b>${re.filter((e) => e.type === 'fx').length}</b><span>ราย</span></div>
+        <div><b>${re.filter((e) => e.cbct).length}</b><span>CBCT</span></div>
+        <div><b>${re.filter((e) => e.start).length}</b><span>เริ่มใหม่</span></div>
+      </div>
+      <div class="meter" role="meter" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="การใช้เครื่อง"><i style="width:${Math.min(100, pct)}%"></i></div>
+      <div class="meter-label"><span>การใช้เครื่อง ${pct}%</span><span>${state.settings.rooms[r.id].open}–${state.settings.rooms[r.id].close} น.</span></div>
+      <ul class="room-next">${
+        shown.length
+          ? shown
+              .map(
+                (e) => `<li data-id="${esc(e.appt.id)}"><span class="t">${esc(e.time)}</span><span class="n">${esc(e.appt.name)}</span>${eventBadges(e)}</li>`,
+              )
+              .join('') + (re.length > shown.length ? `<li class="muted">และอีก ${re.length - shown.length} ราย</li>` : '')
+          : '<li class="muted">ไม่มีนัด</li>'
+      }</ul>
+    </article>`;
+  }).join('');
+
+  renderDailyChart(day);
+  renderTechChart(day);
+
+  const upcoming = (filter, limit = 10) => {
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(day, i);
+      for (const e of eventsOn(d, filter)) out.push(e);
+    }
+    return { items: out.slice(0, limit), more: Math.max(0, out.length - limit) };
+  };
+  const listHtml = ({ items, more }, metaFn) =>
+    items.length
+      ? `<ul class="mini-list">${items
+          .map(
+            (e) => `<li data-id="${esc(e.appt.id)}"><span class="date">${fShort(e.date)} ${esc(e.time)}</span>
+              <span class="name">${esc(e.appt.name)} <span class="muted small">HN ${esc(e.appt.hn)}</span></span>
+              <span class="meta">${metaFn(e)}</span></li>`,
+          )
+          .join('')}</ul>${more ? `<p class="muted small">และอีก ${more} รายการ</p>` : ''}`
+      : '<p class="empty">ไม่มีรายการ</p>';
+
+  $('#list-starts').innerHTML = listHtml(
+    upcoming((e) => e.type === 'fx' && e.start),
+    (e) => `${esc(techOf(e.appt.technique).name)} · ${roomTag(e.room)}`,
+  );
+  $('#list-cbct').innerHTML = listHtml(
+    upcoming((e) => e.cbct, 12),
+    (e) => `${e.type === 'verify' ? 'ก่อนฉาย' : `Fx ${e.fx}/${e.total}`} · ${roomTag(e.room)}`,
+  );
+
+  const ending = state.appts
+    .filter((a) => phase(a, day) === 'treating')
+    .map((a) => {
+      const ss = sessionsOf(a);
+      return { a, left: ss.filter((s) => s.date >= day).length, last: ss[ss.length - 1].date };
+    })
+    .filter((x) => x.left <= 3)
+    .sort((x, y) => x.last.localeCompare(y.last));
+  $('#list-ending').innerHTML = ending.length
+    ? `<ul class="mini-list">${ending
+        .map(
+          ({ a, left, last }) => `<li data-id="${esc(a.id)}"><span class="date">${fShort(last)}</span>
+            <span class="name">${esc(a.name)} <span class="muted small">HN ${esc(a.hn)}</span></span>
+            <span class="meta">เหลือ ${left} ครั้ง · ${roomTag(a.room)}</span></li>`,
+        )
+        .join('')}</ul>`
+    : '<p class="empty">ไม่มีรายการ</p>';
+}
+
+function eventBadges(e) {
+  const b = [];
+  if (e.type === 'verify') b.push('<span class="badge cbct">CBCT ก่อนฉาย</span>');
+  else {
+    if (e.start) b.push('<span class="badge start">เริ่มฉาย</span>');
+    if (e.cbct) b.push('<span class="badge cbct">CBCT</span>');
+  }
+  return b.join(' ');
+}
+
+// ---------- charts ----------
+function roundedTop(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+function niceMax(v) {
+  if (v <= 5) return 5;
+  const p = 10 ** Math.floor(Math.log10(v));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+
+function renderDailyChart(fromDay) {
+  const el = $('#chart-daily');
+  const days = [];
+  let d = nextWorkday(fromDay, state.settings);
+  while (days.length < 10) {
+    days.push(d);
+    d = nextWorkday(addDays(d, 1), state.settings);
+  }
+  const data = days.map((date) => {
+    const evs = eventsOn(date);
+    const byRoom = Object.fromEntries(ROOMS.map((r) => [r.id, evs.filter((e) => e.room === r.id).length]));
+    return { date, byRoom, total: evs.length };
+  });
+
+  const W = Math.max(300, el.clientWidth || 600);
+  const H = 240;
+  const m = { t: 22, r: 8, b: 40, l: 30 };
+  const iw = W - m.l - m.r;
+  const ih = H - m.t - m.b;
+  const max = niceMax(Math.max(1, ...data.map((x) => x.total)));
+  const step = iw / data.length;
+  const bw = Math.min(36, step * 0.6);
+  const y = (v) => m.t + ih - (v / max) * ih;
+  const ticks = [0, max / 2, max];
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="จำนวนผู้ป่วยที่นัดฉายต่อวัน">`;
+  for (const t of ticks)
+    svg += `<line class="${t === 0 ? 'baseline' : 'gridline'}" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>
+      <text class="lbl" x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`;
+  data.forEach((row, i) => {
+    const cx = m.l + step * i + step / 2;
+    const x = cx - bw / 2;
+    let acc = 0;
+    const segs = ROOMS.filter((r) => row.byRoom[r.id] > 0);
+    let g = '';
+    segs.forEach((r, j) => {
+      const v = row.byRoom[r.id];
+      const y0 = y(acc);
+      const y1 = y(acc + v);
+      // เว้นช่อง 2px ระหว่างส่วนของแท่งที่ซ้อนกัน
+      const h = Math.max(1, y0 - y1 - (j > 0 ? 2 : 0));
+      g +=
+        j === segs.length - 1
+          ? `<path d="${roundedTop(x, y1, bw, h, 4)}" fill="var(--room-${r.id})"/>`
+          : `<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="var(--room-${r.id})"/>`;
+      acc += v;
+    });
+    const dt = parseISO(row.date);
+    svg += `<g>${g}</g>`;
+    if (row.total) svg += `<text class="val" x="${cx}" y="${y(row.total) - 6}" text-anchor="middle">${row.total}</text>`;
+    svg += `<text class="lbl" x="${cx}" y="${H - m.b + 16}" text-anchor="middle">${DOW[dt.getUTCDay()]}</text>
+      <text class="lbl" x="${cx}" y="${H - m.b + 30}" text-anchor="middle">${step < 52 ? dt.getUTCDate() : fShort(row.date)}</text>
+      <rect class="hit" data-i="${i}" x="${m.l + step * i}" y="${m.t}" width="${step}" height="${ih + m.b}"/>`;
+  });
+  svg += '</svg>';
+
+  const legend = `<div class="chart-legend">${ROOMS.map((r) => `<span><i class="dot ${r.id}"></i>${r.label}</span>`).join('')}</div>`;
+  const table = `<details><summary>ดูเป็นตาราง</summary><table class="table compact"><thead><tr><th>วันที่</th>${ROOMS.map(
+    (r) => `<th>${r.id}</th>`,
+  ).join('')}<th>รวม</th></tr></thead><tbody>${data
+    .map(
+      (row) => `<tr><td>${fShort(row.date)}</td>${ROOMS.map((r) => `<td class="num">${row.byRoom[r.id]}</td>`).join('')}<td class="num"><b>${row.total}</b></td></tr>`,
+    )
+    .join('')}</tbody></table></details>`;
+  el.innerHTML = legend + svg + table;
+
+  for (const hit of $$('.hit', el)) {
+    const row = data[Number(hit.dataset.i)];
+    hit.addEventListener('mousemove', (ev) =>
+      showTip(
+        `<div class="tt-title">${fLong(row.date)}</div>${ROOMS.map(
+          (r) => `<div class="tt-row"><span><i class="dot ${r.id}"></i>${r.label}</span><b>${row.byRoom[r.id]}</b></div>`,
+        ).join('')}<div class="tt-row"><span>รวม</span><b>${row.total}</b></div>`,
+        ev,
+      ),
+    );
+    hit.addEventListener('mouseleave', hideTip);
+    hit.addEventListener('click', () => {
+      state.selectedDay = row.date;
+      state.calMonth = row.date.slice(0, 7);
+      setView('calendar');
+    });
+  }
+}
+
+function renderTechChart(day) {
+  const el = $('#chart-tech');
+  const active = state.appts.filter((a) => ['waiting', 'treating'].includes(phase(a, day)));
+  const rows = TECHNIQUES.map((t) => ({
+    t,
+    n: active.filter((a) => a.technique === t.id).length,
+    byRoom: Object.fromEntries(ROOMS.map((r) => [r.id, active.filter((a) => a.technique === t.id && a.room === r.id).length])),
+  }))
+    .filter((r) => r.n > 0)
+    .sort((a, b) => b.n - a.n);
+  if (!rows.length) {
+    el.innerHTML = '<p class="empty">ยังไม่มีผู้ป่วยที่กำลังฉายหรือรอเริ่มฉาย</p>';
+    return;
+  }
+  const W = Math.max(300, el.clientWidth || 600);
+  const rowH = 28;
+  const m = { t: 4, r: 36, b: 4, l: 120 };
+  const H = m.t + m.b + rows.length * rowH;
+  const max = Math.max(...rows.map((r) => r.n));
+  const iw = W - m.l - m.r;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="จำนวนผู้ป่วยตามเทคนิคการฉาย">`;
+  rows.forEach((r, i) => {
+    const y = m.t + i * rowH;
+    const w = Math.max(2, (r.n / max) * iw);
+    const bh = 16;
+    const by = y + (rowH - bh) / 2;
+    svg += `<text class="lbl" x="${m.l - 10}" y="${y + rowH / 2 + 4}" text-anchor="end">${esc(r.t.name)}</text>
+      <path d="M${m.l},${by}H${m.l + w - 4}Q${m.l + w},${by} ${m.l + w},${by + 4}V${by + bh - 4}Q${m.l + w},${by + bh} ${m.l + w - 4},${by + bh}H${m.l}Z" fill="var(--seq)"/>
+      <text class="val" x="${m.l + w + 6}" y="${y + rowH / 2 + 4}">${r.n}</text>
+      <rect class="hit" data-i="${i}" x="0" y="${y}" width="${W}" height="${rowH}"/>`;
+  });
+  svg += `<line class="baseline" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H - m.b}"/></svg>`;
+  el.innerHTML = svg;
+  for (const hit of $$('.hit', el)) {
+    const r = rows[Number(hit.dataset.i)];
+    hit.addEventListener('mousemove', (ev) =>
+      showTip(
+        `<div class="tt-title">${esc(r.t.name)} · ${r.n} ราย</div>${ROOMS.map(
+          (x) => `<div class="tt-row"><span><i class="dot ${x.id}"></i>${x.label}</span><b>${r.byRoom[x.id]}</b></div>`,
+        ).join('')}`,
+        ev,
+      ),
+    );
+    hit.addEventListener('mouseleave', hideTip);
+  }
+}
+
+// ================= calendar =================
+function calFilter(e) {
+  if (!state.calRooms.has(e.room)) return false;
+  if (state.calType === 'start') return e.type === 'fx' && e.start;
+  if (state.calType === 'cbct') return e.cbct;
+  return true;
+}
+
+function renderCalendar() {
+  const [yy, mm] = state.calMonth.split('-').map(Number);
+  const first = `${state.calMonth}-01`;
+  $('#cal-title').textContent = F_MONTH.format(parseISO(first));
+
+  $('#cal-rooms').innerHTML = ROOMS.map(
+    (r) => `<button type="button" data-room="${r.id}" aria-pressed="${state.calRooms.has(r.id)}"><i class="dot ${r.id}"></i>${r.label}</button>`,
+  ).join('');
+  $('#cal-type').value = state.calType;
+  $('#cal-legend').innerHTML =
+    ROOMS.map((r) => `<span><i class="dot ${r.id}"></i>${r.label}</span>`).join('') +
+    '<span><span class="badge start">เริ่ม</span> วันเริ่มฉาย</span><span><span class="badge cbct">CBCT</span> นัดทำ CBCT</span>' +
+    '<span><i class="dot" style="background:var(--holiday);border:1px solid var(--border)"></i>วันหยุด</span>';
+
+  const gridStart = startOfWeek(first);
+  const lastDay = addDays(`${yy + (mm === 12 ? 1 : 0)}-${String(mm === 12 ? 1 : mm + 1).padStart(2, '0')}-01`, -1);
+  const gridEnd = addDays(startOfWeek(lastDay), 6);
+  const today = todayISO();
+  let html = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'].map((d) => `<div class="cal-dow">${d}</div>`).join('');
+  for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) {
+    const evs = eventsOn(d, calFilter);
+    const hol = holidayName(d);
+    const off = !isWorkday(d, state.settings);
+    const cls = ['cal-day', d.slice(0, 7) !== state.calMonth && 'other', off && 'off', d === today && 'today', d === state.selectedDay && 'selected']
+      .filter(Boolean)
+      .join(' ');
+    const rooms = ROOMS.filter((r) => state.calRooms.has(r.id))
+      .map((r) => {
+        const re = evs.filter((e) => e.room === r.id);
+        if (!re.length) return '';
+        const u = Math.min(1, utilization(re, state.settings.rooms[r.id]));
+        return `<div class="cal-room"><i class="dot ${r.id}"></i><span class="code">${r.id}</span><span class="bar"><i style="width:${Math.round(u * 100)}%;background:var(--room-${r.id})"></i></span><b>${re.length}</b></div>`;
+      })
+      .join('');
+    const nStart = evs.filter((e) => e.type === 'fx' && e.start).length;
+    const nCbct = evs.filter((e) => e.cbct).length;
+    html += `<button type="button" class="${cls}" data-date="${d}" aria-label="${fLong(d)} นัด ${evs.length} รายการ">
+      <span class="dnum"><b>${parseISO(d).getUTCDate()}</b>${evs.length ? `<span class="muted small">${evs.length}</span>` : ''}</span>
+      ${hol ? `<span class="hname">${esc(hol)}</span>` : ''}
+      <span class="rooms">${rooms}</span>
+      <span class="cal-flags">${nStart ? `<span class="badge start">เริ่ม ${nStart}</span>` : ''}${nCbct ? `<span class="badge cbct">CBCT ${nCbct}</span>` : ''}</span>
+    </button>`;
+  }
+  $('#calendar').innerHTML = html;
+  renderDayPanel();
+}
+
+function renderDayPanel() {
+  const day = state.selectedDay;
+  const evs = eventsOn(day, calFilter);
+  const hol = holidayName(day);
+  $('#day-title').textContent = fLong(day);
+  $('#day-sub').textContent = `${evs.length} รายการ${hol ? ` · วันหยุด: ${hol}` : !isWorkday(day, state.settings) ? ' · วันหยุด' : ''}`;
+  $('#day-rooms').innerHTML = ROOMS.filter((r) => state.calRooms.has(r.id))
+    .map((r) => {
+      const re = evs.filter((e) => e.room === r.id);
+      return `<div class="day-room" style="--rc: var(--room-${r.id})">
+        <h4><i class="dot ${r.id}"></i>${r.label}<span class="count">${re.length} ราย</span></h4>
+        ${
+          re.length
+            ? re
+                .map(
+                  (e) => `<div class="slot" data-id="${esc(e.appt.id)}"><span class="t">${esc(e.time)}</span>
+                  <div><div class="n">${esc(e.appt.name)}</div>
+                  <div class="m"><span>HN ${esc(e.appt.hn)}</span><span>${esc(techOf(e.appt.technique).name)}</span>
+                  <span>${e.type === 'verify' ? '' : `Fx ${e.fx}/${e.total}`}</span>${eventBadges(e)}</div></div></div>`,
+                )
+                .join('')
+            : '<p class="empty">ไม่มีนัด</p>'
+        }
+      </div>`;
+    })
+    .join('');
+}
+
+function printDay() {
+  const day = state.selectedDay;
+  const evs = eventsOn(day, calFilter);
+  $('#print-area').innerHTML = `<h2>ตารางนัดฉายรังสี ${esc(fLong(day))}</h2>
+    <div>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</div>
+    ${ROOMS.filter((r) => state.calRooms.has(r.id))
+      .map((r) => {
+        const re = evs.filter((e) => e.room === r.id);
+        return `<div class="pr-room"><h3>ห้อง ${r.label} (${re.length} ราย)</h3>
+        <table><thead><tr><th>เวลา</th><th>HN</th><th>ชื่อ-สกุล</th><th>เทคนิค</th><th>ครั้งที่</th><th>CBCT</th><th>หมายเหตุ</th></tr></thead><tbody>
+        ${re
+          .map(
+            (e) => `<tr><td>${esc(e.time)}</td><td>${esc(e.appt.hn)}</td><td>${esc(e.appt.name)}</td><td>${esc(techOf(e.appt.technique).name)}</td>
+            <td>${e.type === 'verify' ? 'ก่อนฉาย' : `${e.fx}/${e.total}${e.start ? ' (เริ่ม)' : ''}`}</td><td>${e.cbct ? '✓' : ''}</td><td>${esc(e.appt.notes)}</td></tr>`,
+          )
+          .join('')}</tbody></table></div>`;
+      })
+      .join('')}`;
+  window.print();
+}
+
+// ================= patients =================
+const PHASE_ORDER = { treating: 0, waiting: 1, hold: 2, completed: 3, cancelled: 4 };
+
+function patientRows() {
+  const q = $('#pt-search').value.trim().toLowerCase();
+  const room = $('#pt-room').value;
+  const tech = $('#pt-tech').value;
+  const ph = $('#pt-phase').value;
+  const today = todayISO();
+  return state.appts
+    .map((a) => {
+      const ss = sessionsOf(a);
+      return { a, ss, phase: phase(a), done: ss.filter((s) => s.date < today).length };
+    })
+    .filter(
+      ({ a, phase: p }) =>
+        (!q || [a.hn, a.name, a.diagnosis, a.physician].some((v) => String(v || '').toLowerCase().includes(q))) &&
+        (!room || a.room === room) &&
+        (!tech || a.technique === tech) &&
+        (!ph || p === ph),
+    )
+    .sort((x, y) => PHASE_ORDER[x.phase] - PHASE_ORDER[y.phase] || (x.a.startDate || '').localeCompare(y.a.startDate || ''));
+}
+
+function renderPatients() {
+  const rows = patientRows();
+  $('#pt-table tbody').innerHTML = rows
+    .map(({ a, ss, phase: p, done }) => {
+      const pct = ss.length ? Math.round((done / ss.length) * 100) : 0;
+      return `<tr data-id="${esc(a.id)}">
+        <td class="num">${esc(a.hn)}</td>
+        <td><b>${esc(a.name)}</b><div class="muted small">${esc(a.diagnosis)}</div></td>
+        <td>${esc(techOf(a.technique).name)}</td>
+        <td>${roomTag(a.room)}</td>
+        <td class="num">${a.verifyDate ? `${fMed(a.verifyDate)} ${esc(a.verifyTime || a.time)}` : '-'}</td>
+        <td class="num">${fMed(ss[0]?.date)} ${esc(a.time)}</td>
+        <td><div class="progress"><div class="meter"><i style="width:${pct}%"></i></div><span class="num small">${done}/${ss.length}</span></div></td>
+        <td class="num">${fMed(ss[ss.length - 1]?.date)}</td>
+        <td><span class="badge ${p}">${PHASE_LABELS[p]}</span></td>
+        <td><div class="row-actions"><button class="btn small" data-act="edit">แก้ไข</button><button class="btn small ghost" data-act="slip">ใบนัด</button></div></td>
+      </tr>`;
+    })
+    .join('');
+  $('#pt-empty').hidden = rows.length > 0;
+  $('#pt-empty').textContent = state.appts.length ? 'ไม่พบผู้ป่วยตามเงื่อนไขที่ค้นหา' : 'ยังไม่มีข้อมูลผู้ป่วย — กด “+ นัดผู้ป่วยใหม่” เพื่อเริ่มต้น';
+}
+
+function exportCsv() {
+  const head = ['HN', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'การวินิจฉัย', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ'];
+  const lines = patientRows().map(({ a, ss, phase: p }) =>
+    [
+      a.hn, a.name, a.age, a.sex, a.phone, a.diagnosis, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
+      a.fractions, a.simDate, a.verifyDate, ss[0]?.date, ss[ss.length - 1]?.date, a.time,
+      CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes,
+    ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  download(`rt-appointments-${todayISO()}.csv`, '\ufeff' + [head.join(','), ...lines].join('\r\n'), 'text/csv');
+}
+
+function download(name, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function printSlip(a) {
+  const ss = sessionsOf(a);
+  $('#print-area').innerHTML = `<h2>ใบนัดฉายรังสี</h2>
+    <div>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</div>
+    <p><b>${esc(a.name)}</b> HN ${esc(a.hn)} ${a.age !== '' && a.age != null ? `อายุ ${esc(a.age)} ปี` : ''}<br>
+    การวินิจฉัย: ${esc(a.diagnosis || '-')} · แพทย์: ${esc(a.physician || '-')}<br>
+    ห้องฉาย: ${esc(roomOf(a.room).label)} · เทคนิค: ${esc(techOf(a.technique).name)} · จำนวน ${ss.length} ครั้ง<br>
+    เวลานัด: ${esc(a.time)} น. · ฉายระหว่าง ${esc(fLong(ss[0]?.date))} ถึง ${esc(fLong(ss[ss.length - 1]?.date))}
+    ${a.verifyDate ? `<br><b>นัดทำ CBCT ก่อนเริ่มฉาย: ${esc(fLong(a.verifyDate))} เวลา ${esc(a.verifyTime || a.time)} น.</b>` : ''}</p>
+    <table><thead><tr><th>ครั้งที่</th><th>วันที่</th><th>เวลา</th><th>CBCT</th><th>ลงชื่อผู้ฉาย</th></tr></thead><tbody>
+    ${ss.map((s) => `<tr><td>${s.fx}</td><td>${esc(fLong(s.date))}</td><td>${esc(a.time)}</td><td>${s.cbct ? '✓' : ''}</td><td></td></tr>`).join('')}
+    </tbody></table>
+    <p>หมายเหตุ: ${esc(a.notes || '-')}</p>`;
+  window.print();
+}
+
+// ================= settings =================
+let draftSettings = null;
+
+function renderSettings() {
+  draftSettings ||= structuredClone(state.settings);
+  const s = draftSettings;
+  $('#set-rooms').innerHTML = ROOMS.map(
+    (r) => `<label class="span-2"><span><i class="dot ${r.id}"></i> ${r.label}</span>
+      <span style="display:flex;gap:6px;align-items:center"><input type="time" data-room="${r.id}" data-k="open" value="${s.rooms[r.id].open}"> ถึง
+      <input type="time" data-room="${r.id}" data-k="close" value="${s.rooms[r.id].close}"></span></label>`,
+  ).join('');
+  $('#set-slot').value = String(s.slotMinutes);
+  $('#set-workdays').innerHTML = [1, 2, 3, 4, 5, 6, 0]
+    .map((d) => `<button type="button" class="chip" data-dow="${d}" aria-pressed="${s.workdays.includes(d)}">${DOW[d]}</button>`)
+    .join('');
+  const today = todayISO();
+  $('#hol-list').innerHTML = s.holidays
+    .filter((h) => h.date >= addDays(today, -60))
+    .map(
+      (h) => `<li><span class="d">${fMed(h.date)}</span><span class="nm">${esc(h.name)}</span>
+        <button type="button" class="btn small ghost danger" data-del="${h.date}" aria-label="ลบ">ลบ</button></li>`,
+    )
+    .join('') || '<li class="muted">ไม่มีวันหยุด</li>';
+}
+
+async function saveSettings() {
+  try {
+    state.settings = await state.store.saveSettings(draftSettings);
+    draftSettings = null;
+    toast('บันทึกการตั้งค่าแล้ว');
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ================= appointment form =================
+const form = $('#appt-form');
+const dialog = $('#appt-dialog');
+let editing = null; // appointment being edited (or null for new)
+let fState = { room: 'L1', cbctDates: [], skipDates: [], prevMode: 'fx1' };
+
+function fillSelect(sel, items, placeholder) {
+  sel.innerHTML = (placeholder ? `<option value="">${placeholder}</option>` : '') + items.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join('');
+}
+
+function readForm() {
+  const fd = new FormData(form);
+  const v = Object.fromEntries(fd.entries());
+  return {
+    ...v,
+    id: editing?.id,
+    room: fState.room,
+    fractions: Number(v.fractions),
+    duration: Number(v.duration),
+    age: v.age === '' ? '' : Number(v.age),
+    cbctDates: v.cbctMode === 'custom' ? [...fState.cbctDates] : [],
+    skipDates: [...fState.skipDates],
+  };
+}
+
+function openForm(appt = null, defaults = {}) {
+  editing = appt;
+  form.reset();
+  $('#form-errors').hidden = true;
+  $('#suggest-list').innerHTML = '';
+  const start = nextWorkday(addDays(todayISO(), 1), state.settings);
+  const a = appt || {
+    technique: 'VMAT',
+    duration: techOf('VMAT').duration,
+    fractions: 25,
+    startDate: start,
+    cbctMode: 'fx123_weekly',
+    status: 'active',
+    room: 'L1',
+    ...defaults,
+  };
+  for (const el of form.elements) {
+    if (el.name && a[el.name] != null) el.value = a[el.name];
+  }
+  fState = {
+    room: a.room || 'L1',
+    cbctDates: [...(a.cbctDates || [])],
+    skipDates: [...(a.skipDates || [])],
+    prevMode: a.cbctMode === 'custom' ? 'fx1' : a.cbctMode,
+  };
+  $('#appt-title').textContent = appt ? `แก้ไขนัด: ${appt.name}` : 'นัดผู้ป่วยใหม่';
+  $('#btn-delete').hidden = !appt;
+  renderRoomPicker();
+  updatePreview();
+  dialog.showModal();
+}
+
+function renderRoomPicker() {
+  $('#room-picker').innerHTML = ROOMS.map((r) => {
+    const n = (state.evMap.get(form.startDate.value) || []).filter((e) => e.room === r.id && e.appt.id !== editing?.id).length;
+    return `<button type="button" class="room-option" role="radio" data-room="${r.id}" aria-checked="${fState.room === r.id}" style="--rc: var(--room-${r.id})">
+      <span class="swatch"></span><span><b>${r.name}</b><small>ห้อง ${r.id} · วันเริ่มฉายมีนัดแล้ว ${n} ราย</small></span></button>`;
+  }).join('');
+}
+
+function updatePreview() {
+  const a = readForm();
+  const others = state.appts;
+  const valid = a.startDate && a.fractions > 0;
+  const ss = valid ? buildSessions(a, state.settings) : [];
+  const conflicts = valid && /^\d\d:\d\d$/.test(a.time) && a.duration > 0 ? findConflicts(a, others, state.settings) : [];
+  const conflictDates = new Set(conflicts.map((c) => c.date));
+
+  // สรุปคอร์ส
+  const notes = [];
+  if (valid && ss.length) {
+    notes.push(
+      `ฉาย <b>${ss.length}</b> ครั้ง ตั้งแต่ <b>${fLong(ss[0].date)}</b> ถึง <b>${fLong(ss[ss.length - 1].date)}</b> · CBCT ระหว่างฉาย <b>${ss.filter((s) => s.cbct).length}</b> ครั้ง`,
+    );
+    if (ss[0].date !== a.startDate) notes.push(`<span class="muted">วันที่เลือก (${fMed(a.startDate)}) เป็นวันหยุด ระบบเลื่อนวันเริ่มฉายเป็น ${fMed(ss[0].date)}</span>`);
+  }
+  if (a.verifyDate) {
+    if (!isWorkday(a.verifyDate, state.settings)) notes.push('<span class="muted">⚠ วันนัดทำ CBCT ก่อนฉายตรงกับวันหยุด</span>');
+    if (ss.length && a.verifyDate > ss[0].date) notes.push('<span class="muted">⚠ วันนัดทำ CBCT ก่อนฉายอยู่หลังวันเริ่มฉาย</span>');
+  }
+  $('#session-summary').innerHTML = notes.join('<br>');
+
+  const rows = [];
+  if (a.verifyDate)
+    rows.push(`<tr class="verify${conflictDates.has(a.verifyDate) ? ' conflict' : ''}"><td>—</td><td>${fLong(a.verifyDate)} · ${esc(a.verifyTime || a.time)}</td><td>✓ ก่อนฉาย</td><td></td></tr>`);
+  for (const s of ss) {
+    rows.push(`<tr class="${conflictDates.has(s.date) ? 'conflict' : ''}"><td>${s.fx}</td><td>${fLong(s.date)}</td>
+      <td><input type="checkbox" class="cbct-toggle" data-date="${s.date}" ${s.cbct ? 'checked' : ''} aria-label="ทำ CBCT วันที่ ${fMed(s.date)}"></td>
+      <td><button type="button" class="btn small ghost" data-skip="${s.date}">งด</button></td></tr>`);
+  }
+  $('#session-table tbody').innerHTML = rows.join('') || '<tr><td colspan="4" class="empty">กรอกวันเริ่มฉายและจำนวนครั้ง</td></tr>';
+  $('#skip-list').innerHTML = fState.skipDates.length
+    ? '<span class="muted small">วันที่งดฉาย:</span>' +
+      fState.skipDates.sort().map((d) => `<button type="button" class="chip" data-unskip="${d}">${fMed(d)} ✕</button>`).join('')
+    : '';
+
+  const box = $('#conflicts');
+  box.hidden = !conflicts.length;
+  if (conflicts.length) {
+    box.innerHTML = `<b>⚠ เวลานัดซ้อนกับผู้ป่วยรายอื่นในห้อง ${esc(roomOf(a.room).label)} ${conflicts.length} ครั้ง</b> — แนะนำกด “หาเวลาว่างอัตโนมัติ”
+      <ul>${conflicts
+        .slice(0, 30)
+        .map((c) => `<li>${fMed(c.date)} ${esc(c.time)} น. (${c.duration} นาที) ชนกับ ${esc(c.with.name)} HN ${esc(c.with.hn)}</li>`)
+        .join('')}</ul>`;
+  }
+  return { a, ss, conflicts };
+}
+
+async function submitForm(ev) {
+  ev.preventDefault();
+  const { a, conflicts } = updatePreview();
+  const errors = [];
+  if (!a.hn?.trim()) errors.push('กรุณาระบุ HN');
+  if (!a.name?.trim()) errors.push('กรุณาระบุชื่อผู้ป่วย');
+  if (!a.startDate) errors.push('กรุณาระบุวันเริ่มฉาย');
+  if (!(a.fractions >= 1 && a.fractions <= 60)) errors.push('จำนวนครั้งต้องอยู่ระหว่าง 1–60');
+  if (!/^\d\d:\d\d$/.test(a.time || '')) errors.push('กรุณาระบุเวลานัด');
+  if (!(a.duration >= 5)) errors.push('กรุณาระบุระยะเวลาต่อครั้ง');
+  const dup = state.appts.find((x) => x.id !== a.id && x.hn === a.hn?.trim() && x.status === 'active' && phase(x) !== 'completed');
+  if (errors.length) {
+    $('#form-errors').textContent = errors.join('\n');
+    $('#form-errors').hidden = false;
+    return;
+  }
+  if (dup && !confirm(`ผู้ป่วย HN ${a.hn} มีนัดที่ยังไม่สิ้นสุดอยู่แล้ว (${dup.name} ห้อง ${dup.room}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
+  if (conflicts.length && !confirm(`มีเวลานัดซ้อนกับผู้ป่วยรายอื่น ${conflicts.length} ครั้ง ต้องการบันทึกต่อหรือไม่?`)) return;
+  const { id, ...payload } = a;
+  try {
+    if (editing) {
+      const rec = await state.store.update(editing.id, payload);
+      state.appts = state.appts.map((x) => (x.id === rec.id ? rec : x));
+    } else {
+      state.appts.push(await state.store.create(payload));
+    }
+    dialog.close();
+    toast(editing ? 'บันทึกการแก้ไขแล้ว' : 'บันทึกนัดใหม่แล้ว');
+    render();
+  } catch (err) {
+    $('#form-errors').textContent = err.message;
+    $('#form-errors').hidden = false;
+  }
+}
+
+async function deleteAppt() {
+  if (!editing || !confirm(`ลบนัดของ ${editing.name} (HN ${editing.hn}) ใช่หรือไม่? หากผู้ป่วยไม่มาฉายแล้ว แนะนำให้เปลี่ยนสถานะเป็น “ยกเลิก” แทน`)) return;
+  try {
+    await state.store.remove(editing.id);
+    state.appts = state.appts.filter((x) => x.id !== editing.id);
+    dialog.close();
+    toast('ลบนัดแล้ว');
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function openById(id) {
+  const a = state.appts.find((x) => x.id === id);
+  if (a) openForm(a);
+}
+
+// ================= demo data =================
+async function loadDemo() {
+  if (!confirm('เพิ่มข้อมูลผู้ป่วยตัวอย่าง (สมมติ) 30 รายเพื่อทดลองใช้งาน?')) return;
+  const first = ['สมชาย', 'สมศรี', 'บุญมี', 'จันทร์เพ็ญ', 'ประเสริฐ', 'มาลี', 'วิไล', 'สุดา', 'ทองดี', 'คำปุ่น', 'แสงเดือน', 'อินทร', 'บัวผัน', 'ศรีนวล', 'ปัญญา'];
+  const last = ['ใจดี', 'มีสุข', 'แก้วมา', 'ทองคำ', 'ศรีวงศ์', 'คำแสน', 'อินต๊ะ', 'ปัญญาดี', 'บุญเรือง', 'จันทร์แก้ว'];
+  const dx = ['CA Cervix', 'CA Breast (Lt)', 'CA Breast (Rt)', 'CA Nasopharynx', 'CA Lung', 'CA Rectum', 'CA Prostate', 'Brain metastasis', 'CA Esophagus', 'Bone metastasis'];
+  const plan = {
+    'CA Cervix': ['VMAT', 25], 'CA Breast (Lt)': ['3DCRT', 15], 'CA Breast (Rt)': ['3DCRT', 15], 'CA Nasopharynx': ['IMRT', 35],
+    'CA Lung': ['SBRT', 5], 'CA Rectum': ['VMAT', 25], 'CA Prostate': ['VMAT', 28], 'Brain metastasis': ['SRS', 1],
+    'CA Esophagus': ['IMRT', 25], 'Bone metastasis': ['2D', 10],
+  };
+  const docs = ['นพ.ก', 'พญ.ข', 'นพ.ค'];
+  const pick = (arr, i) => arr[i % arr.length];
+  const today = todayISO();
+  const created = [];
+  for (let i = 0; i < 30; i++) {
+    const d = pick(dx, i * 7 + 3);
+    const [technique, fractions] = plan[d];
+    const room = technique === 'SRS' || technique === 'SBRT' ? 'L3' : pick(['L1', 'L2', 'L3'], i);
+    const startDate = nextWorkday(addDays(today, -30 + i * 2), state.settings);
+    const a = {
+      hn: String(6800000 + i * 137),
+      name: `${pick(first, i * 5)} ${pick(last, i * 3 + 1)} (ตัวอย่าง)`,
+      age: 35 + ((i * 7) % 45),
+      sex: d.includes('Prostate') ? 'ชาย' : d.includes('Cervix') || d.includes('Breast') ? 'หญิง' : pick(['ชาย', 'หญิง'], i),
+      phone: '',
+      diagnosis: d,
+      physician: pick(docs, i),
+      technique,
+      room,
+      dosePerFx: technique === 'SRS' ? '2000 cGy' : technique === 'SBRT' ? '1000 cGy' : '200 cGy',
+      fractions,
+      simDate: addDays(startDate, -10),
+      verifyDate: i % 3 === 0 ? nextWorkday(addDays(startDate, -2), state.settings) : '',
+      verifyTime: '',
+      startDate,
+      time: '',
+      duration: techOf(technique).duration,
+      cbctMode: technique === 'SRS' || technique === 'SBRT' ? 'daily' : pick(['fx123_weekly', 'weekly', 'fx1'], i),
+      cbctDates: [],
+      skipDates: [],
+      status: 'active',
+      notes: '',
+    };
+    a.time = suggestTimes(a, [...state.appts, ...created], state.settings, 1)[0] || '08:00';
+    created.push({ ...a, id: `demo-${i}` });
+  }
+  try {
+    for (const { id, ...a } of created) state.appts.push(await state.store.create(a));
+    toast('เพิ่มข้อมูลตัวอย่างแล้ว');
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ================= events =================
+function bind() {
+  $('.tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]');
+    if (b) setView(b.dataset.view);
+  });
+  $('#btn-new').addEventListener('click', () => openForm());
+
+  // ข้อมูลผู้ป่วย: คลิกที่รายการใด ๆ ที่มี data-id เพื่อเปิดแก้ไข
+  document.addEventListener('click', (e) => {
+    const li = e.target.closest('main [data-id]');
+    if (!li || e.target.closest('[data-act]') || li.tagName === 'TR') return;
+    openById(li.dataset.id);
+  });
+
+  $('#dash-date').addEventListener('change', (e) => {
+    state.dashDate = e.target.value || todayISO();
+    renderDashboard();
+  });
+  $('#dash-today').addEventListener('click', () => {
+    state.dashDate = todayISO();
+    renderDashboard();
+  });
+
+  const shiftMonth = (n) => {
+    const [y, m] = state.calMonth.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + n, 1));
+    state.calMonth = d.toISOString().slice(0, 7);
+    renderCalendar();
+  };
+  $('#cal-prev').addEventListener('click', () => shiftMonth(-1));
+  $('#cal-next').addEventListener('click', () => shiftMonth(1));
+  $('#cal-today').addEventListener('click', () => {
+    state.calMonth = todayISO().slice(0, 7);
+    state.selectedDay = todayISO();
+    renderCalendar();
+  });
+  $('#cal-rooms').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-room]');
+    if (!b) return;
+    const r = b.dataset.room;
+    if (state.calRooms.has(r) && state.calRooms.size > 1) state.calRooms.delete(r);
+    else state.calRooms.add(r);
+    renderCalendar();
+  });
+  $('#cal-type').addEventListener('change', (e) => {
+    state.calType = e.target.value;
+    renderCalendar();
+  });
+  $('#calendar').addEventListener('click', (e) => {
+    const c = e.target.closest('.cal-day');
+    if (!c) return;
+    state.selectedDay = c.dataset.date;
+    if (c.classList.contains('other')) state.calMonth = c.dataset.date.slice(0, 7);
+    renderCalendar();
+    $('#day-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  $('#day-print').addEventListener('click', printDay);
+
+  for (const id of ['#pt-search', '#pt-room', '#pt-tech', '#pt-phase']) $(id).addEventListener('input', renderPatients);
+  $('#pt-table').addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const a = state.appts.find((x) => x.id === tr.dataset.id);
+    if (e.target.closest('[data-act="slip"]')) printSlip(a);
+    else openForm(a);
+  });
+  $('#pt-export').addEventListener('click', exportCsv);
+
+  // settings
+  $('#set-rooms').addEventListener('change', (e) => {
+    const el = e.target;
+    if (el.dataset.room) draftSettings.rooms[el.dataset.room][el.dataset.k] = el.value;
+  });
+  $('#set-slot').addEventListener('change', (e) => (draftSettings.slotMinutes = Number(e.target.value)));
+  $('#set-workdays').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dow]');
+    if (!b) return;
+    const d = Number(b.dataset.dow);
+    const w = draftSettings.workdays;
+    draftSettings.workdays = w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort();
+    renderSettings();
+  });
+  $('#hol-add').addEventListener('click', () => {
+    const date = $('#hol-date').value;
+    if (!date) return;
+    draftSettings.holidays = [
+      ...draftSettings.holidays.filter((h) => h.date !== date),
+      { date, name: $('#hol-name').value.trim() || 'วันหยุด' },
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    $('#hol-date').value = '';
+    $('#hol-name').value = '';
+    renderSettings();
+  });
+  $('#hol-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-del]');
+    if (!b) return;
+    draftSettings.holidays = draftSettings.holidays.filter((h) => h.date !== b.dataset.del);
+    renderSettings();
+  });
+  $('#set-save').addEventListener('click', saveSettings);
+  $('#backup-export').addEventListener('click', () =>
+    download(`rt-queue-backup-${todayISO()}.json`, JSON.stringify({ appointments: state.appts, settings: state.settings }, null, 2), 'application/json'),
+  );
+  $('#backup-import').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!Array.isArray(data.appointments)) throw new Error('ไฟล์สำรองไม่ถูกต้อง');
+      if (!confirm(`นำเข้าข้อมูล ${data.appointments.length} รายการ? ข้อมูลปัจจุบันทั้งหมดจะถูกแทนที่`)) return;
+      const res = await state.store.importAll(data);
+      state.appts = res.appointments;
+      state.settings = res.settings;
+      draftSettings = null;
+      toast('นำเข้าข้อมูลแล้ว');
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  $('#demo-load').addEventListener('click', loadDemo);
+
+  // form
+  for (const b of $$('[data-close]', dialog)) b.addEventListener('click', () => dialog.close());
+  form.addEventListener('submit', submitForm);
+  form.addEventListener('input', (e) => {
+    if (e.target.classList.contains('cbct-toggle')) return; // จัดการใน change ของตาราง
+    const n = e.target.name;
+    if (n === 'technique') form.duration.value = techOf(e.target.value).duration;
+    if (n === 'cbctMode') {
+      if (e.target.value === 'custom') {
+        // เริ่มจากวันที่ตามรูปแบบเดิม แล้วให้ผู้ใช้ติ๊กเพิ่ม/ลดเอง
+        const ss = buildSessions({ ...readForm(), cbctMode: fState.prevMode }, state.settings);
+        fState.cbctDates = ss.filter((s) => s.cbct).map((s) => s.date);
+      } else fState.prevMode = e.target.value;
+    }
+    if (n === 'startDate') renderRoomPicker();
+    if (['startDate', 'time', 'duration', 'fractions', 'technique'].includes(n)) $('#suggest-list').innerHTML = '';
+    updatePreview();
+  });
+  $('#room-picker').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-room]');
+    if (!b) return;
+    fState.room = b.dataset.room;
+    $('#suggest-list').innerHTML = '';
+    renderRoomPicker();
+    updatePreview();
+  });
+  $('#session-table').addEventListener('change', (e) => {
+    const cb = e.target.closest('.cbct-toggle');
+    if (!cb) return;
+    const a = readForm();
+    const ss = buildSessions(a, state.settings);
+    const set = new Set(ss.filter((s) => s.cbct).map((s) => s.date));
+    if (cb.checked) set.add(cb.dataset.date);
+    else set.delete(cb.dataset.date);
+    fState.cbctDates = [...set];
+    form.cbctMode.value = 'custom';
+    updatePreview();
+  });
+  $('#session-table').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-skip]');
+    if (!b) return;
+    fState.skipDates.push(b.dataset.skip);
+    updatePreview();
+  });
+  $('#skip-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-unskip]');
+    if (!b) return;
+    fState.skipDates = fState.skipDates.filter((d) => d !== b.dataset.unskip);
+    updatePreview();
+  });
+  $('#btn-suggest').addEventListener('click', () => {
+    const a = readForm();
+    if (!a.startDate || !(a.fractions > 0)) return;
+    const times = suggestTimes({ ...a, verifyTime: a.verifyTime || '' }, state.appts, state.settings, 8);
+    $('#suggest-list').innerHTML = times.length
+      ? times.map((t) => `<button type="button" class="chip" data-time="${t}">${t}</button>`).join('')
+      : '<span class="muted small">ไม่พบเวลาว่างตลอดคอร์สในห้องนี้ ลองเปลี่ยนห้องหรือวันเริ่มฉาย</span>';
+  });
+  $('#suggest-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-time]');
+    if (!b) return;
+    form.time.value = b.dataset.time;
+    for (const c of $$('[data-time]', $('#suggest-list'))) c.setAttribute('aria-pressed', String(c === b));
+    updatePreview();
+  });
+  $('#btn-delete').addEventListener('click', deleteAppt);
+
+  let rt;
+  window.addEventListener('resize', () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => state.view === 'dashboard' && renderDashboard(), 150);
+  });
+  window.addEventListener('hashchange', () => {
+    const v = location.hash.slice(1);
+    if (v && v !== state.view && $(`#view-${v}`)) setView(v);
+  });
+}
+
+// ================= init =================
+async function init() {
+  fillSelect($('#f-technique'), TECHNIQUES);
+  fillSelect($('#f-cbct'), CBCT_MODES);
+  fillSelect($('#f-status'), STATUSES);
+  $('#pt-room').innerHTML += ROOMS.map((r) => `<option value="${r.id}">${r.label}</option>`).join('');
+  $('#pt-tech').innerHTML += TECHNIQUES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+
+  const { store, data } = await openStore();
+  state.store = store;
+  state.appts = data.appointments || [];
+  state.settings = data.settings;
+  const badge = $('#mode-badge');
+  badge.textContent = store.mode === 'server' ? 'เชื่อมต่อเซิร์ฟเวอร์' : 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)';
+  badge.classList.toggle('local', store.mode !== 'server');
+
+  bind();
+  const v = location.hash.slice(1);
+  setView($(`#view-${v}`) ? v : 'dashboard');
+}
+
+init();
