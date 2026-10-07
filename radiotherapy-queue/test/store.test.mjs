@@ -16,3 +16,11 @@ test('โหมดออฟไลน์: บันทึกนัดหนึ่
   assert.equal(JSON.parse(mem.get('rt-queue-db-v1')).appointments.length, 2);
   assert.equal((await store.load()).appointments.length, 2);
 });
+
+test('ตัดคำนำหน้าข้อความผิดพลาดของ Apps Script', async () => {
+  const { gasErrorMessage } = await import('../public/js/store.js');
+  assert.equal(gasErrorMessage(new Error('Error: session_expired')), 'session_expired');
+  assert.equal(gasErrorMessage({ message: 'Exception: ไม่พบข้อมูลนัด' }), 'ไม่พบข้อมูลนัด');
+  assert.equal(gasErrorMessage(new Error('ScriptError: x')), 'x');
+  assert.equal(gasErrorMessage(new Error('session_expired')), 'session_expired');
+});

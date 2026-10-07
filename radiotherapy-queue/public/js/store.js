@@ -44,12 +44,17 @@ class ServerStore {
   }
 }
 
+// ข้อความผิดพลาดจาก Apps Script มักมีคำนำหน้า เช่น "Error: session_expired" หรือ "Exception: …" — ตัดออก
+export function gasErrorMessage(err) {
+  return String(err?.message || err || '').replace(/^\s*(?:(?:Script)?Error|Exception|TypeError)\s*:\s*/i, '').trim();
+}
+
 // เรียกฟังก์ชันฝั่ง Apps Script (apps-script/Code.gs) แบบ Promise
 function gas(fn, ...args) {
   return new Promise((resolve, reject) =>
     google.script.run
       .withSuccessHandler(resolve)
-      .withFailureHandler((err) => reject(new Error(err?.message || String(err))))
+      .withFailureHandler((err) => reject(new Error(gasErrorMessage(err))))
       [fn](...args),
   );
 }
