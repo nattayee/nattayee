@@ -16,11 +16,17 @@ const AUTO_SPREADSHEET_TITLE = 'ระบบนัดคิวเทคนิค
 const TECHNIQUES = ['DIBH', 'SRS', 'SRT', 'SBRT', 'อื่นๆ'];
 const CBCT_PATTERNS = [
   ['first3_weekly', '3 ครั้งแรก แล้วสัปดาห์ละครั้ง'],
+  ['dibh', 'Fx 1, 2, 3, 6, 11 (Breast DIBH)'],
   ['weekly', 'สัปดาห์ละครั้ง'],
   ['daily', 'ทุกครั้ง'],
   ['first', 'เฉพาะครั้งแรก'],
   ['none', 'ไม่ทำ CBCT ระหว่างฉาย'],
   ['custom', 'กำหนดเอง (เลือกในตาราง)'],
+];
+const FREQUENCIES = [
+  ['daily', 'Daily (ทุกวันทำการ)'],
+  ['eod', 'EOD (วันเว้นวัน)'],
+  ['bid', 'BID (วันละ 2 ครั้ง)'],
 ];
 const MAX_FRACTIONS = 100;
 
@@ -70,6 +76,9 @@ const COLUMNS = [
   ['cbctDates', 'วัน CBCT ระหว่างฉาย'],
   ['treatmentDates', 'วันฉายทั้งหมด'],
   ['skipDates', 'วันงดฉาย'],
+  ['frequency', 'ความถี่ในการฉาย'],
+  ['time2', 'เวลานัดรอบ 2 (BID)'],
+  ['cbctFx', 'Fx ที่ทำ CBCT'],
 ];
 const KEYS = COLUMNS.map(function (c) { return c[0]; });
 const LIST_KEYS = ['cbctDates', 'treatmentDates', 'skipDates'];
@@ -263,22 +272,29 @@ function findRow_(sheet, id) {
   throw new Error('ไม่พบรายการนัด (อาจถูกลบไปแล้ว)');
 }
 
-function patternLabel_(key) {
-  for (let i = 0; i < CBCT_PATTERNS.length; i++) if (CBCT_PATTERNS[i][0] === key) return CBCT_PATTERNS[i][1];
+// [key, label] lists are stored in the sheet by label so the sheet is readable
+function labelOf_(list, key) {
+  for (let i = 0; i < list.length; i++) if (list[i][0] === key) return list[i][1];
   return key;
 }
 
-function patternKey_(value) {
-  for (let i = 0; i < CBCT_PATTERNS.length; i++) {
-    if (CBCT_PATTERNS[i][0] === value || CBCT_PATTERNS[i][1] === value) return CBCT_PATTERNS[i][0];
+function keyOf_(list, value) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i][0] === value || list[i][1] === value) return list[i][0];
   }
   return '';
+}
+
+function patternKey_(value) {
+  return keyOf_(CBCT_PATTERNS, value);
 }
 
 function writeRow_(sheet, row, b) {
   const values = KEYS.map(function (k) {
     if (k === 'cbct') return b.cbct ? 'ทำ' : 'ไม่ทำ';
-    if (k === 'cbctPattern') return patternLabel_(b.cbctPattern);
+    if (k === 'cbctPattern') return labelOf_(CBCT_PATTERNS, b.cbctPattern);
+    if (k === 'frequency') return labelOf_(FREQUENCIES, b.frequency);
+    if (k === 'cbctFx') return (b.cbctFx || []).join(', ');
     if (LIST_KEYS.indexOf(k) !== -1) return (b[k] || []).join(', ');
     return b[k] === undefined || b[k] === null ? '' : String(b[k]);
   });
@@ -296,7 +312,7 @@ function rowToBooking_(row) {
     let v = row[i];
     if (isDate_(v)) {
       // กันกรณีมีคนแก้ข้อมูลในชีตแล้วชีตแปลงเป็นวันที่/เวลา
-      v = (k === 'time' || k === 'verifyTime') ? Utilities.formatDate(v, tz, 'HH:mm')
+      v = (k === 'time' || k === 'time2' || k === 'verifyTime') ? Utilities.formatDate(v, tz, 'HH:mm')
         : (k === 'startDate' || k === 'endDate' || k === 'verifyDate') ? Utilities.formatDate(v, tz, 'yyyy-MM-dd')
         : v.toISOString();
     }
@@ -309,6 +325,12 @@ function rowToBooking_(row) {
   b.fractions = b.fractions === '' ? null : Number(b.fractions);
   b.duration = Number(b.duration) || 15;
   b.cbctPattern = patternKey_(b.cbctPattern);
+  b.frequency = keyOf_(FREQUENCIES, b.frequency) || 'daily';
+  b.cbctFx = b.cbctFx ? b.cbctFx.split(/[,\s]+/).map(Number).filter(function (n) { return n > 0; }) : [];
+  if (!b.cbctFx.length && b.cbctDates.length) {
+    // rows saved before CBCT was stored per Fx
+    b.cbctFx = b.cbctDates.map(function (d) { return b.treatmentDates.indexOf(d) + 1; }).filter(function (n) { return n > 0; });
+  }
   return b;
 }
 
@@ -355,10 +377,13 @@ function validate_(input) {
     physician: text_(input.physician, 120),
     startDate: '',
     endDate: '',
+    frequency: text_(input.frequency, 10) || 'daily',
     time: text_(input.time, 5),
+    time2: text_(input.time2, 5),
     duration: input.duration === '' || input.duration == null ? 15 : Number(input.duration),
     treatmentDates: dateList_(input.treatmentDates, MAX_FRACTIONS),
     cbctPattern: text_(input.cbctPattern, 20) || 'none',
+    cbctFx: null,
     cbctDates: dateList_(input.cbctDates, MAX_FRACTIONS),
     skipDates: dateList_(input.skipDates, 366),
     verifyDate: text_(input.verifyDate, 10),
@@ -379,22 +404,38 @@ function validate_(input) {
   const dates = b.treatmentDates;
   if (!dates || dates.length === 0) throw new Error('กรุณาระบุวันเริ่มฉายรังสีและตารางวันฉาย');
   if (dates.length !== b.fractions) throw new Error('จำนวนวันฉายไม่ตรงกับจำนวนครั้ง (Fx)');
+  if (!keyOf_(FREQUENCIES, b.frequency)) throw new Error('ความถี่ในการฉายไม่ถูกต้อง');
+  b.frequency = keyOf_(FREQUENCIES, b.frequency);
+  // per-Fx dates: ascending, and at most 2 Fx on a day (only for BID)
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i] <= dates[i - 1]) throw new Error('ตารางวันฉายต้องเรียงตามวันที่และไม่ซ้ำกัน');
+    if (dates[i] < dates[i - 1]) throw new Error('ตารางวันฉายต้องเรียงตามวันที่');
+    if (dates[i] === dates[i - 1] && (b.frequency !== 'bid' || (i > 1 && dates[i - 2] === dates[i]))) {
+      throw new Error(b.frequency === 'bid' ? 'BID ฉายได้ไม่เกินวันละ 2 ครั้ง' : 'ตารางวันฉายต้องไม่มีวันซ้ำ (ยกเว้น BID)');
+    }
   }
   if (b.time && !isTime_(b.time)) throw new Error('เวลานัดไม่ถูกต้อง');
+  if (b.frequency !== 'bid') b.time2 = '';
+  if (b.time2 && !isTime_(b.time2)) throw new Error('เวลานัดรอบ 2 ไม่ถูกต้อง');
+  if (b.time2 && b.time && b.time2 <= b.time) throw new Error('เวลานัดรอบ 2 ต้องอยู่หลังรอบ 1');
   if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) throw new Error('ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที');
   if (!patternKey_(b.cbctPattern)) throw new Error('รูปแบบ CBCT ไม่ถูกต้อง');
-  if (!b.cbctDates || !b.cbctDates.every(function (d) { return dates.indexOf(d) !== -1; })) throw new Error('วันทำ CBCT ต้องเป็นวันฉาย');
+  if (Array.isArray(input.cbctFx)) {
+    b.cbctFx = input.cbctFx.map(Number);
+    if (!b.cbctFx.every(function (fx) { return Number.isInteger(fx) && fx >= 1 && fx <= dates.length; })) throw new Error('Fx ที่ทำ CBCT ไม่ถูกต้อง');
+  } else {
+    if (!b.cbctDates || !b.cbctDates.every(function (d) { return dates.indexOf(d) !== -1; })) throw new Error('วันทำ CBCT ต้องเป็นวันฉาย');
+    b.cbctFx = b.cbctDates.map(function (d) { return dates.indexOf(d) + 1; });
+  }
   if (!b.skipDates) throw new Error('วันงดฉายไม่ถูกต้อง');
   if (b.verifyDate && !isValidDate_(b.verifyDate)) throw new Error('วันนัดทำ CBCT ไม่ถูกต้อง');
   if (b.verifyTime && !isTime_(b.verifyTime)) throw new Error('เวลานัดทำ CBCT ไม่ถูกต้อง');
   if (b.verifyTime && !b.verifyDate) throw new Error('กรุณาระบุวันนัดทำ CBCT');
 
-  b.cbctDates = uniqueSorted_(b.cbctDates);
+  b.cbctFx = b.cbctFx.filter(function (fx, i) { return b.cbctFx.indexOf(fx) === i; }).sort(function (x, y) { return x - y; });
+  b.cbctDates = uniqueSorted_(b.cbctFx.map(function (fx) { return dates[fx - 1]; }));
   b.skipDates = uniqueSorted_(b.skipDates);
   b.startDate = dates[0];
   b.endDate = dates[dates.length - 1];
-  b.cbct = b.cbctDates.length > 0 || Boolean(b.verifyDate);
+  b.cbct = b.cbctFx.length > 0 || Boolean(b.verifyDate);
   return b;
 }

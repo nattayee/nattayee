@@ -18,7 +18,8 @@ const HOLIDAY_FILES = [path.join(DATA_DIR, 'holidays.json'), path.join(__dirname
 const MAX_BODY = 64 * 1024;
 
 const TECHNIQUES = ['DIBH', 'SRS', 'SRT', 'SBRT', 'อื่นๆ'];
-const CBCT_PATTERNS = ['first3_weekly', 'weekly', 'daily', 'first', 'none', 'custom'];
+const CBCT_PATTERNS = ['first3_weekly', 'dibh', 'weekly', 'daily', 'first', 'none', 'custom'];
+const FREQUENCIES = ['daily', 'eod', 'bid'];
 const MAX_FRACTIONS = 100;
 const PHYSICIANS = JSON.parse(fs.readFileSync(path.join(__dirname, 'physicians.json'), 'utf8'));
 const SITES = JSON.parse(fs.readFileSync(path.join(__dirname, 'sites.json'), 'utf8'));
@@ -69,6 +70,17 @@ function dateList(value, max) {
   return value.every((d) => typeof d === 'string' && isValidDate(d)) ? value.slice() : null;
 }
 
+// Checks the per-Fx dates: ascending, and at most 2 Fx on a day (only for BID).
+function scheduleError(dates, frequency) {
+  for (let i = 1; i < dates.length; i++) {
+    if (dates[i] < dates[i - 1]) return 'ตารางวันฉายต้องเรียงตามวันที่';
+    if (dates[i] === dates[i - 1] && (frequency !== 'bid' || (i > 1 && dates[i - 2] === dates[i]))) {
+      return frequency === 'bid' ? 'BID ฉายได้ไม่เกินวันละ 2 ครั้ง' : 'ตารางวันฉายต้องไม่มีวันซ้ำ (ยกเว้น BID)';
+    }
+  }
+  return '';
+}
+
 // Returns { booking } on success or { error } with a Thai message.
 function validate(input) {
   if (!input || typeof input !== 'object') return { error: 'ข้อมูลไม่ถูกต้อง' };
@@ -83,10 +95,13 @@ function validate(input) {
     physician: text(input.physician, 120),
     startDate: '',
     endDate: '',
+    frequency: text(input.frequency, 10) || 'daily',
     time: text(input.time, 5),
+    time2: text(input.time2, 5),
     duration: input.duration === '' || input.duration == null ? 15 : Number(input.duration),
     treatmentDates: dateList(input.treatmentDates, MAX_FRACTIONS),
     cbctPattern: text(input.cbctPattern, 20) || 'none',
+    cbctFx: null,
     cbctDates: dateList(input.cbctDates, MAX_FRACTIONS),
     skipDates: dateList(input.skipDates, 366),
     verifyDate: text(input.verifyDate, 10),
@@ -109,21 +124,34 @@ function validate(input) {
   const dates = b.treatmentDates;
   if (!dates || dates.length === 0) return { error: 'กรุณาระบุวันเริ่มฉายรังสีและตารางวันฉาย' };
   if (dates.length !== b.fractions) return { error: 'จำนวนวันฉายไม่ตรงกับจำนวนครั้ง (Fx)' };
-  if (dates.some((d, i) => i > 0 && d <= dates[i - 1])) return { error: 'ตารางวันฉายต้องเรียงตามวันที่และไม่ซ้ำกัน' };
+  if (!FREQUENCIES.includes(b.frequency)) return { error: 'ความถี่ในการฉายไม่ถูกต้อง' };
+  const schedErr = scheduleError(dates, b.frequency);
+  if (schedErr) return { error: schedErr };
   if (b.time && !isTime(b.time)) return { error: 'เวลานัดไม่ถูกต้อง' };
+  if (b.frequency !== 'bid') b.time2 = '';
+  if (b.time2 && !isTime(b.time2)) return { error: 'เวลานัดรอบ 2 ไม่ถูกต้อง' };
+  if (b.time2 && b.time && b.time2 <= b.time) return { error: 'เวลานัดรอบ 2 ต้องอยู่หลังรอบ 1' };
   if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) return { error: 'ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที' };
   if (!CBCT_PATTERNS.includes(b.cbctPattern)) return { error: 'รูปแบบ CBCT ไม่ถูกต้อง' };
-  if (!b.cbctDates || !b.cbctDates.every((d) => dates.includes(d))) return { error: 'วันทำ CBCT ต้องเป็นวันฉาย' };
+  if (Array.isArray(input.cbctFx)) {
+    b.cbctFx = input.cbctFx.map(Number);
+    if (!b.cbctFx.every((fx) => Number.isInteger(fx) && fx >= 1 && fx <= dates.length)) return { error: 'Fx ที่ทำ CBCT ไม่ถูกต้อง' };
+  } else {
+    // older clients send CBCT as dates
+    if (!b.cbctDates || !b.cbctDates.every((d) => dates.includes(d))) return { error: 'วันทำ CBCT ต้องเป็นวันฉาย' };
+    b.cbctFx = b.cbctDates.map((d) => dates.indexOf(d) + 1);
+  }
   if (!b.skipDates) return { error: 'วันงดฉายไม่ถูกต้อง' };
   if (b.verifyDate && !isValidDate(b.verifyDate)) return { error: 'วันนัดทำ CBCT ไม่ถูกต้อง' };
   if (b.verifyTime && !isTime(b.verifyTime)) return { error: 'เวลานัดทำ CBCT ไม่ถูกต้อง' };
   if (b.verifyTime && !b.verifyDate) return { error: 'กรุณาระบุวันนัดทำ CBCT' };
 
-  b.cbctDates = [...new Set(b.cbctDates)].sort();
+  b.cbctFx = [...new Set(b.cbctFx)].sort((x, y) => x - y);
+  b.cbctDates = [...new Set(b.cbctFx.map((fx) => dates[fx - 1]))];
   b.skipDates = [...new Set(b.skipDates)].sort();
   b.startDate = dates[0];
   b.endDate = dates[dates.length - 1];
-  b.cbct = b.cbctDates.length > 0 || Boolean(b.verifyDate);
+  b.cbct = b.cbctFx.length > 0 || Boolean(b.verifyDate);
   return { booking: b };
 }
 

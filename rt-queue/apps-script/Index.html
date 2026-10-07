@@ -360,12 +360,21 @@
           <input type="date" id="f-date" name="startDate" required>
         </div>
         <div class="field">
-          <label for="f-time">เวลานัด <span class="opt">(ไม่บังคับ)</span></label>
-          <input type="time" id="f-time" name="time">
+          <label for="f-freq">ความถี่ในการฉาย</label>
+          <select id="f-freq" name="frequency"></select>
         </div>
         <div class="field">
           <label for="f-dur">ระยะเวลาต่อครั้ง (นาที)</label>
           <input type="number" id="f-dur" name="duration" min="5" max="240" step="5" inputmode="numeric">
+        </div>
+        <div></div>
+        <div class="field">
+          <label for="f-time"><span id="timeLabel">เวลานัด</span> <span class="opt">(ไม่บังคับ)</span></label>
+          <input type="time" id="f-time" name="time">
+        </div>
+        <div class="field" id="time2Field" hidden>
+          <label for="f-time2">เวลานัดรอบ 2 (BID)</label>
+          <input type="time" id="f-time2" name="time2">
         </div>
         <button type="button" class="btn" id="findSlot">หาเวลาว่างอัตโนมัติ</button>
       </div>
@@ -416,6 +425,18 @@
   const SLOT_STEP = 5;            // นาที
   const DEFAULT_DURATION = 15;    // นาทีต่อครั้ง
   const DEFAULT_PATTERN = 'first3_weekly';
+  const BID_MIN_GAP = 360;        // นาที ระหว่างรอบ 1 และรอบ 2 ของ BID (6 ชั่วโมง)
+  // ค่าเริ่มต้นเมื่อเลือกเทคนิค (เทคนิคที่ไม่มีในนี้ใช้ DEFAULT_PATTERN)
+  const TECH_DEFAULTS = {
+    DIBH: { pattern: 'dibh', site: 'Lt Breast' },
+    SRS: { pattern: 'daily' },
+    SBRT: { pattern: 'daily' },
+  };
+  const FREQUENCIES = [
+    ['daily', 'Daily (ทุกวันทำการ)'],
+    ['eod', 'EOD (วันเว้นวัน)'],
+    ['bid', 'BID (วันละ 2 ครั้ง)'],
+  ];
 
   const TECHS = [
     { key: 'DIBH', desc: 'Deep Inspiration Breath Hold', color: 'var(--c-dibh)' },
@@ -426,6 +447,7 @@
   ];
   const CBCT_PATTERNS = [
     ['first3_weekly', '3 ครั้งแรก แล้วสัปดาห์ละครั้ง'],
+    ['dibh', 'Fx 1, 2, 3, 6, 11 (Breast DIBH)'],
     ['weekly', 'สัปดาห์ละครั้ง'],
     ['daily', 'ทุกครั้ง'],
     ['first', 'เฉพาะครั้งแรก'],
@@ -497,6 +519,7 @@
 
   const TECH = Object.fromEntries(TECHS.map(t => [t.key, t]));
   const PATTERN_LABEL = Object.fromEntries(CBCT_PATTERNS);
+  const FREQ_LABEL = Object.fromEntries(FREQUENCIES);
   const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
   const DAYS_SHORT = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
@@ -538,28 +561,40 @@
   }
   const isWorkday = (s) => { const g = parseYmd(s).getDay(); return g !== 0 && g !== 6 && !holidays.has(s); };
 
-  // วันฉายตามลำดับ: ข้ามเสาร์-อาทิตย์ วันหยุด และวันที่กด "งด"
-  function buildSchedule(start, n, skips) {
+  const dayGap = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+  // รอบที่ของแต่ละ Fx: วัน BID มี 2 Fx วันเดียวกัน (รอบ 1 และรอบ 2)
+  const sessionOf = (dates, i) => (i > 0 && dates[i - 1] === dates[i] ? 2 : 1);
+
+  // วันฉายของแต่ละ Fx ตามลำดับ: ข้ามเสาร์-อาทิตย์ วันหยุด และวันที่กด "งด"
+  //  daily = ทุกวันทำการ, eod = เว้นอย่างน้อย 1 วัน, bid = วันละ 2 Fx (วันเดียวกันซ้ำ 2 ครั้ง)
+  function buildSchedule(start, n, skips, freq) {
     const dates = [];
-    let d = start;
+    let d = start, last = null;
     for (let guard = 0; dates.length < n && guard < 1000; guard++) {
-      if (isWorkday(d) && !skips.has(d)) dates.push(d);
+      if (isWorkday(d) && !skips.has(d) && (freq !== 'eod' || !last || dayGap(last, d) >= 2)) {
+        dates.push(d);
+        if (freq === 'bid' && dates.length < n) dates.push(d);
+        last = d;
+      }
       d = addDays(d, 1);
     }
     return dates;
   }
 
-  function patternDates(pattern, dates) {
-    if (pattern === 'daily') return dates.slice();
-    if (pattern === 'first') return dates.slice(0, 1);
+  // Fx (เริ่มที่ 1) ที่ทำ CBCT ตามรูปแบบ
+  function patternFx(pattern, dates) {
+    const all = dates.map((_, i) => i + 1);
+    if (pattern === 'daily') return all;
+    if (pattern === 'first') return all.slice(0, 1);
+    if (pattern === 'dibh') return [1, 2, 3, 6, 11].filter(fx => fx <= dates.length);
     if (pattern === 'weekly' || pattern === 'first3_weekly') {
-      const out = pattern === 'first3_weekly' ? dates.slice(0, 3) : [];
-      const weeks = new Set(out.map(weekKey));
-      for (const d of dates) {
-        const w = weekKey(d);
-        if (!weeks.has(w)) { weeks.add(w); out.push(d); }
+      const out = pattern === 'first3_weekly' ? all.slice(0, 3) : [];
+      const weeks = new Set(out.map(fx => weekKey(dates[fx - 1])));
+      for (const fx of all) {
+        const w = weekKey(dates[fx - 1]);
+        if (!weeks.has(w)) { weeks.add(w); out.push(fx); }
       }
-      return out.sort();
+      return out.sort((a, b) => a - b);
     }
     return [];
   }
@@ -569,30 +604,36 @@
     const legacy = !(Array.isArray(b.treatmentDates) && b.treatmentDates.length);
     const treatmentDates = legacy ? [b.startDate] : b.treatmentDates;
     const cbctDates = legacy ? (b.cbct ? [b.startDate] : []) : (b.cbctDates || []);
+    // CBCT เก็บเป็นเลข Fx ตั้งแต่รองรับ BID; ข้อมูลเก่าเก็บเป็นวันที่
+    const cbctFx = Array.isArray(b.cbctFx) && !legacy && (b.cbctFx.length || !cbctDates.length) ? b.cbctFx.map(Number)
+      : cbctDates.map(d => treatmentDates.indexOf(d) + 1).filter(fx => fx > 0);
     return {
       ...b,
+      frequency: FREQ_LABEL[b.frequency] ? b.frequency : 'daily',
       time: b.time || '',
+      time2: b.time2 || '',
       duration: Number(b.duration) || DEFAULT_DURATION,
       fractions: Number(b.fractions) || treatmentDates.length,
       treatmentDates,
       cbctDates,
+      cbctFx,
       skipDates: Array.isArray(b.skipDates) ? b.skipDates : [],
       cbctPattern: PATTERN_LABEL[b.cbctPattern] ? b.cbctPattern : (cbctDates.length ? 'custom' : 'none'),
       verifyDate: b.verifyDate || '',
       verifyTime: b.verifyTime || '',
       startDate: treatmentDates[0],
       endDate: treatmentDates[treatmentDates.length - 1],
-      cbctSet: new Set(cbctDates),
+      cbctFxSet: new Set(cbctFx),
     };
   }
 
   // Time slots a booking occupies on the machine (only when a time is set).
   function slotsOf(b) {
     const out = [];
-    if (b.time) {
-      const s = toMin(b.time);
-      for (const date of b.treatmentDates) out.push({ date, s, e: s + b.duration, b });
-    }
+    b.treatmentDates.forEach((date, i) => {
+      const t = sessionOf(b.treatmentDates, i) === 2 ? b.time2 : b.time;
+      if (t) out.push({ date, s: toMin(t), e: toMin(t) + b.duration, b });
+    });
     if (b.verifyDate && b.verifyTime) {
       const s = toMin(b.verifyTime);
       out.push({ date: b.verifyDate, s, e: s + b.duration, b, verify: true });
@@ -664,7 +705,10 @@
   function eventsOf(b) {
     const ev = [];
     if (b.verifyDate) ev.push({ b, date: b.verifyDate, kind: 'verify', cbct: true, time: b.verifyTime });
-    b.treatmentDates.forEach((date, i) => ev.push({ b, date, kind: i === 0 ? 'start' : 'fx', fx: i + 1, cbct: b.cbctSet.has(date), time: b.time }));
+    b.treatmentDates.forEach((date, i) => {
+      const sess = sessionOf(b.treatmentDates, i);
+      ev.push({ b, date, kind: i === 0 ? 'start' : 'fx', fx: i + 1, sess, cbct: b.cbctFxSet.has(i + 1), time: sess === 2 ? b.time2 : b.time });
+    });
     return ev;
   }
   function eventShown(e) {
@@ -689,7 +733,7 @@
 
   const kindTag = (e) => e.kind === 'verify' ? 'V-CBCT' : e.kind === 'start' ? 'เริ่ม' : `Fx ${e.fx}`;
   const kindText = (e) => e.kind === 'verify' ? 'CBCT ก่อนเริ่มฉาย (Verification)'
-    : `${e.kind === 'start' ? 'เริ่มฉาย · ' : ''}Fx ${e.fx}/${e.b.treatmentDates.length}`;
+    : `${e.kind === 'start' ? 'เริ่มฉาย · ' : ''}Fx ${e.fx}/${e.b.treatmentDates.length}${e.b.frequency === 'bid' ? ` · รอบ ${e.sess}` : ''}`;
 
   // ---------- rendering ----------
   function monthPrefix() { return `${state.year}-${pad(state.month + 1)}-`; }
@@ -701,7 +745,7 @@
     let cbct = 0;
     for (const b of state.bookings) {
       if (b.verifyDate.startsWith(prefix)) cbct++;
-      for (const d of b.cbctSet) if (d.startsWith(prefix)) cbct++;
+      b.treatmentDates.forEach((d, i) => { if (b.cbctFxSet.has(i + 1) && d.startsWith(prefix)) cbct++; });
     }
     $('stats').innerHTML =
       `<div class="card stat" style="--c: var(--primary)"><div class="label">เริ่มฉายเดือนนี้</div><div class="value">${starts.length}</div></div>` +
@@ -774,7 +818,7 @@
         </div>
         <div class="name">${esc(b.name)}</div>
         <div class="meta">HN ${esc(b.hn)}${b.site ? ' · ' + esc(b.site) : ''}${b.physician ? ' · แพทย์: ' + esc(b.physician) : ''}</div>
-        <div class="meta">ฉาย ${b.treatmentDates.length} ครั้ง ${esc(shortDate(b.startDate))} – ${esc(shortDate(b.endDate))} ${b.endDate.slice(0, 4) * 1 + 543} · ${esc(PATTERN_LABEL[b.cbctPattern])}</div>
+        <div class="meta">ฉาย ${b.treatmentDates.length} ครั้ง ${esc(shortDate(b.startDate))} – ${esc(shortDate(b.endDate))} ${b.endDate.slice(0, 4) * 1 + 543} · ${esc(FREQ_LABEL[b.frequency].split(' ')[0])} · CBCT ${esc(PATTERN_LABEL[b.cbctPattern])}</div>
         ${b.note ? `<div class="meta">หมายเหตุ: ${esc(b.note)}</div>` : ''}
         <div class="actions"><button type="button" class="btn" data-edit="${esc(b.id)}">แก้ไข</button></div>
       </div>`;
@@ -801,7 +845,8 @@
   // ---------- booking form ----------
   const form = $('form');
   const dlg = $('dlg');
-  // fs = form schedule state. `manual` holds hand-picked CBCT days for the "custom" pattern.
+  // fs = form schedule state. dates[i] is the date of Fx i+1 (a BID day appears twice).
+  // `manual` holds hand-picked CBCT Fx numbers for the "custom" pattern.
   const fs = { dates: [], skips: new Set(), manual: new Set(), pattern: DEFAULT_PATTERN, view: 'table' };
 
   $('techRadios').innerHTML = TECHS.map(t =>
@@ -812,41 +857,58 @@
   $('f-site').innerHTML = '<option value="">— เลือกตำแหน่ง —</option>' +
     SITES.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   $('f-pattern').innerHTML = CBCT_PATTERNS.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('');
+  $('f-freq').innerHTML = FREQUENCIES.map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join('');
 
+  function setPattern(p) {
+    fs.pattern = p;
+    form.cbctPattern.value = p;
+  }
+
+  // Choosing a technique applies its default CBCT pattern (and site for DIBH).
   $('techRadios').addEventListener('change', () => {
-    const isOther = form.technique.value === 'อื่นๆ';
+    const tech = form.technique.value;
+    const isOther = tech === 'อื่นๆ';
     $('f-other').hidden = !isOther;
+    const def = TECH_DEFAULTS[tech] || {};
+    setPattern(def.pattern || DEFAULT_PATTERN);
+    if (def.site && !form.site.value) form.site.value = def.site;
+    renderSchedule();
     if (isOther) $('f-other').focus();
   });
 
   const fxCount = () => { const n = Number(form.fractions.value); return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 0; };
   const duration = () => { const n = Number(form.duration.value); return Number.isInteger(n) && n >= 5 && n <= 240 ? n : DEFAULT_DURATION; };
+  const isBid = () => form.frequency.value === 'bid';
 
   function computeSchedule() {
     const start = form.startDate.value;
     const n = fxCount();
-    fs.dates = start && n ? buildSchedule(start, n, fs.skips) : [];
+    fs.dates = start && n ? buildSchedule(start, n, fs.skips, form.frequency.value) : [];
   }
   function effectiveCbct() {
-    if (fs.pattern === 'custom') return new Set(fs.dates.filter(d => fs.manual.has(d)));
-    return new Set(patternDates(fs.pattern, fs.dates));
+    if (fs.pattern === 'custom') return new Set([...fs.manual].filter(fx => fx <= fs.dates.length));
+    return new Set(patternFx(fs.pattern, fs.dates));
   }
   function visibleSkips() {
     if (!fs.dates.length) return [];
     const from = form.startDate.value, to = fs.dates[fs.dates.length - 1];
     return [...fs.skips].filter(d => d >= from && d <= to && isWorkday(d)).sort();
   }
-  function mySlots() {
-    const out = [];
+  // Slots for the given session times, defaulting to the form's time fields.
+  function slotsFor(t1 = form.time.value, t2 = isBid() ? form.time2.value : '') {
     const dur = duration();
-    if (form.time.value) {
-      const s = toMin(form.time.value);
-      for (const date of fs.dates) out.push({ date, s, e: s + dur });
-    }
+    const out = [];
+    fs.dates.forEach((date, i) => {
+      const t = sessionOf(fs.dates, i) === 2 ? t2 : t1;
+      if (t) out.push({ date, s: toMin(t), e: toMin(t) + dur });
+    });
     return out;
   }
 
   function renderSchedule() {
+    const bid = isBid();
+    $('time2Field').hidden = !bid;
+    $('timeLabel').textContent = bid ? 'เวลานัดรอบ 1' : 'เวลานัด';
     computeSchedule();
     const dates = fs.dates;
     const cbct = effectiveCbct();
@@ -859,23 +921,32 @@
       return;
     }
     const first = dates[0], last = dates[dates.length - 1];
-    lines.push(`<div>ฉาย <b>${dates.length}</b> ครั้ง ตั้งแต่ <b>${esc(thaiDate(first))}</b> ถึง <b>${esc(thaiDate(last))}</b> · CBCT ระหว่างฉาย <b>${cbct.size}</b> ครั้ง</div>`);
+    const days = new Set(dates).size;
+    lines.push(`<div>ฉาย <b>${dates.length}</b> ครั้ง${bid ? ` (${days} วัน)` : ''} ตั้งแต่ <b>${esc(thaiDate(first))}</b> ถึง <b>${esc(thaiDate(last))}</b> · CBCT ระหว่างฉาย <b>${cbct.size}</b> ครั้ง</div>`);
     if (start !== first) {
       const why = holidays.get(start) || (fs.skips.has(start) ? 'วันที่งดฉาย' : 'วันเสาร์-อาทิตย์');
       lines.push(`<div class="msg warn">วันที่เลือก (${esc(thaiDate(start, false))}) เป็น${esc(why)} — Fx 1 จะเริ่ม${esc(thaiDate(first))}</div>`);
     }
 
-    const conflicts = findConflicts(mySlots(), occupancy(state.editingId));
+    const conflicts = findConflicts(slotsFor(), occupancy(state.editingId));
     const clashDates = new Set(conflicts.map(c => c.date));
     if (!form.time.value) {
       lines.push(`<div class="msg muted">ยังไม่ได้ระบุเวลานัด — ระบบจะไม่ตรวจเวลาซ้อนกับผู้ป่วยรายอื่น (กด “หาเวลาว่างอัตโนมัติ” เพื่อเลือกเวลาได้)</div>`);
+    }
+    if (bid && days < dates.length) {
+      if (!form.time2.value) {
+        lines.push(`<div class="msg muted">ยังไม่ได้ระบุเวลานัดรอบ 2 — รอบ 2 จะไม่ถูกตรวจเวลาซ้อน</div>`);
+      } else if (form.time.value && toMin(form.time2.value) - toMin(form.time.value) < BID_MIN_GAP) {
+        lines.push(`<div class="msg warn">BID ควรห่างกันอย่างน้อย ${BID_MIN_GAP / 60} ชั่วโมง (ตอนนี้ห่าง ${((toMin(form.time2.value) - toMin(form.time.value)) / 60).toFixed(1)} ชั่วโมง)</div>`);
+      }
     }
     if (conflicts.length) {
       const sample = conflicts.slice(0, 4).map(c =>
         `${shortDate(c.date)} ${c.other.b.name} (${fromMin(c.other.s)}–${fromMin(c.other.e)}${c.other.verify ? ' CBCT' : ''})`).join(', ');
       lines.push(`<div class="msg err">เวลาซ้อนกับผู้ป่วยรายอื่น ${clashDates.size} วัน: ${esc(sample)}${conflicts.length > 4 ? ' …' : ''}</div>`);
     } else if (form.time.value) {
-      lines.push(`<div class="msg ok">ไม่พบเวลาซ้อนกับผู้ป่วยรายอื่น (${esc(timeRange(form.time.value, duration()))})</div>`);
+      const times = [timeRange(form.time.value, duration()), bid && form.time2.value ? timeRange(form.time2.value, duration()) : ''].filter(Boolean).join(' และ ');
+      lines.push(`<div class="msg ok">ไม่พบเวลาซ้อนกับผู้ป่วยรายอื่น (${esc(times)})</div>`);
     }
     $('schedSummary').innerHTML = lines.join('');
     $('schedView').innerHTML = fs.view === 'table'
@@ -884,21 +955,25 @@
   }
 
   function scheduleTable(dates, cbct, clashDates) {
+    const bid = isBid();
     const rows = [
-      ...dates.map((d, i) => ({ d, fx: i + 1 })),
+      ...dates.map((d, i) => ({ d, fx: i + 1, sess: sessionOf(dates, i) })),
       ...visibleSkips().map(d => ({ d, skip: true })),
-    ].sort((a, b) => a.d.localeCompare(b.d));
+    ].sort((a, b) => a.d.localeCompare(b.d) || (a.fx || 0) - (b.fx || 0));
     let prevWeek = null;
     const body = rows.map(r => {
       const wk = weekKey(r.d);
       const cls = [r.skip ? 'skipped' : '', prevWeek && wk !== prevWeek ? 'newweek' : ''].filter(Boolean).join(' ');
       prevWeek = wk;
       const clash = clashDates.has(r.d) ? ' <span class="pill bad">เวลาซ้อน</span>' : '';
+      const sess = bid && !r.skip ? ` <span class="pill">รอบ ${r.sess}</span>` : '';
+      // งด applies to the whole day, so a BID day shows the button on its first row only
+      const act = r.skip ? 'ยกเลิกงด' : r.sess === 1 ? 'งด' : '';
       return `<tr class="${cls}">
         <td class="c-fx">${r.skip ? '–' : r.fx}</td>
-        <td><span class="d">${esc(thaiDate(r.d))}</span>${r.skip ? ' <span class="pill">งด</span>' : ''}${clash}</td>
-        <td class="c-cbct">${r.skip ? '' : `<input type="checkbox" data-cbct="${r.d}" ${cbct.has(r.d) ? 'checked' : ''} aria-label="CBCT Fx ${r.fx}">`}</td>
-        <td class="c-act"><button type="button" class="linkbtn" data-skip="${r.d}">${r.skip ? 'ยกเลิกงด' : 'งด'}</button></td>
+        <td><span class="d">${esc(thaiDate(r.d))}</span>${sess}${r.skip ? ' <span class="pill">งด</span>' : ''}${clash}</td>
+        <td class="c-cbct">${r.skip ? '' : `<input type="checkbox" data-cbct="${r.fx}" ${cbct.has(r.fx) ? 'checked' : ''} aria-label="CBCT Fx ${r.fx}">`}</td>
+        <td class="c-act">${act ? `<button type="button" class="linkbtn" data-skip="${r.d}">${act}</button>` : ''}</td>
       </tr>`;
     }).join('');
     return `<div class="sched-table-wrap"><table class="sched">
@@ -907,7 +982,8 @@
   }
 
   function scheduleMonths(dates, cbct, clashDates) {
-    const fxOf = new Map(dates.map((d, i) => [d, i + 1]));
+    const fxOf = new Map();
+    dates.forEach((d, i) => { if (!fxOf.has(d)) fxOf.set(d, []); fxOf.get(d).push(i + 1); });
     const skips = new Set(visibleSkips());
     const from = [dates[0], form.startDate.value].sort()[0];
     const to = dates[dates.length - 1];
@@ -926,14 +1002,15 @@
       for (let i = 0; i < lead; i++) cells += '<div></div>';
       for (let day = 1; day <= days; day++) {
         const key = `${yy}-${pad(mm + 1)}-${pad(day)}`;
-        const fx = fxOf.get(key);
+        const fxs = fxOf.get(key);
         const cls = ['mc'];
         let sub = '';
         let title = thaiDate(key);
-        if (fx) {
-          cls.push('tx'); sub = `Fx ${fx}`;
-          if (cbct.has(key)) { cls.push('cb'); sub += ' ·CB'; title += ' · CBCT'; }
-          title += ` · Fx ${fx} (คลิกเพื่อเปิด/ปิด CBCT)`;
+        if (fxs) {
+          cls.push('tx'); sub = `Fx ${fxs.join(',')}`;
+          const cb = fxs.filter(fx => cbct.has(fx));
+          if (cb.length) { cls.push('cb'); sub += ' ·CB'; title += ` · CBCT Fx ${cb.join(',')}`; }
+          title += ` · Fx ${fxs.join(', ')} (คลิกเพื่อเปิด/ปิด CBCT)`;
         } else if (skips.has(key)) {
           cls.push('skip'); sub = 'งด'; title += ' · งด';
         } else if (holidays.has(key)) {
@@ -942,7 +1019,7 @@
           cls.push('off');
         }
         if (clashDates.has(key)) { cls.push('clash'); title += ' · เวลาซ้อน'; }
-        cells += `<div class="${cls.join(' ')}" ${fx ? `data-cbct-cell="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
+        cells += `<div class="${cls.join(' ')}" ${fxs ? `data-cbct-day="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
       }
       return `<div class="mon"><h4>${MONTHS[mm]} ${yy + 543}</h4><div class="mgrid">${cells}</div></div>`;
     }).join('');
@@ -956,15 +1033,17 @@
       </div>`;
   }
 
-  function toggleCbct(date) {
+  // Toggle CBCT for the given Fx numbers: all off if any is on, otherwise on for the first.
+  function toggleCbct(fxs) {
     fs.manual = effectiveCbct();
-    fs.manual.has(date) ? fs.manual.delete(date) : fs.manual.add(date);
-    fs.pattern = 'custom';
-    form.cbctPattern.value = 'custom';
+    if (fxs.some(fx => fs.manual.has(fx))) fxs.forEach(fx => fs.manual.delete(fx));
+    else fs.manual.add(fxs[0]);
+    setPattern('custom');
     renderSchedule();
   }
 
-  ['f-date', 'f-fx', 'f-time', 'f-dur'].forEach(id => $(id).addEventListener('input', renderSchedule));
+  ['f-date', 'f-fx', 'f-time', 'f-time2', 'f-dur'].forEach(id => $(id).addEventListener('input', renderSchedule));
+  $('f-freq').addEventListener('change', renderSchedule);
   $('f-pattern').addEventListener('change', () => {
     if (form.cbctPattern.value === 'custom') fs.manual = effectiveCbct();
     fs.pattern = form.cbctPattern.value;
@@ -985,11 +1064,14 @@
       renderSchedule();
       return;
     }
-    const cell = e.target.closest('[data-cbct-cell]');
-    if (cell) toggleCbct(cell.dataset.cbctCell);
+    const day = e.target.closest('[data-cbct-day]');
+    if (day) {
+      const fxs = fs.dates.map((d, i) => d === day.dataset.cbctDay ? i + 1 : 0).filter(Boolean);
+      if (fxs.length) toggleCbct(fxs);
+    }
   });
   form.addEventListener('change', (e) => {
-    if (e.target.matches('[data-cbct]')) toggleCbct(e.target.dataset.cbct);
+    if (e.target.matches('[data-cbct]')) toggleCbct([Number(e.target.dataset.cbct)]);
   });
 
   $('findSlot').addEventListener('click', () => {
@@ -998,16 +1080,30 @@
     if (!fs.dates.length) { $('formError').textContent = 'กรุณากรอกวันเริ่มฉายและจำนวนครั้ง (Fx) ก่อน'; return; }
     const dur = duration();
     const occ = occupancy(state.editingId);
-    for (let t = toMin(WORK_START); t + dur <= toMin(WORK_END); t += SLOT_STEP) {
-      const mine = fs.dates.map(date => ({ date, s: t, e: t + dur }));
-      if (!findConflicts(mine, occ).length) {
-        form.time.value = fromMin(t);
+    const startMin = toMin(WORK_START), endMin = toMin(WORK_END);
+    const free = (t1, t2) => !findConflicts(slotsFor(fromMin(t1), t2 === null ? '' : fromMin(t2)), occ).length;
+    const needSecond = isBid() && new Set(fs.dates).size < fs.dates.length;
+    for (let t1 = startMin; t1 + dur <= endMin; t1 += SLOT_STEP) {
+      if (!free(t1, null)) continue;
+      if (!needSecond) {
+        form.time.value = fromMin(t1);
         renderSchedule();
-        toast(`พบเวลาว่าง ${fromMin(t)} น. ตรงกันทุกวันฉาย`);
+        toast(`พบเวลาว่าง ${fromMin(t1)} น. ตรงกันทุกวันฉาย`);
         return;
       }
+      for (let t2 = t1 + BID_MIN_GAP; t2 + dur <= endMin; t2 += SLOT_STEP) {
+        if (free(t1, t2)) {
+          form.time.value = fromMin(t1);
+          form.time2.value = fromMin(t2);
+          renderSchedule();
+          toast(`พบเวลาว่าง รอบ 1 ${fromMin(t1)} น. · รอบ 2 ${fromMin(t2)} น.`);
+          return;
+        }
+      }
     }
-    $('formError').textContent = `ไม่พบเวลาว่างที่ตรงกันทุกวันฉายในช่วง ${WORK_START}–${WORK_END} น. ลองลดระยะเวลาหรือเลือกเวลาเอง`;
+    $('formError').textContent = needSecond
+      ? `ไม่พบเวลาว่าง 2 รอบ (ห่างกัน ${BID_MIN_GAP / 60} ชั่วโมง) ที่ตรงกันทุกวันในช่วง ${WORK_START}–${WORK_END} น. ลองเลือกเวลาเอง`
+      : `ไม่พบเวลาว่างที่ตรงกันทุกวันฉายในช่วง ${WORK_START}–${WORK_END} น. ลองลดระยะเวลาหรือเลือกเวลาเอง`;
   });
 
   function openForm(booking, date) {
@@ -1017,9 +1113,9 @@
     $('formTitle').textContent = booking ? 'แก้ไขนัดคิว' : 'นัดคิวเทคนิคพิเศษ';
     $('deleteBtn').hidden = !booking;
     fs.skips = new Set(booking ? booking.skipDates : []);
-    fs.manual = new Set(booking ? booking.cbctDates : []);
-    fs.pattern = booking ? booking.cbctPattern : DEFAULT_PATTERN;
-    form.cbctPattern.value = fs.pattern;
+    fs.manual = new Set(booking ? booking.cbctFx : []);
+    setPattern(booking ? booking.cbctPattern : DEFAULT_PATTERN);
+    form.frequency.value = booking ? booking.frequency : 'daily';
     form.duration.value = booking ? booking.duration : DEFAULT_DURATION;
     if (booking) {
       form.hn.value = booking.hn;
@@ -1031,6 +1127,7 @@
       form.physician.value = booking.physician || '';
       form.startDate.value = booking.startDate;
       form.time.value = booking.time || '';
+      form.time2.value = booking.time2 || '';
       form.note.value = booking.note || '';
     } else {
       form.startDate.value = date || state.selected;
@@ -1044,6 +1141,7 @@
 
   function readForm() {
     computeSchedule();
+    const cbctFx = [...effectiveCbct()].sort((a, b) => a - b);
     const b = {
       hn: form.hn.value.trim(),
       name: $('f-name').value.trim(),
@@ -1053,11 +1151,14 @@
       fractions: form.fractions.value === '' ? null : Number(form.fractions.value),
       physician: form.physician.value.trim(),
       startDate: fs.dates[0] || '',
+      frequency: form.frequency.value,
       time: form.time.value,
+      time2: isBid() ? form.time2.value : '',
       duration: Number(form.duration.value) || DEFAULT_DURATION,
       treatmentDates: fs.dates.slice(),
       cbctPattern: fs.pattern,
-      cbctDates: [...effectiveCbct()].sort(),
+      cbctFx,
+      cbctDates: [...new Set(cbctFx.map(fx => fs.dates[fx - 1]))],
       skipDates: visibleSkips(),
       verifyDate: '',
       verifyTime: '',
@@ -1078,6 +1179,7 @@
     if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) {
       return { error: 'ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที', focus: form.duration };
     }
+    if (b.time2 && b.time && b.time2 <= b.time) return { error: 'เวลานัดรอบ 2 ต้องอยู่หลังรอบ 1', focus: form.time2 };
     return { booking: b };
   }
 
@@ -1089,7 +1191,7 @@
     const mine = new Set(booking.treatmentDates);
     const dup = state.bookings.find(b => b.id !== state.editingId && b.hn === booking.hn && b.treatmentDates.some(d => mine.has(d)));
     if (dup && !confirm(`HN ${booking.hn} มีคอร์สฉาย ${techLabel(dup)} ที่วันฉายทับกันอยู่แล้ว (เริ่ม ${thaiDate(dup.startDate, false)}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
-    const conflicts = findConflicts(mySlots(), occupancy(state.editingId));
+    const conflicts = findConflicts(slotsFor(), occupancy(state.editingId));
     if (conflicts.length && !confirm(`เวลานัดซ้อนกับผู้ป่วยรายอื่น ${new Set(conflicts.map(c => c.date)).size} วัน ต้องการบันทึกต่อหรือไม่?`)) return;
 
     $('saveBtn').disabled = true;
@@ -1179,14 +1281,14 @@
     const prefix = monthPrefix();
     const rows = visibleBookings().filter(b => b.startDate.startsWith(prefix))
       .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.time || '99').localeCompare(b.time || '99'));
-    const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'เวลานัด', 'ระยะเวลา (นาที)', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
-      'รูปแบบ CBCT', 'วัน CBCT ระหว่างฉาย', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
+    const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'ความถี่', 'เวลานัด', 'เวลานัดรอบ 2', 'ระยะเวลา (นาที)', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
+      'รูปแบบ CBCT', 'Fx ที่ทำ CBCT', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const list = (arr) => arr.map(d => thaiDate(d, false)).join(', ');
     const lines = [head, ...rows.map(b => [
-      thaiDate(b.startDate, false), thaiDate(b.endDate, false), b.time, b.duration, b.hn, b.name, techLabel(b), b.site,
+      thaiDate(b.startDate, false), thaiDate(b.endDate, false), FREQ_LABEL[b.frequency], b.time, b.time2, b.duration, b.hn, b.name, techLabel(b), b.site,
       b.treatmentDates.length, PATTERN_LABEL[b.cbctPattern],
-      list(b.cbctDates), list(b.skipDates), b.physician, b.note,
+      b.cbctFx.join(', '), list(b.skipDates), b.physician, b.note,
     ])].map(r => r.map(cell).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
