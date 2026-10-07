@@ -5,15 +5,21 @@
  * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
- * - ระบบสมาชิกของตัวเอง: สมัคร (ชื่อ-นามสกุล / ชื่อผู้ใช้ / รหัสผ่าน / อีเมล) แล้วเข้าสู่ระบบ
- *   ผู้สมัครคนแรกเป็นผู้ดูแลระบบ คนถัดไปรอผู้ดูแลอนุมัติ (ปิดได้ที่ REQUIRE_APPROVAL)
- *   รหัสผ่านเก็บเป็น hash + salt, ลืมรหัสผ่านใช้รหัสยืนยันทางอีเมล, บันทึกทุกการใช้งานในชีต AccessLog
+ * - เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace (WORKSPACE_URL) ระบบนี้ไม่เก็บรหัสผ่านเอง
+ *   สมัครสมาชิก อนุมัติ ระงับ และลืมรหัสผ่าน ทำที่ Workspace ทั้งหมด
+ *   เปิดจากปุ่มใน Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ" (?sso=...) จะเข้าได้ทันทีโดยไม่ต้องกรอกรหัสผ่าน
+ *   บันทึกทุกการใช้งานในชีต AccessLog
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
  *
  * สร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet หลังบ้าน (ระบบจะรู้จักชีตเอง)
  * ถ้าสร้างโปรเจกต์แยกที่ script.google.com ให้ใส่ลิงก์หรือ ID ของชีตที่ SPREADSHEET_ID ด้านล่าง
  * แล้ว Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone"
+ * ครั้งแรกหลังอัปเดตเป็นการเข้าสู่ระบบผ่าน Workspace: เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง
+ * เพื่ออนุญาตสิทธิ์ "เชื่อมต่อกับบริการภายนอก" (UrlFetchApp) ก่อน Deploy เวอร์ชันใหม่
  */
+
+/** เว็บ LPCH RO Workspace ที่ใช้ตรวจชื่อผู้ใช้/รหัสผ่าน (ต้อง Deploy แบบ Who has access: Anyone) */
+const WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 
 /** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
 const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
@@ -30,7 +36,6 @@ const SHEET_APPTS = 'Appointments';
 const SHEET_DOCTORS = 'Doctors';
 const SHEET_HOLIDAYS = 'Holidays';
 const SHEET_SETTINGS = 'Settings';
-const SHEET_ACCOUNTS = 'Accounts';
 const SHEET_LOG = 'AccessLog';
 
 const APPT_HEADERS = [
@@ -63,19 +68,6 @@ const STATUS_BOOKED = 'นัดแล้ว';
 const STATUS_CANCELLED = 'ยกเลิก';
 const STATUS_DONE = 'มาตามนัด';
 
-/** บัญชีผู้ใช้ (ชีต Accounts) */
-// ชื่อ/นามสกุลต่อท้ายเป็นคอลัมน์ H, I เพื่อไม่ให้คอลัมน์เดิมของชีตที่สร้างไว้แล้วเลื่อน
-const ACCOUNT_HEADERS = ['ชื่อผู้ใช้', 'อีเมล', 'รหัสผ่าน (hash)', 'บทบาท', 'สถานะ', 'สมัครเมื่อ', 'เข้าใช้ล่าสุด', 'ชื่อ', 'นามสกุล'];
-const ACOL = { username: 0, email: 1, hash: 2, role: 3, status: 4, createdAt: 5, lastLogin: 6, firstName: 7, lastName: 8 };
-const ROLE_ADMIN = 'admin';
-const ROLE_USER = 'user';
-const ACC_ACTIVE = 'ใช้งาน';
-const ACC_PENDING = 'รออนุมัติ';
-const ACC_SUSPENDED = 'ระงับ';
-const PW_ITERATIONS = 500;           // รอบการ hash รหัสผ่าน
-const LOGIN_MAX_FAILS = 5;           // ใส่รหัสผิดได้กี่ครั้งก่อนล็อก
-const LOGIN_LOCK_SECONDS = 600;      // ล็อก 10 นาที
-const RESET_CODE_SECONDS = 900;      // รหัสยืนยันลืมรหัสผ่านใช้ได้ 15 นาที
 const AUTH_ERR = 'AUTH_REQUIRED: ';  // ขึ้นต้นข้อความ error เมื่อหน้าเว็บต้องให้เข้าสู่ระบบใหม่
 
 const DEFAULT_DOCTORS = [
@@ -90,20 +82,9 @@ const OLD_SAMPLE_DOCTORS = ['พญ. ตัวอย่าง หนึ่ง', 
 const MSG = {
   th: {
     sessionExpired: 'กรุณาเข้าสู่ระบบอีกครั้ง',
-    accountSuspended: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
-    accountPending: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ',
-    adminOnly: 'เฉพาะผู้ดูแลระบบเท่านั้น',
-    badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
-    locked: 'ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่',
-    nameRequired: 'กรุณากรอกชื่อและนามสกุล (ไม่เกิน 60 ตัวอักษร)',
-    usernameRule: 'ชื่อผู้ใช้ต้องยาว 3–30 ตัว ใช้ได้เฉพาะ a-z, 0-9, จุด (.), ขีดล่าง (_) และขีด (-)',
-    usernameTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว',
-    emailRule: 'รูปแบบอีเมลไม่ถูกต้อง',
-    emailTaken: 'อีเมลนี้สมัครไว้แล้ว',
-    passwordRule: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว',
-    badCode: 'รหัสยืนยันไม่ถูกต้องหรือหมดอายุ',
-    cannotChangeSelf: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้',
-    userNotFound: 'ไม่พบบัญชี {username}',
+    loginRequired: 'กรุณากรอกชื่อผู้ใช้หรืออีเมล และรหัสผ่าน',
+    ssoInvalid: 'ลิงก์เข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง',
+    workspaceDown: 'ติดต่อ LPCH RO Workspace ไม่ได้ ({err}) กรุณาลองใหม่ ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ',
     noData: 'ไม่มีข้อมูล',
     technique: 'กรุณาเลือกรูปแบบการใส่ หรือกรอกในช่อง "อื่นๆ" (ไม่เกิน 100 ตัวอักษร)',
     statusInvalid: 'สถานะไม่ถูกต้อง',
@@ -124,20 +105,9 @@ const MSG = {
   },
   en: {
     sessionExpired: 'Please log in again',
-    accountSuspended: 'This account is suspended. Please contact the administrator',
-    accountPending: 'This account is waiting for administrator approval',
-    adminOnly: 'Administrators only',
-    badLogin: 'Incorrect username or password',
-    locked: 'Too many wrong passwords. Please wait 10 minutes and try again',
-    nameRequired: 'Please enter your first and last name (up to 60 characters each)',
-    usernameRule: 'Username must be 3–30 characters: a-z, 0-9, dot (.), underscore (_) or hyphen (-)',
-    usernameTaken: 'This username is already taken',
-    emailRule: 'Invalid email address',
-    emailTaken: 'This email is already registered',
-    passwordRule: 'Password must be at least 8 characters',
-    badCode: 'The verification code is wrong or has expired',
-    cannotChangeSelf: 'You cannot change the status or role of your own account',
-    userNotFound: 'Account {username} not found',
+    loginRequired: 'Please enter your username or email and password',
+    ssoInvalid: 'This sign-in link is not valid. Please log in again',
+    workspaceDown: 'Could not reach LPCH RO Workspace ({err}). Please try again, or tell the administrator',
     noData: 'No data',
     technique: 'Please choose an insertion type, or type one under "Other" (up to 100 characters)',
     statusInvalid: 'Invalid status',
@@ -170,7 +140,6 @@ const DEFAULT_SETTINGS = [
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
   ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
   ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล'],
-  ['REQUIRE_APPROVAL', 'TRUE', 'TRUE = ผู้สมัครใหม่ต้องรอผู้ดูแลอนุมัติก่อนเข้าใช้, FALSE = สมัครแล้วเข้าใช้ได้ทันที'],
   ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)']
 ];
 
@@ -218,7 +187,6 @@ function setup() {
   ss.getSheetByName(SHEET_APPTS).getRange('D:D').setNumberFormat('@');
   ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
   ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
-  ss.getSheetByName(SHEET_ACCOUNTS).getRange('A:B').setNumberFormat('@');
   // ทดสอบปฏิทิน (และติดตามปฏิทินที่แชร์มาให้) แล้วแสดงผลใน "บันทึกการดำเนินการ"
   let calMsg;
   try {
@@ -227,130 +195,100 @@ function setup() {
   } catch (e) {
     calMsg = 'ปฏิทิน: ⚠️ ' + e.message;
   }
+  // ทดสอบการเชื่อมต่อ Workspace (และขอสิทธิ์ UrlFetchApp): token ปลอมต้องได้คำตอบว่า session หมดอายุ
+  let wsMsg;
+  try {
+    workspace_({ action: 'me', token: '-' }, 'th');
+    wsMsg = 'LPCH RO Workspace: ⚠️ ตอบกลับผิดปกติ';
+  } catch (e) {
+    wsMsg = e.message.indexOf(AUTH_ERR) === 0 ? 'LPCH RO Workspace: เชื่อมต่อได้' : 'LPCH RO Workspace: ⚠️ ' + e.message;
+  }
   console.log('สคริปต์รันในนาม: ' + scriptOwner_());
   console.log(calMsg);
+  console.log(wsMsg);
   try {
-    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, Accounts, AccessLog แล้ว\n' +
-      calMsg + '\nDeploy เว็บแอป แล้วสมัครสมาชิกเป็นคนแรกทันที บัญชีแรกจะเป็นผู้ดูแลระบบ');
+    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, AccessLog แล้ว\n' +
+      calMsg + '\n' + wsMsg + '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
 }
 
 /* ------------------------------------------------------------------ */
-/*  API สมาชิก (ไม่ต้องเข้าสู่ระบบ)                                       */
+/*  เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace                                */
 /* ------------------------------------------------------------------ */
 
-/** สมัครสมาชิก: form = { firstName, lastName, username, email, password, lang } */
-function registerAccount(form) {
-  const lang = form && form.lang;
-  const firstName = cleanName_(form && form.firstName);
-  const lastName = cleanName_(form && form.lastName);
-  const username = normUsername_(form && form.username);
-  const email = String(form && form.email || '').trim().toLowerCase();
-  const password = String(form && form.password || '');
-  if (!firstName || !lastName || firstName.length > 60 || lastName.length > 60) throw new Error(msg_(lang, 'nameRequired'));
-  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error(msg_(lang, 'usernameRule'));
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw new Error(msg_(lang, 'emailRule'));
-  if (password.length < 8 || password.length > 200) throw new Error(msg_(lang, 'passwordRule'));
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const accounts = getAccounts_();
-    if (accounts.some(a => a.username === username)) throw new Error(msg_(lang, 'usernameTaken'));
-    if (accounts.some(a => a.email === email)) throw new Error(msg_(lang, 'emailTaken'));
-
-    // บัญชีแรกของระบบเป็นผู้ดูแลและใช้งานได้ทันที
-    const first = accounts.length === 0;
-    const needApproval = !first && String(getSettings_().REQUIRE_APPROVAL).toUpperCase() !== 'FALSE';
-    const role = first ? ROLE_ADMIN : ROLE_USER;
-    const status = needApproval ? ACC_PENDING : ACC_ACTIVE;
-    const sh = getSheet_(SHEET_ACCOUNTS);
-    sh.getRange(sh.getLastRow() + 1, 1, 1, ACCOUNT_HEADERS.length)
-      .setValues([[username, email, hashPassword_(password), role, status, nowStr_(), '', firstName, lastName]]);
-    SpreadsheetApp.flush();
-    log_(username, 'สมัครสมาชิก', firstName + ' ' + lastName + ' / ' + email + ' / ' + role + ' / ' + status);
-    if (needApproval) notifyAdminsNewAccount_(accounts, username, email, firstName + ' ' + lastName);
-    return { ok: true, status: status, role: role, needApproval: needApproval };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/** เข้าสู่ระบบ: form = { login (ชื่อผู้ใช้หรืออีเมล), password, remember, lang } */
+/** เข้าสู่ระบบ: form = { login (ชื่อผู้ใช้หรืออีเมล), password, remember, lang } ตรวจรหัสผ่านที่ Workspace */
 function login(form) {
   const lang = form && form.lang;
   const loginId = String(form && form.login || '').trim().toLowerCase();
   const password = String(form && form.password || '');
-  const cache = CacheService.getScriptCache();
-  const failKey = 'loginfail_' + loginId;
-  const fails = Number(cache.get(failKey) || 0);
-  if (fails >= LOGIN_MAX_FAILS) throw new Error(msg_(lang, 'locked'));
-
-  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
-  if (!acc || !verifyPassword_(password, acc.hash)) {
-    cache.put(failKey, String(fails + 1), LOGIN_LOCK_SECONDS);
-    log_(loginId || '(ว่าง)', 'เข้าสู่ระบบไม่สำเร็จ', 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (' + (fails + 1) + ')');
-    throw new Error(msg_(lang, 'badLogin'));
-  }
-  cache.remove(failKey);
-  if (acc.status === ACC_PENDING) throw new Error(msg_(lang, 'accountPending'));
-  if (acc.status !== ACC_ACTIVE) throw new Error(msg_(lang, 'accountSuspended'));
-
-  getSheet_(SHEET_ACCOUNTS).getRange(acc.row, ACOL.lastLogin + 1).setValue(nowStr_());
-  log_(acc.username, 'เข้าสู่ระบบ', '');
-  const hours = form && form.remember ? 24 * 7 : Math.max(1, Number(getSettings_().SESSION_HOURS) || 12);
-  return { token: makeToken_(acc.username, hours), user: publicUser_(acc) };
-}
-
-/** ลืมรหัสผ่าน ขั้นที่ 1: ส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี */
-function requestPasswordReset(form) {
-  const loginId = String(form && form.login || '').trim().toLowerCase();
-  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
-  // ตอบเหมือนกันทุกกรณี เพื่อไม่ให้ใช้ตรวจว่ามีบัญชีนี้หรือไม่
-  if (!acc || !acc.email || acc.status === ACC_SUSPENDED) return { ok: true };
-  const cache = CacheService.getScriptCache();
-  const countKey = 'resetcount_' + acc.username;
-  const count = Number(cache.get(countKey) || 0);
-  if (count >= 3) return { ok: true }; // ส่งได้ไม่เกิน 3 ครั้งต่อ 15 นาที
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  cache.put('reset_' + acc.username, hashPassword_(code, 1), RESET_CODE_SECONDS);
-  cache.put(countKey, String(count + 1), RESET_CODE_SECONDS);
+  if (!loginId || !password) throw new Error(msg_(lang, 'loginRequired'));
+  let r;
   try {
-    MailApp.sendEmail({
-      to: acc.email,
-      subject: '[นัดคิวใส่แร่] รหัสยืนยันสำหรับตั้งรหัสผ่านใหม่',
-      body: 'รหัสยืนยันของบัญชี ' + acc.username + ' คือ ' + code + '\n' +
-        'ใช้ได้ภายใน 15 นาที ถ้าคุณไม่ได้ขอรหัสนี้ ไม่ต้องทำอะไร\n\n' +
-        'Your verification code for ' + acc.username + ' is ' + code + ' (valid for 15 minutes).'
-    });
-    log_(acc.username, 'ขอรหัสตั้งรหัสผ่านใหม่', 'ส่งไปที่ ' + acc.email);
+    r = workspace_({ action: 'login', username: loginId, password: password }, lang);
   } catch (e) {
-    log_(acc.username, 'ส่งรหัสตั้งรหัสผ่านไม่สำเร็จ', e.message);
+    log_(loginId, 'เข้าสู่ระบบไม่สำเร็จ', e.message);
+    throw e;
   }
+  return startSession_(r, form && form.remember, 'เข้าสู่ระบบ');
+}
+
+/** เปิดจากปุ่มใน Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ": ลิงก์มี ?sso=<บัตรผ่าน> ใช้ได้ครั้งเดียว อายุ 2 นาที */
+function ssoLogin(ticket, lang) {
+  const t = String(ticket || '').replace(/[^0-9a-f]/gi, '');
+  if (!t) throw new Error(msg_(lang, 'ssoInvalid'));
+  return startSession_(workspace_({ action: 'ssoRedeem', ticket: t }, lang), false, 'เข้าสู่ระบบจาก Workspace');
+}
+
+/** ออกจากระบบ: ปิด session ที่ Workspace ที่ระบบนี้เปิดไว้ด้วย */
+function logout(token) {
+  const s = parseToken_(token);
+  if (!s) return { ok: true };
+  try { workspace_({ action: 'logout', token: s.w }); } catch (e) { /* session อาจหมดอายุไปแล้ว */ }
+  log_(s.u, 'ออกจากระบบ', '');
   return { ok: true };
 }
 
-/** ลืมรหัสผ่าน ขั้นที่ 2: form = { login, code, password, lang } */
-function resetPassword(form) {
-  const lang = form && form.lang;
-  const loginId = String(form && form.login || '').trim().toLowerCase();
-  const code = String(form && form.code || '').trim();
-  const password = String(form && form.password || '');
-  if (password.length < 8 || password.length > 200) throw new Error(msg_(lang, 'passwordRule'));
-  const acc = getAccounts_().find(a => a.username === loginId || a.email === loginId);
-  if (!acc) throw new Error(msg_(lang, 'badCode'));
-  const cache = CacheService.getScriptCache();
-  const stored = cache.get('reset_' + acc.username);
-  const tryKey = 'resettry_' + acc.username;
-  const tries = Number(cache.get(tryKey) || 0);
-  if (!stored || tries >= 5 || !verifyPassword_(code, stored)) {
-    cache.put(tryKey, String(tries + 1), RESET_CODE_SECONDS);
-    throw new Error(msg_(lang, 'badCode'));
+/** หลัง Workspace ยืนยันตัวตนแล้ว: ออก token ของระบบนี้ (เก็บ session ของ Workspace ไว้ข้างในเพื่อตรวจซ้ำตอนเปิดหน้า) */
+function startSession_(r, remember, action) {
+  const user = member_(r.user);
+  const hours = remember ? 24 * 7 : Math.max(1, Number(getSettings_().SESSION_HOURS) || 12);
+  log_(user.username, action, user.fullName + (user.role ? ' (' + user.role + ')' : ''));
+  return { token: makeToken_(user, r.token, hours), user: user };
+}
+
+/** ข้อมูลผู้ใช้จาก Workspace เฉพาะที่ระบบนี้ใช้ */
+function member_(u) {
+  u = u || {};
+  return {
+    username: String(u.username || ''), fullName: String(u.fullName || u.username || ''),
+    role: String(u.role || ''), email: String(u.email || ''), isAdmin: !!u.isAdmin
+  };
+}
+
+/** เรียก API ของ LPCH RO Workspace (doPost แบบ JSON) คืนผลเมื่อ ok ไม่งั้นโยนข้อความ error ของ Workspace */
+function workspace_(req, lang) {
+  let res;
+  try {
+    res = UrlFetchApp.fetch(WORKSPACE_URL, {
+      method: 'post', contentType: 'application/json', payload: JSON.stringify(req),
+      muteHttpExceptions: true, followRedirects: true
+    });
+  } catch (e) {
+    throw new Error(msg_(lang, 'workspaceDown', { err: e.message }));
   }
-  getSheet_(SHEET_ACCOUNTS).getRange(acc.row, ACOL.hash + 1).setValue(hashPassword_(password));
-  cache.removeAll(['reset_' + acc.username, tryKey, 'loginfail_' + acc.username, 'loginfail_' + acc.email]);
-  log_(acc.username, 'ตั้งรหัสผ่านใหม่', 'ผ่านรหัสยืนยันทางอีเมล');
-  return { ok: true };
+  let out;
+  try {
+    out = JSON.parse(res.getContentText('UTF-8'));
+  } catch (e) {
+    // ได้หน้า HTML แทน JSON: มักเป็นเพราะ Workspace ไม่ได้ Deploy แบบ Who has access: Anyone
+    throw new Error(msg_(lang, 'workspaceDown', { err: 'HTTP ' + res.getResponseCode() }));
+  }
+  if (!out || !out.ok) {
+    const err = out && out.error;
+    if (err === 'session_expired') throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
+    throw new Error(err || msg_(lang, 'workspaceDown', { err: '?' }));
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -360,9 +298,17 @@ function resetPassword(form) {
 function getInitData(token, lang) {
   ensureSetup_();
   const acc = requireUser_(token, lang);
+  // ตรวจกับ Workspace ทุกครั้งที่เปิดหน้า: บัญชีที่ถูกระงับหรือ session ที่ถูกปิดจะต้องเข้าสู่ระบบใหม่
+  let user = member_(acc);
+  try {
+    user = member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user);
+  } catch (e) {
+    if (String(e.message).indexOf(AUTH_ERR) === 0) throw e;
+    console.warn('getInitData: ตรวจกับ Workspace ไม่ได้ ใช้ข้อมูลใน token แทน: ' + e.message);
+  }
   const settings = getSettings_();
   return {
-    user: publicUser_(acc),
+    user: user,
     doctors: getDoctors_(),
     techniques: TECHNIQUES,
     holidays: getHolidays_(),
@@ -370,8 +316,7 @@ function getInitData(token, lang) {
       maxCasesPerDay: maxCases_(settings),
       calendarName: calendarNameSafe_(lang)
     },
-    appointments: listAppointments_(),
-    pendingAccounts: acc.role === ROLE_ADMIN ? getAccounts_().filter(a => a.status === ACC_PENDING).length : 0
+    appointments: listAppointments_()
   };
 }
 
@@ -563,114 +508,18 @@ function updateAppointment(token, apptId, changes, lang) {
   }
 }
 
-/** (ผู้ดูแล) รายชื่อบัญชีทั้งหมด */
-function listAccounts(token, lang) {
-  requireAdmin_(token, lang);
-  return getAccounts_().map(publicUser_);
-}
-
-/** (ผู้ดูแล) เปลี่ยนสถานะ/บทบาท: changes = { status?: 'ใช้งาน'|'ระงับ', role?: 'admin'|'user' } */
-function updateAccount(token, username, changes, lang) {
-  const admin = requireAdmin_(token, lang);
-  const target = normUsername_(username);
-  if (target === admin.username) throw new Error(msg_(lang, 'cannotChangeSelf'));
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const acc = getAccounts_().find(a => a.username === target);
-    if (!acc) throw new Error(msg_(lang, 'userNotFound', { username: target }));
-    const sh = getSheet_(SHEET_ACCOUNTS);
-    const done = [];
-    if (changes && [ACC_ACTIVE, ACC_SUSPENDED].indexOf(changes.status) >= 0 && changes.status !== acc.status) {
-      sh.getRange(acc.row, ACOL.status + 1).setValue(changes.status);
-      done.push('สถานะ ' + acc.status + ' → ' + changes.status);
-    }
-    if (changes && [ROLE_ADMIN, ROLE_USER].indexOf(changes.role) >= 0 && changes.role !== acc.role) {
-      sh.getRange(acc.row, ACOL.role + 1).setValue(changes.role);
-      done.push('บทบาท ' + acc.role + ' → ' + changes.role);
-    }
-    SpreadsheetApp.flush();
-    if (done.length) log_(admin.username, 'แก้ไขบัญชี', target + ': ' + done.join(', '));
-    return getAccounts_().map(publicUser_);
-  } finally {
-    lock.releaseLock();
-  }
-}
-
 /* ------------------------------------------------------------------ */
-/*  บัญชี / รหัสผ่าน / token / log                                      */
+/*  token / log                                                        */
 /* ------------------------------------------------------------------ */
 
-function normUsername_(u) {
-  return String(u || '').trim().toLowerCase();
-}
-
-/** ตัดช่องว่างหัวท้าย/ช่องว่างซ้ำ และตัวอักษรที่อาจทำให้ชีตตีความเป็นสูตร */
-function cleanName_(v) {
-  return String(v || '').replace(/\s+/g, ' ').trim().replace(/^[=+\-@]+/, '');
-}
-
-function getAccounts_() {
-  const sh = getSheet_(SHEET_ACCOUNTS);
-  const last = sh.getLastRow();
-  if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, ACCOUNT_HEADERS.length).getDisplayValues()
-    .map((r, i) => ({
-      row: i + 2,
-      username: normUsername_(r[ACOL.username]),
-      email: String(r[ACOL.email]).trim().toLowerCase(),
-      hash: String(r[ACOL.hash]).trim(),
-      role: String(r[ACOL.role]).trim() === ROLE_ADMIN ? ROLE_ADMIN : ROLE_USER,
-      status: String(r[ACOL.status]).trim(),
-      createdAt: r[ACOL.createdAt],
-      lastLogin: r[ACOL.lastLogin],
-      firstName: String(r[ACOL.firstName] || '').trim(),
-      lastName: String(r[ACOL.lastName] || '').trim()
-    }))
-    .filter(a => a.username);
-}
-
-function publicUser_(a) {
-  return {
-    username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin,
-    firstName: a.firstName, lastName: a.lastName, fullName: (a.firstName + ' ' + a.lastName).trim()
-  };
-}
-
-/** ตรวจ token แล้วคืนบัญชี (ต้องสถานะ "ใช้งาน") */
+/** ตรวจ token แล้วคืนผู้ใช้ { username, fullName, role, isAdmin, wsToken } */
 function requireUser_(token, lang) {
-  const username = parseToken_(token);
-  if (!username) throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
-  const acc = getAccounts_().find(a => a.username === username);
-  if (!acc) throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
-  if (acc.status === ACC_PENDING) throw new Error(AUTH_ERR + msg_(lang, 'accountPending'));
-  if (acc.status !== ACC_ACTIVE) throw new Error(AUTH_ERR + msg_(lang, 'accountSuspended'));
-  return acc;
-}
-
-function requireAdmin_(token, lang) {
-  const acc = requireUser_(token, lang);
-  if (acc.role !== ROLE_ADMIN) throw new Error(msg_(lang, 'adminOnly'));
-  return acc;
+  const s = parseToken_(token);
+  if (!s) throw new Error(AUTH_ERR + msg_(lang, 'sessionExpired'));
+  return { username: s.u, fullName: s.n || s.u, role: s.r || '', email: '', isAdmin: !!s.a, wsToken: s.w || '' };
 }
 
 function bytesToB64_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ''); }
-
-/** hash รหัสผ่านแบบ salt + SHA-256 วนหลายรอบ เก็บเป็น v1$รอบ$salt$hash */
-function hashPassword_(password, iterations, salt) {
-  const iters = iterations || PW_ITERATIONS;
-  const s = salt || bytesToB64_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random()));
-  const pw = Utilities.newBlob(String(password)).getBytes();
-  let h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s + ':' + password, Utilities.Charset.UTF_8);
-  for (let i = 1; i < iters; i++) h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h.concat(pw));
-  return 'v1$' + iters + '$' + s + '$' + bytesToB64_(h);
-}
-
-function verifyPassword_(password, stored) {
-  const parts = String(stored || '').split('$');
-  if (parts.length !== 4 || parts[0] !== 'v1') return false;
-  return safeEqual_(hashPassword_(password, Number(parts[1]), parts[2]), stored);
-}
 
 function safeEqual_(a, b) {
   a = String(a); b = String(b);
@@ -690,40 +539,32 @@ function authSecret_() {
   return s;
 }
 
-function makeToken_(username, hours) {
-  const payload = username + '|' + (Date.now() + hours * 3600 * 1000);
-  const sig = bytesToB64_(Utilities.computeHmacSha256Signature(payload, authSecret_()));
-  return bytesToB64_(Utilities.newBlob(payload).getBytes()) + '.' + sig;
+/** token = base64(JSON ข้อมูลผู้ใช้ + session ของ Workspace + เวลาหมดอายุ) . ลายเซ็น HMAC */
+function makeToken_(user, wsToken, hours) {
+  const payload = JSON.stringify({
+    u: user.username, n: user.fullName, r: user.role, a: user.isAdmin ? 1 : 0,
+    w: String(wsToken || ''), e: Date.now() + hours * 3600 * 1000
+  });
+  return Utilities.base64EncodeWebSafe(payload, Utilities.Charset.UTF_8).replace(/=+$/, '') + '.' + sign_(payload);
 }
 
-/** คืนชื่อผู้ใช้จาก token ที่ถูกต้องและยังไม่หมดอายุ ไม่งั้นคืน '' */
+function sign_(payload) {
+  return bytesToB64_(Utilities.computeHmacSha256Signature(payload, authSecret_(), Utilities.Charset.UTF_8));
+}
+
+/** คืนข้อมูลใน token ที่ถูกต้องและยังไม่หมดอายุ ไม่งั้นคืน null (token รูปแบบเก่าก็คืน null → เข้าสู่ระบบใหม่) */
 function parseToken_(token) {
   try {
     const parts = String(token || '').split('.');
-    if (parts.length !== 2) return '';
-    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
-    const sig = bytesToB64_(Utilities.computeHmacSha256Signature(payload, authSecret_()));
-    if (!safeEqual_(sig, parts[1])) return '';
-    const i = payload.lastIndexOf('|');
-    if (Number(payload.slice(i + 1)) < Date.now()) return '';
-    return payload.slice(0, i);
+    if (parts.length !== 2) return null;
+    const b64 = parts[0] + '='.repeat((4 - parts[0].length % 4) % 4);
+    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(b64)).getDataAsString('UTF-8');
+    if (!safeEqual_(sign_(payload), parts[1])) return null;
+    const s = JSON.parse(payload);
+    if (!s || !s.u || !(Number(s.e) > Date.now())) return null;
+    return s;
   } catch (e) {
-    return '';
-  }
-}
-
-function notifyAdminsNewAccount_(accounts, username, email, fullName) {
-  const to = accounts.filter(a => a.role === ROLE_ADMIN && a.status === ACC_ACTIVE && a.email).map(a => a.email).join(',');
-  if (!to) return;
-  try {
-    MailApp.sendEmail({
-      to: to,
-      subject: '[นัดคิวใส่แร่] มีผู้สมัครใหม่รออนุมัติ: ' + fullName + ' (' + username + ')',
-      body: 'ผู้สมัครใหม่: ' + fullName + '\nชื่อผู้ใช้: ' + username + '\nอีเมล: ' + email +
-        '\nเข้าสู่ระบบแล้วไปที่แท็บ "ผู้ใช้" เพื่ออนุมัติหรือระงับ'
-    });
-  } catch (e) {
-    log_(username, 'แจ้งผู้ดูแลไม่สำเร็จ', e.message);
+    return null;
   }
 }
 
@@ -921,8 +762,8 @@ function parseHistory_(v) {
 
 /** ชื่อที่แสดงในประวัติ: "ชื่อ นามสกุล (username)" */
 function userLabel_(acc) {
-  const full = ((acc.firstName || '') + ' ' + (acc.lastName || '')).trim();
-  return full ? full + ' (' + acc.username + ')' : acc.username;
+  const full = String(acc.fullName || '').trim();
+  return full && full !== acc.username ? full + ' (' + acc.username + ')' : acc.username;
 }
 
 function cleanText_(v) {
@@ -1127,18 +968,6 @@ function ensureSetup_() {
   if (missing.length) {
     sh.getRange(sh.getLastRow() + 1, 1, missing.length, 3).setNumberFormat('@').setValues(missing);
     sh.autoResizeColumns(1, 3);
-  }
-
-  sh = ss.getSheetByName(SHEET_ACCOUNTS);
-  if (!sh) {
-    sh = ss.insertSheet(SHEET_ACCOUNTS);
-    sh.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS])
-      .setFontWeight('bold').setBackground('#ede7f6');
-    sh.setFrozenRows(1);
-    sh.getRange('A:B').setNumberFormat('@');
-  } else if (sh.getLastColumn() < ACCOUNT_HEADERS.length) {
-    // ชีต Accounts จากเวอร์ชันก่อน: เติมหัวคอลัมน์ ชื่อ / นามสกุล
-    sh.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
   }
 
   sh = ss.getSheetByName(SHEET_LOG);
