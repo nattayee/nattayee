@@ -2,7 +2,8 @@
 // 1) Google Apps Script (google.script.run) — เก็บใน Google Sheet
 // 2) API ของเซิร์ฟเวอร์ (server.mjs)
 // 3) ถ้าเรียกไม่ได้ เช่นวางบน static hosting จะเก็บในเบราว์เซอร์ (localStorage) — ข้อมูลไม่แชร์ระหว่างเครื่อง
-import { defaultSettings } from './schedule.js';
+import { defaultSettings, todayISO } from './schedule.js';
+import { demoHisPatient } from './his.js';
 
 const LS_KEY = 'rt-queue-db-v1';
 
@@ -41,6 +42,9 @@ class ServerStore {
   }
   async importAll(data) {
     return api('PUT', 'api/state', data);
+  }
+  async hisLookup(hn) {
+    return api('GET', `api/his?hn=${encodeURIComponent(hn)}`);
   }
 }
 
@@ -137,6 +141,9 @@ class GasStore {
   importAll(data) {
     return this.call('importAll', data);
   }
+  hisLookup(hn) {
+    return this.call('hisLookup', hn);
+  }
 }
 
 class LocalStore {
@@ -184,6 +191,11 @@ class LocalStore {
     this.db.settings = structuredClone(settings);
     this.write(this.db);
     return structuredClone(settings);
+  }
+  async hisLookup(hn) {
+    // ไฟล์ตัวอย่างใช้ข้อมูลสมมติ เพื่อให้เห็นการทำงานของปุ่ม
+    if (globalThis.RTQ_PREVIEW) return demoHisPatient(hn, todayISO());
+    throw new Error('โหมดออฟไลน์เชื่อมต่อระบบ HIS ไม่ได้');
   }
   async importAll(data) {
     this.db = structuredClone({ appointments: data.appointments, settings: data.settings || this.db.settings });

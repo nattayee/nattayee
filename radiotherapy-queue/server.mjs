@@ -7,12 +7,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, defaultSettings } from './public/js/schedule.js';
 import { composeName } from './public/js/icd.js';
+import { normalizeHisPatient } from './public/js/his.js';
+import { todayISO } from './public/js/schedule.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
+// เชื่อมต่อ HIS (ไม่บังคับ): เซิร์ฟเวอร์นี้มักติดตั้งในเครือข่ายโรงพยาบาล จึงเรียก API ของ HIS ภายในได้โดยตรง
+const HIS_API_URL = process.env.HIS_API_URL || '';
+const HIS_API_KEY = process.env.HIS_API_KEY || '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -181,6 +186,31 @@ async function handleApi(req, res, url) {
     db = { appointments, settings: body.settings ? validateSettings(body.settings) : db.settings };
     await saveDb();
     return send(res, 200, db);
+  }
+
+  if (resource === 'his' && req.method === 'GET') {
+    const hn = (url.searchParams.get('hn') || '').trim().slice(0, 30);
+    if (!hn) return send(res, 400, { errors: ['กรุณากรอก HN ก่อน'] });
+    if (!HIS_API_URL) return send(res, 501, { errors: ['ยังไม่ได้เชื่อมต่อระบบ HIS — ตั้งค่า HIS_API_URL (และ HIS_API_KEY) ตอนเริ่มเซิร์ฟเวอร์'] });
+    const target = `${HIS_API_URL}${HIS_API_URL.includes('?') ? '&' : '?'}hn=${encodeURIComponent(hn)}`;
+    let r;
+    try {
+      r = await fetch(target, { headers: HIS_API_KEY ? { 'X-API-Key': HIS_API_KEY } : {}, signal: AbortSignal.timeout(10000) });
+    } catch {
+      return send(res, 502, { errors: ['เชื่อมต่อระบบ HIS ไม่สำเร็จ กรุณาลองใหม่หรือติดต่อฝ่าย IT'] });
+    }
+    const body = await r.json().catch(() => null);
+    console.log(`[HIS] ${new Date().toISOString()} ค้น HN ${hn} → HTTP ${r.status}`);
+    if (r.status === 401 || r.status === 403)
+      return send(res, 502, { errors: [`HIS ไม่อนุญาต (HTTP ${r.status}) ตรวจสอบ HIS_API_KEY`] });
+    if (r.status === 404 || (body && body.ok === false && r.status < 500))
+      return send(res, 404, { errors: [(body && body.error) || `ไม่พบ HN ${hn} ในระบบ HIS`] });
+    if (!r.ok || !body) return send(res, 502, { errors: [`เชื่อมต่อระบบ HIS ไม่สำเร็จ (HTTP ${r.status})`] });
+    try {
+      return send(res, 200, normalizeHisPatient(body, hn, todayISO()));
+    } catch (err) {
+      return send(res, 502, { errors: [err.message] });
+    }
   }
 
   if (resource === 'settings' && req.method === 'PUT') {

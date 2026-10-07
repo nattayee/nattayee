@@ -7,7 +7,7 @@ import path from 'node:path';
 import { ROOT, loadSources, replaceOnce, stripModule, STYLE_LINK, SCRIPT_TAG } from './bundle.mjs';
 
 const HEADER = 'สร้างอัตโนมัติจาก public/ ด้วยคำสั่ง npm run build:gas — แก้ที่ไฟล์ต้นฉบับแล้วสร้างใหม่';
-const { html, css, schedule, icd, js } = await loadSources();
+const { html, css, schedule, icd, his, js } = await loadSources();
 const dir = path.join(ROOT, 'apps-script');
 
 let index = replaceOnce(html, '<head>\n', `<head>\n  <!-- ${HEADER} -->\n`);
@@ -20,7 +20,7 @@ const VERSION_RE = /^var APP_VERSION = '[^']*';$/m;
 const code = await readFile(codePath, 'utf8');
 if (!VERSION_RE.test(code)) throw new Error("Code.gs ต้องมีบรรทัด var APP_VERSION = '...';");
 const version = createHash('sha256')
-  .update(index).update(schedule).update(icd).update(code.replace(VERSION_RE, ''))
+  .update(index).update(schedule).update(icd).update(his).update(code.replace(VERSION_RE, ''))
   .digest('hex').slice(0, 8);
 index = replaceOnce(index, '</head>', `<script>window.RTQ_CLIENT_VERSION = '${version}';</script>\n</head>`);
 await writeFile(codePath, code.replace(VERSION_RE, `var APP_VERSION = '${version}';`));
@@ -28,7 +28,7 @@ console.log(`รุ่น ${version}`);
 
 const files = {
   'Index.html': index,
-  'Schedule.gs': `// ${HEADER}\n// ตรรกะคำนวณวันฉาย ค่าคงที่ และรายการรหัส ICD ใช้ร่วมกันกับหน้าเว็บ (public/js/schedule.js, public/js/icd.js)\n\n${stripModule(schedule)}\n${stripModule(icd)}`,
+  'Schedule.gs': `// ${HEADER}\n// ตรรกะคำนวณวันฉาย ค่าคงที่ และรายการรหัส ICD ใช้ร่วมกันกับหน้าเว็บ (public/js/schedule.js, icd.js, his.js)\n\n${stripModule(schedule)}\n${stripModule(icd)}\n${stripModule(his)}`,
 };
 for (const [name, content] of Object.entries(files)) {
   await writeFile(path.join(dir, name), content);

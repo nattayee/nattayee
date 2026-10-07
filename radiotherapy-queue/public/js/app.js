@@ -684,6 +684,7 @@ function openForm(appt = null, defaults = {}) {
   $('#icd-list').hidden = true;
   $('#site-custom').value = '';
   setSites(parseSites(a.site));
+  hisStatus('');
   fState = {
     room: a.room || 'L1',
     cbctDates: [...(a.cbctDates || [])],
@@ -758,6 +759,61 @@ function updatePreview() {
         .join('')}</ul>`;
   }
   return { a, ss, conflicts };
+}
+
+// ---------- ดึงข้อมูลผู้ป่วยจาก HIS ----------
+function hisStatus(text, kind = '') {
+  const el = $('#his-status');
+  el.textContent = text;
+  el.className = `muted ${kind}`;
+}
+
+async function fillFromHis() {
+  const hn = form.hn.value.trim();
+  if (!hn) {
+    hisStatus('กรุณากรอก HN ก่อน', 'err');
+    form.hn.focus();
+    return;
+  }
+  if (!state.store.hisLookup) return hisStatus('ระบบนี้ยังไม่รองรับการเชื่อมต่อ HIS', 'err');
+  const hasName = form.firstName.value.trim() || form.lastName.value.trim();
+  const btn = $('#btn-his');
+  btn.disabled = true;
+  hisStatus('กำลังค้นหาใน HIS…');
+  try {
+    const p = await state.store.hisLookup(hn);
+    const name = composeName(p.prefix, p.firstName, p.lastName);
+    if (hasName && !confirm(`แทนที่ข้อมูลผู้ป่วยในฟอร์มด้วยข้อมูลจาก HIS?\n${name} HN ${p.hn}`)) return hisStatus('');
+    const filled = [];
+    const set = (el, v) => {
+      if (v === '' || v == null) return;
+      el.value = v;
+      el.classList.remove('his-filled');
+      void el.offsetWidth; // เริ่ม animation ใหม่
+      el.classList.add('his-filled');
+      filled.push(el);
+    };
+    const known = NAME_PREFIXES.some((x) => x.id === p.prefix);
+    if (p.prefix) {
+      set(form.prefixSel, known ? p.prefix : 'other');
+      form.prefixOther.value = known ? '' : p.prefix;
+      $('#prefix-other-wrap').hidden = known;
+    }
+    set(form.firstName, p.firstName);
+    set(form.lastName, p.lastName);
+    set(form.age, p.age);
+    set(form.sex, p.sex || NAME_PREFIXES.find((x) => x.id === p.prefix)?.sex || '');
+    set(form.phone, p.phone);
+    const row = p.icd10 && ICD10.find((r) => r[0] === p.icd10);
+    if (row) set(form.diagnosis, `${row[0]} ${row[1]}`);
+    else if (p.icd10 || p.diagnosis) set(form.diagnosis, [p.icd10, p.diagnosis].filter(Boolean).join(' '));
+    hisStatus(`✓ ดึงข้อมูลจาก HIS แล้ว: ${name}${filled.length ? '' : ' (ไม่มีข้อมูลเพิ่มเติม)'} — ตรวจสอบก่อนบันทึก`, 'ok');
+    updatePreview();
+  } catch (err) {
+    hisStatus(err.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ---------- ตำแหน่งที่ฉาย (เลือกได้หลายตำแหน่ง) ----------
@@ -1177,6 +1233,13 @@ function bind() {
     if (b) setSites(sites.filter((s) => s !== b.dataset.siteRemove));
   });
   $('#site-add').addEventListener('click', addCustomSite);
+  $('#btn-his').addEventListener('click', fillFromHis);
+  form.hn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Enter ในช่อง HN = ดึงข้อมูลจาก HIS (ไม่ส่งฟอร์ม)
+      fillFromHis();
+    }
+  });
   $('#site-custom').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault(); // ไม่ให้ Enter ส่งฟอร์ม

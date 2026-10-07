@@ -8,7 +8,7 @@
  */
 
 // รุ่นของโค้ด (npm run build:gas ใส่ให้อัตโนมัติ) — ต้องตรงกับไฟล์ Index ไม่เช่นนั้นหน้าเว็บจะแจ้งเตือน
-var APP_VERSION = 'bd237f92';
+var APP_VERSION = '8bbfcda4';
 
 // (ไม่บังคับ) ถ้าต้องการใช้ Google Sheet ที่มีอยู่แล้ว ให้วางลิงก์ของ Sheet ไว้ในเครื่องหมายคำพูดก่อนรัน setup
 // ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
@@ -23,7 +23,13 @@ var ALLOWED_ROLES = [];
 var SESSION_HOURS_ = 6;      // ไม่ได้ใช้งานนานเกินนี้ต้องเข้าสู่ระบบใหม่ (นับใหม่ทุกครั้งที่ใช้งาน; CacheService เก็บได้สูงสุด 6 ชั่วโมง)
 var VERIFY_MINUTES_ = 15;    // ตรวจกับ Workspace ซ้ำทุก ๆ เท่านี้ (บัญชีที่ถูกระงับจะถูกออกจากระบบ)
 
+// ================= เชื่อมต่อระบบ HIS ของโรงพยาบาล (ปุ่ม “ดึงข้อมูลจาก HIS” ในฟอร์มนัด) =================
+// ลิงก์ API ที่ฝ่าย IT จัดทำ (รูปแบบอยู่ในคู่มือ apps-script/README.md หัวข้อ “เชื่อมต่อระบบ HIS”) — ว่าง = ยังไม่เชื่อมต่อ
+var HIS_API_URL = '';
+// API key ไม่เขียนในโค้ด: การตั้งค่าโปรเจกต์ › คุณสมบัติของสคริปต์ › เพิ่ม HIS_API_KEY
+
 var SHEET_APPTS_ = 'Appointments';
+var SHEET_HIS_LOG_ = 'HisLog';
 var SHEET_HOLIDAYS_ = 'Holidays';
 var SHEET_SETTINGS_ = 'Settings';
 
@@ -108,6 +114,43 @@ function ssoLogin(ticket) {
   var out = workspace_({ action: 'ssoRedeem', ticket: String(ticket || '') });
   if (!out.ok) throw new Error(out.error || 'เข้าสู่ระบบไม่สำเร็จ');
   return startSession_(out.token, out.user);
+}
+
+/** ดึงข้อมูลผู้ป่วยจาก HIS ตาม HN (บันทึกทุกครั้งในแผ่นงาน HisLog ว่าใครค้น HN ใด) */
+function hisLookup(token, hn) {
+  var me = requireSession_(token);
+  hn = str_(hn, 30);
+  if (!hn) throw new Error('กรุณากรอก HN ก่อน');
+  if (!HIS_API_URL) {
+    throw new Error('ยังไม่ได้เชื่อมต่อระบบ HIS — ผู้ดูแลระบบต้องใส่ลิงก์ API ของ HIS ที่ HIS_API_URL ใน Code.gs (ดูคู่มือหัวข้อ “เชื่อมต่อระบบ HIS”)');
+  }
+  var key = PropertiesService.getScriptProperties().getProperty('HIS_API_KEY') || '';
+  var url = HIS_API_URL + (HIS_API_URL.indexOf('?') >= 0 ? '&' : '?') + 'hn=' + encodeURIComponent(hn);
+  var res = UrlFetchApp.fetch(url, { method: 'get', headers: key ? { 'X-API-Key': key } : {}, muteHttpExceptions: true });
+  var code = res.getResponseCode();
+  var body = null;
+  try { body = JSON.parse(res.getContentText()); } catch (e) { body = null; }
+  var found = code === 200 && body && body.ok !== false;
+  logHis_(me, hn, found ? 'พบ' : 'ไม่พบ/ผิดพลาด (HTTP ' + code + ')');
+  if (code === 401 || code === 403) throw new Error('HIS ไม่อนุญาต (HTTP ' + code + ') ตรวจสอบ HIS_API_KEY');
+  if (code === 404 || (body && body.ok === false && code < 500)) throw new Error((body && body.error) || 'ไม่พบ HN ' + hn + ' ในระบบ HIS');
+  if (!found) throw new Error('เชื่อมต่อระบบ HIS ไม่สำเร็จ (HTTP ' + code + ') กรุณาลองใหม่หรือติดต่อฝ่าย IT');
+  return normalizeHisPatient(body, hn, Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'));
+}
+
+function logHis_(me, hn, result) {
+  var ss = spreadsheet_();
+  var sh = ss.getSheetByName(SHEET_HIS_LOG_);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_HIS_LOG_);
+    sh.getRange(1, 1, sh.getMaxRows(), 4).setNumberFormat('@');
+    sh.getRange(1, 1, 1, 4).setValues([['เวลา', 'ผู้ค้นหา', 'HN', 'ผล']]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  var row = sh.getLastRow() + 1;
+  sh.getRange(row, 1, 1, 4).setNumberFormat('@').setValues([[
+    Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'), me ? me.fullName + ' (' + me.username + ')' : '', hn, result,
+  ]]);
 }
 
 function logout(token) {

@@ -141,7 +141,7 @@ export function createWorkspace() {
   return ws;
 }
 
-export function createGas({ bound = true, workspace = null } = {}) {
+export function createGas({ bound = true, workspace = null, his = null } = {}) {
   const sheets = new Map();
   const ss = {
     getSheets: () => [...sheets.values()],
@@ -182,13 +182,26 @@ export function createGas({ bound = true, workspace = null } = {}) {
       }),
     },
     UrlFetchApp: {
-      fetch: (url, opts) => {
+      fetch: (url, opts = {}) => {
+        if (his && url.startsWith('https://his.test/')) {
+          // HIS จำลอง: his({ hn, apiKey }) → { code, body }
+          const u = new URL(url);
+          const r = his({ hn: u.searchParams.get('hn'), apiKey: opts.headers?.['X-API-Key'] || '' });
+          const text = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
+          return { getContentText: () => text, getResponseCode: () => r.code };
+        }
         if (!workspace) throw new Error('ไม่ได้ตั้งค่า Workspace จำลอง');
         const body = JSON.stringify(workspace.handle(JSON.parse(opts.payload)));
         return { getContentText: () => body, getResponseCode: () => 200 };
       },
     },
-    Utilities: { getUuid: () => randomUUID() },
+    Utilities: {
+      getUuid: () => randomUUID(),
+      formatDate: (d, tz, fmt) => {
+        const iso = new Date(d.getTime() + 7 * 3600e3).toISOString(); // Asia/Bangkok
+        return fmt === 'yyyy-MM-dd' ? iso.slice(0, 10) : `${iso.slice(0, 10)} ${iso.slice(11, 19)}`;
+      },
+    },
     Logger: { log() {} },
     HtmlService: {
       createHtmlOutputFromFile: (n) => ({ getContent: () => readFileSync(path.join(DIR, `${n}.html`), 'utf8') }),
