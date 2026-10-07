@@ -89,7 +89,10 @@ function tdfSubmit(token, rec) {
   var p = rec.patient || {};
   if (!TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
   if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
-  if (!p.hn || !p.first || !p.last || !rec.doctor) throw new Error('กรอก HN ชื่อ นามสกุล และแพทย์ผู้รักษาก่อนส่ง recheck');
+  var blank = function (v) { return !String(v || '').trim(); };
+  if (blank(p.hn) || blank(p.prefix) || blank(p.first) || blank(p.last) || blank(rec.doctor)) {
+    throw new Error('กรอก HN คำนำหน้าชื่อ ชื่อ นามสกุล และแพทย์ผู้รักษาให้ครบก่อนส่ง recheck');
+  }
   var json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
   if (json.length > 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
   return locked_(function () {
@@ -215,7 +218,7 @@ function findRecord_(sh, id) {
 }
 
 function patientName_(p) {
-  return (String(p.prefix || '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
+  return ((p.prefix && p.prefix !== '-' ? String(p.prefix) : '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
 }
 
 function locked_(fn) {

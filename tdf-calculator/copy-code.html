@@ -151,7 +151,10 @@ function tdfSubmit(token, rec) {
   var p = rec.patient || {};
   if (!TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
   if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
-  if (!p.hn || !p.first || !p.last || !rec.doctor) throw new Error('กรอก HN ชื่อ นามสกุล และแพทย์ผู้รักษาก่อนส่ง recheck');
+  var blank = function (v) { return !String(v || '').trim(); };
+  if (blank(p.hn) || blank(p.prefix) || blank(p.first) || blank(p.last) || blank(rec.doctor)) {
+    throw new Error('กรอก HN คำนำหน้าชื่อ ชื่อ นามสกุล และแพทย์ผู้รักษาให้ครบก่อนส่ง recheck');
+  }
   var json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
   if (json.length &gt; 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
   return locked_(function () {
@@ -277,7 +280,7 @@ function findRecord_(sh, id) {
 }
 
 function patientName_(p) {
-  return (String(p.prefix || '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
+  return ((p.prefix &amp;&amp; p.prefix !== '-' ? String(p.prefix) : '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
 }
 
 function locked_(fn) {
@@ -360,7 +363,7 @@ function session_(res) {
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
 }
 </textarea>
-    <div class="meta">300 บรรทัด · 15.1 KB</div>
+    <div class="meta">303 บรรทัด · 15.3 KB</div>
   </section>
   <section class="box">
     <div class="box-head">
@@ -554,6 +557,9 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .case-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.6fr); gap: 10px; }
 @media (max-width: 900px) { .case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .case-fields .f-doctor { grid-column: 1 / -1; } }
 .case-fields input[type="text"] { font-family: var(--font-body); }
+.req { color: var(--crit); font-weight: 600; }
+.req-note { font-size: .75rem; font-weight: 400; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+.case-fields [aria-invalid="true"] { border-color: var(--crit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--crit) 22%, transparent); }
 .case-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.08); }
@@ -713,7 +719,7 @@ body.locked .wrap { display: none; }
 
   &lt;section class="card case" aria-labelledby="case-title"&gt;
     &lt;div class="case-head"&gt;
-      &lt;h2 id="case-title"&gt;ผู้ป่วยและแพทย์ผู้รักษา&lt;/h2&gt;
+      &lt;h2 id="case-title"&gt;ผู้ป่วยและแพทย์ผู้รักษา &lt;span class="req-note"&gt;&lt;span class="req"&gt;*&lt;/span&gt; จำเป็นต้องกรอกทุกช่อง&lt;/span&gt;&lt;/h2&gt;
       &lt;div class="case-actions"&gt;
         &lt;button type="button" class="btn ghost" id="ptClear"&gt;ผู้ป่วยใหม่&lt;/button&gt;
         &lt;button type="button" class="btn" id="histOpen"&gt;รายการคำนวณ&lt;span class="count" id="histCount"&gt;0&lt;/span&gt;&lt;/button&gt;
@@ -722,12 +728,12 @@ body.locked .wrap { display: none; }
       &lt;/div&gt;
     &lt;/div&gt;
     &lt;div class="case-fields"&gt;
-      &lt;div class="field"&gt;&lt;label for="pt-hn"&gt;HN&lt;/label&gt;&lt;input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20"&gt;&lt;/div&gt;
-      &lt;div class="field"&gt;&lt;label for="pt-prefix"&gt;คำนำหน้าชื่อ&lt;/label&gt;
-        &lt;select id="pt-prefix"&gt;&lt;option value=""&gt;—&lt;/option&gt;&lt;option&gt;นาย&lt;/option&gt;&lt;option&gt;นาง&lt;/option&gt;&lt;option&gt;นางสาว&lt;/option&gt;&lt;option&gt;เด็กชาย&lt;/option&gt;&lt;option&gt;เด็กหญิง&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
-      &lt;div class="field"&gt;&lt;label for="pt-first"&gt;ชื่อ&lt;/label&gt;&lt;input id="pt-first" type="text" autocomplete="off" maxlength="60"&gt;&lt;/div&gt;
-      &lt;div class="field"&gt;&lt;label for="pt-last"&gt;นามสกุล&lt;/label&gt;&lt;input id="pt-last" type="text" autocomplete="off" maxlength="60"&gt;&lt;/div&gt;
-      &lt;div class="field f-doctor"&gt;&lt;label for="pt-doctor"&gt;แพทย์ผู้รักษา&lt;/label&gt;&lt;select id="pt-doctor"&gt;&lt;/select&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;&lt;label for="pt-hn"&gt;HN &lt;span class="req" aria-hidden="true"&gt;*&lt;/span&gt;&lt;/label&gt;&lt;input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20" required aria-required="true"&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;&lt;label for="pt-prefix"&gt;คำนำหน้าชื่อ &lt;span class="req" aria-hidden="true"&gt;*&lt;/span&gt;&lt;/label&gt;
+        &lt;select id="pt-prefix" required aria-required="true"&gt;&lt;option value=""&gt;— เลือก —&lt;/option&gt;&lt;option&gt;นาย&lt;/option&gt;&lt;option&gt;นาง&lt;/option&gt;&lt;option&gt;นางสาว&lt;/option&gt;&lt;option&gt;เด็กชาย&lt;/option&gt;&lt;option&gt;เด็กหญิง&lt;/option&gt;&lt;option&gt;พระภิกษุ&lt;/option&gt;&lt;option&gt;สามเณร&lt;/option&gt;&lt;option value="-"&gt;อื่น ๆ / ไม่มี&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;&lt;label for="pt-first"&gt;ชื่อ &lt;span class="req" aria-hidden="true"&gt;*&lt;/span&gt;&lt;/label&gt;&lt;input id="pt-first" type="text" autocomplete="off" maxlength="60" required aria-required="true"&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;&lt;label for="pt-last"&gt;นามสกุล &lt;span class="req" aria-hidden="true"&gt;*&lt;/span&gt;&lt;/label&gt;&lt;input id="pt-last" type="text" autocomplete="off" maxlength="60" required aria-required="true"&gt;&lt;/div&gt;
+      &lt;div class="field f-doctor"&gt;&lt;label for="pt-doctor"&gt;แพทย์ผู้รักษา &lt;span class="req" aria-hidden="true"&gt;*&lt;/span&gt;&lt;/label&gt;&lt;select id="pt-doctor" required aria-required="true"&gt;&lt;/select&gt;&lt;/div&gt;
     &lt;/div&gt;
   &lt;/section&gt;
 
@@ -1727,8 +1733,24 @@ body.locked .wrap { display: none; }
     sel.value = doctor || "";
   }
   // Thai style: the title is written straight onto the first name (นายสมชาย ใจดี)
-  const patientName = (p) =&gt; ((p.prefix || "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
-  $("ptClear").addEventListener("click", () =&gt; { setPatient({}, ""); $("pt-hn").focus(); });
+  const patientName = (p) =&gt; ((p.prefix &amp;&amp; p.prefix !== "-" ? p.prefix : "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
+  $("ptClear").addEventListener("click", () =&gt; { setPatient({}, ""); clearPatientErrors(); $("pt-hn").focus(); });
+
+  // Every patient field is required before sending for recheck or making a report.
+  const REQUIRED = [["pt-hn", "HN"], ["pt-prefix", "คำนำหน้าชื่อ"], ["pt-first", "ชื่อ"], ["pt-last", "นามสกุล"], ["pt-doctor", "แพทย์ผู้รักษา"]];
+  function clearPatientErrors() { REQUIRED.forEach(([id]) =&gt; $(id).removeAttribute("aria-invalid")); }
+  /** Marks empty required fields, focuses the first one and returns false when anything is missing. */
+  function checkPatient() {
+    const missing = REQUIRED.filter(([id]) =&gt; !$(id).value.trim());
+    REQUIRED.forEach(([id]) =&gt; {
+      if (missing.some(([m]) =&gt; m === id)) $(id).setAttribute("aria-invalid", "true"); else $(id).removeAttribute("aria-invalid");
+    });
+    if (!missing.length) return true;
+    toast("กรอกข้อมูลให้ครบ: " + missing.map(([, label]) =&gt; label).join(", "), 4000);
+    $(missing[0][0]).focus();
+    return false;
+  }
+  REQUIRED.forEach(([id]) =&gt; $(id).addEventListener("input", () =&gt; { if ($(id).value.trim()) $(id).removeAttribute("aria-invalid"); }));
 
   function toast(msg, ms = 2600) {
     const t = $("toast");
@@ -1863,8 +1885,7 @@ body.locked .wrap { display: none; }
   function submitForRecheck() {
     const snap = snapshot();
     if (!snap) return toast(notReady(), 4000);
-    const missing = [!snap.patient.hn &amp;&amp; "HN", !snap.patient.first &amp;&amp; "ชื่อ", !snap.patient.last &amp;&amp; "นามสกุล", !snap.doctor &amp;&amp; "แพทย์ผู้รักษา"].filter(Boolean);
-    if (missing.length) return toast("กรอก " + missing.join(", ") + " ก่อนส่ง recheck", 4000);
+    if (!checkPatient()) return;
     const sig = sigOf(snap);
     const dup = records.find((r) =&gt; r.sig === sig &amp;&amp; (r.status === "pending" || r.status === "approved"));
     if (dup) return toast(`รายการนี้ส่งไปแล้ว (${STATUS[dup.status][0]})`, 4000);
@@ -2055,6 +2076,7 @@ body.locked .wrap { display: none; }
     if (!rec) {
       const snap = snapshot();
       if (!snap) return toast(notReady(), 4000);
+      if (!checkPatient()) return;
       const sig = sigOf(snap);
       rec = records.find((r) =&gt; r.sig === sig &amp;&amp; r.status === "approved") || (backend.shared ? null : records.find((r) =&gt; r.sig === sig));
       if (!rec &amp;&amp; backend.shared) {
@@ -2256,7 +2278,7 @@ body.locked .wrap { display: none; }
 &lt;/body&gt;
 &lt;/html&gt;
 </textarea>
-    <div class="meta">1,889 บรรทัด · 125.2 KB</div>
+    <div class="meta">1,908 บรรทัด · 127.0 KB</div>
   </section>
 </main>
 <script>

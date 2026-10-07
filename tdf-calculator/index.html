@@ -185,6 +185,9 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .case-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.6fr); gap: 10px; }
 @media (max-width: 900px) { .case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .case-fields .f-doctor { grid-column: 1 / -1; } }
 .case-fields input[type="text"] { font-family: var(--font-body); }
+.req { color: var(--crit); font-weight: 600; }
+.req-note { font-size: .75rem; font-weight: 400; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+.case-fields [aria-invalid="true"] { border-color: var(--crit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--crit) 22%, transparent); }
 .case-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.08); }
@@ -302,7 +305,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 
   <section class="card case" aria-labelledby="case-title">
     <div class="case-head">
-      <h2 id="case-title">ผู้ป่วยและแพทย์ผู้รักษา</h2>
+      <h2 id="case-title">ผู้ป่วยและแพทย์ผู้รักษา <span class="req-note"><span class="req">*</span> จำเป็นต้องกรอกทุกช่อง</span></h2>
       <div class="case-actions">
         <button type="button" class="btn ghost" id="ptClear">ผู้ป่วยใหม่</button>
         <button type="button" class="btn" id="histOpen">รายการคำนวณ<span class="count" id="histCount">0</span></button>
@@ -311,12 +314,12 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       </div>
     </div>
     <div class="case-fields">
-      <div class="field"><label for="pt-hn">HN</label><input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20"></div>
-      <div class="field"><label for="pt-prefix">คำนำหน้าชื่อ</label>
-        <select id="pt-prefix"><option value="">—</option><option>นาย</option><option>นาง</option><option>นางสาว</option><option>เด็กชาย</option><option>เด็กหญิง</option></select></div>
-      <div class="field"><label for="pt-first">ชื่อ</label><input id="pt-first" type="text" autocomplete="off" maxlength="60"></div>
-      <div class="field"><label for="pt-last">นามสกุล</label><input id="pt-last" type="text" autocomplete="off" maxlength="60"></div>
-      <div class="field f-doctor"><label for="pt-doctor">แพทย์ผู้รักษา</label><select id="pt-doctor"></select></div>
+      <div class="field"><label for="pt-hn">HN <span class="req" aria-hidden="true">*</span></label><input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20" required aria-required="true"></div>
+      <div class="field"><label for="pt-prefix">คำนำหน้าชื่อ <span class="req" aria-hidden="true">*</span></label>
+        <select id="pt-prefix" required aria-required="true"><option value="">— เลือก —</option><option>นาย</option><option>นาง</option><option>นางสาว</option><option>เด็กชาย</option><option>เด็กหญิง</option><option>พระภิกษุ</option><option>สามเณร</option><option value="-">อื่น ๆ / ไม่มี</option></select></div>
+      <div class="field"><label for="pt-first">ชื่อ <span class="req" aria-hidden="true">*</span></label><input id="pt-first" type="text" autocomplete="off" maxlength="60" required aria-required="true"></div>
+      <div class="field"><label for="pt-last">นามสกุล <span class="req" aria-hidden="true">*</span></label><input id="pt-last" type="text" autocomplete="off" maxlength="60" required aria-required="true"></div>
+      <div class="field f-doctor"><label for="pt-doctor">แพทย์ผู้รักษา <span class="req" aria-hidden="true">*</span></label><select id="pt-doctor" required aria-required="true"></select></div>
     </div>
   </section>
 
@@ -1086,8 +1089,24 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     sel.value = doctor || "";
   }
   // Thai style: the title is written straight onto the first name (นายสมชาย ใจดี)
-  const patientName = (p) => ((p.prefix || "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
-  $("ptClear").addEventListener("click", () => { setPatient({}, ""); $("pt-hn").focus(); });
+  const patientName = (p) => ((p.prefix && p.prefix !== "-" ? p.prefix : "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
+  $("ptClear").addEventListener("click", () => { setPatient({}, ""); clearPatientErrors(); $("pt-hn").focus(); });
+
+  // Every patient field is required before sending for recheck or making a report.
+  const REQUIRED = [["pt-hn", "HN"], ["pt-prefix", "คำนำหน้าชื่อ"], ["pt-first", "ชื่อ"], ["pt-last", "นามสกุล"], ["pt-doctor", "แพทย์ผู้รักษา"]];
+  function clearPatientErrors() { REQUIRED.forEach(([id]) => $(id).removeAttribute("aria-invalid")); }
+  /** Marks empty required fields, focuses the first one and returns false when anything is missing. */
+  function checkPatient() {
+    const missing = REQUIRED.filter(([id]) => !$(id).value.trim());
+    REQUIRED.forEach(([id]) => {
+      if (missing.some(([m]) => m === id)) $(id).setAttribute("aria-invalid", "true"); else $(id).removeAttribute("aria-invalid");
+    });
+    if (!missing.length) return true;
+    toast("กรอกข้อมูลให้ครบ: " + missing.map(([, label]) => label).join(", "), 4000);
+    $(missing[0][0]).focus();
+    return false;
+  }
+  REQUIRED.forEach(([id]) => $(id).addEventListener("input", () => { if ($(id).value.trim()) $(id).removeAttribute("aria-invalid"); }));
 
   function toast(msg, ms = 2600) {
     const t = $("toast");
@@ -1222,8 +1241,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   function submitForRecheck() {
     const snap = snapshot();
     if (!snap) return toast(notReady(), 4000);
-    const missing = [!snap.patient.hn && "HN", !snap.patient.first && "ชื่อ", !snap.patient.last && "นามสกุล", !snap.doctor && "แพทย์ผู้รักษา"].filter(Boolean);
-    if (missing.length) return toast("กรอก " + missing.join(", ") + " ก่อนส่ง recheck", 4000);
+    if (!checkPatient()) return;
     const sig = sigOf(snap);
     const dup = records.find((r) => r.sig === sig && (r.status === "pending" || r.status === "approved"));
     if (dup) return toast(`รายการนี้ส่งไปแล้ว (${STATUS[dup.status][0]})`, 4000);
@@ -1414,6 +1432,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     if (!rec) {
       const snap = snapshot();
       if (!snap) return toast(notReady(), 4000);
+      if (!checkPatient()) return;
       const sig = sigOf(snap);
       rec = records.find((r) => r.sig === sig && r.status === "approved") || (backend.shared ? null : records.find((r) => r.sig === sig));
       if (!rec && backend.shared) {
