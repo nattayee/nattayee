@@ -90,6 +90,8 @@
 
     menus: function () { return '<section class="section" id="menusRoot"></section>'; },
 
+    calendars: function () { return '<section class="section cal" id="calRoot" aria-label="ปฏิทิน"></section>'; },
+
     team: function () { return '<section class="section team-wrap" id="teamRoot" aria-label="สถานะทีม"></section>'; },
 
     statusSettings: function () { return '<section class="section" id="statusSettingsRoot"></section>'; },
@@ -372,6 +374,8 @@
     if (accountRoot) Auth.mountAccount(accountRoot);
     var adminRoot = document.getElementById("adminRoot");
     if (adminRoot) Auth.mountAdmin(adminRoot);
+    var calRoot = document.getElementById("calRoot");
+    if (calRoot && window.Calendars) window.Calendars.mount(calRoot);
     var teamRoot = document.getElementById("teamRoot");
     if (teamRoot && window.Status) unmountTeam = window.Status.mountTeam(teamRoot);
     var stSet = document.getElementById("statusSettingsRoot");

@@ -14,7 +14,7 @@
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
  * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
- *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่)
+ *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะ สถานที่ และปฏิทินหน้าแรก)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -57,7 +57,7 @@ var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบ�
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, calendarsGet: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -764,6 +764,58 @@ function statusConfig_() {
 
 function markSeen_(username) {
   try { CacheService.getScriptCache().put('seen_' + username, String(Date.now()), ONLINE_SECONDS * 3); } catch (e) { /* cache full */ }
+}
+
+/* ---------------- ปฏิทินในหน้าแรก (แท็บ) ----------------
+ * รายการปฏิทิน/เว็บแอปที่ฝังไว้ใต้ Workspace (ชีต Config แถว "calendars") ผู้ดูแลระบบแก้ได้จากหน้าเว็บ
+ * เว็บแอป Apps Script จะฝังได้เมื่อแอปนั้นตั้ง setXFrameOptionsMode(ALLOWALL) และเปิดได้โดยไม่ต้องล็อกอิน Google
+ */
+var CALENDAR_DEFAULTS = [
+  { id: 'cal-1', label: 'ปฏิทิน 1', url: 'https://script.google.com/macros/s/AKfycbxupxMpE1FN85EA-ppw27LP-KZFEol3nYVwYZAA0Per9Gcw3hTFB8xB9dK4r9F4cEe5VA/exec', height: 720, sso: false },
+  { id: 'cal-2', label: 'ปฏิทิน 2', url: 'https://script.google.com/macros/s/AKfycbyUG8L4u-hF0Qzpvs4Q4EeMK4UogcN_aNS-nGrmhbr3EIlTnK3Uw5ialWzcTLj6vI7CiA/exec', height: 720, sso: false }
+];
+
+ACTIONS.calendarsGet = function (req) {
+  requireUser_(req.token);
+  var c = configGet_('calendars');
+  return { calendars: Array.isArray(c) ? c : JSON.parse(JSON.stringify(CALENDAR_DEFAULTS)) };
+};
+
+ACTIONS.calendarsSave = function (req) {
+  var admin = requireAdmin_(req.token);
+  var clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
+  var list = (req.calendars || []).filter(function (c) { return c && (clean(c.label, 40) || String(c.url || '').trim()); });
+  if (list.length > 10) throw new Error('ใส่ปฏิทินได้สูงสุด 10 รายการ');
+  var ids = {};
+  var out = list.map(function (c) {
+    var label = clean(c.label, 40), url = String(c.url || '').trim();
+    if (!label) throw new Error('ปฏิทินทุกรายการต้องมีชื่อ');
+    if (!/^https:\/\/[^\s<>"]+$/i.test(url) || url.length > 1000) throw new Error('ลิงก์ของ "' + label + '" ต้องขึ้นต้นด้วย https://');
+    if (c.sso && !APPS_SCRIPT_RE.test(url)) throw new Error('"' + label + '": เข้าสู่ระบบอัตโนมัติได้เฉพาะเว็บแอป Apps Script (https://script.google.com/macros/s/…/exec)');
+    var id = /^[a-z0-9-]{1,40}$/.test(String(c.id || '')) && !ids[c.id] ? String(c.id) : 'cal-' + Utilities.getUuid().replace(/-/g, '').slice(0, 6);
+    ids[id] = true;
+    var h = Math.round(Number(c.height) || 720);
+    return { id: id, label: label, url: url, height: Math.max(300, Math.min(1600, h)), sso: !!c.sso };
+  });
+  configPut_('calendars', out, admin.username);
+  return { calendars: out, message: 'บันทึกปฏิทินแล้ว' };
+};
+
+/** A JSON value kept in the Config sheet under a key, or null. */
+function configGet_(key) {
+  var rows = sheet_('Config', CONFIG_HEADERS).getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === key) { try { return JSON.parse(rows[i][1]); } catch (e) { return null; } }
+  }
+  return null;
+}
+
+function configPut_(key, value, by) {
+  var sh = sheet_('Config', CONFIG_HEADERS), rows = sh.getDataRange().getValues(), values = [key, JSON.stringify(value), new Date(), by || ''];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === key) { sh.getRange(i + 1, 1, 1, values.length).setValues([values]); return; }
+  }
+  sh.appendRow(values);
 }
 
 function settingsRow_(username) {
