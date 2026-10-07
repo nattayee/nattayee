@@ -1,0 +1,2141 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบนัดคิวผู้ป่วยใส่แร่</title>
+  <script>
+    // ตั้งโหมดสี/ภาษาที่เคยเลือกไว้ก่อนแสดงผล เพื่อไม่ให้หน้าจอกะพริบ
+    (function () {
+      try {
+        var th = localStorage.getItem('bq-theme');
+        if (th === 'light' || th === 'dark') document.documentElement.setAttribute('data-theme', th);
+        var lg = localStorage.getItem('bq-lang');
+        if (lg === 'en' || lg === 'th') document.documentElement.lang = lg;
+      } catch (e) { /* ไม่มี storage ก็ใช้ค่าเริ่มต้น */ }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f3fa;
+      --card: #ffffff;
+      --field: #ffffff;
+      --raise: #faf9fd;
+      --ink: #1f1b2e;
+      --muted: #6b6680;
+      --line: #e3dfee;
+      --accent: #6b3fa0;
+      --accent-ink: #ffffff;
+      --accent-soft: #efe8f8;
+      --accent-hover: rgba(107, 63, 160, .08);
+      --sel-ring: rgba(107, 63, 160, .25);
+      --header-bg: #6b3fa0;
+      --header-ink: #ffffff;
+      --tab-bg: rgba(255, 255, 255, .14);
+      --tab-on-bg: #ffffff;
+      --tab-on-ink: #6b3fa0;
+      --ok: #1e7f4f;
+      --ok-soft: #e3f4ea;
+      --warn: #a15c00;
+      --warn-soft: #fff3df;
+      --warn-line: #f0d3a0;
+      --on-warn: #ffffff;
+      --bad: #b3261e;
+      --bad-soft: #fdeceb;
+      --bad-line: #f3c1bd;
+      --on-bad: #ffffff;
+      --toast-bg: #1f1b2e;
+      --toast-ink: #ffffff;
+      --overlay: rgba(20, 15, 35, .45);
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #141120;
+        --card: #1e1a2c;
+        --field: #262137;
+        --raise: #231e33;
+        --ink: #ece8f6;
+        --muted: #a7a1bd;
+        --line: #363049;
+        --accent: #b794f0;
+        --accent-ink: #1a1228;
+        --accent-soft: #2f2647;
+        --accent-hover: rgba(183, 148, 240, .12);
+        --sel-ring: rgba(183, 148, 240, .35);
+        --header-bg: #2a2142;
+        --header-ink: #f3eefc;
+        --tab-bg: rgba(255, 255, 255, .08);
+        --tab-on-bg: #b794f0;
+        --tab-on-ink: #1a1228;
+        --ok: #6fd39e;
+        --ok-soft: #16332a;
+        --warn: #f2b55e;
+        --warn-soft: #3a2b14;
+        --warn-line: #6b4f22;
+        --on-warn: #2a1a05;
+        --bad: #ff8f86;
+        --bad-soft: #3e1d1c;
+        --bad-line: #6e3431;
+        --on-bad: #2a0d0b;
+        --toast-bg: #ece8f6;
+        --toast-ink: #1a1228;
+        --overlay: rgba(0, 0, 0, .6);
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #141120;
+      --card: #1e1a2c;
+      --field: #262137;
+      --raise: #231e33;
+      --ink: #ece8f6;
+      --muted: #a7a1bd;
+      --line: #363049;
+      --accent: #b794f0;
+      --accent-ink: #1a1228;
+      --accent-soft: #2f2647;
+      --accent-hover: rgba(183, 148, 240, .12);
+      --sel-ring: rgba(183, 148, 240, .35);
+      --header-bg: #2a2142;
+      --header-ink: #f3eefc;
+      --tab-bg: rgba(255, 255, 255, .08);
+      --tab-on-bg: #b794f0;
+      --tab-on-ink: #1a1228;
+      --ok: #6fd39e;
+      --ok-soft: #16332a;
+      --warn: #f2b55e;
+      --warn-soft: #3a2b14;
+      --warn-line: #6b4f22;
+      --on-warn: #2a1a05;
+      --bad: #ff8f86;
+      --bad-soft: #3e1d1c;
+      --bad-line: #6e3431;
+      --on-bad: #2a0d0b;
+      --toast-bg: #ece8f6;
+      --toast-ink: #1a1228;
+      --overlay: rgba(0, 0, 0, .6);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: 'Sarabun', system-ui, sans-serif; font-size: 15px; line-height: 1.5;
+      transition: background-color .2s, color .2s;
+    }
+    header {
+      background: var(--header-bg); color: var(--header-ink);
+      padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 8px 16px;
+      align-items: center; justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand .logo { width: 50px; height: 50px; flex: none; border-radius: 12px; background: #ffffff; padding: 3px; }
+    .brandtext { display: grid; gap: 2px; min-width: 0; }
+    .authlogo { display: block; width: 128px; height: auto; margin: 0 auto 10px; background: #ffffff; border-radius: 12px; padding: 8px; }
+    .authhead { text-align: center; }
+    header h1 { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: .01em; text-wrap: balance; }
+    header .org { font-size: 14px; font-weight: 500; opacity: .88; }
+    @media (max-width: 560px) { header h1 { font-size: 21px; } header .org { font-size: 13px; } .brand .logo { width: 42px; height: 42px; } }
+    header .cal { font-size: 13px; opacity: .85; }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+    main > *, .grid2 > *, #viewBook > *, #viewDash > *, #viewUsers > * { min-width: 0; }
+    .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+    @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; }
+    .row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    .req::after { content: ' *'; color: var(--bad); }
+    .field { margin-bottom: 12px; }
+    input, select, textarea, button { font: inherit; color: inherit; }
+    input[type=text], input[type=number], input[type=date], input[type=search], input[type=email], input[type=password], select, textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--field);
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    textarea { resize: vertical; min-height: 40px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      border: 1px solid var(--line); background: var(--field); border-radius: 999px; padding: 4px 12px;
+      cursor: pointer; font-size: 14px;
+    }
+    .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .days { display: flex; flex-wrap: wrap; gap: 6px; }
+    .days label {
+      margin: 0; display: inline-flex; align-items: center; justify-content: center; min-width: 44px;
+      padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; color: var(--ink);
+      font-size: 14px; background: var(--field);
+    }
+    .days input { display: none; }
+    .days label:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .radio { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+    .radio label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; margin: 0; }
+    .check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; }
+    .hint { font-size: 12px; color: var(--muted); }
+    .manual { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 6px; }
+    .manual .mrow { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 6px; align-items: center; }
+    .manual .mrow span { font-weight: 700; color: var(--accent); font-size: 14px; }
+    .manual .mrow input:invalid, .manual .mrow input.empty { border-color: var(--warn); }
+
+    .preview { display: grid; gap: 6px; max-height: 420px; overflow: auto; padding-right: 2px; }
+    .fx {
+      display: grid; gap: 8px; align-items: center;
+      grid-template-columns: 64px minmax(0, 220px) minmax(0, 1fr);
+      padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+    }
+    .fx .no { font-weight: 700; color: var(--accent); }
+    .fx .desc { font-size: 12px; color: var(--muted); }
+    .fx.warn { background: var(--warn-soft); border-color: var(--warn-line); }
+    .fx.warn .desc { color: var(--warn); }
+    @media (max-width: 560px) {
+      .fx { grid-template-columns: 52px 1fr; }
+      .fx .desc { grid-column: 1 / -1; }
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: 1px solid var(--line); background: var(--field); border-radius: 10px; padding: 8px 14px; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary {
+      background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+      font-weight: 700; font-size: 17px; padding: 12px 18px; width: 100%;
+    }
+    .btn.primary:hover { filter: brightness(1.08); }
+    .btn:disabled { opacity: .55; cursor: progress; }
+    .btn.sm { padding: 3px 10px; font-size: 13px; border-radius: 8px; }
+    .btn.danger { color: var(--bad); }
+    .btn.danger:hover { border-color: var(--bad); }
+    .btn.okb { color: var(--ok); }
+    .btn.okb:hover { border-color: var(--ok); }
+    .btn.warnb { background: var(--warn); color: var(--on-warn); border-color: var(--warn); }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .toolbar input[type=search] { max-width: 260px; }
+    .tablewrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--raise); position: sticky; top: 0; }
+    td.name { white-space: normal; min-width: 140px; }
+    tr.daysep td { background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; padding: 5px 8px; }
+    tr.cancel td:not(.act) { color: var(--muted); text-decoration: line-through; }
+    .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .tag.booked { background: var(--accent-soft); color: var(--accent); }
+    .tag.done { background: var(--ok-soft); color: var(--ok); }
+    .tag.cancel { background: var(--bad-soft); color: var(--bad); text-decoration: none; }
+    td.act .acts { display: flex; gap: 4px; }
+    .empty { text-align: center; color: var(--muted); padding: 24px; }
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+    .stats b { color: var(--ink); font-size: 16px; }
+    .badtext { color: var(--bad); }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(140%);
+      background: var(--toast-bg); color: var(--toast-ink); padding: 10px 18px; border-radius: 10px; transition: transform .25s, visibility .25s;
+      max-width: calc(100% - 32px); z-index: 20; white-space: pre-line; visibility: hidden;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); visibility: visible; }
+    .toast.err { background: var(--bad); color: var(--on-bad); }
+    .modal { position: fixed; inset: 0; background: var(--overlay); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+    .modal.show { display: flex; }
+    .modal .box { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; max-width: 520px; width: 100%; max-height: 92vh; overflow: auto; }
+    .modal .box.wide { max-width: 600px; }
+    .modal h3.plain { color: var(--ink); }
+    .typepick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .typepick input[type=text] { flex: 1 1 180px; width: auto; }
+    .techtag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; background: var(--raise); border: 1px solid var(--line); }
+    td.stcell { white-space: normal; min-width: 150px; }
+    .stline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .btn.xs { padding: 1px 8px; font-size: 12px; border-radius: 7px; }
+    .edited { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); text-decoration: underline; text-align: left; }
+    .histbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
+    .histbox h4 { margin: 0 0 6px; font-size: 14px; }
+    .histbox ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+    .histbox li { border-left: 3px solid var(--accent-soft); padding-left: 10px; }
+    .histbox li b { font-weight: 600; }
+    .histbox li ul { margin: 2px 0 0; padding-left: 16px; color: var(--muted); }
+    .histbox .ago { color: var(--muted); font-size: 12px; }
+    .modal h3 { margin: 0 0 8px; color: var(--warn); }
+    .modal ul { padding-left: 18px; margin: 8px 0 14px; font-size: 14px; }
+    .modal .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .banner { background: var(--warn-soft); color: var(--warn); padding: 6px 16px; font-size: 13px; text-align: center; }
+    .banner button { font: inherit; font-size: 12px; margin-left: 8px; border: 1px solid currentColor; background: none; color: inherit; border-radius: 6px; padding: 0 8px; cursor: pointer; }
+
+    /* header: แท็บ + ผู้ใช้ + ภาษา + โหมดสี */
+    .hleft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+    .hright { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+    .tabs { display: flex; gap: 4px; }
+    .tab {
+      border: 0; background: var(--tab-bg); color: var(--header-ink); padding: 6px 14px; border-radius: 8px;
+      cursor: pointer; font-weight: 600;
+    }
+    .tab.on { background: var(--tab-on-bg); color: var(--tab-on-ink); }
+    .who { font-size: 13px; text-align: right; opacity: .92; }
+    .who b { font-weight: 600; }
+    .tools { display: flex; align-items: center; gap: 6px; }
+    .seg { display: inline-flex; background: var(--tab-bg); border-radius: 8px; padding: 2px; }
+    .seg button {
+      border: 0; background: transparent; color: var(--header-ink); padding: 4px 10px; border-radius: 6px;
+      cursor: pointer; font-size: 13px; font-weight: 600; min-width: 40px;
+    }
+    .seg button[aria-pressed="true"] { background: var(--tab-on-bg); color: var(--tab-on-ink); }
+    .iconbtn {
+      border: 0; background: var(--tab-bg); color: var(--header-ink); width: 36px; height: 32px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .iconbtn svg { width: 18px; height: 18px; }
+    .iconbtn:hover, .seg button:hover { filter: brightness(1.15); }
+
+    /* แถบแจ้งเตือนเกินเคส */
+    .alertbar {
+      background: var(--bad-soft); border: 1px solid var(--bad-line); color: var(--bad); border-radius: var(--radius);
+      padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+    }
+    .alertbar b { margin-right: 4px; }
+    .alertbar button {
+      font: inherit; font-size: 13px; border: 1px solid var(--bad-line); background: var(--card); color: var(--bad);
+      border-radius: 999px; padding: 1px 10px; cursor: pointer;
+    }
+    .cap { font-size: 12px; font-weight: 600; }
+    .cap.over { color: var(--bad); }
+
+    /* ---------- แดชบอร์ด ---------- */
+    .kpis { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+    .kpi .k { font-size: 13px; color: var(--muted); }
+    .kpi .v { font-size: 28px; font-weight: 700; line-height: 1.2; }
+    .kpi .s { font-size: 12px; color: var(--muted); }
+    .kpi.bad { border-color: var(--bad-line); }
+    .kpi.bad .v { color: var(--bad); }
+    .monthnav { display: flex; align-items: center; gap: 8px; }
+    .monthnav h2 { margin: 0; min-width: 150px; text-align: center; }
+    .chartwrap { position: relative; }
+    .chartwrap svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .chartwrap .grid line { stroke: var(--line); stroke-width: 1; }
+    .chartwrap .axis text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+    .chartwrap .axis text.today { fill: var(--accent); font-weight: 700; }
+    .chartwrap .limit { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .chartwrap .limit-label { fill: var(--bad); font-size: 11px; font-weight: 600; font-family: inherit; }
+    .chartwrap .bar { fill: var(--accent); }
+    .chartwrap .bar.over { fill: var(--bad); }
+    .chartwrap .bar.past { opacity: .45; }
+    .chartwrap .hit { fill: transparent; cursor: pointer; }
+    .chartwrap .bar, .chartwrap .val, .chartwrap .limit, .chartwrap .limit-label { pointer-events: none; }
+    .chartwrap .hit:hover, .chartwrap .hit.sel { fill: var(--accent-hover); }
+    .chartwrap .val { fill: var(--ink); font-size: 11px; font-weight: 600; font-family: inherit; text-anchor: middle; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .legend .dash { width: 16px; height: 0; border-top: 2px dashed var(--bad); border-radius: 0; vertical-align: 3px; }
+    .tip {
+      position: absolute; pointer-events: none; background: var(--toast-bg); color: var(--toast-ink); border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; line-height: 1.45; max-width: 260px; z-index: 5; display: none;
+    }
+    .tip b { font-size: 13px; }
+
+    .calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+    .calgrid .dow { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; padding-bottom: 2px; }
+    .day {
+      border: 1px solid var(--line); border-radius: 10px; min-height: 108px; padding: 6px; background: var(--card);
+      display: flex; flex-direction: column; gap: 3px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+    }
+    .day:hover { border-color: var(--accent); }
+    .day.out { background: transparent; border-style: dashed; opacity: .45; cursor: default; }
+    .day.holiday { background: var(--raise); }
+    .day.today { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .day.sel { box-shadow: 0 0 0 3px var(--sel-ring); }
+    .day.over { background: var(--bad-soft); border-color: var(--bad-line); }
+    .day .top { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+    .day .num { font-weight: 700; font-size: 14px; }
+    .day .cnt { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 0 8px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+    .day.full .cnt { background: var(--warn-soft); color: var(--warn); }
+    .day.over .cnt { background: var(--bad); color: var(--on-bad); }
+    .day .hol { font-size: 11px; color: var(--muted); }
+    .day ul { list-style: none; margin: 0; padding: 0; font-size: 11.5px; line-height: 1.35; overflow: hidden; }
+    .day li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .day li.done { color: var(--ok); }
+    .day li.more { color: var(--muted); }
+    @media (max-width: 700px) {
+      .calgrid { grid-template-columns: 1fr; }
+      .calgrid .dow, .day.out, .day.empty { display: none; }
+      .day { min-height: 0; }
+      .day ul { font-size: 13px; }
+      .day li { white-space: normal; }
+    }
+    .daydetail h3 { margin: 0 0 8px; font-size: 16px; }
+    .docsum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    /* ---------- เข้าสู่ระบบ / สมัครสมาชิก ---------- */
+    .authwrap { display: flex; justify-content: center; padding-inline: 16px; padding-block: 40px 56px; }
+    .authcard {
+      width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 22px; display: grid; gap: 14px; align-content: start;
+    }
+    .authcard h2 { margin: 0; font-size: 24px; line-height: 1.25; text-wrap: balance; color: var(--accent); }
+    .authcard .authorg { margin: 2px 0 6px; font-size: 14px; font-weight: 600; color: var(--ink); }
+    .authcard p { margin: 4px 0 0; }
+    .authtabs { display: flex; gap: 4px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+    .authtabs button { flex: 1; border: 0; background: transparent; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--muted); }
+    .authtabs button[aria-selected="true"] { background: var(--card); color: var(--accent); }
+    .authcard form { display: grid; gap: 12px; }
+    .authcard .field { margin: 0; }
+    .authmsg { font-size: 14px; padding: 8px 12px; border-radius: 8px; }
+    .authmsg.err { background: var(--bad-soft); color: var(--bad); }
+    .authmsg.ok { background: var(--ok-soft); color: var(--ok); }
+    .linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; justify-self: start; }
+    .pwwrap { position: relative; }
+    .pwwrap input { padding-right: 70px; }
+    .pwwrap button {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: var(--raise);
+      color: var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+    }
+    .authfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .logout {
+      border: 0; background: var(--tab-bg); color: var(--header-ink); padding: 2px 10px; border-radius: 7px;
+      cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px;
+    }
+    .tab .badge { background: var(--bad); color: var(--on-bad); border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 4px; }
+    .tag.pending { background: var(--warn-soft); color: var(--warn); }
+    .tag.admin { background: var(--accent); color: var(--accent-ink); }
+    .docsum span { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="demoBanner" class="banner" hidden><span data-i18n="demo_banner"></span>
+    <button type="button" id="seedBtn" data-i18n="seed"></button><button type="button" id="clearBtn" data-i18n="clear"></button></div>
+  <header>
+    <div class="hleft">
+      <div class="brand">
+        <img class="logo" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAAwFBMVEX////+///+//7//v/+/v7+/f39/v79/v39/f38/v38/f38/fz7/fz7+/v2+Pbu8u/l7ejf6ODV4tnJ2s7C1Me4zr+tx7Sjwa2TuKCJsJZ1pIVimHVWkW1GiF82flMmdEUabj0VbTsUbTsUbDoTbTsTbDoTazkSbDoSazkRazkSazgRazgRazcQazgRajcQajgQajcQajYPajcSaTQNaDUPZjILZjEHZTAGZC4GYy0FYiwEYCkBYCoAYCkAXiYAWiAPiDnJAAAH6ElEQVR42rVaaXOqShAdCVcMCAguyL5dbjC+eIkSFGT5///qNagJCIO+0tcfUlZK+jDT3afP9IjQg0aS1GhEkQT6P4xkxtTlMzVmyGd7r5yzvCCKAs+Wn4mnuoc/k7miGaYdhpZpaMqcf6J/cM8tNOuYJ/swDIIw2if50Z2X/3+GUQTil2aWhp7j+etNEGzWvudYuYzGT/EPXsB95HjroG5uqjxlBQSFRB3cvwdX5mYqop8QXQJJu7TtPgi89BkAJPql5Fs3CP4nAHLAarmz7vL/lC0ih+DfDgIMwMNBJplfKtY/ADycpmOk4P0HTr58EIBBi/w31n/g5Q9W8giJu3CNBwi+REQ9AvDK6ImDd7+OTA5hGJtiTkZTZN8GLXsCUJaBdtcCoIcMujvXxOrdIDfDxviXOFtUNhNPlD4edS1AyfoWEKyiKRp1x26aHI4pWB7vTF1dii8IDRjimqGF93DT49/fGywuueXM9irzt9EhzSNDnp56SmMBcmL9dn5sc3eZDZGWeOdvbdZ/POfjkMW6xKIBXee4ya7I69ZazicmSUnEmVEzeL6zilNDekE/+wQA0qJhVw/hcwjKJ+zIOW+f6dNyeTgzDn7jgQRXxgyaH9+6guYkB5n9yQuyLBSW49hzzRh7v+Ffx70Mi6S8uz49P9cnOHZ5aQK8JTNcLxhDgeIIwE5NsYYwRIIsSyc6aALYuYLtNWPsCsoHD1YNgUbzotBPsWwA+JHJY1mmbwXA8XtL+M4OGk0/9+e2WAfY+LBBDL6J9JK8Exv8kPyu+RAaO3MNYPcqLgaYwu+hADtTL29HIWGXtQHKADB9OgRY8p8eBCdfnAMIQS6djRsAazdXSy2JF2qIbWbctb1DBEnyxOQTK1fGHFUDcLcAOew9GdBITd0+Hi63mKkUL2LMQj5F4wQA1fgl3fBf5mk/wHto8qhcgygpm8RQJLHsIcYeeDHKgU+YQX8Lg53dbfsAQDZLUPCiHhW5af4pilCbARdF6yQzpF93CAmqxtfftqmZWzIlb+aWLE5n4lw9moYhGIWtSxy6pw2XdNcC2NYttCZIjGPYfr2QEJIsUxeXklA+O7hH8BNcO492DTtCpaqFIZYALIu4U3McNs6VDNUX5qzBFuvQmgoNg73gtSKS9QJoH9xTJM206BkLMaBY4+A1Afh2QSLJKKJInrMddUUiXoYto0lcKcyStybAZMhQNSOqow07N3awU/O2gAM+iHaKiHA5xTRlcwnQoQJhU9RiruTxtJU7FeGkX8oEUZ2NjaQ4I3ZvAaAxoxRTCHSbPCsA+29mLTGLAKJ0Q+8mwEgphLldtPt7BbAOnDDXJt3UzaBZtPX7AUgWyUctKtR2Ap0BgncnMzHNBxpPfFlDNwD8Y6rnhblkBwQOAKgxiqXuNQBCFDl4AMhENc81icd2lZMS8z5wR6kxmlmJjQMgSE4rjMWS63y4BhCs3/AIgpGvvG4AqJXc5BbFhCRvAASbt0zCRZpVkr3z3gUAeRbZ3HzHo5sAwfoDp8OgfmZGHtmfHTGgkHQ0FYsjRjcBAi8CKuhkJoJG7NLMDl1ZREESFeYUodsAoEW07uNO2W7LYVPYVQd0OSfSNe4UBZKhf2xMX53gfrRIexHVuIxHg8aMqPoyO5iZoqUSXYvnmwCgRTiS7Bv4NU65P5lkIiliYXUEmswatrg6g/bLvTrECN6XEefl21D0VGfNSp0CtRRRXLND+1zOD+6YpJLgbKoYR6M666PpJQYEnLzCt1XNWooQtMhtxVG616IsOuiVwFmYyiWLXm/ptT+x/kLeFhy8Eqcrxy0BKAjkXEav5EWLtMXO1SaJuFStcbiZreA9/RKAJHhjqVya2YDgzF5N2zdb+PYvRfuK/SqAstJMjb9MqJlrLdI1JKT6Resy35524QQAX5+oKk+cEIjhlRZpy3IDO9+5jG/ezql9BiAIStGFy0NMqUX6xhfbT6FnCQxaHFeX0jkDkKykz3+eoZHcO0F6O/Yc3ar52fd49wQAZzS1rolImtUz+7NniCdho0zQDR1zWQE3k+vibTjgjRSPYENnY7EF1lj9GQBYUGqEDaJu4MdUJR1hAF4H4tffTQcAP2+GbYR4Pf/9/p9XAGeStJ7jAHDSqCxPjaoPP99klTTsroff2BjAkT5qkNf3CjreZQAHksz3/lMWvcIC3KuBnNg0rs63EzVO1u71SHKDrQMQEJvWsfCzblGjZ8NbzoByQ7d554Kf1DJIbrPMtnZsux7kk/CeU9VK09B33erWqCK7RMMMqQZMx9l/UzuAfrSm1CPwxEuaFWfZIdqu3sBWLq5pUkiM1v08rEKYrku/lAX8bKka5md8BItDC9MPgEWzvl612e4EksLePSJOEEsVMBV4/ME89W7PLro7+LguhgbozkFqk8L2Btc3pUfkkKIZhhnhvlSG4G/PBvn4AeO9FynzvhlbzwbdfRPUNyUEVfvCEA8CKNgk2tqJgZecdxqNVCyAnRqTxy6CziM2D7c/4H/08G1013yqkiFervNPuG/FAdhRqjCPvz9ui9xVZi1AbKHnAFwF+d35SCNlgpin/K6hvM+yvAupb9ae40f5lzpFz7hPPxdakSbh1i/vpVbbKMkPZjlqop/3ww+QV7r5FadplpY3a/KsnF6O0HONF2YLSVrMhKq7j6mnOifocS1bhmP6yb+KOfdxZgzWez97l/0L9YRirAsMc84AAAAASUVORK5CYII=">
+        <div class="brandtext">
+          <h1 data-i18n="app_title"></h1>
+          <div class="org" data-i18n="app_org"></div>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs" hidden>
+        <button type="button" class="tab on" data-view="book" data-i18n="tab_book"></button>
+        <button type="button" class="tab" data-view="dash" data-i18n="tab_dash"></button>
+        <button type="button" class="tab" data-view="users" id="tabUsers" hidden><span data-i18n="tab_users"></span><span class="badge" id="pendBadge" hidden></span></button>
+      </nav>
+    </div>
+    <div class="hright">
+      <div class="who" id="whoBox" hidden><span id="userEmail"></span><button type="button" class="logout" id="logoutBtn" data-i18n="logout"></button><br><span class="cal" id="calName"></span></div>
+      <div class="tools">
+        <div class="seg" role="group" id="langSeg" data-i18n-aria="lang_group">
+          <button type="button" data-lang="th" lang="th" aria-pressed="true">ไทย</button>
+          <button type="button" data-lang="en" lang="en" aria-pressed="false">EN</button>
+        </div>
+        <button type="button" class="iconbtn" id="themeBtn">
+          <svg id="icoMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg id="icoSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2.5M12 20v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M1.5 12H4M20 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- เข้าสู่ระบบ / สมัครสมาชิก / ลืมรหัสผ่าน -->
+  <div class="authwrap" id="viewAuth" hidden>
+    <section class="authcard" aria-labelledby="authTitle">
+      <div class="authhead">
+        <img class="authlogo" data-i18n-alt="logo_alt" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAFpCAMAAAARNuWYAAAAwFBMVEX///////7+//7//v/+/v/+/v7+/v3//f/9/v79/v39/vz9/f/9/f39/fz8/fz8/Pz7+/v5+/r5+fn19/bx8/Ls7ezk6ubi5OLY4tvW2NfG1crBycO+w8CytbOXtqCFo46IkYpZjWd7e3tzc3NZd18yd0khcEAabTsTbDoSazkQazgbajsQajgQajcQajYOajZbXlsWYioLaDMKYSkDZC0BXyYBXCEAVhY/Pz8rLisfHx8YGBgODg4FBQUCAgIAAAAxW2OFAAA4uElEQVR42u1dB3viuNPXOqfd8P592GAb9waYGEgoxgXS+P7f6p2RTS8B4g25JHqeuw1gq/w0mqbRiJCf8lN+yk95V+EorVQqlNLbW1r8yf2gsg+oiiDe7n79u1rl6Q8664XyYgX/rcmKqhk2FsvQVEVi8FHxB6/F0itWmmo5ru8HQeduMIyiaNAPgsD3XcfUCkC/PWAVRjqi5vidzjDOS1QU/HuSxMO7wHe0+renqqpIyB/VdoMsTZI4GvZCVrqs5H/3gMriJM3uXEv9zqRVEQhpWG6QpPHwvht2e/cPe8o9wNa9H8Zp0rFJ5ZuyKuRUhh9EsM7C3sObpRv2Mp9Uv6X0AxKRrfY4jaMwfBg+nFCG3djnvqPaBaxKsf0kie7C7sOppRu3uRvuG5KV5PiT5OEMpBCsKJDIN+PxHIzXDtK4dxZSjLI6jW/G4YFFa/4kBU51bulGdxrhv9MK/JfUnU7SOx8qBpb+ncCCFWi0k7jbG1wEVtf4RroDBbLK0rD7cFHpRZH5bcACsmr4aXQ3fLgYLOu7gFXhiIXc6lKsvhNYlEhuNgkv4lbfDSxKZC+Nwod3lG8DVhXYVTLsDn7AOsUW1IKLpeA3A0sgeicNHx7eC9bgG+hZPGCVhIP3gvUtlNIqMfrx5RrDtzJ3BEZXD+8v38DrwBM1SO4eSgErkL+2P4uSBsjBQUlgiV8arApRAKvhQzlg+fztV6YrWveScugKwEq+9O4OJxA37fYeygLL/cpgVYidDrslYfXQS50vrDlQovWjshbhw8N9Znxd/k5/SX5SEnNnu6xpg3zVbUMq/s9Ne6VBBcLw7utG0lSJnUXd8sAKQRh+ZW00uSuNYT0Mwsz9wmC5aXnMnYHlfFWWRYmVlMiwCgfN1xSGt1QJ4m6ZYIVJoHxRsEB1z8KHUsFKffFrLsMqMSZRqWB1exPnaxIWpaiOPpTLsvrGdYwdjqP0tsKvlcotpVxpRH5LzHHULXcVxkHjs1mGCCN9fyWSX6ragGBNfPEqLmWh0dAM03LWim0aWkORFiynWnkPlVHQ3XvlYnXfix2MRP3wcuMEwTBK0yRNliVNJw+dwHcdy2gwyKrvOC5zK5SsNqBhOL5O1F+tj4cZhjBdGzb9MI4BvmEfILMNJefTF9EXT5z0oeQCWhapfLww5ECqd/fOOzsAws5+pBGelqmRtVNI5+ijchCHJYOFjr8reEl54h62QwY5YmEvzZK+7+gyLkj+3AbsaFjyKuzFA5Vcg7Bqfvym0dYN74aTOBm0XQM4WOWcBUCJULaOBUZ06gvXMNqI2olOsHAHPVirsCQnbUdj5HJ6A8Y4Kn0VTuxrmDpVYk6ik90BsCjx8JoB03o683Kzu0HvzXJ/nkZ6DSOaA1E1Gd6fswLuJmnfN4G0TtIlKFEHk+iUcpZG6l7DLqS04idncd/BAERkMvAtiZwijygQ1vikcvpORjca6NeQhbidfj777XajJGsbtZOIS5ZOKTXj7mTrEdj7zRWULBbTcokSdA/Ma+LryL9LmjQjPBWsbjSxrmLqMP7evUx8D9O+K78NF3dKqZ4BFmjv9ascyhTBFLlQrg+7wLvGNi3FRDsHrOHEJFeJnqmiYH+HuzJO/UYZRtoZYIWJL3HXICzuF/Gz92zmdYdJYJfAuc4Aqwcc6yr+ZEpEP3ufWy6MJ5787tDOk8Ea3KVt6TobFbek0XmnRwAZfRvUHvoxYHWH6bXOzVVAv36vc3zQ7aaBeSLjqhblYrBQx7ql1wKrX4ITM0wip/ouRnIqWN24o15rn6JCGv0SHHPDMErd+gmMS7KLUrsMrEE3cchv8p8GC9Aapm7t7SmXgmwCJetLF4E1BLWhfrWd1bLAYozXe5u2BD++Hw4HcSBcAtYACPiKwSDlgQUKauq/mcCDotP0PrwQrPtuds0t+xLBArQy700NiG22wmL6fQlY8J5YqXwJsAZAW+5bCxHBQg/6zQVghXHnqhlCygSL2T7uG9qpezlYveHEvuohgcr7NfiNuY9gPPwpYJ2vZ90PU+e6B+YokYMSQzYGYTw+fl4yByvzzgcLEK5d93Ah9+uf93kddtEKlMNMnkPv2WBfnPGbYN19gqjICtuoKjUIwZcOhtxQ4mQXgTUIk0C9+qmm6uWe0gNsuJccPn6EsUcFWL/OAQs0dxCEVz8BViXWpNxAhBBN3eohOraAjs8GCyRCR/8EAaQ80TrlhrgAFG3pgL+mQswcrJ1w/6NgAf76ZzhZWAFxWHbYRnjQKKkQAxb9uWABb/8UWBHKlR7jMuhibOwBx6yZ9O6He9A8AlaYfhKsMJWjm5wVlHGSRHT3OzOBspIeUpZ9MlhgQ7UbnyXg/V/g8FGvXLB6UV/7VdkLlhZH3eEZYIVRCtb5ZzkJDf2/KzlEHcgh3XvUm1Z5LR4ysAShsrGpvBesYTdM+g79PKfGweDxyw4lBvE13lGLKJOQyl0cAlgGfrMe3LEPLNw3CgzymQ6dgA4fl8yzHgZ3oEn935pnIT94UJM1ewCKCvA0S29IHFkF9O4BqweQ+8rnOkVBOTMpO/D6IZyAJbfkWhwQ2Y1quX7Qn0Q4McNkMu4Ers2uC2A+nR2wwjDK2ib5dIkbpHH0F9BaaQccR2TbDyZpEkcP+XUBId64kCSdtqOy6MMtsDDmJB27Cvl8SYxu/LTsANkBbsMssbqxgjSBCQnvFrdSxMO7u27vPkqSsW+iHbEO1gDDc/q+dk7c6keVWzDYwtJJK4qKfRhK/zhZEoY9DLmJO0FegMx68FUYBX4HYaktwYIv47SDcXKfMRsIHosv/QQEaA+FSYM+rGE4GHSjDLiUoSpQGprt+mkaddH9pXU6rkQYWHhvRRRnQ1cHfeFzJjBi5+JLBytuCzlWCljqg4defGfLTCTW6yL+W9f8cdztRp12J07aKjHuhmEEjCwLkI992ow8YIT0yw/rj0DVojgTRsZ2v9p4VoreOrgI/QbjRhrY8ABQeBdmATEmaTzo+K6+UjU+J1j1M8O7T9rRh3UoLMG6y/AT5Tg/A+JJNeCUoFA0giyBj1ka2MTA02cqHnb53Jd4CHgU6Sz7cPB2wS0ckcNDAxMwBxGsKlqibta5izr5KSWe6G12o5XdIERuMPEpfPaMh5QqwVnGdHj3dulMgnouD70sHHZxg1SgzOW/ysjwmwiSVFtu5XOV/8J9aVXcSDiDH8HKOaWYuA5vWaT9EOSeRrjaJljF/zlmJNL/zEVp8jg+4xQzLJ0TSjuPZwSuNUnCh24SODyhm2AVFzn9twplG3onK5wm+d8/b5ZlNCNPzHECOlQ8CUxsJ0zfmV+U3l6da52umEbmL3reKtf9JL67GySp78bDMG1LovguihL5K5NWcvKWWGRSnp5Q1tCS3H4W3YXDZIK+P7+GobgXwyWDyla9otSsULl9MmnBMqTnzgUBhT2NwZ5BF7yvM93zsqXIETNwVXJNpyB/xonW88Fi5ovuBnEaPYDO5VrZ2Lely8ZLiZmkfVfjyTWSFRSaKXpqhn8NLMIDXKrtdqIHBCuNE1DbL9qKALD6YZyOXQMXM3clrqXexaddKnERWIXLxZ5EoM2DWhcO48S/JN8AgDUYht0oHfuWyC5GvApa9olHDy8EC7NvciaC5epBHIXdXhJo59cEetsw7j70wiiZ+OafK3kIqeidtjl9MVh4FjRCsIji9ONwcJeCXKTngzXA/ajhQ4inabXrsK4KUU+7AuA9YBnd6C51YUWyjFrDyfkZwxZg5XuwyR266q+gdtVgIZ6ibL0LrH58h1uwGBjWexgmzI9zMVgD5F0BsC7+GmzLTYd/Fyw9B6tSrdjp/bvByrcXMxQUH74UuduTUqi9FyxAqHpL/KR7f0m09hZYQF09dB5+/K4Zy+n7JlqXg8UTrT8BsCq3KHp7zPd8+06wMK1QPPFl8uHHEGHqx2+aPZeDlefcAMqSXfSfhql3/gneXbCA0Q/TjvnxaPHEGkf3fw8sOUh6sWO2U8QqvlDP2gHr4T5MJg734eZihTiTN6Lb3gEWxajMqDNIet2HMB0bF2nwe8DC86ExLMUPVlC5StVJu92/AlaFJ3+CNLyPohBkftIxLrMN94H1MOzep1eJlQcFojssHyyRgObegYF2Ma8UapOXqEcHwEI+j/CLH+02vXHTh27ZYHHA3Z0gAb29exdnYxb4QcoEi8WAf/iNh7Tyx02O2NQXgQVvOMEEeFV3GKeBe3mMzBGwBqBDfHhGfXoLxsjhHf1LwKrgNci4Ux+lke+8xy98BCxk88mH5+SESXdA1S4PLEr0IO1hOF/fw4DS6uUDOgYWnjkH2qrefDRaVv+QC+J8sCp4T1/I8taopGFr77HkjoLFgsE/nLY4HmjhwIbP2WBRlrYblVCDNNw+qFeVvwYW5jOwycdbPnjZelgKWOjGwsg1ldTcDI948X8NLORb44/P7VMldbxD/H7wbrCAA+IinNikTpwIY0T+HmUxtAYG+egMuTAip5/s6qcXgQWE1deoCMbU3waLHdXWPn5bkSeqn07C94J1S8xBFA5hddQQrED9m8sQaesuu8aJaoHUnXHSC9/Ls6R2eheipVuxJ8n6gYK/AhYLLf/z8dsYQAJaO4nD9R3F81UHEK3jJOwlYON8CFgYQ3aNhPEU723oJNHabvUFSmmVGJ0Et65sa/AhYIFyepV0d6Cgau4kDXvvMXcoEGg2vJukAcay0erfBgsPwCqVKwRycVVCjXYWD4vFeJEhXSEyqFggE9ld2e/gvieChWfPbirX2K0GzlW3ggnA9TC41EWDcTR+BOs5CQyrfrk8PBWsbhTb18nRifEXkh3AYgwvdv7hO4bf7ya+ibvu//5lsDDLiFy5UsgqjFW221kWdYcXB4YQUrMHiW9008C6dF/0VLAwZ4JP/u86YLEzlnXLHyTxxRsWRISRAmX1E/QN/G2wrpgAFvsJLQuaG1wOFk8RLMlox1Fil+5W3pdF6PZ60ZQU+DKnKu+QFAws0mjHmCqD/l2wuhgecNWjCO9qHFT5OwALQx0vddJRzhzGp+fZl698ev8dfk5MI5H6dUobQZzsJH/4zf95uyBxnno5yACTdf43Cq1URbrHv+zVfle0TrwdQVMluntS8U8/ONONe/J/4EgQ5St7nTWNIHE5AYNo+ltuLbAfsyxJ3y7npFboZs6nPRW7sVKriuk0NvNGU6K0E5fiSbHEFejGLgzPyZ3kLny7nHOQFIwrpfKJaYtjajMA5Xcm461sTsyz5eCB36y9I1NrpPTbSB/ur53d9DhUeMBSttxgksTMg7zR00qV+InrdFLEanvCq9RJh2Wnegljv/7rk5IWQgVq6ziNo2EYRltgAY9q+NEgTTrO7a4pDaKy9PRUDyHeoVz5nCsQj+gMsrjX7d6zewG2KEtxgjTt+I5M9jgEbogYxGWD9RCm7s0npCx0TejeOJ0sWPAWWMwBmAWuIR/I25DnMS19HQYK+XQZNWBZKe5dEofL8W6ChdG96cBR1MahbNWg2Edl8yw8smdyn420qkR0xlm0vhO0CVaFuOnEAeJxDnuVS7/2Pb+T9PMtQR1jinqbSs4aWJT7X5B1OM5Pj8lyJyl9HT5EY/lzYYWb12l36wjeBlgcdwtg1Tn3CFigrXbKTyL0cK2b2A7Zxw0/icL7HfV5fRnicR1Yhm5iHQ5EqFK/3MTYbA8xdj9Pfqmbah6qtsfW2GTwSjvtW+7E4g+CJRBjUnoSoW7clj5NmkVK7H4S3j+8ARaqDkHW70yOUBZhZ3pKz7h03csvttjVON7LlneVUtVP0q5tHD6SyWPe1PuywYL5+RRKPFjNbhrtP4q+A1aF3Br+wAq8Y2LVLV0gItP6DImmKFd1MU3dw0lg4WKwJ1aQHb7PkcMr07tlK/F+/RMwLUr/xeMYBznrzgUBPLUnhp36h3Xqv2DzhO+MRSnNx+dnh08K7wELLJpU0yd+7eDOOkfr7eSuZHHY1y/eAS9RbXfTXvfhDLD4qjXWnMzlKsd2gMaTUtWH7jCxru4BFIhz9AT6LlgUT3+C3nks+wXHYwhquevw+p54igc5w4dzwMLQkGTcPp4phFK0p4flYcUSY195+5Atl+EZYFFa99Cf9dZOLSWNTpneeADLv7kqWnnm3OHDGWD9Qv9Mw1Urwts0W6bVg1morqo7UFp7cy9mdxn6nT+Nsfp2th0wupNeybrDFcHiMeVH7+EssCgxOoYybryt89Bycxh3o4F2RUULxj1+c6HsUBZoWa7TOQEs0Erqfnm6aTeaXBEsSqQTsmXsLkM8+ts/BSzQWaV2aWiBonVFsCq37gniao/qUCHaieyjQuTSsvrf91L9amDBIuwPTzEzdsDiqHZqyBRQoV9SWv9rggXm20kuun1gAWVVT4y4RtrKyrrl+mrLkAn2y8ACTbbNneq1rODWWBn61hV5Fk8bnckpvHcvZRn+6Wbabe6F/S9LQ5ao/DTXyB7K0s6JiUVn4Th9t8OmG/fV64AF4z3Rl7nPkCZ/zvXw487RO50QLN7hOhr8n1O95HvBOvc8DQrF7a3uC3bwr2MbUqr1o1Opv4x7Z6uk5nTS3jsUVPQ6kKsceqqcbrWVAxYyGy0A4noYXA7WdbZ3qkQbn7r7gmBR4axs6If3Jjvpw8ViMUyv4inlRHK6gcuuSS6HnHmi+4OkG95fpmYd3QX/ezoW1zg9zqUbha5zUjHe5JRVQk1Yi73wfniBMOzr19i/58/zyg3j5JSSnZD8DxRU0QkSgOts3sU0h49XsyiR22fF5nVPKHep/88psgpYtOQWp2nPdJT6wj8frzlweJyr5LiNMw66AZNu2O00eeh1z1BT73uJy/26hubgln4IIkzaJ59zw/OOsulnKUtIeWJHetHE5vgrEJbaKTtS/X4YO+T0g9/s0h3dDaIkGd6FJx2m60ada5jR/yN2WvoRiLjTOEtUsZgSBQ+8ZPFJp566MZDuxweVVv9CXN6BG7rfUiQAL9vvZFk8fOgBB+seYaTAsq5gGN5yyrjsYOJeNL7kAARl96Iohut3JkkcR3hSiJ2u2746EORxODGvcCBFxHufyl2GwzC9cNrpbc6GGrbrB3fjJEnTBCBj9wXm5xLzP4dRAtPx8bKQ3nglH4AY4PXclx8WKYxKSVFNx/eD/mDPZYJJf+xew51MlNLvBe5dnAxjye8rC0Enq7rpOK67ujXQBWvL1DXhKmBhUsiSReF7CGtFYDxfrayUgxuBFwXhD7lmoW/Erl206+KUpQFx9JavYlnV96vCvqhew0fKkbLPbIVpUC9/KBzHfGRXvZSTsgsoylUbYuPTJxK4FCxjUC7Lulht+C+AZZcboB4mQeM/eIHtiSzLLRUs5uz9ooQFpV2qYYjH4vkvC5Ycxt1SF6HCfVWsOKKmJcamd6Ox/nnOl5bP362sPIfyAO2cypdlWDye0ykzjF/6uswdlEe3tND0ASbzJV8arPK8pOxKNf7rYsXd3LbLEobA3L+qmbPg73JQkrHTjTLnK69BlueiUw5ldXuZ+5XXIBOGelgKZXXZZgv3pcGq4qUdvZLoin7pRVhcLt4rwXrOMKfr18aKCMQqAawwSl2BfHWsSgEL7/Fyb74+VgjWe1M9DsM4ccgXtgjXeJY9eV8S0UGYjG3CfX26YjkckneB1cWbPr603r5OWc67KCsEMdj46Lt4r0dZsAwv5VlDMJ3HrvxN6OqdYIW9NDCvcyDkv6Y6dMM49VVS/TZYwQqyhpeANeyCcjWwb78TVpeaO8NwmAyAsxNKyHcCy+heAFaYpL7xzaAq0jye56LpdntRFtgSqXwzrFgMzRlgDQZhGMVxgJnfeUK+HVhi+4xlGN7F6biNUH07soLC/eb8EwNK77thL8nGvimTL+/mO8jh/SyO7rt4xOhALM0AcOr27qMkGQeujoyOI9+zUGL47UEax1EXo/O7u+wcvu5FcZKGbXbzQqVKyXcuDQMv00nSNI5621cH9SK8jWkc+A4iRfhvDhUrdcV0/YAhliRJzAqebkiTfoBAScyxQH+QIlwBQl0zLBadH2Bp+z4Lzm/kDpjKD1BL1kWrYuEYvqlLMitSfSEExOoPTe0QGF+tbhJQhRfgG+4HmyOLclF+UPopP+Wn/JSf8lN+yk/5KT/lp/yUn/JTfspP+Rvl6l68v9GBrbSoe1rgN0oJXXizst0H+K3yLiTogebfGCbll/634ufSpoOK9G9TzvEGBKF8QqVbze80IZi2bS2Kbesn1uxND6UtlO1lhfsfEQx72Vrexbq16gIU09TVGj54GC6BtEYHMm1TY9H+ev47utYv+EPZhUqxnNYMy8izNNw2kKdbaSwpqXnT2fMLK/Pn2fSkNJeUytP5/qwLlDRa08eXV6zv2dsT9UGpMmOtvT7PRja+QInUnD2+FH3A8vI4HTUtiRxM4stT9flFp3tjSqgzZQ08v4zEdf6D/Xpm/YLatY3OQzOaN32GlvH31/kcALPN0Xxf/2XvmfVxZounrVOe2M+vozo9RHaK94QNz6d7Du8KxGGNzR/tdSjU1iuDaTadTgE5/HPqyIdCbHjivLw2DzJ5pclAf/XW0YZnZQf69ewp28wMEHjE8Y8cXVVVq4W4PT/j+/wuMRDv5fX19Uk/maXVRvP5k3kkWsh5ZcXZeYTy0oz99Gyv/8YTYTqHSR3hdrWg280ZjnZ6oEcwuimgfeRssPfM2tg55Wm/ArlsLS5KDKht/uQt02JTa8Qmu7mnAV6wnucvQAf8abFSlOhIq03h0MzyojF/fUXSkrYfEYEoWUce9Q0WXSNNAGveImKNfa2P8ONs/4TwBDu8STibAyLwOjTyvPk+LzTmL6Ygbo3GeoSHZwZ0TkCJyIvIGHCy9oJFcrBOTQhKSQvn7VGl/KEHDLbSXl+3WSClwmj+BBQ+n6kbrYmUgTWipOiuPAIGMp/uuxgSnmm9IpSNA7NFBdoqZquxIeKI+gL4CXsGP9OJyK/eB9qE91tHwFJOAwt45RMCcXhmEayXZ6SfUX27KePp2Zti7zYXkbigrHxwVCT6E6LVpPvA0pEnvswPnQ8GRak1f8YuzkfrtL0HLKgLH3w0tiAEgngpAyzgrq8zRrnKAdKCHsynI5zZZ2u7zuZ8ZMzeBAsYFw8r6fV1quyr3ptPn5Bu6ofUUtKat2aI1muT8vQwWJRKjIJ3WDnPK7P56N1gUeSuThObsA+QFgPLfMKZbW0ol9Db6dzWH08AizExEEq7PB468PhkTF/ZVNCDYLkWSq3XlzVOsAsWE6svr7NdjiLCjIz2jO88sPDpx5r1hG9I+5kGgjVrNHFmHzfy7wBNvM4UfXYSWB6u4z3qHAxwPqU2/tqq7Vf2ECwPKsDpelwx+R2w4AugP9RChF0NSHqavRcsYNHYEaAuEM2HZhbBUlUU38B01isFvcEj5mlgObiOX83tJpCyQSeRHpG09iumBVjQUcbkl6JkD1gOrHWQzHtQgYkdkV0j8iywBOCuzyqqZmxmD4OlkxYjLW3VEVBmUTsyT6UsgGNX+eOJ+fKEHcDam3sZQQEW2hmvTMoUkO5h8Djn8wOmW105qLacSlnQyxbYEfLzK5sSehAsasLkI++kK+N0CpRGjNPAauGkj5RdA2EEj8GczaDy/erLAiyiPs6xC82CQrbBokRDsT5vnuHwOQcssGWeUMRRGBwqpkfAImIuz5aqjkisl2fQ/RhYW6S/DRZIo2nOTXY6qz2+6kzXQpXf23eiswALB/Y0z5m8sA8sPl/qm8bERjXvBcuZg00CRKIjS3pU9s1JARYq69CZhc0BymbrdSTQU8CitVxMPZq7qxCl1KrT+1bQAiz413tlTN5gQ9sFqznP9ZuNxUxra0V8D1jSCGYTERJxmbx4pHYQLF5ecISiGdAZUO86BhbNfXAEbBDAarmA1vqqzJg2wDwfLxuawQ5Y8Ie4zuR3GfwIwXrSz7ij6AywmN6gYt1gUj29MoOSHgILqQP68pLLTHSCvUzRr3GcsnK/gfeIg2xJ/I4stAtnhoi1g4F0ZBkyu33B5MHw3QKLIqPIOe+GeqNNR6NWUUYjaXM2TgeLIqtqMTbBdFM2s/xByqL1R1wFU0aJlDZmoMbSI2DBmHRd1S3bm6HDZubscRnxjLJzx9gj85XsMoIVWEjOSN5MlaI7YMkMrC1ZQxrN5ih3I81nLe9isHgK8qVojfEDmNk9emEBFtIS8lfgCeKCJugxsNDge8q9WfPnmbfn0CYl5tNTQQjCQRmzBtaSySMXPxEsrBt53cvrVH3HMkTuOoVG0ecvChqYLa9P5jGwGqggw1JBj700e0ET7ChlPY6m09lsOh017b3noKgItmVdEPJtB7S150+NPU6zFVjI5NHuQR8Mvw0Wv2cZFr4ClMWwiOoXg4XcFVj0mlGMSop4aBlSQgvNEvqJCilzy7zBs+qyosi1wtm72wH1EUa70YHX1o6MWQcL/TVNxrZmQKnb0rB1iMHXUe2Ze/RysATgqc9Nb1lawL9fn1RKD4Olo+3P+LYwemWmz1GwRkUP+Nre3Qr0ST+t2vdGjGR2nB8bYMFCwNWGTL5GT1IdCl8wiA97V4s7FSyKVbzOt8uup3oFFq0xmwc/6M/Pei5Gj6sOwuF9w0K2bZSVynkIrGLK5qjnbIPFzPGXPb52vnU+WFtbQcbTc6u5VlBNeX2Ud+V7ARa0ZSJ7nXvIjUeFZniKBr/f9U/sl9l6+03GWbal+zZYaE4+5n5/Zb5p7jRwbcxHu5uUl4C1vQ+Aag3dmrHdKldgUUGcMtKSlcd57iIowHoyzgaL8sJoHQMEAT1FT9YbYGFCE8bkn6zHl01DOheH6s7IzweL1o21zSxK1dmrTWprl6XyzNU9lbaYxgos7CZa3HPLeZ0uNsUvpSw0AZ7M9W12oYa63rxJyHGwaI31FGB52gAL1yFg8rJrYZ4NFm4PrklVdLrNZH7tytlch9k1RNfAgodGjLSmhSL/nmUIYg2W3AostCCZ6belmO6AVSjryO+2/FmFprWz9XE2WLQ2nUorNyMvzWAOa5vexClacC26zdyWYKEumm/hLkzed4Clz143dwJB0M32KKa7YBWaU747Jmwu5E0/0oVgAWG9tFZP10C5e95a3OiofmG+44NgEZK74F4W/bkYLHR45HbphpaMCGw5P/aAxaQTEtHWhgXPMyPjaVsvfROsxor1UIzKsZ7WnubRhzDaYmoC1WavuffsIFg0N3iXewLH9azDYDHKHm3vkFL9Kd+Vq70BFm7vvuxQFjxaZ4op8Hhh3ZoWD4LFLyhLqtdqtXq9jt5iaj/OH+XljKFAmTtbS5sWW78vKr85swhW8RUPBvQrEpawGF8OlkE3wOILPesgWMzP7Oxo6/WC6azvprN9Q29b+YJlgMEvW5usuc3DdllJoQlTvsbjuF6guW05z4u5YH1ypDXL22o9z1+ni4dhYBheYPGbijUvimy60BOxEgRQoYWhEDU2AIoq1vypWMDYmvWcL4f6WjAb8yIjZQnCfq+liKbWkyVuev35YhmhX23FXEWcQ6hqM2iNUgR2GywWSPSKpG+zOAsh74CNfo9Hc4/NpRa8b9pCW6aJXpwZbiivB3bURy+vO6SNISAvRZjHhpMDgF1uj+IWx/p+pcI0r9eRtPGK9VSEchwqyugVZfyu7of79K9P1mavnre7lDP52Q5lsXVvT18xbMfT8z6pzgiG/9jaueybN+zW0/xAMRYCTHWmLCJoZJtrpmXNtlu5qJs/j+zCIapYdvORxRQ1bVsqTLDXhXA3bG+28BV5tp5rqbJtj4p6XqYYaba7VaizoCDswLoGKlurDjQXsXO67U6Zt2fk2pvXdaOi9rJLLUD7ij1CEJ5YNNvsiUVoadv8E/QPb7QorY2CXyhLLxJ8yB/y5NW7Umv5KvzHAsQo0YrP7Dc2bp7q3oKMvNGyJiiOwKxttbX4lv1vd8sIGObyneb6nul6B1qFr8ZZdWm0FfOEKvK+e+6B2UiWN3p8RsPzFVaYrYssGGcb1lq9JtYOlGWnRQmfgSfrGz6LugTf4IN1sbaIbaP1okKhVpd2bEyQHovWBHh7+YpYfCtCC/uYlgDV5c2sd0CQlp2HX4r34BFBxGehqm3+TKmt7RMhjO4ldNLatqnJ9NDezk9Zw2vvhy24D5V9Dx18dd+XbzR2/NsDL57TgT0kesxQ5wVBFI5GllP+pxwtP6vuopVKBN0yrZ9yuOjimvwfPf2UY2UVBIZgzX/KsbJyDoNW6rR+yrHi1cmxg2I/5Yg29lOOlh+0LsRqAVkVDCoRszxW1lP+V9bNq9vK7e0q5xrlb+Ejf7uqAW009CFheA9/W4GnWYE/8C1afFHZn/ePy3+uMCfULY9NVVZX1heVb+Qtu4Ueo0bOUlNWsBWsYJHbjK7qK/5a9Od2vQN0fYCLB4/f0bK6luTSC0pW+ddOqeHMVtZsGW57B5jbUzn3V1VTQhTH930XvVKGve5Nd1dX4Yi6oWn6IjCxohm6phlGvpuKLj+ooe1iGmDTIBo+quUFX9M4wp7Hj3pD2BkkJbJh5A9jEKqOz+rwRr3onsq6Z9bWJZLmwlcaIU6DEAk6kjeo1lnlXNGcYWpc0Y1FfzStseYQdBeeao7UFl0wxCNY/TH8rN+G7gTjttPxlgPhiTtW6GKhSZY3zrJAJuyLquH446ztWoAmJTdmO+v7rAbfGTvEdINsPB6z7JsBvNWWiOUG4zE004Z/fFvadDWhg7GNb+DwK/hsNs7GXuFS1Pws8F0XKgdgqoU32M060N44cCcGniVsQuXjACtv2yp00XR9qA46qKtjrDgvffwucxcjrHJOttpakWzWbODZh8Hi6m6SueyoreKMs3RZFd7xmDjLa0souXUmUeIKi0sU5HZHIb9wTupumrnaDbSuOmmWOfCVEQ9Tp6FCaWhu5tfZdQTxwFYaKkxN1t52LN2Qup/GgVzMst5PoCO3jF1Bp9zGAjQ9748IdaoEprmdpQah+HYc+1pDM1wYrn0D60Fqx6kvwVtZ1wZSNYI0cmApmP4SLIDcT93K2rTZk2hikX8O84Oam06cxfLXgxVYPGdHSXt1oLRCxCAJ164t9tvYc0plP51YixrMcYZPSEGUaotG/ECAJ9Ug6eTBdM4kCRpbHakSN43dHIoKTFM6NvKwWTfLkDNwwOhEP+sYzL1qjAGjCjQo+ZnFvrEjeJs5loNkYhMO6otgLDWijxljEfxkyP6odxYj5Ilxhx1ZDRC72DisfHLQ89T9fcse4ATohb+kpH/9SS+yltggpfWjCDp3uwSLRUD6GSBYXZx+szJkdHInTg2ObbZXqzrMcJU0grSvcVVaofUgxpsMt8HKYn8BllKAdUvsFIYs3i46kAYqcnAnu1NRaglEGWNNPHGi2Bc5HoS5EycdDeuLGViWL/EgFCU/iWwq4Ka/d7OQFm4awtpZSIQK0dh8Hvb96eMYfl8AUrvx/WXvjcDpp/6acST3HT+NBoslxMC6JVYCy6d6uxDyNz6uHwbW8sCEJrG7SAEsRi2/3Sxq74KVxt4WZVVoA7qvLVYKQIJsAoqbTfL7suA1fwkWOvU5XutEsbkGlvubcSQEC76lVHNz93qF0wK3kwQyrSzB6hwDq0r8OPPJ/y1+r3JGe9Gzqt++6cQTnasswRrbWj+O24VIRLAo4w1A2NyyBgeneg0sTqmR/OLWNJ8WygFYwZZA3AdW9TfQfexLC1WjQjVgKjgaB9BGaoWvjC2wgIK7CW5MMLCqRJbJOlirUzmwwgPiJ8BBqieBBSMY4/26azu9dbu2iOAcWziT/hplgaCzxlHqC0x3RLCA/npx3yC/V+taNTfAqty4Kny7AovSGz9N/BMoq8oBB47WZYzUZquSmFk3becBzXw9p7kFWBxQVmQsKGs50SuwVpt5AchtGGD9hjsFLJHYcdzdewEc4D6u4zW+k8ZKuI4dmNSkhyycy8Hice6BSVa2OCGCVTB42V+BpVVwCejwo7WPZy3jWXKwRKJ2Nob4G/jjsA2iB0RnmAa2sDztk/MssByqwOqTQDkG1gIae6wAYHFmFlP9JlhuFHcaW0e0Cr0qgBV/4ybJQvwxsEhV8LNuxg70IlgV6FMMfVsDC/qbg2VIiqw0DD9qLMFSmMIWAHlUd6VhFrmcgBZH9R+pAMuIomjt8DA+dB/gLWyKn/biyNcLcycHi8l8NYgT54a+SVkc8VGeOFni35yyDIEbuZOtoS4Jyx438GR3J2kXv+dg4RJJ8Mp1DsGqgaoCvdyO62Rg9Tp9LGm6BCvp27bjBukE6H/bUEEcwo7fZsX3w5iBZafDyNwAK33AtQxcyh1HQ3Z/3e0SLLkuNaxOOnYF7k2wKr/0iU6ZtsAGcwpYHoAl7TsuVAHca9WqyNrgV2BRns0dIMzA4qo+TPBesGKHufedIF6AFXc7nQwWm1HdJ2rcrBc4blGCJVhjYzWXDKw7jQXUE8NP4m6WjxTBigJQ6TtZx2WX2r0FFmg8AcdXqzfAKp1cgryxDMGggQUu71IWT7RxznLMMAH9u7ICCwPmJsPU/1+xDKHLvryXZxXHObRgjWfV3Enk77vNkPEsd/HpT7EMzUm0RVmwDHNKr5Ka00nuQPFaSkMHitGg7Pk3wOKJ0snDSQCgosY3eZYTx319t+/AzDI/L8AacgmwAAsWp5OFwOSZ6sDtW8gFz6qK1aoAVYG9R9kyBGVRbieJz+96C3KlVKyLUGqiUoClgYBZDZFDBn/frt4UbxDVT+9AXN8WYC2rehssZFbFAO8WTeyAtenOAsE/HmY7UVswtkanqMpvR5kv/uZWYGGtPtg9RrNNhCqxJqA6cPw+sNjDHNXklZ4FJjP84u9m4NqnOgjMYNxSHSYu4aXcXKiQP27azdh5FwSrVqn+XvjLjoMFn4PAY+Pz/G4aiPjWG5QFBmcHsPjz74buxVrqLOI6GtkwM1AxXYGFJlkStwOwDXnQAdEGoxuckNvU4EGvr9NCz6rh0kodUj0BrGoVBRBoBAt7hNMGPZD0xLYWZ8PUPt6pLK70rLX6joDFc1a6sE6lMZKWsAsWleVdgd1ZO0XGHrz9VQ9ArLLC3/hJbqevwCKMPu5A9Qdb6NZLJoG0WcMmWEB2DowQbEMUZBVscmCQW7JPz9o0d6rofgjWsg2AkhyArmC384tWuMo/fhZdANYv4CE1kY2vRvwJqNmw5LbAgtasrV6KyKD5/IAt5f8lvKMwvcHgqoW5aSZRpwGTCw32F8HVVWKOQwYWB5wSzeL8+kvKgxHsLDT4PMS/UgOcjCVYHK1Dk53tY36bYC0Mab7qJMnCkMavYyYcG2MTBDGAJQITm5ioazGldA0s/hhYlBjp4tAPhzZUB91aBVgV7HUFJkrbdo1w8FUauXV2kBq63/C9Oq1V2oFYXLtEeaWdAN8QuaoIYNUKZgPG+4SBhQ33k4nDk3+hBmC9ehssMpFp8PT3zQ0yY6kd1Cui2gHJJeKAGqB7gGm3HiFKayKCVa0j5NWcwbPz3Ddehqy+VhXrBFRk6MktjBw1BgzL4hpBFtRA5ogAlltbhaTSmuDCHC6iUHlR8tOhLdaKH3/7Y3kRUlOR/DhxOZFWxdxFg0465D+Bv6t9au0s83M9oeEG7h/UF7L159ykFzDjUx67a5tCbg4W6ChmAFJfLZy9AXOOKQOQADmsiuFnLmCm3kV9vfAjpWBg/tnqiZtEy1YVJgWZG0t2ES3WvJtNnPw8e4COrdz9MM4PiIKetTU2H/SbNfYcIGUtijEJ1oNQk16HAaANhkNbrpFKTVHtgHkxt1UqGd2pqNEFnbaFktAdZ2PXEArPtNvJJllgK7oDj3lWI68B5QmoDhxDS3X72Zg5pgMfOFVVg0cn6ENut4OgD7VZRHfABgaN0agxHpalWdttrJyyDdtPofgOaiEGPpv2XVPCn6p2MG67lgMKp28Wmx3+GL8DayD3BsqWO4HafWfpb9SK+lisHxCEAyZW2nEtCTc05HyAtcJd7+AAOw4b4CSddNAX3hlnWd/Yc0obY7ldGFXbNW5JBfRR17Edx8yXtGg58Ak+N0z8w1n2B7czuNwzgxqP7QIwUAPqaFWjeKcoti0DAA57H1Mf0t/Ewr/VNR+8jY/BI2iTm2vPsnR9FtNhcHiFmeqYiuHCVwxcDqAu3l6CZTjFNwZz2+hFhzAoGLgsq92s5aS76Ky62Wt7I9x43fJdxcadvo9Eyf+WoeyVdU594o7Sye0wLTCPEBWWwbTsO/5gexdsh536SqGq/iri7Dm6FWNZfN7aov21ocYWJiW3d6N7o5o9VS3f2G4y/3S70UjexbylxVPcgSDK3UEsPh0a4Fshmz/lp/yUn/JTfspP+fDyXxbKH6pR/LcVGPrhjam73si9J30+JVwYo/ZhRVHU1t7Mhp+NgvYkFKTUG9nedMR/BIXxxJ55trt9XBUDyawtq5UaaPVej7gEr7mbbYpITU+vK7b8AR2jVHhs6aY12qIszBAx97YSapsvTcJfCSyeGCNv384FL+hTZ0F6dJ1dULr1YXGLyMav+f+WfuuNdzcPLWKe09nIMrzHHKzlryJmhbHJMnKB5omPET66fGpPprbNP+iBL+kuKyx6t3pw64saaT3rBw69zjARGH3/Kn9bYtT1Bv5v9xSfZW7Xpj4uaI0eaoweamz36pwz46NJQ1f2Z7kWZ012p4thmHmcWk3Ha14kQ+WpIsk6Y/+6IUo6DlUzTAa6jkPmdV0T4E3TzNmQahoWuvQEXYNfZXyBrwksM4SuM9e0jo2wAq0wMGQDa8Q9YvYvyhupAAuoHmtm3SyeLpaJYhqmyii6AX+x5zHVAK9hf9jPFuuRarI6KZHhMaiJqrou4X+EanqNKkpNw0GphoTRyowOJUMniq7K+xkJP8MMKTXgXdbIwmAGozWChWmNRjZpedIMz+HbI88RW1OdWC3Lntp4z0TLYwzbRq4HbyjIeka26Y0MeLfVcgiV8QU2NszMMMUNHQ94Vgt94QLRm+x8vN5yDKi9Dn/YwM1g1M1WU8rBEr2m4Y1UpH61NVrlHYFnbHgJE1VaI1v3WjIRWs2WhPkrPGB0OvzsjIBYjRHUibtNyshRnRbMoz5t1cxpU4IqRk3ocK050zGTQIvYntesYaarpmcCu5D3L8McLHuGmEBTNeKZoxGRPKhTnnrAk2HlzFqSQ5rwSNMjZDSViGN7jxiMMDcBN43ojxgShxgTeJd4+miK6TFnMrGaDkw0cIEp8CnjEUZgeiJOiW2M8LYAB3MCek86+8N7bBDb9p5xsgGsxggmGXgX5jWxRtMla9FxushoJvPiFN6SoAMgPB9hAMaTDeSe/zyVCYg04s0A+uYU3vNsTGvZIg2oklh2ayZ7U74JTVqO82g2ZfXFgt49WapNpi1yjLKwv0RUkAr0OoKlCTMPpkidtQTocZPUiTeFelWeb0I3GlJrxrJLm0S1Rao+NYlYQ68635oSviFMMVN/c6oQ5xnozuEBLOizzZJ7KEghtFHD4VALAz9sANHUKW8/6qRR956UHCzFxlTlLDOQKizBgg/NqSfx3qNK6mxUikSUOgPLfEKq96ZOnW/OAHiok9XG5kUGPiQjWFOPAIMBurc9HedHVeznlk7UZw9zQuOGJVRLj4ClPgE2yEKQNwBYmP/Fs2wH6JYiAqqitKB53JprsozJOVivJhEFfBsWiQj/wiKdYjsFWDLMs2kb8EQLu6vMHlkjRDIZDcoY5SgZVgvAEjFi4VFjdFaAJYp4y04T2Fodx7uSiLDqoXYYJvGeR8V9Vs4CLAEqVnB2FFLH3LKP0Fv7ZeqwsEq5oCyoqTW1bMtGsDBRDCxWBpY6bTYUZXYMLKSn0WzWApRbCs8DWDVenjU91bUALEwPPPK86TQP42QY0CVYLO/HE5Jew2vZWj6oJVg5y+IZWDxpNGdPwISIPIJZRrAwH4inO7g8MRYGKKtGl2AJLDFxEyipQdfBknFq2JqldXv6OLV5ytMVZclM62iyhDg5WJj25HEG1LgCS6AtzObSxFpECkhTRlk8sWYtz3tqHgcLp/Slxdc8izCwsM0RcBAES8BpYsuQFmDRFWXxBVg1ZQbMDFBB+NbAYqmXGFisfecJacxzcsqCZQrDs1k68xwskeyARR17g7LkRw+T2z7mAZ76aG6wdwuwqDTzaA4WXYKFImbOgCzAwh55pthsYfYs6BSySUZZj4jG9DhlSZhXCXgeMPklWCCcGh4uQ1xlstDcAovmPGsBFsv1IlIGFgCB2WfhQVnTRSKJyLNwQ0sA+fGs4AhzsOqAqkS3wWpsgkUsbxsskoMFC7VOFPbRRuJYgEW2wKqj7TIb5WChzGDTBzzWGU03wfLmulAXD4JFASyFWLAABBRfelMpwJo+QsutWZPPwQK5skVZdd58tQqwkDc+4TY2MnhqzpDreSA+vSdHdjzsmqAQG1hTja0XpaVTZPCwvmG4W2A9AifYAEttqfwuWNAdyVb4WgM+QoWY5k7fDxZvS7yIo2JgacDgZZCQzx6QxmMOFrxcgPWqA7SHwOLpowfU5EBNKMMoBT0I/q1DvXMdUxg3KRGnI5qrDIxnzWQ2sSIyTj0H6xmGZD47xDABLJhrTNaFL1B96oFyhX/rHvAnKZdMlDgewXzrIBJBpthPC7BUlo0IFaJHzCMHOiKAJRLQP0bTpa0oMebSAtAFVNpMeBszJTfrTJZtgAX9fILF3mILzEGcmyZa8+wN+NJ4xlqAsnDlv8IX+qtDGO0duqdm1NKINnJA5KrQMb3pAvR1kAszETvdrCN/dHR7xE4ZUanJcverwJhNWKg0T+XXFKHnI7NpeQApECUIhOaMBZ0pCktmOIJxNZCZ4/1y8HrTmTqMn+JG/QyTxVPRm5ksgYIHmLfqzJxUp626wGtNb7owvzGfbBNoEtVJqNa0Wh4jIJgVb9oUMQu8V+frqBFDnYKHj4G6DYoz1CiCcgsKLrwPuo+FnAyTnNfZQ8YjZq+CGnWvKR9yp0kmLp+Gbdv50Q0dY8+gmyZaNKLOUpY1LMsqznHIem6CyJZtG4XZpRkGWhugJcCfOEkmkfNgBtx9Z9E9OsYOSPBOEfWkOhaLPlOhWdlk92jW9dzgqZu2bRbRVmDOoDWjudbK3NENaEPRDazfwE7AyOpg/lge67iGr4AVpeZWlaGyYArbYi4XbEq2YGSygXacoJp4ulMHGweMHnb4VLcts/6mIcznI99/L0jxwL4XFp83bOmVHb9xuxmaLPy6aUsPdWUrr9ox+33df7DfdOa3OnvUP3PU8s6vH6NLdwi/2Prn80/F/+kqC+HS2bFKc7ioIv8Vg/74jZRdLKEne4LfdMazQSzu2OWX/2zWvOzTemv8+qNFi3Tz59UoFhVRNhK6Gja/NdSNxn/KT/kpn6T8P5+r9NxkGKqVAAAAAElFTkSuQmCC">
+        <h2 id="authTitle" data-i18n="app_title"></h2>
+        <p class="authorg" data-i18n="app_org"></p>
+        <p class="hint" data-i18n="auth_sub"></p>
+      </div>
+      <div class="authtabs" role="tablist" id="authTabs">
+        <button type="button" role="tab" data-auth="login" aria-selected="true" data-i18n="login"></button>
+        <button type="button" role="tab" data-auth="register" aria-selected="false" data-i18n="register"></button>
+      </div>
+      <div class="authmsg" id="authMsg" role="status" hidden></div>
+
+      <form id="loginForm" autocomplete="on" novalidate>
+        <div class="field">
+          <label for="loginId" class="req" data-i18n="login_id"></label>
+          <input type="text" id="loginId" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="loginPw" class="req" data-i18n="password"></label>
+          <div class="pwwrap"><input type="password" id="loginPw" autocomplete="current-password" required><button type="button" data-pw="loginPw" data-i18n="show_pw"></button></div>
+        </div>
+        <label class="check" style="margin:0"><input type="checkbox" id="remember"> <span data-i18n="remember"></span></label>
+        <button type="submit" class="btn primary" id="loginBtn" data-i18n="login_btn"></button>
+        <button type="button" class="linkbtn" data-auth="forgot" data-i18n="forgot_link"></button>
+      </form>
+
+      <form id="registerForm" autocomplete="on" novalidate hidden>
+        <div class="row">
+          <div class="field">
+            <label for="regFirst" class="req" data-i18n="first_name"></label>
+            <input type="text" id="regFirst" autocomplete="given-name" maxlength="60" required>
+          </div>
+          <div class="field">
+            <label for="regLast" class="req" data-i18n="last_name"></label>
+            <input type="text" id="regLast" autocomplete="family-name" maxlength="60" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="regUser" class="req" data-i18n="username"></label>
+          <input type="text" id="regUser" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30" required>
+          <div class="hint" data-i18n="username_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regEmail" class="req" data-i18n="email"></label>
+          <input type="email" id="regEmail" autocomplete="email" autocapitalize="none" spellcheck="false" required>
+          <div class="hint" data-i18n="email_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regPw" class="req" data-i18n="password"></label>
+          <div class="pwwrap"><input type="password" id="regPw" autocomplete="new-password" minlength="8" required><button type="button" data-pw="regPw" data-i18n="show_pw"></button></div>
+          <div class="hint" data-i18n="password_hint"></div>
+        </div>
+        <div class="field">
+          <label for="regPw2" class="req" data-i18n="confirm_pw"></label>
+          <input type="password" id="regPw2" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn primary" id="registerBtn" data-i18n="register_btn"></button>
+      </form>
+
+      <form id="forgotForm" novalidate hidden>
+        <p class="hint" data-i18n="forgot_hint" style="margin:0"></p>
+        <div class="field">
+          <label for="fgId" class="req" data-i18n="login_id"></label>
+          <input type="text" id="fgId" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <button type="button" class="btn" id="sendCodeBtn" data-i18n="send_code"></button>
+        <div id="resetStep" hidden style="display:grid; gap:12px">
+          <div class="field">
+            <label for="fgCode" class="req" data-i18n="code"></label>
+            <input type="text" id="fgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+          </div>
+          <div class="field">
+            <label for="fgPw" class="req" data-i18n="new_password"></label>
+            <div class="pwwrap"><input type="password" id="fgPw" autocomplete="new-password" required><button type="button" data-pw="fgPw" data-i18n="show_pw"></button></div>
+            <div class="hint" data-i18n="password_hint"></div>
+          </div>
+          <div class="field">
+            <label for="fgPw2" class="req" data-i18n="confirm_pw"></label>
+            <input type="password" id="fgPw2" autocomplete="new-password" required>
+          </div>
+          <button type="submit" class="btn primary" id="resetBtn" data-i18n="reset_btn"></button>
+        </div>
+        <button type="button" class="linkbtn" data-auth="login" data-i18n="back_to_login"></button>
+      </form>
+    </section>
+  </div>
+
+  <main id="appMain" hidden>
+    <div class="alertbar" id="alertBar" hidden></div>
+
+    <div id="viewBook" style="display:grid; gap:16px">
+    <div class="grid2">
+      <!-- ฟอร์มลงนัด -->
+      <section class="card">
+        <h2 data-i18n="new_appt"></h2>
+        <form id="f" autocomplete="off">
+          <div class="row">
+            <div class="field">
+              <label for="hn" class="req">HN</label>
+              <input type="text" id="hn" required data-i18n-ph="hn_ph" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label for="doctor" class="req" data-i18n="doctor"></label>
+              <select id="doctor" required><option value="" data-i18n="choose_doctor"></option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="name" class="req" data-i18n="name"></label>
+            <input type="text" id="name" required data-i18n-ph="name_ph">
+          </div>
+
+          <div class="field">
+            <label class="req" id="techLabel" data-i18n="technique"></label>
+            <div class="typepick" role="radiogroup" aria-labelledby="techLabel">
+              <div class="chips" id="techChips"></div>
+              <input type="text" id="techOther" maxlength="100" data-i18n-ph="tech_other_ph" hidden>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="totalFx" class="req" data-i18n="fx_count"></label>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+              <input type="number" id="totalFx" min="1" max="30" value="4" required style="width:90px">
+              <div class="chips" id="fxChips"></div>
+            </div>
+          </div>
+
+          <div class="field" style="max-width:240px" id="startDateField">
+            <label for="startDate" class="req" data-i18n="start_date"></label>
+            <input type="date" id="startDate" required>
+          </div>
+
+          <div class="field">
+            <label data-i18n="pattern"></label>
+            <div class="radio">
+              <label><input type="radio" name="mode" value="days" checked> <span data-i18n="by_weekday"></span></label>
+              <label><input type="radio" name="mode" value="interval"> <span data-i18n="every_n"></span></label>
+              <label><input type="radio" name="mode" value="manual"> <span data-i18n="by_manual"></span></label>
+            </div>
+            <div id="modeDays">
+              <div class="days" id="days"></div>
+              <div class="chips" style="margin-top:6px">
+                <button type="button" class="chip" data-preset="1,2,3,4,5" data-i18n="p_mf"></button>
+                <button type="button" class="chip" data-preset="1,4" data-i18n="p_mth"></button>
+                <button type="button" class="chip" data-preset="2,5" data-i18n="p_tf"></button>
+                <button type="button" class="chip" data-preset="weekly" data-i18n="p_weekly"></button>
+              </div>
+            </div>
+            <div id="modeInterval" hidden>
+              <div style="display:flex; gap:8px; align-items:center">
+                <span data-i18n="every"></span> <input type="number" id="interval" min="1" max="30" value="7" style="width:80px"> <span data-i18n="days_unit"></span>
+              </div>
+            </div>
+            <div id="modeManual" hidden>
+              <div class="hint" data-i18n="manual_hint"></div>
+              <div class="manual" id="manualList"></div>
+            </div>
+            <div style="margin-top:8px" id="holidayRow">
+              <label class="check" style="margin:0"><input type="checkbox" id="skipHoliday" checked> <span data-i18n="skip_holiday"></span></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="note" data-i18n="note"></label>
+            <textarea id="note" rows="2" data-i18n-ph="note_ph"></textarea>
+          </div>
+        </form>
+      </section>
+
+      <!-- ตรวจสอบวันนัดก่อนบันทึก -->
+      <section class="card" style="display:flex; flex-direction:column">
+        <h2><span data-i18n="review"></span> <span class="hint" data-i18n="review_hint"></span></h2>
+        <div class="preview" id="preview"></div>
+        <div style="margin-top:auto; padding-top:14px">
+          <button type="button" class="btn primary" id="saveBtn"></button>
+          <div class="hint" style="text-align:center; margin-top:6px" data-i18n="save_hint"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ตารางนัด -->
+    <section class="card">
+      <div class="toolbar">
+        <h2 style="margin:0" data-i18n="schedule"></h2>
+        <div class="chips" id="filters">
+          <button type="button" class="chip" data-f="today" data-i18n="f_today"></button>
+          <button type="button" class="chip on" data-f="upcoming" data-i18n="f_upcoming"></button>
+          <button type="button" class="chip" data-f="past" data-i18n="f_past"></button>
+          <button type="button" class="chip" data-f="all" data-i18n="f_all"></button>
+        </div>
+        <input type="search" id="q" data-i18n-ph="search_ph">
+        <button type="button" class="btn sm" id="refreshBtn" data-i18n="refresh" data-i18n-title="refresh_title"></button>
+      </div>
+      <div class="stats" id="stats" style="margin-bottom:8px"></div>
+      <div class="tablewrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+    </div>
+
+    <!-- แดชบอร์ด -->
+    <div id="viewDash" hidden style="display:grid; gap:16px">
+      <div class="kpis" id="kpis"></div>
+
+      <section class="card">
+        <div class="toolbar">
+          <div class="monthnav">
+            <button type="button" class="btn sm" id="prevM" data-i18n-aria="prev_m">‹</button>
+            <h2 id="monthTitle"></h2>
+            <button type="button" class="btn sm" id="nextM" data-i18n-aria="next_m">›</button>
+            <button type="button" class="btn sm" id="thisM" data-i18n="this_m"></button>
+          </div>
+          <span class="hint" data-i18n="chart_hint"></span>
+        </div>
+        <div class="chartwrap" id="chart"></div>
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="cal_title"></h2>
+        <div class="calgrid" id="calgrid"></div>
+      </section>
+
+      <section class="card daydetail" id="dayDetail"></section>
+    </div>
+
+    <!-- จัดการผู้ใช้ (เฉพาะผู้ดูแล) -->
+    <div id="viewUsers" hidden style="display:grid; gap:16px">
+      <section class="card">
+        <div class="toolbar">
+          <h2 style="margin:0" data-i18n="users_title"></h2>
+          <button type="button" class="btn sm" id="usersRefresh" data-i18n="refresh"></button>
+        </div>
+        <p class="hint" data-i18n="users_hint" style="margin-top:0"></p>
+        <div class="tablewrap">
+          <table><thead id="usersHead"></thead><tbody id="usersBody"></tbody></table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- แก้ไขนัด + ประวัติการแก้ไข -->
+  <div class="modal" id="editModal" role="dialog" aria-modal="true" aria-labelledby="eTitle">
+    <div class="box wide">
+      <h3 id="eTitle" class="plain" data-i18n="edit_title"></h3>
+      <p class="hint" id="eWho" style="margin:0 0 12px"></p>
+      <form id="editForm" novalidate>
+        <div class="row">
+          <div class="field">
+            <label for="eDate" data-i18n="e_date"></label>
+            <input type="date" id="eDate" required>
+            <div class="hint" id="eCap"></div>
+          </div>
+          <div class="field">
+            <label for="eStatus" data-i18n="th_status"></label>
+            <select id="eStatus"></select>
+            <div class="hint" id="eStatusHint"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="eDoctor" data-i18n="doctor"></label>
+          <select id="eDoctor"></select>
+        </div>
+        <div class="field">
+          <label id="eTechLabel" data-i18n="technique"></label>
+          <div class="typepick" role="radiogroup" aria-labelledby="eTechLabel">
+            <div class="chips" id="eTechChips"></div>
+            <input type="text" id="eTechOther" maxlength="100" data-i18n-ph="tech_other_ph" hidden>
+          </div>
+        </div>
+        <div class="field">
+          <label for="eNote" data-i18n="note"></label>
+          <textarea id="eNote" rows="2" maxlength="500"></textarea>
+        </div>
+        <div class="acts" style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap">
+          <button type="button" class="btn" id="eClose" data-i18n="e_close"></button>
+          <button type="submit" class="btn" id="eSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700" data-i18n="e_save"></button>
+        </div>
+      </form>
+      <div class="histbox">
+        <h4 data-i18n="e_history"></h4>
+        <ol id="eHistory"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="box">
+      <h3 id="mTitle" data-i18n="m_title"></h3>
+      <div id="mBody"></div>
+      <div class="acts">
+        <button type="button" class="btn" id="mCancel" data-i18n="m_back"></button>
+        <button type="button" class="btn warnb" id="mOk" data-i18n="m_ok"></button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================= ข้อความ 2 ภาษา ================= */
+  const I18N = {
+    th: {
+      app_title: 'ระบบนัดคิวผู้ป่วยใส่แร่', app_org: 'กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง', logo_alt: 'โลโก้โรงพยาบาลมะเร็งลำปาง',
+      demo_banner: 'โหมดทดลอง: เปิดไฟล์นอก Google Apps Script ข้อมูลเก็บไว้ในเบราว์เซอร์นี้เท่านั้น ยังไม่บันทึกลง Google Sheet หรือปฏิทิน',
+      seed: 'ใส่ข้อมูลตัวอย่าง', clear: 'ล้างข้อมูล', seeded: 'ใส่ข้อมูลตัวอย่างแล้ว', cleared: 'ล้างข้อมูลแล้ว',
+      tab_book: 'ลงนัด / ตารางนัด', tab_dash: 'แดชบอร์ด',
+      lang_group: 'ภาษา', to_dark: 'เปลี่ยนเป็นโหมดกลางคืน', to_light: 'เปลี่ยนเป็นโหมดกลางวัน',
+      checking_user: 'กำลังตรวจสอบผู้ใช้…', calendar: 'ปฏิทิน: {name}', load_failed: 'โหลดข้อมูลไม่สำเร็จ',
+      new_appt: 'ลงนัดผู้ป่วยใหม่', hn_ph: 'เช่น 6512345', doctor: 'แพทย์', choose_doctor: '— เลือกแพทย์ —',
+      name: 'ชื่อ-สกุลผู้ป่วย', name_ph: 'ชื่อ นามสกุล', fx_count: 'จำนวน Fraction', start_date: 'วันเริ่ม Fx 1',
+      pattern: 'รูปแบบการนัด', by_weekday: 'ตามวันในสัปดาห์', every_n: 'ทุก ๆ N วัน', by_manual: 'เลือกวันเองตาม Fraction',
+      manual_hint: 'เลือกวันที่ของแต่ละ Fraction (จำนวนช่องเท่ากับจำนวน Fraction · วันเดียวกันได้ เช่น ทำวันละ 2 Fx)', w_nodate: 'ยังไม่ได้เลือกวัน',
+      p_mf: 'จ–ศ', p_mth: 'จ / พฤ', p_tf: 'อ / ศ', p_weekly: 'สัปดาห์ละครั้ง', every: 'ทุก', days_unit: 'วัน',
+      skip_holiday: 'ข้ามวันหยุด (ชีต Holidays) และเลื่อนนัดที่ตกเสาร์–อาทิตย์',
+      note: 'หมายเหตุ', note_ph: 'เช่น applicator, dose/fraction, งดน้ำงดอาหาร',
+      review: 'ตรวจสอบวันนัด', review_hint: '(แก้วันของแต่ละ Fx ได้ก่อนกดบันทึก)',
+      save: '📅 บันทึกและลงปฏิทิน', save_n: '📅 บันทึกและลงปฏิทิน ({n} นัด)', saving: '⏳ กำลังลงนัด…',
+      save_hint: 'กดครั้งเดียว ระบบจะลงนัดทุก Fraction ใน Google Calendar และบันทึกลง Google Sheet',
+      preview_empty: 'เลือกวันเริ่ม จำนวน fraction และรูปแบบการนัด เพื่อดูรายการวันนัด',
+      w_holiday: 'วันหยุด: {name}', w_weekend: 'วันเสาร์–อาทิตย์', w_past: 'เป็นวันที่ผ่านมาแล้ว',
+      w_order: 'ก่อนวันของ Fx ก่อนหน้า', w_dup: 'HN นี้มีนัดในวันนี้อยู่แล้ว', w_over: 'วันนี้จะมี {n} เคส เกิน {max} เคส',
+      booked_cap: 'มีนัดแล้ว {n}/{max} เคส', fx_date_aria: 'วันที่ Fx {n}', holiday_default: 'วันหยุด',
+      v_hn: 'กรุณากรอก HN', v_name: 'กรุณากรอกชื่อผู้ป่วย', v_doctor: 'กรุณาเลือกแพทย์',
+      v_fx: 'จำนวน fraction ต้องอยู่ระหว่าง 1–30', v_start: 'กรุณาเลือกวันเริ่ม',
+      v_incomplete: 'สร้างวันนัดได้ไม่ครบ {n} fraction — ตรวจสอบรูปแบบการนัด', v_fxdate: 'กรุณาเลือกวันที่ของ Fx {n}',
+      c_dup_course: 'HN {hn} มีนัดที่ยังไม่ถึงอยู่แล้ว ({date})\nต้องการลงนัดคอร์สใหม่เพิ่มหรือไม่?',
+      t_saved: '✅ ลงนัด HN {hn} จำนวน {n} fraction ลงปฏิทินและบันทึกชีตแล้ว',
+      t_saved_over: '✅ ลงนัดแล้ว แต่ ⚠️ มีวันที่เกิน {max} เคส: {list}', t_save_failed: 'บันทึกไม่สำเร็จ: {msg}',
+      m_title: '⚠️ โปรดตรวจสอบก่อนลงนัด', m_over: '🚨 วันต่อไปนี้จะมีเคสเกิน {max} เคส/วัน',
+      m_over_li: '{date}: มีอยู่ {e} + เพิ่ม {a} =', m_dup: 'HN นี้มีนัดในวันเดียวกันอยู่แล้ว', m_dup_with: 'นัดเดิม: {w}',
+      m_hint: 'กด "ยืนยันลงนัด" เพื่อบันทึกต่อ (ระบบจะบันทึกการแจ้งเตือนไว้ใน log และส่งอีเมลถ้าตั้งค่าไว้) หรือกลับไปแก้วันนัด',
+      m_back: 'กลับไปแก้ไข', m_ok: 'ยืนยันลงนัด',
+      schedule: 'ตารางนัดคิว', f_today: 'วันนี้', f_upcoming: 'นัดที่จะถึง', f_past: 'ที่ผ่านมา', f_all: 'ทั้งหมด',
+      search_ph: 'ค้นหา HN / ชื่อ / แพทย์', refresh: '↻ รีเฟรช', refresh_title: 'โหลดข้อมูลใหม่จากชีต', refreshed: 'โหลดข้อมูลล่าสุดแล้ว',
+      stats: 'วันนี้ <b>{a}</b> นัด · นัดที่จะถึง <b>{b}</b> นัด · ผู้ป่วยในคิว <b>{c}</b> ราย',
+      th_queue: 'คิว', th_name: 'ชื่อ-สกุล', th_doctor: 'แพทย์', th_note: 'หมายเหตุ', th_status: 'สถานะ', th_tech: 'รูปแบบการใส่',
+      technique: 'รูปแบบการใส่', tech_other: 'อื่นๆ', tech_other_ph: 'ระบุรูปแบบการใส่', tech_needle: 'เสียบเข็ม',
+      v_tech: 'กรุณาเลือกรูปแบบการใส่', v_tech_other: 'กรุณาระบุรูปแบบการใส่ในช่อง "อื่นๆ"',
+      a_edit: '✏️ แก้ไข', a_edit_title: 'แก้ไขวันนัด แพทย์ รูปแบบการใส่ หมายเหตุ หรือสถานะ', edited_by: 'แก้ไขโดย {name} · {at}',
+      edit_title: 'แก้ไขนัด', e_date: 'วันที่นัด', e_close: 'ปิด', e_save: 'บันทึกการแก้ไข', e_saved: 'บันทึกการแก้ไขแล้ว',
+      e_nochange: 'ไม่มีการเปลี่ยนแปลง', e_history: 'ประวัติการแก้ไข', e_created: 'ลงนัดโดย {name} · {at}', e_none: 'ยังไม่มีการแก้ไข',
+      e_cancel_hint: 'เปลี่ยนเป็น "ยกเลิก" แล้วนัดในปฏิทินจะถูกลบ', e_restore_hint: 'นัดจะถูกสร้างในปฏิทินอีกครั้ง',
+      f_date: 'วันที่นัด', f_doctor: 'แพทย์', f_technique: 'รูปแบบการใส่', f_note: 'หมายเหตุ', f_status: 'สถานะ',
+      no_appts: 'ไม่มีนัด', loading: 'กำลังโหลด…', today_tag: ' (วันนี้)', over_max: '⚠️ เกิน {max} เคส',
+      st_booked: 'นัดแล้ว', st_done: 'มาตามนัด', st_cancel: 'ยกเลิก',
+      a_done: '✓ มาแล้ว', a_done_title: 'บันทึกว่ามาตามนัด', a_cancel: 'ยกเลิก', a_cancel_title: 'ยกเลิกเฉพาะ fraction นี้',
+      a_course: 'ยกเลิกทั้งคอร์ส', a_course_title: 'ยกเลิกทุก fraction ที่ยังไม่ได้ทำในคอร์สนี้',
+      c_cancel_one: 'ยกเลิกนัด Fx {fx} ของ {who} วันที่ {date}?\n(นัดในปฏิทินจะถูกลบ)',
+      c_cancel_course: 'ยกเลิกทุก fraction ที่ยังไม่ได้ทำของ {who}?\n(นัดในปฏิทินจะถูกลบ)',
+      t_done: 'บันทึกว่ามาตามนัดแล้ว', t_cancelled: 'ยกเลิกแล้ว {n} นัด',
+      alert: '🚨 แจ้งเตือน: มี {n} วันที่เคสเกิน {max} เคส',
+      prev_m: 'เดือนก่อน', next_m: 'เดือนถัดไป', this_m: 'เดือนนี้',
+      chart_hint: 'จำนวนเคสต่อวัน (ไม่นับนัดที่ยกเลิก) · คลิกแท่งหรือวันเพื่อดูรายชื่อ', cal_title: 'ปฏิทินเคสรายวัน',
+      k_today: 'วันนี้', k_today_sub: 'จากสูงสุด {max} เคส', k_week: 'สัปดาห์นี้', k_month: 'ทั้งเดือน ({m})',
+      k_busiest: 'มากสุด {date} · {cases}', k_none_yet: 'ยังไม่มีนัด', k_over: 'วันที่เกิน {max} เคส', k_over_days: 'วันที่ {list}', none: 'ไม่มี',
+      limit_label: 'สูงสุด {max} เคส/วัน', chart_aria: 'กราฟจำนวนเคสต่อวัน',
+      lg_cases: 'จำนวนเคส', lg_over: '⚠️ เกิน {max} เคส', lg_past: 'วันที่ผ่านมาแล้ว', lg_limit: 'เส้นจำนวนเคสสูงสุด',
+      more: '+ อีก {n} เคส', dd_over: '⚠️ เกิน {max} เคส ({n})', no_appts_day: 'ไม่มีนัดในวันนี้',
+      cases_one: '{n} เคส', cases_many: '{n} เคส',
+      tab_users: 'ผู้ใช้', logout: 'ออกจากระบบ', logged_out: 'ออกจากระบบแล้ว',
+      auth_sub: 'เข้าสู่ระบบด้วยบัญชีของคุณ หรือสมัครสมาชิกใหม่',
+      login: 'เข้าสู่ระบบ', register: 'สมัครสมาชิก', login_id: 'ชื่อผู้ใช้หรืออีเมล', password: 'รหัสผ่าน',
+      show_pw: 'แสดง', hide_pw: 'ซ่อน', remember: 'จำฉันไว้ในเครื่องนี้ 7 วัน', login_btn: 'เข้าสู่ระบบ', forgot_link: 'ลืมรหัสผ่าน?',
+      first_name: 'ชื่อ', last_name: 'นามสกุล', v_fullname: 'กรุณากรอกชื่อและนามสกุล', u_fullname: 'ชื่อ-นามสกุล',
+      username: 'ชื่อผู้ใช้ (username)', username_hint: '3–30 ตัว ใช้ a-z, 0-9, จุด ขีดล่าง หรือขีด',
+      email: 'อีเมล', email_hint: 'ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน', password_hint: 'อย่างน้อย 8 ตัว',
+      confirm_pw: 'ยืนยันรหัสผ่าน', register_btn: 'สมัครสมาชิก',
+      reg_admin: 'สมัครสำเร็จ บัญชีนี้เป็นผู้ดูแลระบบ เข้าสู่ระบบได้เลย',
+      reg_active: 'สมัครสำเร็จ เข้าสู่ระบบได้เลย',
+      reg_pending: 'สมัครสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าสู่ระบบ',
+      forgot_hint: 'กรอกชื่อผู้ใช้หรืออีเมล ระบบจะส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี',
+      send_code: 'ส่งรหัสยืนยัน', code_sent: 'ถ้ามีบัญชีนี้ ระบบส่งรหัสยืนยันไปที่อีเมลแล้ว (ใช้ได้ 15 นาที)',
+      code: 'รหัสยืนยัน 6 หลัก', new_password: 'รหัสผ่านใหม่', reset_btn: 'ตั้งรหัสผ่านใหม่',
+      reset_done: 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย', back_to_login: 'กลับไปหน้าเข้าสู่ระบบ',
+      v_login: 'กรุณากรอกชื่อผู้ใช้หรืออีเมล และรหัสผ่าน', v_username: 'ชื่อผู้ใช้ต้องยาว 3–30 ตัว ใช้ได้เฉพาะ a-z, 0-9, จุด ขีดล่าง และขีด',
+      v_email: 'รูปแบบอีเมลไม่ถูกต้อง', v_pw: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว', v_pw_match: 'รหัสผ่านทั้งสองช่องไม่ตรงกัน',
+      v_code: 'กรุณากรอกรหัสยืนยัน 6 หลัก', working: 'กำลังดำเนินการ…',
+      users_title: 'จัดการผู้ใช้', users_hint: 'อนุมัติผู้สมัครใหม่ ระงับ หรือเปิดใช้งานบัญชี และกำหนดผู้ดูแลระบบ',
+      u_username: 'ชื่อผู้ใช้', u_email: 'อีเมล', u_role: 'บทบาท', u_status: 'สถานะ', u_created: 'สมัครเมื่อ', u_last: 'เข้าใช้ล่าสุด',
+      role_admin: 'ผู้ดูแล', role_user: 'ผู้ใช้', acc_active: 'ใช้งาน', acc_pending: 'รออนุมัติ', acc_suspended: 'ระงับ',
+      a_approve: 'อนุมัติ', a_suspend: 'ระงับ', a_activate: 'เปิดใช้งาน', a_make_admin: 'ตั้งเป็นผู้ดูแล', a_make_user: 'เปลี่ยนเป็นผู้ใช้',
+      you: '(คุณ)', t_user_updated: 'บันทึกการเปลี่ยนแปลงแล้ว', no_users: 'ยังไม่มีผู้ใช้',
+      demo_code: 'โหมดทดลอง: รหัสยืนยันคือ {code}',
+      m_badLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', m_pending: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ', m_suspended: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
+      m_userTaken: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว', m_emailTaken: 'อีเมลนี้สมัครไว้แล้ว', m_badCode: 'รหัสยืนยันไม่ถูกต้องหรือหมดอายุ',
+      m_session: 'กรุณาเข้าสู่ระบบอีกครั้ง', m_self: 'เปลี่ยนสถานะหรือบทบาทของบัญชีตัวเองไม่ได้'
+    },
+    en: {
+      app_title: 'Brachytherapy Appointment Queue', app_org: 'Radiation Oncology Department, Lampang Cancer Hospital', logo_alt: 'Lampang Cancer Hospital logo',
+      demo_banner: 'Demo mode: opened outside Google Apps Script. Data is kept in this browser only — nothing is saved to Google Sheets or Calendar.',
+      seed: 'Load sample data', clear: 'Clear data', seeded: 'Sample data loaded', cleared: 'Data cleared',
+      tab_book: 'Book / Queue', tab_dash: 'Dashboard',
+      lang_group: 'Language', to_dark: 'Switch to dark mode', to_light: 'Switch to light mode',
+      checking_user: 'Checking user…', calendar: 'Calendar: {name}', load_failed: 'Failed to load data',
+      new_appt: 'New appointment', hn_ph: 'e.g. 6512345', doctor: 'Doctor', choose_doctor: '— Select doctor —',
+      name: 'Patient name', name_ph: 'First and last name', fx_count: 'Number of fractions', start_date: 'Fx 1 start date',
+      pattern: 'Schedule pattern', by_weekday: 'By weekday', every_n: 'Every N days', by_manual: 'Pick a date for each fraction',
+      manual_hint: 'Choose the date of each fraction (one box per fraction · the same day is allowed, e.g. 2 Fx/day)', w_nodate: 'No date selected',
+      p_mf: 'Mon–Fri', p_mth: 'Mon / Thu', p_tf: 'Tue / Fri', p_weekly: 'Weekly', every: 'Every', days_unit: 'days',
+      skip_holiday: 'Skip holidays (Holidays sheet) and move dates that fall on weekends',
+      note: 'Note', note_ph: 'e.g. applicator, dose/fraction, NPO',
+      review: 'Review dates', review_hint: '(edit any Fx date before saving)',
+      save: '📅 Save & add to calendar', save_n: '📅 Save & add to calendar ({n})', saving: '⏳ Booking…',
+      save_hint: 'One click books every fraction in Google Calendar and records it in Google Sheets',
+      preview_empty: 'Choose a start date, number of fractions and a pattern to see the dates',
+      w_holiday: 'Holiday: {name}', w_weekend: 'Weekend', w_past: 'Date is in the past',
+      w_order: 'Earlier than the previous Fx', w_dup: 'This HN is already booked on this day', w_over: 'Will have {n} cases (over {max})',
+      booked_cap: '{n}/{max} cases booked', fx_date_aria: 'Fx {n} date', holiday_default: 'Holiday',
+      v_hn: 'Please enter HN', v_name: 'Please enter the patient name', v_doctor: 'Please select a doctor',
+      v_fx: 'Fractions must be between 1 and 30', v_start: 'Please choose a start date',
+      v_incomplete: 'Could not generate all {n} fractions — check the pattern', v_fxdate: 'Please choose a date for Fx {n}',
+      c_dup_course: 'HN {hn} already has an upcoming appointment ({date}).\nBook a new course anyway?',
+      t_saved: '✅ Booked HN {hn}: {n} fraction(s) added to the calendar and sheet',
+      t_saved_over: '✅ Booked, but ⚠️ over {max} cases on: {list}', t_save_failed: 'Save failed: {msg}',
+      m_title: '⚠️ Please review before booking', m_over: '🚨 These days will exceed {max} cases/day',
+      m_over_li: '{date}: {e} booked + {a} new =', m_dup: 'This HN is already booked on the same day', m_dup_with: 'Existing: {w}',
+      m_hint: 'Press "Confirm booking" to continue (the alert is logged and emailed if configured), or go back to change the dates.',
+      m_back: 'Go back', m_ok: 'Confirm booking',
+      schedule: 'Appointment queue', f_today: 'Today', f_upcoming: 'Upcoming', f_past: 'Past', f_all: 'All',
+      search_ph: 'Search HN / name / doctor', refresh: '↻ Refresh', refresh_title: 'Reload from the sheet', refreshed: 'Data refreshed',
+      stats: 'Today <b>{a}</b> · Upcoming <b>{b}</b> · Patients in queue <b>{c}</b>',
+      th_queue: 'Queue', th_name: 'Name', th_doctor: 'Doctor', th_note: 'Note', th_status: 'Status', th_tech: 'Insertion type',
+      technique: 'Insertion type', tech_other: 'Other', tech_other_ph: 'Specify insertion type', tech_needle: 'Needles (interstitial)',
+      v_tech: 'Please choose an insertion type', v_tech_other: 'Please type the insertion type under "Other"',
+      a_edit: '✏️ Edit', a_edit_title: 'Edit date, doctor, insertion type, note or status', edited_by: 'Edited by {name} · {at}',
+      edit_title: 'Edit appointment', e_date: 'Appointment date', e_close: 'Close', e_save: 'Save changes', e_saved: 'Changes saved',
+      e_nochange: 'Nothing changed', e_history: 'Edit history', e_created: 'Booked by {name} · {at}', e_none: 'No edits yet',
+      e_cancel_hint: 'Changing to "Cancelled" deletes the calendar event', e_restore_hint: 'The calendar event will be created again',
+      f_date: 'Date', f_doctor: 'Doctor', f_technique: 'Insertion type', f_note: 'Note', f_status: 'Status',
+      no_appts: 'No appointments', loading: 'Loading…', today_tag: ' (today)', over_max: '⚠️ over {max}',
+      st_booked: 'Booked', st_done: 'Attended', st_cancel: 'Cancelled',
+      a_done: '✓ Arrived', a_done_title: 'Mark as attended', a_cancel: 'Cancel', a_cancel_title: 'Cancel this fraction only',
+      a_course: 'Cancel course', a_course_title: 'Cancel all remaining fractions in this course',
+      c_cancel_one: 'Cancel Fx {fx} for {who} on {date}?\n(The calendar event will be deleted)',
+      c_cancel_course: 'Cancel all remaining fractions for {who}?\n(The calendar events will be deleted)',
+      t_done: 'Marked as attended', t_cancelled: 'Cancelled {n} appointment(s)',
+      alert: '🚨 Alert: {n} day(s) over {max} cases',
+      prev_m: 'Previous month', next_m: 'Next month', this_m: 'This month',
+      chart_hint: 'Cases per day (cancelled excluded) · click a bar or a day to see patients', cal_title: 'Daily case calendar',
+      k_today: 'Today', k_today_sub: 'of max {max}', k_week: 'This week', k_month: 'Month total ({m})',
+      k_busiest: 'Busiest {date} · {cases}', k_none_yet: 'No appointments yet', k_over: 'Days over {max}', k_over_days: 'Dates: {list}', none: 'None',
+      limit_label: 'Max {max} cases/day', chart_aria: 'Cases per day chart',
+      lg_cases: 'Cases', lg_over: '⚠️ Over {max}', lg_past: 'Past days', lg_limit: 'Daily limit',
+      more: '+ {n} more', dd_over: '⚠️ over {max} by {n}', no_appts_day: 'No appointments on this day',
+      cases_one: '{n} case', cases_many: '{n} cases',
+      tab_users: 'Users', logout: 'Log out', logged_out: 'You have logged out',
+      auth_sub: 'Log in with your account, or sign up for a new one',
+      login: 'Log in', register: 'Sign up', login_id: 'Username or email', password: 'Password',
+      show_pw: 'Show', hide_pw: 'Hide', remember: 'Keep me logged in on this device for 7 days', login_btn: 'Log in', forgot_link: 'Forgot password?',
+      first_name: 'First name', last_name: 'Last name', v_fullname: 'Please enter your first and last name', u_fullname: 'Full name',
+      username: 'Username', username_hint: '3–30 characters: a-z, 0-9, dot, underscore or hyphen',
+      email: 'Email', email_hint: 'Used to send a verification code if you forget your password', password_hint: 'At least 8 characters',
+      confirm_pw: 'Confirm password', register_btn: 'Sign up',
+      reg_admin: 'Signed up. This account is the administrator. You can log in now',
+      reg_active: 'Signed up. You can log in now',
+      reg_pending: 'Signed up. Please wait for an administrator to approve your account before logging in',
+      forgot_hint: 'Enter your username or email. We will send a 6-digit verification code to the account\'s email',
+      send_code: 'Send code', code_sent: 'If this account exists, a verification code has been sent to its email (valid for 15 minutes)',
+      code: '6-digit code', new_password: 'New password', reset_btn: 'Set new password',
+      reset_done: 'Password changed. Log in with your new password', back_to_login: 'Back to log in',
+      v_login: 'Please enter your username or email and password', v_username: 'Username must be 3–30 characters: a-z, 0-9, dot, underscore or hyphen',
+      v_email: 'Invalid email address', v_pw: 'Password must be at least 8 characters', v_pw_match: 'The two passwords do not match',
+      v_code: 'Please enter the 6-digit code', working: 'Working…',
+      users_title: 'Manage users', users_hint: 'Approve new sign-ups, suspend or reactivate accounts, and choose administrators',
+      u_username: 'Username', u_email: 'Email', u_role: 'Role', u_status: 'Status', u_created: 'Signed up', u_last: 'Last login',
+      role_admin: 'Admin', role_user: 'User', acc_active: 'Active', acc_pending: 'Pending', acc_suspended: 'Suspended',
+      a_approve: 'Approve', a_suspend: 'Suspend', a_activate: 'Reactivate', a_make_admin: 'Make admin', a_make_user: 'Make user',
+      you: '(you)', t_user_updated: 'Changes saved', no_users: 'No users yet',
+      demo_code: 'Demo mode: the verification code is {code}',
+      m_badLogin: 'Incorrect username or password', m_pending: 'This account is waiting for administrator approval', m_suspended: 'This account is suspended. Please contact the administrator',
+      m_userTaken: 'This username is already taken', m_emailTaken: 'This email is already registered', m_badCode: 'The verification code is wrong or has expired',
+      m_session: 'Please log in again', m_self: 'You cannot change the status or role of your own account'
+    }
+  };
+  const DOW = { th: ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
+  const LOCALE = { th: 'th-TH', en: 'en-GB' };
+  // ค่าสถานะในชีตเก็บเป็นภาษาไทยเสมอ แปลเฉพาะตอนแสดงผล
+  const ST_BOOKED = 'นัดแล้ว', ST_DONE = 'มาตามนัด', ST_CANCEL = 'ยกเลิก';
+  const STATUS_KEY = { [ST_BOOKED]: 'st_booked', [ST_DONE]: 'st_done', [ST_CANCEL]: 'st_cancel' };
+  // สถานะบัญชีในชีต Accounts เก็บเป็นภาษาไทยเช่นกัน
+  const ACC_ACTIVE = 'ใช้งาน', ACC_PENDING = 'รออนุมัติ', ACC_SUSPENDED = 'ระงับ';
+  const ACC_KEY = { [ACC_ACTIVE]: 'acc_active', [ACC_PENDING]: 'acc_pending', [ACC_SUSPENDED]: 'acc_suspended' };
+
+  let lang = document.documentElement.lang === 'en' ? 'en' : 'th';
+  function t(key, vars) {
+    const s = (I18N[lang] && I18N[lang][key]) || I18N.th[key] || key;
+    return s.replace(/\{(\w+)\}/g, (m, k) => (vars && k in vars ? vars[k] : m));
+  }
+  const cases = (n) => t(n === 1 ? 'cases_one' : 'cases_many', { n: n });
+  const statusText = (s) => (STATUS_KEY[s] ? t(STATUS_KEY[s]) : s);
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+  };
+
+  /* ================= token เข้าสู่ระบบ ================= */
+  // "จำฉันไว้" เก็บใน localStorage ไม่งั้นเก็บใน sessionStorage (ปิดเบราว์เซอร์แล้วต้องเข้าใหม่)
+  const auth = {
+    token: (function () {
+      try { return localStorage.getItem('bq-token') || sessionStorage.getItem('bq-token') || ''; } catch (e) { return ''; }
+    })(),
+    save(tk, remember) {
+      this.token = tk;
+      try {
+        localStorage.removeItem('bq-token'); sessionStorage.removeItem('bq-token');
+        (remember ? localStorage : sessionStorage).setItem('bq-token', tk);
+      } catch (e) { /* ใช้ token ในหน่วยความจำต่อไป */ }
+    },
+    clear() {
+      this.token = '';
+      try { localStorage.removeItem('bq-token'); sessionStorage.removeItem('bq-token'); } catch (e) { /* ignore */ }
+    }
+  };
+  const AUTH_PREFIX = 'AUTH_REQUIRED:';
+
+  /* ================= backend: google.script.run หรือ mock ================= */
+  const isGas = typeof google !== 'undefined' && google.script && google.script.run;
+  const api = withAuthCheck(isGas ? gasApi() : mockApi());
+  if (!isGas) document.getElementById('demoBanner').hidden = false;
+
+  // ถ้าเซิร์ฟเวอร์ตอบว่าต้องเข้าสู่ระบบใหม่ (token หมดอายุ/บัญชีถูกระงับ) ให้กลับไปหน้าเข้าสู่ระบบ
+  function withAuthCheck(raw) {
+    const wrapped = {};
+    Object.keys(raw).forEach(k => {
+      wrapped[k] = (...args) => raw[k](...args).catch(e => {
+        const m = e && e.message ? e.message : String(e);
+        if (m.indexOf(AUTH_PREFIX) >= 0) onAuthLost(m.slice(m.indexOf(AUTH_PREFIX) + AUTH_PREFIX.length).trim());
+        throw e;
+      });
+    });
+    return wrapped;
+  }
+
+  function gasApi() {
+    const call = (fn, ...args) => new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+    });
+    return {
+      register: (f) => call('registerAccount', Object.assign({ lang: lang }, f)),
+      login: (f) => call('login', Object.assign({ lang: lang }, f)),
+      requestReset: (f) => call('requestPasswordReset', Object.assign({ lang: lang }, f)),
+      reset: (f) => call('resetPassword', Object.assign({ lang: lang }, f)),
+      init: () => call('getInitData', auth.token, lang),
+      list: () => call('listAppointments', auth.token, lang),
+      create: (p) => call('createAppointments', auth.token, Object.assign({ lang: lang }, p)),
+      cancel: (id, scope) => call('cancelAppointment', auth.token, id, scope, lang),
+      done: (id) => call('markDone', auth.token, id, lang),
+      edit: (id, ch) => call('updateAppointment', auth.token, id, ch, lang),
+      accounts: () => call('listAccounts', auth.token, lang),
+      updateAccount: (u, ch) => call('updateAccount', auth.token, u, ch, lang)
+    };
+  }
+
+  function mockApi() {
+    const KEY = 'brachyQueueDemo';
+    const MAX = 6;
+    const DOCS = ['ทัศน์วรรณ อาษากิจ', 'ศิริรัตน์ เชื้อสำราญ', 'พัฒธิดา มโนรส', 'ทินกร จอมใจ'];
+    const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
+    const save = (a) => store.set(KEY, JSON.stringify(a));
+    // เรียงตามวันที่ แล้วตามลำดับที่ลงนัด (เหมือนลำดับแถวในชีต)
+    const sorted = () => load().map((a, i) => Object.assign(a, { row: i })).sort((a, b) => a.date.localeCompare(b.date) || a.row - b.row);
+    const delay = (v) => new Promise(r => setTimeout(() => r(v), 300));
+    const fail = (key) => new Promise((r, rej) => setTimeout(() => rej(new Error(t(key))), 300));
+    // บัญชีในโหมดทดลอง (เก็บในเบราว์เซอร์นี้เท่านั้น ไม่ได้เข้ารหัสจริง)
+    const AKEY = 'brachyQueueDemoAccounts';
+    const loadAcc = () => { try { return JSON.parse(localStorage.getItem(AKEY)) || []; } catch (e) { return []; } };
+    const saveAcc = (a) => store.set(AKEY, JSON.stringify(a));
+    const pub = (a) => ({ username: a.username, email: a.email, role: a.role, status: a.status, createdAt: a.createdAt, lastLogin: a.lastLogin,
+      firstName: a.firstName || '', lastName: a.lastName || '', fullName: ((a.firstName || '') + ' ' + (a.lastName || '')).trim() });
+    const now = () => { const d = new Date(); return iso(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    const findAcc = (id) => { id = String(id || '').trim().toLowerCase(); return loadAcc().find(a => a.username === id || a.email === id); };
+    const me = () => {
+      if (!auth.token.startsWith('demo.')) return null;
+      const u = auth.token.slice(5); // ชื่อผู้ใช้มีจุดได้ จึงตัดเฉพาะคำนำหน้า
+      return loadAcc().find(x => x.username === u) || null;
+    };
+    const needUser = (fn) => {
+      const a = me();
+      if (!a) return Promise.reject(new Error(AUTH_PREFIX + ' ' + t('m_session')));
+      if (a.status !== ACC_ACTIVE) return Promise.reject(new Error(AUTH_PREFIX + ' ' + t(a.status === ACC_PENDING ? 'm_pending' : 'm_suspended')));
+      return fn(a);
+    };
+    const resetCodes = {};
+    const label = () => { const a = me(); if (!a) return 'demo'; const f = ((a.firstName || '') + ' ' + (a.lastName || '')).trim(); return f ? f + ' (' + a.username + ')' : a.username; };
+    function addHist(a, changes) {
+      const at = now();
+      a.history = (a.history || []).concat([{ at, by: (me() || {}).username || 'demo', name: label(), changes }]);
+      a.editedBy = label(); a.editedAt = at;
+    }
+    return {
+      register: (f) => {
+        const all = loadAcc();
+        const u = String(f.username).trim().toLowerCase(), em = String(f.email).trim().toLowerCase();
+        if (all.some(a => a.username === u)) return fail('m_userTaken');
+        if (all.some(a => a.email === em)) return fail('m_emailTaken');
+        const first = all.length === 0;
+        const acc = { username: u, email: em, pw: f.password, firstName: String(f.firstName).trim(), lastName: String(f.lastName).trim(), role: first ? 'admin' : 'user', status: first ? ACC_ACTIVE : ACC_PENDING, createdAt: now(), lastLogin: '' };
+        all.push(acc); saveAcc(all);
+        return delay({ ok: true, role: acc.role, status: acc.status, needApproval: !first });
+      },
+      login: (f) => {
+        const all = loadAcc(); const id = String(f.login).trim().toLowerCase();
+        const a = all.find(x => x.username === id || x.email === id);
+        if (!a || a.pw !== f.password) return fail('m_badLogin');
+        if (a.status === ACC_PENDING) return fail('m_pending');
+        if (a.status !== ACC_ACTIVE) return fail('m_suspended');
+        a.lastLogin = now(); saveAcc(all);
+        return delay({ token: 'demo.' + a.username, user: pub(a) });
+      },
+      requestReset: (f) => {
+        const a = findAcc(f.login);
+        if (a) { resetCodes[a.username] = String(Math.floor(100000 + Math.random() * 900000)); return delay({ ok: true, demoCode: resetCodes[a.username] }); }
+        return delay({ ok: true });
+      },
+      reset: (f) => {
+        const all = loadAcc(); const id = String(f.login).trim().toLowerCase();
+        const a = all.find(x => x.username === id || x.email === id);
+        if (!a || !resetCodes[a.username] || resetCodes[a.username] !== String(f.code).trim()) return fail('m_badCode');
+        a.pw = f.password; delete resetCodes[a.username]; saveAcc(all);
+        return delay({ ok: true });
+      },
+      accounts: () => needUser(a => a.role === 'admin' ? delay(loadAcc().map(pub)) : fail('m_session')),
+      updateAccount: (u, ch) => needUser(a => {
+        if (u === a.username) return fail('m_self');
+        const all = loadAcc(); const tg = all.find(x => x.username === u);
+        if (tg && ch.status) tg.status = ch.status;
+        if (tg && ch.role) tg.role = ch.role;
+        saveAcc(all); return delay(all.map(pub));
+      }),
+      init: () => needUser(a => delay({
+        user: pub(a),
+        pendingAccounts: a.role === 'admin' ? loadAcc().filter(x => x.status === ACC_PENDING).length : 0,
+        doctors: DOCS,
+        techniques: ['Full', 'Mould', 'เสียบเข็ม'],
+        holidays: [{ date: '2026-10-13', name: 'วันนวมินทรมหาราช' }, { date: '2026-10-23', name: 'วันปิยมหาราช' }],
+        settings: { maxCasesPerDay: MAX, calendarName: 'Demo' },
+        appointments: sorted()
+      })),
+      seed: () => {
+        // ข้อมูลตัวอย่างสำหรับดูหน้าแดชบอร์ด
+        const all = []; const base = new Date(); base.setDate(base.getDate() - 6);
+        const first = ['สมหญิง', 'มาลี', 'บุญมา', 'จันทร์เพ็ญ', 'สุดา', 'วิไล', 'ประภา', 'นงลักษณ์', 'อรุณี', 'กาญจนา', 'ลำดวน', 'พิมพ์ใจ'];
+        const last = ['ใจดี', 'ศรีสุข', 'แก้วมณี', 'ทองดี', 'บุญเรือง', 'สายทอง', 'รุ่งเรือง', 'มีสุข'];
+        const todayStr = iso(new Date());
+        for (let k = 0; k < 14; k++) {
+          const startDay = new Date(base); startDay.setDate(base.getDate() + (k * 3) % 26);
+          const days = k % 3 === 0 ? [1, 4] : [1, 2, 3, 4, 5];
+          const total = 4; const courseId = 'BTDEMO' + k; let d = new Date(startDay), fx = 0, guard = 0;
+          while (fx < total && guard++ < 60) {
+            if (days.includes(d.getDay())) {
+              fx++;
+              const ds = iso(d);
+              all.push({ apptId: courseId + '-' + fx, courseId, hn: String(6500100 + k * 37), name: first[k % first.length] + ' ' + last[k % last.length],
+                doctor: DOCS[k % 4], fx, totalFx: total, date: ds, note: '', status: ds < todayStr ? ST_DONE : ST_BOOKED,
+                technique: ['Full', 'Mould', 'เสียบเข็ม'][k % 3], createdAt: ds + ' 09:00', createdBy: 'demo', history: [] });
+            }
+            d.setDate(d.getDate() + 1);
+          }
+        }
+        save(all); return delay(sorted());
+      },
+      clear: () => { save([]); return delay([]); },
+      list: () => delay(sorted()),
+      create: (p) => {
+        const all = load();
+        if (!p.force) {
+          const conflicts = [];
+          p.sessions.forEach((s, i) => {
+            const o = all.filter(a => a.status === ST_BOOKED && a.hn === p.hn && a.date === s.date);
+            if (o.length) conflicts.push({ fx: i + 1, date: s.date, with: o.map(a => 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx).join(', ') });
+          });
+          const counts = {}; all.forEach(a => { if (a.status !== ST_CANCEL) counts[a.date] = (counts[a.date] || 0) + 1; });
+          const adding = {}; p.sessions.forEach(s => { adding[s.date] = (adding[s.date] || 0) + 1; });
+          const overCapacity = Object.keys(adding).sort().map(d => ({ date: d, existing: counts[d] || 0, adding: adding[d], total: (counts[d] || 0) + adding[d] })).filter(x => x.total > MAX);
+          if (conflicts.length || overCapacity.length) return delay({ ok: false, needConfirm: true, conflicts, overCapacity, max: MAX });
+        }
+        const courseId = 'BT' + Date.now().toString().slice(-10);
+        const by = me();
+        p.sessions.forEach((s, i) => all.push({
+          apptId: courseId + '-' + (i + 1), courseId, hn: p.hn, name: p.name, doctor: p.doctor, technique: p.technique,
+          fx: i + 1, totalFx: p.totalFx, date: s.date, note: p.note, status: ST_BOOKED,
+          createdAt: now(), createdBy: by ? by.username : 'demo', history: []
+        }));
+        save(all);
+        const counts2 = {}; all.forEach(a => { if (a.status !== ST_CANCEL) counts2[a.date] = (counts2[a.date] || 0) + 1; });
+        const over2 = [...new Set(p.sessions.map(s => s.date))].filter(d => counts2[d] > MAX).map(d => ({ date: d, total: counts2[d] }));
+        return delay({ ok: true, courseId, count: p.sessions.length, overCapacity: over2, appointments: sorted() });
+      },
+      cancel: (id, scope) => {
+        const all = load(); const tg = all.find(a => a.apptId === id); let changed = 0;
+        all.forEach(a => {
+          const m = scope === 'course' ? a.courseId === tg.courseId && a.status === ST_BOOKED : a.apptId === id;
+          if (m && a.status !== ST_CANCEL) { addHist(a, [{ f: 'status', from: a.status, to: ST_CANCEL }]); a.status = ST_CANCEL; changed++; }
+        });
+        save(all); return delay({ ok: true, changed, appointments: sorted() });
+      },
+      done: (id) => {
+        const all = load();
+        all.forEach(a => { if (a.apptId === id) { addHist(a, [{ f: 'status', from: a.status, to: ST_DONE }]); a.status = ST_DONE; } });
+        save(all); return delay({ ok: true, changed: 1, appointments: sorted() });
+      },
+      edit: (id, ch) => {
+        const all = load(); const a = all.find(x => x.apptId === id);
+        const diff = Object.keys(ch).filter(f => (a[f] || '') !== ch[f]).map(f => ({ f, from: a[f] || '', to: ch[f] }));
+        if (diff.length) { addHist(a, diff); diff.forEach(d => { a[d.f] = d.to; }); save(all); }
+        const total = all.filter(x => x.date === a.date && x.status !== ST_CANCEL).length;
+        return delay({ ok: true, changed: diff.length, overCapacity: total > MAX && ch.date ? [{ date: a.date, total }] : [], appointments: sorted() });
+      }
+    };
+  }
+
+  /* ================= state & helpers ================= */
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    holidays: {}, sessions: [], appts: [], filter: 'upcoming', busy: false, max: 6,
+    view: 'book', dashMonth: null, dashDay: null, user: null, calName: '', loadError: '',
+    authMode: 'login', accounts: [], pending: 0
+  };
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  const parseIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const todayIso = () => iso(new Date());
+  const fmtDate = (s, opt) => parseIso(s).toLocaleDateString(LOCALE[lang], opt || { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const LONG = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function toast(msg, isErr) {
+    const el = $('toast'); el.textContent = msg; el.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toast._t); toast._t = setTimeout(() => { el.className = 'toast' + (isErr ? ' err' : ''); }, isErr ? 6000 : 3500);
+  }
+  const errMsg = (e) => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '').replace(AUTH_PREFIX, '').trim();
+
+  /* ================= ภาษา ================= */
+  function applyStaticText() {
+    document.documentElement.lang = lang;
+    document.title = t('app_title') + ' · ' + t('app_org');
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+    document.querySelectorAll('[data-i18n-alt]').forEach(el => { el.alt = t(el.dataset.i18nAlt); });
+    $('langSeg').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+    $('days').querySelectorAll('label').forEach(l => { l.lastChild.textContent = DOW[lang][Number(l.querySelector('input').value)]; });
+    $('thead').innerHTML = theadHtml();
+    $('usersHead').innerHTML = usersHeadHtml();
+    document.querySelectorAll('[data-pw]').forEach(b => { b.textContent = t($(b.dataset.pw).type === 'password' ? 'show_pw' : 'hide_pw'); });
+    renderUser();
+    updateThemeButton();
+  }
+  function setLang(l) {
+    if (l === lang) return;
+    lang = l; store.set('bq-lang', l);
+    applyStaticText();
+    renderManual();
+    techPick.render(); ePick.render();
+    if (editing) openEdit(editing);
+    renderAll();
+    if (state.view === 'users') renderUsers();
+  }
+  $('langSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); });
+
+  function renderUser() {
+    if (state.loadError) { $('userEmail').textContent = '⚠️ ' + state.loadError; $('calName').textContent = t('load_failed'); return; }
+    if (!state.user) { $('userEmail').textContent = t('checking_user'); $('calName').textContent = ''; return; }
+    const u = state.user;
+    $('userEmail').innerHTML = '👤 <b>' + esc(u.fullName || u.username) + '</b>' + (u.fullName ? ' <span style="opacity:.8">(' + esc(u.username) + ')</span>' : '') +
+      (u.role === 'admin' ? ' · ' + esc(t('role_admin')) : '');
+    $('calName').textContent = t('calendar', { name: state.calName });
+  }
+
+  /* ================= เข้าสู่ระบบ / สมัครสมาชิก ================= */
+  function authMsg(text, ok) {
+    const el = $('authMsg');
+    el.hidden = !text; el.textContent = text || ''; el.className = 'authmsg ' + (ok ? 'ok' : 'err');
+  }
+  function setAuthMode(mode) {
+    state.authMode = mode;
+    $('loginForm').hidden = mode !== 'login';
+    $('registerForm').hidden = mode !== 'register';
+    $('forgotForm').hidden = mode !== 'forgot';
+    $('authTabs').hidden = mode === 'forgot';
+    $('authTabs').querySelectorAll('[data-auth]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.auth === mode)));
+    if (mode !== 'forgot') $('resetStep').hidden = true;
+  }
+  function showAuth(mode, msg, ok) {
+    $('appMain').hidden = true; $('tabs').hidden = true; $('whoBox').hidden = true;
+    $('viewAuth').hidden = false;
+    setAuthMode(mode || 'login');
+    authMsg(msg || '', ok);
+    const first = { login: 'loginId', register: 'regFirst', forgot: 'fgId' }[state.authMode];
+    setTimeout(() => { try { $(first).focus(); } catch (e) { /* ignore */ } }, 0);
+  }
+  function showApp() {
+    $('viewAuth').hidden = true;
+    $('appMain').hidden = false; $('tabs').hidden = false; $('whoBox').hidden = false;
+    $('tabUsers').hidden = !(state.user && state.user.role === 'admin');
+    renderPendingBadge();
+    setView(state.view === 'users' && $('tabUsers').hidden ? 'book' : state.view);
+  }
+  function onAuthLost(msg) {
+    auth.clear();
+    state.user = null;
+    showAuth('login', msg || t('m_session'));
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-auth]'); if (!b) return;
+    if (b.dataset.auth === 'forgot') $('fgId').value = $('loginId').value.trim();
+    setAuthMode(b.dataset.auth); authMsg('');
+    const first = { login: 'loginId', register: 'regFirst', forgot: 'fgId' }[b.dataset.auth];
+    if (first) $(first).focus();
+  });
+  document.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', () => {
+    const inp = $(b.dataset.pw); inp.type = inp.type === 'password' ? 'text' : 'password';
+    b.textContent = t(inp.type === 'password' ? 'show_pw' : 'hide_pw');
+  }));
+  async function busyBtn(id, fn) {
+    const b = $(id), label = b.textContent;
+    b.disabled = true; b.textContent = t('working');
+    try { return await fn(); } finally { b.disabled = false; b.textContent = label; }
+  }
+  const RE_USER = /^[a-z0-9._-]{3,30}$/, RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  $('loginForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = $('loginId').value.trim(), pw = $('loginPw').value;
+    if (!id || !pw) { authMsg(t('v_login')); return; }
+    busyBtn('loginBtn', async () => {
+      try {
+        const r = await api.login({ login: id, password: pw, remember: $('remember').checked });
+        auth.save(r.token, $('remember').checked);
+        $('loginPw').value = '';
+        authMsg('');
+        await loadApp();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('registerForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fn = $('regFirst').value.replace(/\s+/g, ' ').trim(), ln = $('regLast').value.replace(/\s+/g, ' ').trim();
+    const u = $('regUser').value.trim().toLowerCase(), em = $('regEmail').value.trim().toLowerCase();
+    const pw = $('regPw').value, pw2 = $('regPw2').value;
+    if (!fn) { authMsg(t('v_fullname')); $('regFirst').focus(); return; }
+    if (!ln) { authMsg(t('v_fullname')); $('regLast').focus(); return; }
+    if (!RE_USER.test(u)) { authMsg(t('v_username')); $('regUser').focus(); return; }
+    if (!RE_EMAIL.test(em)) { authMsg(t('v_email')); $('regEmail').focus(); return; }
+    if (pw.length < 8) { authMsg(t('v_pw')); $('regPw').focus(); return; }
+    if (pw !== pw2) { authMsg(t('v_pw_match')); $('regPw2').focus(); return; }
+    busyBtn('registerBtn', async () => {
+      try {
+        const r = await api.register({ firstName: fn, lastName: ln, username: u, email: em, password: pw });
+        ['regFirst', 'regLast', 'regUser', 'regEmail', 'regPw', 'regPw2'].forEach(id => { $(id).value = ''; });
+        $('loginId').value = u;
+        showAuth('login', t(r.role === 'admin' ? 'reg_admin' : r.needApproval ? 'reg_pending' : 'reg_active'), true);
+        $('loginPw').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('sendCodeBtn').addEventListener('click', () => {
+    const id = $('fgId').value.trim();
+    if (!id) { authMsg(t('v_login')); $('fgId').focus(); return; }
+    busyBtn('sendCodeBtn', async () => {
+      try {
+        const r = await api.requestReset({ login: id });
+        $('resetStep').hidden = false;
+        authMsg(r && r.demoCode ? t('demo_code', { code: r.demoCode }) : t('code_sent'), true);
+        $('fgCode').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+  $('forgotForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = $('fgId').value.trim(), code = $('fgCode').value.trim(), pw = $('fgPw').value;
+    if (!/^\d{6}$/.test(code)) { authMsg(t('v_code')); $('fgCode').focus(); return; }
+    if (pw.length < 8) { authMsg(t('v_pw')); $('fgPw').focus(); return; }
+    if (pw !== $('fgPw2').value) { authMsg(t('v_pw_match')); $('fgPw2').focus(); return; }
+    busyBtn('resetBtn', async () => {
+      try {
+        await api.reset({ login: id, code: code, password: pw });
+        ['fgCode', 'fgPw', 'fgPw2'].forEach(x => { $(x).value = ''; });
+        $('loginId').value = id;
+        showAuth('login', t('reset_done'), true);
+        $('loginPw').focus();
+      } catch (err) { authMsg(errMsg(err)); }
+    });
+  });
+
+  $('logoutBtn').addEventListener('click', () => {
+    auth.clear();
+    state.user = null; state.appts = []; state.accounts = [];
+    showAuth('login', t('logged_out'), true);
+  });
+
+  /* ================= จัดการผู้ใช้ (ผู้ดูแล) ================= */
+  function renderPendingBadge() {
+    const b = $('pendBadge');
+    b.hidden = !state.pending; b.textContent = state.pending || '';
+  }
+  function usersHeadHtml() {
+    return '<tr>' + ['u_fullname', 'u_username', 'u_email', 'u_role', 'u_status', 'u_created', 'u_last'].map(k => '<th>' + esc(t(k)) + '</th>').join('') + '<th></th></tr>';
+  }
+  async function loadUsers() {
+    try { state.accounts = await api.accounts(); renderUsers(); }
+    catch (e) { toast(errMsg(e), true); }
+  }
+  function renderUsers() {
+    const list = state.accounts.slice().sort((a, b) =>
+      (a.status === ACC_PENDING ? 0 : 1) - (b.status === ACC_PENDING ? 0 : 1) || a.username.localeCompare(b.username));
+    state.pending = list.filter(a => a.status === ACC_PENDING).length;
+    renderPendingBadge();
+    if (!list.length) { $('usersBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('no_users')) + '</td></tr>'; return; }
+    const btn = (u, act, key, cls) => '<button class="btn sm ' + cls + '" data-uact="' + act + '" data-u="' + esc(u) + '">' + esc(t(key)) + '</button>';
+    $('usersBody').innerHTML = list.map(a => {
+      const self = state.user && a.username === state.user.username;
+      const stCls = a.status === ACC_ACTIVE ? 'done' : a.status === ACC_PENDING ? 'pending' : 'cancel';
+      let acts = '';
+      if (!self) {
+        if (a.status === ACC_PENDING) acts += btn(a.username, 'approve', 'a_approve', 'okb') + btn(a.username, 'suspend', 'a_suspend', 'danger');
+        else if (a.status === ACC_ACTIVE) acts += btn(a.username, 'suspend', 'a_suspend', 'danger');
+        else acts += btn(a.username, 'activate', 'a_activate', 'okb');
+        acts += a.role === 'admin' ? btn(a.username, 'user', 'a_make_user', '') : btn(a.username, 'admin', 'a_make_admin', '');
+      }
+      return '<tr><td class="name"><b>' + esc(a.fullName || '–') + '</b>' + (self ? ' <span class="hint">' + esc(t('you')) + '</span>' : '') + '</td>' +
+        '<td>' + esc(a.username) + '</td>' +
+        '<td>' + esc(a.email) + '</td>' +
+        '<td><span class="tag ' + (a.role === 'admin' ? 'admin' : 'booked') + '">' + esc(t(a.role === 'admin' ? 'role_admin' : 'role_user')) + '</span></td>' +
+        '<td><span class="tag ' + stCls + '">' + esc(ACC_KEY[a.status] ? t(ACC_KEY[a.status]) : a.status) + '</span></td>' +
+        '<td class="hint">' + esc(a.createdAt) + '</td><td class="hint">' + esc(a.lastLogin || '–') + '</td>' +
+        '<td class="act"><div class="acts">' + acts + '</div></td></tr>';
+    }).join('');
+  }
+  $('usersBody').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-uact]'); if (!b) return;
+    const ch = { approve: { status: ACC_ACTIVE }, activate: { status: ACC_ACTIVE }, suspend: { status: ACC_SUSPENDED },
+      admin: { role: 'admin' }, user: { role: 'user' } }[b.dataset.uact];
+    b.disabled = true;
+    try { state.accounts = await api.updateAccount(b.dataset.u, ch); renderUsers(); toast(t('t_user_updated')); }
+    catch (err) { toast(errMsg(err), true); b.disabled = false; }
+  });
+  $('usersRefresh').addEventListener('click', loadUsers);
+
+  /* ================= โหมดกลางวัน / กลางคืน ================= */
+  const darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function effectiveTheme() {
+    const a = document.documentElement.getAttribute('data-theme');
+    if (a === 'light' || a === 'dark') return a;
+    return darkMq && darkMq.matches ? 'dark' : 'light';
+  }
+  function updateThemeButton() {
+    const dark = effectiveTheme() === 'dark';
+    // SVG ไม่มี property .hidden จึงต้องสลับ attribute เอง
+    $('icoMoon').toggleAttribute('hidden', dark);   // โหมดกลางวัน: แสดงพระจันทร์ (กดเพื่อเป็นกลางคืน)
+    $('icoSun').toggleAttribute('hidden', !dark);   // โหมดกลางคืน: แสดงพระอาทิตย์ (กดเพื่อเป็นกลางวัน)
+    const label = dark ? t('to_light') : t('to_dark');
+    $('themeBtn').setAttribute('aria-label', label);
+    $('themeBtn').title = label;
+  }
+  $('themeBtn').addEventListener('click', () => {
+    const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    store.set('bq-theme', next);
+    updateThemeButton();
+  });
+  if (darkMq && darkMq.addEventListener) darkMq.addEventListener('change', updateThemeButton);
+
+  /* ================= form setup ================= */
+  [1, 2, 3, 4, 5, 6].forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = n; b.dataset.fx = n;
+    $('fxChips').appendChild(b);
+  });
+  $('fxChips').addEventListener('click', (e) => {
+    if (!e.target.dataset.fx) return;
+    $('totalFx').value = e.target.dataset.fx; regenerate();
+  });
+
+  // วันในสัปดาห์ (เริ่มจันทร์)
+  [1, 2, 3, 4, 5, 6, 0].forEach(d => {
+    const l = document.createElement('label');
+    l.innerHTML = '<input type="checkbox" value="' + d + '"' + (d >= 1 && d <= 5 ? ' checked' : '') + '><span></span>';
+    $('days').appendChild(l);
+  });
+  document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    let set;
+    if (b.dataset.preset === 'weekly') {
+      const sd = $('startDate').value ? parseIso($('startDate').value).getDay() : 1;
+      set = [sd];
+    } else set = b.dataset.preset.split(',').map(Number);
+    $('days').querySelectorAll('input').forEach(i => { i.checked = set.includes(Number(i.value)); });
+    regenerate();
+  }));
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+    const m = modeVal();
+    // เปลี่ยนเป็นเลือกวันเอง: ตั้งต้นจากวันที่ที่สร้างไว้ตอนนี้ แล้วค่อยแก้ทีละ Fx
+    if (m === 'manual') state.manual = state.sessions.map(x => x.date);
+    $('modeDays').hidden = m !== 'days';
+    $('modeInterval').hidden = m !== 'interval';
+    $('modeManual').hidden = m !== 'manual';
+    $('startDateField').hidden = m === 'manual';
+    $('holidayRow').hidden = m === 'manual';
+    regenerate();
+  }));
+  const modeVal = () => document.querySelector('input[name=mode]:checked').value;
+
+  ['totalFx', 'startDate', 'interval', 'skipHoliday'].forEach(id => $(id).addEventListener('change', regenerate));
+  $('days').addEventListener('change', regenerate);
+  $('totalFx').addEventListener('input', regenerate);
+  $('hn').addEventListener('change', renderPreview);
+
+  /* ================= เลือกวันเองตาม Fraction ================= */
+  state.manual = [];
+  function renderManual() {
+    $('manualList').innerHTML = state.manual.map((d, i) =>
+      '<label class="mrow"><span>Fx ' + (i + 1) + '</span><input type="date" data-mi="' + i + '" value="' + esc(d) + '"' +
+      (d ? '' : ' class="empty"') + ' aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '"></label>').join('');
+  }
+  $('manualList').addEventListener('change', (e) => {
+    const i = e.target.dataset.mi; if (i == null) return;
+    state.manual[Number(i)] = e.target.value;
+    e.target.classList.toggle('empty', !e.target.value);
+    regenerate(true);
+  });
+
+  /* ================= สร้างรายการวันนัด ================= */
+  function isBlocked(d) {
+    if (!$('skipHoliday').checked) return false;
+    return d.getDay() === 0 || d.getDay() === 6 || !!state.holidays[iso(d)];
+  }
+  function nextFree(d) {
+    let x = new Date(d), guard = 0;
+    while (isBlocked(x) && guard++ < 60) x = addDays(x, 1);
+    return x;
+  }
+
+  function regenerate(keepManualInputs) {
+    const n = Math.max(0, Math.min(30, parseInt($('totalFx').value, 10) || 0));
+    if (modeVal() === 'manual') {
+      // ช่องวันที่เท่ากับจำนวน Fraction: เพิ่มช่องว่างหรือตัดช่องท้ายออก
+      state.manual = state.manual.slice(0, n);
+      while (state.manual.length < n) state.manual.push('');
+      if (keepManualInputs !== true) renderManual();
+      state.sessions = state.manual.map(d => ({ date: d }));
+      renderPreview();
+      return;
+    }
+    const sd = $('startDate').value;
+    const out = [];
+    if (sd && n) {
+      if (modeVal() === 'interval') {
+        const step = Math.max(1, parseInt($('interval').value, 10) || 1);
+        let d = nextFree(parseIso(sd));
+        for (let i = 0; i < n; i++) { out.push(d); d = nextFree(addDays(d, step)); }
+      } else {
+        const allowed = Array.from($('days').querySelectorAll('input:checked')).map(i => Number(i.value));
+        if (allowed.length) {
+          let d = parseIso(sd), guard = 0;
+          while (out.length < n && guard++ < 400) {
+            const holiday = $('skipHoliday').checked && state.holidays[iso(d)];
+            if (allowed.includes(d.getDay()) && !holiday) out.push(new Date(d));
+            d = addDays(d, 1);
+          }
+        }
+      }
+    }
+    state.sessions = out.map(d => ({ date: iso(d) }));
+    renderPreview();
+  }
+
+  function renderPreview() {
+    const box = $('preview');
+    const n = state.sessions.length;
+    if (!state.busy) $('saveBtn').textContent = n ? t('save_n', { n: n }) : t('save');
+    if (!n) { box.innerHTML = '<div class="empty">' + esc(t('preview_empty')) + '</div>'; return; }
+    const booked = state.appts.filter(a => a.status === ST_BOOKED);
+    const counts = dayCounts();
+    const hn = $('hn').value.trim();
+    box.innerHTML = state.sessions.map((s, i) => {
+      if (!s.date) {
+        return '<div class="fx warn"><span class="no">Fx ' + (i + 1) + '</span>' +
+          '<input type="date" data-i="' + i + '" value="" aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '">' +
+          '<span class="desc">⚠️ ' + esc(t('w_nodate')) + '</span></div>';
+      }
+      const warns = [];
+      const d = parseIso(s.date);
+      if (state.holidays[s.date]) warns.push(t('w_holiday', { name: state.holidays[s.date] }));
+      if (d.getDay() === 0 || d.getDay() === 6) warns.push(t('w_weekend'));
+      if (s.date < todayIso()) warns.push(t('w_past'));
+      const prev = state.sessions.slice(0, i).map(x => x.date).filter(Boolean).pop();
+      if (prev && s.date < prev) warns.push(t('w_order'));
+      if (hn && booked.some(a => a.hn === hn && a.date === s.date)) warns.push(t('w_dup'));
+      const existing = (counts[s.date] || []).length;
+      const after = existing + state.sessions.filter(x => x.date === s.date).length;
+      if (after > state.max) warns.push(t('w_over', { n: after, max: state.max }));
+      return '<div class="fx' + (warns.length ? ' warn' : '') + '">' +
+        '<span class="no">Fx ' + (i + 1) + '</span>' +
+        '<input type="date" data-i="' + i + '" value="' + s.date + '" aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '">' +
+        '<span class="desc">' + esc(fmtDate(s.date, LONG)) +
+        ' · <span class="cap' + (after > state.max ? ' over' : '') + '">' + esc(t('booked_cap', { n: existing, max: state.max })) + '</span>' +
+        (warns.length ? ' — ⚠️ ' + esc(warns.join(' · ')) : '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+  $('preview').addEventListener('change', (e) => {
+    const i = e.target.dataset.i;
+    if (i == null || !e.target.value) return;
+    state.sessions[Number(i)].date = e.target.value;
+    if (modeVal() === 'manual') { state.manual[Number(i)] = e.target.value; renderManual(); }
+    renderPreview();
+  });
+
+  /* ================= บันทึก (คลิกเดียว) ================= */
+  function buildPayload(force) {
+    return {
+      hn: $('hn').value.trim(), name: $('name').value.trim(), doctor: $('doctor').value.trim(), technique: techPick.get(),
+      totalFx: parseInt($('totalFx').value, 10), note: $('note').value.trim(),
+      sessions: state.sessions.map(s => ({ date: s.date })), force: !!force
+    };
+  }
+
+  function validate(p) {
+    if (!p.hn) return ['hn', t('v_hn')];
+    if (!p.name) return ['name', t('v_name')];
+    if (!p.doctor) return ['doctor', t('v_doctor')];
+    if (!techPick.selected()) return [null, t('v_tech')];
+    if (!p.technique) return ['techOther', t('v_tech_other')];
+    if (!(p.totalFx >= 1 && p.totalFx <= 30)) return ['totalFx', t('v_fx')];
+    if (modeVal() !== 'manual' && !$('startDate').value) return ['startDate', t('v_start')];
+    if (p.sessions.length !== p.totalFx) return [null, t('v_incomplete', { n: p.totalFx })];
+    const bad = p.sessions.findIndex(s => !s.date);
+    if (bad >= 0) {
+      const el = modeVal() === 'manual' ? document.querySelector('[data-mi="' + bad + '"]') : null;
+      if (el) el.focus();
+      return [null, t('v_fxdate', { n: bad + 1 })];
+    }
+    const dupHn = state.appts.find(a => a.hn === p.hn && a.status === ST_BOOKED && a.date >= todayIso());
+    if (dupHn && !confirm(t('c_dup_course', { hn: p.hn, date: fmtDate(dupHn.date) }))) return [null, null];
+    return null;
+  }
+
+  async function save(force) {
+    if (state.busy) return;
+    const p = buildPayload(force);
+    const v = force ? null : validate(p);
+    if (v) {
+      if (v[0]) $(v[0]).focus();
+      if (v[1]) toast(v[1], true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.create(p);
+      if (res.needConfirm) { showConfirm(res); return; }
+      state.appts = res.appointments;
+      if (res.overCapacity && res.overCapacity.length) {
+        toast(t('t_saved_over', { max: state.max, list: res.overCapacity.map(d => fmtDate(d.date) + ' (' + d.total + ')').join(', ') }), true);
+      } else {
+        toast(t('t_saved', { hn: p.hn, n: res.count }));
+      }
+      resetForm();
+    } catch (e) {
+      toast(t('t_save_failed', { msg: errMsg(e) }), true);
+    } finally {
+      setBusy(false);
+      renderAll();
+    }
+  }
+  $('saveBtn').addEventListener('click', () => save(false));
+  $('f').addEventListener('submit', (e) => { e.preventDefault(); save(false); });
+
+  function setBusy(b) {
+    state.busy = b;
+    $('saveBtn').disabled = b;
+    if (b) $('saveBtn').textContent = t('saving'); else renderPreview();
+  }
+
+  function resetForm() {
+    ['hn', 'name', 'note'].forEach(id => { $(id).value = ''; });
+    $('doctor').value = '';
+    techPick.set('');
+    state.manual = [];
+    regenerate();
+    $('hn').focus();
+  }
+
+  function showConfirm(res) {
+    let html = '';
+    const over = res.overCapacity || [], conf = res.conflicts || [];
+    const max = res.max || state.max;
+    if (over.length) {
+      html += '<p><b class="badtext">' + esc(t('m_over', { max: max })) + '</b></p><ul>' + over.map(d =>
+        '<li>' + esc(t('m_over_li', { date: fmtDate(d.date), e: d.existing, a: d.adding })) + ' <b class="badtext">' + esc(cases(d.total)) + '</b></li>'
+      ).join('') + '</ul>';
+    }
+    if (conf.length) {
+      html += '<p><b>' + esc(t('m_dup')) + '</b></p><ul>' + conf.map(c =>
+        '<li><b>Fx ' + c.fx + '</b> ' + esc(fmtDate(c.date)) + '<br><span class="hint">' + esc(t('m_dup_with', { w: c.with })) + '</span></li>'
+      ).join('') + '</ul>';
+    }
+    html += '<p class="hint">' + esc(t('m_hint')) + '</p>';
+    $('mBody').innerHTML = html;
+    $('modal').classList.add('show');
+    $('mOk').focus();
+  }
+  $('mCancel').addEventListener('click', () => $('modal').classList.remove('show'));
+  $('mOk').addEventListener('click', () => { $('modal').classList.remove('show'); save(true); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('modal').classList.remove('show'); });
+
+  /* ================= ตารางนัด ================= */
+  $('filters').addEventListener('click', (e) => {
+    const f = e.target.dataset.f; if (!f) return;
+    state.filter = f;
+    $('filters').querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.f === f));
+    renderTable();
+  });
+  $('q').addEventListener('input', renderTable);
+  $('refreshBtn').addEventListener('click', async () => {
+    try { state.appts = await api.list(); renderAll(); toast(t('refreshed')); }
+    catch (e) { toast(errMsg(e), true); }
+  });
+
+  const COLS = 9;
+  function theadHtml() {
+    return '<tr><th>' + esc(t('th_queue')) + '</th><th>HN</th><th>' + esc(t('th_name')) + '</th><th>' + esc(t('th_doctor')) +
+      '</th><th>' + esc(t('th_tech')) + '</th><th>Fx</th><th>' + esc(t('th_note')) + '</th><th>' + esc(t('th_status')) + '</th><th></th></tr>';
+  }
+  function rowHtml(a, queueNo) {
+    const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
+    return '<tr class="' + (cls === 'cancel' ? 'cancel' : '') + '">' +
+      '<td>' + (a.status === ST_CANCEL ? '–' : queueNo[a.apptId]) + '</td>' +
+      '<td><b>' + esc(a.hn) + '</b></td>' +
+      '<td class="name">' + esc(a.name) + '</td>' +
+      '<td>' + esc(a.doctor) + '</td>' +
+      '<td>' + (a.technique ? '<span class="techtag">' + esc(techText(a.technique)) + '</span>' : '<span class="hint">–</span>') + '</td>' +
+      '<td>' + esc(a.fx) + '/' + esc(a.totalFx) + '</td>' +
+      '<td class="name hint">' + esc(a.note) + '</td>' +
+      '<td class="stcell act"><div class="stline"><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
+        '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></div>' +
+        (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
+          esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '</button>' : '') + '</td>' +
+      '<td class="act"><div class="acts">' + actionButtons(a) + '</div></td></tr>';
+  }
+
+  function renderTable() {
+    const today = todayIso();
+    const q = $('q').value.trim().toLowerCase();
+    let list = state.appts.slice();
+    if (state.filter === 'today') list = list.filter(a => a.date === today);
+    else if (state.filter === 'upcoming') list = list.filter(a => a.date >= today);
+    else if (state.filter === 'past') list = list.filter(a => a.date < today).reverse();
+    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor + ' ' + (a.technique || '')).toLowerCase().includes(q));
+
+    const active = state.appts.filter(a => a.status !== ST_CANCEL);
+    const todays = active.filter(a => a.date === today).length;
+    const upcoming = active.filter(a => a.date >= today && a.status === ST_BOOKED);
+    const patients = new Set(upcoming.map(a => a.hn)).size;
+    $('stats').innerHTML = t('stats', { a: todays, b: upcoming.length, c: patients });
+
+    if (!list.length) { $('tbody').innerHTML = '<tr><td colspan="' + COLS + '" class="empty">' + esc(t('no_appts')) + '</td></tr>'; return; }
+    const counts = dayCounts();
+    const queueNo = queueNumbers(counts);
+    let lastDate = '';
+    $('tbody').innerHTML = list.map(a => {
+      let sep = '';
+      if (a.date !== lastDate) {
+        lastDate = a.date;
+        const n = (counts[a.date] || []).length;
+        sep = '<tr class="daysep"><td colspan="' + COLS + '">' + esc(fmtDate(a.date, LONG)) + (a.date === today ? esc(t('today_tag')) : '') +
+          ' · ' + esc(cases(n)) + (n > state.max ? ' <span class="badtext">' + esc(t('over_max', { max: state.max })) + '</span>' : '') + '</td></tr>';
+      }
+      return sep + rowHtml(a, queueNo);
+    }).join('');
+  }
+
+  async function onActionClick(e) {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const a = state.appts.find(x => x.apptId === b.dataset.id); if (!a) return;
+    const who = 'HN ' + a.hn + ' ' + a.name;
+    if (b.dataset.act === 'edit' || b.dataset.act === 'hist') { openEdit(a, b.dataset.act === 'hist'); return; }
+    let p;
+    if (b.dataset.act === 'done') p = api.done(a.apptId);
+    else if (b.dataset.act === 'cancel') {
+      if (!confirm(t('c_cancel_one', { fx: a.fx, who: who, date: fmtDate(a.date) }))) return;
+      p = api.cancel(a.apptId, 'one');
+    } else {
+      if (!confirm(t('c_cancel_course', { who: who }))) return;
+      p = api.cancel(a.apptId, 'course');
+    }
+    b.disabled = true;
+    try {
+      const res = await p; state.appts = res.appointments; renderAll();
+      toast(b.dataset.act === 'done' ? t('t_done') : t('t_cancelled', { n: res.changed }));
+    } catch (err) { toast(errMsg(err), true); b.disabled = false; }
+  }
+  $('tbody').addEventListener('click', onActionClick);
+  $('dayDetail').addEventListener('click', onActionClick);
+
+  /* ================= รูปแบบการใส่ ================= */
+  state.techniques = ['Full', 'Mould', 'เสียบเข็ม'];
+  const TECH_OTHER = 'อื่นๆ';
+  // ค่าที่เก็บในชีตเป็นคำเดิม (Full / Mould / เสียบเข็ม / ที่กรอกเอง) แปลเฉพาะตอนแสดงผล
+  const techText = (v) => (v === 'เสียบเข็ม' ? t('tech_needle') : v);
+  function makeTechPicker(chipsId, otherId) {
+    let sel = '';
+    const chips = $(chipsId), other = $(otherId);
+    const api = {
+      render() {
+        chips.innerHTML = state.techniques.concat(TECH_OTHER).map(v =>
+          '<button type="button" class="chip' + (v === sel ? ' on' : '') + '" role="radio" aria-checked="' + (v === sel) + '" data-tech="' + esc(v) + '">' +
+          esc(v === TECH_OTHER ? t('tech_other') : techText(v)) + '</button>').join('');
+        other.hidden = sel !== TECH_OTHER;
+      },
+      set(v) {
+        v = String(v || '');
+        if (!v) { sel = ''; other.value = ''; }
+        else if (state.techniques.indexOf(v) >= 0) { sel = v; other.value = ''; }
+        else { sel = TECH_OTHER; other.value = v; }
+        api.render();
+      },
+      get() { return sel === TECH_OTHER ? other.value.replace(/\s+/g, ' ').trim() : sel; },
+      selected() { return sel; }
+    };
+    chips.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tech]'); if (!b) return;
+      sel = b.dataset.tech; api.render();
+      if (sel === TECH_OTHER) other.focus();
+    });
+    return api;
+  }
+  const techPick = makeTechPicker('techChips', 'techOther');
+  const ePick = makeTechPicker('eTechChips', 'eTechOther');
+
+  /* ================= แก้ไขนัด + ประวัติ ================= */
+  let editing = null;
+  function openEdit(a, focusHistory) {
+    editing = a;
+    $('eWho').textContent = 'HN ' + a.hn + ' · ' + a.name + ' · Fx ' + a.fx + '/' + a.totalFx;
+    $('eDate').value = a.date;
+    $('eStatus').innerHTML = [ST_BOOKED, ST_DONE, ST_CANCEL].map(v =>
+      '<option value="' + esc(v) + '"' + (v === a.status ? ' selected' : '') + '>' + esc(statusText(v)) + '</option>').join('');
+    if (a.doctor && !Array.from($('eDoctor').options).some(o => o.value === a.doctor)) {
+      $('eDoctor').insertAdjacentHTML('beforeend', '<option value="' + esc(a.doctor) + '">' + esc(a.doctor) + '</option>');
+    }
+    $('eDoctor').value = a.doctor;
+    ePick.set(a.technique || '');
+    $('eNote').value = a.note || '';
+    renderEditHints();
+    renderHistory(a);
+    $('editModal').classList.add('show');
+    setTimeout(() => {
+      if (focusHistory) $('eHistory').scrollIntoView({ block: 'nearest' }); else $('eDate').focus();
+    }, 0);
+  }
+  function closeEdit() { $('editModal').classList.remove('show'); editing = null; }
+  function renderEditHints() {
+    if (!editing) return;
+    const d = $('eDate').value, st = $('eStatus').value;
+    if (d && st !== ST_CANCEL) {
+      const others = state.appts.filter(x => x.date === d && x.status !== ST_CANCEL && x.apptId !== editing.apptId).length;
+      const after = others + 1;
+      $('eCap').innerHTML = '<span class="cap' + (after > state.max ? ' over' : '') + '">' + esc(t('booked_cap', { n: others, max: state.max })) + '</span>' +
+        (after > state.max ? ' — ⚠️ ' + esc(t('w_over', { n: after, max: state.max })) : '') +
+        (state.holidays[d] ? ' · ' + esc(t('w_holiday', { name: state.holidays[d] })) : '');
+    } else $('eCap').textContent = '';
+    $('eStatusHint').textContent = st === ST_CANCEL && editing.status !== ST_CANCEL ? t('e_cancel_hint')
+      : st !== ST_CANCEL && editing.status === ST_CANCEL ? t('e_restore_hint') : '';
+  }
+  $('eDate').addEventListener('change', renderEditHints);
+  $('eStatus').addEventListener('change', renderEditHints);
+  $('eClose').addEventListener('click', closeEdit);
+  $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) closeEdit(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editing) closeEdit(); });
+
+  function fieldValue(f, v) {
+    if (!v) return '–';
+    if (f === 'status') return statusText(v);
+    if (f === 'date') return fmtDate(v);
+    if (f === 'technique') return techText(v);
+    return v;
+  }
+  function renderHistory(a) {
+    const items = (a.history || []).slice().reverse().map(h =>
+      '<li><b>' + esc(h.name || h.by) + '</b> <span class="ago">· ' + esc(h.at) + '</span><ul>' +
+      (h.changes || []).map(c => '<li>' + esc(t('f_' + c.f)) + ': ' + esc(fieldValue(c.f, c.from)) + ' → <b>' + esc(fieldValue(c.f, c.to)) + '</b></li>').join('') +
+      '</ul></li>');
+    const created = a.createdBy ? '<li><span class="ago">' + esc(t('e_created', { name: a.createdBy, at: a.createdAt || '' })) + '</span></li>' : '';
+    $('eHistory').innerHTML = (items.length ? items.join('') : '<li class="hint">' + esc(t('e_none')) + '</li>') + created;
+  }
+
+  $('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    const a = editing;
+    if (!$('eDate').value) { toast(t('v_fxdate', { n: a.fx }), true); $('eDate').focus(); return; }
+    if (!ePick.selected()) { toast(t('v_tech'), true); return; }
+    const next = { date: $('eDate').value, status: $('eStatus').value, doctor: $('eDoctor').value,
+      technique: ePick.get(), note: $('eNote').value.trim() };
+    if (!next.technique) { toast(t('v_tech_other'), true); $('eTechOther').focus(); return; }
+    const ch = {};
+    Object.keys(next).forEach(k => { if (next[k] !== (a[k] || '')) ch[k] = next[k]; });
+    if (!Object.keys(ch).length) { toast(t('e_nochange')); return; }
+    const btn = $('eSave'); btn.disabled = true;
+    try {
+      const res = await api.edit(a.apptId, ch);
+      state.appts = res.appointments;
+      closeEdit();
+      renderAll();
+      if (res.overCapacity && res.overCapacity.length) {
+        toast(t('e_saved') + ' · ' + t('t_saved_over', { max: state.max, list: res.overCapacity.map(d => fmtDate(d.date) + ' (' + d.total + ')').join(', ') }), true);
+      } else toast(t('e_saved'));
+    } catch (err) { toast(errMsg(err), true); }
+    finally { btn.disabled = false; }
+  });
+
+  /* ================= ส่วนกลาง ================= */
+  // นัดที่ไม่ถูกยกเลิก จัดกลุ่มตามวัน { 'yyyy-MM-dd': [appt, ...] }
+  function dayCounts() {
+    const m = {};
+    state.appts.forEach(a => { if (a.status !== ST_CANCEL) (m[a.date] = m[a.date] || []).push(a); });
+    return m;
+  }
+  // ลำดับคิวในแต่ละวัน (ตามลำดับที่ลงนัด ไม่นับนัดที่ยกเลิก)
+  function queueNumbers(counts) {
+    const q = {};
+    Object.keys(counts).forEach(d => counts[d].forEach((a, i) => { q[a.apptId] = i + 1; }));
+    return q;
+  }
+  function actionButtons(a) {
+    if (a.status !== ST_BOOKED) return '';
+    const id = esc(a.apptId);
+    return '<button class="btn sm okb" data-act="done" data-id="' + id + '" title="' + esc(t('a_done_title')) + '">' + esc(t('a_done')) + '</button>' +
+      '<button class="btn sm danger" data-act="cancel" data-id="' + id + '" title="' + esc(t('a_cancel_title')) + '">' + esc(t('a_cancel')) + '</button>' +
+      (a.totalFx > 1 ? '<button class="btn sm danger" data-act="course" data-id="' + id + '" title="' + esc(t('a_course_title')) + '">' + esc(t('a_course')) + '</button>' : '');
+  }
+
+  function renderAll() {
+    renderAlerts();
+    renderTable();
+    renderPreview();
+    if (state.view === 'dash') renderDash();
+  }
+
+  // แถบแจ้งเตือน: วันนี้เป็นต้นไปที่มีเคสเกินกำหนด
+  function renderAlerts() {
+    const counts = dayCounts(), today = todayIso();
+    const over = Object.keys(counts).filter(d => d >= today && counts[d].length > state.max).sort();
+    const bar = $('alertBar');
+    if (!over.length) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.innerHTML = '<b>' + esc(t('alert', { n: over.length, max: state.max })) + '</b>' +
+      over.map(d => '<button type="button" data-goto="' + d + '">' + esc(fmtDate(d)) + ' · ' + esc(cases(counts[d].length)) + '</button>').join('');
+  }
+  $('alertBar').addEventListener('click', (e) => {
+    const d = e.target.closest('[data-goto]'); if (!d) return;
+    const dt = parseIso(d.dataset.goto);
+    state.dashMonth = new Date(dt.getFullYear(), dt.getMonth(), 1);
+    state.dashDay = d.dataset.goto;
+    setView('dash');
+    $('dayDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  /* ================= สลับหน้า ================= */
+  function setView(v) {
+    state.view = v;
+    $('viewBook').hidden = v !== 'book';
+    $('viewDash').hidden = v !== 'dash';
+    $('viewUsers').hidden = v !== 'users';
+    $('tabs').querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.view === v));
+    if (v === 'dash') renderDash();
+    if (v === 'users') loadUsers();
+  }
+  $('tabs').addEventListener('click', (e) => { const x = e.target.closest('[data-view]'); if (x) setView(x.dataset.view); });
+
+  /* ================= แดชบอร์ด ================= */
+  const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+  function daysOfMonth(m) {
+    const n = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), out = [];
+    for (let i = 1; i <= n; i++) out.push(iso(new Date(m.getFullYear(), m.getMonth(), i)));
+    return out;
+  }
+  $('prevM').addEventListener('click', () => { const m = state.dashMonth; state.dashMonth = new Date(m.getFullYear(), m.getMonth() - 1, 1); state.dashDay = null; renderDash(); });
+  $('nextM').addEventListener('click', () => { const m = state.dashMonth; state.dashMonth = new Date(m.getFullYear(), m.getMonth() + 1, 1); state.dashDay = null; renderDash(); });
+  $('thisM').addEventListener('click', () => { state.dashMonth = monthStart(new Date()); state.dashDay = todayIso(); renderDash(); });
+
+  function renderDash() {
+    if (!state.dashMonth) state.dashMonth = monthStart(new Date());
+    const m = state.dashMonth;
+    const counts = dayCounts();
+    const today = todayIso();
+    const days = daysOfMonth(m);
+    if (!state.dashDay || state.dashDay.slice(0, 7) !== days[0].slice(0, 7)) {
+      state.dashDay = today.slice(0, 7) === days[0].slice(0, 7) ? today : (days.find(d => counts[d]) || days[0]);
+    }
+    $('monthTitle').textContent = m.toLocaleDateString(LOCALE[lang], { month: 'long', year: 'numeric' });
+
+    // KPI
+    const now = new Date(); const dow = (now.getDay() + 6) % 7;
+    const wkStart = iso(addDays(now, -dow)), wkEnd = iso(addDays(now, 6 - dow));
+    const sumRange = (a, b) => Object.keys(counts).filter(d => d >= a && d <= b).reduce((n, d) => n + counts[d].length, 0);
+    const monthTotal = days.reduce((n, d) => n + (counts[d] || []).length, 0);
+    const overDays = days.filter(d => (counts[d] || []).length > state.max);
+    const busiest = days.reduce((best, d) => ((counts[d] || []).length > (counts[best] || []).length ? d : best), days[0]);
+    const todayN = (counts[today] || []).length;
+    const short = { day: 'numeric', month: 'short' };
+    $('kpis').innerHTML =
+      kpi(t('k_today'), todayN, todayN > state.max ? t('over_max', { max: state.max }) : t('k_today_sub', { max: state.max }), todayN > state.max) +
+      kpi(t('k_week'), sumRange(wkStart, wkEnd), fmtDate(wkStart, short) + ' – ' + fmtDate(wkEnd, short)) +
+      kpi(t('k_month', { m: m.toLocaleDateString(LOCALE[lang], { month: 'short' }) }), monthTotal,
+        (counts[busiest] || []).length ? t('k_busiest', { date: fmtDate(busiest, short), cases: cases(counts[busiest].length) }) : t('k_none_yet')) +
+      kpi(t('k_over', { max: state.max }), overDays.length,
+        overDays.length ? t('k_over_days', { list: overDays.map(d => parseIso(d).getDate()).join(', ') }) : t('none'), overDays.length > 0);
+
+    renderChart(days, counts, today);
+    renderCalendar(m, days, counts, today);
+    renderDayDetail(counts);
+  }
+
+  function kpi(k, v, s, bad) {
+    return '<div class="kpi' + (bad ? ' bad' : '') + '"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>';
+  }
+
+  // กราฟแท่ง: เคสต่อวัน + เส้นจำกัดจำนวนเคส
+  function renderChart(days, counts, today) {
+    // วาดตามความกว้างจริงของกล่อง ให้ตัวหนังสือไม่เล็กลงบนมือถือ
+    const W = Math.max(300, Math.round($('chart').clientWidth || 900)), H = W < 560 ? 200 : 240, L = 30, R = 12, T = 18, B = 26;
+    const vals = days.map(d => (counts[d] || []).length);
+    const yMax = Math.max(state.max + 2, ...vals);
+    const step = yMax > 12 ? 4 : 2;
+    const top = Math.ceil(yMax / step) * step;
+    const cw = (W - L - R) / days.length;
+    const bw = Math.max(4, cw - 4); // เว้นช่องระหว่างแท่ง
+    const y = (v) => T + (H - T - B) * (1 - v / top);
+    let g = '<g class="grid">';
+    for (let v = 0; v <= top; v += step) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+    g += '</g><g class="axis">';
+    for (let v = 0; v <= top; v += step) g += '<text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    const every = cw < 14 ? 5 : cw < 22 ? 2 : 1;
+    days.forEach((d, i) => {
+      const n = i + 1;
+      if (n === 1 || (n - 1) % every === 0) {
+        g += '<text x="' + (L + cw * i + cw / 2) + '" y="' + (H - 8) + '" text-anchor="middle"' + (d === today ? ' class="today"' : '') + '>' + n + '</text>';
+      }
+    });
+    g += '</g>';
+    let bars = '';
+    days.forEach((d, i) => {
+      const v = vals[i]; const x = L + cw * i + (cw - bw) / 2;
+      if (v > 0) {
+        const y0 = y(0), y1 = y(v), r = Math.min(4, bw / 2, y0 - y1);
+        const cls = 'bar' + (v > state.max ? ' over' : '') + (d < today ? ' past' : '');
+        bars += '<path class="' + cls + '" d="M' + x + ',' + y0 + 'V' + (y1 + r) + 'Q' + x + ',' + y1 + ' ' + (x + r) + ',' + y1 +
+          'H' + (x + bw - r) + 'Q' + (x + bw) + ',' + y1 + ' ' + (x + bw) + ',' + (y1 + r) + 'V' + y0 + 'Z"/>';
+        if (v > state.max) bars += '<text class="val" x="' + (x + bw / 2) + '" y="' + (y1 - 4) + '">' + v + '</text>';
+      }
+    });
+    const ly = y(state.max);
+    const limit = '<line class="limit" x1="' + L + '" x2="' + (W - R) + '" y1="' + ly + '" y2="' + ly + '"/>' +
+      '<text class="limit-label" x="' + (W - R) + '" y="' + (ly - 5) + '" text-anchor="end">' + esc(t('limit_label', { max: state.max })) + '</text>';
+    let hits = '';
+    days.forEach((d, i) => {
+      hits += '<rect class="hit' + (d === state.dashDay ? ' sel' : '') + '" data-d="' + d + '" x="' + (L + cw * i) + '" y="' + T + '" width="' + cw + '" height="' + (H - T - B + 18) + '" rx="4"/>';
+    });
+    $('chart').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(t('chart_aria')) + '">' + g + hits + bars + limit + '</svg><div class="tip" id="tip"></div>';
+    $('legend').innerHTML = '<span><i style="background:var(--accent)"></i>' + esc(t('lg_cases')) + '</span>' +
+      '<span><i style="background:var(--bad)"></i>' + esc(t('lg_over', { max: state.max })) + '</span>' +
+      '<span><i style="background:var(--accent);opacity:.45"></i>' + esc(t('lg_past')) + '</span>' +
+      '<span><i class="dash"></i>' + esc(t('lg_limit')) + '</span>';
+  }
+  // tooltip + คลิกแท่ง
+  $('chart').addEventListener('mousemove', (e) => {
+    const r = e.target.closest('.hit'); const tip = $('tip'); if (!tip) return;
+    if (!r) { tip.style.display = 'none'; return; }
+    const d = r.dataset.d, list = dayCounts()[d] || [];
+    tip.innerHTML = '<b>' + esc(fmtDate(d)) + '</b><br>' + esc(cases(list.length)) + (list.length > state.max ? ' · ' + esc(t('over_max', { max: state.max })) : '') +
+      (list.length ? '<br>' + list.slice(0, 8).map((a, i) => esc((i + 1) + '. HN ' + a.hn + ' ' + a.name)).join('<br>') + (list.length > 8 ? '<br>…' : '') : '');
+    tip.style.display = 'block';
+    const box = $('chart').getBoundingClientRect();
+    let x = e.clientX - box.left + 12; if (x + 260 > box.width) x = e.clientX - box.left - tip.offsetWidth - 12;
+    tip.style.left = Math.max(0, x) + 'px'; tip.style.top = Math.max(0, e.clientY - box.top - 10) + 'px';
+  });
+  $('chart').addEventListener('mouseleave', () => { const tip = $('tip'); if (tip) tip.style.display = 'none'; });
+  $('chart').addEventListener('click', (e) => {
+    const r = e.target.closest('.hit'); if (!r) return;
+    state.dashDay = r.dataset.d; renderDash();
+  });
+  let resizeT;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (state.view === 'dash') renderChart(daysOfMonth(state.dashMonth), dayCounts(), todayIso()); }, 150);
+  });
+
+  // ปฏิทินรายเดือน: แต่ละวันแสดงจำนวนเคสและรายชื่อตามคิว
+  function renderCalendar(m, days, counts, today) {
+    const lead = (new Date(m.getFullYear(), m.getMonth(), 1).getDay() + 6) % 7; // เริ่มวันจันทร์
+    let html = [1, 2, 3, 4, 5, 6, 0].map(d => '<div class="dow">' + esc(DOW[lang][d]) + '</div>').join('');
+    for (let i = 0; i < lead; i++) html += '<div class="day out"></div>';
+    days.forEach(d => {
+      const list = counts[d] || [];
+      const n = list.length, hol = state.holidays[d];
+      const cls = ['day', n === 0 ? 'empty' : '', hol ? 'holiday' : '', d === today ? 'today' : '', d === state.dashDay ? 'sel' : '',
+        n > state.max ? 'over' : n === state.max ? 'full' : ''].filter(Boolean).join(' ');
+      const show = list.slice(0, 7);
+      html += '<button type="button" class="' + cls + '" data-d="' + d + '">' +
+        '<div class="top"><span class="num">' + parseIso(d).getDate() +
+        '<span class="hint" style="font-weight:400"> ' + esc(DOW[lang][parseIso(d).getDay()]) + '</span></span>' +
+        (n ? '<span class="cnt">' + (n > state.max ? '⚠️ ' : '') + esc(cases(n)) + '</span>' : '') + '</div>' +
+        (hol ? '<div class="hol">🏖 ' + esc(hol) + '</div>' : '') +
+        (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
+          (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
+          (n > show.length ? '<li class="more">' + esc(t('more', { n: n - show.length })) + '</li>' : '') + '</ul>' : '') +
+        '</button>';
+    });
+    const trail = (7 - (lead + days.length) % 7) % 7;
+    for (let i = 0; i < trail; i++) html += '<div class="day out"></div>';
+    $('calgrid').innerHTML = html;
+  }
+  $('calgrid').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-d]'); if (!b) return;
+    state.dashDay = b.dataset.d; renderDash();
+    if (window.innerWidth < 860) $('dayDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // รายละเอียดวันที่เลือก
+  function renderDayDetail(counts) {
+    const d = state.dashDay;
+    const all = state.appts.filter(a => a.date === d);
+    const active = counts[d] || [];
+    const queueNo = queueNumbers(counts);
+    const byDoc = {};
+    active.forEach(a => { byDoc[a.doctor] = (byDoc[a.doctor] || 0) + 1; });
+    const n = active.length;
+    let html = '<h3>' + esc(fmtDate(d, LONG)) + ' — ' + esc(cases(n)) +
+      (n > state.max ? ' <span class="badtext">' + esc(t('dd_over', { max: state.max, n: n - state.max })) + '</span>' : '') + '</h3>';
+    if (state.holidays[d]) html += '<p class="hint">🏖 ' + esc(t('w_holiday', { name: state.holidays[d] })) + '</p>';
+    if (Object.keys(byDoc).length) {
+      html += '<div class="docsum">' + Object.keys(byDoc).map(k => '<span>👩‍⚕️ ' + esc(k) + ' · ' + byDoc[k] + '</span>').join('') + '</div>';
+    }
+    if (!all.length) { $('dayDetail').innerHTML = html + '<div class="empty">' + esc(t('no_appts_day')) + '</div>'; return; }
+    html += '<div class="tablewrap"><table><thead>' + theadHtml() + '</thead><tbody>' +
+      all.map(a => rowHtml(a, queueNo)).join('') + '</tbody></table></div>';
+    $('dayDetail').innerHTML = html;
+  }
+
+  /* ================= init ================= */
+  applyStaticText();
+  $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+
+  // โหลดข้อมูลหลังเข้าสู่ระบบ (หรือเมื่อเปิดหน้าโดยมี token เดิม)
+  async function loadApp() {
+    $('tbody').innerHTML = '<tr><td colspan="' + COLS + '" class="empty">' + esc(t('loading')) + '</td></tr>';
+    state.loadError = '';
+    try {
+      const d = await api.init();
+      state.user = d.user;
+      state.pending = d.pendingAccounts || 0;
+      state.calName = d.settings.calendarName;
+      state.techniques = d.techniques || ['Full', 'Mould', 'เสียบเข็ม'];
+      techPick.render(); ePick.render();
+      $('eDoctor').innerHTML = d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
+      state.max = d.settings.maxCasesPerDay || 6;
+      $('doctor').innerHTML = '<option value="" data-i18n="choose_doctor">' + esc(t('choose_doctor')) + '</option>' +
+        d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
+      d.holidays.forEach(h => { state.holidays[h.date] = h.name || t('holiday_default'); });
+      $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
+      state.appts = d.appointments;
+    } catch (e) {
+      if (!auth.token) return; // ต้องเข้าสู่ระบบใหม่ (onAuthLost แสดงหน้าเข้าสู่ระบบแล้ว)
+      state.loadError = errMsg(e);
+      toast(state.loadError, true);
+    }
+    showApp();
+    renderUser();
+    regenerate();
+    renderAll();
+  }
+
+  if (auth.token) loadApp(); else showAuth('login');
+
+  if (!isGas) {
+    $('seedBtn').addEventListener('click', async () => { state.appts = await api.seed(); renderAll(); toast(t('seeded')); });
+    $('clearBtn').addEventListener('click', async () => { state.appts = await api.clear(); renderAll(); toast(t('cleared')); });
+  }
+})();
+</script>
+</body>
+</html>
