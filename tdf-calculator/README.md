@@ -24,6 +24,8 @@ node --test tdf-calculator/tdf.test.js
 
 Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone**
 
+เปิด `copy-code.html` เพื่อคัดลอกโค้ดทั้ง 3 ไฟล์ทีละกล่องด้วยปุ่มเดียว
+
 ### วิธีเข้าสู่ระบบ
 
 | ทาง | การทำงาน |
