@@ -32,9 +32,9 @@ var PAGE_CACHE_SECONDS = 600;
 function doGet() {
   var output;
   try {
-    var page = HtmlService.createTemplate(pageSource_());
-    page.workspaceUrl = WORKSPACE_URL;
-    output = page.evaluate();
+    // plain HTML output, not a template: template processing has broken script lines that contain "//"
+    var html = pageSource_().split('<?= workspaceUrl ?>').join(WORKSPACE_URL);
+    output = HtmlService.createHtmlOutput(html);
   } catch (err) {
     output = HtmlService.createHtmlOutput('<div style="font:16px/1.6 sans-serif;padding:24px;max-width:640px">' +
       '<h2 style="color:#b3261e">เปิด TDF Dose Calculator ไม่ได้</h2><p>' + String(err.message || err).replace(/[<>&]/g, '') +
