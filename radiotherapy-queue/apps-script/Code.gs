@@ -21,14 +21,9 @@ var APPT_COLUMNS_ = [
 // ================= หน้าเว็บ =================
 
 function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
+  return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('ระบบนัดคิวฉายรังสี')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}
-
-function include(name) {
-  return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
 /**

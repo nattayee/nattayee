@@ -114,8 +114,7 @@ export function createGas() {
   return { context, sheets, call };
 }
 
-// ประกอบ Index.html แบบเดียวกับ HtmlService.createTemplateFromFile('Index').evaluate()
+// หน้าเว็บที่ doGet ส่งออก (HtmlService.createHtmlOutputFromFile('Index'))
 export function renderIndex() {
-  const src = readFileSync(path.join(DIR, 'Index.html'), 'utf8');
-  return src.replace(/<\?!= include\('(\w+)'\); \?>/g, (_, n) => readFileSync(path.join(DIR, `${n}.html`), 'utf8'));
+  return readFileSync(path.join(DIR, 'Index.html'), 'utf8');
 }

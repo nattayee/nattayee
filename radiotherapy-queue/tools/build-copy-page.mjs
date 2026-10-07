@@ -6,10 +6,8 @@ import { ROOT } from './bundle.mjs';
 
 const FILES = [
   { file: 'Code.gs', name: 'Code', kind: 'สคริปต์', how: 'มีอยู่แล้วในโปรเจกต์ใหม่ — ลบโค้ดเดิมออกแล้ววางทับ' },
-  { file: 'Schedule.gs', name: 'Schedule', kind: 'สคริปต์', how: 'กด ＋ › สคริปต์ แล้วตั้งชื่อ Schedule' },
-  { file: 'Index.html', name: 'Index', kind: 'HTML', how: 'กด ＋ › HTML แล้วตั้งชื่อ Index' },
-  { file: 'Styles.html', name: 'Styles', kind: 'HTML', how: 'กด ＋ › HTML แล้วตั้งชื่อ Styles' },
-  { file: 'JavaScript.html', name: 'JavaScript', kind: 'HTML', how: 'กด ＋ › HTML แล้วตั้งชื่อ JavaScript' },
+  { file: 'Schedule.gs', name: 'Schedule', kind: 'สคริปต์', how: 'กด ＋ › สคริปต์ แล้วพิมพ์ชื่อ Schedule (ไม่ต้องพิมพ์ .gs)' },
+  { file: 'Index.html', name: 'Index', kind: 'HTML', how: 'กด ＋ › HTML แล้วพิมพ์ชื่อ Index (ไม่ต้องพิมพ์ .html) — ไฟล์นี้มีทั้งหน้าเว็บ รูปแบบ และสคริปต์' },
   {
     file: 'appsscript.json', name: 'appsscript.json', kind: 'Manifest', optional: true,
     how: 'ไม่บังคับ — เปิดได้ที่ การตั้งค่าโปรเจกต์ › แสดงไฟล์ Manifest "appsscript.json" ในเครื่องมือแก้ไข',

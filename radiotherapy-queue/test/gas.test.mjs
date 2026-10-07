@@ -10,9 +10,9 @@ const appt = {
 };
 
 test('ไฟล์ใน apps-script/ ตรงกับต้นฉบับใน public/ (ลืมรัน npm run build:gas?)', () => {
-  const before = ['Index.html', 'Styles.html', 'JavaScript.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
+  const before = ['Index.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
   execFileSync(process.execPath, [new URL('../tools/build-gas.mjs', import.meta.url).pathname]);
-  const after = ['Index.html', 'Styles.html', 'JavaScript.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
+  const after = ['Index.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
   assert.deepEqual(after, before);
 });
 
@@ -75,9 +75,9 @@ test('บันทึกการตั้งค่าและนำเข้�
   assert.throws(() => call('importAll', { appointments: [{ ...appt, time: 'x' }] }), /รายการที่ 1/);
 });
 
-test('doGet ประกอบหน้าเว็บได้ครบ', () => {
+test('doGet ส่งหน้าเว็บไฟล์เดียวที่มีทั้ง CSS และ JS', () => {
   const html = renderIndex();
-  assert.doesNotMatch(html, /<\?/);
+  assert.doesNotMatch(html, /include\(|href="css\/|src="js\//);
   assert.match(html, /<style>/);
   assert.match(html, /google\?\.script\?\.run/);
 });
