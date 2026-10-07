@@ -181,10 +181,7 @@
   .field textarea { min-height: 64px; resize: vertical; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .grid3 { display: grid; grid-template-columns: 1.3fr .7fr 1fr; gap: 12px; }
-  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; }
-  .grid4 .btn { min-height: 40px; width: 100%; }
-  @media (max-width: 760px) { .grid4 { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 520px) { .grid2, .grid3, .grid4 { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
   .techs { display: flex; flex-wrap: wrap; gap: 6px; }
   .techs label {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
@@ -235,7 +232,6 @@
   .mc.tx:hover { outline: 1px solid var(--primary); }
   .mc.tx.cb { background: var(--primary); color: #fff; }
   .mc.skip { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
-  .mc.clash::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 
@@ -353,8 +349,8 @@
         </div>
       </div>
 
-      <h3 class="sec">วันเริ่มฉายและเวลานัด</h3>
-      <div class="grid4">
+      <h3 class="sec">วันเริ่มฉายและความถี่</h3>
+      <div class="grid2">
         <div class="field">
           <label for="f-date">วันเริ่มฉาย <span class="req">*</span></label>
           <input type="date" id="f-date" name="startDate" required>
@@ -363,20 +359,6 @@
           <label for="f-freq">ความถี่ในการฉาย</label>
           <select id="f-freq" name="frequency"></select>
         </div>
-        <div class="field">
-          <label for="f-dur">ระยะเวลาต่อครั้ง (นาที)</label>
-          <input type="number" id="f-dur" name="duration" min="5" max="240" step="5" inputmode="numeric">
-        </div>
-        <div></div>
-        <div class="field">
-          <label for="f-time"><span id="timeLabel">เวลานัด</span> <span class="opt">(ไม่บังคับ)</span></label>
-          <input type="time" id="f-time" name="time">
-        </div>
-        <div class="field" id="time2Field" hidden>
-          <label for="f-time2">เวลานัดรอบ 2 (BID)</label>
-          <input type="time" id="f-time2" name="time2">
-        </div>
-        <button type="button" class="btn" id="findSlot">หาเวลาว่างอัตโนมัติ</button>
       </div>
 
       <h3 class="sec">การทำ CBCT</h3>
@@ -420,16 +402,13 @@
   'use strict';
 
   // ---------- settings ----------
-  const WORK_START = '08:00';     // ช่วงเวลาที่ใช้ "หาเวลาว่างอัตโนมัติ"
-  const WORK_END = '16:30';
-  const SLOT_STEP = 5;            // นาที
-  const DEFAULT_DURATION = 15;    // นาทีต่อครั้ง
+  const DEFAULT_DURATION = 15;    // นาทีต่อครั้ง (ใช้แสดงเวลาของนัดเก่าที่มีเวลานัด)
   const DEFAULT_PATTERN = 'first3_weekly';
-  const BID_MIN_GAP = 360;        // นาที ระหว่างรอบ 1 และรอบ 2 ของ BID (6 ชั่วโมง)
   // ค่าเริ่มต้นเมื่อเลือกเทคนิค (เทคนิคที่ไม่มีในนี้ใช้ DEFAULT_PATTERN)
   const TECH_DEFAULTS = {
     DIBH: { pattern: 'dibh', site: 'Lt Breast' },
     SRS: { pattern: 'daily' },
+    SRT: { pattern: 'daily' },
     SBRT: { pattern: 'daily' },
   };
   const FREQUENCIES = [
@@ -625,40 +604,6 @@
       endDate: treatmentDates[treatmentDates.length - 1],
       cbctFxSet: new Set(cbctFx),
     };
-  }
-
-  // Time slots a booking occupies on the machine (only when a time is set).
-  function slotsOf(b) {
-    const out = [];
-    b.treatmentDates.forEach((date, i) => {
-      const t = sessionOf(b.treatmentDates, i) === 2 ? b.time2 : b.time;
-      if (t) out.push({ date, s: toMin(t), e: toMin(t) + b.duration, b });
-    });
-    if (b.verifyDate && b.verifyTime) {
-      const s = toMin(b.verifyTime);
-      out.push({ date: b.verifyDate, s, e: s + b.duration, b, verify: true });
-    }
-    return out;
-  }
-  function occupancy(excludeId) {
-    const map = new Map();
-    for (const b of state.bookings) {
-      if (b.id === excludeId) continue;
-      for (const slot of slotsOf(b)) {
-        if (!map.has(slot.date)) map.set(slot.date, []);
-        map.get(slot.date).push(slot);
-      }
-    }
-    return map;
-  }
-  function findConflicts(mine, occ) {
-    const out = [];
-    for (const m of mine) {
-      for (const o of occ.get(m.date) || []) {
-        if (o.s < m.e && m.s < o.e) out.push({ date: m.date, mine: m, other: o });
-      }
-    }
-    return out;
   }
 
   /* generated from public/index.html by scripts/build.js — edit that file instead */
@@ -877,7 +822,6 @@
   });
 
   const fxCount = () => { const n = Number(form.fractions.value); return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 0; };
-  const duration = () => { const n = Number(form.duration.value); return Number.isInteger(n) && n >= 5 && n <= 240 ? n : DEFAULT_DURATION; };
   const isBid = () => form.frequency.value === 'bid';
 
   function computeSchedule() {
@@ -894,21 +838,8 @@
     const from = form.startDate.value, to = fs.dates[fs.dates.length - 1];
     return [...fs.skips].filter(d => d >= from && d <= to && isWorkday(d)).sort();
   }
-  // Slots for the given session times, defaulting to the form's time fields.
-  function slotsFor(t1 = form.time.value, t2 = isBid() ? form.time2.value : '') {
-    const dur = duration();
-    const out = [];
-    fs.dates.forEach((date, i) => {
-      const t = sessionOf(fs.dates, i) === 2 ? t2 : t1;
-      if (t) out.push({ date, s: toMin(t), e: toMin(t) + dur });
-    });
-    return out;
-  }
-
   function renderSchedule() {
     const bid = isBid();
-    $('time2Field').hidden = !bid;
-    $('timeLabel').textContent = bid ? 'เวลานัดรอบ 1' : 'เวลานัด';
     computeSchedule();
     const dates = fs.dates;
     const cbct = effectiveCbct();
@@ -928,33 +859,13 @@
       lines.push(`<div class="msg warn">วันที่เลือก (${esc(thaiDate(start, false))}) เป็น${esc(why)} — Fx 1 จะเริ่ม${esc(thaiDate(first))}</div>`);
     }
 
-    const conflicts = findConflicts(slotsFor(), occupancy(state.editingId));
-    const clashDates = new Set(conflicts.map(c => c.date));
-    if (!form.time.value) {
-      lines.push(`<div class="msg muted">ยังไม่ได้ระบุเวลานัด — ระบบจะไม่ตรวจเวลาซ้อนกับผู้ป่วยรายอื่น (กด “หาเวลาว่างอัตโนมัติ” เพื่อเลือกเวลาได้)</div>`);
-    }
-    if (bid && days < dates.length) {
-      if (!form.time2.value) {
-        lines.push(`<div class="msg muted">ยังไม่ได้ระบุเวลานัดรอบ 2 — รอบ 2 จะไม่ถูกตรวจเวลาซ้อน</div>`);
-      } else if (form.time.value && toMin(form.time2.value) - toMin(form.time.value) < BID_MIN_GAP) {
-        lines.push(`<div class="msg warn">BID ควรห่างกันอย่างน้อย ${BID_MIN_GAP / 60} ชั่วโมง (ตอนนี้ห่าง ${((toMin(form.time2.value) - toMin(form.time.value)) / 60).toFixed(1)} ชั่วโมง)</div>`);
-      }
-    }
-    if (conflicts.length) {
-      const sample = conflicts.slice(0, 4).map(c =>
-        `${shortDate(c.date)} ${c.other.b.name} (${fromMin(c.other.s)}–${fromMin(c.other.e)}${c.other.verify ? ' CBCT' : ''})`).join(', ');
-      lines.push(`<div class="msg err">เวลาซ้อนกับผู้ป่วยรายอื่น ${clashDates.size} วัน: ${esc(sample)}${conflicts.length > 4 ? ' …' : ''}</div>`);
-    } else if (form.time.value) {
-      const times = [timeRange(form.time.value, duration()), bid && form.time2.value ? timeRange(form.time2.value, duration()) : ''].filter(Boolean).join(' และ ');
-      lines.push(`<div class="msg ok">ไม่พบเวลาซ้อนกับผู้ป่วยรายอื่น (${esc(times)})</div>`);
-    }
     $('schedSummary').innerHTML = lines.join('');
     $('schedView').innerHTML = fs.view === 'table'
-      ? scheduleTable(dates, cbct, clashDates)
-      : scheduleMonths(dates, cbct, clashDates);
+      ? scheduleTable(dates, cbct)
+      : scheduleMonths(dates, cbct);
   }
 
-  function scheduleTable(dates, cbct, clashDates) {
+  function scheduleTable(dates, cbct) {
     const bid = isBid();
     const rows = [
       ...dates.map((d, i) => ({ d, fx: i + 1, sess: sessionOf(dates, i) })),
@@ -965,13 +876,12 @@
       const wk = weekKey(r.d);
       const cls = [r.skip ? 'skipped' : '', prevWeek && wk !== prevWeek ? 'newweek' : ''].filter(Boolean).join(' ');
       prevWeek = wk;
-      const clash = clashDates.has(r.d) ? ' <span class="pill bad">เวลาซ้อน</span>' : '';
       const sess = bid && !r.skip ? ` <span class="pill">รอบ ${r.sess}</span>` : '';
       // งด applies to the whole day, so a BID day shows the button on its first row only
       const act = r.skip ? 'ยกเลิกงด' : r.sess === 1 ? 'งด' : '';
       return `<tr class="${cls}">
         <td class="c-fx">${r.skip ? '–' : r.fx}</td>
-        <td><span class="d">${esc(thaiDate(r.d))}</span>${sess}${r.skip ? ' <span class="pill">งด</span>' : ''}${clash}</td>
+        <td><span class="d">${esc(thaiDate(r.d))}</span>${sess}${r.skip ? ' <span class="pill">งด</span>' : ''}</td>
         <td class="c-cbct">${r.skip ? '' : `<input type="checkbox" data-cbct="${r.fx}" ${cbct.has(r.fx) ? 'checked' : ''} aria-label="CBCT Fx ${r.fx}">`}</td>
         <td class="c-act">${act ? `<button type="button" class="linkbtn" data-skip="${r.d}">${act}</button>` : ''}</td>
       </tr>`;
@@ -981,7 +891,7 @@
       <tbody>${body}</tbody></table></div>`;
   }
 
-  function scheduleMonths(dates, cbct, clashDates) {
+  function scheduleMonths(dates, cbct) {
     const fxOf = new Map();
     dates.forEach((d, i) => { if (!fxOf.has(d)) fxOf.set(d, []); fxOf.get(d).push(i + 1); });
     const skips = new Set(visibleSkips());
@@ -1018,7 +928,6 @@
         } else if (!isWorkday(key)) {
           cls.push('off');
         }
-        if (clashDates.has(key)) { cls.push('clash'); title += ' · เวลาซ้อน'; }
         cells += `<div class="${cls.join(' ')}" ${fxs ? `data-cbct-day="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
       }
       return `<div class="mon"><h4>${MONTHS[mm]} ${yy + 543}</h4><div class="mgrid">${cells}</div></div>`;
@@ -1029,7 +938,6 @@
         <span><i style="background:var(--primary)"></i>วันฉาย + CBCT</span>
         <span><i style="background:var(--holiday)"></i>วันหยุด</span>
         <span><i style="background:var(--surface-2);border:1px solid var(--border)"></i>งด</span>
-        <span><i style="background:var(--danger);border-radius:50%"></i>เวลาซ้อน</span>
       </div>`;
   }
 
@@ -1042,7 +950,7 @@
     renderSchedule();
   }
 
-  ['f-date', 'f-fx', 'f-time', 'f-time2', 'f-dur'].forEach(id => $(id).addEventListener('input', renderSchedule));
+  ['f-date', 'f-fx'].forEach(id => $(id).addEventListener('input', renderSchedule));
   $('f-freq').addEventListener('change', renderSchedule);
   $('f-pattern').addEventListener('change', () => {
     if (form.cbctPattern.value === 'custom') fs.manual = effectiveCbct();
@@ -1074,38 +982,6 @@
     if (e.target.matches('[data-cbct]')) toggleCbct([Number(e.target.dataset.cbct)]);
   });
 
-  $('findSlot').addEventListener('click', () => {
-    computeSchedule();
-    $('formError').textContent = '';
-    if (!fs.dates.length) { $('formError').textContent = 'กรุณากรอกวันเริ่มฉายและจำนวนครั้ง (Fx) ก่อน'; return; }
-    const dur = duration();
-    const occ = occupancy(state.editingId);
-    const startMin = toMin(WORK_START), endMin = toMin(WORK_END);
-    const free = (t1, t2) => !findConflicts(slotsFor(fromMin(t1), t2 === null ? '' : fromMin(t2)), occ).length;
-    const needSecond = isBid() && new Set(fs.dates).size < fs.dates.length;
-    for (let t1 = startMin; t1 + dur <= endMin; t1 += SLOT_STEP) {
-      if (!free(t1, null)) continue;
-      if (!needSecond) {
-        form.time.value = fromMin(t1);
-        renderSchedule();
-        toast(`พบเวลาว่าง ${fromMin(t1)} น. ตรงกันทุกวันฉาย`);
-        return;
-      }
-      for (let t2 = t1 + BID_MIN_GAP; t2 + dur <= endMin; t2 += SLOT_STEP) {
-        if (free(t1, t2)) {
-          form.time.value = fromMin(t1);
-          form.time2.value = fromMin(t2);
-          renderSchedule();
-          toast(`พบเวลาว่าง รอบ 1 ${fromMin(t1)} น. · รอบ 2 ${fromMin(t2)} น.`);
-          return;
-        }
-      }
-    }
-    $('formError').textContent = needSecond
-      ? `ไม่พบเวลาว่าง 2 รอบ (ห่างกัน ${BID_MIN_GAP / 60} ชั่วโมง) ที่ตรงกันทุกวันในช่วง ${WORK_START}–${WORK_END} น. ลองเลือกเวลาเอง`
-      : `ไม่พบเวลาว่างที่ตรงกันทุกวันฉายในช่วง ${WORK_START}–${WORK_END} น. ลองลดระยะเวลาหรือเลือกเวลาเอง`;
-  });
-
   function openForm(booking, date) {
     form.reset();
     $('formError').textContent = '';
@@ -1116,7 +992,6 @@
     fs.manual = new Set(booking ? booking.cbctFx : []);
     setPattern(booking ? booking.cbctPattern : DEFAULT_PATTERN);
     form.frequency.value = booking ? booking.frequency : 'daily';
-    form.duration.value = booking ? booking.duration : DEFAULT_DURATION;
     if (booking) {
       form.hn.value = booking.hn;
       $('f-name').value = booking.name;
@@ -1126,8 +1001,6 @@
       form.fractions.value = booking.treatmentDates.length;
       form.physician.value = booking.physician || '';
       form.startDate.value = booking.startDate;
-      form.time.value = booking.time || '';
-      form.time2.value = booking.time2 || '';
       form.note.value = booking.note || '';
     } else {
       form.startDate.value = date || state.selected;
@@ -1152,9 +1025,9 @@
       physician: form.physician.value.trim(),
       startDate: fs.dates[0] || '',
       frequency: form.frequency.value,
-      time: form.time.value,
-      time2: isBid() ? form.time2.value : '',
-      duration: Number(form.duration.value) || DEFAULT_DURATION,
+      time: '',
+      time2: '',
+      duration: DEFAULT_DURATION,
       treatmentDates: fs.dates.slice(),
       cbctPattern: fs.pattern,
       cbctFx,
@@ -1176,10 +1049,6 @@
     if (!PHYSICIANS.includes(b.physician)) return { error: 'กรุณาเลือกแพทย์ผู้สั่ง', focus: form.physician };
     if (!form.startDate.value) return { error: 'กรุณาระบุวันเริ่มฉาย', focus: form.startDate };
     if (b.treatmentDates.length !== b.fractions) return { error: 'สร้างตารางวันฉายไม่ครบตามจำนวนครั้ง', focus: form.startDate };
-    if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) {
-      return { error: 'ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที', focus: form.duration };
-    }
-    if (b.time2 && b.time && b.time2 <= b.time) return { error: 'เวลานัดรอบ 2 ต้องอยู่หลังรอบ 1', focus: form.time2 };
     return { booking: b };
   }
 
@@ -1191,8 +1060,6 @@
     const mine = new Set(booking.treatmentDates);
     const dup = state.bookings.find(b => b.id !== state.editingId && b.hn === booking.hn && b.treatmentDates.some(d => mine.has(d)));
     if (dup && !confirm(`HN ${booking.hn} มีคอร์สฉาย ${techLabel(dup)} ที่วันฉายทับกันอยู่แล้ว (เริ่ม ${thaiDate(dup.startDate, false)}) ต้องการบันทึกเพิ่มหรือไม่?`)) return;
-    const conflicts = findConflicts(slotsFor(), occupancy(state.editingId));
-    if (conflicts.length && !confirm(`เวลานัดซ้อนกับผู้ป่วยรายอื่น ${new Set(conflicts.map(c => c.date)).size} วัน ต้องการบันทึกต่อหรือไม่?`)) return;
 
     $('saveBtn').disabled = true;
     try {
@@ -1280,13 +1147,13 @@
   $('exportCsv').addEventListener('click', () => {
     const prefix = monthPrefix();
     const rows = visibleBookings().filter(b => b.startDate.startsWith(prefix))
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.time || '99').localeCompare(b.time || '99'));
-    const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'ความถี่', 'เวลานัด', 'เวลานัดรอบ 2', 'ระยะเวลา (นาที)', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name, 'th'));
+    const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'ความถี่', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
       'รูปแบบ CBCT', 'Fx ที่ทำ CBCT', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const list = (arr) => arr.map(d => thaiDate(d, false)).join(', ');
     const lines = [head, ...rows.map(b => [
-      thaiDate(b.startDate, false), thaiDate(b.endDate, false), FREQ_LABEL[b.frequency], b.time, b.time2, b.duration, b.hn, b.name, techLabel(b), b.site,
+      thaiDate(b.startDate, false), thaiDate(b.endDate, false), FREQ_LABEL[b.frequency], b.hn, b.name, techLabel(b), b.site,
       b.treatmentDates.length, PATTERN_LABEL[b.cbctPattern],
       b.cbctFx.join(', '), list(b.skipDates), b.physician, b.note,
     ])].map(r => r.map(cell).join(','));
