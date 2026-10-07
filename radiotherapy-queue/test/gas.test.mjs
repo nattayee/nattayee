@@ -1,0 +1,83 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createGas, renderIndex } from './gas-mock.mjs';
+
+const appt = {
+  hn: '0012345', name: 'ทดสอบ GAS', technique: 'VMAT', room: 'L2', startDate: '2026-10-12', fractions: 10,
+  time: '09:00', duration: 15, cbctMode: 'custom', cbctDates: ['2026-10-12', '2026-10-19'], status: 'active', age: '',
+};
+
+test('ไฟล์ใน apps-script/ ตรงกับต้นฉบับใน public/ (ลืมรัน npm run build:gas?)', () => {
+  const before = ['Index.html', 'Styles.html', 'JavaScript.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
+  execFileSync(process.execPath, [new URL('../tools/build-gas.mjs', import.meta.url).pathname]);
+  const after = ['Index.html', 'Styles.html', 'JavaScript.html', 'Schedule.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8'));
+  assert.deepEqual(after, before);
+});
+
+test('setup สร้างแผ่นงานและใส่วันหยุดเริ่มต้น', () => {
+  const { call, sheets } = createGas();
+  call('setup');
+  assert.deepEqual([...sheets.keys()].sort(), ['Appointments', 'Holidays', 'Settings']);
+  const state = call('getState');
+  assert.equal(state.appointments.length, 0);
+  assert.ok(state.settings.holidays.length >= 15);
+  assert.deepEqual(state.settings.workdays, [1, 2, 3, 4, 5]);
+});
+
+test('เพิ่ม แก้ไข ลบ นัดผู้ป่วยใน Sheet', () => {
+  const { call, sheets } = createGas();
+  call('setup');
+  const created = call('createAppointment', appt);
+  assert.ok(created.id);
+  let [a] = call('getState').appointments;
+  assert.equal(a.hn, '0012345', 'HN ต้องไม่เสียเลข 0 นำหน้า');
+  assert.equal(a.fractions, 10);
+  assert.equal(a.age, '');
+  assert.deepEqual(a.cbctDates, ['2026-10-12', '2026-10-19']);
+  assert.equal(sheets.get('Appointments').data[1][1], '0012345');
+
+  call('createAppointment', { ...appt, hn: '2', room: 'L1' });
+  call('updateAppointment', created.id, { ...appt, room: 'L3', notes: 'แก้ไขแล้ว' });
+  a = call('getState').appointments.find((x) => x.id === created.id);
+  assert.equal(a.room, 'L3');
+  assert.equal(a.notes, 'แก้ไขแล้ว');
+  assert.equal(a.createdAt, created.createdAt);
+
+  call('deleteAppointment', created.id);
+  const left = call('getState').appointments;
+  assert.equal(left.length, 1);
+  assert.equal(left[0].hn, '2');
+  assert.throws(() => call('deleteAppointment', created.id), /ไม่พบ/);
+});
+
+test('ตรวจสอบข้อมูลไม่ถูกต้อง', () => {
+  const { call } = createGas();
+  call('setup');
+  assert.throws(() => call('createAppointment', { ...appt, room: 'L9', fractions: 0 }), /ห้องฉายไม่ถูกต้อง[\s\S]*จำนวนครั้ง/);
+});
+
+test('บันทึกการตั้งค่าและนำเข้าไฟล์สำรอง', () => {
+  const { call } = createGas();
+  call('setup');
+  const s = call('getState').settings;
+  call('saveSettings', { ...s, workdays: [1, 2, 3, 4, 5, 6], holidays: [{ date: '2026-10-30', name: 'ทดสอบ' }], slotMinutes: 10 });
+  let st = call('getState').settings;
+  assert.deepEqual(st.workdays, [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(st.holidays, [{ date: '2026-10-30', name: 'ทดสอบ' }]);
+  assert.equal(st.slotMinutes, 10);
+
+  call('createAppointment', appt);
+  const res = call('importAll', { appointments: [{ ...appt, id: 'keep-me' }, { ...appt, hn: '9' }] });
+  assert.deepEqual(res.appointments.map((x) => x.hn), ['0012345', '9']);
+  assert.equal(res.appointments[0].id, 'keep-me');
+  assert.throws(() => call('importAll', { appointments: [{ ...appt, time: 'x' }] }), /รายการที่ 1/);
+});
+
+test('doGet ประกอบหน้าเว็บได้ครบ', () => {
+  const html = renderIndex();
+  assert.doesNotMatch(html, /<\?/);
+  assert.match(html, /<style>/);
+  assert.match(html, /google\?\.script\?\.run/);
+});

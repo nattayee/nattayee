@@ -1,5 +1,7 @@
-// ชั้นจัดเก็บข้อมูล: ใช้ API ของเซิร์ฟเวอร์ (server.mjs) ถ้าเรียกไม่ได้ เช่นวางบน static hosting
-// จะเก็บข้อมูลในเบราว์เซอร์ (localStorage) แทน — ข้อมูลจะไม่แชร์ระหว่างเครื่อง
+// ชั้นจัดเก็บข้อมูล เลือกอัตโนมัติตามที่ที่หน้าเว็บถูกเปิด:
+// 1) Google Apps Script (google.script.run) — เก็บใน Google Sheet
+// 2) API ของเซิร์ฟเวอร์ (server.mjs)
+// 3) ถ้าเรียกไม่ได้ เช่นวางบน static hosting จะเก็บในเบราว์เซอร์ (localStorage) — ข้อมูลไม่แชร์ระหว่างเครื่อง
 import { defaultSettings } from './schedule.js';
 
 const LS_KEY = 'rt-queue-db-v1';
@@ -39,6 +41,38 @@ class ServerStore {
   }
   async importAll(data) {
     return api('PUT', 'api/state', data);
+  }
+}
+
+// เรียกฟังก์ชันฝั่ง Apps Script (apps-script/Code.gs) แบบ Promise
+function gas(fn, ...args) {
+  return new Promise((resolve, reject) =>
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler((err) => reject(new Error(err?.message || String(err))))
+      [fn](...args),
+  );
+}
+
+class GasStore {
+  mode = 'gas';
+  load() {
+    return gas('getState');
+  }
+  create(appt) {
+    return gas('createAppointment', appt);
+  }
+  update(id, appt) {
+    return gas('updateAppointment', id, appt);
+  }
+  remove(id) {
+    return gas('deleteAppointment', id);
+  }
+  saveSettings(settings) {
+    return gas('saveSettings', settings);
+  }
+  importAll(data) {
+    return gas('importAll', data);
   }
 }
 
@@ -95,6 +129,10 @@ class LocalStore {
 }
 
 export async function openStore() {
+  if (globalThis.google?.script?.run) {
+    const s = new GasStore();
+    return { store: s, data: await s.load() }; // ถ้าโหลดไม่ได้ให้แจ้งผู้ใช้ ไม่ตกไปโหมดออฟไลน์
+  }
   // ไฟล์ตัวอย่างหรือเปิดไฟล์ตรง ๆ (file://) ไม่มีเซิร์ฟเวอร์ให้เรียก
   if (!globalThis.RTQ_PREVIEW && location.protocol !== 'file:') {
     try {
