@@ -49,11 +49,11 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
   <p class="intro">กดปุ่มคัดลอกทีละกล่อง แล้ววางในโปรเจกต์ Apps Script ตามชื่อไฟล์</p>
   <ol>
     <li>script.google.com → New project</li>
-    <li>คัดลอกทั้ง 3 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
+    <li>คัดลอกทั้ง 2 กล่องไปวางตามชื่อ (ชื่อไฟล์ HTML ไม่ต้องพิมพ์ .html)</li>
     <li>Deploy → New deployment → Web app · Execute as: Me · Who has access: Anyone</li>
   </ol>
   <div class="warn"><b>ขึ้น SyntaxError: Unexpected token '&lt;' ในไฟล์ รหัส.gs?</b><br>
-    แปลว่าวางโค้ด HTML (กล่อง 2 หรือ 3) ลงในไฟล์ .gs ให้ลบทุกอย่างใน รหัส.gs แล้ววางกล่อง 1 ใหม่ ส่วนกล่อง 2 และ 3 ต้องสร้างเป็นไฟล์ <b>HTML</b> (ไม่ใช่ สคริปต์)</div>
+    แปลว่าวางโค้ด HTML (กล่อง 2) ลงในไฟล์ .gs ให้ลบทุกอย่างใน รหัส.gs แล้ววางกล่อง 1 ใหม่ ส่วนกล่อง 2 ต้องสร้างเป็นไฟล์ <b>HTML</b> (ไม่ใช่ สคริปต์) ชื่อ <b>Index</b></div>
   <section class="box">
     <div class="box-head">
       <div><span class="step">1</span><b>รหัส.gs (Code.gs)</b><span class="as">ไฟล์สคริปต์ที่มีอยู่แล้ว ลบของเดิมทั้งหมดแล้ววาง</span><span class="first">บรรทัดแรกต้องเป็น <code>/**</code></span></div>
@@ -64,8 +64,7 @@ textarea { width: 100%; height: 190px; resize: vertical; background: var(--code-
  *
  * Files in this project:
  *   Code.gs     this file (server side)
- *   Index.html  the page (sign-in screen + calculator)
- *   Tdf.html    the calculation library (TDF formulas), pulled in by include('Tdf')
+ *   Index.html  the page (sign-in screen + calculator, with the TDF formulas built in)
  *
  * Sign-in uses the Workspace web app's own JSON API (doPost there), so the Workspace project needs no changes:
  *   - From the Workspace: a Home button / menu card with this app's /exec URL and "เข้าสู่ระบบอัตโนมัติ" (sso) on
@@ -137,13 +136,8 @@ function session_(res) {
   var u = res.user || {};
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
 }
-
-/** Inserts the contents of another HTML file in the project (used for Tdf.html). */
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
-}
 </textarea>
-    <div class="meta">84 บรรทัด · 3.6 KB</div>
+    <div class="meta">78 บรรทัด · 3.3 KB</div>
   </section>
   <section class="box">
     <div class="box-head">
@@ -536,7 +530,237 @@ body.locked .wrap { display: none; }
   &lt;/footer&gt;
 &lt;/div&gt;
 
-&lt;?!= include('Tdf'); ?&gt;
+&lt;script&gt;
+/*
+ * Time-Dose-Fractionation (TDF) model — Orton &amp; Ellis (1973), Orton (1974).
+ *
+ * Fractionated:     TDF = 1.19 · N · d^1.538 · X^-0.169      (d in Gy, X = days between fractions)
+ * Rest-gap decay:   TDF_after = TDF_before · (T / (T + R))^0.11   (T = days from start to break, R = rest days)
+ * Continuous LDR:   TDF = 4.76e-3 · r^1.35 · t               (r in cGy/h, t in h)
+ * Decaying source:  TDF = 4.76e-3 · r0^1.35 · (1 − e^(−1.35·λ·t)) / (1.35·λ)
+ * NSD (ret):        TDF = 1e-3 · NSD^1.538
+ *
+ * Works in the browser (window.TDF) and in Node (module.exports).
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === "object" &amp;&amp; module.exports) module.exports = api;
+  else root.TDF = api;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  const D_EXP = 1.538;
+  const X_EXP = -0.169;
+  const FRAC_K = 1.19;
+  const DECAY_EXP = 0.11;
+  const LDR_K = 4.76e-3;
+  const R_EXP = 1.35;
+  const LDR_VALID_MIN = 25; // cGy/h — Orton's data extend down to about this dose rate
+
+  // Fraction days within a week (0 = first treatment day) for f fractions/week.
+  const WEEK_PATTERNS = {
+    1: [0],
+    2: [0, 3],
+    3: [0, 2, 4],
+    4: [0, 1, 3, 4],
+    5: [0, 1, 2, 3, 4],
+    6: [0, 1, 2, 3, 4, 5],
+    7: [0, 1, 2, 3, 4, 5, 6],
+  };
+
+  const ISOTOPES = {
+    "I-125": { halfLifeDays: 59.40 },
+    "Pd-103": { halfLifeDays: 16.99 },
+    "Cs-131": { halfLifeDays: 9.69 },
+    "Au-198": { halfLifeDays: 2.695 },
+    "Ir-192": { halfLifeDays: 73.83 },
+    "Cs-137": { halfLifeDays: 30.08 * 365.25 },
+    "Co-60": { halfLifeDays: 5.2713 * 365.25 },
+  };
+
+  function assertPositive(name, v) {
+    if (!(Number.isFinite(v) &amp;&amp; v &gt; 0)) throw new RangeError(name + " must be a positive number");
+  }
+
+  /** Days from the first to the last fraction when N fractions follow the weekly pattern. */
+  function overallTime(N, perWeek) {
+    const pat = WEEK_PATTERNS[perWeek];
+    if (!pat) throw new RangeError("fractions per week must be 1–7");
+    if (!(Number.isInteger(N) &amp;&amp; N &gt;= 1)) throw new RangeError("N must be a whole number ≥ 1");
+    const k = N - 1;
+    return 7 * Math.floor(k / perWeek) + pat[k % perWeek];
+  }
+
+  /** TDF of one fraction of d Gy with X days between fractions. */
+  function tdfPerFraction(dGy, X) {
+    assertPositive("Dose per fraction", dGy);
+    assertPositive("Fraction interval X", X);
+    return FRAC_K * Math.pow(dGy, D_EXP) * Math.pow(X, X_EXP);
+  }
+
+  /** TDF of N fractions of d Gy, X days apart. */
+  function tdfFractionated(N, dGy, X) {
+    assertPositive("Number of fractions", N);
+    return N * tdfPerFraction(dGy, X);
+  }
+
+  /** X from a weekly schedule, as in the Orton–Ellis tables: X = 7 / f. */
+  function xFromPerWeek(perWeek) {
+    assertPositive("Fractions per week", perWeek);
+    return 7 / perWeek;
+  }
+
+  /** Repopulation decay factor for a rest gap of R days after T days of treatment. */
+  function decayFactor(T, R) {
+    if (!(R &gt;= 0)) throw new RangeError("Rest interval must be ≥ 0");
+    if (R === 0) return 1;
+    assertPositive("Elapsed time before the break", T);
+    return Math.pow(T / (T + R), DECAY_EXP);
+  }
+
+  function nsdFromTdf(tdf) {
+    return Math.pow(1000 * tdf, 1 / D_EXP);
+  }
+
+  /** Equivalent number of fractions / total dose at d Gy, f fractions per week, for a given TDF. */
+  function equivalentSchedule(tdf, dGy = 2, perWeek = 5) {
+    const per = tdfPerFraction(dGy, xFromPerWeek(perWeek));
+    const n = tdf / per;
+    return { fractions: n, dose: n * dGy };
+  }
+
+  /** Linear-quadratic comparison values (D total Gy, d Gy per fraction). */
+  function lq(Dtotal, dGy, alphaBeta) {
+    assertPositive("α/β", alphaBeta);
+    const bed = Dtotal * (1 + dGy / alphaBeta);
+    return { bed, eqd2: bed / (1 + 2 / alphaBeta) };
+  }
+
+  /**
+   * Split-course treatment. Each course: { N, d, perWeek, T?, gapAfter? }.
+   * T defaults to the calendar overall time from the weekly pattern; X = T/N when T is
+   * supplied explicitly and N &gt; 1, otherwise X = 7/perWeek.
+   * Before each gap the accumulated TDF is multiplied by (Telapsed / (Telapsed + R))^0.11,
+   * with Telapsed counted from the first fraction of the whole treatment.
+   */
+  function splitCourse(courses) {
+    let accumulated = 0;
+    let day = 0; // day index of the current course's first fraction
+    const rows = [];
+    const timeline = [{ day: 0, tdf: 0 }];
+
+    courses.forEach((c, i) =&gt; {
+      const N = c.N;
+      const T = c.T != null &amp;&amp; c.T !== "" ? Number(c.T) : overallTime(N, c.perWeek);
+      const X = c.T != null &amp;&amp; c.T !== "" &amp;&amp; N &gt; 1 &amp;&amp; T &gt; 0 ? T / N : xFromPerWeek(c.perWeek);
+      const per = tdfPerFraction(c.d, X);
+      const tdf = N * per;
+
+      // timeline: one point per fraction (cumulative), spread evenly over T
+      for (let k = 1; k &lt;= N; k++) {
+        const fxDay = N &gt; 1 ? day + (T * (k - 1)) / (N - 1) : day;
+        timeline.push({ day: fxDay, tdf: accumulated + per * k });
+      }
+      accumulated += tdf;
+      const endDay = day + T;
+
+      const R = i &lt; courses.length - 1 ? Number(c.gapAfter || 0) : 0;
+      let factor = 1;
+      let elapsed = endDay;
+      if (R &gt; 0) {
+        // elapsed from start of therapy to the break; a one-day minimum keeps a
+        // single-fraction first course from decaying to zero
+        elapsed = Math.max(endDay, 1);
+        factor = decayFactor(elapsed, R);
+      }
+      const before = accumulated;
+      accumulated *= factor;
+      rows.push({ index: i + 1, N, d: c.d, dose: N * c.d, T, X, tdf, startDay: day, endDay, gap: R, elapsed, factor, before, after: accumulated });
+      if (R &gt; 0) timeline.push({ day: endDay + R, tdf: accumulated, gapEnd: true });
+      day = endDay + R;
+    });
+
+    return { total: accumulated, rows, timeline, totalDays: day };
+  }
+
+  /** Fractions needed (at d Gy, f/week) for a following course to reach targetTdf from currentTdf. */
+  function fractionsToTarget(currentTdf, targetTdf, dGy, perWeek) {
+    const per = tdfPerFraction(dGy, xFromPerWeek(perWeek));
+    const need = targetTdf - currentTdf;
+    if (need &lt;= 0) return { need, exact: 0, fractions: 0, dose: 0, per };
+    const exact = need / per;
+    const fractions = Math.ceil(exact - 1e-9);
+    return { need, exact, fractions, dose: fractions * dGy, per, reached: currentTdf + fractions * per };
+  }
+
+  function lambdaPerHour(halfLifeDays) {
+    assertPositive("Half-life", halfLifeDays);
+    return Math.LN2 / (halfLifeDays * 24);
+  }
+
+  /** Constant dose-rate LDR: r cGy/h for t hours. */
+  function ldrConstant(rate, hours) {
+    assertPositive("Dose rate", rate);
+    assertPositive("Treatment time", hours);
+    return { tdf: LDR_K * Math.pow(rate, R_EXP) * hours, dose: (rate * hours) / 100 };
+  }
+
+  /**
+   * Decaying source. r0 cGy/h initial dose rate, half-life in days, treatment time in hours
+   * (Infinity for a permanent implant).
+   */
+  function ldrDecaying(r0, halfLifeDays, hours) {
+    assertPositive("Initial dose rate", r0);
+    const lam = lambdaPerHour(halfLifeDays);
+    const t = hours === Infinity ? Infinity : hours;
+    if (t !== Infinity) assertPositive("Treatment time", t);
+    const fDose = t === Infinity ? 1 : 1 - Math.exp(-lam * t);
+    const fTdf = t === Infinity ? 1 : 1 - Math.exp(-R_EXP * lam * t);
+    const tdf = (LDR_K * Math.pow(r0, R_EXP) * fTdf) / (R_EXP * lam);
+    const dose = (r0 * fDose) / lam / 100; // Gy
+    const endRate = t === Infinity ? 0 : r0 * Math.exp(-lam * t);
+    const tBelowValid = r0 &gt; LDR_VALID_MIN ? Math.log(r0 / LDR_VALID_MIN) / lam : 0; // h until r &lt; 25 cGy/h
+    return {
+      tdf,
+      dose,
+      lambda: lam,
+      meanLife: 1 / lam,
+      endRate,
+      t90tdf: Math.log(10) / (R_EXP * lam), // h to deliver 90 % of the permanent-implant TDF
+      t90dose: Math.log(10) / lam,
+      tBelowValid,
+    };
+  }
+
+  /** Initial dose rate (cGy/h) giving total dose D (Gy) over t hours (Infinity = permanent). */
+  function r0FromDose(Dgy, halfLifeDays, hours) {
+    assertPositive("Total dose", Dgy);
+    const lam = lambdaPerHour(halfLifeDays);
+    const f = hours === Infinity ? 1 : 1 - Math.exp(-lam * hours);
+    return (Dgy * 100 * lam) / f;
+  }
+
+  return {
+    constants: { D_EXP, X_EXP, FRAC_K, DECAY_EXP, LDR_K, R_EXP, LDR_VALID_MIN },
+    WEEK_PATTERNS,
+    ISOTOPES,
+    overallTime,
+    tdfPerFraction,
+    tdfFractionated,
+    xFromPerWeek,
+    decayFactor,
+    nsdFromTdf,
+    equivalentSchedule,
+    lq,
+    splitCourse,
+    fractionsToTarget,
+    lambdaPerHour,
+    ldrConstant,
+    ldrDecaying,
+    r0FromDose,
+  };
+});
+&lt;/script&gt;
 &lt;script&gt;
 (function () {
   "use strict";
@@ -1098,247 +1322,7 @@ body.locked .wrap { display: none; }
 &lt;/body&gt;
 &lt;/html&gt;
 </textarea>
-    <div class="meta">948 บรรทัด · 55.7 KB</div>
-  </section>
-  <section class="box">
-    <div class="box-head">
-      <div><span class="step">3</span><b>Tdf.html</b><span class="as">กด + → HTML → ตั้งชื่อ Tdf</span><span class="first">บรรทัดแรกต้องเป็น <code>&lt;!--</code></span></div>
-      <button type="button" class="copy" data-target="code2">คัดลอก</button>
-    </div>
-    <textarea id="code2" readonly spellcheck="false" aria-label="โค้ด Tdf.html">&lt;!-- Generated by build-apps-script.js from index.html — edit the source, then rebuild. --&gt;
-&lt;script&gt;
-/*
- * Time-Dose-Fractionation (TDF) model — Orton &amp; Ellis (1973), Orton (1974).
- *
- * Fractionated:     TDF = 1.19 · N · d^1.538 · X^-0.169      (d in Gy, X = days between fractions)
- * Rest-gap decay:   TDF_after = TDF_before · (T / (T + R))^0.11   (T = days from start to break, R = rest days)
- * Continuous LDR:   TDF = 4.76e-3 · r^1.35 · t               (r in cGy/h, t in h)
- * Decaying source:  TDF = 4.76e-3 · r0^1.35 · (1 − e^(−1.35·λ·t)) / (1.35·λ)
- * NSD (ret):        TDF = 1e-3 · NSD^1.538
- *
- * Works in the browser (window.TDF) and in Node (module.exports).
- */
-(function (root, factory) {
-  const api = factory();
-  if (typeof module === "object" &amp;&amp; module.exports) module.exports = api;
-  else root.TDF = api;
-})(typeof self !== "undefined" ? self : this, function () {
-  "use strict";
-
-  const D_EXP = 1.538;
-  const X_EXP = -0.169;
-  const FRAC_K = 1.19;
-  const DECAY_EXP = 0.11;
-  const LDR_K = 4.76e-3;
-  const R_EXP = 1.35;
-  const LDR_VALID_MIN = 25; // cGy/h — Orton's data extend down to about this dose rate
-
-  // Fraction days within a week (0 = first treatment day) for f fractions/week.
-  const WEEK_PATTERNS = {
-    1: [0],
-    2: [0, 3],
-    3: [0, 2, 4],
-    4: [0, 1, 3, 4],
-    5: [0, 1, 2, 3, 4],
-    6: [0, 1, 2, 3, 4, 5],
-    7: [0, 1, 2, 3, 4, 5, 6],
-  };
-
-  const ISOTOPES = {
-    "I-125": { halfLifeDays: 59.40 },
-    "Pd-103": { halfLifeDays: 16.99 },
-    "Cs-131": { halfLifeDays: 9.69 },
-    "Au-198": { halfLifeDays: 2.695 },
-    "Ir-192": { halfLifeDays: 73.83 },
-    "Cs-137": { halfLifeDays: 30.08 * 365.25 },
-    "Co-60": { halfLifeDays: 5.2713 * 365.25 },
-  };
-
-  function assertPositive(name, v) {
-    if (!(Number.isFinite(v) &amp;&amp; v &gt; 0)) throw new RangeError(name + " must be a positive number");
-  }
-
-  /** Days from the first to the last fraction when N fractions follow the weekly pattern. */
-  function overallTime(N, perWeek) {
-    const pat = WEEK_PATTERNS[perWeek];
-    if (!pat) throw new RangeError("fractions per week must be 1–7");
-    if (!(Number.isInteger(N) &amp;&amp; N &gt;= 1)) throw new RangeError("N must be a whole number ≥ 1");
-    const k = N - 1;
-    return 7 * Math.floor(k / perWeek) + pat[k % perWeek];
-  }
-
-  /** TDF of one fraction of d Gy with X days between fractions. */
-  function tdfPerFraction(dGy, X) {
-    assertPositive("Dose per fraction", dGy);
-    assertPositive("Fraction interval X", X);
-    return FRAC_K * Math.pow(dGy, D_EXP) * Math.pow(X, X_EXP);
-  }
-
-  /** TDF of N fractions of d Gy, X days apart. */
-  function tdfFractionated(N, dGy, X) {
-    assertPositive("Number of fractions", N);
-    return N * tdfPerFraction(dGy, X);
-  }
-
-  /** X from a weekly schedule, as in the Orton–Ellis tables: X = 7 / f. */
-  function xFromPerWeek(perWeek) {
-    assertPositive("Fractions per week", perWeek);
-    return 7 / perWeek;
-  }
-
-  /** Repopulation decay factor for a rest gap of R days after T days of treatment. */
-  function decayFactor(T, R) {
-    if (!(R &gt;= 0)) throw new RangeError("Rest interval must be ≥ 0");
-    if (R === 0) return 1;
-    assertPositive("Elapsed time before the break", T);
-    return Math.pow(T / (T + R), DECAY_EXP);
-  }
-
-  function nsdFromTdf(tdf) {
-    return Math.pow(1000 * tdf, 1 / D_EXP);
-  }
-
-  /** Equivalent number of fractions / total dose at d Gy, f fractions per week, for a given TDF. */
-  function equivalentSchedule(tdf, dGy = 2, perWeek = 5) {
-    const per = tdfPerFraction(dGy, xFromPerWeek(perWeek));
-    const n = tdf / per;
-    return { fractions: n, dose: n * dGy };
-  }
-
-  /** Linear-quadratic comparison values (D total Gy, d Gy per fraction). */
-  function lq(Dtotal, dGy, alphaBeta) {
-    assertPositive("α/β", alphaBeta);
-    const bed = Dtotal * (1 + dGy / alphaBeta);
-    return { bed, eqd2: bed / (1 + 2 / alphaBeta) };
-  }
-
-  /**
-   * Split-course treatment. Each course: { N, d, perWeek, T?, gapAfter? }.
-   * T defaults to the calendar overall time from the weekly pattern; X = T/N when T is
-   * supplied explicitly and N &gt; 1, otherwise X = 7/perWeek.
-   * Before each gap the accumulated TDF is multiplied by (Telapsed / (Telapsed + R))^0.11,
-   * with Telapsed counted from the first fraction of the whole treatment.
-   */
-  function splitCourse(courses) {
-    let accumulated = 0;
-    let day = 0; // day index of the current course's first fraction
-    const rows = [];
-    const timeline = [{ day: 0, tdf: 0 }];
-
-    courses.forEach((c, i) =&gt; {
-      const N = c.N;
-      const T = c.T != null &amp;&amp; c.T !== "" ? Number(c.T) : overallTime(N, c.perWeek);
-      const X = c.T != null &amp;&amp; c.T !== "" &amp;&amp; N &gt; 1 &amp;&amp; T &gt; 0 ? T / N : xFromPerWeek(c.perWeek);
-      const per = tdfPerFraction(c.d, X);
-      const tdf = N * per;
-
-      // timeline: one point per fraction (cumulative), spread evenly over T
-      for (let k = 1; k &lt;= N; k++) {
-        const fxDay = N &gt; 1 ? day + (T * (k - 1)) / (N - 1) : day;
-        timeline.push({ day: fxDay, tdf: accumulated + per * k });
-      }
-      accumulated += tdf;
-      const endDay = day + T;
-
-      const R = i &lt; courses.length - 1 ? Number(c.gapAfter || 0) : 0;
-      let factor = 1;
-      let elapsed = endDay;
-      if (R &gt; 0) {
-        // elapsed from start of therapy to the break; a one-day minimum keeps a
-        // single-fraction first course from decaying to zero
-        elapsed = Math.max(endDay, 1);
-        factor = decayFactor(elapsed, R);
-      }
-      const before = accumulated;
-      accumulated *= factor;
-      rows.push({ index: i + 1, N, d: c.d, dose: N * c.d, T, X, tdf, startDay: day, endDay, gap: R, elapsed, factor, before, after: accumulated });
-      if (R &gt; 0) timeline.push({ day: endDay + R, tdf: accumulated, gapEnd: true });
-      day = endDay + R;
-    });
-
-    return { total: accumulated, rows, timeline, totalDays: day };
-  }
-
-  /** Fractions needed (at d Gy, f/week) for a following course to reach targetTdf from currentTdf. */
-  function fractionsToTarget(currentTdf, targetTdf, dGy, perWeek) {
-    const per = tdfPerFraction(dGy, xFromPerWeek(perWeek));
-    const need = targetTdf - currentTdf;
-    if (need &lt;= 0) return { need, exact: 0, fractions: 0, dose: 0, per };
-    const exact = need / per;
-    const fractions = Math.ceil(exact - 1e-9);
-    return { need, exact, fractions, dose: fractions * dGy, per, reached: currentTdf + fractions * per };
-  }
-
-  function lambdaPerHour(halfLifeDays) {
-    assertPositive("Half-life", halfLifeDays);
-    return Math.LN2 / (halfLifeDays * 24);
-  }
-
-  /** Constant dose-rate LDR: r cGy/h for t hours. */
-  function ldrConstant(rate, hours) {
-    assertPositive("Dose rate", rate);
-    assertPositive("Treatment time", hours);
-    return { tdf: LDR_K * Math.pow(rate, R_EXP) * hours, dose: (rate * hours) / 100 };
-  }
-
-  /**
-   * Decaying source. r0 cGy/h initial dose rate, half-life in days, treatment time in hours
-   * (Infinity for a permanent implant).
-   */
-  function ldrDecaying(r0, halfLifeDays, hours) {
-    assertPositive("Initial dose rate", r0);
-    const lam = lambdaPerHour(halfLifeDays);
-    const t = hours === Infinity ? Infinity : hours;
-    if (t !== Infinity) assertPositive("Treatment time", t);
-    const fDose = t === Infinity ? 1 : 1 - Math.exp(-lam * t);
-    const fTdf = t === Infinity ? 1 : 1 - Math.exp(-R_EXP * lam * t);
-    const tdf = (LDR_K * Math.pow(r0, R_EXP) * fTdf) / (R_EXP * lam);
-    const dose = (r0 * fDose) / lam / 100; // Gy
-    const endRate = t === Infinity ? 0 : r0 * Math.exp(-lam * t);
-    const tBelowValid = r0 &gt; LDR_VALID_MIN ? Math.log(r0 / LDR_VALID_MIN) / lam : 0; // h until r &lt; 25 cGy/h
-    return {
-      tdf,
-      dose,
-      lambda: lam,
-      meanLife: 1 / lam,
-      endRate,
-      t90tdf: Math.log(10) / (R_EXP * lam), // h to deliver 90 % of the permanent-implant TDF
-      t90dose: Math.log(10) / lam,
-      tBelowValid,
-    };
-  }
-
-  /** Initial dose rate (cGy/h) giving total dose D (Gy) over t hours (Infinity = permanent). */
-  function r0FromDose(Dgy, halfLifeDays, hours) {
-    assertPositive("Total dose", Dgy);
-    const lam = lambdaPerHour(halfLifeDays);
-    const f = hours === Infinity ? 1 : 1 - Math.exp(-lam * hours);
-    return (Dgy * 100 * lam) / f;
-  }
-
-  return {
-    constants: { D_EXP, X_EXP, FRAC_K, DECAY_EXP, LDR_K, R_EXP, LDR_VALID_MIN },
-    WEEK_PATTERNS,
-    ISOTOPES,
-    overallTime,
-    tdfPerFraction,
-    tdfFractionated,
-    xFromPerWeek,
-    decayFactor,
-    nsdFromTdf,
-    equivalentSchedule,
-    lq,
-    splitCourse,
-    fractionsToTarget,
-    lambdaPerHour,
-    ldrConstant,
-    ldrDecaying,
-    r0FromDose,
-  };
-});
-&lt;/script&gt;
-</textarea>
-    <div class="meta">233 บรรทัด · 8.4 KB</div>
+    <div class="meta">1,178 บรรทัด · 64.0 KB</div>
   </section>
 </main>
 <script>

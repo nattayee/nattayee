@@ -18,13 +18,12 @@ node --test tdf-calculator/tdf.test.js
 | ไฟล์ | ใส่ใน Apps Script เป็น |
 |---|---|
 | `Code.gs` | Script file ชื่อ `Code` (URL ของ Workspace อยู่ใน `WORKSPACE_URL`) |
-| `Index.html` | HTML file ชื่อ `Index` (หน้าเข้าสู่ระบบ + เครื่องคำนวณ) |
-| `Tdf.html` | HTML file ชื่อ `Tdf` (สูตรคำนวณ) |
+| `Index.html` | HTML file ชื่อ `Index` (หน้าเข้าสู่ระบบ + เครื่องคำนวณ + สูตรคำนวณ) |
 | `appsscript.json` | manifest (ถ้าใช้ `clasp`) |
 
 Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone**
 
-เปิด `copy-code.html` เพื่อคัดลอกโค้ดทั้ง 3 ไฟล์ทีละกล่องด้วยปุ่มเดียว
+เปิด `copy-code.html` เพื่อคัดลอกโค้ดทั้ง 2 ไฟล์ทีละกล่องด้วยปุ่มเดียว
 
 ### วิธีเข้าสู่ระบบ
 
@@ -40,7 +39,7 @@ Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **
 
 หน้าเครื่องคำนวณซ่อนไว้จนกว่าจะเข้าสู่ระบบ (สูตรคำนวณไม่ใช่ข้อมูลลับ จึงตรวจสิทธิ์ที่หน้าเว็บ)
 
-`Index.html` และ `Tdf.html` สร้างจาก `index.html` และ `tdf.js` ถ้าแก้ไฟล์ต้นฉบับให้รัน `node tdf-calculator/build-apps-script.js` ใหม่
+`Index.html` สร้างจาก `index.html` และ `tdf.js` ถ้าแก้ไฟล์ต้นฉบับให้รัน `node tdf-calculator/build-apps-script.js` ใหม่
 
 ## ความสามารถ
 

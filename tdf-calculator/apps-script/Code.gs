@@ -3,8 +3,7 @@
  *
  * Files in this project:
  *   Code.gs     this file (server side)
- *   Index.html  the page (sign-in screen + calculator)
- *   Tdf.html    the calculation library (TDF formulas), pulled in by include('Tdf')
+ *   Index.html  the page (sign-in screen + calculator, with the TDF formulas built in)
  *
  * Sign-in uses the Workspace web app's own JSON API (doPost there), so the Workspace project needs no changes:
  *   - From the Workspace: a Home button / menu card with this app's /exec URL and "เข้าสู่ระบบอัตโนมัติ" (sso) on
@@ -75,9 +74,4 @@ function workspace_(req) {
 function session_(res) {
   var u = res.user || {};
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
-}
-
-/** Inserts the contents of another HTML file in the project (used for Tdf.html). */
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
