@@ -177,7 +177,7 @@ const DEFAULT_SETTINGS = [
   ['REQUIRE_APPROVAL', 'TRUE', 'TRUE = ผู้สมัครใหม่ต้องรอผู้ดูแลอนุมัติก่อนเข้าใช้, FALSE = สมัครแล้วเข้าใช้ได้ทันที'],
   ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)'],
   ['PUBLIC_DASHBOARD', 'TRUE', 'TRUE = ดูแดชบอร์ดได้โดยไม่ต้องเข้าสู่ระบบ (ปุ่มที่หน้าเข้าสู่ระบบ หรือลิงก์เว็บแอป + ?view=dashboard), FALSE = ต้องเข้าสู่ระบบ'],
-  ['PUBLIC_PATIENT_INFO', 'MASK', 'ข้อมูลผู้ป่วยในแดชบอร์ดแบบไม่เข้าสู่ระบบ: MASK = แสดง HN 3 ตัวท้าย + อักษรย่อชื่อ, FULL = แสดงเต็ม, COUNTS = ไม่แสดงผู้ป่วย (เฉพาะจำนวนเคส แพทย์ รูปแบบการใส่)']
+  ['PUBLIC_PATIENT_INFO', 'MASK', 'ข้อมูลผู้ป่วยในแดชบอร์ดแบบไม่เข้าสู่ระบบ: MASK = แสดง HN เต็ม ชื่อเป็น ***, FULL = แสดง HN และชื่อเต็ม, COUNTS = ไม่แสดงผู้ป่วย (เฉพาะจำนวนเคส แพทย์ รูปแบบการใส่)']
 ];
 
 /* ------------------------------------------------------------------ */
@@ -378,22 +378,10 @@ function getPublicDashboard(lang) {
       .map((a, i) => ({
         apptId: 'P' + i, date: a.date, status: a.status, doctor: a.doctor, technique: a.technique,
         fx: a.fx, totalFx: a.totalFx,
-        hn: info === 'FULL' ? a.hn : info === 'MASK' ? maskHn_(a.hn) : '',
-        name: info === 'FULL' ? a.name : info === 'MASK' ? maskName_(a.name) : ''
+        hn: info === 'COUNTS' ? '' : a.hn,
+        name: info === 'FULL' ? a.name : info === 'MASK' ? '***' : ''
       }))
   };
-}
-
-/** HN แสดงเฉพาะ 3 ตัวท้าย เช่น 6512345 → ****345 */
-function maskHn_(hn) {
-  const s = String(hn || '');
-  return s.length > 3 ? '*'.repeat(s.length - 3) + s.slice(-3) : '*'.repeat(s.length);
-}
-
-/** ชื่อแสดงเป็นอักษรย่อ เช่น สมหญิง ใจดี → ส. ใจ. (สระหน้า เ แ โ ใ ไ เก็บพยัญชนะตัวถัดไปด้วย) */
-function maskName_(name) {
-  return String(name || '').split(/\s+/).filter(Boolean)
-    .map(w => (/^[เแโใไ]/.test(w) ? w.slice(0, 2) : w.charAt(0)) + '.').join(' ');
 }
 
 /* ------------------------------------------------------------------ */
