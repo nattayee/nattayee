@@ -10,41 +10,33 @@ npx serve tdf-calculator
 node --test tdf-calculator/tdf.test.js
 ```
 
-## Google Apps Script (พร้อมระบบล็อกอิน)
+## Google Apps Script (เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace)
 
-โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script โดยใช้หน้าล็อกอินเดิมที่
-`https://script.google.com/macros/s/AKfycbwVlM9o…/exec` (ตั้งไว้ใน `LOGIN_URL` ของ `Code.gs`)
-
-### โปรเจกต์ TDF (โปรเจกต์ใหม่)
+โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script
+ใช้บัญชีผู้ใช้ของ LPCH RO Workspace ผ่าน JSON API (`doPost`) ที่ Workspace มีอยู่แล้ว **ไม่ต้องแก้โปรเจกต์ Workspace**
 
 | ไฟล์ | ใส่ใน Apps Script เป็น |
 |---|---|
-| `Code.gs` | Script file ชื่อ `Code` |
-| `Index.html` | HTML file ชื่อ `Index` (หน้าเครื่องคำนวณ) |
-| `Login.html` | HTML file ชื่อ `Login` (หน้าให้กดเข้าสู่ระบบ) |
+| `Code.gs` | Script file ชื่อ `Code` (URL ของ Workspace อยู่ใน `WORKSPACE_URL`) |
+| `Index.html` | HTML file ชื่อ `Index` (หน้าเข้าสู่ระบบ + เครื่องคำนวณ) |
 | `Tdf.html` | HTML file ชื่อ `Tdf` (สูตรคำนวณ) |
 | `appsscript.json` | manifest (ถ้าใช้ `clasp`) |
 
-Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone** แล้วคัดลอก URL `/exec` ไว้
+Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone**
 
-### โปรเจกต์ล็อกอินเดิม (เพิ่ม 1 ไฟล์ + แก้ 2 จุด)
+### วิธีเข้าสู่ระบบ
 
-1. เพิ่มไฟล์ `login-bridge/TdfBridge.gs` แล้วใส่ URL ของ TDF ใน `TDF_APP_URL`
-2. ให้ `doPost` เรียก `handleTdfBridge_(e)` (ถ้ายังไม่มี `doPost` ให้สร้างตามตัวอย่างในไฟล์)
-3. ในฟังก์ชันฝั่ง server ที่ตรวจรหัสผ่าน เมื่อผ่านแล้วให้ส่ง `tdfUrl: createTdfRedirect_({ username, name })` กลับไป
-   และในหน้าเว็บเมื่อล็อกอินสำเร็จ ถ้า URL มี `?app=tdf` ให้ไปที่ `window.top.location.href = result.tdfUrl`
-4. Deploy เวอร์ชันใหม่ของโปรเจกต์ล็อกอิน (Manage deployments → Edit → New version) โดย Who has access ต้องเป็น **Anyone**
+| ทาง | การทำงาน |
+|---|---|
+| จาก Workspace (แนะนำ) | ผู้ดูแลระบบเพิ่มปุ่มในหน้า Home หรือการ์ดแอปในเมนู ใส่ URL `/exec` ของ TDF และเปิด "เข้าสู่ระบบอัตโนมัติ" → Workspace เปิด `…/exec?sso=<บัตร>` → TDF แลกบัตรด้วย `ssoRedeem` |
+| เปิด TDF ตรง ๆ | กรอกชื่อผู้ใช้/อีเมล + รหัสผ่านของ Workspace → `login` |
+| ครั้งถัดไป | ใช้ token ที่บันทึกในเบราว์เซอร์ ตรวจด้วย `me` (อายุตาม `SESSION_DAYS` ของ Workspace) |
+| ออกจากระบบ | `logout` ลบ session ในชีต Sessions ของ Workspace |
 
-### ลำดับการทำงาน
+บัตร SSO ใช้ได้ครั้งเดียว หน้าเว็บจึงลบ `?sso=` ออกจากแถบที่อยู่ทันทีหลังแลกบัตร
+เปิดแท็บได้โดยตรงด้วย `?tab=frac`, `?tab=gap`, `?tab=brachy` หรือ `?tab=ref`
 
-```
-ผู้ใช้เปิด TDF ──(ไม่มี token)──► หน้า Login ──กดเข้าสู่ระบบ──► LOGIN_URL?app=tdf
-LOGIN ตรวจรหัสผ่าน ──► createTdfRedirect_() เก็บ token ใน CacheService 6 ชม. ──► TDF_URL?token=…
-TDF doGet ──POST {action:'tdfVerify', token}──► LOGIN ──► {ok:true, user} ──► แสดงเครื่องคำนวณ
-ออกจากระบบ ──POST {action:'tdfLogout', token}──► LOGIN ลบ token ──► กลับหน้า LOGIN
-```
-
-เปิดแท็บได้โดยตรงด้วย `&tab=frac`, `&tab=gap`, `&tab=brachy` หรือ `&tab=ref`
+หน้าเครื่องคำนวณซ่อนไว้จนกว่าจะเข้าสู่ระบบ (สูตรคำนวณไม่ใช่ข้อมูลลับ จึงตรวจสิทธิ์ที่หน้าเว็บ)
 
 `Index.html` และ `Tdf.html` สร้างจาก `index.html` และ `tdf.js` ถ้าแก้ไฟล์ต้นฉบับให้รัน `node tdf-calculator/build-apps-script.js` ใหม่
 
