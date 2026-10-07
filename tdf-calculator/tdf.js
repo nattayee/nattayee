@@ -11,9 +11,12 @@
  */
 (function (root, factory) {
   const api = factory();
-  if (typeof module === "object" && module.exports) module.exports = api;
-  else root.TDF = api;
-})(typeof self !== "undefined" ? self : this, function () {
+  // Always publish window.TDF in a browser: some hosts (Google Apps Script pages) define a global `module`,
+  // which must not stop the page from getting the library.
+  if (root && typeof root.document !== "undefined") root.TDF = api;
+  if (typeof module === "object" && module && module.exports) module.exports = api;
+  else if (root) root.TDF = api;
+})(typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : this, function () {
   "use strict";
 
   const D_EXP = 1.538;

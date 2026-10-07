@@ -8,6 +8,7 @@
 // First script on the page: shows a red bar when a later script fails or never runs
 // (a page cut off inside a script is skipped by the browser without any error, which looks like dead buttons)
 (function () {
+  var first = "";
   function show(msg) {
     var b = document.getElementById("jsError");
     if (!b) {
@@ -19,9 +20,13 @@
     b.textContent = msg + " · ลองโหลดหน้าใหม่ ถ้ายังเป็นอยู่ให้แจ้งผู้ดูแลระบบพร้อมภาพหน้าจอนี้";
   }
   function later(msg) { if (document.body) show(msg); else document.addEventListener("DOMContentLoaded", function () { show(msg); }); }
-  window.addEventListener("error", function (e) { later("หน้าเว็บทำงานไม่สมบูรณ์: " + (e.message || "ข้อผิดพลาดที่ไม่ทราบสาเหตุ")); });
+  window.addEventListener("error", function (e) {
+    if (first) return; // keep the first error: later ones are usually caused by it
+    first = "หน้าเว็บทำงานไม่สมบูรณ์: " + (e.message || "ข้อผิดพลาดที่ไม่ทราบสาเหตุ") + (e.lineno ? " (บรรทัด " + e.lineno + ")" : "");
+    later(first);
+  });
   window.addEventListener("load", function () {
-    if (!window.TDFApp) show("หน้าเว็บโหลดไม่ครบ ปุ่มต่าง ๆ จึงใช้งานไม่ได้ (ไฟล์หน้าเว็บอาจถูกตัด)");
+    if (!window.TDFApp && !first) show("หน้าเว็บโหลดไม่ครบ ปุ่มต่าง ๆ จึงใช้งานไม่ได้ (ไฟล์หน้าเว็บอาจถูกตัด)");
   });
 })();
 </script>
@@ -566,7 +571,7 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.<br>
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
-    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน 4d52fc9</div>
+    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน 9936969</div>
   </footer>
 </div>
 
@@ -605,9 +610,12 @@ body.locked .wrap { display: none; }
  */
 (function (root, factory) {
   const api = factory();
-  if (typeof module === "object" && module.exports) module.exports = api;
-  else root.TDF = api;
-})(typeof self !== "undefined" ? self : this, function () {
+  // Always publish window.TDF in a browser: some hosts (Google Apps Script pages) define a global `module`,
+  // which must not stop the page from getting the library.
+  if (root && typeof root.document !== "undefined") root.TDF = api;
+  if (typeof module === "object" && module && module.exports) module.exports = api;
+  else if (root) root.TDF = api;
+})(typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : this, function () {
   "use strict";
 
   const D_EXP = 1.538;

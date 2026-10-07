@@ -8,6 +8,7 @@
 // First script on the page: shows a red bar when a later script fails or never runs
 // (a page cut off inside a script is skipped by the browser without any error, which looks like dead buttons)
 (function () {
+  var first = "";
   function show(msg) {
     var b = document.getElementById("jsError");
     if (!b) {
@@ -19,9 +20,13 @@
     b.textContent = msg + " · ลองโหลดหน้าใหม่ ถ้ายังเป็นอยู่ให้แจ้งผู้ดูแลระบบพร้อมภาพหน้าจอนี้";
   }
   function later(msg) { if (document.body) show(msg); else document.addEventListener("DOMContentLoaded", function () { show(msg); }); }
-  window.addEventListener("error", function (e) { later("หน้าเว็บทำงานไม่สมบูรณ์: " + (e.message || "ข้อผิดพลาดที่ไม่ทราบสาเหตุ")); });
+  window.addEventListener("error", function (e) {
+    if (first) return; // keep the first error: later ones are usually caused by it
+    first = "หน้าเว็บทำงานไม่สมบูรณ์: " + (e.message || "ข้อผิดพลาดที่ไม่ทราบสาเหตุ") + (e.lineno ? " (บรรทัด " + e.lineno + ")" : "");
+    later(first);
+  });
   window.addEventListener("load", function () {
-    if (!window.TDFApp) show("หน้าเว็บโหลดไม่ครบ ปุ่มต่าง ๆ จึงใช้งานไม่ได้ (ไฟล์หน้าเว็บอาจถูกตัด)");
+    if (!window.TDFApp && !first) show("หน้าเว็บโหลดไม่ครบ ปุ่มต่าง ๆ จึงใช้งานไม่ได้ (ไฟล์หน้าเว็บอาจถูกตัด)");
   });
 })();
 </script>
