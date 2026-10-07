@@ -55,7 +55,12 @@
   }
   header.app .home:hover { background: rgba(255,255,255,.14); }
   header.app .home:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  header.app .user { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+  header.app .user {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 14px;
+    background: rgba(255,255,255,.15); border-radius: 999px; padding: 3px 4px 3px 10px;
+  }
+  header.app .user .who { display: inline-flex; align-items: center; gap: 6px; }
+  header.app .user .who b { font-weight: 700; }
   header.app .user[hidden] { display: none; }
   header.app .user .logout {
     border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff; border-radius: 8px;
@@ -169,6 +174,7 @@
   .form-body { overflow: auto; padding: 18px 20px 8px; display: grid; gap: 12px; }
   form.booking h2 { margin: 0; font-size: 20px; }
   .sec { margin: 8px 0 -2px; font-size: 16px; font-weight: 700; }
+  .audit { margin: -6px 0 0; color: var(--muted); font-size: 13px; }
   .field { display: grid; gap: 4px; align-content: start; }
   .field > label, .field > .lbl { font-weight: 600; font-size: 14px; }
   .opt { color: var(--muted); font-weight: 400; }
@@ -275,7 +281,10 @@
     </div>
     <span class="mode" id="mode">กำลังโหลดข้อมูล…</span>
     <span class="user" id="userBox" hidden>
-      <span id="userName"></span>
+      <span class="who" title="ผู้ใช้งานที่เข้าสู่ระบบ">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+        <span id="userName"></span>
+      </span>
       <button type="button" class="logout" id="logoutBtn">ออกจากระบบ</button>
     </span>
     <a class="home" id="homeLink" href="https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec" target="_top" title="กลับหน้าหลัก">
@@ -319,6 +328,7 @@
   <form class="booking" id="form" novalidate>
     <div class="form-body">
       <h2 id="formTitle">นัดคิวเทคนิคพิเศษ</h2>
+      <p class="audit" id="formAudit" hidden></p>
 
       <h3 class="sec">ข้อมูลผู้ป่วยและแผนการรักษา</h3>
       <div class="grid2">
@@ -795,7 +805,7 @@
         const b = e.b;
         const tip = [`${e.time ? e.time + ' ' : ''}${techLabel(b)} · ${kindText(e)}${e.cbct ? ' · CBCT' : ''}`,
           `HN ${b.hn} ${b.name}`, [b.site, b.physician && 'แพทย์: ' + b.physician].filter(Boolean).join(' · '),
-          b.note && 'หมายเหตุ: ' + b.note, 'คลิกเพื่อดู/แก้ไขนัด'].filter(Boolean).join('\n');
+          b.note && 'หมายเหตุ: ' + b.note, b.createdBy && 'บันทึกโดย ' + b.createdBy, 'คลิกเพื่อดู/แก้ไขนัด'].filter(Boolean).join('\n');
         return `<div class="ev" style="--c:${techColor(b)}" data-id="${esc(b.id)}" title="${esc(tip)}">
           <span class="l1"><span class="tech">${esc(techLabel(b))}</span><span class="tag">${esc(kindTag(e))}</span>${e.cbct && e.kind !== 'verify' ? '<span class="badge-cbct">CBCT</span>' : ''}</span><span class="nm">${esc(b.name)}</span></div>`;
       }).join('');
@@ -813,6 +823,19 @@
     renderStats();
     renderChips();
     renderCalendar();
+  }
+
+  // "บันทึกโดย … เมื่อ … · แก้ไขล่าสุดโดย … เมื่อ …" for bookings saved by a signed-in user.
+  function stampText(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? '' : ` เมื่อ ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}. ${d.getFullYear() + 543} ${pad(d.getHours())}:${pad(d.getMinutes())} น.`;
+  }
+  function auditText(b) {
+    if (!b.createdBy && !b.updatedBy) return '';
+    const parts = [];
+    if (b.createdBy) parts.push(`บันทึกโดย ${b.createdBy}${stampText(b.createdAt)}`);
+    if (b.updatedBy && (b.updatedBy !== b.createdBy || b.updatedAt !== b.createdAt)) parts.push(`แก้ไขล่าสุดโดย ${b.updatedBy}${stampText(b.updatedAt)}`);
+    return parts.join(' · ');
   }
 
   // ---------- booking form ----------
@@ -1021,6 +1044,9 @@
     $('formError').textContent = '';
     state.editingId = booking ? booking.id : null;
     $('formTitle').textContent = booking ? 'แก้ไขนัดคิว' : 'นัดคิวเทคนิคพิเศษ';
+    const audit = booking ? auditText(booking) : '';
+    $('formAudit').hidden = !audit;
+    $('formAudit').textContent = audit;
     $('deleteBtn').hidden = !booking;
     fs.skips = new Set(booking ? booking.skipDates : []);
     fs.manual = new Set(booking ? booking.cbctFx : []);
@@ -1210,7 +1236,7 @@
   $('workspaceLink').href = $('homeLink').href;
   function setUser(u) {
     $('userBox').hidden = !u;
-    $('userName').textContent = u ? `${u.fullName}${u.role ? ` (${u.role})` : ''}` : '';
+    $('userName').innerHTML = u ? `<b>${esc(u.fullName)}</b>${u.role ? ` (${esc(u.role)})` : ''}` : '';
   }
 
   // ---------- boot ----------
