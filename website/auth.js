@@ -255,6 +255,12 @@
     return (gas ? gasCall(req) : remote ? remoteCall(req) : LocalBackend(req)).then(function (res) {
       if (!res.ok) {
         if (res.error === "session_expired") { setSession(null, null); throw new Error("กรุณาเข้าสู่ระบบใหม่"); }
+        // The page (from GitHub) is newer than the Code.gs deployed: say what the admin has to do.
+        if (/^ไม่รู้จักคำสั่ง /.test(res.error || "")) {
+          var e = new Error("ฟังก์ชันนี้ยังใช้ไม่ได้ เพราะเซิร์ฟเวอร์ยังเป็น Code.gs เวอร์ชันเก่า (ไม่มีคำสั่ง " + action + ") — ผู้ดูแลระบบ: วาง Code.gs ล่าสุดแล้ว Deploy → Manage deployments → ✏️ Edit → Version: New version");
+          e.oldServer = true;
+          throw e;
+        }
         throw new Error(res.error || "เกิดข้อผิดพลาด");
       }
       return res;

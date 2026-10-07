@@ -1628,6 +1628,12 @@ window.SITE = {
     return (gas ? gasCall(req) : remote ? remoteCall(req) : LocalBackend(req)).then(function (res) {
       if (!res.ok) {
         if (res.error === "session_expired") { setSession(null, null); throw new Error("กรุณาเข้าสู่ระบบใหม่"); }
+        // The page (from GitHub) is newer than the Code.gs deployed: say what the admin has to do.
+        if (/^ไม่รู้จักคำสั่ง /.test(res.error || "")) {
+          var e = new Error("ฟังก์ชันนี้ยังใช้ไม่ได้ เพราะเซิร์ฟเวอร์ยังเป็น Code.gs เวอร์ชันเก่า (ไม่มีคำสั่ง " + action + ") — ผู้ดูแลระบบ: วาง Code.gs ล่าสุดแล้ว Deploy → Manage deployments → ✏️ Edit → Version: New version");
+          e.oldServer = true;
+          throw e;
+        }
         throw new Error(res.error || "เกิดข้อผิดพลาด");
       }
       return res;
@@ -4624,7 +4630,7 @@ window.SITE = {
           '<div class="team-chips">' + chips + "</div>" +
           '<input class="team-search" type="search" placeholder="ค้นหาชื่อ ตำแหน่ง หรือสถานที่…" aria-label="ค้นหาในสถานะทีม" value="' + esc(query) + '">' +
           (loaded ? (shown.length ? '<ul class="team-list">' + shown.map(person).join("") + "</ul>" : '<p class="muted team-empty">ไม่พบรายชื่อ</p>')
-            : '<p class="muted team-empty">กำลังโหลด…</p>') +
+            : loadError ? '<p class="auth-error team-empty">' + esc(loadError) + "</p>" : '<p class="muted team-empty">กำลังโหลด…</p>') +
         "</div>";
       var search = root.querySelector(".team-search");
       search.addEventListener("input", function () {
@@ -4644,7 +4650,11 @@ window.SITE = {
       filter = t.getAttribute("data-f");
       render();
     });
-    function refresh() { load().catch(function () { /* keep the last list */ }); }
+    var loadError = "";
+    function refresh() {
+      load().then(function () { if (loadError) { loadError = ""; render(); } },
+        function (e) { if (!loaded) { loadError = e.message; render(); } });   // after a first list, keep showing it
+    }
     window.addEventListener("lpch:status", render);
     render();
     refresh();

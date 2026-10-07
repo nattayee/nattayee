@@ -240,7 +240,7 @@
           '<div class="team-chips">' + chips + "</div>" +
           '<input class="team-search" type="search" placeholder="ค้นหาชื่อ ตำแหน่ง หรือสถานที่…" aria-label="ค้นหาในสถานะทีม" value="' + esc(query) + '">' +
           (loaded ? (shown.length ? '<ul class="team-list">' + shown.map(person).join("") + "</ul>" : '<p class="muted team-empty">ไม่พบรายชื่อ</p>')
-            : '<p class="muted team-empty">กำลังโหลด…</p>') +
+            : loadError ? '<p class="auth-error team-empty">' + esc(loadError) + "</p>" : '<p class="muted team-empty">กำลังโหลด…</p>') +
         "</div>";
       var search = root.querySelector(".team-search");
       search.addEventListener("input", function () {
@@ -260,7 +260,11 @@
       filter = t.getAttribute("data-f");
       render();
     });
-    function refresh() { load().catch(function () { /* keep the last list */ }); }
+    var loadError = "";
+    function refresh() {
+      load().then(function () { if (loadError) { loadError = ""; render(); } },
+        function (e) { if (!loaded) { loadError = e.message; render(); } });   // after a first list, keep showing it
+    }
     window.addEventListener("lpch:status", render);
     render();
     refresh();
