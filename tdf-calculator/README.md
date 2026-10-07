@@ -10,22 +10,41 @@ npx serve tdf-calculator
 node --test tdf-calculator/tdf.test.js
 ```
 
-## Google Apps Script
+## Google Apps Script (พร้อมระบบล็อกอิน)
 
-โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script
+โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script โดยใช้หน้าล็อกอินเดิมที่
+`https://script.google.com/macros/s/AKfycbwVlM9o…/exec` (ตั้งไว้ใน `LOGIN_URL` ของ `Code.gs`)
+
+### โปรเจกต์ TDF (โปรเจกต์ใหม่)
 
 | ไฟล์ | ใส่ใน Apps Script เป็น |
 |---|---|
 | `Code.gs` | Script file ชื่อ `Code` |
-| `Index.html` | HTML file ชื่อ `Index` |
+| `Index.html` | HTML file ชื่อ `Index` (หน้าเครื่องคำนวณ) |
+| `Login.html` | HTML file ชื่อ `Login` (หน้าให้กดเข้าสู่ระบบ) |
 | `Tdf.html` | HTML file ชื่อ `Tdf` (สูตรคำนวณ) |
 | `appsscript.json` | manifest (ถ้าใช้ `clasp`) |
 
-1. ไปที่ script.google.com → New project
-2. วางเนื้อหา `Code.gs` ลงใน `Code.gs`
-3. กด **+ → HTML** สร้างไฟล์ `Index` และ `Tdf` แล้ววางเนื้อหาตามไฟล์ (ชื่อต้องตรง ไม่ต้องพิมพ์ `.html`)
-4. **Deploy → New deployment → Web app** เลือก Execute as: Me และกำหนด Who has access
-5. เปิดแท็บได้โดยตรงด้วย `?tab=frac`, `?tab=gap`, `?tab=brachy` หรือ `?tab=ref` ต่อท้าย URL
+Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone** แล้วคัดลอก URL `/exec` ไว้
+
+### โปรเจกต์ล็อกอินเดิม (เพิ่ม 1 ไฟล์ + แก้ 2 จุด)
+
+1. เพิ่มไฟล์ `login-bridge/TdfBridge.gs` แล้วใส่ URL ของ TDF ใน `TDF_APP_URL`
+2. ให้ `doPost` เรียก `handleTdfBridge_(e)` (ถ้ายังไม่มี `doPost` ให้สร้างตามตัวอย่างในไฟล์)
+3. ในฟังก์ชันฝั่ง server ที่ตรวจรหัสผ่าน เมื่อผ่านแล้วให้ส่ง `tdfUrl: createTdfRedirect_({ username, name })` กลับไป
+   และในหน้าเว็บเมื่อล็อกอินสำเร็จ ถ้า URL มี `?app=tdf` ให้ไปที่ `window.top.location.href = result.tdfUrl`
+4. Deploy เวอร์ชันใหม่ของโปรเจกต์ล็อกอิน (Manage deployments → Edit → New version) โดย Who has access ต้องเป็น **Anyone**
+
+### ลำดับการทำงาน
+
+```
+ผู้ใช้เปิด TDF ──(ไม่มี token)──► หน้า Login ──กดเข้าสู่ระบบ──► LOGIN_URL?app=tdf
+LOGIN ตรวจรหัสผ่าน ──► createTdfRedirect_() เก็บ token ใน CacheService 6 ชม. ──► TDF_URL?token=…
+TDF doGet ──POST {action:'tdfVerify', token}──► LOGIN ──► {ok:true, user} ──► แสดงเครื่องคำนวณ
+ออกจากระบบ ──POST {action:'tdfLogout', token}──► LOGIN ลบ token ──► กลับหน้า LOGIN
+```
+
+เปิดแท็บได้โดยตรงด้วย `&tab=frac`, `&tab=gap`, `&tab=brachy` หรือ `&tab=ref`
 
 `Index.html` และ `Tdf.html` สร้างจาก `index.html` และ `tdf.js` ถ้าแก้ไฟล์ต้นฉบับให้รัน `node tdf-calculator/build-apps-script.js` ใหม่
 

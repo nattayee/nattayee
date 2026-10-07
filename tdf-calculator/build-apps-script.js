@@ -19,18 +19,49 @@ function replaceOnce(src, from, to) {
 html = replaceOnce(html, '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n', "");
 html = replaceOnce(html, '<script src="tdf.js"></script>', "<?!= include('Tdf'); ?>");
 
-// The page runs inside a sandboxed iframe, so the outer URL's #hash / ?tab= only reach it via google.script.url.
+// Signed-in user + sign-out button. userName, token and loginUrl are set by doGet in Code.gs.
+html = replaceOnce(
+  html,
+  "</style>",
+  `.session { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--ink-2); }
+.session b { color: var(--ink); font-weight: 600; }
+</style>`
+);
+html = replaceOnce(
+  html,
+  '    <div class="ref-box">',
+  `    <div class="session" id="session" data-token="<?= token ?>" data-login="<?= loginUrl ?>">
+      <span>ผู้ใช้ <b><?= userName ?></b></span>
+      <button type="button" class="btn" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+    <div class="ref-box">`
+);
+
+// The page runs inside a sandboxed iframe: the outer URL's ?tab= / #hash only reach it via google.script.url,
+// and leaving the app has to navigate window.top.
 html = replaceOnce(
   html,
   "</body>",
   `<script>
-if (window.google && google.script && google.script.url) {
-  google.script.url.getLocation(function (loc) {
-    var tab = (loc.parameter && loc.parameter.tab) || loc.hash;
-    var btn = tab && document.getElementById("tab-" + tab);
-    if (btn) btn.click();
+(function () {
+  var session = document.getElementById("session");
+  var logoutBtn = document.getElementById("logoutBtn");
+  var hasGas = window.google && google.script;
+  logoutBtn.addEventListener("click", function () {
+    logoutBtn.disabled = true;
+    logoutBtn.textContent = "กำลังออกจากระบบ…";
+    var go = function (url) { window.top.location.href = url || session.dataset.login; };
+    if (hasGas) google.script.run.withSuccessHandler(go).withFailureHandler(function () { go(); }).logout(session.dataset.token);
+    else go();
   });
-}
+  if (hasGas && google.script.url) {
+    google.script.url.getLocation(function (loc) {
+      var tab = (loc.parameter && loc.parameter.tab) || loc.hash;
+      var btn = tab && document.getElementById("tab-" + tab);
+      if (btn) btn.click();
+    });
+  }
+})();
 </script>
 </body>`
 );

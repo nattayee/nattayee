@@ -175,6 +175,8 @@ td.decay { color: var(--decay); }
 .formulas ul { padding-left: 18px; margin: 8px 0 0; }
 footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80ch; }
 @media (prefers-reduced-motion: no-preference) { .gauge .fill { transition: width .25s ease; } }
+.session { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--ink-2); }
+.session b { color: var(--ink); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -183,6 +185,10 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     <div class="brand">
       <h1><span class="sym">TDF</span> Dose Calculator</h1>
       <p>คำนวณ Time-Dose-Fractionation (Orton &amp; Ellis) สำหรับการฉายรังสีแบบแบ่ง fraction, การพักฉาย (decay factor) และ brachytherapy ที่แหล่งรังสีสลายตัว</p>
+    </div>
+    <div class="session" id="session" data-token="<?= token ?>" data-login="<?= loginUrl ?>">
+      <span>ผู้ใช้ <b><?= userName ?></b></span>
+      <button type="button" class="btn" id="logoutBtn">ออกจากระบบ</button>
     </div>
     <div class="ref-box">
       <label for="refTdf">TDF อ้างอิง<br>(tolerance)</label>
@@ -828,13 +834,25 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 })();
 </script>
 <script>
-if (window.google && google.script && google.script.url) {
-  google.script.url.getLocation(function (loc) {
-    var tab = (loc.parameter && loc.parameter.tab) || loc.hash;
-    var btn = tab && document.getElementById("tab-" + tab);
-    if (btn) btn.click();
+(function () {
+  var session = document.getElementById("session");
+  var logoutBtn = document.getElementById("logoutBtn");
+  var hasGas = window.google && google.script;
+  logoutBtn.addEventListener("click", function () {
+    logoutBtn.disabled = true;
+    logoutBtn.textContent = "กำลังออกจากระบบ…";
+    var go = function (url) { window.top.location.href = url || session.dataset.login; };
+    if (hasGas) google.script.run.withSuccessHandler(go).withFailureHandler(function () { go(); }).logout(session.dataset.token);
+    else go();
   });
-}
+  if (hasGas && google.script.url) {
+    google.script.url.getLocation(function (loc) {
+      var tab = (loc.parameter && loc.parameter.tab) || loc.hash;
+      var btn = tab && document.getElementById("tab-" + tab);
+      if (btn) btn.click();
+    });
+  }
+})();
 </script>
 </body>
 </html>
