@@ -11,6 +11,7 @@
   S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
+  S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true };
   var navEl = document.getElementById("nav");
 
   function esc(s) {
@@ -85,6 +86,8 @@
     account: function () { return '<section class="section" id="accountRoot"></section>'; },
 
     admin: function () { return '<section class="section" id="adminRoot"></section>'; },
+
+    menus: function () { return '<section class="section" id="menusRoot"></section>'; },
 
     inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
@@ -200,6 +203,7 @@
         " <span>›</span> " + esc(p.title);
       html += '<nav class="breadcrumb" aria-label="breadcrumb">' + crumbs + "</nav>" +
         '<header class="page-head"><h2>' + esc(p.title) + "</h2>" + (p.lead ? '<p class="lead">' + esc(p.lead) + "</p>" : "") + "</header>";
+      if (window.Menus) html += window.Menus.adminBar(key);
     }
 
     if (p.specs) {
@@ -345,6 +349,7 @@
     if (e.target.closest && e.target.closest("a[data-sso]")) setTimeout(initSso, 300);   // that ticket is used now
   });
 
+  var renderedPage = null;
   function route() {
     if (!Auth.user) return;
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
@@ -371,6 +376,13 @@
     if (accountRoot) Auth.mountAccount(accountRoot);
     var adminRoot = document.getElementById("adminRoot");
     if (adminRoot) Auth.mountAdmin(adminRoot);
+    var menusRoot = document.getElementById("menusRoot");
+    if (menusRoot && window.Menus) {
+      // #/menus?add=<heading> opens the editor for a new sub-menu, ?edit=<page> for an existing one
+      var add = /[?&]add=([^&]+)/.exec(location.hash), edit = /[?&]edit=([^&]+)/.exec(location.hash);
+      window.Menus.mount(menusRoot, { add: add && decodeURIComponent(add[1]), edit: edit && decodeURIComponent(edit[1]) });
+    }
+    renderedPage = page;
 
 
     // Highlight the top-level item that owns this page.
@@ -414,7 +426,7 @@
           (u.isAdmin ? " · admin" : "") + "</span></div>" +
         '<a href="#/inbox">✉️ ข้อความส่วนตัว</a>' +
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
-        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
+        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a><a href="#/menus">🧭 จัดการเมนู</a>' : "") +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
       "</div>";
@@ -451,6 +463,11 @@
       // Accounts created before email was required are asked to add one (needed to reset a password).
       if (!user.email && location.hash !== "#/account") location.hash = "#/account";
       route();
+      // Sub-menus added by admins (Menus sheet): once loaded, draw the page again so a custom page opened by
+      // link, or a heading's list of sub-menus, shows them (chat pages keep running as they are).
+      if (window.Menus) window.Menus.load().then(function () {
+        if (Auth.user && ["chat", "inbox", "menus"].indexOf(renderedPage) === -1) route();
+      });
       // Pop-ups for new announcements and private messages (also keeps the unread badges current).
       if (window.Notifier) window.Notifier.start();
     } else {
@@ -474,6 +491,12 @@
   });
 
   renderNav();
+  if (window.Menus) window.Menus.onChange(function () {
+    renderNav();
+    // keep the active item highlighted after the menu is drawn again
+    var page = renderedPage || "home", nav = findNav(page), top = nav ? (nav.parent || nav.item).page : "home";
+    navEl.querySelectorAll(".nav-link").forEach(function (a) { a.classList.toggle("active", a.getAttribute("data-page") === top); });
+  });
 
   document.getElementById("menuToggle").addEventListener("click", function () {
     var open = navEl.classList.toggle("open");

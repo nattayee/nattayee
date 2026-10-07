@@ -13,7 +13,8 @@
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน)
+ * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
+ *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -47,13 +48,14 @@ var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
 var SETTINGS_HEADERS = ['username', 'quickReplies', 'updatedAt'];
+var MENU_HEADERS = ['id', 'parent', 'order', 'json', 'updatedAt', 'updatedBy'];
 var QUICK_MAX = 5;             // ข้อความด่วน (quick chat) สูงสุดต่อคน
 var QUICK_LEN = 100;           // ความยาวสูงสุดต่อข้อความด่วน
 var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบคุณครับ/ค่ะ', 'กำลังดำเนินการ', 'เรียบร้อยแล้ว', 'ขอรายละเอียดเพิ่มเติม'];
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -141,6 +143,7 @@ function setup() {
   sheet_('ChatLog', LOG_HEADERS);
   sheet_('DirectMessages', DM_HEADERS);
   sheet_('Settings', SETTINGS_HEADERS);
+  sheet_('Menus', MENU_HEADERS);
   folder_();
   folder_('DM_FOLDER_ID', DM_FOLDER);
   Logger.log('ส่งอีเมลได้อีกวันนี้: ' + MailApp.getRemainingDailyQuota() + ' ฉบับ');
@@ -490,6 +493,137 @@ ACTIONS.quickSave = function (req) {
   else sh.appendRow([u.username, JSON.stringify(items), new Date()]);
   return { items: items, message: 'บันทึกข้อความด่วนแล้ว' };
 };
+
+/* ---------------- เมนูย่อยที่ผู้ดูแลระบบเพิ่มเอง (หน้า "จัดการเมนู") ----------------
+ * แต่ละแถวในชีต Menus คือเมนูย่อย 1 รายการใต้หัวข้อหลัก (เช่น MP, RTT) พร้อมเนื้อหาของหน้านั้น
+ * (คำอธิบาย การ์ดแอป และรายการลิงก์) หรือแถวที่ซ่อนเมนูย่อยเดิมของเว็บ (json = {"hidden":true})
+ */
+var MENU_MAX_APPS = 5;
+var MENU_MAX_LINKS = 40;
+var MENU_KEY_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+var APPS_SCRIPT_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/;
+
+ACTIONS.menuList = function (req) {
+  requireUser_(req.token);
+  return { items: menuRows_().map(function (r) { return r.item; }) };
+};
+
+ACTIONS.menuSave = function (req) {
+  var admin = requireAdmin_(req.token);
+  var m = cleanMenu_(req.item || {});
+  var sh = sheet_('Menus', MENU_HEADERS), rows = menuRows_();
+  var old = m.id ? rows.filter(function (r) { return r.item.id === m.id && !r.item.builtin; })[0] : null;
+  if (m.id && !old) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
+  var siblings = rows.filter(function (r) { return r.item.parent === m.parent && !r.item.builtin; }).length;
+  if (!old && siblings >= 30) throw new Error('หัวข้อนี้มีเมนูย่อยครบ 30 รายการแล้ว');
+  if (!old) m.id = m.parent + '/m' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  var order = old && old.item.parent === m.parent ? old.item.order : nextOrder_(rows, m.parent);
+  var json = JSON.stringify({ title: m.title, lead: m.lead, icon: m.icon, apps: m.apps, links: m.links });
+  var values = [m.id, m.parent, order, json, new Date(), admin.username];
+  if (old) sh.getRange(old.row, 1, 1, values.length).setValues([values]);
+  else sh.appendRow(values);
+  return { item: menuItem_(values), message: 'บันทึกเมนู "' + m.title + '" แล้ว' };
+};
+
+ACTIONS.menuDelete = function (req) {
+  requireAdmin_(req.token);
+  var r = menuRows_().filter(function (x) { return x.item.id === String(req.id) && !x.item.builtin; })[0];
+  if (!r) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
+  sheet_('Menus', MENU_HEADERS).deleteRow(r.row);
+  return { message: 'ลบเมนู "' + r.item.title + '" แล้ว' };
+};
+
+/** Move a custom menu one place up (-1) or down (+1) among the custom menus of its section. */
+ACTIONS.menuMove = function (req) {
+  var admin = requireAdmin_(req.token);
+  var rows = menuRows_(), me = rows.filter(function (x) { return x.item.id === String(req.id) && !x.item.builtin; })[0];
+  if (!me) throw new Error('ไม่พบเมนูนี้');
+  var sibs = rows.filter(function (x) { return x.item.parent === me.item.parent && !x.item.builtin; })
+    .sort(function (a, b) { return a.item.order - b.item.order; });
+  var i = sibs.indexOf(me), j = i + (Number(req.dir) < 0 ? -1 : 1);
+  if (j < 0 || j >= sibs.length) return { moved: false };
+  var sh = sheet_('Menus', MENU_HEADERS), other = sibs[j];
+  // renumber the section so equal or missing orders cannot get stuck
+  sibs.splice(i, 1); sibs.splice(j, 0, me);
+  sibs.forEach(function (x, k) { if (x.item.order !== k + 1) sh.getRange(x.row, 3).setValue(k + 1); });
+  sh.getRange(me.row, 5, 1, 2).setValues([[new Date(), admin.username]]);
+  return { moved: true, swappedWith: other.item.id };
+};
+
+/** Hide (or show again) one of the site's own sub-menus, e.g. "mp/psqa". */
+ACTIONS.menuHide = function (req) {
+  var admin = requireAdmin_(req.token);
+  var id = String(req.id || '');
+  if (!/^[a-z0-9][a-z0-9-]{0,40}\/[a-z0-9][a-z0-9-]{0,40}$/.test(id)) throw new Error('เมนูไม่ถูกต้อง');
+  var sh = sheet_('Menus', MENU_HEADERS);
+  var r = menuRows_().filter(function (x) { return x.item.id === id && x.item.builtin; })[0];
+  if (req.hidden) {
+    if (!r) sh.appendRow([id, '', 0, JSON.stringify({ hidden: true }), new Date(), admin.username]);
+  } else if (r) {
+    sh.deleteRow(r.row);
+  }
+  return { message: req.hidden ? 'ซ่อนเมนูแล้ว' : 'แสดงเมนูแล้ว' };
+};
+
+function menuRows_() {
+  var rows = sheet_('Menus', MENU_HEADERS).getDataRange().getValues(), out = [];
+  for (var i = 1; i < rows.length; i++) if (rows[i][0]) out.push({ row: i + 1, item: menuItem_(rows[i]) });
+  return out;
+}
+
+function menuItem_(r) {
+  var j = {};
+  try { j = JSON.parse(r[3] || '{}') || {}; } catch (e) { j = {}; }
+  if (j.hidden) return { id: String(r[0]), builtin: true, hidden: true };
+  return { id: String(r[0]), parent: String(r[1]), order: Number(r[2]) || 0, title: j.title || '', lead: j.lead || '',
+    icon: j.icon || '', apps: j.apps || [], links: j.links || [],
+    updatedAt: r[4] ? new Date(r[4]).getTime() : null, updatedBy: String(r[5] || '') };
+}
+
+function nextOrder_(rows, parent) {
+  return rows.reduce(function (n, r) { return r.item.parent === parent && !r.item.builtin ? Math.max(n, r.item.order) : n; }, 0) + 1;
+}
+
+/** A menu as sent by the editor, checked and trimmed. Throws a message the admin can act on. */
+function cleanMenu_(m) {
+  var text = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
+  var url = function (v, label) {
+    var u = String(v || '').trim();
+    if (!u || u === '#') return '#';
+    if (!/^https?:\/\/[^\s<>"]+$/i.test(u) || u.length > 1000) throw new Error('ลิงก์ของ "' + label + '" ต้องขึ้นต้นด้วย https:// (หรือเว้นว่างไว้ก่อน)');
+    return u;
+  };
+  var out = {
+    id: m.id ? String(m.id) : '',
+    parent: String(m.parent || ''),
+    title: text(m.title, 60),
+    lead: text(m.lead, 200),
+    icon: text(m.icon, 8)
+  };
+  if (!MENU_KEY_RE.test(out.parent) || out.parent === 'home' || out.parent === 'chat') throw new Error('เลือกหัวข้อของเมนู');
+  if (out.id && !/^[a-z0-9-]+\/m[0-9a-f]{8}$/.test(out.id)) throw new Error('เมนูไม่ถูกต้อง');
+  if (!out.title) throw new Error('กรุณาใส่ชื่อเมนู');
+  var apps = (m.apps || []).filter(function (a) { return a && (text(a.label, 80) || String(a.url || '').trim()); });
+  var links = (m.links || []).filter(function (l) { return l && (text(l.label, 100) || String(l.url || '').trim()); });
+  if (apps.length > MENU_MAX_APPS) throw new Error('ใส่การ์ดแอปได้สูงสุด ' + MENU_MAX_APPS + ' รายการ');
+  if (links.length > MENU_MAX_LINKS) throw new Error('ใส่ลิงก์ได้สูงสุด ' + MENU_MAX_LINKS + ' รายการ');
+  out.apps = apps.map(function (a) {
+    var label = text(a.label, 80);
+    if (!label) throw new Error('การ์ดแอปต้องมีชื่อ');
+    var u = url(a.url, label);
+    // a sign-in ticket may only go to an Apps Script web app (like TRS-398 and Linac QA)
+    if (a.sso && !APPS_SCRIPT_RE.test(u)) throw new Error('"' + label + '": เข้าสู่ระบบอัตโนมัติได้เฉพาะลิงก์เว็บแอป Apps Script (https://script.google.com/macros/s/…/exec)');
+    return { icon: text(a.icon, 8), label: label, desc: text(a.desc, 200), url: u, sso: !!a.sso };
+  });
+  out.links = links.map(function (l) {
+    var label = text(l.label, 100);
+    if (!label) throw new Error('ลิงก์ทุกรายการต้องมีชื่อ');
+    var u = url(l.url, label);
+    if (l.sso && !APPS_SCRIPT_RE.test(u)) throw new Error('"' + label + '": เข้าสู่ระบบอัตโนมัติได้เฉพาะลิงก์เว็บแอป Apps Script');
+    return { label: label, url: u, type: text(l.type, 20), sso: !!l.sso };
+  });
+  return out;
+}
 
 function settingsRow_(username) {
   var rows = sheet_('Settings', SETTINGS_HEADERS).getDataRange().getValues();
