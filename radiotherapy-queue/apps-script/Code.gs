@@ -16,7 +16,8 @@ var SHEET_HOLIDAYS_ = 'Holidays';
 var SHEET_SETTINGS_ = 'Settings';
 
 var APPT_COLUMNS_ = [
-  'id', 'hn', 'name', 'age', 'sex', 'phone', 'diagnosis', 'physician',
+  'id', 'hn', 'prefix', 'firstName', 'lastName', 'name', 'age', 'sex', 'phone',
+  'icd10', 'diagnosis', 'site', 'icd9', 'physician',
   'technique', 'room', 'dosePerFx', 'fractions', 'simDate', 'verifyDate', 'verifyTime',
   'startDate', 'time', 'duration', 'cbctMode', 'cbctDates', 'skipDates',
   'status', 'notes', 'createdAt', 'updatedAt',
@@ -163,6 +164,7 @@ function ensureSheets_() {
   [[SHEET_APPTS_, APPT_COLUMNS_], [SHEET_HOLIDAYS_, ['date', 'name']], [SHEET_SETTINGS_, ['key', 'value']]].forEach(function (x) {
     if (ss.getSheetByName(x[0])) return;
     var sh = ss.insertSheet(x[0]);
+    ensureColumns_(sh, x[1].length);
     sh.getRange(1, 1, sh.getMaxRows(), x[1].length).setNumberFormat('@'); // เก็บเป็นข้อความ ไม่ให้ Sheet แปลงวันที่/HN
     sh.getRange(1, 1, 1, x[1].length).setValues([x[1]]).setFontWeight('bold');
     sh.setFrozenRows(1);
@@ -170,6 +172,16 @@ function ensureSheets_() {
   });
   if (created && ss.getSheetByName(SHEET_HOLIDAYS_).getLastRow() < 2) {
     withLock_(function () { writeSettings_(defaultSettings()); });
+  }
+  // Sheet จากเวอร์ชันก่อน: เพิ่มคอลัมน์ใหม่ต่อท้าย
+  var sh = ss.getSheetByName(SHEET_APPTS_);
+  var headers = headers_(sh);
+  var missing = APPT_COLUMNS_.filter(function (c) { return headers.indexOf(c) < 0; });
+  if (missing.length) {
+    var col = headers.length + 1;
+    ensureColumns_(sh, headers.length + missing.length);
+    sh.getRange(1, col, sh.getMaxRows(), missing.length).setNumberFormat('@');
+    sh.getRange(1, col, 1, missing.length).setValues([missing]).setFontWeight('bold');
   }
 }
 
@@ -239,6 +251,7 @@ function readSettings_() {
         if (r[0] === 'workdays') s.workdays = JSON.parse(r[1]);
         if (r[0] === 'rooms') s.rooms = Object.assign(s.rooms, JSON.parse(r[1]));
         if (r[0] === 'slotMinutes') s.slotMinutes = Number(r[1]) || s.slotMinutes;
+        if (r[0] === 'physicians') s.physicians = JSON.parse(r[1]);
       } catch (e) {
         /* ค่าที่แก้ใน Sheet ไม่ถูกต้อง — ใช้ค่าเริ่มต้น */
       }
@@ -258,10 +271,11 @@ function writeSettings_(s) {
   var ss = spreadsheet_();
   var kv = ss.getSheetByName(SHEET_SETTINGS_);
   clearBody_(kv);
-  kv.getRange(2, 1, 3, 2).setNumberFormat('@').setValues([
+  kv.getRange(2, 1, 4, 2).setNumberFormat('@').setValues([
     ['workdays', JSON.stringify(s.workdays)],
     ['rooms', JSON.stringify(s.rooms)],
     ['slotMinutes', String(s.slotMinutes)],
+    ['physicians', JSON.stringify(s.physicians || [])],
   ]);
   var hs = ss.getSheetByName(SHEET_HOLIDAYS_);
   clearBody_(hs);
@@ -269,6 +283,12 @@ function writeSettings_(s) {
     hs.getRange(2, 1, s.holidays.length, 2).setNumberFormat('@')
       .setValues(s.holidays.map(function (h) { return [h.date, h.name]; }));
   }
+}
+
+/** แผ่นงานใหม่มี 26 คอลัมน์ (A–Z) — เพิ่มคอลัมน์ถ้าไม่พอ */
+function ensureColumns_(sh, n) {
+  var max = sh.getMaxColumns();
+  if (max < n) sh.insertColumnsAfter(max, n - max);
 }
 
 /** ล้างข้อมูลทุกแถวยกเว้นหัวตาราง */
@@ -305,11 +325,17 @@ function validateAppointment_(input) {
   var errors = [];
   var a = {
     hn: str_(input.hn, 30),
+    prefix: str_(input.prefix, 40),
+    firstName: str_(input.firstName, 100),
+    lastName: str_(input.lastName, 100),
     name: str_(input.name, 200),
     age: input.age === '' || input.age == null ? '' : Number(input.age),
     sex: str_(input.sex, 10),
     phone: str_(input.phone, 50),
+    icd10: str_(input.icd10, 10),
     diagnosis: str_(input.diagnosis, 200),
+    site: str_(input.site, 200),
+    icd9: str_(input.icd9, 10),
     physician: str_(input.physician, 100),
     technique: str_(input.technique, 20),
     room: str_(input.room, 5),
@@ -327,6 +353,7 @@ function validateAppointment_(input) {
     status: str_(input.status, 20) || 'active',
     notes: str_(input.notes, 2000),
   };
+  if (a.firstName) a.name = composeName(a.prefix, a.firstName, a.lastName);
   if (!a.hn) errors.push('กรุณาระบุ HN');
   if (!a.name) errors.push('กรุณาระบุชื่อผู้ป่วย');
   if (ids_(ROOMS).indexOf(a.room) < 0) errors.push('ห้องฉายไม่ถูกต้อง');
@@ -363,5 +390,10 @@ function validateSettings_(input) {
   }
   var slot = Number(input.slotMinutes);
   if ([5, 10, 15, 20, 30].indexOf(slot) >= 0) s.slotMinutes = slot;
+  if (Array.isArray(input.physicians)) {
+    s.physicians = input.physicians
+      .map(function (p) { return str_(p, 100); })
+      .filter(function (p, i, arr) { return p && arr.indexOf(p) === i; });
+  }
   return s;
 }

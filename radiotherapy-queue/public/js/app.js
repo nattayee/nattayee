@@ -1,8 +1,11 @@
 import {
   ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, PHASE_LABELS,
   addDays, todayISO, startOfWeek, isWorkday, nextWorkday, parseISO,
-  buildSessions, phaseOf, eventsByDate, findConflicts, suggestTimes, utilization,
+  buildSessions, phaseOf, eventsByDate, findConflicts, suggestTimes, utilization, DEFAULT_PHYSICIANS,
 } from './schedule.js';
+import {
+  NAME_PREFIXES, composeName, ICD10, ICD9_RT, ICD9_BY_TECHNIQUE, TREATMENT_SITES, searchIcd10,
+} from './icd.js';
 import { openStore } from './store.js';
 
 // ================= state =================
@@ -68,6 +71,7 @@ function showTip(html, ev) {
 const hideTip = () => (tip.hidden = true);
 
 function recompute() {
+  state.settings.physicians ||= [...DEFAULT_PHYSICIANS]; // ข้อมูลจากเวอร์ชันก่อน
   state.sessions = new Map(state.appts.map((a) => [a.id, buildSessions(a, state.settings)]));
   state.evMap = eventsByDate(state.appts, state.settings);
 }
@@ -487,7 +491,7 @@ function patientRows() {
     })
     .filter(
       ({ a, phase: p }) =>
-        (!q || [a.hn, a.name, a.diagnosis, a.physician].some((v) => String(v || '').toLowerCase().includes(q))) &&
+        (!q || [a.hn, a.name, a.diagnosis, a.site, a.physician].some((v) => String(v || '').toLowerCase().includes(q))) &&
         (!room || a.room === room) &&
         (!tech || a.technique === tech) &&
         (!ph || p === ph),
@@ -502,7 +506,8 @@ function renderPatients() {
       const pct = ss.length ? Math.round((done / ss.length) * 100) : 0;
       return `<tr data-id="${esc(a.id)}">
         <td class="num">${esc(a.hn)}</td>
-        <td><b>${esc(a.name)}</b><div class="muted small">${esc(a.diagnosis)}</div></td>
+        <td><b>${esc(a.name)}</b><div class="muted small">${esc(a.physician || '')}</div></td>
+        <td class="dx-cell"><div class="dx" title="${esc(a.diagnosis)}">${esc(a.diagnosis || '-')}</div><div class="muted small">${esc(a.site || '')}</div></td>
         <td>${esc(techOf(a.technique).name)}</td>
         <td>${roomTag(a.room)}</td>
         <td class="num">${a.verifyDate ? `${fMed(a.verifyDate)} ${esc(a.verifyTime || a.time)}` : '-'}</td>
@@ -519,10 +524,10 @@ function renderPatients() {
 }
 
 function exportCsv() {
-  const head = ['HN', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'การวินิจฉัย', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ'];
+  const head = ['HN', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อ-สกุล', 'อายุ', 'เพศ', 'โทรศัพท์', 'ICD-10', 'การวินิจฉัย', 'ตำแหน่งที่ฉาย', 'ICD-9-CM', 'แพทย์', 'เทคนิค', 'ห้อง', 'ปริมาณรังสี/ครั้ง', 'จำนวนครั้ง', 'วัน CT Sim', 'วัน CBCT ก่อนฉาย', 'วันเริ่มฉาย', 'วันสุดท้าย', 'เวลานัด', 'รูปแบบ CBCT', 'วันทำ CBCT ระหว่างฉาย', 'สถานะ', 'หมายเหตุ'];
   const lines = patientRows().map(({ a, ss, phase: p }) =>
     [
-      a.hn, a.name, a.age, a.sex, a.phone, a.diagnosis, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
+      a.hn, a.prefix, a.firstName, a.lastName, a.name, a.age, a.sex, a.phone, a.icd10, a.diagnosis, a.site, a.icd9, a.physician, techOf(a.technique).name, roomOf(a.room).label, a.dosePerFx,
       a.fractions, a.simDate, a.verifyDate, ss[0]?.date, ss[ss.length - 1]?.date, a.time,
       CBCT_MODES.find((m) => m.id === a.cbctMode)?.name, ss.filter((s) => s.cbct).map((s) => s.date).join(' '), PHASE_LABELS[p], a.notes,
     ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
@@ -544,7 +549,8 @@ function printSlip(a) {
   $('#print-area').innerHTML = `<h2>ใบนัดฉายรังสี</h2>
     <div>กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</div>
     <p><b>${esc(a.name)}</b> HN ${esc(a.hn)} ${a.age !== '' && a.age != null ? `อายุ ${esc(a.age)} ปี` : ''}<br>
-    การวินิจฉัย: ${esc(a.diagnosis || '-')} · แพทย์: ${esc(a.physician || '-')}<br>
+    การวินิจฉัย: ${esc(a.diagnosis || '-')}<br>
+    ตำแหน่งที่ฉาย: ${esc(a.site || '-')} · แพทย์: ${esc(a.physician || '-')}<br>
     ห้องฉาย: ${esc(roomOf(a.room).label)} · เทคนิค: ${esc(techOf(a.technique).name)} · จำนวน ${ss.length} ครั้ง<br>
     เวลานัด: ${esc(a.time)} น. · ฉายระหว่าง ${esc(fLong(ss[0]?.date))} ถึง ${esc(fLong(ss[ss.length - 1]?.date))}
     ${a.verifyDate ? `<br><b>นัดทำ CBCT ก่อนเริ่มฉาย: ${esc(fLong(a.verifyDate))} เวลา ${esc(a.verifyTime || a.time)} น.</b>` : ''}</p>
@@ -578,6 +584,15 @@ function renderSettings() {
         <button type="button" class="btn small ghost danger" data-del="${h.date}" aria-label="ลบ">ลบ</button></li>`,
     )
     .join('') || '<li class="muted">ไม่มีวันหยุด</li>';
+  s.physicians ||= [...DEFAULT_PHYSICIANS];
+  $('#phys-list').innerHTML =
+    s.physicians
+      .map(
+        (p, i) => `<li><span class="nm">${esc(p)}</span>
+        <button type="button" class="btn small ghost" data-phys-up="${i}" aria-label="เลื่อนขึ้น" ${i ? '' : 'disabled'}>↑</button>
+        <button type="button" class="btn small ghost danger" data-phys-del="${i}" aria-label="ลบ">ลบ</button></li>`,
+      )
+      .join('') || '<li class="muted">ยังไม่มีรายชื่อแพทย์</li>';
 }
 
 async function saveSettings() {
@@ -601,11 +616,23 @@ function fillSelect(sel, items, placeholder) {
   sel.innerHTML = (placeholder ? `<option value="">${placeholder}</option>` : '') + items.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join('');
 }
 
+// รหัส ICD-10 ของข้อความการวินิจฉัย (เลือกจากรายการ หรือพิมพ์รหัสนำหน้าเอง)
+function icd10Of(text) {
+  const m = /^([A-Z]\d{2}(?:\.\d)?)\b/i.exec((text || '').trim());
+  if (!m) return '';
+  const code = m[1].toUpperCase();
+  return ICD10.some((r) => r[0] === code) ? code : '';
+}
+
 function readForm() {
   const fd = new FormData(form);
-  const v = Object.fromEntries(fd.entries());
+  const { prefixSel, prefixOther, ...v } = Object.fromEntries(fd.entries());
+  const prefix = prefixSel === 'other' ? (prefixOther || '').trim() : prefixSel || '';
   return {
     ...v,
+    prefix,
+    name: composeName(prefix, v.firstName, v.lastName),
+    icd10: icd10Of(v.diagnosis),
     id: editing?.id,
     room: fState.room,
     fractions: Number(v.fractions),
@@ -630,11 +657,26 @@ function openForm(appt = null, defaults = {}) {
     cbctMode: 'fx123_weekly',
     status: 'active',
     room: 'L1',
+    icd9: ICD9_BY_TECHNIQUE.VMAT,
     ...defaults,
   };
+  // แพทย์: รายชื่อจากหน้าตั้งค่า (+ ชื่อเดิมของนัดนี้ ถ้าถูกลบออกจากรายชื่อแล้ว)
+  const docs = [...(state.settings.physicians || DEFAULT_PHYSICIANS)];
+  if (a.physician && !docs.includes(a.physician)) docs.push(a.physician);
+  $('#f-physician').innerHTML = '<option value="">- เลือกแพทย์ -</option>' + docs.map((d) => `<option>${esc(d)}</option>`).join('');
+  // ICD-9-CM: รหัสเดิมที่ไม่อยู่ในรายการยังแสดงอยู่
+  const icd9 = ICD9_RT.some((r) => r[0] === a.icd9) || !a.icd9 ? ICD9_RT : [...ICD9_RT, [a.icd9, '']];
+  $('#f-icd9').innerHTML = '<option value="">- ไม่ระบุ -</option>' + icd9.map(([c, n]) => `<option value="${esc(c)}">${esc(c)} ${esc(n)}</option>`).join('');
   for (const el of form.elements) {
     if (el.name && a[el.name] != null) el.value = a[el.name];
   }
+  // คำนำหน้า / ชื่อ (นัดจากเวอร์ชันก่อนมีแค่ชื่อเต็มในช่องเดียว)
+  const known = NAME_PREFIXES.some((p) => p.id === a.prefix);
+  form.prefixSel.value = !a.prefix ? '' : known ? a.prefix : 'other';
+  form.prefixOther.value = known ? '' : a.prefix || '';
+  if (!a.firstName && a.name) form.firstName.value = a.name;
+  $('#prefix-other-wrap').hidden = form.prefixSel.value !== 'other';
+  $('#icd-list').hidden = true;
   fState = {
     room: a.room || 'L1',
     cbctDates: [...(a.cbctDates || [])],
@@ -687,6 +729,7 @@ function updatePreview() {
       <td><button type="button" class="btn small ghost" data-skip="${s.date}">งด</button></td></tr>`);
   }
   $('#session-table tbody').innerHTML = rows.join('') || '<tr><td colspan="4" class="empty">กรอกวันเริ่มฉายและจำนวนครั้ง</td></tr>';
+  renderCbctCalendar(a, ss, conflictDates);
   $('#skip-list').innerHTML = fState.skipDates.length
     ? '<span class="muted small">วันที่งดฉาย:</span>' +
       fState.skipDates.sort().map((d) => `<button type="button" class="chip" data-unskip="${d}">${fMed(d)} ✕</button>`).join('')
@@ -704,12 +747,99 @@ function updatePreview() {
   return { a, ss, conflicts };
 }
 
+// ---------- ปฏิทิน CBCT รายเดือนในฟอร์ม ----------
+let cbctView = 'table';
+try {
+  cbctView = localStorage.getItem('rtq-cbct-view') === 'calendar' ? 'calendar' : 'table';
+} catch {
+  /* ใช้ค่าเริ่มต้น */
+}
+
+function setCbctView(view) {
+  cbctView = view;
+  try {
+    localStorage.setItem('rtq-cbct-view', view);
+  } catch {
+    /* ไม่บันทึกก็ได้ */
+  }
+  for (const b of $$('[data-cbct-view]')) b.setAttribute('aria-pressed', String(b.dataset.cbctView === view));
+  $('#cbct-cal').hidden = view !== 'calendar';
+  $('#session-table-wrap').hidden = view !== 'table';
+  $('#cbct-hint').textContent =
+    view === 'calendar'
+      ? 'คลิกวันฉายในปฏิทินเพื่อเลือกหรือยกเลิกวันทำ CBCT · คลิกวันที่งดฉายเพื่อนำกลับมา'
+      : 'คลิกช่อง CBCT ในตารางเพื่อกำหนดวันทำ CBCT เอง หรือกด “งด” เพื่อเลื่อนวันฉายนั้นออกไป';
+}
+
+function renderCbctCalendar(a, ss, conflictDates) {
+  const box = $('#cbct-cal');
+  if (!ss.length) {
+    box.innerHTML = '<p class="empty">กรอกวันเริ่มฉายและจำนวนครั้ง</p>';
+    return;
+  }
+  const byDate = new Map(ss.map((s) => [s.date, s]));
+  const skipped = new Set(fState.skipDates);
+  const first = [a.verifyDate, ss[0].date].filter(Boolean).sort()[0];
+  const last = ss[ss.length - 1].date;
+  const months = [];
+  for (let m = first.slice(0, 7); m <= last.slice(0, 7); ) {
+    months.push(m);
+    const [y, mo] = m.split('-').map(Number);
+    m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+  }
+  box.innerHTML =
+    `<div class="cc-months">${months
+      .map((m) => {
+        const start = startOfWeek(`${m}-01`);
+        let cells = '';
+        for (let i = 0; i < 42; i++) {
+          const d = addDays(start, i);
+          if (i % 7 === 0 && i >= 35 && d.slice(0, 7) !== m) break; // ไม่ต้องแสดงแถวสุดท้ายที่ว่าง
+          if (d.slice(0, 7) !== m) {
+            cells += '<span class="cc-day pad"></span>';
+            continue;
+          }
+          const s = byDate.get(d);
+          const num = parseISO(d).getUTCDate();
+          const conflict = conflictDates.has(d) ? ' conflict' : '';
+          if (s) {
+            cells += `<button type="button" class="cc-day fx${s.cbct ? ' cbct' : ''}${conflict}" data-cbct-date="${d}" aria-pressed="${s.cbct}"
+              aria-label="${fLong(d)} ครั้งที่ ${s.fx}${s.cbct ? ' ทำ CBCT' : ''}"><b>${num}</b><span>Fx ${s.fx}</span>${s.cbct ? '<em>CBCT</em>' : ''}</button>`;
+          } else if (skipped.has(d)) {
+            cells += `<button type="button" class="cc-day skip" data-unskip="${d}" aria-label="${fLong(d)} งดฉาย คลิกเพื่อนำกลับมา"><b>${num}</b><span>งด</span></button>`;
+          } else if (d === a.verifyDate) {
+            cells += `<span class="cc-day verify${conflict}" title="นัดทำ CBCT ก่อนเริ่มฉาย"><b>${num}</b><em>CBCT</em><span>ก่อนฉาย</span></span>`;
+          } else {
+            const hol = holidayName(d);
+            cells += `<span class="cc-day${isWorkday(d, state.settings) ? '' : ' off'}" ${hol ? `title="${esc(hol)}"` : ''}><b>${num}</b></span>`;
+          }
+        }
+        return `<div class="cc-month"><div class="cc-title">${F_MONTH.format(parseISO(`${m}-01`))}</div>
+          <div class="cc-grid">${['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'].map((x) => `<span class="cc-dow">${x}</span>`).join('')}${cells}</div></div>`;
+      })
+      .join('')}</div>
+    <div class="cc-legend"><span><i class="cc-key fx"></i>วันฉาย</span><span><i class="cc-key cbct"></i>ทำ CBCT</span>
+      <span><i class="cc-key verify"></i>CBCT ก่อนฉาย</span><span><i class="cc-key off"></i>วันหยุด</span><span><i class="cc-key conflict"></i>เวลาซ้อน</span></div>`;
+}
+
+// เลือก/ยกเลิก CBCT วันใดวันหนึ่ง → เปลี่ยนเป็นรูปแบบ “กำหนดวันเอง”
+function toggleCbct(date, on) {
+  const ss = buildSessions(readForm(), state.settings);
+  const set = new Set(ss.filter((s) => s.cbct).map((s) => s.date));
+  if (on ?? !set.has(date)) set.add(date);
+  else set.delete(date);
+  fState.cbctDates = [...set];
+  form.cbctMode.value = 'custom';
+  updatePreview();
+}
+
 async function submitForm(ev) {
   ev.preventDefault();
   const { a, conflicts } = updatePreview();
   const errors = [];
   if (!a.hn?.trim()) errors.push('กรุณาระบุ HN');
-  if (!a.name?.trim()) errors.push('กรุณาระบุชื่อผู้ป่วย');
+  if (!a.firstName?.trim()) errors.push('กรุณาระบุชื่อผู้ป่วย');
+  if (form.prefixSel.value === 'other' && !a.prefix) errors.push('กรุณาระบุคำนำหน้า หรือเลือกจากรายการ');
   if (!a.startDate) errors.push('กรุณาระบุวันเริ่มฉาย');
   if (!(a.fractions >= 1 && a.fractions <= 60)) errors.push('จำนวนครั้งต้องอยู่ระหว่าง 1–60');
   if (!/^\d\d:\d\d$/.test(a.time || '')) errors.push('กรุณาระบุเวลานัด');
@@ -760,30 +890,41 @@ function openById(id) {
 // ================= demo data =================
 async function loadDemo(silent = false) {
   if (!silent && !confirm('เพิ่มข้อมูลผู้ป่วยตัวอย่าง (สมมติ) 30 รายเพื่อทดลองใช้งาน?')) return;
-  const first = ['สมชาย', 'สมศรี', 'บุญมี', 'จันทร์เพ็ญ', 'ประเสริฐ', 'มาลี', 'วิไล', 'สุดา', 'ทองดี', 'คำปุ่น', 'แสงเดือน', 'อินทร', 'บัวผัน', 'ศรีนวล', 'ปัญญา'];
+  const male = ['สมชาย', 'บุญมี', 'ประเสริฐ', 'ทองดี', 'อินทร', 'ปัญญา', 'คำปุ่น'];
+  const female = ['สมศรี', 'จันทร์เพ็ญ', 'มาลี', 'วิไล', 'สุดา', 'แสงเดือน', 'บัวผัน', 'ศรีนวล'];
   const last = ['ใจดี', 'มีสุข', 'แก้วมา', 'ทองคำ', 'ศรีวงศ์', 'คำแสน', 'อินต๊ะ', 'ปัญญาดี', 'บุญเรือง', 'จันทร์แก้ว'];
-  const dx = ['CA Cervix', 'CA Breast (Lt)', 'CA Breast (Rt)', 'CA Nasopharynx', 'CA Lung', 'CA Rectum', 'CA Prostate', 'Brain metastasis', 'CA Esophagus', 'Bone metastasis'];
-  const plan = {
-    'CA Cervix': ['VMAT', 25], 'CA Breast (Lt)': ['3DCRT', 15], 'CA Breast (Rt)': ['3DCRT', 15], 'CA Nasopharynx': ['IMRT', 35],
-    'CA Lung': ['SBRT', 5], 'CA Rectum': ['VMAT', 25], 'CA Prostate': ['VMAT', 28], 'Brain metastasis': ['SRS', 1],
-    'CA Esophagus': ['IMRT', 25], 'Bone metastasis': ['2D', 10],
-  };
-  const docs = ['นพ.ก', 'พญ.ข', 'นพ.ค'];
+  // [ICD-10, ตำแหน่งที่ฉาย, เทคนิค, จำนวนครั้ง, เพศ]
+  const cases = [
+    ['C53.9', 'Whole pelvis', 'VMAT', 25, 'หญิง'], ['C50.4', 'Breast (Lt)', '3DCRT', 15, 'หญิง'],
+    ['C50.9', 'Chest wall (Rt)', '3DCRT', 15, 'หญิง'], ['C11.9', 'Nasopharynx', 'IMRT', 35, ''],
+    ['C34.1', 'Lung', 'SBRT', 5, ''], ['C20', 'Whole pelvis', 'VMAT', 25, ''], ['C61', 'Prostate', 'VMAT', 28, 'ชาย'],
+    ['C79.3', 'Brain (partial)', 'SRS', 1, ''], ['C15.4', 'Esophagus', 'IMRT', 25, ''], ['C79.5', 'Bone (palliative)', '2D', 10, ''],
+  ];
+  const docs = state.settings.physicians?.length ? state.settings.physicians : DEFAULT_PHYSICIANS;
   const pick = (arr, i) => arr[i % arr.length];
   const today = todayISO();
   const created = [];
   for (let i = 0; i < 30; i++) {
-    const d = pick(dx, i * 7 + 3);
-    const [technique, fractions] = plan[d];
+    const [icd10, site, technique, fractions, sexOf] = pick(cases, i * 7 + 3);
+    const sex = sexOf || pick(['ชาย', 'หญิง'], i);
+    const prefix = sex === 'ชาย' ? (i % 9 === 4 ? 'พระภิกษุ' : 'นาย') : i % 2 ? 'นาง' : 'นางสาว';
+    const firstName = sex === 'ชาย' ? pick(male, i * 5) : pick(female, i * 5);
+    const lastName = `${pick(last, i * 3 + 1)} (ตัวอย่าง)`;
     const room = technique === 'SRS' || technique === 'SBRT' ? 'L3' : pick(['L1', 'L2', 'L3'], i);
     const startDate = nextWorkday(addDays(today, -30 + i * 2), state.settings);
     const a = {
       hn: String(6800000 + i * 137),
-      name: `${pick(first, i * 5)} ${pick(last, i * 3 + 1)} (ตัวอย่าง)`,
+      prefix,
+      firstName,
+      lastName,
+      name: composeName(prefix, firstName, lastName),
       age: 35 + ((i * 7) % 45),
-      sex: d.includes('Prostate') ? 'ชาย' : d.includes('Cervix') || d.includes('Breast') ? 'หญิง' : pick(['ชาย', 'หญิง'], i),
+      sex,
       phone: '',
-      diagnosis: d,
+      icd10,
+      diagnosis: `${icd10} ${ICD10.find((r) => r[0] === icd10)[1]}`,
+      site,
+      icd9: ICD9_BY_TECHNIQUE[technique],
       physician: pick(docs, i),
       technique,
       room,
@@ -943,7 +1084,16 @@ function bind() {
   form.addEventListener('input', (e) => {
     if (e.target.classList.contains('cbct-toggle')) return; // จัดการใน change ของตาราง
     const n = e.target.name;
-    if (n === 'technique') form.duration.value = techOf(e.target.value).duration;
+    if (n === 'technique') {
+      form.duration.value = techOf(e.target.value).duration;
+      if (ICD9_BY_TECHNIQUE[e.target.value]) form.icd9.value = ICD9_BY_TECHNIQUE[e.target.value];
+    }
+    if (n === 'prefixSel') {
+      const p = NAME_PREFIXES.find((x) => x.id === e.target.value);
+      if (p) form.sex.value = p.sex;
+      $('#prefix-other-wrap').hidden = e.target.value !== 'other';
+      if (e.target.value === 'other') form.prefixOther.focus();
+    }
     if (n === 'cbctMode') {
       if (e.target.value === 'custom') {
         // เริ่มจากวันที่ตามรูปแบบเดิม แล้วให้ผู้ใช้ติ๊กเพิ่ม/ลดเอง
@@ -965,15 +1115,96 @@ function bind() {
   });
   $('#session-table').addEventListener('change', (e) => {
     const cb = e.target.closest('.cbct-toggle');
-    if (!cb) return;
-    const a = readForm();
-    const ss = buildSessions(a, state.settings);
-    const set = new Set(ss.filter((s) => s.cbct).map((s) => s.date));
-    if (cb.checked) set.add(cb.dataset.date);
-    else set.delete(cb.dataset.date);
-    fState.cbctDates = [...set];
-    form.cbctMode.value = 'custom';
+    if (cb) toggleCbct(cb.dataset.date, cb.checked);
+  });
+  for (const b of $$('[data-cbct-view]')) b.addEventListener('click', () => setCbctView(b.dataset.cbctView));
+  $('#cbct-cal').addEventListener('click', (e) => {
+    const day = e.target.closest('[data-cbct-date]');
+    if (day) return toggleCbct(day.dataset.cbctDate);
+    const un = e.target.closest('[data-unskip]');
+    if (un) {
+      fState.skipDates = fState.skipDates.filter((d) => d !== un.dataset.unskip);
+      updatePreview();
+    }
+  });
+
+  // การวินิจฉัย ICD-10: ค้นหาแล้วเลือกจากรายการ
+  const dxInput = $('#f-diagnosis');
+  const dxList = $('#icd-list');
+  let dxActive = -1;
+  const dxItems = () => $$('li[data-code]', dxList);
+  const showDx = () => {
+    const rows = searchIcd10(dxInput.value, 40);
+    dxActive = -1;
+    dxList.innerHTML = rows.length
+      ? rows
+          .map(
+            ([code, en, th]) => `<li role="option" data-code="${code}" data-label="${esc(`${code} ${en}`)}"><b>${code}</b>
+              <span>${esc(en)}${th ? `<small>${esc(th)}</small>` : ''}</span></li>`,
+          )
+          .join('')
+      : '<li class="muted">ไม่พบในรายการ — พิมพ์การวินิจฉัยเองได้</li>';
+    dxList.hidden = false;
+    dxInput.setAttribute('aria-expanded', 'true');
+  };
+  const hideDx = () => {
+    dxList.hidden = true;
+    dxInput.setAttribute('aria-expanded', 'false');
+  };
+  const pickDx = (li) => {
+    dxInput.value = li.dataset.label;
+    hideDx();
     updatePreview();
+  };
+  dxInput.addEventListener('focus', showDx);
+  dxInput.addEventListener('input', showDx);
+  dxInput.addEventListener('blur', () => setTimeout(hideDx, 150));
+  dxInput.addEventListener('keydown', (e) => {
+    const items = dxItems();
+    if (dxList.hidden || !items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      dxActive = (dxActive + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach((li, i) => li.classList.toggle('active', i === dxActive));
+      items[dxActive].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && dxActive >= 0) {
+      e.preventDefault();
+      pickDx(items[dxActive]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      hideDx();
+    }
+  });
+  dxList.addEventListener('mousedown', (e) => {
+    const li = e.target.closest('li[data-code]');
+    if (!li) return;
+    e.preventDefault(); // ไม่ให้ช่องค้นหาเสียโฟกัสก่อนเลือก
+    pickDx(li);
+  });
+
+  // รายชื่อแพทย์ในหน้าตั้งค่า
+  $('#phys-add').addEventListener('click', () => {
+    const name = $('#phys-name').value.trim();
+    if (!name) return;
+    draftSettings.physicians = [...(draftSettings.physicians || []).filter((p) => p !== name), name];
+    $('#phys-name').value = '';
+    renderSettings();
+  });
+  $('#phys-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#phys-add').click();
+  });
+  $('#phys-list').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-phys-del]');
+    const up = e.target.closest('[data-phys-up]');
+    const list = [...draftSettings.physicians];
+    if (del) list.splice(Number(del.dataset.physDel), 1);
+    else if (up) {
+      const i = Number(up.dataset.physUp);
+      [list[i - 1], list[i]] = [list[i], list[i - 1]];
+    } else return;
+    draftSettings.physicians = list;
+    renderSettings();
   });
   $('#session-table').addEventListener('click', (e) => {
     const b = e.target.closest('[data-skip]');
@@ -1035,6 +1266,10 @@ async function init() {
   fillSelect($('#f-technique'), TECHNIQUES);
   fillSelect($('#f-cbct'), CBCT_MODES);
   fillSelect($('#f-status'), STATUSES);
+  $('#f-prefix').innerHTML =
+    '<option value="">- ไม่ระบุ -</option>' + NAME_PREFIXES.map((p) => `<option>${p.id}</option>`).join('') + '<option value="other">อื่นๆ (กรอกเอง)</option>';
+  $('#site-list').innerHTML = TREATMENT_SITES.map((x) => `<option value="${esc(x)}"></option>`).join('');
+  setCbctView(cbctView);
   $('#pt-room').innerHTML += ROOMS.map((r) => `<option value="${r.id}">${r.label}</option>`).join('');
   $('#pt-tech').innerHTML += TECHNIQUES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
 
@@ -1052,6 +1287,7 @@ async function init() {
   state.store = store;
   state.appts = data.appointments || [];
   state.settings = data.settings;
+  state.settings.physicians ||= [...DEFAULT_PHYSICIANS];
   badge.textContent = { server: 'เชื่อมต่อเซิร์ฟเวอร์', gas: 'เชื่อมต่อ Google Sheet', local: 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)' }[store.mode];
   badge.classList.toggle('local', store.mode === 'local');
 

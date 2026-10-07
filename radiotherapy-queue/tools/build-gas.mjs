@@ -6,7 +6,7 @@ import path from 'node:path';
 import { ROOT, loadSources, replaceOnce, stripModule, STYLE_LINK, SCRIPT_TAG } from './bundle.mjs';
 
 const HEADER = 'สร้างอัตโนมัติจาก public/ ด้วยคำสั่ง npm run build:gas — แก้ที่ไฟล์ต้นฉบับแล้วสร้างใหม่';
-const { html, css, schedule, js } = await loadSources();
+const { html, css, schedule, icd, js } = await loadSources();
 const dir = path.join(ROOT, 'apps-script');
 
 let index = replaceOnce(html, '<head>\n', `<head>\n  <!-- ${HEADER} -->\n`);
@@ -15,7 +15,7 @@ index = replaceOnce(index, SCRIPT_TAG, `<script>\n${js.replace(/<\/script/gi, '<
 
 const files = {
   'Index.html': index,
-  'Schedule.gs': `// ${HEADER}\n// ตรรกะคำนวณวันฉายและค่าคงที่ ใช้ร่วมกันกับหน้าเว็บ (public/js/schedule.js)\n\n${stripModule(schedule)}`,
+  'Schedule.gs': `// ${HEADER}\n// ตรรกะคำนวณวันฉาย ค่าคงที่ และรายการรหัส ICD ใช้ร่วมกันกับหน้าเว็บ (public/js/schedule.js, public/js/icd.js)\n\n${stripModule(schedule)}\n${stripModule(icd)}`,
 };
 for (const [name, content] of Object.entries(files)) {
   await writeFile(path.join(dir, name), content);

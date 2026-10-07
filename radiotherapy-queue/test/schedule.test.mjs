@@ -84,3 +84,13 @@ test('นัดใหม่ที่ยังไม่มี id ยังตร�
   const { id: _, ...b } = { ...base };
   assert.equal(findConflicts(a, [b], settings).length, 5);
 });
+
+test('ประกอบชื่อเต็มจากคำนำหน้า', async () => {
+  const { composeName, searchIcd10 } = await import('../public/js/icd.js');
+  assert.equal(composeName('นาย', 'สมชาย', 'ใจดี'), 'นายสมชาย ใจดี');
+  assert.equal(composeName('ด.ญ.', 'มาลี', 'มีสุข'), 'ด.ญ.มาลี มีสุข');
+  assert.equal(composeName('พระภิกษุ', 'บุญมี', ''), 'พระภิกษุ บุญมี');
+  assert.equal(composeName('ร.ต.อ.', 'ปัญญา', 'ดี'), 'ร.ต.อ. ปัญญา ดี');
+  assert.equal(searchIcd10('C53')[0][0], 'C53.0');
+  assert.ok(searchIcd10('มะเร็งปากมดลูก').every((r) => r[0].startsWith('C53') || r[0].startsWith('D06')));
+});

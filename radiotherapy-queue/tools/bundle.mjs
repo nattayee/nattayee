@@ -13,16 +13,17 @@ export const stripModule = (src) =>
     .replace(/^export (?=(const|function|async function|class) )/gm, '');
 
 export async function loadSources() {
-  const [html, css, schedule, store, app] = await Promise.all([
+  const [html, css, schedule, icd, store, app] = await Promise.all([
     pub('index.html'),
     pub('css/style.css'),
     pub('js/schedule.js'),
+    pub('js/icd.js'),
     pub('js/store.js'),
     pub('js/app.js'),
   ]);
   // ห่อด้วยฟังก์ชันเพื่อไม่ให้ตัวแปรรั่วไปที่ global (ใช้เป็น <script> ธรรมดาได้)
-  const js = `(() => {\n${[schedule, store, app].map(stripModule).join('\n')}\n})();`;
-  return { html, css, schedule, js };
+  const js = `(() => {\n${[schedule, icd, store, app].map(stripModule).join('\n')}\n})();`;
+  return { html, css, schedule, icd, js };
 }
 
 export const STYLE_LINK = '<link rel="stylesheet" href="css/style.css">';

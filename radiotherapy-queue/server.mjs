@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOMS, TECHNIQUES, CBCT_MODES, STATUSES, defaultSettings } from './public/js/schedule.js';
+import { composeName } from './public/js/icd.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -67,11 +68,17 @@ function validateAppointment(input) {
   const errors = [];
   const a = {
     hn: str(input.hn, 30),
+    prefix: str(input.prefix, 40),
+    firstName: str(input.firstName, 100),
+    lastName: str(input.lastName, 100),
     name: str(input.name, 200),
     age: input.age === '' || input.age == null ? '' : Number(input.age),
     sex: str(input.sex, 10),
     phone: str(input.phone, 50),
+    icd10: str(input.icd10, 10),
     diagnosis: str(input.diagnosis, 200),
+    site: str(input.site, 200),
+    icd9: str(input.icd9, 10),
     physician: str(input.physician, 100),
     technique: str(input.technique, 20),
     room: str(input.room, 5),
@@ -89,6 +96,7 @@ function validateAppointment(input) {
     status: str(input.status, 20) || 'active',
     notes: str(input.notes, 2000),
   };
+  if (a.firstName) a.name = composeName(a.prefix, a.firstName, a.lastName);
   if (!a.hn) errors.push('กรุณาระบุ HN');
   if (!a.name) errors.push('กรุณาระบุชื่อผู้ป่วย');
   if (!ROOM_IDS.has(a.room)) errors.push('ห้องฉายไม่ถูกต้อง');
@@ -117,6 +125,8 @@ function validateSettings(input) {
       const v = input.rooms[r.id];
       if (v && TIME_RE.test(v.open) && TIME_RE.test(v.close)) s.rooms[r.id] = { open: v.open, close: v.close };
     }
+  if (Array.isArray(input.physicians))
+    s.physicians = [...new Set(input.physicians.map((p) => str(p, 100)).filter(Boolean))];
   const slot = Number(input.slotMinutes);
   if ([5, 10, 15, 20, 30].includes(slot)) s.slotMinutes = slot;
   return s;

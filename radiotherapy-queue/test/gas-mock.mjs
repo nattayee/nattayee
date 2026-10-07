@@ -54,11 +54,15 @@ class Sheet {
     this.name = name;
     this.data = [];
     this.formats = new Map();
+    this.maxColumns = 26; // แผ่นงานใหม่ของ Google Sheets มีคอลัมน์ A–Z
   }
   isText(r, c) {
     return this.formats.get(`${r}:${c}`) === '@';
   }
   getRange(row, col, rows = 1, cols = 1) {
+    if (col + cols - 1 > this.maxColumns || row + rows - 1 > this.getMaxRows()) {
+      throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
+    }
     return new Range(this, row, col, rows, cols);
   }
   getLastRow() {
@@ -70,6 +74,12 @@ class Sheet {
   }
   getMaxRows() {
     return 1000;
+  }
+  getMaxColumns() {
+    return this.maxColumns;
+  }
+  insertColumnsAfter(after, n) {
+    this.maxColumns += n;
   }
   setFrozenRows() {}
   deleteRow(r) {

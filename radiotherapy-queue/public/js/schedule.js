@@ -63,6 +63,8 @@ export function defaultHolidays(years) {
   return out;
 }
 
+export const DEFAULT_PHYSICIANS = ['ทัศน์วรรณ อาษากิจ', 'ศิริรัตน์ เชื้อสำราญ', 'พัฒธิดา มโนรส', 'ทินกร จอมใจ'];
+
 export function defaultSettings(today = todayISO()) {
   const y = Number(today.slice(0, 4));
   return {
@@ -70,6 +72,7 @@ export function defaultSettings(today = todayISO()) {
     holidays: defaultHolidays([y, y + 1]),
     rooms: Object.fromEntries(ROOMS.map((r) => [r.id, { open: '08:00', close: '16:30' }])),
     slotMinutes: 15,
+    physicians: [...DEFAULT_PHYSICIANS],
   };
 }
 

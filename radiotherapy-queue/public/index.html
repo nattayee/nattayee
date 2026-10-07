@@ -129,7 +129,7 @@
         <table class="table" id="pt-table">
           <thead>
             <tr>
-              <th>HN</th><th>ชื่อ-สกุล</th><th>เทคนิค</th><th>ห้อง</th><th>CBCT ก่อนฉาย</th>
+              <th>HN</th><th>ชื่อ-สกุล</th><th>การวินิจฉัย / ตำแหน่ง</th><th>เทคนิค</th><th>ห้อง</th><th>CBCT ก่อนฉาย</th>
               <th>วันเริ่มฉาย</th><th>ความคืบหน้า</th><th>วันสุดท้าย</th><th>สถานะ</th><th></th>
             </tr>
           </thead>
@@ -166,6 +166,15 @@
           </div>
           <ul class="holiday-list" id="hol-list"></ul>
         </article>
+        <article class="card">
+          <header class="card-head"><h3>รายชื่อแพทย์ผู้รักษา</h3></header>
+          <p class="muted small">รายชื่อนี้จะแสดงเป็นตัวเลือกในฟอร์มนัดผู้ป่วย</p>
+          <div class="holiday-add phys-add">
+            <input type="text" id="phys-name" placeholder="ชื่อ-นามสกุลแพทย์" aria-label="ชื่อแพทย์">
+            <button class="btn" id="phys-add">เพิ่ม</button>
+          </div>
+          <ul class="holiday-list" id="phys-list"></ul>
+        </article>
       </div>
       <div class="settings-actions">
         <button class="btn primary" id="set-save">บันทึกการตั้งค่า</button>
@@ -194,14 +203,36 @@
           <legend>ข้อมูลผู้ป่วย</legend>
           <div class="form-grid">
             <label><span>HN <span class="req">*</span></span><input name="hn" required autocomplete="off"></label>
-            <label class="span-2"><span>ชื่อ-สกุล <span class="req">*</span></span><input name="name" required autocomplete="off"></label>
+            <label>คำนำหน้า
+              <select name="prefixSel" id="f-prefix"></select>
+            </label>
+            <label id="prefix-other-wrap" hidden>ระบุคำนำหน้า<input name="prefixOther" id="f-prefix-other" placeholder="เช่น ร.ต.อ., ดร., สามเณร" autocomplete="off"></label>
+            <label><span>ชื่อ <span class="req">*</span></span><input name="firstName" required autocomplete="off"></label>
+            <label><span>นามสกุล</span><input name="lastName" autocomplete="off"></label>
             <label>อายุ (ปี)<input name="age" type="number" min="0" max="120"></label>
             <label>เพศ
               <select name="sex"><option value="">-</option><option value="ชาย">ชาย</option><option value="หญิง">หญิง</option></select>
             </label>
             <label>โทรศัพท์<input name="phone" type="tel"></label>
-            <label class="span-2">การวินิจฉัย / ตำแหน่งที่ฉาย<input name="diagnosis" placeholder="เช่น CA Cervix, Whole pelvis"></label>
-            <label>แพทย์ผู้รักษา<input name="physician"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>การวินิจฉัยและตำแหน่งที่ฉาย</legend>
+          <div class="form-grid">
+            <div class="span-2 combo">
+              <label for="f-diagnosis">การวินิจฉัย (ICD-10)</label>
+              <input id="f-diagnosis" name="diagnosis" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="icd-list"
+                placeholder="พิมพ์รหัสหรือชื่อโรค เช่น C53, มะเร็งปากมดลูก, breast">
+              <input type="hidden" name="icd10" id="f-icd10">
+              <ul class="combo-list" id="icd-list" role="listbox" hidden></ul>
+            </div>
+            <label class="span-2">ตำแหน่งที่ฉาย
+              <input name="site" list="site-list" autocomplete="off" placeholder="เช่น Whole pelvis, Breast (Lt), Whole brain">
+              <datalist id="site-list"></datalist>
+            </label>
+            <label class="span-2">หัตถการ (ICD-9-CM)<select name="icd9" id="f-icd9"></select></label>
+            <label class="span-2">แพทย์ผู้รักษา<select name="physician" id="f-physician"></select></label>
           </div>
         </fieldset>
 
@@ -236,9 +267,16 @@
             <label>เวลานัดทำ CBCT<input name="verifyTime" type="time" step="300"></label>
             <label class="span-2">รูปแบบ CBCT ระหว่างฉาย<select name="cbctMode" id="f-cbct"></select></label>
           </div>
-          <p class="muted small">คลิกช่อง CBCT ในตารางด้านล่างเพื่อกำหนดวันทำ CBCT เอง หรือกด “งด” เพื่อเลื่อนวันฉายนั้นออกไป</p>
+          <div class="cbct-head">
+            <p class="muted small" id="cbct-hint">คลิกช่อง CBCT ในตารางเพื่อกำหนดวันทำ CBCT เอง หรือกด “งด” เพื่อเลื่อนวันฉายนั้นออกไป</p>
+            <div class="seg" role="group" aria-label="รูปแบบการแสดงวันฉาย">
+              <button type="button" data-cbct-view="table" aria-pressed="true">ตาราง</button>
+              <button type="button" data-cbct-view="calendar" aria-pressed="false">ปฏิทินรายเดือน</button>
+            </div>
+          </div>
           <div id="session-summary" class="session-summary"></div>
-          <div class="session-table-wrap">
+          <div class="cbct-cal" id="cbct-cal" hidden></div>
+          <div class="session-table-wrap" id="session-table-wrap">
             <table class="table compact" id="session-table">
               <thead><tr><th>Fx</th><th>วันที่</th><th>CBCT</th><th></th></tr></thead>
               <tbody></tbody>

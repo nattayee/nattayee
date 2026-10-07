@@ -91,3 +91,35 @@ test('doGet ส่งหน้าเว็บไฟล์เดียวที�
   assert.match(html, /<style>/);
   assert.match(html, /google\?\.script\?\.run/);
 });
+
+test('ชื่อจากคำนำหน้า และคอลัมน์ใหม่ใน Sheet เดิมจากเวอร์ชันก่อน', () => {
+  const { call, sheets } = createGas();
+  call('setup');
+  // จำลอง Sheet เวอร์ชันก่อน: ไม่มีคอลัมน์ prefix, firstName, lastName, icd10, site, icd9
+  const old = ['id', 'hn', 'name', 'age', 'sex', 'phone', 'diagnosis', 'physician', 'technique', 'room', 'dosePerFx', 'fractions',
+    'simDate', 'verifyDate', 'verifyTime', 'startDate', 'time', 'duration', 'cbctMode', 'cbctDates', 'skipDates', 'status', 'notes',
+    'createdAt', 'updatedAt'];
+  const sh = sheets.get('Appointments');
+  sh.data = [old, ['old-1', '55', 'นายเก่า ข้อมูล', '', '', '', 'CA Cervix', '', 'VMAT', 'L1', '', '5', '', '', '', '2026-10-12', '08:00', '15', 'fx1', '', '', 'active', '', '', '']];
+  sh.formats = new Map([...Array(26)].flatMap((_, c) => [...Array(5)].map((__, r) => [`${r + 1}:${c + 1}`, '@'])));
+  sh.maxColumns = 26;
+
+  assert.equal(call('getState').appointments[0].name, 'นายเก่า ข้อมูล');
+  const created = call('createAppointment', {
+    ...appt, prefix: 'พระภิกษุ', firstName: 'สมชาย', lastName: 'ใจดี', name: '',
+    icd10: 'C11.9', diagnosis: 'C11.9 Malignant neoplasm of nasopharynx, unspecified', site: 'Nasopharynx', icd9: '92.24',
+  });
+  assert.equal(created.name, 'พระภิกษุ สมชาย ใจดี');
+  const a = call('getState').appointments.find((x) => x.id === created.id);
+  assert.deepEqual([a.prefix, a.firstName, a.lastName, a.icd10, a.site, a.icd9], ['พระภิกษุ', 'สมชาย', 'ใจดี', 'C11.9', 'Nasopharynx', '92.24']);
+  assert.ok(sh.maxColumns >= 31, 'ต้องเพิ่มคอลัมน์ให้พอ');
+});
+
+test('รายชื่อแพทย์เริ่มต้นและบันทึกการแก้ไข', () => {
+  const { call } = createGas();
+  call('setup');
+  const s = call('getState').settings;
+  assert.deepEqual(s.physicians, ['ทัศน์วรรณ อาษากิจ', 'ศิริรัตน์ เชื้อสำราญ', 'พัฒธิดา มโนรส', 'ทินกร จอมใจ']);
+  call('saveSettings', { ...s, physicians: ['ทินกร จอมใจ', 'แพทย์ใหม่', 'แพทย์ใหม่', ''] });
+  assert.deepEqual(call('getState').settings.physicians, ['ทินกร จอมใจ', 'แพทย์ใหม่']);
+});
