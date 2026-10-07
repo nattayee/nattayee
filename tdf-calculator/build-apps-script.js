@@ -119,6 +119,7 @@ html = replaceOnce(
     $("whoRole").textContent = res.user.role;
     $("whoRole").hidden = !res.user.role;
     $("authPass").value = "";
+    if (window.TDFApp) TDFApp.setUser(res.user);
     $("auth").hidden = true;
     document.body.classList.remove("locked");
     window.dispatchEvent(new Event("resize")); // draw charts that were laid out while hidden
@@ -141,7 +142,11 @@ html = replaceOnce(
 
   $("logoutBtn").addEventListener("click", function () {
     $("logoutBtn").disabled = true;
-    var done = function () { $("logoutBtn").disabled = false; token = ""; save(""); showForm("ออกจากระบบแล้ว", "info"); };
+    var done = function () {
+      $("logoutBtn").disabled = false; token = ""; save("");
+      if (window.TDFApp) TDFApp.setUser(null);
+      showForm("ออกจากระบบแล้ว", "info");
+    };
     if (gas) call("tdfLogout", [token], done, done); else done();
   });
 

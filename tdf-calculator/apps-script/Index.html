@@ -26,6 +26,8 @@
   --warn: #A15C00;
   --crit: #B3261E;
   --grid: #E3E8F0;
+  --scrim: rgba(21, 32, 51, .35);
+  --shadow: rgba(21, 32, 51, .18);
   --font-body: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --r: 10px;
@@ -34,13 +36,13 @@
   :root:not([data-theme="light"]) {
     --bg: #10151F; --surface: #171E2A; --surface-2: #1C2432; --ink: #E7ECF4; --ink-2: #B3BECF; --muted: #8592A6;
     --line: #2B3546; --accent: #6A86EE; --accent-ink: #9DB0FF; --accent-soft: #1F2A4A; --decay: #C77A22; --decay-soft: #3A2A18;
-    --good: #5CC08A; --warn: #E3A94B; --crit: #F08A80; --grid: #232C3B; color-scheme: dark;
+    --good: #5CC08A; --warn: #E3A94B; --crit: #F08A80; --grid: #232C3B; --scrim: rgba(0, 0, 0, .55); --shadow: rgba(0, 0, 0, .5); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #10151F; --surface: #171E2A; --surface-2: #1C2432; --ink: #E7ECF4; --ink-2: #B3BECF; --muted: #8592A6;
   --line: #2B3546; --accent: #6A86EE; --accent-ink: #9DB0FF; --accent-soft: #1F2A4A; --decay: #C77A22; --decay-soft: #3A2A18;
-  --good: #5CC08A; --warn: #E3A94B; --crit: #F08A80; --grid: #232C3B; color-scheme: dark;
+  --good: #5CC08A; --warn: #E3A94B; --crit: #F08A80; --grid: #232C3B; --scrim: rgba(0, 0, 0, .55); --shadow: rgba(0, 0, 0, .5); color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -175,6 +177,84 @@ td.decay { color: var(--decay); }
 .formulas ul { padding-left: 18px; margin: 8px 0 0; }
 footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80ch; }
 @media (prefers-reduced-motion: no-preference) { .gauge .fill { transition: width .25s ease; } }
+
+/* patient / physician bar */
+.case { display: grid; gap: 12px; margin-bottom: 18px; }
+.case-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.case-head h2 { margin: 0; }
+.case-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.6fr); gap: 10px; }
+@media (max-width: 900px) { .case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .case-fields .f-doctor { grid-column: 1 / -1; } }
+.case-fields input[type="text"] { font-family: var(--font-body); }
+.case-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.count { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; padding: 0 .35em; margin-left: 4px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font: 600 .72rem var(--font-mono); }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: .88rem; max-width: calc(100% - 32px); }
+
+/* history drawer */
+.scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(420px, 100%); background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 12px; box-shadow: -12px 0 32px var(--shadow); }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.drawer-head h2 { font-size: 1.05rem; }
+.drawer input[type="search"] { width: 100%; font: 400 .92rem var(--font-body); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.hist-list { flex: 1; overflow-y: auto; display: grid; align-content: start; gap: 8px; min-height: 0; }
+.hist-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--surface-2); }
+.hist-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hist-type { font-size: .72rem; font-weight: 600; letter-spacing: .04em; color: var(--accent-ink); text-transform: uppercase; }
+.hist-time { font: 400 .75rem var(--font-mono); color: var(--muted); }
+.hist-who { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
+.hist-who span { font-weight: 400; color: var(--ink-2); }
+.hist-sum { font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.hist-val { font: 500 1.15rem var(--font-mono); }
+.hist-val small { font-size: .72rem; color: var(--muted); font-family: var(--font-body); }
+.hist-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.hist-actions .btn { padding: 4px 10px; font-size: .8rem; }
+.hist-empty { color: var(--muted); font-size: .88rem; padding: 12px 2px; }
+.drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
+
+/* A4 report (rendered off-screen for the PDF, and the only thing printed) */
+.report {
+  position: fixed; left: -10000px; top: 0; width: 794px; padding: 36px 46px 30px; box-sizing: border-box;
+  --ink: #152033; --ink-2: #4B5A70; --muted: #6E7C90; --line: #D6DDE8; --grid: #E3E8F0; --accent: #2747B0; --accent-ink: #2747B0;
+  --decay: #B4570A; --surface: #FFFFFF; --surface-2: #F6F8FB; color-scheme: light;
+  background: var(--surface); color: var(--ink); font: 400 13px/1.5 var(--font-body);
+}
+.report .rp-block { padding-bottom: 11px; }
+.report .rp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 14px; }
+.report h1 { font-size: 20px; margin: 0; }
+.report h1 span { color: var(--accent); }
+.report .rp-sub { color: var(--ink-2); font-size: 13px; }
+.report .rp-meta { text-align: right; font-size: 11.5px; color: var(--ink-2); }
+.report h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
+.report .rp-patient { display: grid; grid-template-columns: 1fr 2fr 1.6fr; gap: 0; border: 1px solid var(--line); border-radius: 6px; }
+.report .rp-patient div { padding: 5px 12px; }
+.report .rp-patient div + div { border-left: 1px solid var(--line); }
+.report .rp-k { font-size: 11px; color: var(--muted); }
+.report .rp-v { font-size: 14px; font-weight: 600; }
+.report .rp-hero { display: flex; align-items: baseline; gap: 18px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; }
+.report .rp-hero .n { font: 500 34px/1 var(--font-mono); }
+.report .rp-hero .s { color: var(--ink-2); }
+.report table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.report th, .report td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: normal; font-family: var(--font-body); }
+.report td.v { text-align: right; font-family: var(--font-mono); }
+.report table.kv td { padding: 3px 8px; }
+.report table.kv td:first-child { width: 46%; color: var(--ink-2); }
+.report .rp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.report .rp-chart { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px 4px; }
+.report .rp-chart h3 { font-size: 12px; margin: 0 0 4px; color: var(--ink-2); }
+.report .rp-chart svg { width: 100%; height: auto; display: block; }
+.report .rp-note { font-size: 11.5px; color: var(--ink-2); border-left: 3px solid var(--decay); padding: 4px 10px; }
+.report .rp-eq { font: 400 12px var(--font-mono); }
+.report .rp-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding-top: 26px; text-align: center; font-size: 12px; }
+.report .rp-sign .line { border-top: 1px dotted var(--ink); padding-top: 6px; }
+.report .rp-foot { font-size: 10.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+@media print {
+  @page { size: A4; margin: 0; }
+  body { background: #FFFFFF; padding: 0; }
+  body > :not(.report) { display: none !important; }
+  .report { position: static; left: auto; }
+}
 /* sign-in (Apps Script build) */
 body.locked .wrap { display: none; }
 .auth { min-height: 100vh; display: grid; place-items: center; padding-block: 24px; }
@@ -230,6 +310,26 @@ body.locked .wrap { display: none; }
       <input id="refTdf" type="number" min="1" step="1" value="100">
     </div>
   </header>
+
+  <section class="card case" aria-labelledby="case-title">
+    <div class="case-head">
+      <h2 id="case-title">ผู้ป่วยและแพทย์ผู้รักษา</h2>
+      <div class="case-actions">
+        <button type="button" class="btn ghost" id="ptClear">ผู้ป่วยใหม่</button>
+        <button type="button" class="btn" id="histOpen">ประวัติ<span class="count" id="histCount">0</span></button>
+        <button type="button" class="btn" id="histSave">บันทึกลงประวัติ</button>
+        <button type="button" class="btn primary" id="pdfBtn">สร้างรายงาน PDF</button>
+      </div>
+    </div>
+    <div class="case-fields">
+      <div class="field"><label for="pt-hn">HN</label><input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20"></div>
+      <div class="field"><label for="pt-prefix">คำนำหน้าชื่อ</label>
+        <select id="pt-prefix"><option value="">—</option><option>นาย</option><option>นาง</option><option>นางสาว</option><option>เด็กชาย</option><option>เด็กหญิง</option></select></div>
+      <div class="field"><label for="pt-first">ชื่อ</label><input id="pt-first" type="text" autocomplete="off" maxlength="60"></div>
+      <div class="field"><label for="pt-last">นามสกุล</label><input id="pt-last" type="text" autocomplete="off" maxlength="60"></div>
+      <div class="field f-doctor"><label for="pt-doctor">แพทย์ผู้รักษา</label><select id="pt-doctor"></select></div>
+    </div>
+  </section>
 
   <nav class="tabs" role="tablist" aria-label="โหมดคำนวณ">
     <button role="tab" id="tab-frac" aria-controls="p-frac" aria-selected="true">Fractionated<small>ฉายแบบแบ่ง fraction</small></button>
@@ -383,6 +483,22 @@ body.locked .wrap { display: none; }
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
   </footer>
 </div>
+
+<div class="scrim" id="histScrim" hidden></div>
+<aside class="drawer" id="histDrawer" aria-labelledby="hist-title" hidden>
+  <div class="drawer-head">
+    <h2 id="hist-title">ประวัติการคำนวณ</h2>
+    <button type="button" class="btn ghost" id="histClose">ปิด</button>
+  </div>
+  <input type="search" id="histSearch" placeholder="ค้นหา HN, ชื่อ หรือแพทย์" aria-label="ค้นหาประวัติ">
+  <div class="hist-list" id="histList"></div>
+  <div class="drawer-foot">
+    <span>เก็บไว้ในเบราว์เซอร์นี้เท่านั้น</span>
+    <button type="button" class="btn ghost" id="histClear">ลบทั้งหมด</button>
+  </div>
+</aside>
+<div class="report" id="report" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script>
 /*
@@ -623,6 +739,10 @@ body.locked .wrap { display: none; }
   const fmt = (v, dp = 1) => (Number.isFinite(v) ? v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }) : "—");
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const refTdf = () => { const v = num("refTdf"); return v > 0 ? v : 100; };
+  const PHYSICIANS = ["ทัศน์วรรณ อาษากิจ", "ศิริรัตน์ เชื้อสำราญ", "พัฒธิดา มโนรส", "ทินกร จอมใจ"];
+  // Latest successful calculation per tab, for history and the PDF report: { type, title, tdf, state, summary, inputs, results, table?, charts?, notes?, formulas }
+  const current = { frac: null, gap: null, brachy: null };
+  const unitJoin = ([k, v, u]) => [k, u ? `${v} ${u}` : String(v)];
   const PER_WEEK_LABEL = { 1: "1 ครั้ง/สัปดาห์", 2: "2 ครั้ง/สัปดาห์", 3: "3 ครั้ง/สัปดาห์ (จ-พ-ศ)", 4: "4 ครั้ง/สัปดาห์", 5: "5 ครั้ง/สัปดาห์ (จ–ศ)", 6: "6 ครั้ง/สัปดาห์", 7: "7 ครั้ง/สัปดาห์ (ทุกวัน)" };
 
   function fillPerWeek(sel, value = 5) {
@@ -760,23 +880,35 @@ body.locked .wrap { display: none; }
       const lq1 = TDF.lq(D, d, ab1), lq2 = TDF.lq(D, d, ab2);
       const ref = refTdf();
       const toRef = Math.max(0, (ref - tdf) / per);
+      const fracStats = [
+        ["Total dose", fmt(D, 1), "Gy"],
+        ["TDF ต่อ fraction", fmt(per, 3)],
+        ["X (วัน/fraction)", fmt(X, 3)],
+        ["Overall time T", fmt(T, 0), "วัน"],
+        ["NSD", fmt(TDF.nsdFromTdf(tdf), 0), "ret"],
+        ["เทียบเท่า 2 Gy × 5/wk", fmt(eq.dose, 1), `Gy (${fmt(eq.fractions, 1)} fx)`],
+        [`ถึง TDF ${fmt(ref, 0)} ต้องเพิ่ม`, fmt(toRef, 1), "fx"],
+      ];
+      current.frac = {
+        type: "frac", title: "Fractionated (ฉายแบบแบ่ง fraction)", tdf,
+        state: { d, N, f, useT, T: num("fr-T"), ab1, ab2 },
+        summary: `${fmt(d, 2)} Gy × ${N} fx · ${f}/สัปดาห์ · ${fmt(D, 1)} Gy`,
+        inputs: [["Dose / fraction", `${fmt(d, 2)} Gy`], ["จำนวน fraction (N)", String(N)], ["Fractions ต่อสัปดาห์", PER_WEEK_LABEL[f]],
+          ["Overall time T", `${fmt(T, 0)} วัน${useT ? " (กำหนดเอง, X = T/N)" : " (ตามปฏิทิน, X = 7/f)"}`]],
+        results: [...fracStats.map(unitJoin),
+          [`BED (α/β ${fmt(ab1, 1)} Gy)`, `${fmt(lq1.bed, 1)} Gy`], [`EQD2 (α/β ${fmt(ab1, 1)} Gy)`, `${fmt(lq1.eqd2, 1)} Gy`],
+          [`BED (α/β ${fmt(ab2, 1)} Gy)`, `${fmt(lq2.bed, 1)} Gy`], [`EQD2 (α/β ${fmt(ab2, 1)} Gy)`, `${fmt(lq2.eqd2, 1)} Gy`]],
+        formulas: ["TDF = 1.19 · N · d^1.538 · X^−0.169", "NSD: TDF = 10^−3 · NSD^1.538", "BED = D · (1 + d / (α/β)),  EQD2 = BED / (1 + 2 / (α/β))"],
+      };
       out.innerHTML = headline("TDF รวม", tdf) +
-        `<div class="card">${stats([
-          ["Total dose", fmt(D, 1), "Gy"],
-          ["TDF ต่อ fraction", fmt(per, 3)],
-          ["X (วัน/fraction)", fmt(X, 3)],
-          ["Overall time T", fmt(T, 0), "วัน"],
-          ["NSD", fmt(TDF.nsdFromTdf(tdf), 0), "ret"],
-          ["เทียบเท่า 2 Gy × 5/wk", fmt(eq.dose, 1), `Gy (${fmt(eq.fractions, 1)} fx)`],
-          [`ถึง TDF ${fmt(ref, 0)} ต้องเพิ่ม`, fmt(toRef, 1), "fx"],
-        ])}</div>` +
+        `<div class="card">${stats(fracStats)}</div>` +
         `<div class="card"><h3>เปรียบเทียบกับ Linear-Quadratic</h3><div class="tbl-wrap"><table>
           <tr><th>α/β</th><th>BED (Gy)</th><th>EQD2 (Gy)</th></tr>
           <tr><td>${fmt(ab1, 1)} Gy</td><td>${fmt(lq1.bed, 1)}</td><td>${fmt(lq1.eqd2, 1)}</td></tr>
           <tr><td>${fmt(ab2, 1)} Gy</td><td>${fmt(lq2.bed, 1)}</td><td>${fmt(lq2.eqd2, 1)}</td></tr>
         </table></div><p style="margin:10px 0 0;font-size:.8rem;color:var(--muted)">LQ ไม่รวมผลของเวลา (repopulation) ส่วน TDF รวมผลของเวลาผ่าน X</p></div>` +
         (useT ? `<div class="note info">ปฏิทินมาตรฐาน ${PER_WEEK_LABEL[f]} ให้ T = ${calT} วัน (X ตามตาราง = ${fmt(7 / f, 2)})</div>` : "");
-    } catch (e) { out.innerHTML = errorCard(e); }
+    } catch (e) { current.frac = null; out.innerHTML = errorCard(e); }
   }
 
   // ---------- Tab 2: gap / split course ----------
@@ -821,12 +953,12 @@ body.locked .wrap { display: none; }
     courses.push({ d: last.d, N: 5, perWeek: last.perWeek, gapAfter: 0 });
     renderCourses(); calcGap();
   });
-  ["plan", "ref", "custom"].forEach((k) => $("tgt-" + k).addEventListener("click", () => {
+  function setTargetMode(k) {
     targetMode = k;
     ["plan", "ref", "custom"].forEach((j) => $("tgt-" + j).setAttribute("aria-pressed", String(j === k)));
     $("gap-target").hidden = k !== "custom";
-    calcGap();
-  }));
+  }
+  ["plan", "ref", "custom"].forEach((k) => $("tgt-" + k).addEventListener("click", () => { setTargetMode(k); calcGap(); }));
 
   function calcGap() {
     const out = $("r-gap");
@@ -844,13 +976,17 @@ body.locked .wrap { display: none; }
       const totalDose = res.rows.reduce((a, r) => a + r.dose, 0);
       const eq = TDF.equivalentSchedule(res.total, 2, 5);
 
-      let solver = "";
+      let solver = "", solverRows = [];
       if (courses.length >= 2) {
         const beforeLast = res.rows[res.rows.length - 2].after;
         const dL = num("gap-d"), fL = +$("gap-f").value;
         const s = TDF.fractionsToTarget(beforeLast, target, dL, fL);
         const lastN = courses[courses.length - 1].N;
         const diff = s.fractions - (courses[courses.length - 1].d === dL && courses[courses.length - 1].perWeek === fL ? lastN : NaN);
+        solverRows = s.need <= 0
+          ? [["Course สุดท้าย", `TDF สะสมก่อน course สุดท้าย (${fmt(beforeLast, 1)}) ถึงเป้าหมายแล้ว`]]
+          : [["TDF สะสมหลังพัก (ก่อน course สุดท้าย)", fmt(beforeLast, 1)], ["TDF ที่ยังต้องการ", fmt(s.need, 1)],
+             ["Course สุดท้ายต้องฉาย", `${s.fractions} fx × ${fmt(dL, 2)} Gy = ${fmt(s.dose, 1)} Gy (${fL}/สัปดาห์)`], ["TDF รวมที่ได้", fmt(s.reached, 1)]];
         solver = `<div class="card"><h3>Course สุดท้ายต้องฉายเท่าไรจึงถึง TDF ${fmt(target, 1)}</h3>` +
           (s.need <= 0
             ? `<p style="margin:0">TDF สะสมก่อน course สุดท้าย (${fmt(beforeLast, 1)}) ถึงเป้าหมายแล้ว</p>`
@@ -871,14 +1007,28 @@ body.locked .wrap { display: none; }
           <td class="${r.gap ? "decay" : ""}">${r.gap ? fmt(r.factor, 4) : "—"}</td>
           <td>${fmt(r.after, 1)}</td></tr>`).join("");
 
+      const gapStats = [
+        ["TDF ตามแผน (ไม่พัก)", fmt(planned, 1)],
+        ["TDF ที่สูญเสียจากการพัก", fmt(lost, 1), `(${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`],
+        ["Total dose", fmt(totalDose, 1), "Gy"],
+        ["ระยะเวลารวม", fmt(res.rows[res.rows.length - 1].endDay, 0), "วัน"],
+        ["เทียบเท่า 2 Gy × 5/wk", fmt(eq.dose, 1), "Gy"],
+      ];
+      current.gap = {
+        type: "gap", title: "Treatment gap (พักฉาย · decay factor)", tdf: res.total,
+        state: { courses: courses.map((c) => ({ ...c })), targetMode, target: num("gap-target"), dL: num("gap-d"), fL: +$("gap-f").value },
+        summary: res.rows.map((r) => `${fmt(r.d, 2)}×${r.N}`).join(" + ") + ` · พัก ${res.rows.reduce((a, r) => a + r.gap, 0)} วัน`,
+        inputs: res.rows.map((r) => [`Course ${r.index}`, `${fmt(r.d, 2)} Gy × ${r.N} fx, ${courses[r.index - 1].perWeek}/สัปดาห์` + (r.gap ? ` → พัก ${fmt(r.gap, 0)} วัน` : "")])
+          .concat([["TDF เป้าหมาย", `${fmt(target, 1)} (${targetMode === "plan" ? "ตามแผนเดิม" : targetMode === "ref" ? "TDF อ้างอิง" : "กำหนดเอง"})`]]),
+        results: [...gapStats.map(unitJoin), ...solverRows],
+        table: { head: ["Course", "Gy × fx", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
+          rows: res.rows.map((r) => [`Course ${r.index}`, `${fmt(r.d, 2)} × ${r.N}`, fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
+            r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]) },
+        charts: [["gapChart", "TDF สะสมตามวันรักษา (เส้นประ = ลดลงจากช่วงพัก)"]],
+        formulas: ["TDF = 1.19 · N · d^1.538 · X^−0.169", "TDF หลังพัก = TDF ก่อนพัก · (T / (T + R))^0.11"],
+      };
       out.innerHTML = headline("TDF รวม (หลัง decay)", res.total) +
-        `<div class="card">${stats([
-          ["TDF ตามแผน (ไม่พัก)", fmt(planned, 1)],
-          ["TDF ที่สูญเสียจากการพัก", fmt(lost, 1), `(${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`],
-          ["Total dose", fmt(totalDose, 1), "Gy"],
-          ["ระยะเวลารวม", fmt(res.rows[res.rows.length - 1].endDay, 0), "วัน"],
-          ["เทียบเท่า 2 Gy × 5/wk", fmt(eq.dose, 1), "Gy"],
-        ])}</div>` +
+        `<div class="card">${stats(gapStats)}</div>` +
         `<div class="card"><h3>TDF สะสมตามวันรักษา</h3><div id="gapChart"></div>
           <div class="legend"><span><i></i>TDF สะสม</span><span><i class="decay"></i>ลดลงจากช่วงพัก (decay)</span><span><i class="ref"></i>TDF เป้าหมาย</span></div></div>` +
         solver +
@@ -908,7 +1058,7 @@ body.locked .wrap { display: none; }
           tipFor: (p) => p.kind === "decay" ? `หลังพัก · วัน <b>${fmt(p.x, 0)}</b> · TDF <b>${fmt(p.y, 1)}</b>` : `วัน <b>${fmt(p.x, 1)}</b> · TDF <b>${fmt(p.y, 1)}</b>`,
         };
       });
-    } catch (e) { out.innerHTML = errorCard(e); }
+    } catch (e) { current.gap = null; out.innerHTML = errorCard(e); }
   }
 
   // ---------- Tab 3: brachytherapy ----------
@@ -1007,6 +1157,19 @@ body.locked .wrap { display: none; }
       if (r0 < LV) warn = `<div class="note">Dose rate เริ่มต้น ${fmt(r0, 2)} cGy/h ต่ำกว่า ~${LV} cGy/h ซึ่งเป็นขอบล่างของข้อมูลที่ใช้สร้างสูตร LDR TDF ผลลัพธ์จึงเป็นการ extrapolate ควรใช้ด้วยความระมัดระวัง</div>`;
       else if (minRate < LV) warn = `<div class="note">Dose rate ลดลงต่ำกว่า ~${LV} cGy/h หลังผ่านไป ${fmtHours(res.tBelowValid)} ส่วนหลังจากนั้นเป็นการ extrapolate ของสูตร</div>`;
 
+      const isoLabel = noDecay ? "Dose rate คงที่ (ไม่คิด decay)" : iso === "custom" ? `กำหนดเอง (T½ ${fmt(hl, 3)} วัน)` : `${iso} (T½ ${hl > 3650 ? fmt(hl / 365.25, 2) + " ปี" : fmt(hl, 2) + " วัน"})`;
+      current.brachy = {
+        type: "brachy", title: "Brachytherapy (แหล่งรังสีสลายตัว)", tdf: res.tdf,
+        state: { iso, hl: num("br-hl"), permanent: brPermanent, byDose: brByDose, t: num("br-t"), D: num("br-D"), r: num("br-r") },
+        summary: `${noDecay ? "LDR คงที่" : iso === "custom" ? "custom" : iso} · ${brPermanent ? "permanent" : "temporary " + fmtHours(hours)} · ${fmt(res.dose, 1)} Gy`,
+        inputs: [["แหล่งรังสี", isoLabel], ["ชนิดการฝังแร่", brPermanent ? "Permanent (t → ∞)" : `Temporary ${fmtHours(hours)} (${fmt(hours, 1)} ชม.)`],
+          brByDose ? ["Total dose (กำหนด)", `${fmt(num("br-D"), 1)} Gy`] : ["Initial dose rate (กำหนด)", `${fmt(num("br-r"), 2)} cGy/h`]],
+        results: items.map(unitJoin),
+        notes: warn ? [warn.replace(/<[^>]+>/g, "")] : [],
+        charts: [["brRate", "Dose rate ตามเวลา (cGy/h)"], ["brTdf", "TDF สะสมตามเวลา"]],
+        formulas: noDecay ? ["TDF = 4.76×10^−3 · r^1.35 · t   (r cGy/h, t ชม.)"]
+          : ["TDF = 4.76×10^−3 · r₀^1.35 · (1 − e^(−1.35λt)) / (1.35λ)", "λ = ln2 / T½,   dose = r₀ (1 − e^(−λt)) / λ"],
+      };
       out.innerHTML = headline(brPermanent ? "TDF (permanent implant)" : "TDF (temporary implant)", res.tdf) +
         `<div class="card">${stats(items)}</div>` + warn +
         `<div class="charts2">
@@ -1041,7 +1204,7 @@ body.locked .wrap { display: none; }
         ref: res.tdf > ref * 0.5 ? { y: ref, label: `อ้างอิง ${fmt(ref, 0)}` } : null,
         tipFor: (p) => `${unit} <b>${fmt(p.x, 1)}</b> · TDF <b>${fmt(p.y, 1)}</b>`,
       }));
-    } catch (e) { out.innerHTML = errorCard(e); }
+    } catch (e) { current.brachy = null; out.innerHTML = errorCard(e); }
   }
 
   // ---------- Tab 4: reference table ----------
@@ -1084,9 +1247,292 @@ body.locked .wrap { display: none; }
     selectTab(k);
   });
 
+  // ---------- patient & physician ----------
+  $("pt-doctor").innerHTML = `<option value="">— เลือกแพทย์ —</option>` + PHYSICIANS.map((n) => `<option>${esc(n)}</option>`).join("");
+  const PT_FIELDS = { hn: "pt-hn", prefix: "pt-prefix", first: "pt-first", last: "pt-last" };
+  function getPatient() {
+    const p = {};
+    Object.entries(PT_FIELDS).forEach(([k, id]) => { p[k] = $(id).value.trim(); });
+    return p;
+  }
+  function setPatient(p, doctor) {
+    Object.entries(PT_FIELDS).forEach(([k, id]) => { $(id).value = (p && p[k]) || ""; });
+    const sel = $("pt-doctor");
+    if (doctor && ![...sel.options].some((o) => o.value === doctor)) sel.add(new Option(doctor, doctor));
+    sel.value = doctor || "";
+  }
+  // Thai style: the title is written straight onto the first name (นายสมชาย ใจดี)
+  const patientName = (p) => ((p.prefix || "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
+  $("ptClear").addEventListener("click", () => { setPatient({}, ""); $("pt-hn").focus(); });
+
+  function toast(msg, ms = 2600) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { t.hidden = true; }, ms);
+  }
+  const activeTab = () => tabs.map(([k]) => k).find((k) => !$("p-" + k).hidden);
+
+  /** The calculation on screen plus patient, physician and signed-in user. Null on the reference tab or after an input error. */
+  function snapshot() {
+    const snap = current[activeTab()];
+    if (!snap) return null;
+    return { ...snap, patient: getPatient(), doctor: $("pt-doctor").value, ref: refTdf(), user: user ? user.name : "" };
+  }
+
+  // ---------- history (this browser only; one list per signed-in user) ----------
+  let user = null;
+  const HISTORY_MAX = 300;
+  const histKey = () => "tdf-history" + (user && user.username ? ":" + user.username : "");
+  function loadHistory() {
+    try { const v = JSON.parse(localStorage.getItem(histKey()) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function storeHistory(list) {
+    try { localStorage.setItem(histKey(), JSON.stringify(list.slice(0, HISTORY_MAX))); return true; } catch (e) { return false; }
+  }
+  /** Saves the snapshot; the same calculation for the same patient saved again only moves to the top with a new time. */
+  function saveHistory(snap) {
+    const sig = JSON.stringify([snap.type, snap.state, snap.patient, snap.doctor, snap.ref]);
+    const list = loadHistory().filter((e) => e.sig !== sig);
+    const entry = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), sig,
+      type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, state: snap.state,
+      patient: snap.patient, doctor: snap.doctor, user: snap.user };
+    list.unshift(entry);
+    const ok = storeHistory(list);
+    renderHistory();
+    return ok ? entry : null;
+  }
+  const TYPE_LABEL = { frac: "Fractionated", gap: "Treatment gap", brachy: "Brachytherapy" };
+  const fmtTime = (t) => new Date(t).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+  function renderHistory() {
+    const list = loadHistory();
+    $("histCount").textContent = list.length;
+    const q = $("histSearch").value.trim().toLowerCase();
+    const shown = q ? list.filter((e) => [e.patient.hn, patientName(e.patient), e.doctor, e.summary, TYPE_LABEL[e.type]].join(" ").toLowerCase().includes(q)) : list;
+    $("histList").innerHTML = shown.length ? shown.map((e) => `
+      <article class="hist-item" data-id="${e.id}">
+        <div class="hist-top"><span class="hist-type">${TYPE_LABEL[e.type] || e.type}</span><span class="hist-time">${esc(fmtTime(e.at))}</span></div>
+        <div class="hist-who">${e.patient.hn ? "HN " + esc(e.patient.hn) + " · " : ""}${esc(patientName(e.patient) || "ไม่ระบุชื่อผู้ป่วย")}${e.doctor ? `<br><span>แพทย์ ${esc(e.doctor)}</span>` : ""}</div>
+        <div class="hist-val">TDF ${fmt(e.tdf, 1)} <small>/ อ้างอิง ${fmt(e.ref, 0)}</small></div>
+        <div class="hist-sum">${esc(e.summary)}</div>
+        <div class="hist-actions">
+          <button type="button" class="btn" data-act="open">เปิด</button>
+          <button type="button" class="btn" data-act="pdf">PDF</button>
+          <button type="button" class="btn ghost" data-act="del">ลบ</button>
+        </div>
+      </article>`).join("")
+      : `<p class="hist-empty">${q ? "ไม่พบรายการที่ค้นหา" : "ยังไม่มีประวัติ กด “บันทึกลงประวัติ” หรือ “สร้างรายงาน PDF” เพื่อเก็บการคำนวณ"}</p>`;
+  }
+  function openHistory(open) {
+    $("histDrawer").hidden = !open;
+    $("histScrim").hidden = !open;
+    if (open) { renderHistory(); $("histSearch").focus(); } else $("histOpen").focus();
+  }
+  /** Puts a saved calculation back into the form and shows its tab. */
+  function restore(e) {
+    const s = e.state;
+    setPatient(e.patient, e.doctor);
+    if (e.ref) $("refTdf").value = e.ref;
+    if (e.type === "frac") {
+      $("fr-d").value = s.d; $("fr-n").value = s.N; $("fr-f").value = s.f; $("fr-useT").checked = !!s.useT;
+      $("fr-T").value = s.T; $("fr-T-wrap").hidden = !s.useT; $("fr-ab1").value = s.ab1; $("fr-ab2").value = s.ab2;
+    } else if (e.type === "gap") {
+      courses = s.courses.map((c) => ({ ...c }));
+      setTargetMode(s.targetMode);
+      $("gap-target").value = s.target; $("gap-d").value = s.dL; $("gap-f").value = s.fL;
+      renderCourses();
+    } else if (e.type === "brachy") {
+      isoSel.value = s.iso; $("br-hl").value = s.hl; brPermanent = s.permanent; brByDose = s.byDose;
+      $("br-t").value = s.t; $("br-D").value = s.D; $("br-r").value = s.r;
+      syncBrachyUI();
+    }
+    selectTab(e.type);
+  }
+  $("histOpen").addEventListener("click", () => openHistory(true));
+  $("histClose").addEventListener("click", () => openHistory(false));
+  $("histScrim").addEventListener("click", () => openHistory(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("histDrawer").hidden) openHistory(false); });
+  $("histSearch").addEventListener("input", renderHistory);
+  $("histSave").addEventListener("click", () => {
+    const snap = snapshot();
+    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนบันทึก");
+    toast(saveHistory(snap) ? "บันทึกลงประวัติแล้ว" : "บันทึกไม่ได้: เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล");
+  });
+  $("histList").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = btn.closest(".hist-item").dataset.id;
+    const list = loadHistory(), e = list.find((x) => x.id === id);
+    if (!e) return renderHistory();
+    if (btn.dataset.act === "del") {
+      if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "ยืนยันลบ"; return; }
+      storeHistory(list.filter((x) => x.id !== id));
+      renderHistory();
+    } else {
+      restore(e);
+      openHistory(false);
+      if (btn.dataset.act === "pdf") makePdf(e);
+      else toast("เปิดการคำนวณจากประวัติแล้ว");
+    }
+  });
+  $("histClear").addEventListener("click", () => {
+    const b = $("histClear");
+    if (b.dataset.armed !== "1") {
+      b.dataset.armed = "1"; b.textContent = "กดอีกครั้งเพื่อลบทั้งหมด";
+      setTimeout(() => { b.dataset.armed = ""; b.textContent = "ลบทั้งหมด"; }, 4000);
+      return;
+    }
+    b.dataset.armed = ""; b.textContent = "ลบทั้งหมด";
+    storeHistory([]);
+    renderHistory();
+  });
+
+  // ---------- PDF report ----------
+  const PDF_LIBS = [
+    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  ];
+  let libsLoading = null;
+  function loadPdfLibs() {
+    if (window.html2canvas && window.jspdf) return Promise.resolve();
+    libsLoading = libsLoading || Promise.all(PDF_LIBS.map((src) => new Promise((ok, fail) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = ok; s.onerror = () => fail(new Error("โหลด " + src + " ไม่ได้"));
+      document.head.appendChild(s);
+    }))).catch((err) => { libsLoading = null; throw err; });
+    return libsLoading;
+  }
+
+  const rows2 = (pairs) => pairs.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join("");
+  /** Fills the off-screen A4 report from a snapshot (the live charts are copied in with their styles inlined). */
+  function buildReport(snap, at) {
+    const p = snap.patient, pct = (snap.tdf / snap.ref) * 100;
+    const status = pct > 105 ? "เกินค่าอ้างอิง" : pct >= 90 ? "ใกล้ค่าอ้างอิง" : "ต่ำกว่าค่าอ้างอิง";
+    const charts = (snap.charts || []).map(([id, title]) => {
+      const svg = $(id) && $(id).querySelector("svg");
+      return svg ? `<div class="rp-chart chart" data-src="${id}"><h3>${esc(title)}</h3></div>` : "";
+    }).filter(Boolean);
+    const r = $("report");
+    r.innerHTML = `
+      <div class="rp-block rp-head">
+        <div><h1><span>TDF</span> Dose Calculation Report</h1><div class="rp-sub">รายงานการคำนวณ Time-Dose-Fractionation · ${esc(snap.title)}</div></div>
+        <div class="rp-meta">วันที่ ${esc(fmtTime(at))}${snap.user ? `<br>ผู้คำนวณ ${esc(snap.user)}` : ""}</div>
+      </div>
+      <div class="rp-block"><h2>ผู้ป่วย</h2><div class="rp-patient">
+        <div><div class="rp-k">HN</div><div class="rp-v">${esc(p.hn || "—")}</div></div>
+        <div><div class="rp-k">ชื่อ - นามสกุล</div><div class="rp-v">${esc(patientName(p) || "—")}</div></div>
+        <div><div class="rp-k">แพทย์ผู้รักษา</div><div class="rp-v">${esc(snap.doctor || "—")}</div></div>
+      </div></div>
+      <div class="rp-block"><div class="rp-hero"><div class="n">${fmt(snap.tdf, 1)}</div>
+        <div class="s"><b>TDF</b> · ค่าอ้างอิง (tolerance) ${fmt(snap.ref, 0)} · ${fmt(pct, 0)}% (${status})</div></div></div>
+      <div class="rp-block"><h2>ข้อมูลที่ใช้คำนวณ</h2><table class="kv">${rows2(snap.inputs)}</table></div>
+      <div class="rp-block"><h2>ผลการคำนวณ</h2><table class="kv">${rows2(snap.results)}</table></div>
+      ${snap.table ? `<div class="rp-block"><h2>รายละเอียดแต่ละ course</h2><table><tr>${snap.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
+        ${snap.table.rows.map((row) => `<tr>${row.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table></div>` : ""}
+      ${charts.length ? `<div class="rp-block ${charts.length > 1 ? "rp-two" : ""}">${charts.join("")}</div>` : ""}
+      ${(snap.notes || []).map((n) => `<div class="rp-block"><div class="rp-note">${esc(n)}</div></div>`).join("")}
+      <div class="rp-block"><h2>สูตรที่ใช้</h2>${snap.formulas.map((f) => `<div class="rp-eq">${esc(f)}</div>`).join("")}</div>
+      <div class="rp-block rp-sign">
+        <div><div class="line">ผู้คำนวณ${snap.user ? `<br>(${esc(snap.user)})` : "<br>(.................................................)"}</div></div>
+        <div><div class="line">แพทย์ผู้รักษา<br>(${esc(snap.doctor || ".................................................")})</div></div>
+      </div>
+      <div class="rp-block rp-foot">Orton CG, Ellis F. Br J Radiol 1973;46:529–537 · Orton CG. Br J Radiol 1974;47:603–607 · Ellis F. Clin Radiol 1969;20:1–7.
+        ผลการคำนวณใช้ประกอบการพิจารณาของแพทย์และนักฟิสิกส์การแพทย์ ไม่ใช้แทนการวางแผนการรักษา · สร้างโดย TDF Dose Calculator</div>`;
+    // copy each live chart, then freeze the report's light colours into inline styles (html2canvas draws SVG as a standalone image)
+    r.querySelectorAll(".rp-chart").forEach((box) => {
+      const svg = $(box.dataset.src).querySelector("svg").cloneNode(true);
+      svg.querySelectorAll(".hover, .hit").forEach((n) => n.remove());
+      box.appendChild(svg);
+      svg.querySelectorAll("*").forEach((n) => {
+        const cs = getComputedStyle(n);
+        n.setAttribute("style", ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin"]
+          .map((k) => `${k}:${cs.getPropertyValue(k)}`).join(";") +
+          (n.tagName === "text" ? `;font-family:${cs.fontFamily};font-size:${cs.fontSize};font-weight:${cs.fontWeight}` : ""));
+      });
+      // hand html2canvas a sized image rather than live SVG, so nothing is clipped at the edges
+      const vb = svg.viewBox.baseVal, h = 175, w = Math.round((h * vb.width) / vb.height);
+      svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      svg.setAttribute("width", vb.width); svg.setAttribute("height", vb.height);
+      svg.style.overflow = "visible";
+      const img = new Image();
+      img.alt = box.querySelector("h3").textContent;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      img.style.cssText = `display:block;margin:0 auto;height:${h}px;width:${w}px;max-width:100%;object-fit:contain`;
+      svg.replaceWith(img);
+    });
+    return r;
+  }
+
+  const fileName = (snap, at) => {
+    const d = new Date(at), pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+    return `TDF_${(snap.patient.hn || "report").replace(/[^\w.-]+/g, "_")}_${snap.type}_${stamp}.pdf`;
+  };
+
+  /** Builds the report, saves the calculation to history, and downloads an A4 PDF (falls back to the print dialog). */
+  async function makePdf() {
+    const snap = snapshot();
+    if (!snap) return toast("เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อนสร้างรายงาน");
+    const at = Date.now();
+    saveHistory(snap);
+    const report = buildReport(snap, at);
+    const btn = $("pdfBtn");
+    btn.disabled = true; btn.textContent = "กำลังสร้าง PDF…";
+    try {
+      await loadPdfLibs();
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const scale = 2;
+      const canvas = await window.html2canvas(report, {
+        scale, backgroundColor: "#FFFFFF", logging: false,
+        onclone: (doc) => { const c = doc.getElementById("report"); c.style.left = "0"; },
+      });
+      // page breaks fall between blocks, never through one
+      const pageH = Math.floor(report.offsetWidth * 297 / 210);
+      const blocks = [...report.querySelectorAll(".rp-block")].map((b) => ({ top: b.offsetTop, bottom: b.offsetTop + b.offsetHeight }));
+      const pages = [];
+      let start = 0;
+      blocks.forEach((b) => {
+        if (b.bottom - start > pageH && b.top > start) { pages.push([start, b.top]); start = b.top; }
+      });
+      pages.push([start, report.offsetHeight]);
+      const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      pages.forEach(([top, bottom], i) => {
+        const part = document.createElement("canvas");
+        part.width = canvas.width;
+        part.height = Math.min(canvas.height - top * scale, Math.ceil(Math.min(bottom - top, pageH) * scale));
+        const ctx = part.getContext("2d");
+        ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, part.width, part.height);
+        ctx.drawImage(canvas, 0, top * scale, canvas.width, part.height, 0, 0, part.width, part.height);
+        if (i) pdf.addPage();
+        pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, (part.height / part.width) * 210);
+      });
+      pdf.setProperties({ title: "TDF Dose Calculation Report", subject: snap.title, creator: "TDF Dose Calculator" });
+      pdf.save(fileName(snap, at));
+      toast("สร้างรายงาน PDF แล้ว และบันทึกลงประวัติ");
+    } catch (err) {
+      console.error(err);
+      toast("ดาวน์โหลด PDF ไม่ได้ จะเปิดหน้าพิมพ์แทน ให้เลือก “บันทึกเป็น PDF”", 5000);
+      setTimeout(() => window.print(), 300);
+    } finally {
+      btn.disabled = false; btn.textContent = "สร้างรายงาน PDF";
+    }
+  }
+  $("pdfBtn").addEventListener("click", () => makePdf());
+
+  // The Apps Script build signs people in; history is kept per user.
+  window.TDFApp = {
+    setUser(u) {
+      user = u && u.username ? { username: String(u.username), name: String(u.name || u.username) } : null;
+      if (!user) { openHistory(false); setPatient({}, ""); }
+      renderHistory();
+    },
+  };
+
   renderCourses();
   syncBrachyUI();
   buildTable();
+  renderHistory();
   let start = "frac";
   const hash = (location.hash || "").slice(1);
   if (tabs.some(([k]) => k === hash)) start = hash;
@@ -1131,6 +1577,7 @@ body.locked .wrap { display: none; }
     $("whoRole").textContent = res.user.role;
     $("whoRole").hidden = !res.user.role;
     $("authPass").value = "";
+    if (window.TDFApp) TDFApp.setUser(res.user);
     $("auth").hidden = true;
     document.body.classList.remove("locked");
     window.dispatchEvent(new Event("resize")); // draw charts that were laid out while hidden
@@ -1153,7 +1600,11 @@ body.locked .wrap { display: none; }
 
   $("logoutBtn").addEventListener("click", function () {
     $("logoutBtn").disabled = true;
-    var done = function () { $("logoutBtn").disabled = false; token = ""; save(""); showForm("ออกจากระบบแล้ว", "info"); };
+    var done = function () {
+      $("logoutBtn").disabled = false; token = ""; save("");
+      if (window.TDFApp) TDFApp.setUser(null);
+      showForm("ออกจากระบบแล้ว", "info");
+    };
     if (gas) call("tdfLogout", [token], done, done); else done();
   });
 
