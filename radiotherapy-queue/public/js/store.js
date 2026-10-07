@@ -44,9 +44,12 @@ class ServerStore {
   }
 }
 
-// ข้อความผิดพลาดจาก Apps Script มักมีคำนำหน้า เช่น "Error: session_expired" หรือ "Exception: …" — ตัดออก
+// ข้อความผิดพลาดจาก Apps Script อาจมีคำนำหน้า ("Error: …", "Exception: …") และตำแหน่งโค้ดต่อท้าย ("(line 12, file "Code")") — ตัดออก
 export function gasErrorMessage(err) {
-  return String(err?.message || err || '').replace(/^\s*(?:(?:Script)?Error|Exception|TypeError)\s*:\s*/i, '').trim();
+  return String(err?.message || err || '')
+    .replace(/^\s*(?:(?:Script)?Error|Exception|TypeError)\s*:\s*/i, '')
+    .replace(/\s*\(line \d+, file "[^"]*"\)\s*$/i, '')
+    .trim();
 }
 
 // เรียกฟังก์ชันฝั่ง Apps Script (apps-script/Code.gs) แบบ Promise
@@ -85,7 +88,7 @@ class GasStore {
     try {
       return await gas(fn, this.token, ...args);
     } catch (err) {
-      if (err.message !== 'session_expired') throw err;
+      if (!/session_expired/.test(err.message)) throw err;
       this.setToken('');
       this.onExpired?.();
       throw new Error('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่แล้วทำรายการอีกครั้ง');
@@ -94,9 +97,10 @@ class GasStore {
   /** ข้อมูลทั้งหมด หรือ null ถ้ายังไม่ได้เข้าสู่ระบบ */
   async loadOrNull() {
     try {
-      return await gas('getState', this.token);
+      const data = await gas('getState', this.token);
+      return data && !data.needLogin ? data : null;
     } catch (err) {
-      if (err.message === 'session_expired') return null;
+      if (/session_expired/.test(err.message)) return null; // Code.gs รุ่นก่อน throw แทนการตอบ needLogin
       throw err;
     }
   }

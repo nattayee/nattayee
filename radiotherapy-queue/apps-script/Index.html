@@ -483,6 +483,7 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
 }
 
 </style>
+<script>window.RTQ_CLIENT_VERSION = 'e7d18e58';</script>
 </head>
 <body>
   <header class="app-header">
@@ -809,6 +810,7 @@ button.cc-day { cursor: pointer; font: inherit; font-size: 0.7rem; }
       <div class="form-errors" id="login-error" role="alert" hidden></div>
       <button type="submit" class="btn primary" id="login-btn">เข้าสู่ระบบ</button>
       <p class="small muted login-foot">ยังไม่มีบัญชี หรือลืมรหัสผ่าน? <a id="login-ws-link" href="#" target="_top" rel="noopener">เปิด LPCH RO Workspace</a></p>
+      <p class="small muted login-foot" id="login-version"></p>
     </form>
   </dialog>
 
@@ -1440,9 +1442,12 @@ class ServerStore {
   }
 }
 
-// ข้อความผิดพลาดจาก Apps Script มักมีคำนำหน้า เช่น "Error: session_expired" หรือ "Exception: …" — ตัดออก
+// ข้อความผิดพลาดจาก Apps Script อาจมีคำนำหน้า ("Error: …", "Exception: …") และตำแหน่งโค้ดต่อท้าย ("(line 12, file "Code")") — ตัดออก
 function gasErrorMessage(err) {
-  return String(err?.message || err || '').replace(/^\s*(?:(?:Script)?Error|Exception|TypeError)\s*:\s*/i, '').trim();
+  return String(err?.message || err || '')
+    .replace(/^\s*(?:(?:Script)?Error|Exception|TypeError)\s*:\s*/i, '')
+    .replace(/\s*\(line \d+, file "[^"]*"\)\s*$/i, '')
+    .trim();
 }
 
 // เรียกฟังก์ชันฝั่ง Apps Script (apps-script/Code.gs) แบบ Promise
@@ -1481,7 +1486,7 @@ class GasStore {
     try {
       return await gas(fn, this.token, ...args);
     } catch (err) {
-      if (err.message !== 'session_expired') throw err;
+      if (!/session_expired/.test(err.message)) throw err;
       this.setToken('');
       this.onExpired?.();
       throw new Error('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่แล้วทำรายการอีกครั้ง');
@@ -1490,9 +1495,10 @@ class GasStore {
   /** ข้อมูลทั้งหมด หรือ null ถ้ายังไม่ได้เข้าสู่ระบบ */
   async loadOrNull() {
     try {
-      return await gas('getState', this.token);
+      const data = await gas('getState', this.token);
+      return data && !data.needLogin ? data : null;
     } catch (err) {
-      if (err.message === 'session_expired') return null;
+      if (/session_expired/.test(err.message)) return null; // Code.gs รุ่นก่อน throw แทนการตอบ needLogin
       throw err;
     }
   }
@@ -2893,6 +2899,18 @@ function bind() {
   });
 }
 
+// ================= รุ่นของโค้ด (Apps Script) =================
+const CLIENT_VERSION = globalThis.RTQ_CLIENT_VERSION || '';
+
+// ไฟล์ Code กับ Index ต้องมาจากรุ่นเดียวกัน (วางไม่ครบ หรือยังไม่ได้ Deploy เวอร์ชันใหม่)
+function checkVersion(serverVersion) {
+  if (!CLIENT_VERSION || !serverVersion || serverVersion === 'dev' || serverVersion === CLIENT_VERSION) return;
+  const n = document.createElement('div');
+  n.className = 'notice version-notice';
+  n.textContent = `ไฟล์ Code (รุ่น ${serverVersion}) กับ Index (รุ่น ${CLIENT_VERSION}) ไม่ใช่รุ่นเดียวกัน — คัดลอกโค้ดล่าสุดไปวางให้ครบทั้ง Code, Schedule, Index แล้ว Deploy เป็นเวอร์ชันใหม่ (New version)`;
+  $('main').prepend(n);
+}
+
 // ================= ผู้ใช้และการเข้าสู่ระบบ =================
 const isAdmin = () => !state.me || state.me.isAdmin; // ไม่มีระบบเข้าสู่ระบบ = ใช้ได้ทุกเมนู
 
@@ -2929,6 +2947,7 @@ function showLogin({ error = '', status = '', onLogin: cb = null } = {}) {
 }
 
 function bindLogin(cfg) {
+  $('#login-version').textContent = CLIENT_VERSION ? `รุ่น ${CLIENT_VERSION}` : '';
   if (cfg.workspaceUrl) $('#login-ws-link').href = cfg.workspaceUrl;
   else $('#login-ws-link').closest('p').hidden = true;
   $('#login-screen').addEventListener('cancel', (e) => e.preventDefault()); // Esc ปิดไม่ได้
@@ -3000,14 +3019,17 @@ async function init() {
   } catch (err) {
     badge.textContent = 'โหลดข้อมูลไม่สำเร็จ';
     badge.classList.add('local');
-    $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่</div>`;
+    $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่${
+      CLIENT_VERSION ? `<br><small>หน้าเว็บรุ่น ${esc(CLIENT_VERSION)}</small>` : ''
+    }</div>`;
     return;
   }
   const { store } = opened;
   let { data } = opened;
   state.store = store;
   const cfg = globalThis.RTQ_CONFIG || {};
-  if (store.mode === 'gas' && cfg.auth) {
+  // !data: เซิร์ฟเวอร์บอกให้เข้าสู่ระบบ — แสดงหน้าเข้าสู่ระบบแม้ doGet จะไม่ได้ส่ง RTQ_CONFIG มา
+  if (store.mode === 'gas' && (cfg.auth || !data)) {
     bindLogin(cfg);
     store.onExpired = () => showLogin({ error: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่' });
     let error = '';
@@ -3025,6 +3047,7 @@ async function init() {
     $('#login-screen').close();
   }
   applyData(data);
+  checkVersion(cfg.version || data.version);
   badge.textContent = { server: 'เชื่อมต่อเซิร์ฟเวอร์', gas: 'เชื่อมต่อ Google Sheet', local: 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)' }[store.mode];
   badge.classList.toggle('local', store.mode === 'local');
 

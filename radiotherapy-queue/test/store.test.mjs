@@ -23,4 +23,5 @@ test('ตัดคำนำหน้าข้อความผิดพลา�
   assert.equal(gasErrorMessage({ message: 'Exception: ไม่พบข้อมูลนัด' }), 'ไม่พบข้อมูลนัด');
   assert.equal(gasErrorMessage(new Error('ScriptError: x')), 'x');
   assert.equal(gasErrorMessage(new Error('session_expired')), 'session_expired');
+  assert.equal(gasErrorMessage(new Error('Error: รหัสผ่านไม่ถูกต้อง (line 260, file "Code")')), 'รหัสผ่านไม่ถูกต้อง');
 });

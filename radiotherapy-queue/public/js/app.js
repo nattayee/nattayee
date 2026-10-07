@@ -1296,6 +1296,18 @@ function bind() {
   });
 }
 
+// ================= รุ่นของโค้ด (Apps Script) =================
+const CLIENT_VERSION = globalThis.RTQ_CLIENT_VERSION || '';
+
+// ไฟล์ Code กับ Index ต้องมาจากรุ่นเดียวกัน (วางไม่ครบ หรือยังไม่ได้ Deploy เวอร์ชันใหม่)
+function checkVersion(serverVersion) {
+  if (!CLIENT_VERSION || !serverVersion || serverVersion === 'dev' || serverVersion === CLIENT_VERSION) return;
+  const n = document.createElement('div');
+  n.className = 'notice version-notice';
+  n.textContent = `ไฟล์ Code (รุ่น ${serverVersion}) กับ Index (รุ่น ${CLIENT_VERSION}) ไม่ใช่รุ่นเดียวกัน — คัดลอกโค้ดล่าสุดไปวางให้ครบทั้ง Code, Schedule, Index แล้ว Deploy เป็นเวอร์ชันใหม่ (New version)`;
+  $('main').prepend(n);
+}
+
 // ================= ผู้ใช้และการเข้าสู่ระบบ =================
 const isAdmin = () => !state.me || state.me.isAdmin; // ไม่มีระบบเข้าสู่ระบบ = ใช้ได้ทุกเมนู
 
@@ -1332,6 +1344,7 @@ function showLogin({ error = '', status = '', onLogin: cb = null } = {}) {
 }
 
 function bindLogin(cfg) {
+  $('#login-version').textContent = CLIENT_VERSION ? `รุ่น ${CLIENT_VERSION}` : '';
   if (cfg.workspaceUrl) $('#login-ws-link').href = cfg.workspaceUrl;
   else $('#login-ws-link').closest('p').hidden = true;
   $('#login-screen').addEventListener('cancel', (e) => e.preventDefault()); // Esc ปิดไม่ได้
@@ -1403,14 +1416,17 @@ async function init() {
   } catch (err) {
     badge.textContent = 'โหลดข้อมูลไม่สำเร็จ';
     badge.classList.add('local');
-    $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่</div>`;
+    $('main').innerHTML = `<div class="notice">โหลดข้อมูลไม่สำเร็จ: ${esc(err.message)}<br>ตรวจสอบว่าบัญชีนี้มีสิทธิ์เข้าถึง Google Sheet ของระบบ แล้วโหลดหน้าใหม่${
+      CLIENT_VERSION ? `<br><small>หน้าเว็บรุ่น ${esc(CLIENT_VERSION)}</small>` : ''
+    }</div>`;
     return;
   }
   const { store } = opened;
   let { data } = opened;
   state.store = store;
   const cfg = globalThis.RTQ_CONFIG || {};
-  if (store.mode === 'gas' && cfg.auth) {
+  // !data: เซิร์ฟเวอร์บอกให้เข้าสู่ระบบ — แสดงหน้าเข้าสู่ระบบแม้ doGet จะไม่ได้ส่ง RTQ_CONFIG มา
+  if (store.mode === 'gas' && (cfg.auth || !data)) {
     bindLogin(cfg);
     store.onExpired = () => showLogin({ error: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่' });
     let error = '';
@@ -1428,6 +1444,7 @@ async function init() {
     $('#login-screen').close();
   }
   applyData(data);
+  checkVersion(cfg.version || data.version);
   badge.textContent = { server: 'เชื่อมต่อเซิร์ฟเวอร์', gas: 'เชื่อมต่อ Google Sheet', local: 'โหมดออฟไลน์ (เก็บในเบราว์เซอร์)' }[store.mode];
   badge.classList.toggle('local', store.mode === 'local');
 

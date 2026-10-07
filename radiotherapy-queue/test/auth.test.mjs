@@ -15,11 +15,25 @@ function setup() {
   return { ws, ...gas };
 }
 
-test('ยังไม่เข้าสู่ระบบ: ทุกคำสั่งตอบ session_expired', () => {
-  const { call } = setup();
-  assert.throws(() => call('getState', null), /session_expired/);
-  assert.throws(() => call('getState', 'fake-token'), /session_expired/);
+test('ยังไม่เข้าสู่ระบบ: getState ตอบ needLogin (ไม่ส่งข้อมูล) คำสั่งอื่นตอบ session_expired', () => {
+  const { call, context } = setup();
+  for (const t of [null, 'fake-token']) {
+    const st = call('getState', t);
+    assert.deepEqual(Object.keys(st).sort(), ['needLogin', 'version']);
+    assert.equal(st.needLogin, true);
+    assert.equal(st.version, context.APP_VERSION);
+  }
   assert.throws(() => call('createAppointment', null, appt), /session_expired/);
+  assert.throws(() => call('saveSettings', null, {}), /session_expired/);
+});
+
+test('รุ่นของ Code.gs ตรงกับ Index.html', async () => {
+  const { readFileSync } = await import('node:fs');
+  const code = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
+  const index = readFileSync(new URL('../apps-script/Index.html', import.meta.url), 'utf8');
+  const v = /^var APP_VERSION = '([0-9a-f]{8})';$/m.exec(code)?.[1];
+  assert.ok(v, 'Code.gs ต้องมีรุ่นที่สร้างโดย npm run build:gas');
+  assert.ok(index.includes(`window.RTQ_CLIENT_VERSION = '${v}'`));
 });
 
 test('เข้าสู่ระบบด้วยรหัสผ่าน Workspace แล้วบันทึกชื่อผู้นัด', () => {
@@ -74,7 +88,7 @@ test('ออกจากระบบ และบัญชีที่ถูก�
   const { call, ws, cache } = setup();
   const t1 = call('login', 'rtt1', 'rtt-pass1').token;
   call('logout', t1);
-  assert.throws(() => call('getState', t1), /session_expired/);
+  assert.equal(call('getState', t1).needLogin, true);
 
   const t2 = call('login', 'rtt1', 'rtt-pass1').token;
   ws.users.rtt1.status = 'disabled';
@@ -83,7 +97,7 @@ test('ออกจากระบบ และบัญชีที่ถูก�
     const s = JSON.parse(v);
     if (k.startsWith('rtq_s_')) cache.set(k, JSON.stringify({ ...s, checked: Date.now() - 16 * 60000 }));
   }
-  assert.throws(() => call('getState', t2), /session_expired/);
+  assert.equal(call('getState', t2).needLogin, true);
 });
 
 test('รอบตรวจกับ Workspace อัปเดตสิทธิ์ผู้ดูแลระบบ', () => {

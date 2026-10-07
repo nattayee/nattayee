@@ -7,6 +7,9 @@
  * ค่าคงที่และตรรกะการคำนวณวันฉาย (ROOMS, TECHNIQUES, defaultSettings, …) อยู่ในไฟล์ Schedule.gs
  */
 
+// รุ่นของโค้ด (npm run build:gas ใส่ให้อัตโนมัติ) — ต้องตรงกับไฟล์ Index ไม่เช่นนั้นหน้าเว็บจะแจ้งเตือน
+var APP_VERSION = 'e7d18e58';
+
 // (ไม่บังคับ) ถ้าต้องการใช้ Google Sheet ที่มีอยู่แล้ว ให้วางลิงก์ของ Sheet ไว้ในเครื่องหมายคำพูดก่อนรัน setup
 // ถ้าเว้นว่างไว้ setup จะสร้าง Google Sheet ใหม่ให้อัตโนมัติ
 var SPREADSHEET_URL = '';
@@ -37,7 +40,7 @@ var APPT_COLUMNS_ = [
 /** เปิดจากปุ่มใน LPCH RO Workspace จะมี ?sso=<บัตรผ่าน> ติดมา ส่งต่อให้หน้าเว็บนำไปแลกเป็นการเข้าสู่ระบบ */
 function doGet(e) {
   var sso = String((e && e.parameter && e.parameter.sso) || '').replace(/[^0-9a-f]/gi, '').slice(0, 128);
-  var config = { auth: !!WORKSPACE_URL, workspaceUrl: WORKSPACE_URL, sso: sso };
+  var config = { auth: !!WORKSPACE_URL, workspaceUrl: WORKSPACE_URL, sso: sso, version: APP_VERSION };
   var html = HtmlService.createHtmlOutputFromFile('Index').getContent().replace(
     '</head>',
     '<script>window.RTQ_CONFIG = ' + JSON.stringify(config).replace(/</g, '\\u003c') + ';</script>\n</head>'
@@ -119,10 +122,19 @@ function logout(token) {
 // ================= API ที่หน้าเว็บเรียก (google.script.run) =================
 // ทุกคำสั่งรับ token ของการเข้าสู่ระบบเป็นค่าแรก
 
+/** ยังไม่ได้เข้าสู่ระบบ: ตอบ { needLogin: true } (ไม่ throw — หน้าเว็บไม่ต้องแปลข้อความผิดพลาด) */
 function getState(token) {
-  var me = requireSession_(token);
+  var me;
+  try {
+    me = requireSession_(token);
+  } catch (e) {
+    if (e.message === 'session_expired') return { needLogin: true, version: APP_VERSION };
+    throw e;
+  }
   ensureSheets_();
-  return { appointments: readAppointments_(), settings: readSettings_(), me: me ? publicSession_(me) : null };
+  return {
+    appointments: readAppointments_(), settings: readSettings_(), me: me ? publicSession_(me) : null, version: APP_VERSION,
+  };
 }
 
 function createAppointment(token, input) {

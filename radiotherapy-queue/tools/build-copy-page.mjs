@@ -17,6 +17,7 @@ const FILES = [
 const dir = path.join(ROOT, 'apps-script');
 const data = await Promise.all(FILES.map(async (f) => ({ ...f, code: await readFile(path.join(dir, f.file), 'utf8') })));
 const json = JSON.stringify(data).replace(/</g, '\\u003c');
+const version = /^var APP_VERSION = '([^']*)';$/m.exec(data[0].code)?.[1] || '';
 
 const html = `<title>โค้ด Apps Script ระบบนัดคิวฉายรังสี</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -60,6 +61,8 @@ body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font-body)
 aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; overflow-y: auto; }
 h1 { font-size: 1.1rem; margin: 0; text-wrap: balance; line-height: 1.35; }
 .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+.ver { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--fg-2); font-size: 0.82rem; }
+.ver b { font-family: var(--font-mono); color: var(--accent); }
 .files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; counter-reset: step; }
 .file-btn { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); cursor: pointer; text-align: left; font: inherit; }
 .file-btn:hover { border-color: var(--accent); }
@@ -111,6 +114,7 @@ textarea.clip { position: fixed; left: -9999px; top: 0; opacity: 0; }
     <div>
       <h1>โค้ด Apps Script<br>ระบบนัดคิวผู้ป่วยฉายรังสี</h1>
       <p class="sub">เลือกไฟล์ทีละไฟล์ กดคัดลอก แล้ววางในโปรเจกต์ Apps Script</p>
+      <p class="ver">โค้ดรุ่น <b>${version}</b> — หน้าเข้าสู่ระบบของระบบนัดคิวต้องแสดงรุ่นเดียวกันนี้</p>
     </div>
     <ul class="files" id="files"></ul>
     <div class="steps">
@@ -121,6 +125,7 @@ textarea.clip { position: fixed; left: -9999px; top: 0; opacity: 0; }
         <li>ดำเนินการในฐานะ: <b>ฉัน</b> · ผู้มีสิทธิ์เข้าถึง: <b>ทุกคน</b><br>(เข้าใช้ได้เฉพาะผู้ที่เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace — ไม่ต้องแชร์ Sheet ให้ใคร)</li>
         <li>ใน LPCH RO Workspace: จัดการเมนู › เพิ่มปุ่ม ใส่ URL <code>/exec</code> ของระบบนัดคิว แล้วติ๊ก <b>เข้าสู่ระบบอัตโนมัติ</b></li>
       </ol>
+      <p class="warn">หลังแก้โค้ดทุกครั้ง ต้อง Deploy › จัดการการทำให้ใช้งานได้ › ✏️ › เวอร์ชัน: <b>เวอร์ชันใหม่</b> ไม่เช่นนั้นลิงก์ /exec ยังใช้โค้ดเดิม (ทดสอบโค้ดล่าสุดก่อนได้ที่ “ทดสอบการทำให้ใช้งานได้” ลิงก์ /dev)</p>
       <p class="warn">อัปเดตจากเวอร์ชันก่อน: วางโค้ดใหม่ แล้ว<b>รัน setup อีกครั้ง</b>เพื่ออนุญาตสิทธิ์เชื่อมต่อ Workspace จากนั้นแก้การ Deploy เป็น “ฉัน / ทุกคน” และเลือกเวอร์ชันใหม่</p>
     </div>
   </aside>
