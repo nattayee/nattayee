@@ -104,10 +104,9 @@ export function todayISO(now = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
-export function startOfWeek(iso) {
-  // สัปดาห์เริ่มวันจันทร์
-  const dow = dayOfWeek(iso);
-  return addDays(iso, dow === 0 ? -6 : 1 - dow);
+// วันแรกของสัปดาห์ที่มีวันที่ iso — firstDay: 0 = อาทิตย์ (ปฏิทินในหน้าเว็บ), 1 = จันทร์
+export function startOfWeek(iso, firstDay = 1) {
+  return addDays(iso, -((dayOfWeek(iso) - firstDay + 7) % 7));
 }
 
 export function isWorkday(iso, settings) {

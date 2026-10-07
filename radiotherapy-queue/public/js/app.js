@@ -37,6 +37,9 @@ const F_MED = dtf({ day: 'numeric', month: 'short', year: '2-digit' });
 const F_LONG = dtf({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const F_MONTH = dtf({ month: 'long', year: 'numeric' });
 const DOW = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+const WEEK_START = 0; // สัปดาห์ในปฏิทินเริ่มวันอาทิตย์
+const weekStart = (iso) => startOfWeek(iso, WEEK_START);
+const weekDayNames = () => [0, 1, 2, 3, 4, 5, 6].map((i) => DOW[(i + WEEK_START) % 7]);
 const fmt = (f, iso) => (iso ? f.format(parseISO(iso)) : '-');
 const fShort = (iso) => fmt(F_SHORT, iso);
 const fMed = (iso) => fmt(F_MED, iso);
@@ -127,7 +130,7 @@ function renderDashboard() {
   const phases = state.appts.map((a) => phase(a, day));
   const treating = phases.filter((p) => p === 'treating').length;
   const waiting = phases.filter((p) => p === 'waiting').length;
-  const wk = startOfWeek(day);
+  const wk = weekStart(day);
   let weekStarts = 0;
   for (let i = 0; i < 7; i++) weekStarts += eventsOn(addDays(wk, i), (e) => e.type === 'fx' && e.start).length;
 
@@ -395,11 +398,11 @@ function renderCalendar() {
     '<span><span class="badge start">เริ่ม</span> วันเริ่มฉาย</span><span><span class="badge cbct">CBCT</span> นัดทำ CBCT</span>' +
     '<span><i class="dot" style="background:var(--holiday);border:1px solid var(--border)"></i>วันหยุด</span>';
 
-  const gridStart = startOfWeek(first);
+  const gridStart = weekStart(first);
   const lastDay = addDays(`${yy + (mm === 12 ? 1 : 0)}-${String(mm === 12 ? 1 : mm + 1).padStart(2, '0')}-01`, -1);
-  const gridEnd = addDays(startOfWeek(lastDay), 6);
+  const gridEnd = addDays(weekStart(lastDay), 6);
   const today = todayISO();
-  let html = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'].map((d) => `<div class="cal-dow">${d}</div>`).join('');
+  let html = weekDayNames().map((d) => `<div class="cal-dow">${d}</div>`).join('');
   for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) {
     const evs = eventsOn(d, calFilter);
     const hol = holidayName(d);
@@ -824,7 +827,7 @@ function renderCbctCalendar(a, ss, conflictDates) {
   box.innerHTML =
     `<div class="cc-months">${months
       .map((m) => {
-        const start = startOfWeek(`${m}-01`);
+        const start = weekStart(`${m}-01`);
         let cells = '';
         for (let i = 0; i < 42; i++) {
           const d = addDays(start, i);
@@ -849,7 +852,7 @@ function renderCbctCalendar(a, ss, conflictDates) {
           }
         }
         return `<div class="cc-month"><div class="cc-title">${F_MONTH.format(parseISO(`${m}-01`))}</div>
-          <div class="cc-grid">${['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'].map((x) => `<span class="cc-dow">${x}</span>`).join('')}${cells}</div></div>`;
+          <div class="cc-grid">${weekDayNames().map((x) => `<span class="cc-dow">${x}</span>`).join('')}${cells}</div></div>`;
       })
       .join('')}</div>
     <div class="cc-legend"><span><i class="cc-key fx"></i>วันฉาย</span><span><i class="cc-key cbct"></i>ทำ CBCT</span>

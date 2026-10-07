@@ -103,3 +103,10 @@ test('เวลานัดไม่บังคับ: นัดที่ไม
   assert.deepEqual(day.map((e) => e.appt.id), ['a', 'late', 'n']);
   assert.ok(suggestTimes({ ...base, id: 'x' }, [noTime], settings, 1)[0], 'หาเวลาว่างได้แม้มีนัดที่ไม่ระบุเวลา');
 });
+
+test('สัปดาห์เริ่มวันอาทิตย์ (ปฏิทินในหน้าเว็บ)', () => {
+  assert.equal(startOfWeek('2026-10-07', 0), '2026-10-04'); // พุธ → อาทิตย์ก่อนหน้า
+  assert.equal(startOfWeek('2026-10-04', 0), '2026-10-04'); // อาทิตย์ → วันเดียวกัน
+  assert.equal(startOfWeek('2026-10-10', 0), '2026-10-04'); // เสาร์
+  assert.equal(startOfWeek('2026-10-01', 0), '2026-09-27'); // 1 ต.ค. 69 เป็นวันพฤหัสบดี
+});
