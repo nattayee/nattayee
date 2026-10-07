@@ -21,6 +21,7 @@ const TECHNIQUES = ['DIBH', 'SRS', 'SRT', 'SBRT', 'อื่นๆ'];
 const CBCT_PATTERNS = ['first3_weekly', 'weekly', 'daily', 'first', 'none', 'custom'];
 const MAX_FRACTIONS = 100;
 const PHYSICIANS = JSON.parse(fs.readFileSync(path.join(__dirname, 'physicians.json'), 'utf8'));
+const SITES = JSON.parse(fs.readFileSync(path.join(__dirname, 'sites.json'), 'utf8'));
 
 function loadBookings() {
   try {
@@ -103,6 +104,7 @@ function validate(input) {
   if (!(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= MAX_FRACTIONS)) {
     return { error: 'จำนวนครั้ง (Fx) ต้องเป็นจำนวนเต็ม 1–100' };
   }
+  if (b.site && !SITES.includes(b.site)) return { error: 'กรุณาเลือกตำแหน่งที่ฉายจากรายการ' };
   if (!PHYSICIANS.includes(b.physician)) return { error: 'กรุณาเลือกแพทย์ผู้สั่ง' };
   const dates = b.treatmentDates;
   if (!dates || dates.length === 0) return { error: 'กรุณาระบุวันเริ่มฉายรังสีและตารางวันฉาย' };

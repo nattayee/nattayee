@@ -34,6 +34,18 @@ const PHYSICIANS = [
 ];
 // PHYSICIANS:END
 
+// ตำแหน่ง / อวัยวะที่ฉาย (เลือกจากรายการนี้ หรือเว้นว่าง)
+// SITES:START
+const SITES = [
+  'Lt Breast',
+  'Chest',
+  'Abd',
+  'Head',
+  'H&N',
+  'Pelvis',
+];
+// SITES:END
+
 // [key, หัวคอลัมน์ในชีต] — ห้ามสลับลำดับ คอลัมน์ใหม่ให้เพิ่มต่อท้ายเท่านั้น
 const COLUMNS = [
   ['id', 'ID'],
@@ -362,6 +374,7 @@ function validate_(input) {
   if (!(Number.isInteger(b.fractions) && b.fractions >= 1 && b.fractions <= MAX_FRACTIONS)) {
     throw new Error('จำนวนครั้ง (Fx) ต้องเป็นจำนวนเต็ม 1–100');
   }
+  if (b.site && SITES.indexOf(b.site) === -1) throw new Error('กรุณาเลือกตำแหน่งที่ฉายจากรายการ');
   if (PHYSICIANS.indexOf(b.physician) === -1) throw new Error('กรุณาเลือกแพทย์ผู้สั่ง');
   const dates = b.treatmentDates;
   if (!dates || dates.length === 0) throw new Error('กรุณาระบุวันเริ่มฉายรังสีและตารางวันฉาย');

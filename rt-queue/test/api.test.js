@@ -20,7 +20,7 @@ after(() => {
 });
 
 const sample = {
-  hn: '012345', name: 'ทดสอบ ระบบ', technique: 'DIBH', site: 'Lt. breast',
+  hn: '012345', name: 'ทดสอบ ระบบ', technique: 'DIBH', site: 'Lt Breast',
   fractions: 3, time: '09:30', duration: 15, physician: 'ทินกร จอมใจ',
   treatmentDates: ['2026-10-08', '2026-10-09', '2026-10-12'],
   cbctPattern: 'first3_weekly', cbctDates: ['2026-10-08', '2026-10-09', '2026-10-12'],
@@ -33,6 +33,9 @@ test('validate rejects missing fields and bad values', () => {
   assert.match(validate({ ...sample, technique: 'อื่นๆ' }).error, /อื่นๆ/);
   assert.match(validate({ ...sample, fractions: 0 }).error, /จำนวนครั้ง/);
   assert.match(validate({ ...sample, physician: '' }).error, /แพทย์ผู้สั่ง/);
+  assert.match(validate({ ...sample, site: 'Brain mets' }).error, /ตำแหน่งที่ฉาย/);
+  assert.equal(validate({ ...sample, site: 'H&N' }).booking.site, 'H&N');
+  assert.equal(validate({ ...sample, site: '' }).booking.site, '');
   assert.match(validate({ ...sample, physician: 'นพ.ไม่มีในรายชื่อ' }).error, /แพทย์ผู้สั่ง/);
   assert.match(validate({ ...sample, treatmentDates: [] }).error, /วันเริ่มฉาย/);
   assert.match(validate({ ...sample, fractions: 4 }).error, /ไม่ตรงกับจำนวนครั้ง/);
