@@ -10,6 +10,25 @@ npx serve tdf-calculator
 node --test tdf-calculator/tdf.test.js
 ```
 
+## Google Apps Script
+
+โฟลเดอร์ `apps-script/` คือเวอร์ชันสำหรับ deploy เป็น Web app บน Google Apps Script
+
+| ไฟล์ | ใส่ใน Apps Script เป็น |
+|---|---|
+| `Code.gs` | Script file ชื่อ `Code` |
+| `Index.html` | HTML file ชื่อ `Index` |
+| `Tdf.html` | HTML file ชื่อ `Tdf` (สูตรคำนวณ) |
+| `appsscript.json` | manifest (ถ้าใช้ `clasp`) |
+
+1. ไปที่ script.google.com → New project
+2. วางเนื้อหา `Code.gs` ลงใน `Code.gs`
+3. กด **+ → HTML** สร้างไฟล์ `Index` และ `Tdf` แล้ววางเนื้อหาตามไฟล์ (ชื่อต้องตรง ไม่ต้องพิมพ์ `.html`)
+4. **Deploy → New deployment → Web app** เลือก Execute as: Me และกำหนด Who has access
+5. เปิดแท็บได้โดยตรงด้วย `?tab=frac`, `?tab=gap`, `?tab=brachy` หรือ `?tab=ref` ต่อท้าย URL
+
+`Index.html` และ `Tdf.html` สร้างจาก `index.html` และ `tdf.js` ถ้าแก้ไฟล์ต้นฉบับให้รัน `node tdf-calculator/build-apps-script.js` ใหม่
+
 ## ความสามารถ
 
 | แท็บ | คำนวณ |
