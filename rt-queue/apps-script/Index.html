@@ -182,10 +182,9 @@
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .grid3 { display: grid; grid-template-columns: 1.3fr .7fr 1fr; gap: 12px; }
   .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; }
-  .grid-cbct { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; align-items: end; }
-  .grid4 .btn, .grid-cbct .btn { min-height: 40px; width: 100%; }
-  @media (max-width: 760px) { .grid4, .grid-cbct { grid-template-columns: 1fr 1fr; } .grid-cbct .wide { grid-column: 1 / -1; } }
-  @media (max-width: 520px) { .grid2, .grid3, .grid4, .grid-cbct { grid-template-columns: 1fr; } }
+  .grid4 .btn { min-height: 40px; width: 100%; }
+  @media (max-width: 760px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .grid2, .grid3, .grid4 { grid-template-columns: 1fr; } }
   .techs { display: flex; flex-wrap: wrap; gap: 6px; }
   .techs label {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
@@ -236,7 +235,6 @@
   .mc.tx:hover { outline: 1px solid var(--primary); }
   .mc.tx.cb { background: var(--primary); color: #fff; }
   .mc.skip { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
-  .mc.ver { box-shadow: inset 0 0 0 2px #1d2733; }
   .mc.clash::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
@@ -373,16 +371,8 @@
       </div>
 
       <h3 class="sec">การทำ CBCT</h3>
-      <div class="grid-cbct">
+      <div class="grid2">
         <div class="field">
-          <label for="f-vdate">วันนัดทำ CBCT ก่อนเริ่มฉาย (Verification)</label>
-          <input type="date" id="f-vdate" name="verifyDate">
-        </div>
-        <div class="field">
-          <label for="f-vtime">เวลานัดทำ CBCT</label>
-          <input type="time" id="f-vtime" name="verifyTime">
-        </div>
-        <div class="field wide">
           <label for="f-pattern">รูปแบบ CBCT ระหว่างฉาย</label>
           <select id="f-pattern" name="cbctPattern"></select>
         </div>
@@ -853,10 +843,6 @@
       const s = toMin(form.time.value);
       for (const date of fs.dates) out.push({ date, s, e: s + dur });
     }
-    if (form.verifyDate.value && form.verifyTime.value) {
-      const s = toMin(form.verifyTime.value);
-      out.push({ date: form.verifyDate.value, s, e: s + dur, verify: true });
-    }
     return out;
   }
 
@@ -865,7 +851,6 @@
     const dates = fs.dates;
     const cbct = effectiveCbct();
     const start = form.startDate.value;
-    const vDate = form.verifyDate.value;
     const lines = [];
 
     if (!dates.length) {
@@ -874,14 +859,11 @@
       return;
     }
     const first = dates[0], last = dates[dates.length - 1];
-    lines.push(`<div>ฉาย <b>${dates.length}</b> ครั้ง ตั้งแต่ <b>${esc(thaiDate(first))}</b> ถึง <b>${esc(thaiDate(last))}</b> · CBCT ระหว่างฉาย <b>${cbct.size}</b> ครั้ง${vDate ? ' + ก่อนเริ่มฉาย 1 ครั้ง' : ''}</div>`);
+    lines.push(`<div>ฉาย <b>${dates.length}</b> ครั้ง ตั้งแต่ <b>${esc(thaiDate(first))}</b> ถึง <b>${esc(thaiDate(last))}</b> · CBCT ระหว่างฉาย <b>${cbct.size}</b> ครั้ง</div>`);
     if (start !== first) {
       const why = holidays.get(start) || (fs.skips.has(start) ? 'วันที่งดฉาย' : 'วันเสาร์-อาทิตย์');
       lines.push(`<div class="msg warn">วันที่เลือก (${esc(thaiDate(start, false))}) เป็น${esc(why)} — Fx 1 จะเริ่ม${esc(thaiDate(first))}</div>`);
     }
-    if (vDate && vDate >= first) lines.push(`<div class="msg warn">วันนัดทำ CBCT (Verification) ควรอยู่ก่อนวันเริ่มฉาย</div>`);
-    if (vDate && !isWorkday(vDate)) lines.push(`<div class="msg warn">วันนัดทำ CBCT ตรงกับ${esc(holidays.get(vDate) || 'วันเสาร์-อาทิตย์')}</div>`);
-    if (form.verifyTime.value && !vDate) lines.push(`<div class="msg warn">ระบุเวลานัดทำ CBCT แล้ว แต่ยังไม่ได้ระบุวัน</div>`);
 
     const conflicts = findConflicts(mySlots(), occupancy(state.editingId));
     const clashDates = new Set(conflicts.map(c => c.date));
@@ -927,9 +909,8 @@
   function scheduleMonths(dates, cbct, clashDates) {
     const fxOf = new Map(dates.map((d, i) => [d, i + 1]));
     const skips = new Set(visibleSkips());
-    const vDate = form.verifyDate.value;
-    const from = [dates[0], form.startDate.value, vDate].filter(Boolean).sort()[0];
-    const to = [dates[dates.length - 1], vDate].filter(Boolean).sort().pop();
+    const from = [dates[0], form.startDate.value].sort()[0];
+    const to = dates[dates.length - 1];
     const months = [];
     let y = parseYmd(from).getFullYear(), m = parseYmd(from).getMonth();
     const endKey = to.slice(0, 7);
@@ -960,7 +941,6 @@
         } else if (!isWorkday(key)) {
           cls.push('off');
         }
-        if (key === vDate) { cls.push('ver'); sub = sub ? sub + ' ·V' : 'V-CBCT'; title += ' · CBCT ก่อนเริ่มฉาย'; }
         if (clashDates.has(key)) { cls.push('clash'); title += ' · เวลาซ้อน'; }
         cells += `<div class="${cls.join(' ')}" ${fx ? `data-cbct-cell="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
       }
@@ -970,7 +950,6 @@
       <div class="legend">
         <span><i style="background:#e3f0f4"></i>วันฉาย</span>
         <span><i style="background:var(--primary)"></i>วันฉาย + CBCT</span>
-        <span><i style="box-shadow:inset 0 0 0 2px #1d2733"></i>CBCT ก่อนเริ่มฉาย</span>
         <span><i style="background:var(--holiday)"></i>วันหยุด</span>
         <span><i style="background:var(--surface-2);border:1px solid var(--border)"></i>งด</span>
         <span><i style="background:var(--danger);border-radius:50%"></i>เวลาซ้อน</span>
@@ -985,7 +964,7 @@
     renderSchedule();
   }
 
-  ['f-date', 'f-fx', 'f-time', 'f-dur', 'f-vdate', 'f-vtime'].forEach(id => $(id).addEventListener('input', renderSchedule));
+  ['f-date', 'f-fx', 'f-time', 'f-dur'].forEach(id => $(id).addEventListener('input', renderSchedule));
   $('f-pattern').addEventListener('change', () => {
     if (form.cbctPattern.value === 'custom') fs.manual = effectiveCbct();
     fs.pattern = form.cbctPattern.value;
@@ -1052,8 +1031,6 @@
       form.physician.value = booking.physician || '';
       form.startDate.value = booking.startDate;
       form.time.value = booking.time || '';
-      form.verifyDate.value = booking.verifyDate || '';
-      form.verifyTime.value = booking.verifyTime || '';
       form.note.value = booking.note || '';
     } else {
       form.startDate.value = date || state.selected;
@@ -1082,8 +1059,8 @@
       cbctPattern: fs.pattern,
       cbctDates: [...effectiveCbct()].sort(),
       skipDates: visibleSkips(),
-      verifyDate: form.verifyDate.value,
-      verifyTime: form.verifyTime.value,
+      verifyDate: '',
+      verifyTime: '',
       note: form.note.value.trim(),
     };
     if (!b.hn) return { error: 'กรุณากรอก HN', focus: form.hn };
@@ -1101,7 +1078,6 @@
     if (!(Number.isInteger(b.duration) && b.duration >= 5 && b.duration <= 240)) {
       return { error: 'ระยะเวลาต่อครั้งต้องอยู่ระหว่าง 5–240 นาที', focus: form.duration };
     }
-    if (b.verifyTime && !b.verifyDate) return { error: 'กรุณาระบุวันนัดทำ CBCT', focus: form.verifyDate };
     return { booking: b };
   }
 
@@ -1204,12 +1180,12 @@
     const rows = visibleBookings().filter(b => b.startDate.startsWith(prefix))
       .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.time || '99').localeCompare(b.time || '99'));
     const head = ['วันเริ่มฉาย', 'วันสิ้นสุด', 'เวลานัด', 'ระยะเวลา (นาที)', 'HN', 'ชื่อ-สกุล', 'เทคนิค', 'ตำแหน่งที่ฉาย', 'จำนวนครั้ง',
-      'รูปแบบ CBCT', 'วันทำ CBCT ก่อนฉาย', 'เวลาทำ CBCT', 'วัน CBCT ระหว่างฉาย', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
+      'รูปแบบ CBCT', 'วัน CBCT ระหว่างฉาย', 'วันงด', 'แพทย์ผู้สั่ง', 'หมายเหตุ'];
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const list = (arr) => arr.map(d => thaiDate(d, false)).join(', ');
     const lines = [head, ...rows.map(b => [
       thaiDate(b.startDate, false), thaiDate(b.endDate, false), b.time, b.duration, b.hn, b.name, techLabel(b), b.site,
-      b.treatmentDates.length, PATTERN_LABEL[b.cbctPattern], b.verifyDate ? thaiDate(b.verifyDate, false) : '', b.verifyTime,
+      b.treatmentDates.length, PATTERN_LABEL[b.cbctPattern],
       list(b.cbctDates), list(b.skipDates), b.physician, b.note,
     ])].map(r => r.map(cell).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
