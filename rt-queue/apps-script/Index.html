@@ -639,10 +639,15 @@
   // Inserted into apps-script/Index.html by scripts/build.js.
   const TOKEN_KEY = 'rtq-workspace-token';
   const gs = (fn, ...args) => new Promise((resolve, reject) => {
-    google.script.run
+    const runner = google.script.run
       .withSuccessHandler(resolve)
-      .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^(Error|Exception):\s*/, ''))))
-      [fn](...args);
+      .withFailureHandler((err) => reject(new Error((err && err.message || String(err)).replace(/^(Error|Exception):\s*/, ''))));
+    // google.script.run only has the functions of the deployed Code.gs
+    if (typeof runner[fn] !== 'function') {
+      reject(new Error(`Code.gs ในโปรเจกต์ Apps Script ยังเป็นเวอร์ชันเก่า (ไม่มีฟังก์ชัน ${fn}) — ผู้ดูแลระบบ: วาง Code.gs ใหม่, Run setup แล้ว Deploy เวอร์ชันใหม่`));
+      return;
+    }
+    runner[fn](...args);
   });
 
   let token = '';
