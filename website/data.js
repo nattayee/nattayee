@@ -135,7 +135,7 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["quicklinks", "calendars"],   // calendars: ปฏิทินแบบแท็บใต้ Workspace (calendars.js)
+      widgets: ["quicklinks"],
       sidebar: "team",   // แถบขวา: สถานะทีม (status.js)
     },
 
