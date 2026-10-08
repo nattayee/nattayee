@@ -215,6 +215,7 @@
   table.sched .c-fx { width: 56px; }
   table.sched .c-cbct { width: 80px; text-align: center; }
   table.sched .c-act { width: 100px; text-align: center; }
+  table.sched .c-load { width: 150px; color: var(--muted); font-size: 13.5px; white-space: nowrap; }
   table.sched input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer; }
   table.sched tr.skipped td { color: var(--muted); background: var(--surface-2); }
   table.sched tr.skipped .d { text-decoration: line-through; }
@@ -230,6 +231,11 @@
   .mc { min-height: 42px; border-radius: 6px; padding: 2px 3px; font-size: 12px; display: grid; align-content: start; justify-items: center; position: relative; }
   .mc .n { font-weight: 600; }
   .mc .s { font-size: 10.5px; line-height: 1.2; }
+  .mc .ld {
+    font-size: 10px; line-height: 1.3; margin-top: 1px; padding: 0 4px; border-radius: 6px;
+    background: #fff4d6; color: #7a5200; white-space: nowrap;
+  }
+  .legend .ld-key { background: #fff4d6; color: #7a5200; border-radius: 6px; padding: 0 5px; font-size: 11px; margin-right: 4px; }
   .mc.off { color: #b0b7bf; }
   .mc.hol { background: var(--holiday); color: var(--danger); }
   .mc.tx { background: #e3f0f4; color: var(--primary); cursor: pointer; }
@@ -982,7 +988,25 @@
       : scheduleMonths(dates, cbct);
   }
 
+  // Patients already booked on each day and their CBCT count (all other bookings).
+  function dayLoad() {
+    const map = new Map();
+    for (const b of state.bookings) {
+      if (b.id === state.editingId) continue;
+      const seen = new Set();
+      b.treatmentDates.forEach((d, i) => {
+        if (!map.has(d)) map.set(d, { patients: 0, cbct: 0 });
+        const day = map.get(d);
+        if (!seen.has(d)) { seen.add(d); day.patients++; }
+        if (b.cbctFxSet.has(i + 1)) day.cbct++;
+      });
+    }
+    return map;
+  }
+  const loadText = (l) => l ? `${l.patients} ราย${l.cbct ? ` · CBCT ${l.cbct}` : ''}` : '–';
+
   function scheduleTable(dates, cbct) {
+    const load = dayLoad();
     const bid = isBid();
     const rows = [
       ...dates.map((d, i) => ({ d, fx: i + 1, sess: sessionOf(dates, i) })),
@@ -999,16 +1023,18 @@
       return `<tr class="${cls}">
         <td class="c-fx">${r.skip ? '–' : r.fx}</td>
         <td><span class="d">${esc(thaiDate(r.d))}</span>${sess}${r.skip ? ' <span class="pill">งด</span>' : ''}</td>
+        <td class="c-load" title="ผู้ป่วยรายอื่นที่นัดไว้แล้วในวันนี้">${r.sess === 2 ? '' : loadText(load.get(r.d))}</td>
         <td class="c-cbct">${r.skip ? '' : `<input type="checkbox" data-cbct="${r.fx}" ${cbct.has(r.fx) ? 'checked' : ''} aria-label="CBCT Fx ${r.fx}">`}</td>
         <td class="c-act">${act ? `<button type="button" class="linkbtn" data-skip="${r.d}">${act}</button>` : ''}</td>
       </tr>`;
     }).join('');
     return `<div class="sched-table-wrap"><table class="sched">
-      <thead><tr><th class="c-fx">Fx</th><th>วันที่</th><th class="c-cbct">CBCT</th><th class="c-act"></th></tr></thead>
+      <thead><tr><th class="c-fx">Fx</th><th>วันที่</th><th class="c-load">ยอดวันนั้น</th><th class="c-cbct">CBCT</th><th class="c-act"></th></tr></thead>
       <tbody>${body}</tbody></table></div>`;
   }
 
   function scheduleMonths(dates, cbct) {
+    const load = dayLoad();
     const fxOf = new Map();
     dates.forEach((d, i) => { if (!fxOf.has(d)) fxOf.set(d, []); fxOf.get(d).push(i + 1); });
     const skips = new Set(visibleSkips());
@@ -1045,7 +1071,9 @@
         } else if (!isWorkday(key)) {
           cls.push('off');
         }
-        cells += `<div class="${cls.join(' ')}" ${fxs ? `data-cbct-day="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span></div>`;
+        const l = load.get(key);
+        if (l) title += ` · นัดไว้แล้ว ${loadText(l)}`;
+        cells += `<div class="${cls.join(' ')}" ${fxs ? `data-cbct-day="${key}"` : ''} title="${esc(title)}"><span class="n">${day}</span><span class="s">${esc(sub)}</span>${l ? `<span class="ld">${l.patients} ราย</span>` : ''}</div>`;
       }
       return `<div class="mon"><h4>${MONTHS[mm]} ${yy + 543}</h4><div class="mgrid">${cells}</div></div>`;
     }).join('');
@@ -1055,6 +1083,7 @@
         <span><i style="background:var(--primary)"></i>วันฉาย + CBCT</span>
         <span><i style="background:var(--holiday)"></i>วันหยุด</span>
         <span><i style="background:var(--surface-2);border:1px solid var(--border)"></i>งด</span>
+        <span><span class="ld-key">n ราย</span>ผู้ป่วยรายอื่นที่นัดไว้แล้ว (ชี้เพื่อดูจำนวน CBCT)</span>
       </div>`;
   }
 
