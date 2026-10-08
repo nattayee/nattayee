@@ -195,7 +195,7 @@ function createBooking(token, input) {
   const booking = validate_(input);
   const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_(ss);
+    const sheet = getSheet_(ss, true);
     const now = new Date().toISOString();
     booking.id = Utilities.getUuid();
     booking.createdAt = now;
@@ -212,7 +212,7 @@ function updateBooking(token, id, input) {
   const booking = validate_(input);
   const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_(ss);
+    const sheet = getSheet_(ss, true);
     const row = findRow_(sheet, id);
     const existing = rowToBooking_(sheet.getRange(row, 1, 1, KEYS.length).getValues()[0]);
     booking.id = id;
@@ -229,7 +229,7 @@ function deleteBooking(token, id) {
   requireUser_(token);
   const ss = getSpreadsheet_();
   return withLock_(function () {
-    const sheet = getSheet_(ss);
+    const sheet = getSheet_(ss, true);
     sheet.deleteRow(findRow_(sheet, id));
     return true;
   });
@@ -309,9 +309,24 @@ function getSpreadsheet_() {
   });
 }
 
-function getSheet_(ss) {
-  const headers = COLUMNS.map(function (c) { return c[1]; });
-  let sheet = ss.getSheetByName(SHEET_NAME);
+/**
+ * The bookings sheet with up-to-date headers. Creating it or rewriting the headers happens under the
+ * script lock, so two people opening the page at once cannot both create it. Pass locked = true when
+ * the caller already holds the lock (create/update/delete).
+ */
+function getSheet_(ss, locked) {
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (sheet && headersOk_(sheet)) return sheet;
+  return locked ? prepareSheet_(ss) : withLock_(function () { return prepareSheet_(ss); });
+}
+
+function headersOk_(sheet) {
+  const current = sheet.getRange(1, 1, 1, COLUMNS.length).getValues()[0];
+  return current.join('|') === COLUMNS.map(function (c) { return c[1]; }).join('|');
+}
+
+function prepareSheet_(ss) {
+  let sheet = ss.getSheetByName(SHEET_NAME);   // re-check: another request may have just created it
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.setFrozenRows(1);
@@ -319,11 +334,10 @@ function getSheet_(ss) {
     sheet.getRange(1, 1, sheet.getMaxRows(), COLUMNS.length).setNumberFormat('@');
   }
   // สร้าง/อัปเดตหัวตาราง (รองรับชีตจากเวอร์ชันเก่าที่มีคอลัมน์น้อยกว่า)
-  const current = sheet.getRange(1, 1, 1, COLUMNS.length).getValues()[0];
-  if (current.join('|') !== headers.join('|')) {
+  if (!headersOk_(sheet)) {
     sheet.getRange(1, 1, 1, COLUMNS.length)
       .setNumberFormat('@')
-      .setValues([headers])
+      .setValues([COLUMNS.map(function (c) { return c[1]; })])
       .setFontWeight('bold')
       .setBackground('#0f6e8c')
       .setFontColor('#ffffff');
