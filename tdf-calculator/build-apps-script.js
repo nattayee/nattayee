@@ -78,7 +78,7 @@ html = replaceOnce(
 
 html = replaceOnce(
   html,
-  '    <div class="ref-box">',
+  "  </header>",
   `    <div class="session">
       <a class="btn home-btn" href="<?= workspaceUrl ?>" target="_top" title="กลับไปหน้า LPCH RO Workspace">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h5v-6h4v6h5V9"/></svg>
@@ -87,7 +87,7 @@ html = replaceOnce(
       <span><b id="whoName"></b> <span class="role" id="whoRole"></span></span>
       <button type="button" class="btn" id="logoutBtn">ออกจากระบบ</button>
     </div>
-    <div class="ref-box">`
+  </header>`
 );
 
 // The page runs in a sandboxed iframe: the outer URL's ?sso= / ?tab= only reach it through google.script.url,
