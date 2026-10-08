@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ทะเบียนหนังสือส่ง</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5M8 12h8M8 16h8M8 8h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>ทะเบียนหนังสือส่ง</h1>
+        <p class="unit" id="unit"></p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btn-import" type="button">นำเข้า Excel</button>
+      <a class="btn ghost" id="btn-export" href="api/export.xlsx">ส่งออก Excel</a>
+      <button class="btn ghost" id="btn-print" type="button">พิมพ์</button>
+    </div>
+  </header>
+
+  <main>
+    <nav class="years" id="years" aria-label="เลือกปี พ.ศ."></nav>
+
+    <section class="empty" id="empty" hidden>
+      <h2>ยังไม่มีข้อมูลในระบบ</h2>
+      <p>นำเข้าไฟล์ Excel ทะเบียนหนังสือเดิม (ชีตละปี เช่น 2566, 2567, …) เพื่อให้เลขทะเบียนรันต่อจากไฟล์</p>
+      <button class="btn primary" id="btn-import-empty" type="button">นำเข้าไฟล์ Excel</button>
+    </section>
+
+    <section class="summary" id="summary">
+      <div class="next-card">
+        <div>
+          <div class="label">เลขถัดไปของปี <span id="sum-year"></span></div>
+          <div class="next-no" id="sum-next">–</div>
+          <button class="link" id="btn-counter" type="button">ตั้งเลขถัดไปเอง</button>
+        </div>
+        <button class="btn primary big" id="btn-new" type="button">+ ออกเลขหนังสือใหม่</button>
+      </div>
+      <div class="stat">
+        <div class="label">จำนวนในปีนี้</div>
+        <div class="value" id="sum-count">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">ออกเลขล่าสุด</div>
+        <div class="value small" id="sum-last">–</div>
+      </div>
+    </section>
+
+
+    <section class="list" id="list">
+      <div class="filters">
+        <input type="search" id="q" placeholder="ค้นหา เลขที่ เรื่อง ผู้รับ ผู้ปฏิบัติ …" aria-label="ค้นหา">
+        <select id="person" aria-label="กรองตามผู้ปฏิบัติ"></select>
+        <button class="btn ghost" id="btn-sort" type="button"></button>
+      </div>
+      <p class="result-count" id="result-count"></p>
+      <h2 class="print-title" id="print-title"></h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="c-no">เลขทะเบียนส่ง</th>
+              <th class="c-ref">ที่</th>
+              <th class="c-date">ลงวันที่</th>
+              <th class="c-from">จาก</th>
+              <th class="c-to">ถึง</th>
+              <th class="c-subject">เรื่อง</th>
+              <th class="c-action">การปฏิบัติ</th>
+              <th class="c-note">หมายเหตุ</th>
+              <th class="c-edit"><span class="sr">แก้ไข</span></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ฟอร์มออกเลข / แก้ไข -->
+  <dialog id="dlg-record">
+    <form id="form-record" method="dialog">
+      <header class="dlg-head">
+        <h2 id="form-title">ออกเลขหนังสือใหม่</h2>
+        <div class="badge" id="form-preview"></div>
+      </header>
+      <div class="grid">
+        <label class="f-no" id="wrap-no">เลขทะเบียนส่ง
+          <input type="number" name="no" min="1" step="1">
+        </label>
+        <label>ลงวันที่
+          <input type="date" name="date" required>
+          <small class="hint" id="date-hint"></small>
+        </label>
+        <label>ที่
+          <input type="text" name="ref" list="dl-ref" maxlength="100" placeholder="เช่น สธ 0315.3(2.7.1)">
+        </label>
+        <label>จาก
+          <input type="text" name="from" list="dl-from" maxlength="200">
+        </label>
+        <label>ถึง
+          <input type="text" name="to" list="dl-to" maxlength="200">
+        </label>
+        <label class="wide">เรื่อง
+          <textarea name="subject" rows="3" maxlength="1000" required></textarea>
+        </label>
+        <label>การปฏิบัติ
+          <input type="text" name="action" list="dl-action" maxlength="200" placeholder="ชื่อผู้รับผิดชอบ">
+        </label>
+        <label>หมายเหตุ
+          <input type="text" name="note" maxlength="1000">
+        </label>
+      </div>
+      <p class="error" id="form-error" role="alert"></p>
+      <footer class="dlg-foot">
+        <button class="btn danger ghost" id="btn-delete" type="button">ลบรายการนี้</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" type="button" data-close>ยกเลิก</button>
+        <button class="btn primary" id="btn-save" type="submit">ออกเลข</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- แจ้งผลการออกเลข -->
+  <dialog id="dlg-done">
+    <div class="done">
+      <div class="done-label">ออกเลขสำเร็จ</div>
+      <div class="done-no" id="done-no"></div>
+      <div class="done-ref" id="done-ref"></div>
+      <div class="done-meta" id="done-meta"></div>
+      <footer class="dlg-foot center">
+        <button class="btn ghost" id="btn-copy" type="button">คัดลอกเลขที่หนังสือ</button>
+        <button class="btn primary" type="button" data-close>ตกลง</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- นำเข้า Excel -->
+  <dialog id="dlg-import">
+    <div class="import">
+      <header class="dlg-head"><h2>นำเข้าไฟล์ Excel</h2></header>
+      <p>เลือกไฟล์ทะเบียนหนังสือ (.xlsx) ที่มีชีตละปี พ.ศ. และหัวตาราง
+        <em>เลขทะเบียนส่ง · ที่ · ลงวันที่ · จาก · ถึง · เรื่อง · การปฏิบัติ · หมายเหตุ</em></p>
+      <input type="file" id="import-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <div id="import-preview"></div>
+      <p class="error" id="import-error" role="alert"></p>
+      <footer class="dlg-foot">
+        <span class="spacer"></span>
+        <button class="btn ghost" type="button" data-close>ปิด</button>
+        <button class="btn primary" id="btn-import-go" type="button" disabled>นำเข้า</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <datalist id="dl-ref"></datalist>
+  <datalist id="dl-from"></datalist>
+  <datalist id="dl-to"></datalist>
+  <datalist id="dl-action"></datalist>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
