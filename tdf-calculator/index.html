@@ -134,6 +134,11 @@ select { font-family: var(--font-body); }
 .stats .v small { font-size: .72rem; color: var(--muted); font-weight: 400; }
 .stats .main { background: var(--accent-soft); }
 .stats .main .v { font-size: 1.5rem; font-weight: 600; color: var(--accent-ink); }
+.stats .hero { grid-column: 1 / -1; background: var(--decay-soft); border: 1px solid var(--decay); padding: 14px 18px; }
+.stats .hero .k { font-size: .9rem; font-weight: 600; color: var(--decay); }
+.stats .hero .v { font-size: 2.6rem; font-weight: 700; line-height: 1.1; color: var(--decay); }
+.stats .hero .v small { font-size: 1rem; color: var(--decay); }
+.stats .sub { font-size: .8rem; color: var(--ink-2); margin-top: 4px; }
 
 .note { font-size: .82rem; color: var(--ink-2); border-left: 3px solid var(--decay); background: var(--decay-soft); padding: 8px 12px; border-radius: 0 6px 6px 0; }
 .note.info { border-left-color: var(--accent); background: var(--accent-soft); }
@@ -301,6 +306,11 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .report th { color: var(--ink-2); font-weight: 600; background: var(--surface-2); }
 .report td.v { text-align: right; font-family: var(--font-mono); }
 .report table.kv td:first-child { width: 42%; color: var(--ink-2); }
+.report table.wide { font-size: 10.5px; }
+.report table.wide th, .report table.wide td { padding: 4px 5px; }
+.report table.wide td { white-space: nowrap; }
+.report table.wide th { white-space: normal; text-align: right; }
+.report table.wide th:first-child { text-align: left; }
 .report .rp-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
 .report .rp-chart { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px 4px; }
 .report .rp-chart h3 { font-size: 12px; margin: 0 0 4px; color: var(--ink-2); }
@@ -591,11 +601,11 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 
   // ---------- shared pieces ----------
   /** Result card: the TDF as the first, highlighted tile, then the other values. */
-  function resultCard(label, tdf, items) {
-    return `<div class="card">${stats([[label, fmt(tdf, 1), "", "main"], ...items])}</div>`;
+  function resultCard(label, tdf, items, lead = []) {
+    return `<div class="card">${stats([...lead, [label, fmt(tdf, 1), "", "main"], ...items])}</div>`;
   }
   function stats(items) {
-    return `<div class="stats">${items.map(([k, v, u, cls]) => `<div${cls ? ` class="${cls}"` : ""}><div class="k">${k}</div><div class="v">${v}${u ? ` <small>${u}</small>` : ""}</div></div>`).join("")}</div>`;
+    return `<div class="stats">${items.map(([k, v, u, cls, sub]) => `<div${cls ? ` class="${cls}"` : ""}><div class="k">${k}</div><div class="v">${v}${u ? ` <small>${u}</small>` : ""}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`).join("")}</div>`;
   }
   function errorCard(e) { return `<div class="card error">${esc(e.message || e)}</div>`; }
 
@@ -1010,6 +1020,15 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       const target = targetMode === "plan" ? planned : targetMode === "ref" ? refTdf() : num("gap-target");
       if (!(target > 0)) throw new Error("TDF เป้าหมายต้องมากกว่า 0");
       const lost = planned - res.total;
+      // physical dose lost to a break: the TDF it took away, at the fractionation of the part just before it
+      const lossOf = (r) => {
+        if (!r.gap) return null;
+        const fx = (r.before - r.after) / TDF.tdfPerFraction(r.d, r.X);
+        return { fx, dose: fx * r.d };
+      };
+      const losses = res.rows.map(lossOf).filter(Boolean);
+      const lostFx = losses.reduce((a, l) => a + l.fx, 0), lostDose = losses.reduce((a, l) => a + l.dose, 0);
+      const lostDoseText = `${fmt(lostDose, 2)} Gy (≈ ${fmt(lostFx, 1)} fx)`;
 
       // ----- compensation: suggestion, then the user's decision (add n fractions / add none)
       const dA = num("gap-d"), fA = +$("gap-f").value;
@@ -1067,11 +1086,13 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
         if (!adding || r.index < fin.rows.length) return `${unit} ${r.index}`;
         return merged ? `${unit} ${r.index} (+${nAdd} fx)` : "เพิ่มชดเชย";
       };
+      const rowLoss = (r) => { const l = lossOf(r); return l ? fmt(l.dose, 2) : "—"; };
       const rows = fin.rows.map((r) => `<tr>
           <td>${rowLabel(r)}</td><td>${fmt(r.d, 2)} × ${r.N}</td><td>${cumFx[r.index - 1]}</td><td>${fmt(r.dose, 1)}</td>
           <td>${r.startDay}–${r.endDay}</td><td>${fmt(r.tdf, 1)}</td>
           <td>${r.gap ? fmt(r.gap, 0) : "—"}</td>
           <td class="${r.gap ? "decay" : ""}">${r.gap ? fmt(r.factor, 4) : "—"}</td>
+          <td class="${r.gap ? "decay" : ""}">${rowLoss(r)}</td>
           <td>${fmt(r.after, 1)}</td></tr>`).join("");
 
       const gapStats = [
@@ -1094,25 +1115,27 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
           : res.rows.map((r) => [`Course ${r.index}`, `${fmt(r.d, 2)} Gy × ${r.N} fx, ${courses[r.index - 1].perWeek}/สัปดาห์` + (r.gap ? ` → พัก ${fmt(r.gap, 0)} วัน` : "")]))
           .concat([["TDF เป้าหมาย", `${fmt(target, 1)} (${targetMode === "plan" ? "ตามแผนเดิม" : targetMode === "ref" ? "TDF อ้างอิง" : "กำหนดเอง"})`],
             ["เพิ่ม fraction ชดเชย", decisionText]]),
-        results: gapStats.map(unitJoin),
+        results: [["Physical dose ที่หายไปจากการพัก", lostDoseText]].concat(gapStats.map(unitJoin)),
         comp: compRows,
-        table: { title: segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course", head: [unit, "Gy × fx", "fx สะสม", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
+        table: { title: segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course", head: [unit, "Gy × fx", "fx สะสม", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "Dose หาย (Gy)", "TDF สะสม"],
           rows: fin.rows.map((r) => [rowLabel(r), `${fmt(r.d, 2)} × ${r.N}`, String(cumFx[r.index - 1]), fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
-            r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]),
-          foot: ["รวม", "", `${totalFx} fx`, fmt(finalDose, 1), "", fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1), "", "", fmt(fin.total, 1)] },
+            r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", rowLoss(r), fmt(r.after, 1)]),
+          foot: ["รวม", "", `${totalFx} fx`, fmt(finalDose, 1), "", fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1), "", "", fmt(lostDose, 2), fmt(fin.total, 1)] },
         notes: dateNotes,
         charts: [["gapChart", "TDF สะสมตามวันรักษา (เส้นประ = ลดลงจากช่วงพัก)"]],
         formulas: ["TDF = 1.19 · N · d^1.538 · X^−0.169", "TDF หลังพัก = TDF ก่อนพัก · (T / (T + R))^0.11"],
       };
-      out.innerHTML = resultCard(adding ? `TDF รวม (หลังเพิ่ม ${nAdd} fx)` : compMode === "none" ? "TDF รวม (ไม่เพิ่ม fraction)" : "TDF รวม (หลัง decay)", fin.total, gapStats) +
+      out.innerHTML = resultCard(adding ? `TDF รวม (หลังเพิ่ม ${nAdd} fx)` : compMode === "none" ? "TDF รวม (ไม่เพิ่ม fraction)" : "TDF รวม (หลัง decay)", fin.total, gapStats,
+        [["Physical dose ที่หายไปจากการพัก", fmt(lostDose, 2), "Gy", "hero",
+          `≈ ${fmt(lostFx, 1)} fx · TDF ที่สูญเสีย ${fmt(lost, 1)} (${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`]]) +
         dateNotes.map((n) => `<div class="note">${esc(n)}</div>`).join("") +
         `<div class="card"><h3>TDF สะสมตามวันรักษา</h3><div id="gapChart"></div>
           <div class="legend"><span><i></i>TDF สะสม</span><span><i class="decay"></i>ลดลงจากช่วงพัก (decay)</span><span><i class="ref"></i>TDF เป้าหมาย</span></div></div>` +
         solver +
         `<div class="card"><h3>${segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course"}</h3><div class="tbl-wrap"><table>
-          <tr><th>${unit}</th><th>Gy × fx</th><th>fx สะสม</th><th>Dose (Gy)</th><th>วัน</th><th>TDF</th><th>พัก R (วัน)</th><th>Decay factor</th><th>TDF สะสม</th></tr>
+          <tr><th>${unit}</th><th>Gy × fx</th><th>fx สะสม</th><th>Dose (Gy)</th><th>วัน</th><th>TDF</th><th>พัก R (วัน)</th><th>Decay factor</th><th>Dose หาย (Gy)</th><th>TDF สะสม</th></tr>
           ${rows}
-          <tr class="total"><td>รวม</td><td></td><td>${totalFx} fx</td><td>${fmt(finalDose, 1)}</td><td></td><td>${fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1)}</td><td></td><td></td><td>${fmt(fin.total, 1)}</td></tr>
+          <tr class="total"><td>รวม</td><td></td><td>${totalFx} fx</td><td>${fmt(finalDose, 1)}</td><td></td><td>${fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1)}</td><td></td><td></td><td class="decay">${fmt(lostDose, 2)}</td><td>${fmt(fin.total, 1)}</td></tr>
         </table></div></div>`;
 
       // chart segments: treatment runs solid, gaps dashed amber
@@ -1631,7 +1654,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     if (rec.type === "gap") {
       body += inputs;
       if (s.table) {
-        body += block(s.table.title || "รายละเอียดแต่ละ course", `<table><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
+        body += block(s.table.title || "รายละเอียดแต่ละ course", `<table class="${s.table.head.length > 8 ? "wide" : ""}"><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
           ${s.table.rows.map((row) => `<tr>${row.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}
           ${s.table.foot ? `<tr class="total">${s.table.foot.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>` : ""}</table>`);
       }
