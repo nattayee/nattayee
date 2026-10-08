@@ -213,7 +213,8 @@ function tdfSavePdf(token, id, base64, fileName) {
     if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่อนุมัติแล้ว');
     if (me.username !== row[8] && me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ recheck ของรายการนี้');
     if (row[19]) return record_(row);
-    var name = String(fileName || '').replace(/[^\w.\-]+/g, '_').slice(0, 120) || ('TDF_' + row[0] + '.pdf');
+    // keep the page's name ("Decay Dose_<HN>_<date>_<time>.pdf"); only characters Drive or downloads dislike are replaced
+    var name = String(fileName || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').trim().slice(0, 120) || ('Decay Dose_' + row[4] + '.pdf');
     var file = pdfFolder_(row[14] || new Date()).createFile(Utilities.newBlob(bytes, 'application/pdf', name));
     file.setDescription('TDF ' + Number(row[7]).toFixed(1) + ' · HN ' + row[4] + ' ' + row[5] + ' · แพทย์ ' + row[6] +
       ' · คำนวณ ' + row[9] + ' · recheck ' + row[12] + ' · เลขที่ ' + row[0]);
