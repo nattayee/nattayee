@@ -41,7 +41,9 @@ body.locked .wrap { display: none; }
 .auth-msg.info { color: var(--ink-2); }
 .auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: .82rem; }
 .auth-links a { color: var(--accent-ink); }
-.session { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--ink-2); }
+.session { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: .85rem; color: var(--ink-2); }
+.home-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 600; color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
+.home-btn:hover { filter: brightness(1.05); }
 .session b { color: var(--ink); font-weight: 600; }
 .session .role { font-size: .72rem; font-weight: 600; letter-spacing: .04em; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
 </style>`
@@ -78,6 +80,10 @@ html = replaceOnce(
   html,
   '    <div class="ref-box">',
   `    <div class="session">
+      <a class="btn home-btn" href="<?= workspaceUrl ?>" target="_top" title="กลับไปหน้า LPCH RO Workspace">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h5v-6h4v6h5V9"/></svg>
+        <span>Home</span>
+      </a>
       <span><b id="whoName"></b> <span class="role" id="whoRole"></span></span>
       <button type="button" class="btn" id="logoutBtn">ออกจากระบบ</button>
     </div>
