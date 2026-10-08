@@ -53,6 +53,19 @@ test("split course with calendar days from dates keeps X = 7/f and uses the days
   assert.equal(res.rows[0].endDay, 30);
 });
 
+test("split course with a calendar start day counts the days before it in the elapsed time", () => {
+  const res = TDF.splitCourse([
+    { N: 5, d: 2, perWeek: 5, days: 4, gapAfter: 2 },
+    { N: 5, d: 2, perWeek: 5, days: 4, startDay: 9, gapAfter: 3 },
+    { N: 5, d: 2, perWeek: 5, startDay: 16 },
+  ]);
+  const one = TDF.tdfFractionated(5, 2, 1.4);
+  const f1 = Math.pow(4 / 6, 0.11), f2 = Math.pow(13 / 16, 0.11);
+  close(res.total, (one * f1 + one) * f2 + one, 1e-9);
+  assert.equal(res.rows[1].startDay, 9);
+  assert.equal(res.rows[2].startDay, 16);
+});
+
 test("fractions needed after a break", () => {
   const r = TDF.fractionsToTarget(50, 98, 2, 5);
   assert.ok(r.reached >= 98);

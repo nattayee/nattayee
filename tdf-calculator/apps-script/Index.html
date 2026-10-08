@@ -161,6 +161,14 @@ td.decay { color: var(--decay); }
 .gap-row.dates input[type="date"], .course input[type="date"] { width: 100%; min-width: 0; font: 400 .85rem var(--font-mono); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .gap-row.dates input[type="date"] { width: 9.5em; }
 .gap-days { font: 600 .9rem var(--font-mono); color: var(--decay); padding-bottom: 6px; }
+.gap-row.dates .gap-title { flex-basis: 100%; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.plan-seg { display: grid; gap: 6px; padding: 8px 0 8px 12px; margin-left: 12px; border-left: 3px solid var(--accent); font-size: .82rem; }
+.plan-seg-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }
+.plan-seg-head span { font-family: var(--font-mono); color: var(--ink-2); }
+.plan-seg-n { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--ink-2); }
+.plan-seg-n input { width: 5em; }
+.plan-seg-n .hint { font-size: .75rem; color: var(--muted); }
+.plan-seg-n .hint.warn { color: var(--warn); }
 .btn { appearance: none; font: 500 .85rem var(--font-body); border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .btn:hover { border-color: var(--accent); }
 .btn.ghost { border: 0; background: none; color: var(--muted); padding: 4px 6px; }
@@ -461,8 +469,9 @@ body.locked .wrap { display: none; }
           <button type="button" id="gapmode-days" aria-pressed="false">จำนวนวัน</button>
         </div>
       </div>
+      <div id="plan" class="stack"></div>
       <div id="courses" class="stack"></div>
-      <div class="btn-row"><button type="button" class="btn" id="addCourse">+ เพิ่ม course</button></div>
+      <div class="btn-row"><button type="button" class="btn" id="addBreak">+ เพิ่มช่วงพัก</button><button type="button" class="btn" id="addCourse">+ เพิ่ม course</button></div>
       <hr style="border:0;border-top:1px solid var(--line);margin:0;width:100%">
       <h2>ชดเชยหลังพักฉาย</h2>
       <div class="field">
@@ -581,7 +590,7 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.<br>
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
-    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน 9dbdb6d</div>
+    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน f4d5164</div>
   </footer>
 </div>
 
@@ -716,7 +725,8 @@ body.locked .wrap { display: none; }
   }
 
   /**
-   * Split-course treatment. Each course: { N, d, perWeek, T?, days?, gapAfter? } (days: calendar span from dates).
+   * Split-course treatment. Each course: { N, d, perWeek, T?, days?, startDay?, gapAfter? } (days: calendar span from dates,
+   * startDay: calendar day of its first fraction counted from the first fraction of the treatment).
    * T defaults to the calendar overall time from the weekly pattern; X = T/N when T is
    * supplied explicitly and N > 1, otherwise X = 7/perWeek.
    * Before each gap the accumulated TDF is multiplied by (Telapsed / (Telapsed + R))^0.11,
@@ -730,6 +740,8 @@ body.locked .wrap { display: none; }
 
     courses.forEach((c, i) => {
       const N = c.N;
+      // from dates, a course can start later than the end of the previous break (e.g. a weekend in between)
+      if (c.startDay != null && c.startDay !== "" && Number(c.startDay) > day) day = Number(c.startDay);
       // c.days: calendar days from the first to the last fraction (e.g. from dates). It sets the elapsed
       // time used by the decay factor and the timeline, while X stays 7 / fractions-per-week.
       const hasDays = c.days != null && c.days !== "" && Number(c.days) >= 0;
@@ -1024,41 +1036,178 @@ body.locked .wrap { display: none; }
   /** Rest days R from the first to the last day of the break, both included. */
   const breakDays = (c) => (c.gapStart && c.gapEnd ? daysBetween(c.gapStart, c.gapEnd) + 1 : NaN);
 
-  // "dates": each course before a break has its start and last treatment date, each break its first and last day,
-  // and R is counted from the dates. "days": the number of rest days is typed in.
+  // "dates": one course (dose, planned fractions, schedule and first treatment date) with any number of breaks, each
+  // given by its first and last day. The treatment is split at the breaks, the fractions of each part are counted from
+  // the calendar (editable) and the last part gets the fractions still to go. "days": separate courses, rest days typed in.
   let gapMode = "dates";
-  (function sampleDates() {
+  let plan = { d: 2, N: 30, perWeek: 5, start: "", breaks: [] };
+  const clonePlan = (p) => ({ ...p, breaks: p.breaks.map((b) => ({ ...b })) });
+  (function samplePlan() {
     const now = new Date(), today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     const monday = today - ((new Date(today).getUTCDay() + 6) % 7) * DAY_MS - 42 * DAY_MS;
-    const c = courses[0];
-    c.start = isoDate(monday);
-    c.last = addDays(c.start, TDF.overallTime(c.N, c.perWeek));
-    c.gapStart = addDays(c.last, 1);
-    c.gapEnd = addDays(c.last, 14);
+    plan.start = isoDate(monday);
+    plan.breaks = [{ start: addDays(plan.start, 28), end: addDays(plan.start, 41), fx: null }];
   })();
+  const thaiT = (t) => thaiDate(isoDate(t));
+  const spanText = (a, b) => (Number.isFinite(a) ? (a === b ? thaiT(a) : `${thaiT(a)} – ${thaiT(b)}`) : "—");
+
+  /** Treatment-day test: 5–7 fractions a week run from Monday, fewer follow the weekday of the first treatment. */
+  function txDay(p) {
+    const pat = TDF.WEEK_PATTERNS[p.perWeek] || TDF.WEEK_PATTERNS[5];
+    const anchor = p.perWeek >= 5 ? 1 : new Date(parseDate(p.start)).getUTCDay();
+    return (t) => pat.includes((new Date(t).getUTCDay() - anchor + 7) % 7);
+  }
+  /** The first n treatment days from day t (t itself always counted when `first` is set). */
+  function txDates(t, n, isTx, first) {
+    const out = [];
+    for (let k = 0; out.length < n && k < 3660; k++, t += DAY_MS) if ((first && k === 0) || isTx(t)) out.push(t);
+    return out;
+  }
+  /** Splits the plan at its breaks: { segs, error, isTx }, with the parts found before the first problem. */
+  function planSegments(p) {
+    const segs = [];
+    const fail = (error) => ({ segs, error });
+    if (!(p.d > 0)) return fail("Dose/fx ต้องมากกว่า 0");
+    if (!(Number.isInteger(p.N) && p.N >= 1)) return fail("N รวมต้องเป็นจำนวนเต็มตั้งแต่ 1");
+    const t0 = parseDate(p.start);
+    if (!Number.isFinite(t0)) return fail("กรอกวันเริ่มฉาย");
+    const isTx = txDay(p);
+    let from = t0, used = 0;
+    for (let i = 0; i < p.breaks.length; i++) {
+      const b = p.breaks[i], label = `ช่วงพัก ${i + 1}`;
+      const bs = parseDate(b.start), be = parseDate(b.end);
+      if (!Number.isFinite(bs) || !Number.isFinite(be)) return fail(`${label}: กรอกวันเริ่มพักและวันพักเสร็จ`);
+      if (be < bs) return fail(`${label}: วันพักเสร็จต้องไม่ก่อนวันเริ่มพัก`);
+      if (bs <= from) return fail(i ? `${label}: ต้องเริ่มหลังช่วงพัก ${i} โดยมีวันฉายคั่นอย่างน้อย 1 วัน` : `${label}: วันเริ่มพักต้องอยู่หลังวันเริ่มฉาย`);
+      const days = [];
+      for (let t = from; t < bs; t += DAY_MS) if ((i === 0 && t === t0) || isTx(t)) days.push(t);
+      if (!days.length) return fail(`ไม่มีวันฉายก่อน${label} (${p.perWeek} ครั้ง/สัปดาห์)`);
+      const n = b.fx != null ? b.fx : days.length;
+      segs.push({ first: days[0], last: days[days.length - 1], n, auto: days.length, gapStart: bs, gapEnd: be, R: Math.round((be - bs) / DAY_MS) + 1 });
+      if (!(Number.isInteger(n) && n >= 1)) return fail(`ช่วงฉาย ${i + 1}: จำนวน fraction ต้องเป็นจำนวนเต็มตั้งแต่ 1`);
+      if (n > days.length) return fail(`ช่วงฉาย ${i + 1}: ${n} fx มากกว่าวันฉายตามปฏิทิน (${days.length} วัน) ก่อน${label}`);
+      used += n;
+      from = be + DAY_MS;
+    }
+    const rest = p.N - used;
+    if (rest < 1) return fail(`fraction ก่อนพักรวม ${used} fx ต้องน้อยกว่า N รวม ${p.N} fx (ช่วงพักสุดท้ายอยู่หลังฉายครบแล้ว)`);
+    const lastDays = txDates(from, rest, isTx, !p.breaks.length);
+    segs.push({ first: lastDays[0], last: lastDays[lastDays.length - 1], n: rest, auto: rest, R: 0, rest: true });
+    segs.forEach((s) => { s.startDay = Math.round((s.first - t0) / DAY_MS); s.days = Math.round((s.last - s.first) / DAY_MS); });
+    return { segs, error: "", isTx };
+  }
+
   function setGapMode(k) {
     gapMode = k;
     $("gapmode-dates").setAttribute("aria-pressed", String(k === "dates"));
     $("gapmode-days").setAttribute("aria-pressed", String(k === "days"));
-  }
-  /** Suggests the dates that follow from what is filled in; returns true when it changed something. */
-  function autofillDates() {
-    let changed = false;
-    const set = (c, k, v) => { if (!c[k] && v && Number.isFinite(parseDate(v))) { c[k] = v; changed = true; } };
-    courses.slice(0, -1).forEach((c, i) => {
-      if (i > 0 && courses[i - 1].gapEnd) set(c, "start", addDays(courses[i - 1].gapEnd, 1));
-      if (c.start) set(c, "last", addDays(c.start, TDF.overallTime(c.N, c.perWeek)));
-      if (c.last) set(c, "gapStart", addDays(c.last, 1));
-    });
-    return changed;
+    $("plan").hidden = $("addBreak").hidden = k !== "dates";
+    $("courses").hidden = $("addCourse").hidden = k === "dates";
   }
 
+  function renderPlan() {
+    const p = plan, B = p.breaks.length;
+    let h = `<div class="course">
+        <div class="course-head"><b>แผนการฉาย</b></div>
+        <div class="row3">
+          <div class="field"><label for="pl-d">Gy/fx</label><input id="pl-d" data-pk="d" type="number" min="0.1" step="0.1" value="${esc(p.d)}"></div>
+          <div class="field"><label for="pl-n">N รวม</label><input id="pl-n" data-pk="N" type="number" min="1" step="1" value="${esc(p.N)}"></div>
+          <div class="field"><label for="pl-f">fx/wk</label><select id="pl-f" data-pk="perWeek">${Object.keys(TDF.WEEK_PATTERNS).map((k) => `<option${+k === p.perWeek ? " selected" : ""}>${k}</option>`).join("")}</select></div>
+        </div>
+        <div class="field"><label for="pl-start">เริ่มฉาย</label><input id="pl-start" data-pdate="start" type="date" value="${esc(p.start || "")}"></div>
+      </div>`;
+    for (let k = 0; k <= B; k++) {
+      const last = k === B;
+      h += `<div class="plan-seg">
+          <div class="plan-seg-head"><b>ช่วงฉาย ${k + 1}</b><span id="ps${k}-dates"></span></div>
+          <div class="plan-seg-n">${last ? `<span id="ps${k}-rest"></span>`
+            : `<label for="ps${k}-n">ฉาย</label><input id="ps${k}-n" data-segfx="${k}" type="number" min="1" step="1"><span>fx</span><span class="hint" id="ps${k}-hint"></span>`}</div>
+        </div>`;
+      if (last) break;
+      const b = p.breaks[k];
+      h += `<div class="gap-row dates" data-bi="${k}">
+          <div class="gap-title"><span>ช่วงพัก ${k + 1}</span><button type="button" class="btn ghost" data-bdel="${k}" aria-label="ลบช่วงพัก ${k + 1}">ลบ</button></div>
+          <div class="field"><label for="pb${k}-s">เริ่มพัก</label><input id="pb${k}-s" data-bdate="start" type="date" value="${esc(b.start || "")}"></div>
+          <div class="field"><label for="pb${k}-e">พักเสร็จ</label><input id="pb${k}-e" data-bdate="end" type="date" value="${esc(b.end || "")}"></div>
+          <span class="gap-days" id="pb${k}-days"></span>
+        </div>`;
+    }
+    $("plan").innerHTML = h;
+    refreshPlan();
+  }
+  /** Updates the dates and counts in the plan without rebuilding it, so typing keeps the focus. */
+  function refreshPlan() {
+    const p = plan, { segs } = planSegments(p);
+    for (let k = 0; k <= p.breaks.length; k++) {
+      const s = segs[k];
+      if (!$("ps" + k + "-dates")) return;
+      $("ps" + k + "-dates").textContent = s ? spanText(s.first, s.last) : "—";
+      if (k === p.breaks.length) {
+        $("ps" + k + "-rest").textContent = s ? `${s.n} fx (ที่เหลือจาก N รวม) · ฉายครบ ${thaiT(s.last)}` : "—";
+        continue;
+      }
+      const b = p.breaks[k], inp = $("ps" + k + "-n"), hint = $("ps" + k + "-hint");
+      if (document.activeElement !== inp) inp.value = b.fx != null ? b.fx : s ? s.auto : "";
+      hint.textContent = !s ? "" : b.fx == null ? "นับจากปฏิทินอัตโนมัติ" : b.fx === s.auto ? "ตรงกับปฏิทิน" : `ปฏิทินมีวันฉาย ${s.auto} วัน`;
+      hint.classList.toggle("warn", !!s && b.fx != null && b.fx !== s.auto);
+      const R = breakDays({ gapStart: b.start, gapEnd: b.end });
+      $("pb" + k + "-days").textContent = Number.isFinite(R) && R > 0 ? `= พัก ${R} วัน` : "= ? วัน";
+    }
+  }
+  $("plan").addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.dataset.pk) {
+      plan[t.dataset.pk] = t.dataset.pk === "d" ? parseFloat(t.value) : Math.round(parseFloat(t.value));
+      if (t.dataset.pk === "perWeek") plan.breaks.forEach((br) => { br.fx = null; }); // a new schedule: count every part again
+    }
+    else if (t.dataset.segfx != null) {
+      const v = parseFloat(t.value);
+      plan.breaks[+t.dataset.segfx].fx = t.value === "" || !Number.isFinite(v) ? null : v;
+    } else return;
+    refreshPlan(); calcGap();
+  });
+  $("plan").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.pdate) {
+      plan.start = t.value;
+      if (plan.breaks[0]) plan.breaks[0].fx = null;
+    } else if (t.dataset.bdate) {
+      const k = +t.closest(".gap-row").dataset.bi, b = plan.breaks[k];
+      b[t.dataset.bdate] = t.value;
+      if (t.dataset.bdate === "start" && t.value && !b.end) { b.end = t.value; $("pb" + k + "-e").value = t.value; }
+      // new dates: count the parts on either side of this break from the calendar again
+      b.fx = null;
+      if (plan.breaks[k + 1]) plan.breaks[k + 1].fx = null;
+    } else return;
+    refreshPlan(); calcGap();
+  });
+  $("plan").addEventListener("click", (e) => {
+    const del = e.target.dataset && e.target.dataset.bdel;
+    if (del == null) return;
+    plan.breaks.splice(+del, 1);
+    if (plan.breaks[+del]) plan.breaks[+del].fx = null;
+    renderPlan(); calcGap();
+  });
+  $("addBreak").addEventListener("click", () => {
+    // suggest a two-day break in the middle of the last part; the dates are meant to be changed
+    const { segs, error, isTx } = planSegments(plan);
+    const lastSeg = !error && segs[segs.length - 1];
+    let start = "";
+    if (lastSeg && lastSeg.n >= 2) {
+      const ds = txDates(lastSeg.first, Math.floor(lastSeg.n / 2), isTx, true);
+      start = isoDate(ds[ds.length - 1] + DAY_MS);
+    } else {
+      const prev = plan.breaks[plan.breaks.length - 1], base = prev && prev.end ? prev.end : plan.start;
+      if (base) start = addDays(base, 7);
+    }
+    plan.breaks.push({ start, end: start ? addDays(start, 1) : "", fx: null });
+    renderPlan(); calcGap();
+    const k = plan.breaks.length - 1;
+    if ($("pb" + k + "-s")) $("pb" + k + "-s").focus();
+  });
+
   function renderCourses() {
-    const dated = gapMode === "dates";
-    $("courses").innerHTML = courses.map((c, i) => {
-      const beforeBreak = i < courses.length - 1;
-      const R = breakDays(c);
-      return `
+    $("courses").innerHTML = courses.map((c, i) => `
       <div class="course" data-i="${i}">
         <div class="course-head"><b>Course ${i + 1}</b>${courses.length > 1 ? `<button type="button" class="btn ghost" data-del="${i}" aria-label="ลบ course ${i + 1}">ลบ</button>` : ""}</div>
         <div class="row3">
@@ -1066,23 +1215,11 @@ body.locked .wrap { display: none; }
           <div class="field"><label for="c${i}-n">N</label><input id="c${i}-n" data-k="N" type="number" min="1" step="1" value="${c.N}"></div>
           <div class="field"><label for="c${i}-f">fx/wk</label><select id="c${i}-f" data-k="perWeek">${Object.keys(TDF.WEEK_PATTERNS).map((k) => `<option${+k === c.perWeek ? " selected" : ""}>${k}</option>`).join("")}</select></div>
         </div>
-        ${dated && beforeBreak ? `<div class="row2">
-          <div class="field"><label for="c${i}-start">เริ่มฉาย</label><input id="c${i}-start" data-date="start" type="date" value="${esc(c.start || "")}"></div>
-          <div class="field"><label for="c${i}-last">ฉายวันสุดท้ายก่อนพัก</label><input id="c${i}-last" data-date="last" type="date" value="${esc(c.last || "")}"></div>
-        </div>` : ""}
       </div>
-      ${!beforeBreak ? "" : dated
-        ? `<div class="gap-row dates" data-gi="${i}">
-            <div class="field"><label for="c${i}-gs">เริ่มพัก</label><input id="c${i}-gs" data-gdate="gapStart" type="date" value="${esc(c.gapStart || "")}"></div>
-            <div class="field"><label for="c${i}-ge">พักเสร็จ</label><input id="c${i}-ge" data-gdate="gapEnd" type="date" value="${esc(c.gapEnd || "")}"></div>
-            <span class="gap-days" id="c${i}-gapdays">${Number.isFinite(R) && R > 0 ? `= พัก ${R} วัน` : "= ? วัน"}</span>
-          </div>`
-        : `<div class="gap-row"><label for="c${i}-gap">พักฉาย</label><input id="c${i}-gap" data-gap="${i}" type="number" min="0" step="1" value="${c.gapAfter}"> <span>วัน (R)</span></div>`}`;
-    }).join("");
+      ${i < courses.length - 1 ? `<div class="gap-row"><label for="c${i}-gap">พักฉาย</label><input id="c${i}-gap" data-gap="${i}" type="number" min="0" step="1" value="${c.gapAfter}"> <span>วัน (R)</span></div>` : ""}`).join("");
   }
   $("courses").addEventListener("input", (e) => {
     const t = e.target;
-    if (t.dataset.date || t.dataset.gdate) return; // dates are handled on change
     if (t.dataset.gap != null) courses[+t.dataset.gap].gapAfter = parseFloat(t.value) || 0;
     else if (t.dataset.k) {
       const i = +t.closest(".course").dataset.i;
@@ -1090,23 +1227,13 @@ body.locked .wrap { display: none; }
     }
     calcGap();
   });
-  $("courses").addEventListener("change", (e) => {
-    const t = e.target;
-    if (!t.dataset.date && !t.dataset.gdate) return;
-    const i = t.dataset.date ? +t.closest(".course").dataset.i : +t.closest(".gap-row").dataset.gi;
-    courses[i][t.dataset.date || t.dataset.gdate] = t.value;
-    const changed = autofillDates();
-    // keep the typed-days value in step, so switching to "จำนวนวัน" shows the same break
-    courses.slice(0, -1).forEach((c) => { const R = breakDays(c); if (R >= 1) c.gapAfter = R; });
-    if (changed) renderCourses();
-    else courses.slice(0, -1).forEach((c, j) => {
-      const el = $("c" + j + "-gapdays"), R = breakDays(c);
-      if (el) el.textContent = Number.isFinite(R) && R > 0 ? `= พัก ${R} วัน` : "= ? วัน";
-    });
-    calcGap();
+  $("gapmode-dates").addEventListener("click", () => { setGapMode("dates"); renderPlan(); calcGap(); });
+  $("gapmode-days").addEventListener("click", () => {
+    // carry the parts of the dated plan over as courses
+    const { segs, error } = planSegments(plan);
+    if (gapMode === "dates" && !error) courses = segs.map((s) => ({ d: plan.d, N: s.n, perWeek: plan.perWeek, gapAfter: s.R }));
+    setGapMode("days"); renderCourses(); calcGap();
   });
-  $("gapmode-dates").addEventListener("click", () => { setGapMode("dates"); autofillDates(); renderCourses(); calcGap(); });
-  $("gapmode-days").addEventListener("click", () => { setGapMode("days"); renderCourses(); calcGap(); });
   $("courses").addEventListener("click", (e) => {
     const del = e.target.dataset && e.target.dataset.del;
     if (del == null) return;
@@ -1118,7 +1245,6 @@ body.locked .wrap { display: none; }
     const last = courses[courses.length - 1];
     if (!last.gapAfter) last.gapAfter = 7;
     courses.push({ d: last.d, N: 5, perWeek: last.perWeek, gapAfter: 0 });
-    if (gapMode === "dates") autofillDates();
     renderCourses(); calcGap();
   });
   function setTargetMode(k) {
@@ -1144,31 +1270,24 @@ body.locked .wrap { display: none; }
     const out = $("r-gap");
     resetCharts();
     try {
-      courses.forEach((c, i) => {
-        if (!(c.N >= 1)) throw new Error(`Course ${i + 1}: จำนวน fraction ต้อง ≥ 1`);
-        if (!(c.d > 0)) throw new Error(`Course ${i + 1}: dose/fx ต้องมากกว่า 0`);
-      });
-      // date mode: calendar span of each course before a break, and R from the break dates
+      // dates: the plan split at its breaks (calendar span and start day of each part); days: the courses as typed
       const dateNotes = [];
-      const calCourses = gapMode !== "dates" ? courses : courses.map((c, i) => {
-        if (i === courses.length - 1) return { ...c, gapAfter: 0 };
-        const label = `Course ${i + 1}`;
-        if (!c.start || !c.last) throw new Error(`${label}: กรอกวันเริ่มฉายและวันฉายวันสุดท้ายก่อนพัก`);
-        const days = daysBetween(c.start, c.last);
-        if (!(days >= 0)) throw new Error(`${label}: วันฉายวันสุดท้ายต้องไม่ก่อนวันเริ่มฉาย`);
-        if (!c.gapStart || !c.gapEnd) throw new Error(`ช่วงพักหลัง ${label}: กรอกวันเริ่มพักและวันพักเสร็จ`);
-        const R = breakDays(c);
-        if (!(R >= 1)) throw new Error(`ช่วงพักหลัง ${label}: วันพักเสร็จต้องไม่ก่อนวันเริ่มพัก`);
-        if (!(daysBetween(c.last, c.gapStart) >= 1)) throw new Error(`ช่วงพักหลัง ${label}: วันเริ่มพักต้องอยู่หลังวันฉายวันสุดท้าย`);
-        if (i > 0 && courses[i - 1].gapEnd && !(daysBetween(courses[i - 1].gapEnd, c.start) >= 1)) {
-          throw new Error(`${label}: วันเริ่มฉายต้องอยู่หลังวันพักเสร็จของช่วงก่อนหน้า`);
-        }
-        const expected = TDF.overallTime(c.N, c.perWeek);
-        if (Math.abs(expected - days) > 2) {
-          dateNotes.push(`${label}: ${c.N} fx ที่ ${c.perWeek} ครั้ง/สัปดาห์ ปกติใช้เวลา ${expected} วัน แต่วันที่ที่กรอกห่างกัน ${days} วัน ตรวจสอบจำนวน fraction หรือวันที่`);
-        }
-        return { ...c, days, gapAfter: R };
-      });
+      let calCourses, segs = null, isTx = null;
+      if (gapMode === "dates") {
+        const r = planSegments(plan);
+        if (r.error) throw new Error(r.error);
+        segs = r.segs; isTx = r.isTx;
+        calCourses = segs.map((sg) => ({ d: plan.d, N: sg.n, perWeek: plan.perWeek, days: sg.days, startDay: sg.startDay, gapAfter: sg.R }));
+        segs.forEach((sg, k) => {
+          if (!sg.rest && sg.n < sg.auto) dateNotes.push(`ช่วงฉาย ${k + 1}: ฉาย ${sg.n} fx จากวันฉายตามปฏิทิน ${sg.auto} วัน (งดฉาย ${sg.auto - sg.n} วัน) fraction ที่เหลือไปอยู่ในช่วงฉายสุดท้าย`);
+        });
+      } else {
+        courses.forEach((c, i) => {
+          if (!(c.N >= 1)) throw new Error(`Course ${i + 1}: จำนวน fraction ต้อง ≥ 1`);
+          if (!(c.d > 0)) throw new Error(`Course ${i + 1}: dose/fx ต้องมากกว่า 0`);
+        });
+        calCourses = courses;
+      }
       const res = TDF.splitCourse(calCourses);
       const planned = res.rows.reduce((a, r) => a + r.tdf, 0);
       const target = targetMode === "plan" ? planned : targetMode === "ref" ? refTdf() : num("gap-target");
@@ -1189,8 +1308,21 @@ body.locked .wrap { display: none; }
       const adding = compMode === "add" && !gapIssue;
       // same dose and schedule as the last course: the added fractions extend it; otherwise they follow as their own course
       const merged = adding && lastC.d === dA && lastC.perWeek === fA;
+      // dates: the last treatment day, moved on by the added fractions
+      const lastSeg = segs && segs[segs.length - 1];
+      let endT = lastSeg ? lastSeg.last : NaN;
+      const extendLast = (c) => {
+        if (!lastSeg) return { ...c, N: c.N + nAdd };
+        const ds = txDates(lastSeg.first, c.N + nAdd, isTx, segs.length === 1);
+        endT = ds[ds.length - 1];
+        return { ...c, N: c.N + nAdd, days: Math.round((endT - ds[0]) / DAY_MS) };
+      };
+      if (lastSeg && adding && !merged) {
+        const ds = txDates(lastSeg.last + DAY_MS, nAdd, txDay({ perWeek: fA, start: isoDate(lastSeg.last + DAY_MS) }), false);
+        endT = ds[ds.length - 1];
+      }
       const finalCourses = !adding ? calCourses
-        : merged ? calCourses.map((c, i) => (i === calCourses.length - 1 ? { ...c, N: c.N + nAdd } : c))
+        : merged ? calCourses.map((c, i) => (i === calCourses.length - 1 ? extendLast(c) : c))
         : calCourses.map((c, i) => (i === calCourses.length - 1 ? { ...c, gapAfter: 0 } : c)).concat([{ d: dA, N: nAdd, perWeek: fA, gapAfter: 0 }]);
       const fin = adding ? TDF.splitCourse(finalCourses) : res;
       const finalDose = fin.rows.reduce((a, r) => a + r.dose, 0);
@@ -1210,9 +1342,10 @@ body.locked .wrap { display: none; }
           ["Total dose", fmt(finalDose, 1), "Gy"],
         ]) + `<p style="margin:10px 0 0;font-size:.82rem;color:var(--ink-2)">${esc(sugText)}</p></div>`;
 
+      const unit = segs ? "ช่วง" : "Course";
       const rowLabel = (r) => {
-        if (!adding || r.index < fin.rows.length) return `Course ${r.index}`;
-        return merged ? `Course ${r.index} (+${nAdd} fx)` : "เพิ่มชดเชย";
+        if (!adding || r.index < fin.rows.length) return `${unit} ${r.index}`;
+        return merged ? `${unit} ${r.index} (+${nAdd} fx)` : "เพิ่มชดเชย";
       };
       const rows = fin.rows.map((r) => `<tr>
           <td>${rowLabel(r)}</td><td>${fmt(r.d, 2)} × ${r.N}</td><td>${fmt(r.dose, 1)}</td>
@@ -1226,26 +1359,24 @@ body.locked .wrap { display: none; }
         ["TDF หลังพัก (ก่อนชดเชย)", fmt(res.total, 1)],
         ["TDF ที่สูญเสียจากการพัก", fmt(lost, 1), `(${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`],
         ["Total dose", fmt(finalDose, 1), "Gy"],
-        ["ระยะเวลารวม", fmt(fin.rows[fin.rows.length - 1].endDay, 0), "วัน"],
+        ["ระยะเวลารวม", fmt(segs ? Math.round((endT - parseDate(plan.start)) / DAY_MS) : fin.rows[fin.rows.length - 1].endDay, 0), "วัน"],
         ["เทียบเท่า 2 Gy × 5/wk", fmt(TDF.equivalentSchedule(fin.total, 2, 5).dose, 1), "Gy"],
-      ];
+      ].concat(segs ? [["ฉายครบ (คาดการณ์)", thaiT(endT)]] : []);
       current.gap = gapIssue ? null : {
         type: "gap", title: "Treatment gap (พักฉาย · decay factor)", tdf: fin.total,
-        state: { courses: courses.map((c) => ({ ...c })), gapMode, targetMode, target: num("gap-target"), dL: num("gap-d"), fL: +$("gap-f").value,
+        state: { ...(segs ? { plan: clonePlan(plan) } : { courses: courses.map((c) => ({ ...c })) }), gapMode, targetMode, target: num("gap-target"), dL: num("gap-d"), fL: +$("gap-f").value,
           comp: { mode: compMode, n: adding ? nAdd : null } },
         summary: res.rows.map((r) => `${fmt(r.d, 2)}×${r.N}`).join(" + ") + ` · พัก ${res.rows.reduce((a, r) => a + r.gap, 0)} วัน · ` +
           (adding ? `เพิ่ม ${nAdd} fx` : "ไม่เพิ่ม fx"),
-        inputs: res.rows.map((r) => {
-          const c = courses[r.index - 1], dated = gapMode === "dates" && r.gap;
-          return [`Course ${r.index}`, `${fmt(r.d, 2)} Gy × ${r.N} fx, ${c.perWeek}/สัปดาห์` +
-            (dated ? ` (${thaiDate(c.start)} – ${thaiDate(c.last)})` : "") +
-            (r.gap ? ` → พัก ${fmt(r.gap, 0)} วัน` + (dated ? ` (${thaiDate(c.gapStart)} – ${thaiDate(c.gapEnd)})` : "") : "")];
-        })
+        inputs: (segs
+          ? [["แผนการฉาย", `${fmt(plan.d, 2)} Gy × ${plan.N} fx, ${plan.perWeek}/สัปดาห์ · เริ่มฉาย ${thaiDate(plan.start)}`]].concat(segs.map((sg, k) =>
+            [`ช่วงฉาย ${k + 1}`, `${spanText(sg.first, sg.last)} · ${sg.n} fx` + (sg.R ? ` → พัก ${sg.R} วัน (${spanText(sg.gapStart, sg.gapEnd)})` : "")]))
+          : res.rows.map((r) => [`Course ${r.index}`, `${fmt(r.d, 2)} Gy × ${r.N} fx, ${courses[r.index - 1].perWeek}/สัปดาห์` + (r.gap ? ` → พัก ${fmt(r.gap, 0)} วัน` : "")]))
           .concat([["TDF เป้าหมาย", `${fmt(target, 1)} (${targetMode === "plan" ? "ตามแผนเดิม" : targetMode === "ref" ? "TDF อ้างอิง" : "กำหนดเอง"})`],
             ["เพิ่ม fraction ชดเชย", decisionText]]),
         results: gapStats.map(unitJoin),
         comp: compRows,
-        table: { head: ["Course", "Gy × fx", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
+        table: { title: segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course", head: [unit, "Gy × fx", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
           rows: fin.rows.map((r) => [rowLabel(r), `${fmt(r.d, 2)} × ${r.N}`, fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
             r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]) },
         notes: dateNotes,
@@ -1257,8 +1388,8 @@ body.locked .wrap { display: none; }
         `<div class="card"><h3>TDF สะสมตามวันรักษา</h3><div id="gapChart"></div>
           <div class="legend"><span><i></i>TDF สะสม</span><span><i class="decay"></i>ลดลงจากช่วงพัก (decay)</span><span><i class="ref"></i>TDF เป้าหมาย</span></div></div>` +
         solver +
-        `<div class="card"><h3>รายละเอียดแต่ละ course</h3><div class="tbl-wrap"><table>
-          <tr><th>Course</th><th>Gy × fx</th><th>Dose (Gy)</th><th>วัน</th><th>TDF</th><th>พัก R (วัน)</th><th>Decay factor</th><th>TDF สะสม</th></tr>
+        `<div class="card"><h3>${segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course"}</h3><div class="tbl-wrap"><table>
+          <tr><th>${unit}</th><th>Gy × fx</th><th>Dose (Gy)</th><th>วัน</th><th>TDF</th><th>พัก R (วัน)</th><th>Decay factor</th><th>TDF สะสม</th></tr>
           ${rows}
           <tr class="total"><td>รวม</td><td></td><td>${fmt(finalDose, 1)}</td><td></td><td>${fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1)}</td><td></td><td></td><td>${fmt(fin.total, 1)}</td></tr>
         </table></div></div>`;
@@ -1623,12 +1754,21 @@ body.locked .wrap { display: none; }
       $("fr-d").value = s.d; $("fr-n").value = s.N; $("fr-f").value = s.f; $("fr-useT").checked = !!s.useT;
       $("fr-T").value = s.T; $("fr-T-wrap").hidden = !s.useT; $("fr-ab1").value = s.ab1; $("fr-ab2").value = s.ab2;
     } else if (e.type === "gap") {
-      courses = s.courses.map((c) => ({ ...c }));
-      setGapMode(s.gapMode || "days");
+      if (s.plan) { plan = clonePlan(s.plan); setGapMode("dates"); }
+      else {
+        courses = s.courses.map((c) => ({ ...c }));
+        // records from before the single-plan date entry: dated courses of one dose and schedule become a plan
+        const same = courses.every((c) => c.d === courses[0].d && c.perWeek === courses[0].perWeek);
+        if (s.gapMode === "dates" && same && courses[0].start) {
+          plan = { d: courses[0].d, N: courses.reduce((a, c) => a + c.N, 0), perWeek: courses[0].perWeek, start: courses[0].start,
+            breaks: courses.slice(0, -1).map((c) => ({ start: c.gapStart || "", end: c.gapEnd || "", fx: c.N })) };
+          setGapMode("dates");
+        } else setGapMode("days");
+      }
       setTargetMode(s.targetMode);
       $("gap-target").value = s.target; $("gap-d").value = s.dL; $("gap-f").value = s.fL;
       setCompMode((s.comp && s.comp.mode) || ""); $("comp-n").value = s.comp && s.comp.n ? s.comp.n : "";
-      renderCourses();
+      renderCourses(); renderPlan();
     } else if (e.type === "brachy") {
       isoSel.value = s.iso; $("br-hl").value = s.hl; brPermanent = s.permanent; brByDose = s.byDose;
       $("br-t").value = s.t; $("br-D").value = s.D; $("br-r").value = s.r;
@@ -1770,7 +1910,7 @@ body.locked .wrap { display: none; }
     if (rec.type === "gap") {
       body += inputs;
       if (s.table) {
-        body += block("รายละเอียดแต่ละ course", `<table><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
+        body += block(s.table.title || "รายละเอียดแต่ละ course", `<table><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
           ${s.table.rows.map((row) => `<tr>${row.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>`);
       }
       body += results;
@@ -1961,7 +2101,9 @@ body.locked .wrap { display: none; }
     setBackend(b) { backend = b || localBackend; records = []; renderHistory(); },
   };
 
+  setGapMode(gapMode);
   renderCourses();
+  renderPlan();
   syncBrachyUI();
   buildTable();
   refreshRecords();
