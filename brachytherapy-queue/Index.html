@@ -186,9 +186,45 @@
     .check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; }
     .hint { font-size: 12px; color: var(--muted); }
     .manual { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 6px; }
-    .manual .mrow { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 6px; align-items: center; }
-    .manual .mrow span { font-weight: 700; color: var(--accent); font-size: 14px; }
+    .manual .mrow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 30px; gap: 6px; align-items: center; }
     .manual .mrow input:invalid, .manual .mrow input.empty { border-color: var(--warn); }
+    .manual .mfx {
+      border: 1px solid var(--line); background: var(--field); border-radius: 8px; padding: 7px 0;
+      font-weight: 700; font-size: 13px; color: var(--accent); cursor: pointer;
+    }
+    .manual .mrow.on .mfx { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .manual .mrow.on input { border-color: var(--accent); }
+    .manual .mclr { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 6px; padding: 4px 0; }
+    .manual .mclr:hover { color: var(--bad); }
+
+    /* ปฏิทินเลือกวันตาม Fraction: แต่ละวันแสดงจำนวนนัดที่มีแล้ว / สูงสุด */
+    .mcal { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 8px; display: grid; gap: 8px; }
+    .mcal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mcal-head b { font-size: 15px; }
+    .mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    .mcal-grid .dow { font-size: 11px; color: var(--muted); text-align: center; font-weight: 600; }
+    .mday {
+      min-height: 54px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); padding: 3px 2px;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px;
+      cursor: pointer; font: inherit; color: inherit; min-width: 0;
+    }
+    .mday:hover:not(:disabled) { border-color: var(--accent); }
+    .mday .dn { font-weight: 700; font-size: 14px; line-height: 1.25; }
+    .mday .dc { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .mday .dfx { font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .mday.wkend, .mday.hol { background: var(--raise); }
+    .mday.hol .dn { color: var(--bad); }
+    .mday.full .dc { color: var(--warn); font-weight: 700; }
+    .mday.over { background: var(--bad-soft); border-color: var(--bad-line); }
+    .mday.over .dc { color: var(--bad); font-weight: 700; }
+    .mday.today { box-shadow: inset 0 0 0 2px var(--accent); }
+    .mday.picked { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .mday.picked .dn, .mday.picked .dc { color: var(--accent-ink); }
+    .mday.target { outline: 3px solid var(--sel-ring); outline-offset: 1px; }
+    .mday.picked.over { box-shadow: inset 0 0 0 3px var(--bad); }
+    .mday:disabled { opacity: .35; cursor: default; }
+    .mlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+    .mlegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 
     .preview { display: grid; gap: 6px; max-height: 420px; overflow: auto; padding-right: 2px; }
     .fx {
@@ -559,6 +595,15 @@
             </div>
             <div id="modeManual" hidden>
               <div class="hint" data-i18n="manual_hint"></div>
+              <div class="mcal">
+                <div class="mcal-head">
+                  <button type="button" class="btn sm" id="mPrev" data-i18n-aria="prev_m">‹</button>
+                  <b id="mTitle"></b>
+                  <button type="button" class="btn sm" id="mNext" data-i18n-aria="next_m">›</button>
+                </div>
+                <div class="mcal-grid" id="mGrid"></div>
+                <div class="mlegend" id="mLegend"></div>
+              </div>
               <div class="manual" id="manualList"></div>
             </div>
             <div style="margin-top:8px" id="holidayRow">
@@ -708,7 +753,10 @@
       new_appt: 'ลงนัดผู้ป่วยใหม่', hn_ph: 'เช่น 6512345', doctor: 'แพทย์', choose_doctor: '— เลือกแพทย์ —',
       name: 'ชื่อ-สกุลผู้ป่วย', name_ph: 'ชื่อ นามสกุล', fx_count: 'จำนวน Fraction', start_date: 'วันเริ่ม Fx 1',
       pattern: 'รูปแบบการนัด', by_weekday: 'ตามวันในสัปดาห์', every_n: 'ทุก ๆ N วัน', by_manual: 'เลือกวันเองตาม Fraction',
-      manual_hint: 'เลือกวันที่ของแต่ละ Fraction (จำนวนช่องเท่ากับจำนวน Fraction · วันเดียวกันได้ เช่น ทำวันละ 2 Fx)', w_nodate: 'ยังไม่ได้เลือกวัน',
+      manual_hint: 'กดวันในปฏิทินทีละวันจนครบทุก Fx ระบบเรียง Fx ตามวันให้เอง · กดวันเดิมซ้ำได้ถ้าทำวันละ 2 Fx · จะเปลี่ยนวันของ Fx ไหน กดปุ่ม Fx นั้นก่อนแล้วกดวันใหม่ · ตัวเลขในแต่ละวันคือนัดที่มีอยู่แล้ว / สูงสุด',
+      m_full: 'เลือกครบ {n} Fx แล้ว ถ้าจะเปลี่ยน กดปุ่ม Fx ที่ต้องการก่อนแล้วกดวันใหม่ หรือกด × เพื่อล้าง',
+      m_clear: 'ล้างวันของ Fx {n}', m_pick_fx: 'เลือก Fx {n} แล้วกดวันในปฏิทิน',
+      ml_booked: 'ตัวเลข = นัดที่มีแล้ว / สูงสุด', ml_picked: 'วันที่เลือกให้คอร์สนี้', ml_over: 'เกินจำนวนเคส', ml_off: 'วันหยุด / เสาร์–อาทิตย์', w_nodate: 'ยังไม่ได้เลือกวัน',
       p_mf: 'จ–ศ', p_mth: 'จ / พฤ', p_tf: 'อ / ศ', p_weekly: 'สัปดาห์ละครั้ง', every: 'ทุก', days_unit: 'วัน',
       skip_holiday: 'ข้ามวันหยุด (ชีต Holidays) และเลื่อนนัดที่ตกเสาร์–อาทิตย์',
       note: 'หมายเหตุ', note_ph: 'เช่น applicator, dose/fraction, งดน้ำงดอาหาร',
@@ -785,7 +833,10 @@
       new_appt: 'New appointment', hn_ph: 'e.g. 6512345', doctor: 'Doctor', choose_doctor: '— Select doctor —',
       name: 'Patient name', name_ph: 'First and last name', fx_count: 'Number of fractions', start_date: 'Fx 1 start date',
       pattern: 'Schedule pattern', by_weekday: 'By weekday', every_n: 'Every N days', by_manual: 'Pick a date for each fraction',
-      manual_hint: 'Choose the date of each fraction (one box per fraction · the same day is allowed, e.g. 2 Fx/day)', w_nodate: 'No date selected',
+      manual_hint: 'Tap days in the calendar until every Fx has one; Fx are numbered by date automatically · Tap the same day again for 2 Fx/day · To change an Fx, tap its button first and then a new day · The number on each day is booked / maximum',
+      m_full: 'All {n} Fx have dates. To change one, tap its Fx button first and then a new day, or tap × to clear it',
+      m_clear: 'Clear the date of Fx {n}', m_pick_fx: 'Select Fx {n}, then tap a day',
+      ml_booked: 'Number = booked / maximum', ml_picked: 'Days chosen for this course', ml_over: 'Over the daily limit', ml_off: 'Holiday / weekend', w_nodate: 'No date selected',
       p_mf: 'Mon–Fri', p_mth: 'Mon / Thu', p_tf: 'Tue / Fri', p_weekly: 'Weekly', every: 'Every', days_unit: 'days',
       skip_holiday: 'Skip holidays (Holidays sheet) and move dates that fall on weekends',
       note: 'Note', note_ph: 'e.g. applicator, dose/fraction, NPO',
@@ -1208,7 +1259,12 @@
   document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
     const m = modeVal();
     // เปลี่ยนเป็นเลือกวันเอง: ตั้งต้นจากวันที่ที่สร้างไว้ตอนนี้ แล้วค่อยแก้ทีละ Fx
-    if (m === 'manual') state.manual = state.sessions.map(x => x.date);
+    if (m === 'manual') {
+      state.manual = state.sessions.map(x => x.date);
+      state.manualActive = -1;
+      const first = state.manual.find(Boolean);
+      state.manualMonth = monthStart(first ? parseIso(first) : new Date());
+    }
     $('modeDays').hidden = m !== 'days';
     $('modeInterval').hidden = m !== 'interval';
     $('modeManual').hidden = m !== 'manual';
@@ -1224,16 +1280,100 @@
   $('hn').addEventListener('change', renderPreview);
 
   /* ================= เลือกวันเองตาม Fraction ================= */
-  state.manual = [];
-  function renderManual() {
-    $('manualList').innerHTML = state.manual.map((d, i) =>
-      '<label class="mrow"><span>Fx ' + (i + 1) + '</span><input type="date" data-mi="' + i + '" value="' + esc(d) + '"' +
-      (d ? '' : ' class="empty"') + ' aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '"></label>').join('');
+  // state.manual = วันของแต่ละ Fx ('' = ยังไม่เลือก), manualActive = Fx ที่การกดวันในปฏิทินจะใส่ให้ (-1 = ไม่มี)
+  state.manual = []; state.manualActive = -1; state.manualMonth = null;
+  // ให้ Fx ที่เลือกอยู่ชี้ไปช่องว่างช่องแรก ถ้าตอนนี้ไม่ได้ชี้ช่องใด
+  function fixManualActive() {
+    if (state.manualActive < 0 || state.manualActive >= state.manual.length) state.manualActive = state.manual.findIndex(d => !d);
   }
+  // เรียงวันจากเก่าไปใหม่ (Fx 1 = วันแรก) ช่องว่างไปอยู่ท้าย แล้วชี้ Fx ที่เลือกไปช่องว่างช่องแรก
+  function sortManual() {
+    const filled = state.manual.filter(Boolean).sort();
+    state.manual = filled.concat(state.manual.map(() => '').slice(filled.length));
+    state.manualActive = filled.length < state.manual.length ? filled.length : -1;
+  }
+  function renderManual() {
+    fixManualActive();
+    $('manualList').innerHTML = state.manual.map((d, i) =>
+      '<div class="mrow' + (i === state.manualActive ? ' on' : '') + '">' +
+      '<button type="button" class="mfx" data-mact="' + i + '" aria-pressed="' + (i === state.manualActive) + '" title="' +
+        esc(t('m_pick_fx', { n: i + 1 })) + '">Fx ' + (i + 1) + '</button>' +
+      '<input type="date" data-mi="' + i + '" value="' + esc(d) + '"' + (d ? '' : ' class="empty"') +
+        ' aria-label="' + esc(t('fx_date_aria', { n: i + 1 })) + '">' +
+      '<button type="button" class="mclr" data-mclr="' + i + '" aria-label="' + esc(t('m_clear', { n: i + 1 })) + '" title="' +
+        esc(t('m_clear', { n: i + 1 })) + '"' + (d ? '' : ' hidden') + '>×</button></div>').join('');
+    renderManualCal();
+  }
+  // ปฏิทินเดือนเดียว (เริ่มวันจันทร์) แต่ละวัน: จำนวนนัดที่มีแล้ว / สูงสุด และ Fx ที่เลือกวันนั้น
+  function renderManualCal() {
+    if (modeVal() !== 'manual') return;
+    if (!state.manualMonth) state.manualMonth = monthStart(new Date());
+    const m = state.manualMonth, days = daysOfMonth(m), counts = dayCounts(), today = todayIso();
+    const picked = {};
+    state.manual.forEach((d, i) => { if (d) (picked[d] = picked[d] || []).push(i + 1); });
+    const target = state.manual[state.manualActive] || '';
+    $('mTitle').textContent = m.toLocaleDateString(LOCALE[lang], { month: 'long', year: 'numeric' });
+    let html = [1, 2, 3, 4, 5, 6, 0].map(d => '<div class="dow">' + esc(DOW[lang][d]) + '</div>').join('');
+    const lead = (m.getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) html += '<div></div>';
+    days.forEach(d => {
+      const dt = parseIso(d), n = (counts[d] || []).length, fx = picked[d] || [], total = n + fx.length;
+      const hol = state.holidays[d], wk = dt.getDay() === 0 || dt.getDay() === 6;
+      const cls = ['mday', d < today ? 'past' : '', wk ? 'wkend' : '', hol ? 'hol' : '', d === today ? 'today' : '',
+        fx.length ? 'picked' : '', d === target ? 'target' : '',
+        total > state.max ? 'over' : total === state.max ? 'full' : ''].filter(Boolean).join(' ');
+      const tip = fmtDate(d, LONG) + ' · ' + t('booked_cap', { n: n, max: state.max }) + (hol ? ' · ' + t('w_holiday', { name: hol }) : '') +
+        (fx.length ? ' · Fx ' + fx.join(', ') : '');
+      html += '<button type="button" class="' + cls + '" data-md="' + d + '"' + (d < today ? ' disabled' : '') +
+        ' title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+        '<span class="dn">' + dt.getDate() + '</span>' +
+        '<span class="dc">' + (total > state.max ? '⚠ ' : '') + n + '/' + state.max + '</span>' +
+        (fx.length ? '<span class="dfx">Fx ' + fx.join(',') + '</span>' : '') + '</button>';
+    });
+    $('mGrid').innerHTML = html;
+    $('mLegend').innerHTML = '<span>' + esc(t('ml_booked')) + '</span>' +
+      '<span><i style="background:var(--accent);border-color:var(--accent)"></i>' + esc(t('ml_picked')) + '</span>' +
+      '<span><i style="background:var(--bad-soft);border-color:var(--bad-line)"></i>' + esc(t('ml_over')) + '</span>' +
+      '<span><i style="background:var(--raise)"></i>' + esc(t('ml_off')) + '</span>';
+  }
+  $('mPrev').addEventListener('click', () => { const m = state.manualMonth; state.manualMonth = new Date(m.getFullYear(), m.getMonth() - 1, 1); renderManualCal(); });
+  $('mNext').addEventListener('click', () => { const m = state.manualMonth; state.manualMonth = new Date(m.getFullYear(), m.getMonth() + 1, 1); renderManualCal(); });
+  // กดวัน: ใส่ให้ Fx ที่เลือกอยู่ แล้วเลื่อนไปช่องว่างถัดไป
+  $('mGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-md]'); if (!b || b.disabled) return;
+    fixManualActive();
+    const i = state.manualActive;
+    if (i < 0) { toast(t('m_full', { n: state.manual.length })); return; }
+    state.manual[i] = b.dataset.md;
+    sortManual();
+    regenerate();
+  });
+  $('manualList').addEventListener('click', (e) => {
+    const pick = e.target.closest('[data-mact]'), clr = e.target.closest('[data-mclr]');
+    if (pick) {
+      state.manualActive = Number(pick.dataset.mact);
+      const d = state.manual[state.manualActive];
+      if (d) state.manualMonth = monthStart(parseIso(d));
+      renderManual();
+    } else if (clr) {
+      state.manual[Number(clr.dataset.mclr)] = '';
+      sortManual();
+      regenerate();
+    }
+  });
+  // พิมพ์/เลือกวันจากช่องวันที่ได้เหมือนเดิม
+  $('manualList').addEventListener('focusin', (e) => {
+    const i = e.target.dataset.mi; if (i == null || Number(i) === state.manualActive) return;
+    state.manualActive = Number(i);
+    $('manualList').querySelectorAll('.mrow').forEach((r, k) => r.classList.toggle('on', k === state.manualActive));
+    renderManualCal();
+  });
   $('manualList').addEventListener('change', (e) => {
     const i = e.target.dataset.mi; if (i == null) return;
     state.manual[Number(i)] = e.target.value;
     e.target.classList.toggle('empty', !e.target.value);
+    const clr = e.target.parentNode.querySelector('.mclr'); if (clr) clr.hidden = !e.target.value;
+    if (e.target.value) state.manualMonth = monthStart(parseIso(e.target.value));
     regenerate(true);
   });
 
@@ -1254,7 +1394,7 @@
       // ช่องวันที่เท่ากับจำนวน Fraction: เพิ่มช่องว่างหรือตัดช่องท้ายออก
       state.manual = state.manual.slice(0, n);
       while (state.manual.length < n) state.manual.push('');
-      if (keepManualInputs !== true) renderManual();
+      if (keepManualInputs !== true) renderManual(); else renderManualCal();
       state.sessions = state.manual.map(d => ({ date: d }));
       renderPreview();
       return;
@@ -1393,7 +1533,7 @@
     ['hn', 'name', 'note'].forEach(id => { $(id).value = ''; });
     $('doctor').value = '';
     techPick.set('');
-    state.manual = [];
+    state.manual = []; state.manualActive = -1;
     regenerate();
     $('hn').focus();
   }
@@ -1652,6 +1792,7 @@
     renderAlerts();
     renderTable();
     renderPreview();
+    renderManualCal();
     if (state.view === 'dash') renderDash();
   }
 
