@@ -168,6 +168,7 @@ td.decay { color: var(--decay); }
 .plan-seg-n { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--ink-2); }
 .plan-seg-n input { width: 5em; }
 .plan-seg-n .hint { font-size: .75rem; color: var(--muted); }
+.plan-seg-n .cum { font-weight: 600; color: var(--accent-ink); }
 .plan-seg-n .hint.warn { color: var(--warn); }
 .btn { appearance: none; font: 500 .85rem var(--font-body); border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .btn:hover { border-color: var(--accent); }
@@ -590,7 +591,7 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.<br>
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
-    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน 8dc68ed</div>
+    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน f34ae93</div>
   </footer>
 </div>
 
@@ -1121,7 +1122,7 @@ body.locked .wrap { display: none; }
       h += `<div class="plan-seg">
           <div class="plan-seg-head"><b>ช่วงฉาย ${k + 1}</b><span id="ps${k}-dates"></span></div>
           <div class="plan-seg-n">${last ? `<span id="ps${k}-rest"></span>`
-            : `<label for="ps${k}-n">ฉาย</label><input id="ps${k}-n" data-segfx="${k}" type="number" min="1" step="1"><span>fx</span><span class="hint" id="ps${k}-hint"></span>`}</div>
+            : `<label for="ps${k}-n">ฉาย</label><input id="ps${k}-n" data-segfx="${k}" type="number" min="1" step="1"><span>fx</span><span class="cum" id="ps${k}-cum"></span><span class="hint" id="ps${k}-hint"></span>`}</div>
         </div>`;
       if (last) break;
       const b = p.breaks[k];
@@ -1138,15 +1139,18 @@ body.locked .wrap { display: none; }
   /** Updates the dates and counts in the plan without rebuilding it, so typing keeps the focus. */
   function refreshPlan() {
     const p = plan, { segs } = planSegments(p);
+    let cum = 0;
     for (let k = 0; k <= p.breaks.length; k++) {
       const s = segs[k];
+      cum = s && Number.isFinite(s.n) ? cum + s.n : NaN;
       if (!$("ps" + k + "-dates")) return;
       $("ps" + k + "-dates").textContent = s ? spanText(s.first, s.last) : "—";
       if (k === p.breaks.length) {
-        $("ps" + k + "-rest").textContent = s ? `${s.n} fx (ที่เหลือจาก N รวม) · ฉายครบ ${thaiT(s.last)}` : "—";
+        $("ps" + k + "-rest").innerHTML = s ? `${s.n} fx (ที่เหลือจาก N รวม) · <b class="cum">สะสม ${cum} fx</b> · ฉายครบ ${esc(thaiT(s.last))}` : "—";
         continue;
       }
       const b = p.breaks[k], inp = $("ps" + k + "-n"), hint = $("ps" + k + "-hint");
+      $("ps" + k + "-cum").textContent = Number.isFinite(cum) ? `· สะสม ${cum} fx` : "";
       if (document.activeElement !== inp) inp.value = b.fx != null ? b.fx : s ? s.auto : "";
       hint.textContent = !s ? "" : b.fx == null ? "นับจากปฏิทินอัตโนมัติ" : b.fx === s.auto ? "ตรงกับปฏิทิน" : `ปฏิทินมีวันฉาย ${s.auto} วัน`;
       hint.classList.toggle("warn", !!s && b.fx != null && b.fx !== s.auto);
