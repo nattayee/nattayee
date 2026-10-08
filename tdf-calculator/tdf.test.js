@@ -43,6 +43,16 @@ test("split course applies decay to the accumulated TDF", () => {
   assert.equal(res.rows[0].factor < 1, true);
 });
 
+test("split course with calendar days from dates keeps X = 7/f and uses the days for the decay", () => {
+  const res = TDF.splitCourse([
+    { N: 20, d: 2, perWeek: 5, days: 30, gapAfter: 12 },
+    { N: 10, d: 2, perWeek: 5 },
+  ]);
+  const one = TDF.tdfFractionated(20, 2, 1.4), two = TDF.tdfFractionated(10, 2, 1.4);
+  close(res.total, one * Math.pow(30 / 42, 0.11) + two, 1e-9);
+  assert.equal(res.rows[0].endDay, 30);
+});
+
 test("fractions needed after a break", () => {
   const r = TDF.fractionsToTarget(50, 98, 2, 5);
   assert.ok(r.reached >= 98);

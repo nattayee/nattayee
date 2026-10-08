@@ -107,7 +107,7 @@
   }
 
   /**
-   * Split-course treatment. Each course: { N, d, perWeek, T?, gapAfter? }.
+   * Split-course treatment. Each course: { N, d, perWeek, T?, days?, gapAfter? } (days: calendar span from dates).
    * T defaults to the calendar overall time from the weekly pattern; X = T/N when T is
    * supplied explicitly and N > 1, otherwise X = 7/perWeek.
    * Before each gap the accumulated TDF is multiplied by (Telapsed / (Telapsed + R))^0.11,
@@ -121,8 +121,11 @@
 
     courses.forEach((c, i) => {
       const N = c.N;
-      const T = c.T != null && c.T !== "" ? Number(c.T) : overallTime(N, c.perWeek);
-      const X = c.T != null && c.T !== "" && N > 1 && T > 0 ? T / N : xFromPerWeek(c.perWeek);
+      // c.days: calendar days from the first to the last fraction (e.g. from dates). It sets the elapsed
+      // time used by the decay factor and the timeline, while X stays 7 / fractions-per-week.
+      const hasDays = c.days != null && c.days !== "" && Number(c.days) >= 0;
+      const T = hasDays ? Number(c.days) : c.T != null && c.T !== "" ? Number(c.T) : overallTime(N, c.perWeek);
+      const X = !hasDays && c.T != null && c.T !== "" && N > 1 && T > 0 ? T / N : xFromPerWeek(c.perWeek);
       const per = tdfPerFraction(c.d, X);
       const tdf = N * per;
 
