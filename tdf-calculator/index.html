@@ -1150,7 +1150,12 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     return { ...snap, patient: getPatient(), doctor: $("pt-doctor").value, ref: refTdf() };
   }
   const notReady = () => (activeTab() === "gap" && gapIssue) || "เลือกแท็บการคำนวณที่ไม่มีข้อผิดพลาดก่อน";
-  const sigOf = (s) => JSON.stringify([s.type, s.state, s.patient, s.doctor, s.ref]);
+  // Same text for the same data whatever the key order: google.script.run may hand objects back with their keys reordered
+  const canon = (v) => Array.isArray(v) ? "[" + v.map(canon).join(",") + "]"
+    : v && typeof v === "object" ? "{" + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}"
+    : JSON.stringify(v === undefined ? null : v);
+  /** Identity of a calculation (type, inputs, patient, physician, reference TDF), computed the same way for records and the screen. */
+  const sigOf = (s) => canon([s.type, s.state, s.patient, s.doctor, s.ref]);
 
   // ---------- calculation records & physicist recheck ----------
   // A record: { id, at, status: "pending" | "approved" | "rejected" | "draft", type, title, tdf, ref, summary, sig, state,
@@ -1172,7 +1177,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       return this.list().then((list) => {
         const full = { ...rec, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), status: "draft",
           calc: { username: user ? user.username : "", name: user ? user.name : "", role: user ? user.role : "", at: Date.now() }, review: null };
-        const next = [full].concat(list.filter((r) => r.sig !== rec.sig)).slice(0, 300);
+        const next = [full].concat(list.filter((r) => sigOf(r) !== rec.sig)).slice(0, 300);
         try { localStorage.setItem(localKey(), JSON.stringify(next)); } catch (e) { throw new Error("เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล"); }
         return full;
       });
@@ -1269,7 +1274,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     if (!snap) return toast(notReady(), 4000);
     if (!checkPatient()) return;
     const sig = sigOf(snap);
-    const dup = records.find((r) => r.sig === sig && (r.status === "pending" || r.status === "approved"));
+    const dup = records.find((r) => sigOf(r) === sig && (r.status === "pending" || r.status === "approved"));
     if (dup) return toast(`รายการนี้ส่งไปแล้ว (${STATUS[dup.status][0]})`, 4000);
     const rec = { type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig, state: snap.state,
       patient: snap.patient, doctor: snap.doctor,
@@ -1278,7 +1283,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     btn.disabled = true;
     backend.submit(rec).then((saved) => {
       toast(backend.shared ? "ส่ง recheck แล้ว รอนักฟิสิกส์อีกท่านตรวจและอนุมัติ" : "บันทึกเป็นฉบับร่างในเบราว์เซอร์นี้แล้ว", 4000);
-      records = [saved].concat(records.filter((r) => r.id !== saved.id && r.sig !== saved.sig));
+      records = [saved].concat(records.filter((r) => r.id !== saved.id && sigOf(r) !== sigOf(saved)));
       renderHistory();
     }).catch((err) => toast(err.message || String(err), 5000)).finally(() => { btn.disabled = false; });
   }
@@ -1298,15 +1303,16 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   function updateReview() {
     if (!reviewing) return;
     const snap = snapshot();
-    const same = snap && snap.type === reviewing.type && sigOf(snap) === reviewing.sig;
+    const same = snap && snap.type === reviewing.type && sigOf(snap) === sigOf(reviewing);
     const match = snap && snap.type === reviewing.type && Math.abs(snap.tdf - reviewing.tdf) <= RECHECK_TOLERANCE;
     $("rvSent").textContent = fmt(reviewing.tdf, 1);
     $("rvMine").textContent = snap && snap.type === reviewing.type ? fmt(snap.tdf, 1) : "—";
     const el = $("rvMatch");
-    el.className = "chip " + (match && same ? "ok" : "over");
+    // Approval needs the recalculated TDF to match (Code.gs checks it again). Edited inputs with a matching TDF only warn.
+    el.className = "chip " + (match ? (same ? "ok" : "near") : "over");
     el.textContent = !snap || snap.type !== reviewing.type ? "อยู่คนละแท็บกับรายการที่ตรวจ"
-      : !same ? "ข้อมูลบนหน้าจอถูกแก้ไข ต่างจากที่ส่งมา" : match ? "ตรงกัน" : "ค่าไม่ตรงกัน";
-    $("rvApprove").disabled = !(match && same);
+      : !match ? "ค่าไม่ตรงกัน อนุมัติไม่ได้" : same ? "ตรงกัน" : "TDF ตรงกัน (ข้อมูลบางช่องบนหน้าจอต่างจากที่ส่งมา)";
+    $("rvApprove").disabled = !match;
   }
   function endReview() { reviewing = null; $("reviewBar").hidden = true; }
   function sendReview(decision) {
@@ -1459,9 +1465,9 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       if (!snap) return toast(notReady(), 4000);
       if (!checkPatient()) return;
       const sig = sigOf(snap);
-      rec = records.find((r) => r.sig === sig && r.status === "approved") || (backend.shared ? null : records.find((r) => r.sig === sig));
+      rec = records.find((r) => sigOf(r) === sig && r.status === "approved") || (backend.shared ? null : records.find((r) => sigOf(r) === sig));
       if (!rec && backend.shared) {
-        const sent = records.find((r) => r.sig === sig);
+        const sent = records.find((r) => sigOf(r) === sig);
         return toast(sent ? `รายการนี้ยัง${STATUS[sent.status][0]} สร้างรายงานได้เมื่อนักฟิสิกส์อีกท่าน recheck และอนุมัติแล้ว`
           : "ต้องกด “ส่ง recheck” และได้รับการอนุมัติจากนักฟิสิกส์อีกท่านก่อน จึงสร้างรายงานได้", 5000);
       }
