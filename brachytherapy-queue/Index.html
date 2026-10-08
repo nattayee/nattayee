@@ -808,7 +808,6 @@
       logout: 'ออกจากระบบ', logged_out: 'ออกจากระบบแล้ว',
       auth_sub: 'ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับ LPCH RO Workspace',
       ws_hint: 'ยังไม่มีบัญชี ลืมรหัสผ่าน หรือรออนุมัติ? ทำได้ที่ LPCH RO Workspace', ws_open: 'เปิด LPCH RO Workspace',
-      sso_working: 'กำลังเข้าสู่ระบบจาก LPCH RO Workspace…', m_sso_demo: 'โหมดทดลองเข้าสู่ระบบจาก Workspace ไม่ได้',
       login: 'เข้าสู่ระบบ', login_id: 'ชื่อผู้ใช้หรืออีเมล', password: 'รหัสผ่าน',
       show_pw: 'แสดง', hide_pw: 'ซ่อน', remember: 'จำฉันไว้ในเครื่องนี้ 7 วัน', login_btn: 'เข้าสู่ระบบ', 
       
@@ -889,7 +888,6 @@
       logout: 'Log out', logged_out: 'You have logged out',
       auth_sub: 'Use the same username and password as LPCH RO Workspace',
       ws_hint: 'No account yet, forgot your password, or waiting for approval? Do it in LPCH RO Workspace', ws_open: 'Open LPCH RO Workspace',
-      sso_working: 'Signing in from LPCH RO Workspace…', m_sso_demo: 'Demo mode cannot sign in from Workspace',
       login: 'Log in', login_id: 'Username or email', password: 'Password',
       show_pw: 'Show', hide_pw: 'Hide', remember: 'Keep me logged in on this device for 7 days', login_btn: 'Log in', 
       
@@ -925,16 +923,17 @@
   };
 
   /* ================= token เข้าสู่ระบบ ================= */
-  // "จำฉันไว้" เก็บใน localStorage ไม่งั้นเก็บใน sessionStorage (ปิดเบราว์เซอร์แล้วต้องเข้าใหม่)
+  // เก็บใน localStorage เสมอ เพราะ Workspace เปิดแอปในแท็บใหม่ (sessionStorage ของแท็บใหม่ว่าง → ต้องเข้าสู่ระบบใหม่ทุกครั้ง)
+  // "จำฉันไว้" กำหนดอายุ token ที่เซิร์ฟเวอร์ (7 วัน หรือ SESSION_HOURS ในชีต Settings)
   const auth = {
     token: (function () {
       try { return localStorage.getItem('bq-token') || sessionStorage.getItem('bq-token') || ''; } catch (e) { return ''; }
     })(),
-    save(tk, remember) {
+    save(tk) {
       this.token = tk;
       try {
-        localStorage.removeItem('bq-token'); sessionStorage.removeItem('bq-token');
-        (remember ? localStorage : sessionStorage).setItem('bq-token', tk);
+        sessionStorage.removeItem('bq-token');
+        localStorage.setItem('bq-token', tk);
       } catch (e) { /* ใช้ token ในหน่วยความจำต่อไป */ }
     },
     clear() {
@@ -968,7 +967,6 @@
     });
     return {
       login: (f) => call('login', Object.assign({ lang: lang }, f)),
-      ssoLogin: (ticket) => call('ssoLogin', ticket, lang),
       logout: (tk) => call('logout', tk),
       init: () => call('getInitData', auth.token, lang),
       list: () => call('listAppointments', auth.token, lang),
@@ -1011,7 +1009,6 @@
         const u = id.split('@')[0].replace(/[^a-z0-9._-]/g, '') || 'demo';
         return delay({ token: 'demo.' + u, user: demoUser(u) });
       },
-      ssoLogin: () => fail('m_sso_demo'),
       logout: () => delay({ ok: true }),
       init: () => needUser(a => delay({
         user: a,
@@ -1192,7 +1189,7 @@
     busyBtn('loginBtn', async () => {
       try {
         const r = await api.login({ login: id, password: pw, remember: $('remember').checked });
-        auth.save(r.token, $('remember').checked);
+        auth.save(r.token);
         $('loginPw').value = '';
         authMsg('');
         await loadApp();
@@ -2044,40 +2041,17 @@
     renderAll();
   }
 
-  // พารามิเตอร์ในลิงก์ เช่น ?sso=... (เว็บแอปอยู่ใน iframe จึงต้องถามผ่าน google.script.url)
-  function readParams() {
-    return new Promise(resolve => {
-      try {
-        if (isGas && google.script.url) { google.script.url.getLocation(loc => resolve((loc && loc.parameter) || {})); return; }
-      } catch (e) { /* เปิดใน dialog ของชีต: ไม่มีพารามิเตอร์ */ }
-      const o = {};
-      try { new URLSearchParams(location.search).forEach((v, k) => { o[k] = v; }); } catch (e) { /* ignore */ }
-      resolve(o);
-    });
-  }
   // ลบ ?sso=... ออกจากแถบที่อยู่ ไม่ให้รีเฟรชแล้วใช้บัตรผ่านเดิมซ้ำ (บัตรใช้ได้ครั้งเดียว)
   function clearParams() {
     try { if (isGas && google.script.history) google.script.history.replace(null, {}); } catch (e) { /* ignore */ }
   }
 
-  // เปิดจากปุ่มใน LPCH RO Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ": แลกบัตรผ่านเป็นการเข้าสู่ระบบ
-  readParams().then(async p => {
-    if (p.sso) {
-      clearParams();
-      showAuth('login', t('sso_working'), true);
-      try {
-        const r = await api.ssoLogin(p.sso);
-        auth.save(r.token, false);
-        authMsg('');
-        await loadApp();
-        return;
-      } catch (e) {
-        if (!auth.token) { showAuth('login', errMsg(e)); return; }
-        // บัตรผ่านใช้ไม่ได้ (เช่น รีเฟรชหน้า) แต่ยังมีการเข้าสู่ระบบเดิมอยู่: ใช้ต่อ
-      }
-    }
-    if (auth.token) loadApp(); else showAuth('login');
-  });
+  // เปิดจากปุ่มใน LPCH RO Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ": เซิร์ฟเวอร์แลกบัตรผ่าน (?sso=) ให้แล้วใน window.BQ_SSO
+  const sso = window.BQ_SSO || null;
+  if (sso) clearParams();
+  if (sso && sso.token) { auth.save(sso.token); loadApp(); }
+  else if (auth.token) loadApp();   // บัตรผ่านใช้ไม่ได้ (เช่น รีเฟรชหน้า) แต่ยังเข้าสู่ระบบอยู่: ใช้ต่อ
+  else showAuth('login', sso && sso.error ? sso.error : '');
 
   if (!isGas) {
     $('seedBtn').addEventListener('click', async () => { state.appts = await api.seed(); renderAll(); toast(t('seeded')); });

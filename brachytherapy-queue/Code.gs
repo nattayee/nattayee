@@ -147,16 +147,30 @@ const DEFAULT_SETTINGS = [
 /*  Entry points                                                       */
 /* ------------------------------------------------------------------ */
 
-function doGet() {
+function doGet(e) {
   try {
     ensureSetup_();
-  } catch (e) {
-    console.error('doGet: ensureSetup_ failed: ' + (e && e.stack || e));
+  } catch (err) {
+    console.error('doGet: ensureSetup_ failed: ' + (err && err.stack || err));
     return errorPage_('เปิด Google Sheet ของระบบไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบ',
-      'Could not open the system\'s Google Sheet. Please contact the administrator.', String(e && e.message || e));
+      'Could not open the system\'s Google Sheet. Please contact the administrator.', String(err && err.message || err));
   }
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
+  let html = HtmlService.createHtmlOutputFromFile('Index').getContent();
+  // เปิดจากปุ่มใน LPCH RO Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ" (?sso=บัตรผ่าน): แลกบัตรที่เซิร์ฟเวอร์ก่อนส่งหน้าเว็บ
+  // แล้วส่ง token (หรือข้อความ error) ไปกับหน้าเว็บใน window.BQ_SSO (แบบเดียวกับแอป TRS-398)
+  const ticket = e && e.parameter && e.parameter.sso;
+  if (ticket) {
+    let sso;
+    try {
+      sso = { token: ssoLogin_(ticket, 'th').token };
+    } catch (err) {
+      sso = { error: String(err && err.message || err).replace(AUTH_ERR, '') };
+    }
+    const tag = '<script>window.BQ_SSO = ' + JSON.stringify(sso).replace(/</g, '\\u003c') + ';</script>';
+    const m = /<head(\s[^>]*)?>/i.exec(html);
+    html = m ? html.slice(0, m.index + m[0].length) + tag + html.slice(m.index + m[0].length) : tag + html;
+  }
+  return HtmlService.createHtmlOutput(html)
     .setTitle('ระบบนัดคิวผู้ป่วยใส่แร่ · กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -232,11 +246,12 @@ function login(form) {
   return startSession_(r, form && form.remember, 'เข้าสู่ระบบ');
 }
 
-/** เปิดจากปุ่มใน Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ": ลิงก์มี ?sso=<บัตรผ่าน> ใช้ได้ครั้งเดียว อายุ 2 นาที */
-function ssoLogin(ticket, lang) {
+/** เปิดจากปุ่มใน Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ": ลิงก์มี ?sso=<บัตรผ่าน> ใช้ได้ครั้งเดียว อายุ 2 นาที (doGet เรียก) */
+function ssoLogin_(ticket, lang) {
   const t = String(ticket || '').replace(/[^0-9a-f]/gi, '');
   if (!t) throw new Error(msg_(lang, 'ssoInvalid'));
-  return startSession_(workspace_({ action: 'ssoRedeem', ticket: t }, lang), false, 'เข้าสู่ระบบจาก Workspace');
+  // อายุ 7 วันเท่า session ของ Workspace (ทุกครั้งที่เปิดหน้า getInitData ตรวจกับ Workspace อีกครั้งอยู่แล้ว)
+  return startSession_(workspace_({ action: 'ssoRedeem', ticket: t }, lang), true, 'เข้าสู่ระบบจาก Workspace');
 }
 
 /** ออกจากระบบ: ปิด session ที่ Workspace ที่ระบบนี้เปิดไว้ด้วย */
