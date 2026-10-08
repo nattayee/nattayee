@@ -590,7 +590,7 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.<br>
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
-    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน f4d5164</div>
+    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน fa16297</div>
   </footer>
 </div>
 
@@ -1326,6 +1326,7 @@ body.locked .wrap { display: none; }
         : calCourses.map((c, i) => (i === calCourses.length - 1 ? { ...c, gapAfter: 0 } : c)).concat([{ d: dA, N: nAdd, perWeek: fA, gapAfter: 0 }]);
       const fin = adding ? TDF.splitCourse(finalCourses) : res;
       const finalDose = fin.rows.reduce((a, r) => a + r.dose, 0);
+      const totalFx = fin.rows.reduce((a, r) => a + r.N, 0);
       const vsTarget = fin.total - target;
       const decisionText = compMode === "add"
         ? (adding ? `เพิ่ม ${nAdd} fx × ${fmt(dA, 2)} Gy (${fA}/สัปดาห์) = ${fmt(nAdd * dA, 1)} Gy` : "เพิ่ม (ยังไม่ได้กรอกจำนวน fraction)")
@@ -1358,7 +1359,7 @@ body.locked .wrap { display: none; }
         ["TDF ตามแผน (ไม่พัก)", fmt(planned, 1)],
         ["TDF หลังพัก (ก่อนชดเชย)", fmt(res.total, 1)],
         ["TDF ที่สูญเสียจากการพัก", fmt(lost, 1), `(${fmt(planned ? (lost / planned) * 100 : 0, 1)}%)`],
-        ["Total dose", fmt(finalDose, 1), "Gy"],
+        ["Total dose", fmt(finalDose, 1), `Gy (${totalFx} fx)`],
         ["ระยะเวลารวม", fmt(segs ? Math.round((endT - parseDate(plan.start)) / DAY_MS) : fin.rows[fin.rows.length - 1].endDay, 0), "วัน"],
         ["เทียบเท่า 2 Gy × 5/wk", fmt(TDF.equivalentSchedule(fin.total, 2, 5).dose, 1), "Gy"],
       ].concat(segs ? [["ฉายครบ (คาดการณ์)", thaiT(endT)]] : []);
@@ -1378,7 +1379,8 @@ body.locked .wrap { display: none; }
         comp: compRows,
         table: { title: segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course", head: [unit, "Gy × fx", "Dose (Gy)", "วัน", "TDF", "พัก R", "Decay factor", "TDF สะสม"],
           rows: fin.rows.map((r) => [rowLabel(r), `${fmt(r.d, 2)} × ${r.N}`, fmt(r.dose, 1), `${r.startDay}–${r.endDay}`, fmt(r.tdf, 1),
-            r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]) },
+            r.gap ? fmt(r.gap, 0) : "—", r.gap ? fmt(r.factor, 4) : "—", fmt(r.after, 1)]),
+          foot: ["รวม", `${totalFx} fx`, fmt(finalDose, 1), "", fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1), "", "", fmt(fin.total, 1)] },
         notes: dateNotes,
         charts: [["gapChart", "TDF สะสมตามวันรักษา (เส้นประ = ลดลงจากช่วงพัก)"]],
         formulas: ["TDF = 1.19 · N · d^1.538 · X^−0.169", "TDF หลังพัก = TDF ก่อนพัก · (T / (T + R))^0.11"],
@@ -1391,7 +1393,7 @@ body.locked .wrap { display: none; }
         `<div class="card"><h3>${segs ? "รายละเอียดแต่ละช่วงฉาย" : "รายละเอียดแต่ละ course"}</h3><div class="tbl-wrap"><table>
           <tr><th>${unit}</th><th>Gy × fx</th><th>Dose (Gy)</th><th>วัน</th><th>TDF</th><th>พัก R (วัน)</th><th>Decay factor</th><th>TDF สะสม</th></tr>
           ${rows}
-          <tr class="total"><td>รวม</td><td></td><td>${fmt(finalDose, 1)}</td><td></td><td>${fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1)}</td><td></td><td></td><td>${fmt(fin.total, 1)}</td></tr>
+          <tr class="total"><td>รวม</td><td>${totalFx} fx</td><td>${fmt(finalDose, 1)}</td><td></td><td>${fmt(fin.rows.reduce((a, r) => a + r.tdf, 0), 1)}</td><td></td><td></td><td>${fmt(fin.total, 1)}</td></tr>
         </table></div></div>`;
 
       // chart segments: treatment runs solid, gaps dashed amber
@@ -1911,7 +1913,8 @@ body.locked .wrap { display: none; }
       body += inputs;
       if (s.table) {
         body += block(s.table.title || "รายละเอียดแต่ละ course", `<table><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>
-          ${s.table.rows.map((row) => `<tr>${row.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>`);
+          ${s.table.rows.map((row) => `<tr>${row.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}
+          ${s.table.foot ? `<tr class="total">${s.table.foot.map((c, i) => `<td${i ? ' class="v"' : ""}>${esc(c)}</td>`).join("")}</tr>` : ""}</table>`);
       }
       body += results;
       if (s.comp) {
