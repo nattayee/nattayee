@@ -114,6 +114,10 @@ button{cursor:pointer}
 .assign small{display:block;font-size:12.5px;color:var(--muted)}
 .assign.warn{color:var(--late)}
 .chips.cats span small,.chips.people span small{margin-left:7px;font:500 11px var(--mono);opacity:.65}
+.dose-row{display:grid;grid-template-columns:120px 96px 110px minmax(0,1fr);gap:10px 12px;align-items:start}
+.total{display:flex;align-items:center;min-height:36px;font:500 15px var(--mono);white-space:nowrap}
+.freq-field input{margin-top:6px}
+@media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
 .intake-mode{display:flex;flex-wrap:wrap;gap:14px 32px;align-items:flex-start}
 .link-btn{padding:0;border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:500}
 .link-btn:hover{text-decoration:underline}
@@ -363,6 +367,12 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="field"><span class="lbl">Aim</span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
           <div class="field" id="i-tech-field"><span class="lbl">Technique</span><div class="chips" id="i-tech" role="radiogroup" aria-label="Technique"></div></div>
         </div>
+        <div class="dose-row">
+          <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="i-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
+          <label class="field"><span class="lbl">Fx</span><input type="number" id="i-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+          <div class="field"><span class="lbl">รวม</span><output class="total" id="i-total" for="i-dpf i-fx">–</output></div>
+          <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="i-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="i-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
+        </div>
         <div class="intake-dates">
           <label class="field plan-field"><span class="lbl">CT-Sim</span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
@@ -448,6 +458,12 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="field plan-only"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
       <div class="field plan-only"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
       <div class="field plan-only" id="tech-field"><span class="lbl">Technique</span><div class="chips" id="f-tech" role="radiogroup" aria-label="Technique"></div></div>
+      <div class="dose-row">
+          <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="f-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
+          <label class="field"><span class="lbl">Fx</span><input type="number" id="f-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+          <div class="field"><span class="lbl">รวม</span><output class="total" id="f-total" for="f-dpf f-fx">–</output></div>
+          <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="f-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="f-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
+        </div>
       <div class="dates">
         <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
         <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
@@ -544,6 +560,7 @@ const DEFAULT_CONFIG = {
   types: ['New', 'Adap', 'Emer high', 'Emer low', 'ย้าย', 'เพิ่ม F.S.', 'Replan', 'CP'],
   aims: ['Curative', 'Palliative', 'On tx'],
   techniques: ['SRS', 'SRT', 'SBRT', 'CSI', 'HA'],
+  freqs: ['Daily', 'EOD', 'BID', 'Single fraction'],   // ความถี่ในการฉาย (อื่นๆ กรอกเองในฟอร์ม)
   // หมวดงาน = แท็บในไฟล์เดิม เรียงตามแบบฟอร์ม P4P
   cats: [
     { id: '3dbt',    label: '3D Breast',            p4p: '3D Breast/Chest',       group: '3D Planning',            min: 270,  w: 1.25, kind: 'plan',   mu: true,  rotate: 'case', on: true },
@@ -580,7 +597,7 @@ function logKinds() {
 const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -670,7 +687,7 @@ function mergeConfig(c) {
       return { code, name: str(s.name), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
     }).filter(s => s.code);
   }
-  for (const k of ['doctors', 'types', 'aims', 'techniques']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
+  for (const k of ['doctors', 'types', 'aims', 'techniques', 'freqs']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
   if (Array.isArray(c.cats) && c.cats.length) {
     out.cats = c.cats.filter(x => x && x.id).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
@@ -730,24 +747,24 @@ function demoDb() {
   let n = 0, hn = 999000100;
   const cases = [];
   const mk = (cat, mp, o) => cases.push({ id: 'demo-c' + (++n), cat, mp, hn: String(++hn), created: new Date(t0 + n * 36e5).toISOString(), ...o });
-  mk('vmbt', 'JR', { ct: d(-10), in: d(-9), sim: d(5), fin: d(-6), eval: d(-5), type: 'New', doc: 'TA', aim: 'Curative' });
-  mk('vmbt', 'WM', { ct: d(-8), in: d(-7), sim: d(7), fin: d(-3), type: 'New', doc: 'SC', aim: 'Curative', note: 'DIBH' });
-  mk('vmbt', 'NY', { ct: d(-5), in: d(-4), sim: d(8), type: 'New', doc: 'SC', aim: 'Curative' });
-  mk('vmbt', 'WS', { ct: d(-1), in: d(0), sim: d(12), type: 'New', doc: 'TA', aim: 'Curative' });
-  mk('vmetc', 'JR', { ct: d(-7), in: d(-6), sim: d(2), fin: d(-2), type: 'New', doc: 'TC', aim: 'Curative' });
-  mk('vmetc', 'WM', { ct: d(-5), in: d(-5), sim: d(-5), fin: d(-5), eval: d(-5), type: 'Emer low', doc: 'SC', aim: 'Palliative' });
-  mk('vmetc', 'NY', { ct: d(-3), in: d(-2), sim: d(1), type: 'New', doc: 'SC', aim: 'Curative' });
-  mk('vmhn', 'WS', { ct: d(-14), in: d(-8), sim: d(-1), type: 'New', doc: 'SC', aim: 'Curative' });
-  mk('vmhn', 'JR', { ct: d(-9), in: d(-4), sim: d(3), fin: d(-1), type: 'New', doc: 'TA', aim: 'Curative' });
-  mk('vmhn', 'WM', { ct: d(-1), in: d(-1), sim: d(-1), fin: d(-1), eval: d(-1), type: 'Emer high', doc: 'TA', aim: 'Palliative' });
-  mk('3d', 'NY', { ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative' });
-  mk('3d', 'WS', { ct: d(-2), in: d(-2), sim: d(-2), fin: d(-2), eval: d(-2), type: 'Emer low', doc: 'TA', aim: 'Palliative' });
-  mk('3d', 'JR', { ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative' });
-  mk('srs', 'WM', { ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT' });
-  mk('vmchest', 'NY', { ct: d(-4), in: d(-4), sim: d(2), fin: d(-1), type: 'Replan', doc: 'TA', aim: 'On tx' });
-  mk('brachy', 'JR', { in: d(-7) });
-  mk('brachy', 'JR', { in: d(-7) });
-  mk('brachy', 'WS', { in: d(-1) });
+  mk('vmbt', 'JR', { ct: d(-10), in: d(-9), sim: d(5), fin: d(-6), eval: d(-5), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
+  mk('vmbt', 'WM', { ct: d(-8), in: d(-7), sim: d(7), fin: d(-3), type: 'New', doc: 'SC', aim: 'Curative', note: 'DIBH', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('vmbt', 'NY', { ct: d(-5), in: d(-4), sim: d(8), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
+  mk('vmbt', 'WS', { ct: d(-1), in: d(0), sim: d(12), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('vmetc', 'JR', { ct: d(-7), in: d(-6), sim: d(2), fin: d(-2), type: 'New', doc: 'TC', aim: 'Curative', dpf: '1.8', fx: '28', freq: 'Daily' });
+  mk('vmetc', 'WM', { ct: d(-5), in: d(-5), sim: d(-5), fin: d(-5), eval: d(-5), type: 'Emer low', doc: 'SC', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
+  mk('vmetc', 'NY', { ct: d(-3), in: d(-2), sim: d(1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '39', freq: 'Daily' });
+  mk('vmhn', 'WS', { ct: d(-14), in: d(-8), sim: d(-1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '35', freq: 'Daily' });
+  mk('vmhn', 'JR', { ct: d(-9), in: d(-4), sim: d(3), fin: d(-1), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '33', freq: 'Daily' });
+  mk('vmhn', 'WM', { ct: d(-1), in: d(-1), sim: d(-1), fin: d(-1), eval: d(-1), type: 'Emer high', doc: 'TA', aim: 'Palliative', dpf: '4', fx: '5', freq: 'Daily' });
+  mk('3d', 'NY', { ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
+  mk('3d', 'WS', { ct: d(-2), in: d(-2), sim: d(-2), fin: d(-2), eval: d(-2), type: 'Emer low', doc: 'TA', aim: 'Palliative', dpf: '8', fx: '1', freq: 'Single fraction' });
+  mk('3d', 'JR', { ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('srs', 'WM', { ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT', dpf: '8', fx: '3', freq: 'EOD' });
+  mk('vmchest', 'NY', { ct: d(-4), in: d(-4), sim: d(2), fin: d(-1), type: 'Replan', doc: 'TA', aim: 'On tx', dpf: '1.5', fx: '30', freq: 'BID' });
+  mk('brachy', 'JR', { in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
+  mk('brachy', 'JR', { in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
+  mk('brachy', 'WS', { in: d(-1), dpf: '7', fx: '4', freq: 'Weekly' });
   const logs = [];
   let m = 0;
   const lg = (kind, mp, date, o = {}) => logs.push({ id: 'demo-l' + (++m), kind, mp, date, created: new Date(t0 + m * 36e5).toISOString(), ...o });
@@ -1002,7 +1019,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1016,10 +1033,63 @@ function renderWork() {
   $('#more-wrap').hidden = rows.length <= state.limit;
 }
 
+// ขนาดรังสี: "2 Gy × 25 fx (50 Gy) · Daily"
+function doseText(c) {
+  const parts = [];
+  if (c.dpf || c.fx) {
+    const tot = (+c.dpf || 0) * (+c.fx || 0);
+    parts.push(`${c.dpf ? c.dpf + ' Gy' : '? Gy'} × ${c.fx || '?'} fx${tot > 0 ? ` (${num(tot, 2)} Gy)` : ''}`);
+  }
+  if (c.freq) parts.push(c.freq);
+  return parts.join(' · ');
+}
+// ชิปความถี่ + "อื่นๆ" ที่กรอกเองได้ ใช้ทั้งฟอร์มแจกเคส (i) และฟอร์มแก้ไข (f)
+const OTHER = '__other';
+function renderFreq(pre, value) {
+  const list = state.config.freqs;
+  const sel = !value ? '' : list.includes(value) ? value : OTHER;
+  const other = $(`#${pre}-freq-other`);
+  $(`#${pre}-freq`).innerHTML = [...list.map(v => [v, v]), [OTHER, 'อื่นๆ']].map(([v, l]) => `<label><input type="radio" name="${pre}freq" value="${esc(v)}"${v === sel ? ' checked' : ''}><span>${esc(l)}</span></label>`).join('');
+  $(`#${pre}-freq`).dataset.sig = JSON.stringify(list);
+  other.value = sel === OTHER && value !== OTHER ? value : '';
+  syncDose(pre);
+}
+function ensureFreq(pre) {
+  const el = $(`#${pre}-freq`);
+  if (el.dataset.sig === JSON.stringify(state.config.freqs)) return;
+  const cur = el.dataset.sig ? chipValue(el) : '';
+  renderFreq(pre, cur === OTHER ? (str($(`#${pre}-freq-other`).value) || OTHER) : cur);
+}
+function syncDose(pre) {
+  $(`#${pre}-freq-other`).hidden = chipValue($(`#${pre}-freq`)) !== OTHER;
+  const tot = (parseFloat($(`#${pre}-dpf`).value) || 0) * (parseFloat($(`#${pre}-fx`).value) || 0);
+  $(`#${pre}-total`).textContent = tot > 0 ? `${num(tot, 2)} Gy` : '–';
+}
+function onFreqChange(pre, input) {
+  if (/single/i.test(input.value) && input.checked && !$(`#${pre}-fx`).value) $(`#${pre}-fx`).value = 1;
+  syncDose(pre);
+  if (input.value === OTHER && input.checked) $(`#${pre}-freq-other`).focus();
+}
+function checkDose(pre) {
+  const dpf = $(`#${pre}-dpf`).value, fx = $(`#${pre}-fx`).value;
+  if (dpf && !(+dpf > 0)) { $(`#${pre}-dpf`).focus(); return 'Dose/fx ต้องมากกว่า 0'; }
+  if (fx && !(Number.isInteger(+fx) && +fx > 0)) { $(`#${pre}-fx`).focus(); return 'จำนวน Fx ต้องเป็นจำนวนเต็มบวก'; }
+  if (chipValue($(`#${pre}-freq`)) === OTHER && !str($(`#${pre}-freq-other`).value)) { $(`#${pre}-freq-other`).focus(); return 'กรอกความถี่ในช่อง "อื่นๆ"'; }
+  return '';
+}
+const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === OTHER ? str($(`#${pre}-freq-other`).value) : v; };
+const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), freq: readFreq(pre) });
+function fillDose(pre, c) {
+  $(`#${pre}-dpf`).value = c.dpf || '';
+  $(`#${pre}-fx`).value = c.fx || '';
+  renderFreq(pre, c.freq || '');
+}
+
 function caseRow(c, rcs) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
   const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>' : '';
-  const meta = simple ? [manualChip, c.note && esc(c.note)] : [manualChip, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const dose = doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
+  const meta = simple ? [manualChip, dose, c.note && esc(c.note)] : [manualChip, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1287,7 +1357,7 @@ function renderSettings() {
       <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
-      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}</div></div>
+      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
@@ -1375,6 +1445,7 @@ function openCase(id) {
   for (const f of ['hn', 'name', 'ct', 'in', 'fin', 'eval', 'note']) $('#f-' + f).value = editingCase[f] || '';
   $('#f-oncall').checked = editingCase.sim === 'on call';
   $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
+  fillDose('f', editingCase);
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
@@ -1385,6 +1456,8 @@ async function submitCase(e) {
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
   if (!$('#f-mp').value) { $('#f-mp').focus(); return toast('เลือก MP ผู้รับเคส', { err: true }); }
+  const doseErr = checkDose('f');
+  if (doseErr) return toast(doseErr, { err: true });
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
   const v = id => (simple ? '' : $('#f-' + id).value);
@@ -1395,7 +1468,7 @@ async function submitCase(e) {
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
-    updated: nowISO(),
+    ...readDose('f'), updated: nowISO(),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -1543,6 +1616,7 @@ function renderIntake() {
     const sel = el.children.length ? chipValue(el) : (name === 'itype' ? 'New' : '');
     chipGroup(el, name, list, sel);
   }
+  ensureFreq('i');
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
   const order = cfg.staff.filter(s => s.active).map(s => s.code).join(' → ');
@@ -1593,6 +1667,7 @@ function fillIntake(c) {
   for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
+  fillDose('i', c);
   renderIntake();
   const cat = $(`#i-cat input[value="${CSS.escape(c.cat)}"]`);
   if (cat) cat.checked = true;
@@ -1608,6 +1683,8 @@ async function submitIntake(e) {
   if (!hn) { $('#i-hn').focus(); return toast('กรอก HN ก่อนแจกเคส', { err: true }); }
   if (!catId) return toast('เลือกเทคนิคก่อนแจกเคส', { err: true });
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
+  const doseErr = checkDose('i');
+  if (doseErr) return toast(doseErr, { err: true });
   const manual = chipValue($('#i-mode')) === 'manual';
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
@@ -1617,7 +1694,7 @@ async function submitIntake(e) {
     id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value,
     ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
     doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
-    tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
+    tech: simple || !k.tech ? '' : chipValue($('#i-tech')), ...readDose('i'), updated: nowISO(),
   });
   const btn = $('#i-save');
   btn.disabled = true;
@@ -1770,9 +1847,17 @@ document.addEventListener('click', e => {
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
 caseForm.addEventListener('submit', submitCase);
-caseForm.addEventListener('change', e => { if (['f-cat', 'f-mp', 'f-oncall', 'f-in'].includes(e.target.id)) syncCaseForm(); });
+caseForm.addEventListener('change', e => {
+  if (e.target.name === 'ffreq') return onFreqChange('f', e.target);
+  if (['f-cat', 'f-mp', 'f-oncall', 'f-in'].includes(e.target.id)) syncCaseForm();
+});
+caseForm.addEventListener('input', e => { if (e.target.id === 'f-dpf' || e.target.id === 'f-fx') syncDose('f'); });
 intake.addEventListener('submit', submitIntake);
-intake.addEventListener('change', e => { if (e.target.id === 'i-in') renderIntake(); else syncIntake(); });
+intake.addEventListener('change', e => {
+  if (e.target.name === 'ifreq') return onFreqChange('i', e.target);
+  if (e.target.id === 'i-in') renderIntake(); else syncIntake();
+});
+intake.addEventListener('input', e => { if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
 leaveForm.addEventListener('submit', e => {
   e.preventDefault();
   addLeave($('#v-mp').value, $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });

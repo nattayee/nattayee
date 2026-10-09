@@ -15,7 +15,8 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['how', 'วิธีแจก'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
       ['fin', 'Finish'], ['eval', 'Evaluate'], ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
-      ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['note', 'Note'],
+      ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'],
+      ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['freq', 'ความถี่'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
