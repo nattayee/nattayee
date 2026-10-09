@@ -289,8 +289,12 @@ function tdfSavePdf(token, id, base64, fileName) {
   });
 }
 
-/** Drive folder for approved reports, with one subfolder per month (by approval date). */
+/** Drive folder for approved reports, with one subfolder per month (by approval date). Created under the lock. */
 function pdfFolder_(date) {
+  return locked_(function () { return pdfFolderLocked_(date); });
+}
+
+function pdfFolderLocked_(date) {
   var props = PropertiesService.getScriptProperties();
   var root = null, id = props.getProperty('PDF_FOLDER_ID');
   if (id) { try { root = DriveApp.getFolderById(id); } catch (e) { root = null; } }
@@ -345,14 +349,42 @@ function patientName_(p) {
   return ((p.prefix &amp;&amp; p.prefix !== '-' ? String(p.prefix) : '') + [p.first, p.last].filter(function (x) { return x; }).join(' ')).trim().slice(0, 120);
 }
 
+var LOCK_WAIT_MS = 20000;
+var lockDepth_ = 0;
+
+/**
+ * Runs fn while holding the script lock, so writes from several users never interleave. Nested calls (a locked
+ * function that opens the sheet or the PDF folder) reuse the lock already held instead of waiting on themselves.
+ */
 function locked_(fn) {
+  if (lockDepth_ &gt; 0) return fn();
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try { return fn(); } finally { lock.releaseLock(); }
+  if (!lock.tryLock(LOCK_WAIT_MS)) throw new Error('ระบบกำลังบันทึกข้อมูลของผู้ใช้อื่นอยู่ กรุณาลองใหม่อีกครั้งในอีกสักครู่');
+  lockDepth_++;
+  try { return fn(); } finally { lockDepth_--; lock.releaseLock(); }
 }
 
-/** The records sheet, in a spreadsheet this script created (its id is kept in Script properties). */
+/**
+ * The records sheet, in a spreadsheet this script created (its id is kept in Script properties). Opening it needs no
+ * lock; creating it or adding new header columns happens under the lock and is checked again once the lock is held,
+ * so two users arriving together never make two spreadsheets.
+ */
 function records_() {
+  return openRecords_() || locked_(function () { return openRecords_() || createRecords_(); });
+}
+
+/** The records sheet when it exists with every column, otherwise null. */
+function openRecords_() {
+  var id = PropertiesService.getScriptProperties().getProperty('RECORDS_SHEET_ID');
+  if (!id) return null;
+  var ss;
+  try { ss = SpreadsheetApp.openById(id); } catch (e) { return null; }
+  var sh = ss.getSheetByName('Records');
+  return sh &amp;&amp; sh.getLastColumn() &gt;= RECORD_HEADERS.length ? sh : null;
+}
+
+/** Creates whatever is missing: the spreadsheet, the Records sheet, the header columns. Call under the lock. */
+function createRecords_() {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty('RECORDS_SHEET_ID');
   var ss = null;
@@ -425,7 +457,7 @@ function session_(res) {
   return { token: res.token, user: { username: u.username, name: u.fullName || u.username, role: u.role || '' } };
 }
 </textarea>
-    <div class="meta">363 บรรทัด · 18.6 KB</div>
+    <div class="meta">395 บรรทัด · 20.1 KB</div>
   </section>
   <p class="intro">เวอร์ชันหน้าเว็บล่าสุด: <b>a25243f</b></p>
 </main>
