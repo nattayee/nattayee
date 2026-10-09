@@ -86,6 +86,7 @@ const MSG = {
     ssoInvalid: 'ลิงก์เข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง',
     workspaceDown: 'ติดต่อ LPCH RO Workspace ไม่ได้ ({err}) กรุณาลองใหม่ ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ',
     noData: 'ไม่มีข้อมูล',
+    busy: 'มีผู้ใช้อื่นกำลังบันทึกข้อมูลอยู่ กรุณารอสักครู่แล้วลองใหม่',
     technique: 'กรุณาเลือกรูปแบบการใส่ หรือกรอกในช่อง "อื่นๆ" (ไม่เกิน 100 ตัวอักษร)',
     statusInvalid: 'สถานะไม่ถูกต้อง',
     dateInvalid: 'วันที่นัดไม่ถูกต้อง',
@@ -109,6 +110,7 @@ const MSG = {
     ssoInvalid: 'This sign-in link is not valid. Please log in again',
     workspaceDown: 'Could not reach LPCH RO Workspace ({err}). Please try again, or tell the administrator',
     noData: 'No data',
+    busy: 'Someone else is saving right now. Please wait a moment and try again',
     technique: 'Please choose an insertion type, or type one under "Other" (up to 100 characters)',
     statusInvalid: 'Invalid status',
     dateInvalid: 'Invalid appointment date',
@@ -351,8 +353,7 @@ function createAppointments(token, payload) {
   const user = acc.username;
   const p = validatePayload_(payload, lang);
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  const lock = lock_(lang);
   try {
     const settings = getSettings_();
     const max = maxCases_(settings);
@@ -429,8 +430,7 @@ function markDone(token, apptId, lang) {
 function updateAppointment(token, apptId, changes, lang) {
   const acc = requireUser_(token, lang);
   const c = changes || {};
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  const lock = lock_(lang);
   try {
     const sh = getSheet_(SHEET_APPTS);
     const last = sh.getLastRow();
@@ -619,6 +619,13 @@ function errorPage_(message, messageEn, detail) {
 /*  Internal helpers                                                   */
 /* ------------------------------------------------------------------ */
 
+/** ล็อกก่อนเขียนชีต (คนเดียวต่อครั้ง) รอได้ 20 วินาที ถ้ายังไม่ว่างแจ้งให้ลองใหม่ */
+function lock_(lang) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error(msg_(lang, 'busy'));
+  return lock;
+}
+
 /** คืนรายการนัดทั้งหมด เรียงตามวันที่/เวลา */
 function listAppointments_() {
   const sh = getSheet_(SHEET_APPTS);
@@ -634,8 +641,7 @@ function listAppointments_() {
 function updateStatus_(acc, apptId, scope, newStatus, deleteEvent, lang) {
   const user = acc.username;
   const label = userLabel_(acc);
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  const lock = lock_(lang);
   try {
     const sh = getSheet_(SHEET_APPTS);
     const last = sh.getLastRow();
@@ -927,11 +933,30 @@ function ss_() {
   return ss;
 }
 
+/**
+ * สร้างชีต/หัวตาราง/คีย์ Settings ที่ยังไม่มี และอัปเดตจากเวอร์ชันก่อน
+ * เรียกทุกครั้งที่เปิดหน้า: ตรวจแบบอ่านอย่างเดียวก่อน ถ้าต้องแก้จึงล็อกแล้วตรวจซ้ำก่อนเขียน
+ * (กันสองคนเปิดหน้าพร้อมกันแล้วสร้างชีตซ้ำ เติมคีย์ซ้ำ หรือลบคอลัมน์เก่าสองรอบ)
+ */
 function ensureSetup_() {
+  if (!setupSheets_(false)) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error(msg_('th', 'busy'));
+  try {
+    setupSheets_(true);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** apply = false: คืน true ถ้ามีสิ่งที่ต้องสร้าง/แก้ (ไม่เขียนอะไร), apply = true: สร้าง/แก้จริง */
+function setupSheets_(apply) {
   const ss = ss_();
 
   let sh = ss.getSheetByName(SHEET_APPTS);
   if (!sh) {
+    if (!apply) return true;
     sh = ss.insertSheet(SHEET_APPTS);
     sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS])
       .setFontWeight('bold').setBackground('#ede7f6');
@@ -942,16 +967,19 @@ function ensureSetup_() {
   } else {
     // อัปเดตจากเวอร์ชันก่อน: ลบคอลัมน์ที่ไม่ใช้แล้ว (เวลาเริ่ม/เวลาสิ้นสุด หรือ ชนิด) ที่อยู่หลัง "วันที่นัด"
     const h = sh.getRange(1, 10).getDisplayValues()[0][0];
+    if ((h === 'เวลาเริ่ม' || h === 'ชนิด') && !apply) return true;
     if (h === 'เวลาเริ่ม') sh.deleteColumns(10, 2);
     else if (h === 'ชนิด') sh.deleteColumn(10);
     // เติมหัวคอลัมน์ใหม่ (รูปแบบการใส่ / ประวัติการแก้ไข) ที่ต่อท้าย
     if (sh.getLastColumn() < APPT_HEADERS.length) {
+      if (!apply) return true;
       sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
     }
   }
 
   sh = ss.getSheetByName(SHEET_DOCTORS);
   if (!sh) {
+    if (!apply) return true;
     sh = ss.insertSheet(SHEET_DOCTORS);
     sh.getRange(1, 1).setValue('ชื่อแพทย์').setFontWeight('bold');
     sh.getRange(2, 1, DEFAULT_DOCTORS.length, 1).setValues(DEFAULT_DOCTORS.map(d => [d]));
@@ -959,6 +987,7 @@ function ensureSetup_() {
     // แทนที่รายชื่อตัวอย่างจากเวอร์ชันก่อนด้วยรายชื่อแพทย์จริง
     const cur = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().map(r => r[0].trim()).filter(Boolean);
     if (cur.length && cur.every(n => OLD_SAMPLE_DOCTORS.indexOf(n) >= 0)) {
+      if (!apply) return true;
       sh.getRange(2, 1, sh.getLastRow() - 1, 1).clearContent();
       sh.getRange(2, 1, DEFAULT_DOCTORS.length, 1).setValues(DEFAULT_DOCTORS.map(d => [d]));
     }
@@ -966,6 +995,7 @@ function ensureSetup_() {
 
   sh = ss.getSheetByName(SHEET_HOLIDAYS);
   if (!sh) {
+    if (!apply) return true;
     sh = ss.insertSheet(SHEET_HOLIDAYS);
     sh.getRange(1, 1, 1, 2).setValues([['วันที่ (yyyy-MM-dd)', 'ชื่อวันหยุด']]).setFontWeight('bold');
     sh.getRange('A:A').setNumberFormat('@');
@@ -973,6 +1003,7 @@ function ensureSetup_() {
 
   sh = ss.getSheetByName(SHEET_SETTINGS);
   if (!sh) {
+    if (!apply) return true;
     sh = ss.insertSheet(SHEET_SETTINGS);
     sh.getRange(1, 1, 1, 3).setValues([['คีย์', 'ค่า', 'คำอธิบาย']]).setFontWeight('bold');
   }
@@ -981,15 +1012,18 @@ function ensureSetup_() {
     ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().map(r => r[0].trim()) : [];
   const missing = DEFAULT_SETTINGS.filter(s => have.indexOf(s[0]) < 0);
   if (missing.length) {
+    if (!apply) return true;
     sh.getRange(sh.getLastRow() + 1, 1, missing.length, 3).setNumberFormat('@').setValues(missing);
     sh.autoResizeColumns(1, 3);
   }
 
   sh = ss.getSheetByName(SHEET_LOG);
   if (!sh) {
+    if (!apply) return true;
     sh = ss.insertSheet(SHEET_LOG);
     sh.getRange(1, 1, 1, 4).setValues([['เวลา', 'ผู้ใช้', 'การกระทำ', 'รายละเอียด']])
       .setFontWeight('bold').setBackground('#ede7f6');
     sh.setFrozenRows(1);
   }
+  return false;
 }
