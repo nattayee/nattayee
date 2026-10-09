@@ -208,8 +208,10 @@ const LEGACY_PLAN_SHEETS = [
   ['3D', '3d'], ['3D Bt', '3dbt'], ['VM Brain', 'vmbrain'], ['VM bt', 'vmbt'],
   ['VM etc', 'vmetc'], ['VM Chest', 'vmchest'], ['VM H&N', 'vmhn'], ['SRS CSI', 'srs'],
 ];
-// แท็บที่มีสองตารางคู่กัน: ตารางซ้าย, ตารางขวา
+// แท็บที่มีสองตารางคู่กัน: ตารางซ้าย, ตารางขวา (นำเข้าเป็นกิจกรรมนับครั้งในแถบ Brachytherapy / Hyperthermia)
 const LEGACY_PAIR_SHEETS = [['Brachy', 'brachy', 'brachyn'], ['Hyper', 'hyper', 'p2h']];
+// เดิมเป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (ใช้รหัสเดิมเป็นประเภทกิจกรรม)
+const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 const LEGACY_HEADERS = {
   'CT-Sim': 'ct', 'In': 'in', 'Sim': 'sim', 'Finish': 'fin', 'Evaluate': 'eval', 'Type': 'type',
   'HN': 'hn', 'Name': 'name', 'Doc': 'doc', 'Aim': 'aim', 'Technique': 'tech', 'Note': 'note',
@@ -262,7 +264,6 @@ function parseLegacy_(read, tz) {
   const isTableLabel = s => /^Column\d+$/.test(s);
   const isCode = s => /^[A-Z]{2,4}$/.test(s);
   const headerRow = (rows, label, within) => rows.findIndex((r, i) => i < within && r.map(text).indexOf(label) >= 0);
-  const blank = { ct: '', sim: '', fin: '', eval: '', type: '', doc: '', aim: '', tech: '' };
 
   // ลำดับทีม (ใช้กับแต้มต่อ)
   const sum = read('SUM');
@@ -315,10 +316,10 @@ function parseLegacy_(read, tz) {
         const d = date(row[c0]);
         const hn = text(row[c0 + 1]);
         if ((!d && !hn) || isTableLabel(hn)) continue;
-        out.cases.push(Object.assign({}, blank, {
-          id: key(name, cat, r + 1, hn, d), cat: cat, mp: text(row[c0 + 3]).toUpperCase(), hn: hn,
-          name: text(row[c0 + 2]), in: d, note: text(row[c0 + 4]), created: stamp(d, r), updated: '',
-        }));
+        out.logs.push({
+          id: key(name, cat, r + 1, hn, d), kind: cat, date: d, mp: text(row[c0 + 3]).toUpperCase(), hn: hn,
+          name: text(row[c0 + 2]), caseId: '', title: '', min: '', k: '', note: text(row[c0 + 4]), created: stamp(d, r), updated: '',
+        });
       }
     });
   });
@@ -327,7 +328,7 @@ function parseLegacy_(read, tz) {
   const linkCase = (hn, d) => {
     let best = null;
     out.cases.forEach(c => {
-      if (c.hn !== hn || ['brachy', 'brachyn', 'p2h', 'hyper'].indexOf(c.cat) >= 0) return;
+      if (c.hn !== hn) return;
       if (d && c.in && c.in > d) return;
       if (!best || c.in > best.in) best = c;
     });
@@ -392,6 +393,26 @@ function parseLegacy_(read, tz) {
     });
   }
   return out;
+}
+
+/**
+ * ย้ายเคส Brachy / Hyperthermia ที่บันทึกไว้แบบเดิม (แท็บ Cases) ไปเป็นกิจกรรมในแท็บ Logs ครั้งเดียว
+ * ใช้ id เดิม จึงรันซ้ำหรือนำเข้าซ้ำได้โดยไม่เกิดรายการซ้ำ คืนจำนวนที่ย้าย
+ */
+function moveActCases() {
+  return withLock_(() => {
+    const ss = SpreadsheetApp.getActive();
+    const old = readTable_(ss, 'cases').filter(c => MOVED_CATS.indexOf(c.cat) >= 0);
+    if (!old.length) return 0;
+    appendNew_(ss, 'logs', old.map(c => ({
+      id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, caseId: '', title: '', min: '', k: '',
+      note: c.note, created: c.created, updated: new Date().toISOString(),
+    })));
+    const sh = tableSheet_(ss, 'cases');
+    const idCol = headerOf_(sh).indexOf('id') + 1;
+    old.map(c => findRow_(sh, idCol, c.id)).filter(r => r > 0).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+    return old.length;
+  });
 }
 
 /* ---------- แอดมิน ---------- */

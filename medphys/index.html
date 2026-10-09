@@ -224,15 +224,17 @@ input[type="checkbox"]{width:auto;min-height:0;accent-color:var(--accent)}
 }
 
 /* activity log rows */
-.lrow{display:grid;grid-template-columns:62px 92px minmax(0,1fr) 84px;gap:12px;align-items:center;width:100%;padding:10px 14px;border:0;background:none;text-align:left}
+.lrow{display:grid;grid-template-columns:62px 132px minmax(0,1fr) 84px;gap:12px;align-items:center;width:100%;padding:10px 14px;border:0;background:none;text-align:left}
 .lrow:hover{background:var(--hover)}
 .l-date{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
-.l-kind{display:flex;align-items:center;gap:6px}
+.l-kind{display:flex;align-items:center;gap:6px;min-width:0}
+.l-kind .chip{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log-tabs{margin-bottom:10px}
 .l-main{min-width:0;font-size:13.5px}
 .l-main small{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .l-pts{text-align:right;font:13px var(--mono);color:var(--muted)}
 @media (max-width:620px){
-  .lrow{grid-template-columns:112px minmax(0,1fr) auto;grid-template-areas:"kind main pts" "date main pts";row-gap:2px}
+  .lrow{grid-template-columns:132px minmax(0,1fr) auto;grid-template-areas:"kind main pts" "date main pts";row-gap:2px}
   .l-date{grid-area:date}.l-kind{grid-area:kind}.l-main{grid-area:main}.l-pts{grid-area:pts}
 }
 
@@ -435,11 +437,11 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <section id="view-logs" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
-      <div class="tabs" role="tablist" id="log-tabs"></div>
       <span class="spacer"></span>
       <button type="button" class="btn" id="add-other">+ กิจกรรมอื่น</button>
       <button type="button" class="btn primary" id="add-rc">+ บันทึก RC</button>
     </div>
+    <div class="tabs log-tabs" role="tablist" id="log-tabs"></div>
     <ul class="list" id="logs"></ul>
   </section>
 
@@ -577,6 +579,9 @@ const REQ_FIELDS = [
   { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Sim', plan: true },
   { key: 'note', label: 'Note' },
 ];
+// เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
+const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
+const BUILTIN_ACTS = ['dqa', 'mu', 'rc', ...MOVED_CATS];
 const DEFAULT_CONFIG = {
   rate: 0.143,          // คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที) กลุ่ม A5.1
   guarantee: 1200,      // แต้มประกันตั้งต้นของตำแหน่งใหม่
@@ -610,15 +615,16 @@ const DEFAULT_CONFIG = {
     { id: 'vmhn',    label: 'VM H&N',               p4p: 'VM H&N',                group: 'VMAT',                   min: 600,  w: 2,    kind: 'plan',   mu: true,  rotate: 'case', on: true },
     { id: 'vmbt',    label: 'VM Breast',            p4p: 'IM/VM Breast',          group: 'VMAT',                   min: 400,  w: 2,    kind: 'plan',   mu: true,  rotate: 'case', on: true },
     { id: 'srs',     label: 'SRS/SBRT/CSI',         p4p: 'SRS/SRT/SBRT/CSI',      group: 'VMAT',                   min: 1000, w: 2,    kind: 'plan',   mu: true,  rotate: 'case', on: true, tech: true },
-    { id: 'brachy',  label: 'Brachy 3D',            p4p: '3D Brachy',             group: 'Brachytherapy Planning', min: 45,   w: 2,    kind: 'simple', mu: false, rotate: 'day', on: true },
-    { id: 'brachyn', label: 'Brachy เสียบเข็ม',       p4p: '3D Brachy เสียบเข็ม',     group: 'Brachytherapy Planning', min: 60,   w: 2,    kind: 'simple', mu: false, rotate: 'day', on: true },
-    { id: 'p2h',     label: 'Plan to heat',         p4p: 'Plan to heat',          group: 'Hyperthermia',           min: 90,   w: 2,    kind: 'simple', mu: false, rotate: 'day', on: true },
-    { id: 'hyper',   label: 'Hyperthermia control', p4p: 'Hypertermia control',   group: 'Hyperthermia',           min: 120,  w: 2,    kind: 'simple', mu: false, rotate: 'day', on: true },
   ],
   acts: {
     dqa: { label: 'Analysis of Daily QA', short: 'Daily QA', group: 'งานห้องเตรียมอุปกรณ์ฉายรังสี', min: 60, w: 1.25 },
     mu:  { label: 'New MU',               group: 'งานห้องวางแผนการรักษา', min: 15, w: 1 },
     rc:  { label: 'Quality Checklist',    group: 'งานห้องวางแผนการรักษา', min: 20, w: 1.5 },
+    // tab = แถบในหน้า RC และกิจกรรม (กิจกรรมที่ตั้งแถบเดียวกันอยู่รวมกัน) · patient = บันทึก HN และชื่อผู้ป่วย
+    brachy:  { label: 'Brachy 3D',            group: 'Brachytherapy Planning', tab: 'Brachytherapy', patient: true, min: 45,  w: 2 },
+    brachyn: { label: 'Brachy เสียบเข็ม',       group: 'Brachytherapy Planning', tab: 'Brachytherapy', patient: true, min: 60,  w: 2 },
+    p2h:     { label: 'Plan to heat',         group: 'Hyperthermia',           tab: 'Hyperthermia',  patient: true, min: 90,  w: 2 },
+    hyper:   { label: 'Hyperthermia control', group: 'Hyperthermia',           tab: 'Hyperthermia',  patient: true, min: 120, w: 2 },
   },
   queue: {},     // คนถัดไปที่ตั้งเองรายหมวด { cat: { code, at } }
   icdExtra: [],  // รหัส ICD-10 ที่หน่วยงานเพิ่มเอง { code, name, th }
@@ -635,6 +641,20 @@ function logKinds() {
   ];
 }
 const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
+// แถบในหน้า RC และกิจกรรม: กิจกรรมที่ตั้งแถบ (tab) เดียวกันรวมเป็นแถบเดียว เช่น Brachytherapy, Hyperthermia
+function logTabs() {
+  const acts = state.config.acts, tabs = [];
+  for (const k of logKinds()) {
+    const t = acts[k.key] && str(acts[k.key].tab);
+    const key = t ? 'tab:' + t : k.key;
+    const tab = tabs.find(x => x.key === key);
+    if (tab) tab.kinds.push(k.key); else tabs.push({ key, label: t || k.label, kinds: [k.key] });
+  }
+  return tabs;
+}
+const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.config.acts[kind].patient);
+// เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
+const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'area', 'batch', 'note', 'created', 'updated'];
@@ -731,17 +751,20 @@ function mergeConfig(c) {
   for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
   // แพทย์: ค่าเก่าเป็นรายการรหัสล้วน ['SC', ...] แปลงเป็น { code, name }
   if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => (x && typeof x === 'object' ? { code: str(x.code).toUpperCase(), name: str(x.name) } : { code: str(x).toUpperCase(), name: '' })).filter(x => x.code);
-  if (Array.isArray(c.cats) && c.cats.length) {
-    out.cats = c.cats.filter(x => x && x.id).map(x => {
+  const moved = {}; // ค่าที่เคยตั้งให้เทคนิค Brachy/Hyperthermia ใช้ต่อเป็นค่าของกิจกรรม
+  if (Array.isArray(c.cats)) c.cats.forEach(x => { if (x && MOVED_CATS.includes(x.id)) moved[x.id] = { label: x.label, group: x.group, min: x.min, w: x.w }; });
+  if (Array.isArray(c.cats) && c.cats.some(x => x && x.id && !MOVED_CATS.includes(x.id))) {
+    out.cats = c.cats.filter(x => x && x.id && !MOVED_CATS.includes(x.id)).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
       return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false, kind: x.kind === 'simple' ? 'simple' : 'plan', tech: !!x.tech, group: str(x.group) || base.group || 'อื่น ๆ' };
     });
   }
-  if (c.acts && typeof c.acts === 'object') {
-    const pick = (x, base) => ({ ...base, label: str(x.label) || base.label, short: str(x.short) || base.short || '', group: str(x.group) || base.group, min: +x.min || 0, w: +x.w || 0 });
+  if ((c.acts && typeof c.acts === 'object') || Object.keys(moved).length) {
+    const src = c.acts && typeof c.acts === 'object' ? c.acts : {};
+    const pick = (x, base) => ({ ...base, label: str(x.label) || base.label, short: str(x.short) || base.short || '', group: str(x.group) || base.group, tab: x.tab !== undefined ? str(x.tab) : base.tab || '', patient: x.patient !== undefined ? !!x.patient : !!base.patient, min: +x.min || 0, w: +x.w || 0 });
     const acts = {};
-    for (const k of Object.keys(d.acts)) acts[k] = c.acts[k] ? pick(c.acts[k], d.acts[k]) : d.acts[k];
-    for (const k of Object.keys(c.acts)) if (!acts[k] && c.acts[k]) acts[k] = pick(c.acts[k], { label: k, group: 'กิจกรรมอื่น', min: 0, w: 0 });
+    for (const k of Object.keys(d.acts)) acts[k] = src[k] ? pick(src[k], d.acts[k]) : moved[k] ? pick(moved[k], d.acts[k]) : d.acts[k];
+    for (const k of Object.keys(src)) if (!acts[k] && src[k]) acts[k] = pick(src[k], { label: k, group: 'กิจกรรมอื่น', min: 0, w: 0 });
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
@@ -762,6 +785,7 @@ const sheetStore = {
   addCases: recs => call('addCases', recs),
   remove: (table, id) => call('deleteRecord', table, id),
   saveConfig: cfg => call('saveConfig', cfg),
+  moveActCases: () => call('moveActCases'),
 };
 function localStore() {
   const KEY = 'medphys-dispatch:v1';
@@ -770,6 +794,13 @@ function localStore() {
   if (!db || !Array.isArray(db.cases) || !Array.isArray(db.logs)) db = demoDb();
   if (!Array.isArray(db.leaves)) db.leaves = [];
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* โหมดส่วนตัว: เก็บในหน่วยความจำ */ } };
+  const old = db.cases.filter(c => c && MOVED_CATS.includes(c.cat));
+  if (old.length) {
+    const have = new Set(db.logs.map(l => l.id));
+    db.logs.push(...old.filter(c => !have.has(c.id)).map(c => caseToLog(normCase(c))));
+    db.cases = db.cases.filter(c => !old.includes(c));
+    persist();
+  }
   const upsert = (list, r) => { const i = list.findIndex(x => x.id === r.id); if (i < 0) list.push(r); else list[i] = r; };
   return {
     mode: 'local',
@@ -814,15 +845,17 @@ function demoDb() {
   mk('3d', 'JR', { icd: 'C20', ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
   mk('srs', 'WM', { icd: 'C79.3', ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT', dpf: '8', fx: '3', freq: 'EOD' });
   mk('vmchest', 'NY', { icd: 'C34.1', ct: d(-4), in: d(-4), sim: d(2), fin: d(-1), type: 'Replan', doc: 'TA', aim: 'On tx', dpf: '1.5', fx: '30', freq: 'BID' });
-  mk('brachy', 'JR', { icd: 'C53.9', in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
-  mk('brachy', 'JR', { icd: 'C53.9', in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
-  mk('brachy', 'WS', { icd: 'C53.9', in: d(-1), dpf: '7', fx: '4', freq: 'Weekly' });
   const logs = [];
   let m = 0;
   const lg = (kind, mp, date, o = {}) => logs.push({ id: 'demo-l' + (++m), kind, mp, date, created: new Date(t0 + m * 36e5).toISOString(), ...o });
   const rcBy = { JR: 'WM', WM: 'JR', NY: 'WS', WS: 'NY' };
   for (const c of cases) if (c.eval) lg('rc', rcBy[c.mp], c.eval, { hn: c.hn, caseId: c.id });
   lg('rc', 'NY', d(-3), { hn: '999000080', note: 'RC Decay' });
+  lg('brachy', 'JR', d(-7), { hn: '999000201' });
+  lg('brachy', 'JR', d(-7), { hn: '999000202' });
+  lg('brachyn', 'WS', d(-1), { hn: '999000203', note: 'Interstitial' });
+  lg('p2h', 'NY', d(-2), { hn: '999000204' });
+  lg('hyper', 'NY', d(-1), { hn: '999000204' });
   lg('dqa', 'WS', d(-3));
   lg('dqa', 'NY', d(-1));
   lg('acad', 'JR', d(-5), { title: 'ประชุมวิชาการฟิสิกส์การแพทย์', min: '120', k: '1' });
@@ -844,7 +877,9 @@ let editingCase = null, editingLog = null, logMpTouched = false;
 const NOBODY = 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)';
 
 /* ---------- กติกางาน ---------- */
-const catOf = id => state.config.cats.find(c => c.id === id) || { id, label: id || '—', p4p: id, group: 'อื่น ๆ', min: 0, w: 0, kind: 'plan', mu: false, rotate: 'case', on: false };
+const catOf = id => state.config.cats.find(c => c.id === id) || (MOVED_CATS.includes(id) && state.config.acts[id]
+  ? { id, label: state.config.acts[id].label, p4p: id, group: 'อื่น ๆ', min: 0, w: 0, kind: 'simple', mu: false, rotate: 'case', on: false } // เคสเก่าที่ยังไม่ได้ย้ายเป็นกิจกรรม
+  : { id, label: id || '—', p4p: id, group: 'อื่น ๆ', min: 0, w: 0, kind: 'plan', mu: false, rotate: 'case', on: false });
 const isSimple = c => catOf(c.cat).kind === 'simple';
 const unitPts = (min, w) => (+min || 0) * (+w || 0) * state.config.rate;
 const staffIdx = code => state.config.staff.findIndex(s => s.code === code);
@@ -950,6 +985,7 @@ function computeP4P(ym) {
   const add = (r, key) => { r.counts[key] = (r.counts[key] || 0) + 1; };
   for (const c of state.cases) {
     if (!c.mp || !c.in.startsWith(ym)) continue;
+    if (MOVED_CATS.includes(c.cat) && cfg.acts[c.cat]) { add(ensure(c.mp), c.cat); continue; } // ยังไม่ได้ย้ายเป็นกิจกรรม
     const r = ensure(c.mp), k = catOf(c.cat);
     add(r, 'cat:' + k.id);
     if (k.mu) add(r, 'mu');
@@ -1016,8 +1052,11 @@ function render() {
 function p4pSections(cfg = state.config) {
   const secs = [];
   const push = (title, it) => { let sec = secs.find(x => x.title === title); if (!sec) secs.push(sec = { title, items: [] }); sec.items.push(it); };
-  Object.keys(cfg.acts).forEach(k => { const a = cfg.acts[k]; push(a.group || 'กิจกรรมอื่น', { key: k, label: a.label + (k === 'rc' ? ' (RC)' : ''), unit: 'ครั้ง', min: a.min, w: a.w }); });
+  // ลำดับตามแบบฟอร์ม P4P: กิจกรรมทั่วไป → เทคนิควางแผน → กิจกรรมที่มีแถบของตัวเอง (Brachytherapy, Hyperthermia)
+  const act = k => { const a = cfg.acts[k]; push(a.group || 'กิจกรรมอื่น', { key: k, label: a.label + (k === 'rc' ? ' (RC)' : ''), unit: a.patient && k !== 'rc' ? 'ราย' : 'ครั้ง', min: a.min, w: a.w }); };
+  Object.keys(cfg.acts).filter(k => !cfg.acts[k].tab).forEach(act);
   cfg.cats.forEach(k => push(k.group || 'อื่น ๆ', { key: 'cat:' + k.id, label: k.p4p, unit: 'ราย', min: k.min, w: k.w }));
+  Object.keys(cfg.acts).filter(k => cfg.acts[k].tab).forEach(act);
   return secs;
 }
 // แถบความคืบหน้า: เริ่มที่ −แต้มประกัน เต็มเมื่อคะแนนรวมถึง 0
@@ -1440,11 +1479,12 @@ function caseRow(c, rcs) {
 function renderLogs() {
   const ym = state.month;
   const inMonth = state.logs.filter(l => l.date.startsWith(ym));
-  const counts = {};
-  inMonth.forEach(l => { counts[l.kind] = (counts[l.kind] || 0) + 1; });
-  $('#log-tabs').innerHTML = [['', 'ทั้งหมด', inMonth.length], ...logKinds().map(k => [k.key, k.label, counts[k.key] || 0])]
-    .map(([k, l, n]) => `<button type="button" class="tab" role="tab" data-logtab="${k}" aria-selected="${state.logKind === k}">${esc(l)}<span class="n">${n}</span></button>`).join('');
-  const rows = inMonth.filter(l => !state.logKind || l.kind === state.logKind)
+  const tabs = logTabs();
+  if (state.logKind && !tabs.some(t => t.key === state.logKind)) state.logKind = '';
+  const cur = tabs.find(t => t.key === state.logKind);
+  $('#log-tabs').innerHTML = [['', 'ทั้งหมด', inMonth.length], ...tabs.map(t => [t.key, t.label, inMonth.filter(l => t.kinds.includes(l.kind)).length])]
+    .map(([k, l, n]) => `<button type="button" class="tab" role="tab" data-logtab="${esc(k)}" aria-selected="${state.logKind === k}">${esc(l)}<span class="n">${n}</span></button>`).join('');
+  const rows = inMonth.filter(l => !cur || cur.kinds.includes(l.kind))
     .sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created));
   const byId = Object.fromEntries(state.cases.map(c => [c.id, c]));
   const cfg = state.config;
@@ -1457,7 +1497,9 @@ function renderLogs() {
       pts = unitPts(cfg.acts.rc.min, cfg.acts.rc.w);
     } else if (isCountKind(l.kind)) {
       const a = cfg.acts[l.kind];
-      main = `${esc(a.label)}<small>${esc(l.note || '—')}</small>`;
+      main = a.patient
+        ? `<span class="hn">${esc(l.hn || '—')}</span> ${esc(l.name)}<small>${esc(a.label)}${l.note ? ' · ' + esc(l.note) : ''}</small>`
+        : `${esc(a.label)}<small>${esc(l.note || '—')}</small>`;
       pts = unitPts(a.min, a.w);
     } else {
       main = `${esc(l.title || kind.label)}<small>${esc(l.min || 0)} นาที × k ${esc(l.k || 0)}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
@@ -1465,7 +1507,7 @@ function renderLogs() {
     }
     return `<li><button type="button" class="lrow" data-logedit="${esc(l.id)}">
       <span class="l-date">${esc(fmtDay(l.date))}</span>
-      <span class="l-kind">${av(l.mp)}<span class="chip">${esc(kind.label)}</span></span>
+      <span class="l-kind">${av(l.mp)}<span class="chip" title="${esc(kind.label)}">${esc((cfg.acts[l.kind] && cfg.acts[l.kind].tab) || kind.label)}</span></span>
       <span class="l-main">${main}</span>
       <span class="l-pts">${num(pts, 3)}</span>
     </button></li>`;
@@ -1636,11 +1678,13 @@ function renderSettings() {
   const actNote = { mu: 'นับจากเคสวางแผนอัตโนมัติ', rc: 'บันทึกจากปุ่ม RC' };
   const actRows = Object.entries(d.acts).map(([key, a]) => `<tr>
       <td><input data-k="acts.${key}.label" value="${esc(a.label)}" aria-label="ชื่อกิจกรรม">${actNote[key] ? `<span class="unit" style="display:block;margin-top:2px">${actNote[key]}</span>` : ''}</td>
+      <td><input data-k="acts.${key}.tab" value="${esc(a.tab || '')}" list="dl-tabs" placeholder="${['mu', 'rc'].includes(key) ? '' : 'แถบของตัวเอง'}" aria-label="แถบในหน้า RC และกิจกรรม"${['mu', 'rc'].includes(key) ? ' disabled' : ''}></td>
       <td><input data-k="acts.${key}.group" value="${esc(a.group)}" list="dl-groups" aria-label="กลุ่มในแบบ P4P"></td>
       <td><input class="num" type="number" step="any" data-k="acts.${key}.min" value="${esc(a.min)}" aria-label="เวลา"></td>
       <td><input class="num" type="number" step="any" data-k="acts.${key}.w" value="${esc(a.w)}" aria-label="น้ำหนัก"></td>
       <td class="mono" data-pts="acts.${key}">${num((+a.min || 0) * (+a.w || 0) * (+d.rate || 0), 3)}</td>
-      <td>${['dqa', 'mu', 'rc'].includes(key) ? '' : `<button type="button" class="icon-btn" data-delact="${esc(key)}" aria-label="ลบกิจกรรม ${esc(a.label)}"${usedActs.has(key) ? ' disabled title="มีบันทึกแล้ว ลบไม่ได้"' : ''}>×</button>`}</td>
+      <td style="text-align:center"><input type="checkbox" data-k="acts.${key}.patient"${a.patient || key === 'rc' ? ' checked' : ''}${['mu', 'rc'].includes(key) ? ' disabled' : ''} aria-label="บันทึก HN และชื่อผู้ป่วย"></td>
+      <td>${BUILTIN_ACTS.includes(key) ? '' : `<button type="button" class="icon-btn" data-delact="${esc(key)}" aria-label="ลบกิจกรรม ${esc(a.label)}"${usedActs.has(key) ? ' disabled title="มีบันทึกแล้ว ลบไม่ได้"' : ''}>×</button>`}</td>
     </tr>`).join('');
   const icdRows = d.icdExtra.map((x, i) => `<tr>
       <td><input data-k="icdExtra.${i}.code" value="${esc(x.code)}" placeholder="C50.9" aria-label="รหัส ICD-10" style="width:110px;font-family:var(--mono);text-transform:uppercase"></td>
@@ -1687,8 +1731,8 @@ function renderSettings() {
       </div>
       <div class="cat-list">${catCards}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="cat">+ เพิ่มเทคนิค</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>กิจกรรมนับครั้ง</h2><p>กิจกรรมใหม่จะเป็นตัวเลือกในหน้า "RC และกิจกรรม" และนับแต้มในสรุป P4P</p></div>
-      <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
+    <div class="sec"><div class="sec-head"><h2>กิจกรรมนับครั้ง</h2><p>กิจกรรมใหม่จะเป็นตัวเลือกในหน้า "RC และกิจกรรม" และนับแต้มในสรุป P4P · กิจกรรมที่ใส่แถบเดียวกันจะรวมอยู่ในแถบเดียวกัน (เช่น Brachytherapy, Hyperthermia) ไม่ใส่ = มีแถบของตัวเอง · ติ๊ก HN เพื่อบันทึก HN และชื่อผู้ป่วย</p></div>
+      <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">แถบ</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th>HN</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
       <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
@@ -1703,6 +1747,7 @@ function renderSettings() {
       ${icdRows ? `<div class="table-wrap set-table"><table><thead><tr><th>รหัส</th><th style="text-align:left">ชื่อ (อังกฤษ)</th><th style="text-align:left">ชื่อย่อ (ไทย)</th><th></th></tr></thead><tbody>${icdRows}</tbody></table></div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
+    <datalist id="dl-tabs">${[...new Set(Object.values(d.acts).map(a => str(a.tab)).filter(Boolean))].map(t => `<option value="${esc(t)}"></option>`).join('')}</datalist>
     ${adminSec}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     </fieldset>
@@ -1876,7 +1921,7 @@ async function restoreCase(prev) {
 const logDlg = $('#log-dlg'), logForm = $('#log-form');
 function syncLogForm() {
   const kind = chipValue($('#l-kind')) || 'rc';
-  $$('.rc-only', logForm).forEach(el => { el.hidden = kind !== 'rc'; });
+  $$('.rc-only', logForm).forEach(el => { el.hidden = !patientAct(kind); });
   $$('.work-only', logForm).forEach(el => { el.hidden = kind !== 'acad' && kind !== 'admin'; });
   const c = editingLog.caseId ? state.cases.find(x => x.id === editingLog.caseId) : null;
   const linked = $('#l-linked');
@@ -1928,7 +1973,7 @@ async function submitLog(e) {
   if (work && !str($('#l-title').value)) { $('#l-title').focus(); return toast('กรอกชื่อกิจกรรม', { err: true }); }
   const rec = normLog({
     ...editingLog, kind, mp, date: $('#l-date').value, note: $('#l-note').value,
-    hn: kind === 'rc' ? $('#l-hn').value : '', name: kind === 'rc' ? $('#l-name').value : '',
+    hn: patientAct(kind) ? $('#l-hn').value : '', name: patientAct(kind) ? $('#l-name').value : '',
     caseId: kind === 'rc' ? editingLog.caseId : '',
     title: work ? $('#l-title').value : '', min: work ? $('#l-min').value : '', k: work ? $('#l-k').value : '',
     updated: nowISO(),
@@ -2224,7 +2269,7 @@ document.addEventListener('click', e => {
     case 'open-leaves': return openLeaves();
     case 'i-clear': resetIntake(); return $('#i-hn').focus();
     case 'add-rc': return openLog(null, { kind: 'rc' });
-    case 'add-other': return openLog(null, { kind: 'acad' });
+    case 'add-other': { const t = logTabs().find(x => x.key === state.logKind); return openLog(null, { kind: t && t.kinds[0] !== 'rc' ? t.kinds[0] : 'acad' }); }
     case 'clear-person': state.person = ''; return render();
     case 'more': state.limit += 60; return render();
     case 'retry': return refresh();
@@ -2338,6 +2383,7 @@ $('#p4p-table').addEventListener('change', e => {
 });
 
 /* ---------- เริ่มต้น ---------- */
+let movedOnce = false;
 async function refresh(quiet) {
   try {
     const d = await store.load();
@@ -2352,6 +2398,10 @@ async function refresh(quiet) {
     state.demo = !!d.demo;
     state.loaded = true;
     state.error = '';
+    if (store.mode === 'sheet' && !movedOnce && state.cases.some(c => MOVED_CATS.includes(c.cat))) {
+      movedOnce = true;
+      try { if (await store.moveActCases()) return refresh(quiet); } catch (e) { /* นับแต้มจากเคสเดิมไปก่อน */ }
+    }
   } catch (e) {
     if (quiet) return;
     state.error = errMsg(e);
