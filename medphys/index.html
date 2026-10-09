@@ -124,7 +124,10 @@ button{cursor:pointer}
 .dx b{font:500 12px var(--mono);color:var(--fg)}
 .dose-row{display:grid;grid-template-columns:120px 96px 110px minmax(0,1fr);gap:10px 12px;align-items:start}
 .total{display:flex;align-items:center;min-height:36px;font:500 15px var(--mono);white-space:nowrap}
-.freq-field input{margin-top:6px}
+.freq-field input,.with-other input[id$="-other"]{margin-top:6px}
+.sub-lbl{font-size:11.5px;color:var(--faint)}
+.assign-list{display:grid;gap:8px}
+.assign-row{display:flex;align-items:center;gap:10px}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
 .intake-mode{display:flex;flex-wrap:wrap;gap:14px 32px;align-items:flex-start}
 .link-btn{padding:0;border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:500}
@@ -303,6 +306,13 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 
 /* settings */
 .set-list{display:grid;gap:8px}
+.ro-wrap{min-width:0;margin:0;padding:0;border:0}
+.ro-wrap[disabled] .btn.ghost,.ro-wrap[disabled] .icon-btn,.ro-wrap[disabled] .opt-new,.ro-wrap[disabled] .opt-chip button,.ro-wrap[disabled] #reset-demo,.ro-wrap[disabled] #clear-all{display:none}
+.ro-wrap[disabled] input,.ro-wrap[disabled] select{opacity:.75;cursor:default}
+.role-bar{align-items:center}
+.seg-mini{display:inline-flex;gap:2px;padding:2px;background:var(--surface);border:1px solid var(--line);border-radius:999px}
+.seg-mini button{padding:3px 12px;border:0;border-radius:999px;background:none;color:var(--muted);font-size:13px}
+.seg-mini button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
 .cat-list{display:grid;gap:8px}
 .cat-card{display:grid;gap:10px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .cat-l1{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr;gap:10px}
@@ -370,7 +380,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="field doc-field plan-field"><span class="lbl">Doc</span><div class="chips" id="i-doc" role="radiogroup" aria-label="Doc"></div></div>
         </div>
         <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
-        <div class="field"><span class="lbl">เทคนิค</span><div class="chips cats" id="i-cat" role="radiogroup" aria-label="เทคนิค"></div></div>
+        <div class="field"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง แต่ละเทคนิคแจกตามคิวของตัวเอง</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
+        <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
         <div class="intake-mid plan-field">
           <div class="field"><span class="lbl">Type</span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
           <div class="field"><span class="lbl">Aim</span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
@@ -464,6 +475,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
       </div>
       <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="f-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="f-dx-list" role="listbox" hidden></ul></div></div>
+      <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="f-area" aria-label="บริเวณที่ฉาย"></div><input id="f-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
       <div class="field plan-only"><span class="lbl">Doc</span><div class="chips" id="f-doc" role="radiogroup" aria-label="Doc"></div></div>
       <div class="field plan-only"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
       <div class="field plan-only"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
@@ -570,7 +582,9 @@ const DEFAULT_CONFIG = {
   types: ['New', 'Adap', 'Emer high', 'Emer low', 'ย้าย', 'เพิ่ม F.S.', 'Replan', 'CP'],
   aims: ['Curative', 'Palliative', 'On tx'],
   techniques: ['SRS', 'SRT', 'SBRT', 'CSI', 'HA'],
-  freqs: ['Daily', 'EOD', 'BID', 'Single fraction'],   // ความถี่ในการฉาย (อื่นๆ กรอกเองในฟอร์ม)
+  freqs: ['Daily', 'EOD', 'BID', 'Single fraction'],                  // ความถี่ในการฉาย (อื่นๆ กรอกเองในฟอร์ม)
+  areas: ['Head', 'H&N', 'Chest', 'Abdomen', 'Pelvis', 'Extremity'],   // บริเวณที่ฉาย (อื่นๆ กรอกเองในฟอร์ม)
+  admins: [],                                                          // อีเมลแอดมิน (เจ้าของไฟล์ Google Sheet เป็นแอดมินเสมอ)
   // หมวดงาน = แท็บในไฟล์เดิม เรียงตามแบบฟอร์ม P4P
   cats: [
     { id: '3dbt',    label: '3D Breast',            p4p: '3D Breast/Chest',       group: '3D Planning',            min: 270,  w: 1.25, kind: 'plan',   mu: true,  rotate: 'case', on: true },
@@ -608,7 +622,7 @@ function logKinds() {
 const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'area', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -699,7 +713,7 @@ function mergeConfig(c) {
       return { code, name: str(s.name), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
     }).filter(s => s.code);
   }
-  for (const k of ['doctors', 'types', 'aims', 'techniques', 'freqs']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
+  for (const k of ['doctors', 'types', 'aims', 'techniques', 'freqs', 'areas']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
   if (Array.isArray(c.cats) && c.cats.length) {
     out.cats = c.cats.filter(x => x && x.id).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
@@ -714,6 +728,7 @@ function mergeConfig(c) {
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
+  out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
   out.icdExtra = Array.isArray(c.icdExtra) ? c.icdExtra.map(x => ({ code: str(x && x.code).toUpperCase(), name: str(x && x.name), th: str(x && x.th) })).filter(x => x.code) : [];
   out.carry = c.carry && typeof c.carry === 'object' ? c.carry : {};
   return out;
@@ -726,7 +741,7 @@ const sheetStore = {
   mode: 'sheet',
   load: () => call('getData'),
   save: (table, rec) => call('saveRecord', table, rec),
-  addCase: rec => call('addCase', rec),
+  addCases: recs => call('addCases', recs),
   remove: (table, id) => call('deleteRecord', table, id),
   saveConfig: cfg => call('saveConfig', cfg),
 };
@@ -742,10 +757,13 @@ function localStore() {
     mode: 'local',
     load: async () => clone(db),
     save: async (table, rec) => { upsert(db[table], clone(rec)); persist(); return rec; },
-    addCase: async rec => {
-      const out = { ...rec, mp: rec.how === 'manual' ? rec.mp : nextFor(rec.cat, rec.in), created: nowISO() };
-      if (!out.mp) throw new Error(NOBODY);
-      upsert(db.cases, clone(out)); persist(); return out;
+    addCases: async recs => {
+      const out = recs.map(rec => {
+        const r = { ...rec, mp: rec.how === 'manual' ? rec.mp : nextFor(rec.cat, rec.in), created: nowISO() };
+        if (!r.mp) throw new Error(`${catOf(rec.cat).label}: ${NOBODY}`);
+        return r;
+      });
+      out.forEach(r => upsert(db.cases, clone(r))); persist(); return out;
     },
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
     saveConfig: async cfg => { db.config = clone(cfg); persist(); return true; },
@@ -796,7 +814,7 @@ function demoDb() {
 
 /* ---------- สถานะ ---------- */
 const state = {
-  config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: '',
+  config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true },
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60,
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
 };
@@ -1023,6 +1041,8 @@ function renderWork() {
   if ($('#q').value !== state.q) $('#q').value = state.q;
 
   const list = $('#cases');
+  batchIndex = {};
+  state.cases.forEach(c => { if (c.batch) (batchIndex[c.batch] = batchIndex[c.batch] || []).push(c); });
   if (!state.loaded) { list.innerHTML = `<li class="empty-state">${state.error ? `โหลดข้อมูลไม่สำเร็จ: ${esc(state.error)} <button type="button" class="btn" id="retry">ลองใหม่</button>` : 'กำลังโหลดข้อมูล…'}</li>`; $('#more-wrap').hidden = true; return; }
   const rcs = rcIndex();
   const q = state.q.trim().toLowerCase();
@@ -1032,7 +1052,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1307,6 +1327,35 @@ function checkDose(pre) {
   if (chipValue($(`#${pre}-freq`)) === OTHER && !str($(`#${pre}-freq-other`).value)) { $(`#${pre}-freq-other`).focus(); return 'กรอกความถี่ในช่อง "อื่นๆ"'; }
   return '';
 }
+const chipValues = el => $$('input:checked', el).map(i => i.value);
+// บริเวณที่ฉาย: เลือกได้หลายอย่าง + "อื่นๆ" กรอกเอง เก็บเป็น "H&N, Chest"
+function renderArea(pre, value) {
+  const list = state.config.areas;
+  const parts = str(value).split(',').map(str).filter(Boolean);
+  const extra = parts.filter(x => !list.includes(x));
+  $(`#${pre}-area`).innerHTML = [...list.map(v => [v, v]), [OTHER, 'อื่นๆ']].map(([v, l]) => `<label><input type="checkbox" name="${pre}area" value="${esc(v)}"${(v === OTHER ? extra.length : parts.includes(v)) ? ' checked' : ''}><span>${esc(l)}</span></label>`).join('');
+  $(`#${pre}-area`).dataset.sig = JSON.stringify(list);
+  $(`#${pre}-area-other`).value = extra.join(', ');
+  syncArea(pre);
+}
+function readArea(pre) {
+  const vals = chipValues($(`#${pre}-area`)).filter(v => v !== OTHER);
+  if ($(`#${pre}-area input[value="${OTHER}"]`).checked) vals.push(...str($(`#${pre}-area-other`).value).split(',').map(str).filter(Boolean));
+  return [...new Set(vals)].join(', ');
+}
+function ensureArea(pre) {
+  const el = $(`#${pre}-area`);
+  if (el.dataset.sig !== JSON.stringify(state.config.areas)) renderArea(pre, el.dataset.sig ? readArea(pre) : '');
+}
+function syncArea(pre, focusOther) {
+  const on = $(`#${pre}-area input[value="${OTHER}"]`).checked;
+  $(`#${pre}-area-other`).hidden = !on;
+  if (on && focusOther) $(`#${pre}-area-other`).focus();
+}
+function checkArea(pre) {
+  if ($(`#${pre}-area input[value="${OTHER}"]`).checked && !str($(`#${pre}-area-other`).value)) { $(`#${pre}-area-other`).focus(); return 'กรอกบริเวณที่ฉายในช่อง "อื่นๆ"'; }
+  return '';
+}
 const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === OTHER ? str($(`#${pre}-freq-other`).value) : v; };
 const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), freq: readFreq(pre) });
 function fillDose(pre, c) {
@@ -1315,12 +1364,16 @@ function fillDose(pre, c) {
   renderFreq(pre, c.freq || '');
 }
 
+let batchIndex = {};
 function caseRow(c, rcs) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
   const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>' : '';
   const dose = doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
+  const sib = c.batch && batchIndex[c.batch] ? batchIndex[c.batch].filter(x => x.id !== c.id) : [];
+  const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
+  const areaTxt = c.area && `<span>${esc(c.area)}</span>`;
   const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
-  const meta = simple ? [manualChip, dxs, dose, c.note && esc(c.note)] : [manualChip, dxs, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1349,7 +1402,7 @@ function caseRow(c, rcs) {
   if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวัน Finish เป็นวันนี้">Finish</button>`;
   else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวัน Evaluate เป็นวันนี้">Evaluate</button>`;
   else act = `<span class="done-mark">✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtDay(c.eval))}</span>`;
-  return `<li class="row${c.id === state.fresh ? ' fresh' : ''}">
+  return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <button type="button" class="c-main" data-edit="${esc(c.id)}">
       <span class="c-line"><span class="tag">${esc(k.label)}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
@@ -1419,7 +1472,7 @@ function renderP4P() {
   $('#p4p-all').checked = state.allRows;
 
   const cell = n => (n ? `<td>${n}</td>` : '<td class="zero">–</td>');
-  const carryCell = c => `<td><input type="number" step="any" inputmode="decimal" data-carry="${esc(c)}" value="${people[c].override ? people[c].carry : ''}" placeholder="${people[c].position.base}" title="${esc(people[c].position.label)}: ${people[c].position.base} แต้ม · ปล่อยว่างเพื่อใช้ค่าตามตำแหน่ง" aria-label="แต้มต่อ ${esc(c)}"></td>`;
+  const carryCell = c => `<td><input type="number" step="any" inputmode="decimal" data-carry="${esc(c)}" value="${people[c].override ? people[c].carry : ''}" placeholder="${people[c].position.base}" title="${esc(people[c].position.label)}: ${people[c].position.base} แต้ม · ปล่อยว่างเพื่อใช้ค่าตามตำแหน่ง" aria-label="แต้มต่อ ${esc(c)}"${state.user.isAdmin ? '' : ' disabled'}></td>`;
   if (state.who) {
     const r = people[state.who];
     $('#p4p-title').textContent = `ใบคะแนน P4P · ${state.who} ${r.position.label}`;
@@ -1570,7 +1623,18 @@ function renderSettings() {
     ? `<p class="muted" style="margin:0 0 10px;font-size:14px">ข้อมูลเก็บในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกกับระบบนี้ ทุกคนที่มีสิทธิ์แก้ไขชีตจะเห็นข้อมูลเดียวกัน</p>${state.sheetUrl ? `<a class="btn" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}`
     : `<p class="muted" style="margin:0 0 10px;font-size:14px">โหมดตัวอย่าง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ถ้าจะใช้งานจริงร่วมกันทั้งทีม ให้ติดตั้งกับ Google Sheet ตามคู่มือ README</p>
        <div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn" id="reset-demo">โหลดข้อมูลตัวอย่างใหม่</button><button type="button" class="btn danger" id="clear-all">ล้างเคสและกิจกรรมทั้งหมด</button></div>`;
-  el.innerHTML = `
+  const admin = state.user.isAdmin;
+  const roleBar = store.mode === 'local'
+    ? `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini"><button type="button" data-viewas="admin" aria-pressed="${admin}">แอดมิน</button><button type="button" data-viewas="user" aria-pressed="${!admin}">ผู้ใช้ทั่วไป</button></span><span>${admin ? 'แก้ไขการตั้งค่าได้' : 'ดูได้อย่างเดียว การตั้งค่าแก้ได้เฉพาะแอดมิน'}</span></div>`
+    : admin
+      ? `<p class="muted" style="margin:0 0 16px;font-size:13px">คุณเป็นแอดมิน${state.user.me ? ` · ${esc(state.user.me)}` : ''}</p>`
+      : `<p class="notice"><b>ดูได้อย่างเดียว</b><span>การตั้งค่าแก้ได้เฉพาะแอดมิน · คุณเข้าสู่ระบบเป็น ${esc(state.user.me || 'ไม่ทราบอีเมล')}</span></p>`;
+  const adminSec = `<div class="sec"><div class="sec-head"><h2>แอดมิน</h2><p>เฉพาะแอดมินแก้การตั้งค่าได้ ผู้ใช้อื่นยังแจกเคส บันทึก RC และวันลาได้ตามปกติ</p></div>
+      ${store.mode === 'sheet'
+        ? `<p class="muted" style="margin:0 0 10px;font-size:13.5px">เจ้าของไฟล์ Google Sheet${state.user.owner ? ` (${esc(state.user.owner)})` : ''} เป็นแอดมินเสมอ · เพิ่มอีเมล Google ของแอดมินคนอื่นด้านล่าง</p>`
+        : '<p class="muted" style="margin:0 0 10px;font-size:13.5px">โหมดตัวอย่างไม่มีการเข้าสู่ระบบ ใช้ปุ่มมุมมองด้านบนเพื่อดูหน้าจอของผู้ใช้ทั่วไป · ตอนใช้กับ Google Sheet ระบบตรวจจากอีเมลที่เข้าสู่ระบบ</p>'}
+      ${optEditor('admins', 'อีเมลแอดมิน')}</div>`;
+  el.innerHTML = `${roleBar}<fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       <div class="set-list">${staffRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="staff">+ เพิ่มนักฟิสิกส์</button></div></div>
@@ -1594,12 +1658,14 @@ function renderSettings() {
       <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
-      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
+      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
     <div class="sec"><div class="sec-head"><h2>Diag (ICD-10)</h2><p>มีรหัส ICD-10 หมวดเนื้องอก C00–C97 และรหัสที่ใช้ในรังสีรักษาบ่อยให้ค้นหาอยู่แล้ว (${ICD10.length} รหัส) · เพิ่มรหัสย่อยหรือแก้ชื่อที่หน่วยงานใช้ได้ที่นี่ รหัสเดียวกับในระบบจะใช้ชื่อที่ตั้งเอง</p></div>
       ${icdRows ? `<div class="table-wrap set-table"><table><thead><tr><th>รหัส</th><th style="text-align:left">ชื่อ (อังกฤษ)</th><th style="text-align:left">ชื่อย่อ (ไทย)</th><th></th></tr></thead><tbody>${icdRows}</tbody></table></div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
+    ${adminSec}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
+    </fieldset>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
   updateSaveBar();
 }
@@ -1626,6 +1692,9 @@ async function saveSettings() {
   if (new Set(codes).size !== codes.length) return toast('รหัสนักฟิสิกส์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
+  const { me, owner } = state.user;
+  const stillAdmin = (me && (me === owner || draft.admins.includes(me))) || (!draft.admins.length && !owner);
+  if (store.mode === 'sheet' && !stillAdmin) return toast(me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
   if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
   draft.icdExtra = draft.icdExtra.filter(x => str(x.code) || str(x.name));
   if (draft.icdExtra.some(x => !/^[A-Z]\d{2}(\.\d{1,2})?$/.test(str(x.code).toUpperCase()))) return toast('รหัส ICD-10 ต้องเป็นรูปแบบ เช่น C50 หรือ C50.9', { err: true });
@@ -1689,6 +1758,7 @@ function openCase(id) {
   $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
   fillDose('f', editingCase);
   $('#f-dx').value = dxValue(editingCase);
+  renderArea('f', editingCase.area);
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
@@ -1699,7 +1769,7 @@ async function submitCase(e) {
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
   if (!$('#f-mp').value) { $('#f-mp').focus(); return toast('เลือก MP ผู้รับเคส', { err: true }); }
-  const doseErr = checkDose('f');
+  const doseErr = checkDose('f') || checkArea('f');
   if (doseErr) return toast(doseErr, { err: true });
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
@@ -1711,7 +1781,7 @@ async function submitCase(e) {
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
-    ...readDose('f'), ...readDx('f'), updated: nowISO(),
+    ...readDose('f'), ...readDx('f'), area: readArea('f'), updated: nowISO(),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -1849,10 +1919,10 @@ const intake = $('#intake');
 function renderIntake() {
   const cfg = state.config;
   const date = $('#i-in').value || today();
-  const cur = chipValue($('#i-cat'));
+  const cur = chipValues($('#i-cat'));
   $('#i-cat').innerHTML = cfg.cats.filter(k => k.on).map(k => {
     const who = nextFor(k.id, date);
-    return `<label title="${esc(k.p4p)}: คนถัดไป ${esc(who || '—')}"><input type="radio" name="icat" value="${esc(k.id)}"${k.id === cur ? ' checked' : ''}><span>${esc(k.label)}<small>${esc(who || '–')}</small></span></label>`;
+    return `<label title="${esc(k.p4p)}: คนถัดไป ${esc(who || '—')}"><input type="checkbox" name="icat" value="${esc(k.id)}"${cur.includes(k.id) ? ' checked' : ''}><span>${esc(k.label)}<small>${esc(who || '–')}</small></span></label>`;
   }).join('');
   for (const [id, name, list] of [['#i-doc', 'idoc', cfg.doctors], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-tech', 'itech', cfg.techniques]]) {
     const el = $(id);
@@ -1860,19 +1930,19 @@ function renderIntake() {
     chipGroup(el, name, list, sel);
   }
   ensureFreq('i');
+  ensureArea('i');
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
   const order = cfg.staff.filter(s => s.active).map(s => s.code).join(' → ');
-  $('#queue-note').textContent = `เลือกเทคนิคแล้วแจกอัตโนมัติตามคิว (${order}) หรือเลือกผู้รับเอง เคสที่เลือกเองจะหักคิวของคนนั้นเมื่อวนมาถึง`;
+  $('#queue-note').textContent = `เลือกเทคนิคได้หลายอย่าง แต่ละเทคนิคแจกตามคิวของตัวเอง (${order}) หรือเลือกผู้รับเอง เคสที่เลือกเองจะหักคิวของคนนั้นเมื่อวนมาถึง`;
   syncIntake();
 }
 function syncIntake() {
-  const catId = chipValue($('#i-cat'));
-  const k = catId ? catOf(catId) : null;
-  const simple = !!k && k.kind === 'simple';
-  $$('.plan-field', intake).forEach(el => { el.hidden = simple; });
-  $('#i-tech-field').hidden = !k || !k.tech;
-  $('#i-in-lbl').textContent = simple ? 'Date' : 'In';
+  const ks = chipValues($('#i-cat')).map(catOf);
+  const allSimple = ks.length > 0 && ks.every(k => k.kind === 'simple');
+  $$('.plan-field', intake).forEach(el => { el.hidden = allSimple; });
+  $('#i-tech-field').hidden = !ks.some(k => k.tech);
+  $('#i-in-lbl').textContent = allSimple ? 'Date' : 'In';
   $('#i-sim').disabled = $('#i-oncall').checked;
   const date = $('#i-in').value || today();
   const dayTxt = date === today() ? 'วันนี้' : `วัน ${fmtDay(date)}`;
@@ -1881,26 +1951,33 @@ function syncIntake() {
   const away = activeStaff().filter(s => onLeave(s.code, date)).map(s => s.code);
   const box = $('#i-assign');
   box.className = 'assign';
-  if (!k) {
+  if (!ks.length) {
     box.innerHTML = `${av('', 'lg')}<span>เลือกเทคนิคเพื่อดูว่าใครได้เคส<small>${dayTxt} ${away.length ? `${esc(away.join(', '))} ลา` : 'ไม่มีคนลา'}</small></span>`;
     return;
   }
   const named = code => { const s = state.config.staff.find(x => x.code === code); return `<b>${esc(code)}</b>${s && s.name ? ' · ' + esc(s.name) : ''}`; };
-  const pts = `${num(unitPts(k.min, k.w), 3)} แต้ม`;
+  const labels = ks.map(k => k.label).join(', ');
+  const totalPts = ks.reduce((t, k) => t + unitPts(k.min, k.w), 0);
   if (manual) {
     const pick = chipValue($('#i-pick'));
-    if (!pick) { box.innerHTML = `${av('', 'lg')}<span>เลือกผู้รับเคส<small>คิว ${esc(k.label)} จะไม่ขยับ</small></span>`; return; }
+    if (!pick) { box.innerHTML = `${av('', 'lg')}<span>เลือกผู้รับเคส<small>คิวของ ${esc(labels)} จะไม่ขยับ</small></span>`; return; }
     if (onLeave(pick, date)) box.className = 'assign warn';
-    box.innerHTML = `${av(pick, 'lg')}<span>ส่งให้ ${named(pick)} · เลือกเอง
-      <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(pick)} 1 ครั้งเมื่อคิววนมาถึง · ${pts}</small></span>`;
+    box.innerHTML = `${av(pick, 'lg')}<span>ส่งให้ ${named(pick)} · เลือกเอง${ks.length > 1 ? ` ${ks.length} เทคนิค` : ''}
+      <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(labels)} ไม่ขยับ และจะข้าม ${esc(pick)} 1 ครั้ง${ks.length > 1 ? 'ในแต่ละคิว' : ''}เมื่อวนมาถึง · ${num(totalPts, 3)} แต้ม</small></span>`;
     return;
   }
-  const q = queueInfo(k.id, date);
-  if (!q.code) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(NOBODY)}</span>`; return; }
-  const why = [];
-  q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
-  box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}
-    <small>${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${esc(k.label)}${why.length ? ` · ข้าม ${esc(why.join(', '))}` : ''} · ${pts}</small></span>`;
+  const rows = ks.map(k => {
+    const q = queueInfo(k.id, date), why = [];
+    q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
+    return { k, q, note: `${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${k.label}${why.length ? ` · ข้าม ${why.join(', ')}` : ''} · ${num(unitPts(k.min, k.w), 3)} แต้ม` };
+  });
+  const missing = rows.filter(r => !r.q.code);
+  if (missing.length) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(missing.map(r => r.k.label).join(', '))}: ${esc(NOBODY)}</span>`; return; }
+  if (rows.length === 1) {
+    box.innerHTML = `${av(rows[0].q.code, 'lg')}<span>ส่งให้ ${named(rows[0].q.code)}<small>${esc(rows[0].note)}</small></span>`;
+    return;
+  }
+  box.innerHTML = `<div class="assign-list">${rows.map(r => `<div class="assign-row">${av(r.q.code, 'lg')}<span><b>${esc(r.k.label)}</b> → ${named(r.q.code)}<small>${esc(r.note)}</small></span></div>`).join('')}</div>`;
 }
 function fillIntake(c) {
   $$('#i-cat input').forEach(i => { i.checked = false; });
@@ -1911,58 +1988,67 @@ function fillIntake(c) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
   fillDose('i', c);
+  renderArea('i', c.area || '');
   $('#i-dx').value = dxValue(c);
   renderIntake();
-  const cat = $(`#i-cat input[value="${CSS.escape(c.cat)}"]`);
-  if (cat) cat.checked = true;
+  for (const id of c.cats || (c.cat ? [c.cat] : [])) { const el = $(`#i-cat input[value="${CSS.escape(id)}"]`); if (el) el.checked = true; }
   syncIntake();
 }
 function resetIntake() {
   fillIntake({ in: today(), type: 'New' });
 }
+// แจกเคส: เลือกหลายเทคนิค = สร้างเคสแยกต่อเทคนิค ใช้ข้อมูลผู้ป่วยชุดเดียวกัน แต่ละเคสนับคิวและแต้มของเทคนิคนั้น
 async function submitIntake(e) {
   e.preventDefault();
   const hn = str($('#i-hn').value);
-  const catId = chipValue($('#i-cat'));
+  const catIds = chipValues($('#i-cat'));
   if (!hn) { $('#i-hn').focus(); return toast('กรอก HN ก่อนแจกเคส', { err: true }); }
-  if (!catId) return toast('เลือกเทคนิคก่อนแจกเคส', { err: true });
+  if (!catIds.length) return toast('เลือกเทคนิคอย่างน้อย 1 อย่างก่อนแจกเคส', { err: true });
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
-  const doseErr = checkDose('i');
-  if (doseErr) return toast(doseErr, { err: true });
+  const inputErr = checkDose('i') || checkArea('i');
+  if (inputErr) return toast(inputErr, { err: true });
   const manual = chipValue($('#i-mode')) === 'manual';
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
-  const k = catOf(catId), simple = k.kind === 'simple';
-  const plan = v => (simple ? '' : v);
-  const rec = normCase({
-    id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value,
-    ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
-    doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
-    tech: simple || !k.tech ? '' : chipValue($('#i-tech')), ...readDose('i'), ...readDx('i'), updated: nowISO(),
+  const batch = catIds.length > 1 ? 'b-' + uid() : '';
+  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i') };
+  const recs = catIds.map(id => {
+    const k = catOf(id), simple = k.kind === 'simple';
+    const plan = v => (simple ? '' : v);
+    return normCase({
+      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', batch,
+      ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
+      doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
+      tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
+    });
   });
   const btn = $('#i-save');
   btn.disabled = true;
   try {
-    const saved = normCase(await store.addCase(rec));
-    state.cases.push(saved);
-    state.fresh = saved.id;
+    const saved = (await store.addCases(recs)).map(normCase);
+    state.cases.push(...saved);
+    const ids = saved.map(x => x.id);
+    state.fresh = ids;
     resetIntake();
     render();
     $('#i-hn').focus();
-    toast(`แจกเคส ${saved.hn} · ${k.label} ให้ ${saved.mp}${saved.how === 'manual' ? ' (เลือกเอง)' : ''} แล้ว`, { undo: () => undoAssign(saved) });
-    setTimeout(() => { if (state.fresh === saved.id) { state.fresh = ''; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
+    const summary = saved.map(x => `${catOf(x.cat).label} → ${x.mp}`).join(', ');
+    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : ''}`, { undo: () => undoAssign(saved) });
+    setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
   finally { btn.disabled = false; }
 }
-// เลิกทำ = ลบเคสที่เพิ่งแจก คิวจึงกลับไปที่คนเดิม และคืนข้อมูลลงฟอร์มให้แก้
-async function undoAssign(c) {
+// เลิกทำ = ลบทุกเคสที่เพิ่งแจกในชุดนั้น คิวกลับไปที่คนเดิม และคืนข้อมูลลงฟอร์มให้แก้
+async function undoAssign(list) {
   try {
-    await store.remove('cases', c.id);
-    state.cases = state.cases.filter(x => x.id !== c.id);
+    for (const c of list) await store.remove('cases', c.id);
+    const ids = new Set(list.map(c => c.id));
+    state.cases = state.cases.filter(x => !ids.has(x.id));
     render();
-    fillIntake(c);
-    toast(`ยกเลิกการแจกเคส ${c.hn} แล้ว ข้อมูลกลับมาอยู่ในฟอร์ม`);
+    const first = list.find(c => catOf(c.cat).kind !== 'simple') || list[0];
+    fillIntake({ ...first, cats: list.map(c => c.cat), tech: (list.find(c => c.tech) || {}).tech || '' });
+    toast(`ยกเลิกการแจกเคส ${first.hn} แล้ว ข้อมูลกลับมาอยู่ในฟอร์ม`);
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 
@@ -2027,6 +2113,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, a');
   if (!t) return;
   const ds = t.dataset;
+  if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user.isAdmin = ds.viewas === 'admin'; draft = null; return render(); }
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -2084,7 +2171,7 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('click', e => {
   const input = e.target.matches('.chips input') ? e.target : null;
-  if (!input || input.name === 'kind' || input.name === 'imode') return;
+  if (!input || input.type !== 'radio' || input.name === 'kind' || input.name === 'imode') return;
   if (input.dataset.was === '1') { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); }
   input.dataset.was = '';
 });
@@ -2094,6 +2181,7 @@ $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; s
 caseForm.addEventListener('submit', submitCase);
 caseForm.addEventListener('change', e => {
   if (e.target.name === 'ffreq') return onFreqChange('f', e.target);
+  if (e.target.name === 'farea') return syncArea('f', e.target.value === OTHER);
   if (['f-cat', 'f-mp', 'f-oncall', 'f-in'].includes(e.target.id)) syncCaseForm();
 });
 setupCombo('i');
@@ -2102,6 +2190,7 @@ caseForm.addEventListener('input', e => { if (e.target.id === 'f-dpf' || e.targe
 intake.addEventListener('submit', submitIntake);
 intake.addEventListener('change', e => {
   if (e.target.name === 'ifreq') return onFreqChange('i', e.target);
+  if (e.target.name === 'iarea') return syncArea('i', e.target.value === OTHER);
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => { if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
@@ -2128,7 +2217,9 @@ settingsEl.addEventListener('input', e => {
 });
 // เพิ่มตัวเลือกในฟอร์ม: กด Enter หรือออกจากช่อง
 function addOption(el) {
-  const v = str(el.value), key = el.dataset.addopt;
+  const key = el.dataset.addopt;
+  const v = key === 'admins' ? str(el.value).toLowerCase() : str(el.value);
+  if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast('อีเมลไม่ถูกต้อง', { err: true }); return; }
   el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
   if (!v) return;
   if (!draft[key].includes(v)) draft[key].push(v);
@@ -2175,6 +2266,9 @@ async function refresh(quiet) {
     state.cases = (d.cases || []).map(normCase);
     state.logs = (d.logs || []).map(normLog);
     state.leaves = (d.leaves || []).map(normLeave);
+    state.user = store.mode === 'sheet'
+      ? { me: '', owner: '', isAdmin: true, ...(d.user || {}) }
+      : { me: '', owner: '', isAdmin: pref.get('demoRole', 'admin') !== 'user', demo: true };
     state.sheetUrl = d.sheetUrl || '';
     state.demo = !!d.demo;
     state.loaded = true;

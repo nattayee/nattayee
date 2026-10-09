@@ -16,7 +16,7 @@ const TABLES = {
       ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['how', 'วิธีแจก'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
       ['fin', 'Finish'], ['eval', 'Evaluate'], ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'],
-      ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['freq', 'ความถี่'], ['note', 'Note'],
+      ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'], ['batch', 'ชุด'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
@@ -63,11 +63,13 @@ function openApp() {
 
 function getData() {
   const ss = SpreadsheetApp.getActive();
+  const config = readConfig_(ss);
   return {
+    user: adminInfo_(ss, config),
     cases: readTable_(ss, 'cases'),
     logs: readTable_(ss, 'logs'),
     leaves: readTable_(ss, 'leaves'),
-    config: readConfig_(ss),
+    config: config,
     sheetUrl: ss.getUrl(),
   };
 }
@@ -86,36 +88,50 @@ function saveRecord(table, rec) {
 
 /**
  * แจกเคสใหม่ภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
- * how = 'manual' ใช้ MP ที่เลือกมา, นอกนั้นเลือกตามคิวของเทคนิค
+ * รับได้หลายเคส (หลายเทคนิคของผู้ป่วยคนเดียว) แต่ละเคสเลือก MP ตามคิวของเทคนิคนั้น
+ * how = 'manual' ใช้ MP ที่เลือกมา
  */
-function addCase(rec) {
-  if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
+function addCases(recs) {
+  if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
   return withLock_(() => {
     const ss = SpreadsheetApp.getActive();
     const cfg = readConfig_(ss) || {};
     const staff = Array.isArray(cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code, active: true }));
-    const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
-    const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
-    const date = rec.in || Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-    if (rec.how === 'manual') {
-      rec.mp = String(rec.mp || '').toUpperCase();
-      if (!staff.some(s => String(s.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
-    } else {
-      rec.how = 'auto';
-      rec.mp = pickNext_({
-        staff: staff, leaves: readTable_(ss, 'leaves'), date: date, byDay: byDay,
-        cases: readTable_(ss, 'cases').filter(c => c.cat === rec.cat),
-        pointer: (cfg.queue || {})[rec.cat] || null,
-      });
-    }
-    if (!rec.mp) throw new Error('ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
-    rec.id = rec.id || Utilities.getUuid();
-    rec.in = date;
-    rec.created = new Date().toISOString();
+    const leaves = readTable_(ss, 'leaves');
+    const cases = readTable_(ss, 'cases');
+    const today = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    const out = recs.map(rec => {
+      if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
+      const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
+      const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
+      const date = rec.in || today;
+      if (rec.how === 'manual') {
+        rec.mp = String(rec.mp || '').toUpperCase();
+        if (!staff.some(s => String(s.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
+      } else {
+        rec.how = 'auto';
+        rec.mp = pickNext_({
+          staff: staff, leaves: leaves, date: date, byDay: byDay,
+          cases: cases.filter(c => c.cat === rec.cat),
+          pointer: (cfg.queue || {})[rec.cat] || null,
+        });
+      }
+      if (!rec.mp) throw new Error((cat ? cat.label + ': ' : '') + 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
+      rec.id = rec.id || Utilities.getUuid();
+      rec.in = date;
+      rec.created = new Date().toISOString();
+      cases.push(rec);
+      return rec;
+    });
     const sh = tableSheet_(ss, 'cases');
-    writeFields_(sh, sh.getLastRow() + 1, headerOf_(sh), TABLES.cases.fields, rec);
-    return rec;
+    const header = headerOf_(sh);
+    out.forEach(rec => writeFields_(sh, sh.getLastRow() + 1, header, TABLES.cases.fields, rec));
+    return out;
   });
+}
+
+function addCase(rec) {
+  return addCases([rec])[0];
 }
 
 /*
@@ -177,6 +193,7 @@ function deleteRecord(table, id) {
 
 function saveConfig(config) {
   return withLock_(() => {
+    requireAdmin_(SpreadsheetApp.getActive());
     writeConfig_(SpreadsheetApp.getActive(), config || {});
     return true;
   });
@@ -197,6 +214,7 @@ const LEGACY_HEADERS = {
 
 function importLegacy() {
   const ss = SpreadsheetApp.getActive();
+  requireAdmin_(ss);
   const tz = ss.getSpreadsheetTimeZone();
   const found = parseLegacy_(name => {
     const sh = ss.getSheetByName(name);
@@ -371,6 +389,24 @@ function parseLegacy_(read, tz) {
     });
   }
   return out;
+}
+
+/* ---------- แอดมิน ---------- */
+
+// เจ้าของไฟล์เป็นแอดมินเสมอ และเพิ่มอีเมลแอดมินได้ใน Config (admins)
+// ถ้ายังไม่มีรายชื่อแอดมินและหาเจ้าของไฟล์ไม่ได้ (เช่นไฟล์ใน Shared drive) ทุกคนแก้ได้จนกว่าจะตั้งแอดมิน
+function adminInfo_(ss, cfg) {
+  let me = '', owner = '';
+  try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { /* ไม่ทราบอีเมล */ }
+  try { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; } catch (e) { /* ไม่ทราบเจ้าของ */ }
+  const admins = ((cfg && cfg.admins) || []).map(x => String(x).toLowerCase().trim()).filter(Boolean);
+  const isAdmin = (!!me && (me === owner || admins.indexOf(me) >= 0)) || (!admins.length && !owner);
+  return { me: me, owner: owner, isAdmin: isAdmin };
+}
+
+function requireAdmin_(ss) {
+  const info = adminInfo_(ss, readConfig_(ss));
+  if (!info.isAdmin) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (info.me ? ' (' + info.me + ' ไม่ใช่แอดมิน)' : ''));
 }
 
 /* ---------- ตัวช่วย ---------- */
