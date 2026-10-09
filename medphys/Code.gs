@@ -13,7 +13,7 @@ const TABLES = {
   cases: {
     sheet: 'Cases',
     fields: [
-      ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
+      ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['how', 'วิธีแจก'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
       ['fin', 'Finish'], ['eval', 'Evaluate'], ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
@@ -84,7 +84,8 @@ function saveRecord(table, rec) {
 }
 
 /**
- * แจกเคสใหม่: เลือก MP ตามคิวของเทคนิคภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
+ * แจกเคสใหม่ภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
+ * how = 'manual' ใช้ MP ที่เลือกมา, นอกนั้นเลือกตามคิวของเทคนิค
  */
 function addCase(rec) {
   if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
@@ -95,11 +96,17 @@ function addCase(rec) {
     const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
     const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
     const date = rec.in || Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-    rec.mp = pickNext_({
-      staff: staff, leaves: readTable_(ss, 'leaves'), date: date, byDay: byDay,
-      cases: readTable_(ss, 'cases').filter(c => c.cat === rec.cat),
-      pointer: (cfg.queue || {})[rec.cat] || null,
-    });
+    if (rec.how === 'manual') {
+      rec.mp = String(rec.mp || '').toUpperCase();
+      if (!staff.some(s => String(s.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
+    } else {
+      rec.how = 'auto';
+      rec.mp = pickNext_({
+        staff: staff, leaves: readTable_(ss, 'leaves'), date: date, byDay: byDay,
+        cases: readTable_(ss, 'cases').filter(c => c.cat === rec.cat),
+        pointer: (cfg.queue || {})[rec.cat] || null,
+      });
+    }
     if (!rec.mp) throw new Error('ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
     rec.id = rec.id || Utilities.getUuid();
     rec.in = date;
@@ -111,26 +118,50 @@ function addCase(rec) {
 }
 
 /*
- * คิวหมุนเวียน (ตรรกะเดียวกับ pickNext ใน index.html)
- * ต่อจากคนที่ได้เคสล่าสุดของเทคนิคนั้น ข้ามคนที่ลาในวันนั้นหรือปิดการปฏิบัติงาน
- * byDay: เคสวันเดียวกันให้คนเดิม, pointer: คนถัดไปที่ตั้งเองในหน้าตั้งค่า
+ * คิวหมุนเวียนของแต่ละเทคนิค (โค้ดชุดเดียวกับ pickNext ใน index.html)
+ * - แจกอัตโนมัติ: ไปที่คนถัดจากคนที่ได้เคสอัตโนมัติล่าสุด ตามลำดับทีม JR → WM → NY → WS
+ * - แจกเอง (how = 'manual'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
+ * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
+ * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
+ * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
  */
-function pickNext_(o) {
+function pickNext_(o, trace) {
   const staff = o.staff, n = staff.length;
   if (!n) return '';
-  const away = code => o.leaves.some(l => l.mp === code && l.from <= o.date && o.date <= (l.to || l.from));
-  const free = i => staff[i].active !== false && !away(staff[i].code);
   const idx = code => staff.findIndex(s => s.code === code);
+  const away = (code, day) => o.leaves.some(l => l.mp === code && l.from <= day && day <= (l.to || l.from));
+  const free = (i, day) => staff[i].active !== false && !away(staff[i].code, day);
+  // เดินคิวจาก start: ข้ามคนที่ไม่ว่างวันนั้น และหักเคสเลือกเองที่ค้างอยู่ทีละ 1
+  const select = (start, day, cr, skipped) => {
+    let limit = n;
+    Object.keys(cr).forEach(k => { limit += n * cr[k]; });
+    for (let step = 0; step < limit; step++) {
+      const i = (start + step) % n, code = staff[i].code;
+      if (!free(i, day)) { if (skipped && step < n) skipped.push({ code: code, why: 'away' }); continue; }
+      if (cr[code] > 0) { cr[code]--; if (skipped) skipped.push({ code: code, why: 'manual' }); continue; }
+      return i;
+    }
+    return -1;
+  };
+  const pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
+  const credit = {};
+  let p = 0, lastAuto = null, pointerDone = !pointer;
   const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
-  const last = list[list.length - 1];
-  let start = 0;
-  if (o.pointer && idx(o.pointer.code) >= 0 && (!last || last.created <= o.pointer.at)) start = idx(o.pointer.code);
-  else if (last && idx(last.mp) >= 0) {
-    start = idx(last.mp);
-    if (!(o.byDay && last.in === o.date && free(start))) start += 1;
-  }
-  for (let i = 0; i < n; i++) { const j = (start + i) % n; if (free(j)) return staff[j].code; }
-  return '';
+  list.forEach(c => {
+    if (!pointerDone && c.created > pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    const j = idx(c.mp);
+    if (j < 0) return;
+    if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
+    const trial = Object.assign({}, credit);
+    if (select(p, c.in, trial) === j) Object.assign(credit, trial);
+    p = (j + 1) % n;
+    lastAuto = c;
+  });
+  if (!pointerDone) { p = idx(pointer.code); lastAuto = null; }
+  if (trace) { trace.start = staff[p].code; trace.credit = Object.assign({}, credit); trace.skipped = []; }
+  if (o.byDay && lastAuto && lastAuto.in === o.date && free(idx(lastAuto.mp), o.date)) return lastAuto.mp;
+  const i = select(p, o.date, credit, trace ? trace.skipped : null);
+  return i < 0 ? '' : staff[i].code;
 }
 
 function deleteRecord(table, id) {

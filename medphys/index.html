@@ -113,7 +113,8 @@ button{cursor:pointer}
 .assign b{font-weight:600}
 .assign small{display:block;font-size:12.5px;color:var(--muted)}
 .assign.warn{color:var(--late)}
-.chips.cats span small{margin-left:7px;font:500 11px var(--mono);opacity:.65}
+.chips.cats span small,.chips.people span small{margin-left:7px;font:500 11px var(--mono);opacity:.65}
+.intake-mode{display:flex;flex-wrap:wrap;gap:14px 32px;align-items:flex-start}
 .link-btn{padding:0;border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:500}
 .link-btn:hover{text-decoration:underline}
 @media (max-width:760px){
@@ -341,6 +342,13 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="field plan-field"><span class="lbl"><label for="i-sim">Sim</label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
           <label class="field note-field"><span class="lbl">Note</span><input id="i-note"></label>
         </div>
+        <div class="intake-mode">
+          <div class="field"><span class="lbl">วิธีแจก</span><div class="chips" id="i-mode" role="radiogroup" aria-label="วิธีแจก">
+            <label><input type="radio" name="imode" value="auto" checked><span>อัตโนมัติตามคิว</span></label>
+            <label><input type="radio" name="imode" value="manual"><span>เลือกเอง</span></label>
+          </div></div>
+          <div class="field" id="i-pick-field" hidden><span class="lbl">ผู้รับเคส</span><div class="chips people" id="i-pick" role="radiogroup" aria-label="ผู้รับเคส"></div></div>
+        </div>
         <div class="intake-foot">
           <div class="assign" id="i-assign" aria-live="polite"></div>
           <span style="display:flex;gap:8px"><button type="button" class="btn ghost" id="i-clear">ล้างฟอร์ม</button><button type="submit" class="btn primary" id="i-save">แจกเคส</button></span>
@@ -532,7 +540,7 @@ const LOG_KINDS = [
   { key: 'admin', label: 'บริหาร' },
 ];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -579,6 +587,7 @@ function normCase(o) {
   for (const f of ['ct', 'in', 'fin', 'eval']) c[f] = dateStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
+  c.how = c.how === 'manual' ? 'manual' : c.how ? 'auto' : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
   return c;
@@ -651,7 +660,7 @@ function localStore() {
     load: async () => clone(db),
     save: async (table, rec) => { upsert(db[table], clone(rec)); persist(); return rec; },
     addCase: async rec => {
-      const out = { ...rec, mp: nextFor(rec.cat, rec.in), created: nowISO() };
+      const out = { ...rec, mp: rec.how === 'manual' ? rec.mp : nextFor(rec.cat, rec.in), created: nowISO() };
       if (!out.mp) throw new Error(NOBODY);
       upsert(db.cases, clone(out)); persist(); return out;
     },
@@ -725,41 +734,65 @@ function caseStep(c) {
   return 'plan';
 }
 /*
- * คิวหมุนเวียนของแต่ละเทคนิค (ตรรกะเดียวกับ pickNext_ ใน Code.gs)
- * - ต่อจากคนที่ได้เคสล่าสุดของเทคนิคนั้น ตามลำดับทีม JR → WM → NY → WS
- * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" แล้ววนไปคนถัดไป
- * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนไปคนถัดไป
- * - pointer: คนถัดไปที่ตั้งเองในหน้าตั้งค่า ใช้จนกว่าจะมีเคสใหม่
+ * คิวหมุนเวียนของแต่ละเทคนิค (โค้ดชุดเดียวกับ pickNext_ ใน Code.gs)
+ * - แจกอัตโนมัติ: ไปที่คนถัดจากคนที่ได้เคสอัตโนมัติล่าสุด ตามลำดับทีม JR → WM → NY → WS
+ * - แจกเอง (how = 'manual'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
+ * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
+ * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
+ * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
  */
-function pickNext(o) {
+function pickNext(o, trace) {
   const staff = o.staff, n = staff.length;
   if (!n) return '';
-  const away = code => o.leaves.some(l => l.mp === code && l.from <= o.date && o.date <= (l.to || l.from));
-  const free = i => staff[i].active !== false && !away(staff[i].code);
   const idx = code => staff.findIndex(s => s.code === code);
+  const away = (code, day) => o.leaves.some(l => l.mp === code && l.from <= day && day <= (l.to || l.from));
+  const free = (i, day) => staff[i].active !== false && !away(staff[i].code, day);
+  // เดินคิวจาก start: ข้ามคนที่ไม่ว่างวันนั้น และหักเคสเลือกเองที่ค้างอยู่ทีละ 1
+  const select = (start, day, cr, skipped) => {
+    let limit = n;
+    Object.keys(cr).forEach(k => { limit += n * cr[k]; });
+    for (let step = 0; step < limit; step++) {
+      const i = (start + step) % n, code = staff[i].code;
+      if (!free(i, day)) { if (skipped && step < n) skipped.push({ code: code, why: 'away' }); continue; }
+      if (cr[code] > 0) { cr[code]--; if (skipped) skipped.push({ code: code, why: 'manual' }); continue; }
+      return i;
+    }
+    return -1;
+  };
+  const pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
+  const credit = {};
+  let p = 0, lastAuto = null, pointerDone = !pointer;
   const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
-  const last = list[list.length - 1];
-  let start = 0;
-  if (o.pointer && idx(o.pointer.code) >= 0 && (!last || last.created <= o.pointer.at)) start = idx(o.pointer.code);
-  else if (last && idx(last.mp) >= 0) {
-    start = idx(last.mp);
-    if (!(o.byDay && last.in === o.date && free(start))) start += 1;
-  }
-  for (let i = 0; i < n; i++) { const j = (start + i) % n; if (free(j)) return staff[j].code; }
-  return '';
+  list.forEach(c => {
+    if (!pointerDone && c.created > pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    const j = idx(c.mp);
+    if (j < 0) return;
+    if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
+    const trial = Object.assign({}, credit);
+    if (select(p, c.in, trial) === j) Object.assign(credit, trial);
+    p = (j + 1) % n;
+    lastAuto = c;
+  });
+  if (!pointerDone) { p = idx(pointer.code); lastAuto = null; }
+  if (trace) { trace.start = staff[p].code; trace.credit = Object.assign({}, credit); trace.skipped = []; }
+  if (o.byDay && lastAuto && lastAuto.in === o.date && free(idx(lastAuto.mp), o.date)) return lastAuto.mp;
+  const i = select(p, o.date, credit, trace ? trace.skipped : null);
+  return i < 0 ? '' : staff[i].code;
 }
 const onLeave = (code, date) => state.leaves.some(l => l.mp === code && l.from <= date && date <= (l.to || l.from));
-function nextFor(catId, date, ignoreLeave) {
-  return pickNext({
+function queueInput(catId, date, ignoreLeave) {
+  return {
     staff: state.config.staff, leaves: ignoreLeave ? [] : state.leaves,
     cases: state.cases.filter(c => c.cat === catId), pointer: state.config.queue[catId] || null,
     byDay: catOf(catId).rotate === 'day', date: date || today(),
-  });
+  };
 }
-// คนที่ถึงคิวแต่ลาในวันนั้น (ไว้บอกในฟอร์มว่าข้ามใคร)
-function skippedFor(catId, date) {
-  const plain = nextFor(catId, date, true);
-  return plain && plain !== nextFor(catId, date) && onLeave(plain, date || today()) ? plain : '';
+const nextFor = (catId, date, ignoreLeave) => pickNext(queueInput(catId, date, ignoreLeave));
+// ใครได้เคส ข้ามใครเพราะอะไร ตำแหน่งคิว และเคสเลือกเองที่ยังรอหักคิว
+function queueInfo(catId, date) {
+  const t = {};
+  const code = pickNext(queueInput(catId, date), t);
+  return { code, start: t.start, credit: t.credit || {}, skipped: t.skipped || [] };
 }
 function setNext(catId, code) {
   state.config.queue = { ...state.config.queue, [catId]: { code, at: nowISO() } };
@@ -910,7 +943,8 @@ function renderWork() {
 
 function caseRow(c, rcs) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
-  const meta = simple ? [c.note && esc(c.note)] : [c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>' : '';
+  const meta = simple ? [manualChip, c.note && esc(c.note)] : [manualChip, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1046,7 +1080,11 @@ function renderSettings() {
       <label class="check"><input type="checkbox" data-k="staff.${i}.active"${s.active ? ' checked' : ''}> ปฏิบัติงาน</label>
       <span style="display:flex;gap:2px"><button type="button" class="icon-btn" data-up="${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="staff.${i}" aria-label="ลบ">×</button></span>
     </div>`).join('');
-  const queueRows = state.config.cats.filter(k => k.on).map(k => `<tr><td>${esc(k.label)}</td><td style="text-align:left"><select data-next="${esc(k.id)}" style="width:auto">${state.config.staff.map(s => opt(s.code, s.code + (s.name ? ' · ' + s.name : ''), nextFor(k.id, today(), true))).join('')}</select></td><td class="muted" style="text-align:left">${k.rotate === 'day' ? 'รายวัน' : 'ทุกเคส'}</td></tr>`).join('');
+  const queueRows = state.config.cats.filter(k => k.on).map(k => {
+    const q = queueInfo(k.id, today());
+    const owed = Object.keys(q.credit).filter(c => q.credit[c] > 0).map(c => `${c} ${q.credit[c]}`).join(', ');
+    return `<tr><td>${esc(k.label)}</td><td style="text-align:left"><select data-next="${esc(k.id)}" style="width:auto">${state.config.staff.map(s => opt(s.code, s.code + (s.name ? ' · ' + s.name : ''), q.start)).join('')}</select></td><td style="text-align:left" class="${owed ? '' : 'zero'}">${esc(owed || '–')}</td><td class="muted" style="text-align:left">${k.rotate === 'day' ? 'รายวัน' : 'ทุกเคส'}</td></tr>`;
+  }).join('');
   const catRows = d.cats.map((k, i) => `<tr>
       <td><input data-k="cats.${i}.label" value="${esc(k.label)}" aria-label="ชื่อหมวด"></td>
       <td><input data-k="cats.${i}.p4p" value="${esc(k.p4p)}" aria-label="ชื่อในแบบ P4P"></td>
@@ -1072,8 +1110,8 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       <div class="set-list">${staffRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="staff">+ เพิ่มนักฟิสิกส์</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>คิวหมุนเวียน</h2><p>คนที่ถึงคิวรับเคสถัดไปของแต่ละเทคนิค เปลี่ยนได้ทันที ถ้าคนนั้นลาในวันที่แจกเคส ระบบจะข้ามไปคนถัดไป</p></div>
-      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คนถัดไป</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
+    <div class="sec"><div class="sec-head"><h2>คิวหมุนเวียน</h2><p>ตำแหน่งคิวของแต่ละเทคนิค เปลี่ยนได้ทันที ตอนแจกจริงระบบข้ามคนที่ลา และคนที่มีเคสเลือกเองรอหักคิว</p></div>
+      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (เลือกเอง)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
     <div class="sec"><div class="sec-head"><h2>หมวดงานและน้ำหนัก P4P</h2><p>แต้ม/หน่วย = เวลา × น้ำหนัก × แต้มมาตรฐาน</p></div>
       <div class="form-grid" style="margin-bottom:12px">
         <label class="field"><span class="lbl">แต้มมาตรฐาน (แต้ม/นาที)</span><input type="number" step="any" data-k="rate" value="${esc(d.rate)}"></label>
@@ -1151,8 +1189,9 @@ function syncCaseForm() {
   $('#f-sim').disabled = $('#f-oncall').checked;
   const mp = $('#f-mp').value, day = $('#f-in').value || today();
   const hint = $('#f-mp-hint');
-  hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : '';
-  hint.className = 'hint warn';
+  const changed = mp && editingCase.mp && mp !== editingCase.mp;
+  hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
+  hint.className = mp && onLeave(mp, day) ? 'hint warn' : 'hint';
   const extra = k.mu ? ` + New MU ${num(unitPts(state.config.acts.mu.min, state.config.acts.mu.w), 3)}` : '';
   $('#f-preview').innerHTML = `${esc(k.p4p)} = <b>${num(unitPts(k.min, k.w), 3)}</b> แต้ม${extra} ให้ MP ตามวัน ${simple ? 'Date' : 'In'}`;
 }
@@ -1188,6 +1227,7 @@ async function submitCase(e) {
     updated: nowISO(),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
+  if (rec.mp !== editingCase.mp) rec.how = 'manual';
   const btn = $('#case-save');
   btn.disabled = true;
   try {
@@ -1331,8 +1371,10 @@ function renderIntake() {
     const sel = el.children.length ? chipValue(el) : (name === 'itype' ? 'New' : '');
     chipGroup(el, name, list, sel);
   }
+  const pick = chipValue($('#i-pick'));
+  $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
   const order = cfg.staff.filter(s => s.active).map(s => s.code).join(' → ');
-  $('#queue-note').textContent = `กรอกข้อมูลผู้ป่วยแล้วเลือกเทคนิค ระบบส่งให้คนถัดไปในคิวของเทคนิคนั้น (${order}) และข้ามคนที่ลา`;
+  $('#queue-note').textContent = `เลือกเทคนิคแล้วแจกอัตโนมัติตามคิว (${order}) หรือเลือกผู้รับเอง เคสที่เลือกเองจะหักคิวของคนนั้นเมื่อวนมาถึง`;
   syncIntake();
 }
 function syncIntake() {
@@ -1345,6 +1387,8 @@ function syncIntake() {
   $('#i-sim').disabled = $('#i-oncall').checked;
   const date = $('#i-in').value || today();
   const dayTxt = date === today() ? 'วันนี้' : `วัน ${fmtDay(date)}`;
+  const manual = chipValue($('#i-mode')) === 'manual';
+  $('#i-pick-field').hidden = !manual;
   const away = activeStaff().filter(s => onLeave(s.code, date)).map(s => s.code);
   const box = $('#i-assign');
   box.className = 'assign';
@@ -1352,19 +1396,29 @@ function syncIntake() {
     box.innerHTML = `${av('', 'lg')}<span>เลือกเทคนิคเพื่อดูว่าใครได้เคส<small>${dayTxt} ${away.length ? `${esc(away.join(', '))} ลา` : 'ไม่มีคนลา'}</small></span>`;
     return;
   }
-  const who = nextFor(k.id, date);
-  if (!who) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(NOBODY)}</span>`; return; }
-  const s = state.config.staff.find(x => x.code === who);
-  const skip = skippedFor(k.id, date);
-  box.innerHTML = `${av(who, 'lg')}<span>ส่งให้ <b>${esc(who)}</b>${s && s.name ? ' · ' + esc(s.name) : ''}
-    <small>${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${esc(k.label)}${skip ? ` · ข้าม ${esc(skip)} เพราะลา${dayTxt}` : ''} · ${num(unitPts(k.min, k.w), 3)} แต้ม</small></span>`;
+  const named = code => { const s = state.config.staff.find(x => x.code === code); return `<b>${esc(code)}</b>${s && s.name ? ' · ' + esc(s.name) : ''}`; };
+  const pts = `${num(unitPts(k.min, k.w), 3)} แต้ม`;
+  if (manual) {
+    const pick = chipValue($('#i-pick'));
+    if (!pick) { box.innerHTML = `${av('', 'lg')}<span>เลือกผู้รับเคส<small>คิว ${esc(k.label)} จะไม่ขยับ</small></span>`; return; }
+    if (onLeave(pick, date)) box.className = 'assign warn';
+    box.innerHTML = `${av(pick, 'lg')}<span>ส่งให้ ${named(pick)} · เลือกเอง
+      <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(pick)} 1 ครั้งเมื่อคิววนมาถึง · ${pts}</small></span>`;
+    return;
+  }
+  const q = queueInfo(k.id, date);
+  if (!q.code) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(NOBODY)}</span>`; return; }
+  const why = [];
+  q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
+  box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}
+    <small>${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${esc(k.label)}${why.length ? ` · ข้าม ${esc(why.join(', '))}` : ''} · ${pts}</small></span>`;
 }
 function fillIntake(c) {
   $$('#i-cat input').forEach(i => { i.checked = false; });
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#i-' + f).value = c[f] || '';
   $('#i-oncall').checked = c.sim === 'on call';
   $('#i-sim').value = c.sim === 'on call' ? '' : c.sim || '';
-  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-tech', c.tech]]) {
+  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
   renderIntake();
@@ -1382,10 +1436,13 @@ async function submitIntake(e) {
   if (!hn) { $('#i-hn').focus(); return toast('กรอก HN ก่อนแจกเคส', { err: true }); }
   if (!catId) return toast('เลือกเทคนิคก่อนแจกเคส', { err: true });
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
+  const manual = chipValue($('#i-mode')) === 'manual';
+  const pick = manual ? chipValue($('#i-pick')) : '';
+  if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
   const k = catOf(catId), simple = k.kind === 'simple';
   const plan = v => (simple ? '' : v);
   const rec = normCase({
-    id: uid(), cat: k.id, mp: '', hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value,
+    id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value,
     ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
     doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
     tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
@@ -1399,7 +1456,7 @@ async function submitIntake(e) {
     resetIntake();
     render();
     $('#i-hn').focus();
-    toast(`แจกเคส ${saved.hn} · ${k.label} ให้ ${saved.mp} แล้ว`, { undo: () => undoAssign(saved) });
+    toast(`แจกเคส ${saved.hn} · ${k.label} ให้ ${saved.mp}${saved.how === 'manual' ? ' (เลือกเอง)' : ''} แล้ว`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === saved.id) { state.fresh = ''; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
@@ -1520,7 +1577,7 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('click', e => {
   const input = e.target.matches('.chips input') ? e.target : null;
-  if (!input || input.name === 'kind') return;
+  if (!input || input.name === 'kind' || input.name === 'imode') return;
   if (input.dataset.was === '1') { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); }
   input.dataset.was = '';
 });
