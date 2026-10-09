@@ -27,7 +27,14 @@ const TABLES = {
       ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
+  leaves: {
+    sheet: 'Leaves',
+    fields: [['id', 'id'], ['mp', 'MP'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['created', 'Created'], ['updated', 'Updated']],
+  },
 };
+// ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
+const DEFAULT_STAFF = ['JR', 'WM', 'NY', 'WS'];
+const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 
 /* ---------- หน้าเว็บและเมนู ---------- */
 
@@ -58,6 +65,7 @@ function getData() {
   return {
     cases: readTable_(ss, 'cases'),
     logs: readTable_(ss, 'logs'),
+    leaves: readTable_(ss, 'leaves'),
     config: readConfig_(ss),
     sheetUrl: ss.getUrl(),
   };
@@ -73,6 +81,56 @@ function saveRecord(table, rec) {
     writeFields_(sh, row, header, def.fields, rec);
     return rec;
   });
+}
+
+/**
+ * แจกเคสใหม่: เลือก MP ตามคิวของเทคนิคภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
+ */
+function addCase(rec) {
+  if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
+  return withLock_(() => {
+    const ss = SpreadsheetApp.getActive();
+    const cfg = readConfig_(ss) || {};
+    const staff = Array.isArray(cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code, active: true }));
+    const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
+    const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
+    const date = rec.in || Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    rec.mp = pickNext_({
+      staff: staff, leaves: readTable_(ss, 'leaves'), date: date, byDay: byDay,
+      cases: readTable_(ss, 'cases').filter(c => c.cat === rec.cat),
+      pointer: (cfg.queue || {})[rec.cat] || null,
+    });
+    if (!rec.mp) throw new Error('ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
+    rec.id = rec.id || Utilities.getUuid();
+    rec.in = date;
+    rec.created = new Date().toISOString();
+    const sh = tableSheet_(ss, 'cases');
+    writeFields_(sh, sh.getLastRow() + 1, headerOf_(sh), TABLES.cases.fields, rec);
+    return rec;
+  });
+}
+
+/*
+ * คิวหมุนเวียน (ตรรกะเดียวกับ pickNext ใน index.html)
+ * ต่อจากคนที่ได้เคสล่าสุดของเทคนิคนั้น ข้ามคนที่ลาในวันนั้นหรือปิดการปฏิบัติงาน
+ * byDay: เคสวันเดียวกันให้คนเดิม, pointer: คนถัดไปที่ตั้งเองในหน้าตั้งค่า
+ */
+function pickNext_(o) {
+  const staff = o.staff, n = staff.length;
+  if (!n) return '';
+  const away = code => o.leaves.some(l => l.mp === code && l.from <= o.date && o.date <= (l.to || l.from));
+  const free = i => staff[i].active !== false && !away(staff[i].code);
+  const idx = code => staff.findIndex(s => s.code === code);
+  const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  const last = list[list.length - 1];
+  let start = 0;
+  if (o.pointer && idx(o.pointer.code) >= 0 && (!last || last.created <= o.pointer.at)) start = idx(o.pointer.code);
+  else if (last && idx(last.mp) >= 0) {
+    start = idx(last.mp);
+    if (!(o.byDay && last.in === o.date && free(start))) start += 1;
+  }
+  for (let i = 0; i < n; i++) { const j = (start + i) % n; if (free(j)) return staff[j].code; }
+  return '';
 }
 
 function deleteRecord(table, id) {
@@ -120,12 +178,10 @@ function importLegacy() {
     }
     // ตั้งคิวให้คนถัดไปตรงกับแถวว่างแถวแรกในแท็บเดิม
     const codes = cfg.staff.map(s => String(s.code).toUpperCase());
-    const counts = {};
-    readTable_(ss, 'cases').forEach(c => { counts[c.cat] = (counts[c.cat] || 0) + 1; });
-    cfg.offsets = cfg.offsets || {};
+    const at = new Date().toISOString();
+    cfg.queue = cfg.queue || {};
     Object.keys(found.next).forEach(cat => {
-      const i = codes.indexOf(found.next[cat]);
-      if (i >= 0) cfg.offsets[cat] = (((i - (counts[cat] || 0)) % codes.length) + codes.length) % codes.length;
+      if (codes.indexOf(found.next[cat]) >= 0) cfg.queue[cat] = { code: found.next[cat], at: at };
     });
     cfg.carry = cfg.carry || {};
     Object.keys(found.carry).forEach(ym => { cfg.carry[ym] = Object.assign({}, cfg.carry[ym], found.carry[ym]); });
