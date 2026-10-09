@@ -52,6 +52,8 @@
       --toast-bg: #1f1b2e;
       --toast-ink: #ffffff;
       --overlay: rgba(20, 15, 35, .45);
+      /* รูปแบบการใส่: F = Full, M = Mould, I = Interstitial needle, O = อื่นๆ */
+      --t-f: #6b3fa0; --t-m: #0f766e; --t-i: #1d5bd6; --t-o: #6b6680; --t-ink: #ffffff;
       --radius: 12px;
     }
     @media (prefers-color-scheme: dark) {
@@ -88,6 +90,7 @@
         --toast-bg: #ece8f6;
         --toast-ink: #1a1228;
         --overlay: rgba(0, 0, 0, .6);
+        --t-f: #b794f0; --t-m: #5fd4c4; --t-i: #8ab4ff; --t-o: #a7a1bd; --t-ink: #1a1228;
       }
     }
     :root[data-theme="dark"] {
@@ -123,6 +126,7 @@
       --toast-bg: #ece8f6;
       --toast-ink: #1a1228;
       --overlay: rgba(0, 0, 0, .6);
+      --t-f: #b794f0; --t-m: #5fd4c4; --t-i: #8ab4ff; --t-o: #a7a1bd; --t-ink: #1a1228;
     }
 
     * { box-sizing: border-box; }
@@ -422,6 +426,22 @@
     }
     .daydetail h3 { margin: 0 0 8px; font-size: 16px; }
     .docsum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    /* ป้ายตัวย่อรูปแบบการใส่ */
+    .tq {
+      display: inline-block; min-width: 15px; padding: 0 4px; border-radius: 4px; text-align: center;
+      font-size: 10.5px; font-weight: 700; line-height: 1.5; color: var(--t-ink); background: var(--t-o);
+      font-variant-numeric: tabular-nums; vertical-align: 1px;
+    }
+    .tq-F { background: var(--t-f); } .tq-M { background: var(--t-m); } .tq-I { background: var(--t-i); }
+    .tqs { display: flex; flex-wrap: wrap; gap: 3px; }
+    .day .tqs { margin: 1px 0 2px; }
+    .day li .tq { margin-right: 4px; }
+    .docsum .tqs { align-items: center; }
+    .mday .tqs { justify-content: center; gap: 2px; }
+    .mday .tq { font-size: 9.5px; padding: 0 2px; min-width: 0; }
+    .mday.picked .tq { box-shadow: 0 0 0 1px var(--accent-ink); }
+    .techleg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+    .techleg .tq { margin-right: 4px; }
     /* ---------- เข้าสู่ระบบ / สมัครสมาชิก ---------- */
     .authwrap { display: flex; justify-content: center; padding-inline: 16px; padding-block: 40px 56px; }
     .authcard {
@@ -453,7 +473,7 @@
     .tab .badge { background: var(--bad); color: var(--on-bad); border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 4px; }
     .tag.pending { background: var(--warn-soft); color: var(--warn); }
     .tag.admin { background: var(--accent); color: var(--accent-ink); }
-    .docsum span { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 600; }
+    .docsum > span:not(.tqs) { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -672,6 +692,7 @@
 
       <section class="card">
         <h2 data-i18n="cal_title"></h2>
+        <div class="techleg" id="calTechLeg" style="margin:-4px 0 10px"></div>
         <div class="calgrid" id="calgrid"></div>
       </section>
 
@@ -1334,16 +1355,19 @@
       const cls = ['mday', d < today ? 'past' : '', wk ? 'wkend' : '', hol ? 'hol' : '', d === today ? 'today' : '',
         fx.length ? 'picked' : '', d === target ? 'target' : '',
         total > state.max ? 'over' : total === state.max ? 'full' : ''].filter(Boolean).join(' ');
-      const tip = fmtDate(d, LONG) + ' · ' + t('booked_cap', { n: n, max: state.max }) + (hol ? ' · ' + t('w_holiday', { name: hol }) : '') +
+      const tc = techCounts(counts[d] || []);
+      const tip = fmtDate(d, LONG) + ' · ' + t('booked_cap', { n: n, max: state.max }) +
+        TECH_ORDER.filter(k => tc[k]).map(k => ' ' + k + tc[k]).join('') + (hol ? ' · ' + t('w_holiday', { name: hol }) : '') +
         (fx.length ? ' · Fx ' + fx.join(', ') : '');
       html += '<button type="button" class="' + cls + '" data-md="' + d + '"' + (d < today || hol || wk ? ' disabled' : '') +
         ' title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
         '<span class="dn">' + dt.getDate() + '</span>' +
         '<span class="dc">' + (total > state.max ? '⚠ ' : '') + n + '/' + state.max + '</span>' +
+        techSummary(counts[d] || []) +
         (fx.length ? '<span class="dfx">Fx ' + fx.join(',') + '</span>' : '') + '</button>';
     });
     $('mGrid').innerHTML = html;
-    $('mLegend').innerHTML = '<span>' + esc(t('ml_booked')) + '</span>' +
+    $('mLegend').innerHTML = techLegendHtml() + '<span>' + esc(t('ml_booked')) + '</span>' +
       '<span><i style="background:var(--accent);border-color:var(--accent)"></i>' + esc(t('ml_picked')) + '</span>' +
       '<span><i style="background:var(--bad-soft);border-color:var(--bad-line)"></i>' + esc(t('ml_over')) + '</span>' +
       '<span><i style="background:var(--raise)"></i>' + esc(t('ml_off')) + '</span>';
@@ -1669,6 +1693,32 @@
   const TECH_OTHER = 'อื่นๆ';
   // ค่าที่เก็บในชีตเป็นคำเดิม (Full / Mould / เสียบเข็ม / ที่กรอกเอง) แปลเฉพาะตอนแสดงผล
   const techText = (v) => (v === 'เสียบเข็ม' ? t('tech_needle') : v);
+  // ตัวย่อรูปแบบการใส่: F = Full, M = Mould, I = Interstitial needle (รวมค่าเดิม "เสียบเข็ม"), O = ที่กรอกเอง
+  const TECH_ORDER = ['F', 'M', 'I', 'O'];
+  function techAbbr(v) {
+    const x = String(v || '').trim().toLowerCase();
+    if (!x) return '';
+    if (x === 'full') return 'F';
+    if (x === 'mould' || x === 'mold') return 'M';
+    if (x.indexOf('interstitial') === 0 || x === 'เสียบเข็ม') return 'I';
+    return 'O';
+  }
+  // จำนวนเคสแยกตามรูปแบบ { F: 2, M: 1, ... }
+  function techCounts(list) {
+    const c = {};
+    list.forEach(a => { const k = techAbbr(a.technique); if (k) c[k] = (c[k] || 0) + 1; });
+    return c;
+  }
+  const techBadge = (k, text) => '<span class="tq tq-' + k + '">' + esc(text) + '</span>';
+  // ป้ายรวมของวัน เช่น F2 M1 I3 (เฉพาะรูปแบบที่มีเคส)
+  function techSummary(list) {
+    const c = techCounts(list), ks = TECH_ORDER.filter(k => c[k]);
+    return ks.length ? '<span class="tqs">' + ks.map(k => techBadge(k, k + c[k])).join('') + '</span>' : '';
+  }
+  function techLegendHtml() {
+    const names = { F: 'Full', M: 'Mould', I: 'Interstitial needle', O: t('tech_other') };
+    return TECH_ORDER.map(k => '<span>' + techBadge(k, k) + esc(names[k]) + '</span>').join('');
+  }
   function makeTechPicker(chipsId, otherId) {
     let sel = '';
     const chips = $(chipsId), other = $(otherId);
@@ -1940,7 +1990,7 @@
     if (!r) { tip.style.display = 'none'; return; }
     const d = r.dataset.d, list = dayCounts()[d] || [];
     tip.innerHTML = '<b>' + esc(fmtDate(d)) + '</b><br>' + esc(cases(list.length)) + (list.length > state.max ? ' · ' + esc(t('over_max', { max: state.max })) : '') +
-      (list.length ? '<br>' + list.slice(0, 8).map((a, i) => esc((i + 1) + '. HN ' + a.hn + ' ' + a.name)).join('<br>') + (list.length > 8 ? '<br>…' : '') : '');
+      (list.length ? '<br>' + list.slice(0, 8).map((a, i) => esc((i + 1) + '. ' + (techAbbr(a.technique) ? '[' + techAbbr(a.technique) + '] ' : '') + 'HN ' + a.hn + ' ' + a.name)).join('<br>') + (list.length > 8 ? '<br>…' : '') : '');
     tip.style.display = 'block';
     const box = $('chart').getBoundingClientRect();
     let x = e.clientX - box.left + 12; if (x + 260 > box.width) x = e.clientX - box.left - tip.offsetWidth - 12;
@@ -1973,14 +2023,17 @@
         '<span class="hint" style="font-weight:400"> ' + esc(DOW[lang][parseIso(d).getDay()]) + '</span></span>' +
         (n ? '<span class="cnt">' + (n > state.max ? '⚠️ ' : '') + esc(cases(n)) + '</span>' : '') + '</div>' +
         (hol ? '<div class="hol">🏖 ' + esc(hol) + '</div>' : '') +
+        techSummary(list) +
         (n ? '<ul>' + show.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
-          (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
+          (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + (techAbbr(a.technique) ? techBadge(techAbbr(a.technique), techAbbr(a.technique)) : '') +
+          esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
           (n > show.length ? '<li class="more">' + esc(t('more', { n: n - show.length })) + '</li>' : '') + '</ul>' : '') +
         '</button>';
     });
     const trail = (7 - (lead + days.length) % 7) % 7;
     for (let i = 0; i < trail; i++) html += '<div class="day out"></div>';
     $('calgrid').innerHTML = html;
+    $('calTechLeg').innerHTML = techLegendHtml();
   }
   $('calgrid').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-d]'); if (!b) return;
@@ -2001,7 +2054,8 @@
       (n > state.max ? ' <span class="badtext">' + esc(t('dd_over', { max: state.max, n: n - state.max })) + '</span>' : '') + '</h3>';
     if (state.holidays[d]) html += '<p class="hint">🏖 ' + esc(t('w_holiday', { name: state.holidays[d] })) + '</p>';
     if (Object.keys(byDoc).length) {
-      html += '<div class="docsum">' + Object.keys(byDoc).map(k => '<span>👩‍⚕️ ' + esc(k) + ' · ' + byDoc[k] + '</span>').join('') + '</div>';
+      html += '<div class="docsum">' + Object.keys(byDoc).map(k => '<span>👩‍⚕️ ' + esc(k) + ' · ' + byDoc[k] + '</span>').join('') +
+        techSummary(active) + '</div>';
     }
     if (!all.length) { $('dayDetail').innerHTML = html + '<div class="empty">' + esc(t('no_appts_day')) + '</div>'; return; }
     html += '<div class="tablewrap"><table><thead>' + theadHtml() + '</thead><tbody>' +
