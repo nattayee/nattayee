@@ -304,7 +304,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .preview b{font:500 13px var(--mono);color:var(--fg)}
 .linked{font-size:13px;color:var(--muted);background:var(--sunken);border-radius:8px;padding:8px 10px}
 @media (max-width:520px){.row2{grid-template-columns:1fr}.dates{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.leave-add{display:grid;grid-template-columns:92px repeat(2,minmax(0,1fr)) minmax(0,1.3fr) auto;gap:10px;align-items:end}
+.leave-add{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) minmax(0,1.3fr) auto;gap:10px;align-items:end}
+.leave-add .mp-field{grid-column:1/-1}
 @media (max-width:620px){.leave-add{grid-template-columns:1fr 1fr}.leave-add .btn{grid-column:1/-1}}
 .vrow{display:grid;grid-template-columns:auto 132px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 8px 8px 12px;font-size:13.5px}
 .vrow .when{font-variant-numeric:tabular-nums}
@@ -475,7 +476,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <div class="dlg-body">
       <div class="row2">
         <label class="field"><span class="lbl">หมวด</span><select id="f-cat"></select></label>
-        <label class="field"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><select id="f-mp"></select></label>
+        <div class="field"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><div class="chips people" id="f-mp" role="radiogroup" aria-label="MP"></div></div>
       </div>
       <div class="row2">
         <label class="field"><span class="lbl">HN</span><input id="f-hn" inputmode="numeric" autocomplete="off" required></label>
@@ -521,7 +522,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <p class="linked" id="l-linked" hidden></p>
       <div class="row2">
         <label class="field"><span class="lbl">Date</span><input type="date" id="l-date" required></label>
-        <label class="field"><span class="lbl"><span>MP</span><span class="hint" id="l-mp-hint"></span></span><select id="l-mp" required></select></label>
+        <div class="field"><span class="lbl"><span>MP</span><span class="hint" id="l-mp-hint"></span></span><div class="chips people" id="l-mp" role="radiogroup" aria-label="MP"></div></div>
       </div>
       <div class="row2 rc-only">
         <label class="field"><span class="lbl">HN</span><input id="l-hn" inputmode="numeric" autocomplete="off"></label>
@@ -551,7 +552,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <div class="dlg-body">
       <p class="preview" style="margin:0">ในวันที่ลา (นับตามวัน In ของเคส) ถ้าถึงคิวคนนั้น ระบบจะข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> ไม่ชดเชยเมื่อกลับมาทำงาน</p>
       <div class="leave-add">
-        <label class="field"><span class="lbl">MP</span><select id="v-mp"></select></label>
+        <div class="field mp-field"><span class="lbl">MP</span><div class="chips people" id="v-mp" role="radiogroup" aria-label="MP"></div></div>
         <label class="field"><span class="lbl">ตั้งแต่</span><input type="date" id="v-from"></label>
         <label class="field"><span class="lbl">ถึง</span><input type="date" id="v-to"></label>
         <label class="field"><span class="lbl">Note</span><input id="v-note" autocomplete="off" placeholder="เช่น ลาพักร้อน, ประชุม"></label>
@@ -1028,6 +1029,17 @@ const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? ' selecte
 function chipGroup(el, name, values, selected, titleOf) {
   el.innerHTML = values.map(v => { const t = titleOf && titleOf(v); return `<label${t ? ` title="${esc(t)}"` : ''}><input type="radio" name="${name}" value="${esc(v)}"${v === selected ? ' checked' : ''}><span>${esc(v)}</span></label>`; }).join('');
 }
+// ปุ่มเลือก MP แบบเดียวกับ Doc: ทีมที่ปฏิบัติงาน (+ คนเดิมของรายการ) บอก "ลา" ถ้าลาในวันนั้น
+function mpChips(el, name, selected, date) {
+  const codes = activeStaff().map(s => s.code);
+  if (selected && !codes.includes(selected)) codes.push(selected);
+  el.innerHTML = codes.map(code => {
+    const s = state.config.staff.find(x => x.code === code);
+    return `<label${s && s.name ? ` title="${esc(s.name)}"` : ''}><input type="radio" name="${name}" value="${esc(code)}"${code === selected ? ' checked' : ''}><span>${esc(code)}${date && onLeave(code, date) ? '<small>ลา</small>' : ''}</span></label>`;
+  }).join('');
+}
+const setChip = (el, v) => $$('input', el).forEach(i => { i.checked = i.value === v; });
+const focusChips = el => { const i = $('input:checked', el) || $('input', el); if (i) i.focus(); };
 const docCodes = () => state.config.doctors.map(x => x.code);
 const docName = code => (state.config.doctors.find(x => x.code === code) || {}).name || '';
 const chipValue = el => { const i = $('input:checked', el); return i ? i.value : ''; };
@@ -1812,9 +1824,7 @@ const caseDlg = $('#case-dlg'), caseForm = $('#case-form');
 function fillCaseSelects(c) {
   const cats = state.config.cats.filter(k => k.on || k.id === c.cat);
   $('#f-cat').innerHTML = cats.map(k => opt(k.id, k.label, c.cat)).join('');
-  const codes = activeStaff().map(s => s.code);
-  if (c.mp && !codes.includes(c.mp)) codes.push(c.mp);
-  $('#f-mp').innerHTML = opt('', '— เลือก —', c.mp) + codes.map(code => opt(code, code, c.mp)).join('');
+  mpChips($('#f-mp'), 'fmp', c.mp, c.in || today());
   const withCur = (list, v) => (v && !list.includes(v) ? [...list, v] : list);
   chipGroup($('#f-doc'), 'doc', withCur(docCodes(), c.doc), c.doc, docName);
   chipGroup($('#f-type'), 'type', withCur(state.config.types, c.type), c.type);
@@ -1828,7 +1838,7 @@ function syncCaseForm() {
   $('#tech-field').hidden = simple || !k.tech;
   $('#f-in-lbl').textContent = simple ? 'Date' : 'In';
   $('#f-sim').disabled = $('#f-oncall').checked;
-  const mp = $('#f-mp').value, day = $('#f-in').value || today();
+  const mp = chipValue($('#f-mp')), day = $('#f-in').value || today();
   const hint = $('#f-mp-hint');
   const changed = mp && editingCase.mp && mp !== editingCase.mp;
   hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
@@ -1857,7 +1867,7 @@ async function submitCase(e) {
   e.preventDefault();
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
-  if (!$('#f-mp').value) { $('#f-mp').focus(); return toast('เลือก MP ผู้รับเคส', { err: true }); }
+  if (!chipValue($('#f-mp'))) { focusChips($('#f-mp')); return toast('เลือก MP ผู้รับเคส', { err: true }); }
   const doseErr = checkDose('f') || checkArea('f');
   if (doseErr) return toast(doseErr, { err: true });
   const k = catOf($('#f-cat').value);
@@ -1865,7 +1875,7 @@ async function submitCase(e) {
   const v = id => (simple ? '' : $('#f-' + id).value);
   const rec = normCase({
     ...editingCase,
-    cat: k.id, mp: $('#f-mp').value, hn, name: $('#f-name').value, note: $('#f-note').value, in: $('#f-in').value,
+    cat: k.id, mp: chipValue($('#f-mp')), hn, name: $('#f-name').value, note: $('#f-note').value, in: $('#f-in').value,
     ct: v('ct'), fin: v('fin'), eval: v('eval'),
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
@@ -1931,10 +1941,10 @@ function syncLogForm() {
   hint.textContent = '';
   if (!editingLog.id && kind === 'rc') {
     const sug = suggestRC(c ? c.mp : '');
-    if (!logMpTouched && sug) $('#l-mp').value = sug;
-    if (sug) hint.textContent = $('#l-mp').value === sug ? 'RC น้อยสุดเดือนนี้' : '';
+    if (!logMpTouched && sug) setChip($('#l-mp'), sug);
+    if (sug) hint.textContent = chipValue($('#l-mp')) === sug ? 'RC น้อยสุดเดือนนี้' : '';
   }
-  if (c && kind === 'rc' && $('#l-mp').value === c.mp) { hint.textContent = 'คนเดียวกับผู้วางแผน'; hint.className = 'hint warn'; }
+  if (c && kind === 'rc' && chipValue($('#l-mp')) === c.mp) { hint.textContent = 'คนเดียวกับผู้วางแผน'; hint.className = 'hint warn'; }
   else hint.className = 'hint';
   const cfg = state.config;
   let pts = 0, how = '';
@@ -1952,9 +1962,7 @@ function openLog(id, preset = {}) {
   if (!kinds.some(k => k.key === editingLog.kind)) kinds.push(kindOf(editingLog.kind));
   chipGroup($('#l-kind'), 'kind', kinds.map(k => k.key), editingLog.kind);
   $$('#l-kind span').forEach((s, i) => { s.textContent = kinds[i].label; });
-  const codes = activeStaff().map(s => s.code);
-  if (editingLog.mp && !codes.includes(editingLog.mp)) codes.push(editingLog.mp);
-  $('#l-mp').innerHTML = opt('', '— เลือก —', editingLog.mp) + codes.map(code => opt(code, code, editingLog.mp)).join('');
+  mpChips($('#l-mp'), 'lmp', editingLog.mp, editingLog.date);
   for (const f of ['date', 'hn', 'name', 'title', 'min', 'k', 'note']) $('#l-' + f).value = editingLog[f] || '';
   if (!l && !editingLog.k) $('#l-k').value = '1';
   $('#log-title').textContent = l ? 'แก้ไขกิจกรรม' : (editingLog.kind === 'rc' ? 'บันทึก RC' : 'บันทึกกิจกรรม');
@@ -1966,8 +1974,8 @@ function openLog(id, preset = {}) {
 async function submitLog(e) {
   e.preventDefault();
   const kind = chipValue($('#l-kind')) || 'rc';
-  const mp = $('#l-mp').value;
-  if (!mp) { $('#l-mp').focus(); return toast('เลือก MP ผู้ทำกิจกรรม', { err: true }); }
+  const mp = chipValue($('#l-mp'));
+  if (!mp) { focusChips($('#l-mp')); return toast('เลือก MP ผู้ทำกิจกรรม', { err: true }); }
   if (!$('#l-date').value) { $('#l-date').focus(); return toast('ใส่วันที่', { err: true }); }
   const work = kind === 'acad' || kind === 'admin';
   if (work && !str($('#l-title').value)) { $('#l-title').focus(); return toast('กรอกชื่อกิจกรรม', { err: true }); }
@@ -2209,7 +2217,7 @@ function renderLeaves() {
   $('#leave-past').textContent = past ? `วันลาที่ผ่านไปแล้ว ${past} รายการ` : '';
 }
 function openLeaves() {
-  $('#v-mp').innerHTML = activeStaff().map(s => opt(s.code, s.code + (s.name ? ' · ' + s.name : ''), '')).join('');
+  mpChips($('#v-mp'), 'vmp', chipValue($('#v-mp')));
   $('#v-from').value = today();
   $('#v-to').value = today();
   $('#v-note').value = '';
@@ -2303,7 +2311,8 @@ caseForm.addEventListener('submit', submitCase);
 caseForm.addEventListener('change', e => {
   if (e.target.name === 'ffreq') return onFreqChange('f', e.target);
   if (e.target.name === 'farea') return syncArea('f', e.target.value === OTHER);
-  if (['f-cat', 'f-mp', 'f-oncall', 'f-in'].includes(e.target.id)) syncCaseForm();
+  if (e.target.id === 'f-in') mpChips($('#f-mp'), 'fmp', chipValue($('#f-mp')), e.target.value || today());
+  if (['f-cat', 'f-oncall', 'f-in'].includes(e.target.id) || e.target.name === 'fmp') syncCaseForm();
 });
 setupCombo('i');
 setupCombo('f');
@@ -2320,11 +2329,15 @@ intake.addEventListener('change', e => {
 intake.addEventListener('input', e => { clearMissing(e); if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
 leaveForm.addEventListener('submit', e => {
   e.preventDefault();
-  addLeave($('#v-mp').value, $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });
+  addLeave(chipValue($('#v-mp')), $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });
 });
 $('#v-from').addEventListener('change', () => { if (!$('#v-to').value || $('#v-to').value < $('#v-from').value) $('#v-to').value = $('#v-from').value; });
 logForm.addEventListener('submit', submitLog);
-logForm.addEventListener('change', e => { if (e.target.id === 'l-mp') logMpTouched = true; syncLogForm(); });
+logForm.addEventListener('change', e => {
+  if (e.target.name === 'lmp') logMpTouched = true;
+  if (e.target.id === 'l-date') mpChips($('#l-mp'), 'lmp', chipValue($('#l-mp')), e.target.value);
+  syncLogForm();
+});
 logForm.addEventListener('input', e => { if (e.target.id === 'l-min' || e.target.id === 'l-k') syncLogForm(); });
 
 const settingsEl = $('#view-settings');
