@@ -126,8 +126,6 @@ button{cursor:pointer}
 .total{display:flex;align-items:center;min-height:36px;font:500 15px var(--mono);white-space:nowrap}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
-.assign-list{display:grid;gap:8px}
-.assign-row{display:flex;align-items:center;gap:10px}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
 .intake-mode{display:flex;flex-wrap:wrap;gap:14px 32px;align-items:flex-start}
 .link-btn{padding:0;border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:500}
@@ -293,6 +291,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .chips span{display:inline-block;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:13.5px;line-height:1.4;white-space:nowrap}
 .chips label:hover span{border-color:var(--line-strong)}
 .chips input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.chips label.main input:checked+span{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--accent)}
 .chips input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .preview{font-size:13px;color:var(--muted)}
 .preview b{font:500 13px var(--mono);color:var(--fg)}
@@ -380,7 +379,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="field doc-field plan-field"><span class="lbl">Doc</span><div class="chips" id="i-doc" role="radiogroup" aria-label="Doc"></div></div>
         </div>
         <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
-        <div class="field"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง แต่ละเทคนิคแจกตามคิวของตัวเอง</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
+        <div class="field"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกัน</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
         <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
         <div class="intake-mid plan-field">
           <div class="field"><span class="lbl">Type</span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
@@ -670,7 +669,7 @@ function normCase(o) {
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
-  c.how = c.how === 'manual' ? 'manual' : c.how ? 'auto' : '';
+  c.how = c.how === 'manual' || c.how === 'follow' ? c.how : c.how ? 'auto' : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
   return c;
@@ -758,11 +757,14 @@ function localStore() {
     load: async () => clone(db),
     save: async (table, rec) => { upsert(db[table], clone(rec)); persist(); return rec; },
     addCases: async recs => {
-      const out = recs.map(rec => {
-        const r = { ...rec, mp: rec.how === 'manual' ? rec.mp : nextFor(rec.cat, rec.in), created: nowISO() };
+      const out = [];
+      for (const rec of recs) {
+        const follow = rec.how === 'follow' && out.length > 0;
+        const how = rec.how === 'manual' || follow ? rec.how : 'auto';
+        const r = { ...rec, how, mp: how === 'manual' ? rec.mp : follow ? out[0].mp : nextFor(rec.cat, rec.in), created: nowISO() };
         if (!r.mp) throw new Error(`${catOf(rec.cat).label}: ${NOBODY}`);
-        return r;
-      });
+        out.push(r);
+      }
       out.forEach(r => upsert(db.cases, clone(r))); persist(); return out;
     },
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
@@ -845,7 +847,7 @@ function caseStep(c) {
 /*
  * คิวหมุนเวียนของแต่ละเทคนิค (โค้ดชุดเดียวกับ pickNext_ ใน Code.gs)
  * - แจกอัตโนมัติ: ไปที่คนถัดจากคนที่ได้เคสอัตโนมัติล่าสุด ตามลำดับทีม JR → WM → NY → WS
- * - แจกเอง (how = 'manual'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
+ * - แจกเอง (how = 'manual') หรือตามเทคนิคแรก (how = 'follow'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
  * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
  * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
  * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
@@ -876,7 +878,7 @@ function pickNext(o, trace) {
     if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
     const j = idx(c.mp);
     if (j < 0) return;
-    if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
+    if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
     const trial = Object.assign({}, credit);
     if (select(p, c.in, trial) === j) Object.assign(credit, trial);
     p = (j + 1) % n;
@@ -1367,7 +1369,8 @@ function fillDose(pre, c) {
 let batchIndex = {};
 function caseRow(c, rcs) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
-  const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>' : '';
+  const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>'
+    : c.how === 'follow' ? '<span class="chip" title="ให้คนเดียวกับเทคนิคแรกที่แจกพร้อมกัน คิวของเทคนิคนี้ไม่ขยับ และจะข้ามคนนี้ 1 ครั้งเมื่อวนมาถึง">ตามเทคนิคแรก</span>' : '';
   const dose = doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
   const sib = c.batch && batchIndex[c.batch] ? batchIndex[c.batch].filter(x => x.id !== c.id) : [];
   const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
@@ -1645,9 +1648,9 @@ function renderSettings() {
       <ul class="rules">
         <li>แจกอัตโนมัติวนตามลำดับทีมด้านบน แยกคิวตามเทคนิค</li>
         <li>ถึงคิวคนที่ลาในวัน In ของเคส หรือปิด "ปฏิบัติงาน" ไว้ ระบบข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> จนกว่าจะกลับมาทำงาน ไม่ชดเชยภายหลัง</li>
-        <li>เคสที่เลือกเองไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
+        <li>เคสที่เลือกเอง และเทคนิคถัดไปที่แจกพร้อมเทคนิคแรก ไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
       </ul>
-      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (เลือกเอง)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
+      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (ได้นอกคิว)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
     <div class="sec"><div class="sec-head"><h2>เทคนิคและน้ำหนัก P4P</h2><p>แต้ม/ราย = เวลา × น้ำหนัก × แต้มมาตรฐาน · เทคนิคใหม่จะเป็นปุ่มในฟอร์มแจกเคสและมีคิวของตัวเอง</p></div>
       <div class="form-grid" style="margin-bottom:12px">
         <label class="field"><span class="lbl">แต้มมาตรฐาน (แต้ม/นาที)</span><input type="number" step="any" data-k="rate" value="${esc(d.rate)}"></label>
@@ -1916,6 +1919,14 @@ async function deleteLog(btn) {
 
 /* ---------- แจกเคสใหม่ ---------- */
 const intake = $('#intake');
+// ลำดับที่กดเลือกเทคนิค: เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกันและหักคิวของเทคนิคนั้น
+let catOrder = [];
+function selectedCats() {
+  const on = chipValues($('#i-cat'));
+  catOrder = catOrder.filter(id => on.includes(id));
+  on.forEach(id => { if (!catOrder.includes(id)) catOrder.push(id); });
+  return catOrder.slice();
+}
 function renderIntake() {
   const cfg = state.config;
   const date = $('#i-in').value || today();
@@ -1934,11 +1945,11 @@ function renderIntake() {
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
   const order = cfg.staff.filter(s => s.active).map(s => s.code).join(' → ');
-  $('#queue-note').textContent = `เลือกเทคนิคได้หลายอย่าง แต่ละเทคนิคแจกตามคิวของตัวเอง (${order}) หรือเลือกผู้รับเอง เคสที่เลือกเองจะหักคิวของคนนั้นเมื่อวนมาถึง`;
+  $('#queue-note').textContent = `แจกตามคิวของเทคนิคแรกที่เลือก (${order}) เทคนิคถัดไปให้คนเดียวกันและหักคิวของเทคนิคนั้นเมื่อวนมาถึง หรือเลือกผู้รับเอง`;
   syncIntake();
 }
 function syncIntake() {
-  const ks = chipValues($('#i-cat')).map(catOf);
+  const ks = selectedCats().map(catOf);
   const allSimple = ks.length > 0 && ks.every(k => k.kind === 'simple');
   $$('.plan-field', intake).forEach(el => { el.hidden = allSimple; });
   $('#i-tech-field').hidden = !ks.some(k => k.tech);
@@ -1948,6 +1959,7 @@ function syncIntake() {
   const dayTxt = date === today() ? 'วันนี้' : `วัน ${fmtDay(date)}`;
   const manual = chipValue($('#i-mode')) === 'manual';
   $('#i-pick-field').hidden = !manual;
+  $$('#i-cat label').forEach(l => l.classList.toggle('main', !manual && ks.length > 1 && $('input', l).value === ks[0].id));
   const away = activeStaff().filter(s => onLeave(s.code, date)).map(s => s.code);
   const box = $('#i-assign');
   box.className = 'assign';
@@ -1966,18 +1978,18 @@ function syncIntake() {
       <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(labels)} ไม่ขยับ และจะข้าม ${esc(pick)} 1 ครั้ง${ks.length > 1 ? 'ในแต่ละคิว' : ''}เมื่อวนมาถึง · ${num(totalPts, 3)} แต้ม</small></span>`;
     return;
   }
-  const rows = ks.map(k => {
-    const q = queueInfo(k.id, date), why = [];
-    q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
-    return { k, q, note: `${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${k.label}${why.length ? ` · ข้าม ${why.join(', ')}` : ''} · ${num(unitPts(k.min, k.w), 3)} แต้ม` };
-  });
-  const missing = rows.filter(r => !r.q.code);
-  if (missing.length) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(missing.map(r => r.k.label).join(', '))}: ${esc(NOBODY)}</span>`; return; }
-  if (rows.length === 1) {
-    box.innerHTML = `${av(rows[0].q.code, 'lg')}<span>ส่งให้ ${named(rows[0].q.code)}<small>${esc(rows[0].note)}</small></span>`;
+  const [main, ...rest] = ks;
+  const q = queueInfo(main.id, date), why = [];
+  q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสนอกคิวไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
+  const note = `${main.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${main.label}${why.length ? ` · ข้าม ${why.join(', ')}` : ''} · ${num(unitPts(main.min, main.w), 3)} แต้ม`;
+  if (!q.code) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(main.label)}: ${esc(NOBODY)}</span>`; return; }
+  if (!rest.length) {
+    box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}<small>${esc(note)}</small></span>`;
     return;
   }
-  box.innerHTML = `<div class="assign-list">${rows.map(r => `<div class="assign-row">${av(r.q.code, 'lg')}<span><b>${esc(r.k.label)}</b> → ${named(r.q.code)}<small>${esc(r.note)}</small></span></div>`).join('')}</div>`;
+  box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)} · ${ks.length} เทคนิค · ${num(totalPts, 3)} แต้ม
+    <small><b>${esc(main.label)}</b> เทคนิคแรก · ${esc(note)}</small>
+    ${rest.map(k => `<small><b>${esc(k.label)}</b> ตามเทคนิคแรก · คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(q.code)} 1 ครั้งเมื่อวนมาถึง · ${num(unitPts(k.min, k.w), 3)} แต้ม</small>`).join('')}</span>`;
 }
 function fillIntake(c) {
   $$('#i-cat input').forEach(i => { i.checked = false; });
@@ -1991,17 +2003,20 @@ function fillIntake(c) {
   renderArea('i', c.area || '');
   $('#i-dx').value = dxValue(c);
   renderIntake();
-  for (const id of c.cats || (c.cat ? [c.cat] : [])) { const el = $(`#i-cat input[value="${CSS.escape(id)}"]`); if (el) el.checked = true; }
+  const cats = c.cats || (c.cat ? [c.cat] : []);
+  for (const id of cats) { const el = $(`#i-cat input[value="${CSS.escape(id)}"]`); if (el) el.checked = true; }
+  catOrder = cats.slice();
   syncIntake();
 }
 function resetIntake() {
   fillIntake({ in: today(), type: 'New' });
 }
-// แจกเคส: เลือกหลายเทคนิค = สร้างเคสแยกต่อเทคนิค ใช้ข้อมูลผู้ป่วยชุดเดียวกัน แต่ละเคสนับคิวและแต้มของเทคนิคนั้น
+// แจกเคส: เลือกหลายเทคนิค = สร้างเคสแยกต่อเทคนิค ใช้ข้อมูลผู้ป่วยชุดเดียวกัน ให้คนเดียวกันทั้งหมด
+// เทคนิคแรกเดินคิวตามปกติ เทคนิคถัดไป (follow) คิวไม่ขยับ แต่หักคิวของคนนั้นเมื่อวนมาถึง แต้มนับตามแต่ละเทคนิค
 async function submitIntake(e) {
   e.preventDefault();
   const hn = str($('#i-hn').value);
-  const catIds = chipValues($('#i-cat'));
+  const catIds = selectedCats();
   if (!hn) { $('#i-hn').focus(); return toast('กรอก HN ก่อนแจกเคส', { err: true }); }
   if (!catIds.length) return toast('เลือกเทคนิคอย่างน้อย 1 อย่างก่อนแจกเคส', { err: true });
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
@@ -2012,11 +2027,11 @@ async function submitIntake(e) {
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
   const batch = catIds.length > 1 ? 'b-' + uid() : '';
   const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i') };
-  const recs = catIds.map(id => {
+  const recs = catIds.map((id, i) => {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
     return normCase({
-      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', batch,
+      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : i ? 'follow' : 'auto', batch,
       ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
       doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
@@ -2032,8 +2047,8 @@ async function submitIntake(e) {
     resetIntake();
     render();
     $('#i-hn').focus();
-    const summary = saved.map(x => `${catOf(x.cat).label} → ${x.mp}`).join(', ');
-    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : ''}`, { undo: () => undoAssign(saved) });
+    const summary = `${saved.map(x => catOf(x.cat).label).join(', ')} → ${saved[0].mp}`;
+    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (เทคนิคถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
@@ -2191,6 +2206,7 @@ intake.addEventListener('submit', submitIntake);
 intake.addEventListener('change', e => {
   if (e.target.name === 'ifreq') return onFreqChange('i', e.target);
   if (e.target.name === 'iarea') return syncArea('i', e.target.value === OTHER);
+  if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); }
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => { if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });

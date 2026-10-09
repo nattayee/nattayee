@@ -88,8 +88,8 @@ function saveRecord(table, rec) {
 
 /**
  * แจกเคสใหม่ภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
- * รับได้หลายเคส (หลายเทคนิคของผู้ป่วยคนเดียว) แต่ละเคสเลือก MP ตามคิวของเทคนิคนั้น
- * how = 'manual' ใช้ MP ที่เลือกมา
+ * รับได้หลายเคส (หลายเทคนิคของผู้ป่วยคนเดียว) เคสแรกเลือก MP ตามคิวของเทคนิคนั้น
+ * how = 'follow' ให้ MP คนเดียวกับเคสแรก (คิวไม่ขยับ หักคิวเมื่อวนมาถึง) · how = 'manual' ใช้ MP ที่เลือกมา
  */
 function addCases(recs) {
   if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
@@ -100,7 +100,8 @@ function addCases(recs) {
     const leaves = readTable_(ss, 'leaves');
     const cases = readTable_(ss, 'cases');
     const today = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-    const out = recs.map(rec => {
+    const out = [];
+    recs.forEach(rec => {
       if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
       const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
       const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
@@ -108,6 +109,8 @@ function addCases(recs) {
       if (rec.how === 'manual') {
         rec.mp = String(rec.mp || '').toUpperCase();
         if (!staff.some(s => String(s.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
+      } else if (rec.how === 'follow' && out.length) {
+        rec.mp = out[0].mp;
       } else {
         rec.how = 'auto';
         rec.mp = pickNext_({
@@ -121,7 +124,7 @@ function addCases(recs) {
       rec.in = date;
       rec.created = new Date().toISOString();
       cases.push(rec);
-      return rec;
+      out.push(rec);
     });
     const sh = tableSheet_(ss, 'cases');
     const header = headerOf_(sh);
@@ -137,7 +140,7 @@ function addCase(rec) {
 /*
  * คิวหมุนเวียนของแต่ละเทคนิค (โค้ดชุดเดียวกับ pickNext ใน index.html)
  * - แจกอัตโนมัติ: ไปที่คนถัดจากคนที่ได้เคสอัตโนมัติล่าสุด ตามลำดับทีม JR → WM → NY → WS
- * - แจกเอง (how = 'manual'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
+ * - แจกเอง (how = 'manual') หรือตามเทคนิคแรก (how = 'follow'): คิวไม่ขยับ แต่คนที่ได้ไปจะถูกข้าม 1 ครั้งเมื่อคิววนมาถึง
  * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
  * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
  * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
@@ -168,7 +171,7 @@ function pickNext_(o, trace) {
     if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
     const j = idx(c.mp);
     if (j < 0) return;
-    if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
+    if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
     const trial = Object.assign({}, credit);
     if (select(p, c.in, trial) === j) Object.assign(credit, trial);
     p = (j + 1) % n;
