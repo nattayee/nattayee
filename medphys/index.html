@@ -964,11 +964,12 @@ function setNext(catId, code) {
   state.config.queue = { ...state.config.queue, [catId]: { code, at: nowISO() } };
 }
 // RC แนะนำ: คนที่ RC น้อยที่สุดเดือนนี้ และไม่ใช่ผู้วางแผน
+// RC และกิจกรรมเป็นการบันทึกงานที่ทำแล้ว ไม่เกี่ยวกับคิวแจกงาน วันลาจึงไม่มีผล
 function suggestRC(exclude) {
   const ym = thisMonth();
   const count = {};
   for (const l of state.logs) if (l.kind === 'rc' && l.date.startsWith(ym)) count[l.mp] = (count[l.mp] || 0) + 1;
-  const pool = activeStaff().filter(s => s.code !== exclude && !onLeave(s.code, today()));
+  const pool = activeStaff().filter(s => s.code !== exclude);
   pool.sort((a, b) => (count[a.code] || 0) - (count[b.code] || 0));
   return pool[0] ? pool[0].code : '';
 }
@@ -1029,7 +1030,7 @@ const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? ' selecte
 function chipGroup(el, name, values, selected, titleOf) {
   el.innerHTML = values.map(v => { const t = titleOf && titleOf(v); return `<label${t ? ` title="${esc(t)}"` : ''}><input type="radio" name="${name}" value="${esc(v)}"${v === selected ? ' checked' : ''}><span>${esc(v)}</span></label>`; }).join('');
 }
-// ปุ่มเลือก MP แบบเดียวกับ Doc: ทีมที่ปฏิบัติงาน (+ คนเดิมของรายการ) บอก "ลา" ถ้าลาในวันนั้น
+// ปุ่มเลือก MP แบบเดียวกับ Doc: ทีมที่ปฏิบัติงาน (+ คนเดิมของรายการ) · ส่ง date มาเพื่อบอก "ลา" (เฉพาะงานที่แจกตามคิว)
 function mpChips(el, name, selected, date) {
   const codes = activeStaff().map(s => s.code);
   if (selected && !codes.includes(selected)) codes.push(selected);
@@ -1962,7 +1963,7 @@ function openLog(id, preset = {}) {
   if (!kinds.some(k => k.key === editingLog.kind)) kinds.push(kindOf(editingLog.kind));
   chipGroup($('#l-kind'), 'kind', kinds.map(k => k.key), editingLog.kind);
   $$('#l-kind span').forEach((s, i) => { s.textContent = kinds[i].label; });
-  mpChips($('#l-mp'), 'lmp', editingLog.mp, editingLog.date);
+  mpChips($('#l-mp'), 'lmp', editingLog.mp);
   for (const f of ['date', 'hn', 'name', 'title', 'min', 'k', 'note']) $('#l-' + f).value = editingLog[f] || '';
   if (!l && !editingLog.k) $('#l-k').value = '1';
   $('#log-title').textContent = l ? 'แก้ไขกิจกรรม' : (editingLog.kind === 'rc' ? 'บันทึก RC' : 'บันทึกกิจกรรม');
@@ -2335,7 +2336,6 @@ $('#v-from').addEventListener('change', () => { if (!$('#v-to').value || $('#v-t
 logForm.addEventListener('submit', submitLog);
 logForm.addEventListener('change', e => {
   if (e.target.name === 'lmp') logMpTouched = true;
-  if (e.target.id === 'l-date') mpChips($('#l-mp'), 'lmp', chipValue($('#l-mp')), e.target.value);
   syncLogForm();
 });
 logForm.addEventListener('input', e => { if (e.target.id === 'l-min' || e.target.id === 'l-k') syncLogForm(); });
