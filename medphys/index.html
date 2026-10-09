@@ -281,6 +281,11 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .lbl{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:20px;font-size:12.5px;color:var(--muted)}
+.lbl .req{margin-left:3px;color:var(--late);font-weight:600}
+.field.missing .lbl{color:var(--late)}
+.field.missing input:not([type=checkbox]):not([type=radio]),.field.missing .chips span{border-color:var(--late)}
+.req-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 16px}
+.req-grid .check small{color:var(--faint);font-size:12px}
 .hint{font-size:12px;color:var(--accent)}
 .hint.warn{color:var(--warn)}
 .oncall{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
@@ -332,6 +337,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .set-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr) 180px auto auto;grid-template-areas:"idx code name pos act btns";gap:8px;align-items:center}
 .set-row .idx{grid-area:idx}.set-row .code{grid-area:code}.set-row .name{grid-area:name}.set-row .pos{grid-area:pos}.set-row .check{grid-area:act}.set-row .btns{grid-area:btns;display:flex;gap:2px}
 .set-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
+.set-row.doc-row{grid-template-columns:30px 84px minmax(0,1fr) auto;grid-template-areas:"idx code name btns"}
 .check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
 .set-table input:not([type="checkbox"]){min-width:64px;min-height:32px;padding:4px 8px}
 .set-table input.num{width:78px;text-align:right;font-family:var(--mono)}
@@ -339,7 +345,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .savebar{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;margin-top:20px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .savebar span{margin-right:auto;font-size:13px;color:var(--muted)}
-@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". pos pos act"}}
+@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". pos pos act"}.set-row.doc-row{grid-template-areas:"idx code name btns"}}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:14px;opacity:0;pointer-events:none;transform:translate(-50%,16px);transition:opacity .18s,transform .18s}
 .toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
@@ -374,29 +380,29 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="sec-head"><h2>แจกเคสใหม่</h2><p id="queue-note"></p></div>
       <form class="intake" id="intake" novalidate autocomplete="off">
         <div class="intake-top">
-          <label class="field"><span class="lbl">HN</span><input id="i-hn" inputmode="numeric" required></label>
-          <label class="field"><span class="lbl">Name</span><input id="i-name"></label>
-          <div class="field doc-field plan-field"><span class="lbl">Doc</span><div class="chips" id="i-doc" role="radiogroup" aria-label="Doc"></div></div>
+          <label class="field"><span class="lbl"><span>HN<b class="req" title="บังคับเสมอ">*</b></span></span><input id="i-hn" inputmode="numeric" required></label>
+          <label class="field"><span class="lbl"><span>Name<b class="req" data-req="name" hidden>*</b></span></span><input id="i-name"></label>
+          <div class="field doc-field plan-field"><span class="lbl"><span>Doc<b class="req" data-req="doc" hidden>*</b></span></span><div class="chips" id="i-doc" role="radiogroup" aria-label="Doc"></div></div>
         </div>
-        <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
-        <div class="field"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกัน</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
-        <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+        <div class="field dx-field"><span class="lbl"><span>Diag (ICD-10)<b class="req" data-req="dx" hidden>*</b></span></span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
+        <div class="field"><span class="lbl"><span>เทคนิค<b class="req" title="บังคับเสมอ">*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกัน</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
+        <div class="field with-other"><span class="lbl"><span>บริเวณที่ฉาย<b class="req" data-req="area" hidden>*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
         <div class="intake-mid plan-field">
-          <div class="field"><span class="lbl">Type</span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
-          <div class="field"><span class="lbl">Aim</span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
-          <div class="field" id="i-tech-field"><span class="lbl">Technique</span><div class="chips" id="i-tech" role="radiogroup" aria-label="Technique"></div></div>
+          <div class="field"><span class="lbl"><span>Type<b class="req" data-req="type" hidden>*</b></span></span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
+          <div class="field"><span class="lbl"><span>Aim<b class="req" data-req="aim" hidden>*</b></span></span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
+          <div class="field" id="i-tech-field"><span class="lbl"><span>Technique<b class="req" data-req="tech" hidden>*</b></span></span><div class="chips" id="i-tech" role="radiogroup" aria-label="Technique"></div></div>
         </div>
         <div class="dose-row">
-          <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="i-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
-          <label class="field"><span class="lbl">Fx</span><input type="number" id="i-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+          <label class="field"><span class="lbl"><span>Dose/fx (Gy)<b class="req" data-req="dpf" hidden>*</b></span></span><input type="number" id="i-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
+          <label class="field"><span class="lbl"><span>Fx<b class="req" data-req="fx" hidden>*</b></span></span><input type="number" id="i-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
           <div class="field"><span class="lbl">รวม</span><output class="total" id="i-total" for="i-dpf i-fx">–</output></div>
-          <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="i-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="i-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
+          <div class="field freq-field"><span class="lbl"><span>ความถี่ในการฉาย<b class="req" data-req="freq" hidden>*</b></span></span><div class="chips" id="i-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="i-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
         </div>
         <div class="intake-dates">
-          <label class="field plan-field"><span class="lbl">CT-Sim</span><input type="date" id="i-ct"></label>
+          <label class="field plan-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
-          <div class="field plan-field"><span class="lbl"><label for="i-sim">Sim</label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
-          <label class="field note-field"><span class="lbl">Note</span><input id="i-note"></label>
+          <div class="field plan-field"><span class="lbl"><label for="i-sim">Sim<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
+          <label class="field note-field"><span class="lbl"><span>Note<b class="req" data-req="note" hidden>*</b></span></span><input id="i-note"></label>
         </div>
         <div class="intake-mode">
           <div class="field"><span class="lbl">วิธีแจก</span><div class="chips" id="i-mode" role="radiogroup" aria-label="วิธีแจก">
@@ -562,6 +568,15 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 'use strict';
 
 /* ---------- ค่าเริ่มต้น (ตามไฟล์ P4P_Physics) ---------- */
+// ช่องในฟอร์มแจกเคสที่ตั้งให้บังคับกรอกได้ (HN และเทคนิคบังคับเสมอ, In ใส่วันนี้ให้อัตโนมัติ)
+// plan = ช่องของงานวางแผน บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน · pick = เลือกจากปุ่ม
+const REQ_FIELDS = [
+  { key: 'name', label: 'Name' }, { key: 'doc', label: 'Doc', plan: true, pick: true }, { key: 'dx', label: 'Diag (ICD-10)' },
+  { key: 'area', label: 'บริเวณที่ฉาย', pick: true }, { key: 'type', label: 'Type', plan: true, pick: true }, { key: 'aim', label: 'Aim', plan: true, pick: true },
+  { key: 'tech', label: 'Technique', plan: true, pick: true }, { key: 'dpf', label: 'Dose/fx' }, { key: 'fx', label: 'Fx' },
+  { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Sim', plan: true },
+  { key: 'note', label: 'Note' },
+];
 const DEFAULT_CONFIG = {
   rate: 0.143,          // คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที) กลุ่ม A5.1
   guarantee: 1200,      // แต้มประกันตั้งต้นของตำแหน่งใหม่
@@ -577,13 +592,14 @@ const DEFAULT_CONFIG = {
     { code: 'NY', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] },
     { code: 'WS', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] },
   ],
-  doctors: ['SC', 'TA', 'PM', 'TC', 'VS'],
+  doctors: ['SC', 'TA', 'PM', 'TC', 'VS'].map(code => ({ code, name: '' })), // รหัสแพทย์ + ชื่อ-สกุล (ไม่บังคับ)
   types: ['New', 'Adap', 'Emer high', 'Emer low', 'ย้าย', 'เพิ่ม F.S.', 'Replan', 'CP'],
   aims: ['Curative', 'Palliative', 'On tx'],
   techniques: ['SRS', 'SRT', 'SBRT', 'CSI', 'HA'],
   freqs: ['Daily', 'EOD', 'BID', 'Single fraction'],                  // ความถี่ในการฉาย (อื่นๆ กรอกเองในฟอร์ม)
   areas: ['Head', 'H&N', 'Chest', 'Abdomen', 'Pelvis', 'Extremity'],   // บริเวณที่ฉาย (อื่นๆ กรอกเองในฟอร์ม)
   admins: [],                                                          // อีเมลแอดมิน (เจ้าของไฟล์ Google Sheet เป็นแอดมินเสมอ)
+  required: Object.fromEntries(REQ_FIELDS.map(f => [f.key, false])),   // ช่องบังคับกรอกในฟอร์มแจกเคส
   // หมวดงาน = แท็บในไฟล์เดิม เรียงตามแบบฟอร์ม P4P
   cats: [
     { id: '3dbt',    label: '3D Breast',            p4p: '3D Breast/Chest',       group: '3D Planning',            min: 270,  w: 1.25, kind: 'plan',   mu: true,  rotate: 'case', on: true },
@@ -712,7 +728,9 @@ function mergeConfig(c) {
       return { code, name: str(s.name), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
     }).filter(s => s.code);
   }
-  for (const k of ['doctors', 'types', 'aims', 'techniques', 'freqs', 'areas']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
+  for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
+  // แพทย์: ค่าเก่าเป็นรายการรหัสล้วน ['SC', ...] แปลงเป็น { code, name }
+  if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => (x && typeof x === 'object' ? { code: str(x.code).toUpperCase(), name: str(x.name) } : { code: str(x).toUpperCase(), name: '' })).filter(x => x.code);
   if (Array.isArray(c.cats) && c.cats.length) {
     out.cats = c.cats.filter(x => x && x.id).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
@@ -728,6 +746,7 @@ function mergeConfig(c) {
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
+  out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   out.icdExtra = Array.isArray(c.icdExtra) ? c.icdExtra.map(x => ({ code: str(x && x.code).toUpperCase(), name: str(x && x.name), th: str(x && x.th) })).filter(x => x.code) : [];
   out.carry = c.carry && typeof c.carry === 'object' ? c.carry : {};
   return out;
@@ -970,9 +989,11 @@ function av(code, cls = '') {
   return `<span class="av ${cls}" style="--c:var(--p${h});--cs:var(--p${h}s)" title="${esc(title)}">${esc(code)}</span>`;
 }
 const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(label)}</option>`;
-function chipGroup(el, name, values, selected) {
-  el.innerHTML = values.map(v => `<label><input type="radio" name="${name}" value="${esc(v)}"${v === selected ? ' checked' : ''}><span>${esc(v)}</span></label>`).join('');
+function chipGroup(el, name, values, selected, titleOf) {
+  el.innerHTML = values.map(v => { const t = titleOf && titleOf(v); return `<label${t ? ` title="${esc(t)}"` : ''}><input type="radio" name="${name}" value="${esc(v)}"${v === selected ? ' checked' : ''}><span>${esc(v)}</span></label>`; }).join('');
 }
+const docCodes = () => state.config.doctors.map(x => x.code);
+const docName = code => (state.config.doctors.find(x => x.code === code) || {}).name || '';
 const chipValue = el => { const i = $('input:checked', el); return i ? i.value : ''; };
 function typeChip(t) {
   if (!t || t === 'New') return '';
@@ -1054,7 +1075,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1376,7 +1397,7 @@ function caseRow(c, rcs) {
   const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
   const areaTxt = c.area && `<span>${esc(c.area)}</span>`;
   const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
-  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1563,9 +1584,15 @@ function renderSettings() {
       <input class="name" data-k="staff.${i}.name" value="${esc(s.name)}" aria-label="ชื่อ-สกุล" placeholder="ชื่อ-สกุล (ไม่บังคับ)">
       <select class="pos" data-role="${i}" aria-label="ตำแหน่ง" title="${esc(hist)}">${d.positions.map(x => opt(x.id, x.label, cur)).join('')}</select>
       <label class="check"><input type="checkbox" data-k="staff.${i}.active"${s.active ? ' checked' : ''}> ปฏิบัติงาน</label>
-      <span class="btns"><button type="button" class="icon-btn" data-up="${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="staff.${i}" aria-label="ลบ">×</button></span>
+      <span class="btns"><button type="button" class="icon-btn" data-up="staff.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="staff.${i}" aria-label="ลบ">×</button></span>
     </div>`;
   }).join('');
+  const docRows = d.doctors.map((x, i) => `<div class="set-row doc-row">
+      <span class="idx">${i + 1}</span>
+      <input class="code" data-k="doctors.${i}.code" value="${esc(x.code)}" maxlength="6" aria-label="รหัสแพทย์" placeholder="รหัส" style="text-transform:uppercase;font-family:var(--mono)">
+      <input class="name" data-k="doctors.${i}.name" value="${esc(x.name)}" aria-label="ชื่อ-สกุลแพทย์" placeholder="ชื่อ-สกุล (ไม่บังคับ)">
+      <span class="btns"><button type="button" class="icon-btn" data-up="doctors.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="doctors.${i}" aria-label="ลบแพทย์ ${esc(x.code)}">×</button></span>
+    </div>`).join('');
   const usedRoles = new Set(d.staff.flatMap(s => (s.roles || []).map(r => r.role)));
   const posRows = d.positions.map((x, i) => {
     const holders = d.staff.filter(s => positionOf(s.code, ymNow, d).id === x.id).map(s => s.code).join(', ');
@@ -1641,6 +1668,9 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       <div class="set-list">${staffRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="staff">+ เพิ่มนักฟิสิกส์</button></div></div>
+    <div class="sec"><div class="sec-head"><h2>แพทย์ (Doc)</h2><p>ลำดับในรายการคือลำดับปุ่มในฟอร์มแจกเคส · ชื่อแสดงเมื่อชี้ที่รหัส และใช้ค้นหาเคสได้</p></div>
+      <div class="set-list">${docRows}</div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="doctor">+ เพิ่มแพทย์</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
       <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มประกัน/เดือน</th><th>แต้มตั้งต้น/เดือน</th><th>เริ่มเดือนที่</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="position">+ เพิ่มตำแหน่ง</button></div></div>
@@ -1661,7 +1691,14 @@ function renderSettings() {
       <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
-      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
+      <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
+    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Sim บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน</p></div>
+      <div class="req-grid">
+        <label class="check"><input type="checkbox" checked disabled> HN <small>บังคับเสมอ</small></label>
+        <label class="check"><input type="checkbox" checked disabled> เทคนิค <small>บังคับเสมอ</small></label>
+        <label class="check"><input type="checkbox" checked disabled> In <small>ใส่วันนี้ให้เอง</small></label>
+        ${REQ_FIELDS.map(f => `<label class="check"><input type="checkbox" data-k="required.${f.key}"${d.required[f.key] ? ' checked' : ''}> ${esc(f.label)}</label>`).join('')}
+      </div></div>
     <div class="sec"><div class="sec-head"><h2>Diag (ICD-10)</h2><p>มีรหัส ICD-10 หมวดเนื้องอก C00–C97 และรหัสที่ใช้ในรังสีรักษาบ่อยให้ค้นหาอยู่แล้ว (${ICD10.length} รหัส) · เพิ่มรหัสย่อยหรือแก้ชื่อที่หน่วยงานใช้ได้ที่นี่ รหัสเดียวกับในระบบจะใช้ชื่อที่ตั้งเอง</p></div>
       ${icdRows ? `<div class="table-wrap set-table"><table><thead><tr><th>รหัส</th><th style="text-align:left">ชื่อ (อังกฤษ)</th><th style="text-align:left">ชื่อย่อ (ไทย)</th><th></th></tr></thead><tbody>${icdRows}</tbody></table></div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
@@ -1693,6 +1730,10 @@ async function saveSettings() {
   const codes = draft.staff.map(s => str(s.code).toUpperCase());
   if (codes.some(c => !c)) return toast('กรอกรหัสนักฟิสิกส์ให้ครบทุกแถว', { err: true });
   if (new Set(codes).size !== codes.length) return toast('รหัสนักฟิสิกส์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
+  draft.doctors = draft.doctors.filter(x => str(x.code) || str(x.name));
+  const docs = draft.doctors.map(x => str(x.code).toUpperCase());
+  if (docs.some(c => !c)) return toast('กรอกรหัสแพทย์ให้ครบทุกแถว', { err: true });
+  if (new Set(docs).size !== docs.length) return toast('รหัสแพทย์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
   const { me, owner } = state.user;
@@ -1730,7 +1771,7 @@ function fillCaseSelects(c) {
   if (c.mp && !codes.includes(c.mp)) codes.push(c.mp);
   $('#f-mp').innerHTML = opt('', '— เลือก —', c.mp) + codes.map(code => opt(code, code, c.mp)).join('');
   const withCur = (list, v) => (v && !list.includes(v) ? [...list, v] : list);
-  chipGroup($('#f-doc'), 'doc', withCur(state.config.doctors, c.doc), c.doc);
+  chipGroup($('#f-doc'), 'doc', withCur(docCodes(), c.doc), c.doc, docName);
   chipGroup($('#f-type'), 'type', withCur(state.config.types, c.type), c.type);
   chipGroup($('#f-aim'), 'aim', withCur(state.config.aims, c.aim), c.aim);
   chipGroup($('#f-tech'), 'tech', withCur(state.config.techniques, c.tech), c.tech);
@@ -1919,6 +1960,17 @@ async function deleteLog(btn) {
 
 /* ---------- แจกเคสใหม่ ---------- */
 const intake = $('#intake');
+// ช่องบังคับที่ยังว่าง (ช่องงานวางแผนนับเฉพาะเมื่อเลือกเทคนิคงานวางแผน)
+function missingRequired(ks) {
+  const req = state.config.required, plan = ks.some(k => k.kind !== 'simple');
+  const filled = {
+    name: () => str($('#i-name').value), doc: () => chipValue($('#i-doc')), dx: () => str($('#i-dx').value),
+    area: () => readArea('i'), type: () => chipValue($('#i-type')), aim: () => chipValue($('#i-aim')), tech: () => chipValue($('#i-tech')),
+    dpf: () => str($('#i-dpf').value), fx: () => str($('#i-fx').value), freq: () => readFreq('i'),
+    ct: () => $('#i-ct').value, sim: () => $('#i-oncall').checked || $('#i-sim').value, note: () => str($('#i-note').value),
+  };
+  return REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !filled[f.key]()) || null;
+}
 // ลำดับที่กดเลือกเทคนิค: เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกันและหักคิวของเทคนิคนั้น
 let catOrder = [];
 function selectedCats() {
@@ -1935,13 +1987,14 @@ function renderIntake() {
     const who = nextFor(k.id, date);
     return `<label title="${esc(k.p4p)}: คนถัดไป ${esc(who || '—')}"><input type="checkbox" name="icat" value="${esc(k.id)}"${cur.includes(k.id) ? ' checked' : ''}><span>${esc(k.label)}<small>${esc(who || '–')}</small></span></label>`;
   }).join('');
-  for (const [id, name, list] of [['#i-doc', 'idoc', cfg.doctors], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-tech', 'itech', cfg.techniques]]) {
+  for (const [id, name, list] of [['#i-doc', 'idoc', docCodes()], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-tech', 'itech', cfg.techniques]]) {
     const el = $(id);
     const sel = el.children.length ? chipValue(el) : (name === 'itype' ? 'New' : '');
-    chipGroup(el, name, list, sel);
+    chipGroup(el, name, list, sel, name === 'idoc' ? docName : null);
   }
   ensureFreq('i');
   ensureArea('i');
+  $$('[data-req]', intake).forEach(el => { el.hidden = !cfg.required[el.dataset.req]; });
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
   const order = cfg.staff.filter(s => s.active).map(s => s.code).join(' → ');
@@ -2022,6 +2075,13 @@ async function submitIntake(e) {
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
   const inputErr = checkDose('i') || checkArea('i');
   if (inputErr) return toast(inputErr, { err: true });
+  const need = missingRequired(catIds.map(catOf));
+  if (need) {
+    const el = $('#i-' + need.key), target = el.matches('input') ? el : $('input', el);
+    el.closest('.field').classList.add('missing');
+    if (target) target.focus();
+    return toast(`${need.pick ? 'เลือก' : 'กรอก'} ${need.label} ก่อนแจกเคส (ช่องบังคับ)`, { err: true });
+  }
   const manual = chipValue($('#i-mode')) === 'manual';
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
@@ -2158,7 +2218,8 @@ document.addEventListener('click', e => {
   if (ds.rmopt) { const [k, i] = ds.rmopt.split('.'); draft[k].splice(+i, 1); return renderSettings(); }
   if (ds.add === 'position') { draft.positions.push({ id: 'pos-' + uid(), label: 'ตำแหน่งใหม่', base: 0, guarantee: draft.guarantee }); renderSettings(); $$('[data-k^="positions."][data-k$=".label"]').pop().select(); return; }
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
-  if (ds.up) { const i = +ds.up; [draft.staff[i - 1], draft.staff[i]] = [draft.staff[i], draft.staff[i - 1]]; return renderSettings(); }
+  if (ds.up) { const [list, n] = ds.up.split('.'), i = +n, arr = draft[list]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return renderSettings(); }
+  if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
     case 'open-leaves': return openLeaves();
     case 'i-clear': resetIntake(); return $('#i-hn').focus();
@@ -2203,13 +2264,15 @@ setupCombo('i');
 setupCombo('f');
 caseForm.addEventListener('input', e => { if (e.target.id === 'f-dpf' || e.target.id === 'f-fx') syncDose('f'); });
 intake.addEventListener('submit', submitIntake);
+const clearMissing = e => { const f = e.target.closest && e.target.closest('.field.missing'); if (f) f.classList.remove('missing'); };
 intake.addEventListener('change', e => {
+  clearMissing(e);
   if (e.target.name === 'ifreq') return onFreqChange('i', e.target);
   if (e.target.name === 'iarea') return syncArea('i', e.target.value === OTHER);
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); }
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
-intake.addEventListener('input', e => { if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
+intake.addEventListener('input', e => { clearMissing(e); if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
 leaveForm.addEventListener('submit', e => {
   e.preventDefault();
   addLeave($('#v-mp').value, $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });
