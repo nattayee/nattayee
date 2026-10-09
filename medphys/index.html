@@ -228,7 +228,15 @@ input[type="checkbox"]{width:auto;min-height:0;accent-color:var(--accent)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .card-top span{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.big{margin-top:12px;font:500 26px/1.1 var(--mono);letter-spacing:-.01em}
+button.card{display:block;width:100%;text-align:left;cursor:pointer}
+button.card:hover{border-color:var(--line-strong)}
+button.card[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.card .meter{margin-top:10px}
+.sum{display:block;margin-top:8px;font:12.5px var(--mono);color:var(--muted)}
+tr.nil td{color:var(--faint)}
+td.start{font-family:var(--mono)}
+.big{display:block;margin-top:12px;font:500 26px/1.1 var(--mono);letter-spacing:-.01em}
+.big.pos{color:var(--ok)}
 .big small{font:400 13px var(--font);color:var(--muted);letter-spacing:0}
 .diff{display:inline-block;margin-top:8px;padding:1px 8px;border-radius:999px;font:500 12.5px var(--mono)}
 .diff.pos{background:var(--ok-soft);color:var(--ok)}
@@ -244,7 +252,7 @@ td.zero{color:var(--faint)}
 td .unit{color:var(--faint);font-size:12px}
 tfoot td{border-top:1px solid var(--line-strong);border-bottom:0;font-weight:500}
 tfoot tr+tr td{border-top:1px solid var(--line)}
-tfoot input{width:84px;min-height:30px;padding:3px 8px;text-align:right;font:13px var(--mono)}
+input[data-carry]{width:84px;min-height:30px;padding:3px 8px;text-align:right;font:13px var(--mono)}
 td.pos{color:var(--ok)}
 td.neg{color:var(--late)}
 
@@ -392,7 +400,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     </div>
     <div class="cards" id="p4p-cards"></div>
     <div class="sec">
-      <div class="sec-head"><h2>จำนวนกิจกรรมและแต้ม</h2><p>แต้มต่อหน่วย = เวลา (นาที) × น้ำหนักค่างาน × แต้มมาตรฐาน</p></div>
+      <div class="sec-head"><h2 id="p4p-title">จำนวนกิจกรรมและแต้ม</h2><p id="p4p-sub"></p></div>
+      <div class="toolbar"><div class="tabs" role="tablist" id="p4p-who" aria-label="เลือกคน"></div><span class="spacer"></span><label class="check" id="p4p-all-wrap" hidden><input type="checkbox" id="p4p-all"> แสดงกิจกรรมที่ยังไม่มี</label></div>
       <div class="table-wrap" id="p4p-table"></div>
     </div>
     <div class="sec">
@@ -627,7 +636,7 @@ function mergeConfig(c) {
   out.rate = +c.rate > 0 ? +c.rate : d.rate;
   out.guarantee = c.guarantee !== '' && isFinite(+c.guarantee) && c.guarantee != null ? +c.guarantee : d.guarantee;
   out.positions = Array.isArray(c.positions) && c.positions.length
-    ? c.positions.filter(x => x && x.id).map(x => ({ id: str(x.id), label: str(x.label) || str(x.id), base: +x.base || 0, guarantee: x.guarantee !== '' && x.guarantee != null && isFinite(+x.guarantee) ? +x.guarantee : out.guarantee }))
+    ? c.positions.filter(x => x && x.id).map(x => ({ id: str(x.id), label: str(x.label) || str(x.id), base: +x.base || 0, guarantee: x.guarantee !== '' && x.guarantee != null && isFinite(+x.guarantee) ? Math.abs(+x.guarantee) : out.guarantee }))
     : d.positions.map(x => ({ ...x, guarantee: out.guarantee }));
   // ทีมที่ยังไม่มีประวัติตำแหน่ง (เช่นสร้างจากการนำเข้า) ใช้ตำแหน่งเริ่มต้นตามรหัส
   const defRoles = code => clone((d.staff.find(x => x.code === code) || { roles: [{ from: '2000-01', role: 'staff' }] }).roles);
@@ -732,7 +741,7 @@ function demoDb() {
 const state = {
   config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: '',
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60,
-  month: thisMonth(), logKind: '', sheetUrl: '', demo: false,
+  month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
 };
 let draft = null;      // ตั้งค่าที่ยังไม่บันทึก
 let editingCase = null, editingLog = null, logMpTouched = false;
@@ -905,14 +914,18 @@ function render() {
   else renderSettings();
 }
 
+// แถบความคืบหน้า: เริ่มที่ −แต้มประกัน เต็มเมื่อคะแนนรวมถึง 0
+const fillPct = r => (r.guarantee > 0 ? Math.min(100, Math.max(0, ((r.carry + r.work) / r.guarantee) * 100)) : 100).toFixed(1);
+const meterHtml = r => `<span class="meter" aria-hidden="true"><i style="width:${fillPct(r)}%"></i></span>`;
+const sumText = r => `${signed(-r.guarantee)}${r.carry ? ` ${signed(r.carry)}` : ''} ${signed(r.work)}`;
+
 function renderWork() {
   renderIntake();
   const ym = thisMonth(), td = today();
   const p4p = computeP4P(ym);
   const team = activeStaff();
-  const scale = Math.max(...team.map(s => Math.max(p4p[s.code].guarantee, p4p[s.code].total)), 1);
   const away = team.filter(s => onLeave(s.code, td)).map(s => s.code);
-  $('#team-note').textContent = `แต้ม P4P ${fmtMonth(ym)} · ขีดบนแถบคือแต้มประกัน${away.length ? ` · วันนี้ ${away.join(', ')} ลา` : ''}`;
+  $('#team-note').textContent = `คะแนน P4P ${fmtMonth(ym)} เริ่มที่แต้มประกันแล้วบวกแต้มที่ทำได้ แถบเต็มเมื่อถึง 0${away.length ? ` · วันนี้ ${away.join(', ')} ลา` : ''}`;
   $('#team').innerHTML = team.map(s => {
     const open = state.cases.filter(c => c.mp === s.code && caseStep(c) !== 'done').length;
     const r = p4p[s.code];
@@ -929,9 +942,9 @@ function renderWork() {
         ${av(s.code, 'lg')}
         <span style="min-width:0">
           <span class="mate-top"><b>${esc(s.name || s.code)}${roleLabel(s.code, ym) ? ` <span class="chip">${esc(roleLabel(s.code, ym))}</span>` : ''}</b><span>ค้าง ${open}</span></span>
-          <span class="meter" aria-hidden="true"><i style="width:${Math.min(100, (r.total / scale) * 100).toFixed(1)}%"></i><b style="left:${((r.guarantee / scale) * 100).toFixed(1)}%"></b></span>
+          ${meterHtml(r)}
         </span>
-        <span class="mate-pts">${num(r.total)} แต้ม</span>
+        <span class="mate-pts" title="${esc(sumText(r))}">คะแนนรวม ${signed(r.diff)}</span>
       </button>${btn}
     </div>`;
   }).join('');
@@ -1050,41 +1063,55 @@ function renderP4P() {
   const people = computeP4P(ym);
   const staff = cfg.staff.map(s => s.code);
   for (const code in people) if (!staff.includes(code)) staff.push(code);
+  if (state.who && !staff.includes(state.who)) state.who = '';
   const gs = [...new Set(staff.map(c => people[c].guarantee))];
-  $('#p4p-rule').textContent = `${gs.length === 1 ? `แต้มประกัน ${num(gs[0], 0)}` : 'แต้มประกันตามตำแหน่ง'} · ${cfg.rate} แต้ม/นาที`;
+  $('#p4p-rule').textContent = `เริ่มเดือนที่แต้มประกัน ${gs.length === 1 ? signed(-gs[0], 0) : 'ตามตำแหน่ง'} แล้วบวกแต้มที่ทำได้ · ${cfg.rate} แต้ม/นาที`;
 
   $('#p4p-cards').innerHTML = staff.map(code => {
-    const r = people[code], s = cfg.staff.find(x => x.code === code), g = r.guarantee;
-    return `<div class="card">
-      <div class="card-top">${av(code, 'lg')}<span>${esc([r.position.label, s && s.name].filter(Boolean).join(' · '))}</span></div>
-      <div class="big">${num(r.total)} <small>/ ${num(g, 0)}</small></div>
-      <span class="meter" aria-hidden="true"><i style="width:${Math.min(100, (r.total / Math.max(g, r.total, 1)) * 100).toFixed(1)}%"></i><b style="left:${((g / Math.max(g, r.total, 1)) * 100).toFixed(1)}%"></b></span>
-      <span class="diff ${r.diff >= 0 ? 'pos' : 'neg'}">${signed(r.diff)}</span>
-    </div>`;
+    const r = people[code], s = cfg.staff.find(x => x.code === code);
+    return `<button type="button" class="card" data-who="${esc(code)}" aria-pressed="${state.who === code}" title="ดูใบคะแนนของ ${esc(code)}">
+      <span class="card-top">${av(code, 'lg')}<span>${esc([r.position.label, s && s.name].filter(Boolean).join(' · '))}</span></span>
+      <span class="big${r.diff >= 0 ? ' pos' : ''}">${signed(r.diff)}</span>
+      ${meterHtml(r)}
+      <span class="sum">${esc(sumText(r))}</span>
+    </button>`;
   }).join('');
+  $('#p4p-who').innerHTML = [['', 'ทุกคน'], ...staff.map(c => [c, c])]
+    .map(([v, l]) => `<button type="button" class="tab" role="tab" data-who="${esc(v)}" aria-selected="${state.who === v}">${esc(l)}</button>`).join('');
+  $('#p4p-all-wrap').hidden = !state.who;
+  $('#p4p-all').checked = state.allRows;
 
-  const head = `<thead><tr><th>กิจกรรม</th><th>แต้ม/หน่วย</th>${staff.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>`;
   const cell = n => (n ? `<td>${n}</td>` : '<td class="zero">–</td>');
-  const line = (label, unit, key, item) => `<tr><td>${esc(label)} <span class="unit">${unit}</span></td><td>${num(unitPts(item.min, item.w), 3)}</td>${staff.map(c => cell(people[c].counts[key] || 0)).join('')}</tr>`;
-  let body = `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องเตรียมอุปกรณ์ฉายรังสี</td></tr>` + line(cfg.acts.dqa.label, 'ครั้ง', 'dqa', cfg.acts.dqa);
-  body += `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องวางแผนการรักษา</td></tr>` + line(cfg.acts.mu.label, 'ครั้ง', 'mu', cfg.acts.mu) + line(cfg.acts.rc.label + ' (RC)', 'ครั้ง', 'rc', cfg.acts.rc);
-  let grp = '';
-  for (const k of cfg.cats) {
-    if (k.group !== grp) { grp = k.group; body += `<tr class="grp"><td colspan="${staff.length + 2}">${esc(grp)}</td></tr>`; }
-    body += line(k.p4p, 'ราย', 'cat:' + k.id, k);
+  const carryCell = c => `<td><input type="number" step="any" inputmode="decimal" data-carry="${esc(c)}" value="${people[c].override ? people[c].carry : ''}" placeholder="${people[c].position.base}" title="${esc(people[c].position.label)}: ${people[c].position.base} แต้ม · ปล่อยว่างเพื่อใช้ค่าตามตำแหน่ง" aria-label="แต้มต่อ ${esc(c)}"></td>`;
+  if (state.who) {
+    const r = people[state.who];
+    $('#p4p-title').textContent = `ใบคะแนน P4P · ${state.who} ${r.position.label}`;
+    $('#p4p-sub').textContent = `เริ่มจากแต้มประกัน ${signed(-r.guarantee, 0)} บวกแต้มตั้งต้นและแต้มของแต่ละกิจกรรมสะสมจนได้คะแนนรวม`;
+    $('#p4p-table').innerHTML = personTable(state.who, r, ym, carryCell);
+  } else {
+    $('#p4p-title').textContent = 'จำนวนกิจกรรมและแต้ม';
+    $('#p4p-sub').textContent = 'แต้มต่อหน่วย = เวลา (นาที) × น้ำหนักค่างาน × แต้มมาตรฐาน · เลือกชื่อเพื่อดูใบคะแนนรายคน';
+    const head = `<thead><tr><th>กิจกรรม</th><th>แต้ม/หน่วย</th>${staff.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>`;
+    const line = (label, unit, key, item) => `<tr><td>${esc(label)} <span class="unit">${unit}</span></td><td>${num(unitPts(item.min, item.w), 3)}</td>${staff.map(c => cell(people[c].counts[key] || 0)).join('')}</tr>`;
+    let body = `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องเตรียมอุปกรณ์ฉายรังสี</td></tr>` + line(cfg.acts.dqa.label, 'ครั้ง', 'dqa', cfg.acts.dqa);
+    body += `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องวางแผนการรักษา</td></tr>` + line(cfg.acts.mu.label, 'ครั้ง', 'mu', cfg.acts.mu) + line(cfg.acts.rc.label + ' (RC)', 'ครั้ง', 'rc', cfg.acts.rc);
+    let grp = '';
+    for (const k of cfg.cats) {
+      if (k.group !== grp) { grp = k.group; body += `<tr class="grp"><td colspan="${staff.length + 2}">${esc(grp)}</td></tr>`; }
+      body += line(k.p4p, 'ราย', 'cat:' + k.id, k);
+    }
+    body += `<tr class="grp"><td colspan="${staff.length + 2}">งานวิชาการและบริหาร (เวลา × k × ${cfg.rate})</td></tr>`;
+    for (const [key, label] of [['acad', 'งานวิชาการ'], ['admin', 'งานบริหาร']]) {
+      body += `<tr><td>${label} <span class="unit">แต้ม</span></td><td class="zero">–</td>${staff.map(c => (people[c][key] ? `<td>${num(people[c][key], 3)}</td>` : '<td class="zero">–</td>')).join('')}</tr>`;
+    }
+    const foot = `<tfoot>
+      <tr><td>แต้มประกัน</td><td></td>${staff.map(c => `<td>${signed(-people[c].guarantee, 3)}</td>`).join('')}</tr>
+      <tr><td>แต้มต่อ <span class="unit">ตั้งต้นตามตำแหน่ง แก้รายเดือนได้</span></td><td></td>${staff.map(carryCell).join('')}</tr>
+      <tr><td>แต้มจากงาน</td><td></td>${staff.map(c => `<td>${signed(people[c].work, 3)}</td>`).join('')}</tr>
+      <tr><td>คะแนนรวม P4P</td><td></td>${staff.map(c => `<td class="${people[c].diff >= 0 ? 'pos' : 'neg'}">${signed(people[c].diff, 3)}</td>`).join('')}</tr>
+    </tfoot>`;
+    $('#p4p-table').innerHTML = `<table>${head}<tbody>${body}</tbody>${foot}</table>`;
   }
-  body += `<tr class="grp"><td colspan="${staff.length + 2}">งานวิชาการและบริหาร (เวลา × k × ${cfg.rate})</td></tr>`;
-  for (const [key, label] of [['acad', 'งานวิชาการ'], ['admin', 'งานบริหาร']]) {
-    body += `<tr><td>${label} <span class="unit">แต้ม</span></td><td class="zero">–</td>${staff.map(c => (people[c][key] ? `<td>${num(people[c][key], 3)}</td>` : '<td class="zero">–</td>')).join('')}</tr>`;
-  }
-  const foot = `<tfoot>
-    <tr><td>แต้มจากงาน</td><td></td>${staff.map(c => `<td>${num(people[c].work, 3)}</td>`).join('')}</tr>
-    <tr><td>แต้มต่อ <span class="unit">ตั้งต้นตามตำแหน่ง แก้รายเดือนได้</span></td><td></td>${staff.map(c => `<td><input type="number" step="any" inputmode="decimal" data-carry="${esc(c)}" value="${people[c].override ? people[c].carry : ''}" placeholder="${people[c].position.base}" title="${esc(people[c].position.label)}: ${people[c].position.base} แต้ม · ปล่อยว่างเพื่อใช้ค่าตามตำแหน่ง" aria-label="แต้มต่อ ${esc(c)}"></td>`).join('')}</tr>
-    <tr><td>แต้มที่ทำได้</td><td></td>${staff.map(c => `<td>${num(people[c].total, 3)}</td>`).join('')}</tr>
-    <tr><td>แต้มประกัน</td><td></td>${staff.map(c => `<td>${num(people[c].guarantee, 3)}</td>`).join('')}</tr>
-    <tr><td>ส่วนต่างแต้ม</td><td></td>${staff.map(c => `<td class="${people[c].diff >= 0 ? 'pos' : 'neg'}">${signed(people[c].diff, 3)}</td>`).join('')}</tr>
-  </tfoot>`;
-  $('#p4p-table').innerHTML = `<table>${head}<tbody>${body}</tbody>${foot}</table>`;
 
   const cases = state.cases.filter(c => c.in.startsWith(ym));
   const cols = [...cfg.aims, ...cfg.types];
@@ -1095,6 +1122,44 @@ function renderP4P() {
     <tfoot>${statRow('รวม', cases)}</tfoot></table>`;
   const cur = cases.filter(c => c.aim === 'Curative').length, pal = cases.filter(c => c.aim === 'Palliative').length;
   $('#aim-share').textContent = cur + pal ? `Curative ${num((cur / (cur + pal)) * 100, 0)}% · Palliative ${num((pal / (cur + pal)) * 100, 0)}%` : '';
+}
+
+// ใบคะแนนรายคน: เริ่มจาก −แต้มประกัน แล้วสะสมแต้มทีละกิจกรรมจนได้คะแนนรวม
+function personTable(code, r, ym, carryCell) {
+  const cfg = state.config;
+  let bal = -r.guarantee;
+  const balCell = () => `<td class="${bal >= 0 ? 'pos' : 'neg'}">${signed(bal, 3)}</td>`;
+  const rows = [`<tr><td>แต้มประกัน <span class="unit">${esc(r.position.label)}</span></td><td></td><td></td><td></td><td></td><td>${signed(-r.guarantee, 3)}</td>${balCell()}</tr>`];
+  bal += r.carry;
+  rows.push(`<tr><td>แต้มต่อ <span class="unit">ตั้งต้นตามตำแหน่ง แก้ได้</span></td><td></td><td></td><td></td><td></td>${carryCell(code)}${balCell()}</tr>`);
+  const item = (label, unit, it, count) => {
+    if (!count && !state.allRows) return;
+    const u = unitPts(it.min, it.w), pts = u * count;
+    bal += pts;
+    rows.push(`<tr class="${count ? '' : 'nil'}"><td>${esc(label)} <span class="unit">${unit}</span></td><td>${num(it.min, 2)}</td><td>${num(it.w, 3)}</td><td>${num(u, 3)}</td><td>${count || '–'}</td><td>${count ? signed(pts, 3) : '–'}</td>${balCell()}</tr>`);
+  };
+  const group = (title, fill) => {
+    const at = rows.length;
+    rows.push(`<tr class="grp"><td colspan="7">${esc(title)}</td></tr>`);
+    fill();
+    if (rows.length === at + 1) rows.pop();
+  };
+  group('งานห้องเตรียมอุปกรณ์ฉายรังสี', () => item(cfg.acts.dqa.label, 'ครั้ง', cfg.acts.dqa, r.counts.dqa || 0));
+  group('งานห้องวางแผนการรักษา', () => {
+    item(cfg.acts.mu.label, 'ครั้ง', cfg.acts.mu, r.counts.mu || 0);
+    item(cfg.acts.rc.label + ' (RC)', 'ครั้ง', cfg.acts.rc, r.counts.rc || 0);
+  });
+  [...new Set(cfg.cats.map(k => k.group))].forEach(g => group(g, () => cfg.cats.filter(k => k.group === g).forEach(k => item(k.p4p, 'ราย', k, r.counts['cat:' + k.id] || 0))));
+  for (const [kind, title] of [['acad', 'งานวิชาการ'], ['admin', 'งานบริหาร']]) {
+    group(title, () => state.logs.filter(l => l.kind === kind && l.mp === code && l.date.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date)).forEach(l => {
+      const pts = unitPts(l.min, l.k);
+      bal += pts;
+      rows.push(`<tr><td>${esc(l.title)} <span class="unit">${esc(fmtDay(l.date))}</span></td><td>${num(+l.min || 0, 2)}</td><td>${num(+l.k || 0, 3)}</td><td>${num(pts, 3)}</td><td>1</td><td>${signed(pts, 3)}</td>${balCell()}</tr>`);
+    }));
+  }
+  const head = '<thead><tr><th>กิจกรรม</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/หน่วย</th><th>จำนวน</th><th>แต้ม</th><th>ยอดสะสม</th></tr></thead>';
+  const foot = `<tfoot><tr><td>คะแนนรวม P4P <span class="unit">แต้มที่ทำได้ ${num(r.total, 3)} − แต้มประกัน ${num(r.guarantee, 3)}</span></td><td></td><td></td><td></td><td></td><td></td><td class="${r.diff >= 0 ? 'pos' : 'neg'}">${signed(r.diff, 3)}</td></tr></tfoot>`;
+  return `<table>${head}<tbody>${rows.join('')}</tbody>${foot}</table>`;
 }
 
 /* ---------- ตั้งค่า ---------- */
@@ -1121,8 +1186,9 @@ function renderSettings() {
     const used = usedRoles.has(x.id);
     return `<tr>
       <td><input data-k="positions.${i}.label" value="${esc(x.label)}" aria-label="ชื่อตำแหน่ง"></td>
+      <td><input class="num" type="number" step="any" data-k="positions.${i}.guarantee" value="${esc(-Math.abs(+x.guarantee || 0))}" aria-label="แต้มประกันต่อเดือน (ติดลบ)"></td>
       <td><input class="num" type="number" step="any" data-k="positions.${i}.base" value="${esc(x.base)}" aria-label="แต้มตั้งต้นต่อเดือน"></td>
-      <td><input class="num" type="number" step="any" data-k="positions.${i}.guarantee" value="${esc(x.guarantee)}" aria-label="แต้มประกันต่อเดือน"></td>
+      <td class="start" data-start="${i}">${signed(-Math.abs(+x.guarantee || 0) + (+x.base || 0), 0)}</td>
       <td style="text-align:left" class="${holders ? '' : 'zero'}">${esc(holders || '–')}</td>
       <td><button type="button" class="icon-btn" data-del="positions.${i}" aria-label="ลบตำแหน่ง"${used || d.positions.length < 2 ? ' disabled title="มีคนใช้ตำแหน่งนี้อยู่หรือเคยใช้"' : ''}>×</button></td>
     </tr>`;
@@ -1157,8 +1223,8 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       <div class="set-list">${staffRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="staff">+ เพิ่มนักฟิสิกส์</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>แต้มตั้งต้นบวกเข้าแต้มที่ทำได้ทุกเดือน (ในไฟล์เดิมคือ "แต้มต่อ") · เปลี่ยนตำแหน่งของใครมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
-      <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มตั้งต้น/เดือน</th><th>แต้มประกัน/เดือน</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
+    <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
+      <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มประกัน/เดือน</th><th>แต้มตั้งต้น/เดือน</th><th>เริ่มเดือนที่</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="position">+ เพิ่มตำแหน่ง</button></div></div>
     <div class="sec"><div class="sec-head"><h2>คิวหมุนเวียน</h2><p>ตำแหน่งคิวของแต่ละเทคนิค เปลี่ยนได้ทันที ตอนแจกจริงระบบข้ามคนที่ลา และคนที่มีเคสเลือกเองรอหักคิว</p></div>
       <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (เลือกเอง)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
@@ -1184,6 +1250,7 @@ function setPath(obj, path, val) {
 }
 function refreshPts() {
   const rate = +draft.rate || 0;
+  $$('[data-start]').forEach(el => { const x = draft.positions[+el.dataset.start]; el.textContent = signed(-Math.abs(+x.guarantee || 0) + (+x.base || 0), 0); });
   $$('[data-pts]').forEach(el => {
     const [a, b] = el.dataset.pts.split('.');
     const it = a === 'cats' ? draft.cats[+b] : draft.acts[b];
@@ -1584,6 +1651,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, a');
   if (!t) return;
   const ds = t.dataset;
+  if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
   if (ds.unleave) return removeLeave(ds.unleave);
@@ -1653,7 +1721,7 @@ settingsEl.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.k) {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
-    setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase() : v);
+    setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
     refreshPts();
   } else if (el.dataset.list) {
     draft[el.dataset.list] = el.value.split(',').map(str).filter(Boolean);
@@ -1673,6 +1741,7 @@ settingsEl.addEventListener('change', e => {
   }
   if (el.dataset.next) { setNext(el.dataset.next, el.value); if (draft) draft.queue = clone(state.config.queue); saveConfigSoon(`คิว ${catOf(el.dataset.next).label} ถัดไปคือ ${el.value}`); renderIntake(); }
 });
+$('#p4p-all').addEventListener('change', e => { state.allRows = e.target.checked; renderP4P(); });
 $('#p4p-table').addEventListener('change', e => {
   const code = e.target.dataset.carry;
   if (!code) return;
