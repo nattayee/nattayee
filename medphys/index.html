@@ -291,6 +291,21 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 
 /* settings */
 .set-list{display:grid;gap:8px}
+.cat-list{display:grid;gap:8px}
+.cat-card{display:grid;gap:10px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.cat-l1{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr;gap:10px}
+.cat-l2{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.mini{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.mini input.num{width:76px;min-height:32px;padding:4px 8px;text-align:right;font-family:var(--mono)}
+.mini select{width:auto;min-height:32px;padding:3px 8px}
+.mini b{color:var(--fg);font-weight:500}
+@media (max-width:760px){.cat-l1{grid-template-columns:1fr 1fr}}
+.opt-edit{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:40px;padding:5px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.opt-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 2px 2px 10px;border-radius:999px;background:var(--sunken);font-size:13.5px}
+.opt-chip button{width:22px;height:22px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);font-size:14px;line-height:1}
+.opt-chip button:hover{background:var(--line);color:var(--fg)}
+.opt-new{flex:1 1 80px;min-width:80px;width:auto;min-height:28px;padding:2px 6px;border:0;background:none}
+.opt-new:focus{box-shadow:none}
 .rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
 .rules b{color:var(--fg);font-weight:500}
 .set-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr) 180px auto auto;grid-template-areas:"idx code name pos act btns";gap:8px;align-items:center}
@@ -545,19 +560,25 @@ const DEFAULT_CONFIG = {
     { id: 'hyper',   label: 'Hyperthermia control', p4p: 'Hypertermia control',   group: 'Hyperthermia',           min: 120,  w: 2,    kind: 'simple', mu: false, rotate: 'day', on: true },
   ],
   acts: {
-    dqa: { label: 'Analysis of Daily QA', min: 60, w: 1.25 },
-    mu:  { label: 'New MU',               min: 15, w: 1 },
-    rc:  { label: 'Quality Checklist',    min: 20, w: 1.5 },
+    dqa: { label: 'Analysis of Daily QA', short: 'Daily QA', group: 'งานห้องเตรียมอุปกรณ์ฉายรังสี', min: 60, w: 1.25 },
+    mu:  { label: 'New MU',               group: 'งานห้องวางแผนการรักษา', min: 15, w: 1 },
+    rc:  { label: 'Quality Checklist',    group: 'งานห้องวางแผนการรักษา', min: 20, w: 1.5 },
   },
   queue: {},     // คนถัดไปที่ตั้งเองรายหมวด { cat: { code, at } }
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
 };
-const LOG_KINDS = [
-  { key: 'rc',    label: 'RC' },
-  { key: 'dqa',   label: 'Daily QA' },
-  { key: 'acad',  label: 'วิชาการ' },
-  { key: 'admin', label: 'บริหาร' },
-];
+// ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
+function logKinds() {
+  const acts = state.config.acts;
+  return [
+    { key: 'rc', label: 'RC' },
+    ...Object.keys(acts).filter(k => k !== 'mu' && k !== 'rc').map(k => ({ key: k, label: acts[k].short || acts[k].label })),
+    { key: 'acad', label: 'วิชาการ' },
+    { key: 'admin', label: 'บริหาร' },
+  ];
+}
+const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
+const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
@@ -616,7 +637,7 @@ function normLog(o) {
   for (const f of LOG_FIELDS) l[f] = str(o[f]);
   l.date = dateStr(l.date);
   l.mp = l.mp.toUpperCase();
-  if (!LOG_KINDS.some(k => k.key === l.kind)) l.kind = 'rc';
+  if (!l.kind) l.kind = 'rc';
   l.id = l.id || uid();
   l.created = l.created || nowISO();
   return l;
@@ -653,11 +674,15 @@ function mergeConfig(c) {
   if (Array.isArray(c.cats) && c.cats.length) {
     out.cats = c.cats.filter(x => x && x.id).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
-      return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false };
+      return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false, kind: x.kind === 'simple' ? 'simple' : 'plan', tech: !!x.tech, group: str(x.group) || base.group || 'อื่น ๆ' };
     });
   }
   if (c.acts && typeof c.acts === 'object') {
-    for (const k in d.acts) if (c.acts[k]) out.acts[k] = { ...d.acts[k], min: +c.acts[k].min || 0, w: +c.acts[k].w || 0 };
+    const pick = (x, base) => ({ ...base, label: str(x.label) || base.label, short: str(x.short) || base.short || '', group: str(x.group) || base.group, min: +x.min || 0, w: +x.w || 0 });
+    const acts = {};
+    for (const k of Object.keys(d.acts)) acts[k] = c.acts[k] ? pick(c.acts[k], d.acts[k]) : d.acts[k];
+    for (const k of Object.keys(c.acts)) if (!acts[k] && c.acts[k]) acts[k] = pick(c.acts[k], { label: k, group: 'กิจกรรมอื่น', min: 0, w: 0 });
+    out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
   out.carry = c.carry && typeof c.carry === 'object' ? c.carry : {};
@@ -863,8 +888,8 @@ function computeP4P(ym) {
   for (const l of state.logs) {
     if (!l.mp || !l.date.startsWith(ym)) continue;
     const r = ensure(l.mp);
-    if (l.kind === 'rc' || l.kind === 'dqa') add(r, l.kind);
-    else { r[l.kind] += unitPts(l.min, l.k); r[l.kind + 'N']++; }
+    if (l.kind === 'acad' || l.kind === 'admin') { r[l.kind] += unitPts(l.min, l.k); r[l.kind + 'N']++; }
+    else if (l.kind !== 'mu' && cfg.acts[l.kind]) add(r, l.kind);
   }
   const carry = (cfg.carry && cfg.carry[ym]) || {};
   for (const r of Object.values(people)) {
@@ -916,6 +941,14 @@ function render() {
   else renderSettings();
 }
 
+// แถวในแบบ P4P: กิจกรรมนับครั้งตามกลุ่ม แล้วต่อด้วยหมวดงานตามกลุ่ม
+function p4pSections(cfg = state.config) {
+  const secs = [];
+  const push = (title, it) => { let sec = secs.find(x => x.title === title); if (!sec) secs.push(sec = { title, items: [] }); sec.items.push(it); };
+  Object.keys(cfg.acts).forEach(k => { const a = cfg.acts[k]; push(a.group || 'กิจกรรมอื่น', { key: k, label: a.label + (k === 'rc' ? ' (RC)' : ''), unit: 'ครั้ง', min: a.min, w: a.w }); });
+  cfg.cats.forEach(k => push(k.group || 'อื่น ๆ', { key: 'cat:' + k.id, label: k.p4p, unit: 'ราย', min: k.min, w: k.w }));
+  return secs;
+}
 // แถบความคืบหน้า: เริ่มที่ −แต้มประกัน เต็มเมื่อคะแนนรวมถึง 0
 const fillPct = r => (r.guarantee > 0 ? Math.min(100, Math.max(0, ((r.carry + r.work) / r.guarantee) * 100)) : 100).toFixed(1);
 const meterHtml = r => `<span class="meter" aria-hidden="true"><i style="width:${fillPct(r)}%"></i></span>`;
@@ -1031,22 +1064,23 @@ function renderLogs() {
   const inMonth = state.logs.filter(l => l.date.startsWith(ym));
   const counts = {};
   inMonth.forEach(l => { counts[l.kind] = (counts[l.kind] || 0) + 1; });
-  $('#log-tabs').innerHTML = [['', 'ทั้งหมด', inMonth.length], ...LOG_KINDS.map(k => [k.key, k.label, counts[k.key] || 0])]
+  $('#log-tabs').innerHTML = [['', 'ทั้งหมด', inMonth.length], ...logKinds().map(k => [k.key, k.label, counts[k.key] || 0])]
     .map(([k, l, n]) => `<button type="button" class="tab" role="tab" data-logtab="${k}" aria-selected="${state.logKind === k}">${esc(l)}<span class="n">${n}</span></button>`).join('');
   const rows = inMonth.filter(l => !state.logKind || l.kind === state.logKind)
     .sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created));
   const byId = Object.fromEntries(state.cases.map(c => [c.id, c]));
   const cfg = state.config;
   $('#logs').innerHTML = rows.length ? rows.map(l => {
-    const kind = LOG_KINDS.find(k => k.key === l.kind);
+    const kind = kindOf(l.kind);
     let main, pts;
     if (l.kind === 'rc') {
       const c = byId[l.caseId];
       main = `<span class="hn">${esc(l.hn || '—')}</span> ${esc(l.name)}<small>${c ? `แผน ${esc(catOf(c.cat).label)} ของ ${esc(c.mp)}` : 'Quality Checklist'}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
       pts = unitPts(cfg.acts.rc.min, cfg.acts.rc.w);
-    } else if (l.kind === 'dqa') {
-      main = `Analysis of Daily QA<small>${esc(l.note || '—')}</small>`;
-      pts = unitPts(cfg.acts.dqa.min, cfg.acts.dqa.w);
+    } else if (isCountKind(l.kind)) {
+      const a = cfg.acts[l.kind];
+      main = `${esc(a.label)}<small>${esc(l.note || '—')}</small>`;
+      pts = unitPts(a.min, a.w);
     } else {
       main = `${esc(l.title || kind.label)}<small>${esc(l.min || 0)} นาที × k ${esc(l.k || 0)}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
       pts = unitPts(l.min, l.k);
@@ -1095,12 +1129,10 @@ function renderP4P() {
     $('#p4p-sub').textContent = 'แต้มต่อหน่วย = เวลา (นาที) × น้ำหนักค่างาน × แต้มมาตรฐาน · เลือกชื่อเพื่อดูใบคะแนนรายคน';
     const head = `<thead><tr><th>กิจกรรม</th><th>แต้ม/หน่วย</th>${staff.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>`;
     const line = (label, unit, key, item) => `<tr><td>${esc(label)} <span class="unit">${unit}</span></td><td>${num(unitPts(item.min, item.w), 3)}</td>${staff.map(c => cell(people[c].counts[key] || 0)).join('')}</tr>`;
-    let body = `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องเตรียมอุปกรณ์ฉายรังสี</td></tr>` + line(cfg.acts.dqa.label, 'ครั้ง', 'dqa', cfg.acts.dqa);
-    body += `<tr class="grp"><td colspan="${staff.length + 2}">งานห้องวางแผนการรักษา</td></tr>` + line(cfg.acts.mu.label, 'ครั้ง', 'mu', cfg.acts.mu) + line(cfg.acts.rc.label + ' (RC)', 'ครั้ง', 'rc', cfg.acts.rc);
-    let grp = '';
-    for (const k of cfg.cats) {
-      if (k.group !== grp) { grp = k.group; body += `<tr class="grp"><td colspan="${staff.length + 2}">${esc(grp)}</td></tr>`; }
-      body += line(k.p4p, 'ราย', 'cat:' + k.id, k);
+    let body = '';
+    for (const sec of p4pSections()) {
+      body += `<tr class="grp"><td colspan="${staff.length + 2}">${esc(sec.title)}</td></tr>`;
+      for (const it of sec.items) body += line(it.label, it.unit, it.key, it);
     }
     body += `<tr class="grp"><td colspan="${staff.length + 2}">งานวิชาการและบริหาร (เวลา × k × ${cfg.rate})</td></tr>`;
     for (const [key, label] of [['acad', 'งานวิชาการ'], ['admin', 'งานบริหาร']]) {
@@ -1146,12 +1178,7 @@ function personTable(code, r, ym, carryCell) {
     fill();
     if (rows.length === at + 1) rows.pop();
   };
-  group('งานห้องเตรียมอุปกรณ์ฉายรังสี', () => item(cfg.acts.dqa.label, 'ครั้ง', cfg.acts.dqa, r.counts.dqa || 0));
-  group('งานห้องวางแผนการรักษา', () => {
-    item(cfg.acts.mu.label, 'ครั้ง', cfg.acts.mu, r.counts.mu || 0);
-    item(cfg.acts.rc.label + ' (RC)', 'ครั้ง', cfg.acts.rc, r.counts.rc || 0);
-  });
-  [...new Set(cfg.cats.map(k => k.group))].forEach(g => group(g, () => cfg.cats.filter(k => k.group === g).forEach(k => item(k.p4p, 'ราย', k, r.counts['cat:' + k.id] || 0))));
+  p4pSections().forEach(sec => group(sec.title, () => sec.items.forEach(it => item(it.label, it.unit, it, r.counts[it.key] || 0))));
   for (const [kind, title] of [['acad', 'งานวิชาการ'], ['admin', 'งานบริหาร']]) {
     group(title, () => state.logs.filter(l => l.kind === kind && l.mp === code && l.date.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date)).forEach(l => {
       const pts = unitPts(l.min, l.k);
@@ -1200,23 +1227,38 @@ function renderSettings() {
     const owed = Object.keys(q.credit).filter(c => q.credit[c] > 0).map(c => `${c} ${q.credit[c]}`).join(', ');
     return `<tr><td>${esc(k.label)}</td><td style="text-align:left"><select data-next="${esc(k.id)}" style="width:auto">${state.config.staff.map(s => opt(s.code, s.code + (s.name ? ' · ' + s.name : ''), q.start)).join('')}</select></td><td style="text-align:left" class="${owed ? '' : 'zero'}">${esc(owed || '–')}</td><td class="muted" style="text-align:left">${k.rotate === 'day' ? 'รายวัน' : 'ทุกเคส'}</td></tr>`;
   }).join('');
-  const catRows = d.cats.map((k, i) => `<tr>
-      <td><input data-k="cats.${i}.label" value="${esc(k.label)}" aria-label="ชื่อหมวด"></td>
-      <td><input data-k="cats.${i}.p4p" value="${esc(k.p4p)}" aria-label="ชื่อในแบบ P4P"></td>
-      <td><input class="num" type="number" step="any" data-k="cats.${i}.min" value="${esc(k.min)}" aria-label="เวลา"></td>
-      <td><input class="num" type="number" step="any" data-k="cats.${i}.w" value="${esc(k.w)}" aria-label="น้ำหนัก"></td>
-      <td class="mono" data-pts="cats.${i}">${num((+k.min || 0) * (+k.w || 0) * (+d.rate || 0), 3)}</td>
-      <td><select data-k="cats.${i}.rotate" aria-label="รอบคิว" style="width:auto;min-height:32px;padding:3px 8px">${opt('case', 'ทุกเคส', k.rotate)}${opt('day', 'รายวัน', k.rotate)}</select></td>
-      <td style="text-align:center"><input type="checkbox" data-k="cats.${i}.mu"${k.mu ? ' checked' : ''} aria-label="นับ New MU"></td>
-      <td style="text-align:center"><input type="checkbox" data-k="cats.${i}.on"${k.on ? ' checked' : ''} aria-label="แสดงในคิว"></td>
-    </tr>`).join('');
+  const usedCats = new Set(state.cases.map(c => c.cat));
+  const usedActs = new Set(state.logs.map(l => l.kind));
+  const groups = [...new Set([...d.cats.map(k => k.group), ...Object.values(d.acts).map(a => a.group)].filter(Boolean))];
+  const catCards = d.cats.map((k, i) => `<div class="cat-card">
+      <div class="cat-l1">
+        <label class="field"><span class="lbl">ชื่อเทคนิค</span><input data-k="cats.${i}.label" value="${esc(k.label)}"></label>
+        <label class="field"><span class="lbl">ชื่อในแบบ P4P</span><input data-k="cats.${i}.p4p" value="${esc(k.p4p)}"></label>
+        <label class="field"><span class="lbl">กลุ่มในแบบ P4P</span><input data-k="cats.${i}.group" value="${esc(k.group)}" list="dl-groups"></label>
+        <label class="field"><span class="lbl">ประเภท</span><select data-k="cats.${i}.kind">${opt('plan', 'วางแผน (Finish / Evaluate)', k.kind)}${opt('simple', 'บันทึกอย่างเดียว', k.kind)}</select></label>
+      </div>
+      <div class="cat-l2">
+        <label class="mini">เวลา <input class="num" type="number" step="any" data-k="cats.${i}.min" value="${esc(k.min)}" aria-label="เวลา (นาที)"> นาที</label>
+        <label class="mini">× น้ำหนัก <input class="num" type="number" step="any" data-k="cats.${i}.w" value="${esc(k.w)}" aria-label="น้ำหนัก"></label>
+        <span class="mini">= <b class="mono" data-pts="cats.${i}">${num((+k.min || 0) * (+k.w || 0) * (+d.rate || 0), 3)}</b> แต้ม/ราย</span>
+        <label class="mini">รอบคิว <select data-k="cats.${i}.rotate">${opt('case', 'ทุกเคส', k.rotate)}${opt('day', 'รายวัน', k.rotate)}</select></label>
+        <label class="check"><input type="checkbox" data-k="cats.${i}.mu"${k.mu ? ' checked' : ''}> New MU</label>
+        <label class="check"><input type="checkbox" data-k="cats.${i}.tech"${k.tech ? ' checked' : ''}> เลือก Technique</label>
+        <label class="check"><input type="checkbox" data-k="cats.${i}.on"${k.on ? ' checked' : ''}> แสดงในฟอร์ม</label>
+        <span class="spacer"></span>
+        <button type="button" class="icon-btn" data-del="cats.${i}" aria-label="ลบเทคนิค ${esc(k.label)}"${usedCats.has(k.id) ? ' disabled title="มีเคสแล้ว ลบไม่ได้ ใช้การปิด แสดงในฟอร์ม แทน"' : ''}>×</button>
+      </div>
+    </div>`).join('');
+  const actNote = { mu: 'นับจากเคสวางแผนอัตโนมัติ', rc: 'บันทึกจากปุ่ม RC' };
   const actRows = Object.entries(d.acts).map(([key, a]) => `<tr>
-      <td>${esc(a.label)}</td><td class="muted">ครั้ง</td>
+      <td><input data-k="acts.${key}.label" value="${esc(a.label)}" aria-label="ชื่อกิจกรรม">${actNote[key] ? `<span class="unit" style="display:block;margin-top:2px">${actNote[key]}</span>` : ''}</td>
+      <td><input data-k="acts.${key}.group" value="${esc(a.group)}" list="dl-groups" aria-label="กลุ่มในแบบ P4P"></td>
       <td><input class="num" type="number" step="any" data-k="acts.${key}.min" value="${esc(a.min)}" aria-label="เวลา"></td>
       <td><input class="num" type="number" step="any" data-k="acts.${key}.w" value="${esc(a.w)}" aria-label="น้ำหนัก"></td>
-      <td class="mono" data-pts="acts.${key}">${num((+a.min || 0) * (+a.w || 0) * (+d.rate || 0), 3)}</td><td colspan="3"></td>
+      <td class="mono" data-pts="acts.${key}">${num((+a.min || 0) * (+a.w || 0) * (+d.rate || 0), 3)}</td>
+      <td>${['dqa', 'mu', 'rc'].includes(key) ? '' : `<button type="button" class="icon-btn" data-delact="${esc(key)}" aria-label="ลบกิจกรรม ${esc(a.label)}"${usedActs.has(key) ? ' disabled title="มีบันทึกแล้ว ลบไม่ได้"' : ''}>×</button>`}</td>
     </tr>`).join('');
-  const listField = (key, label) => `<label class="field"><span class="lbl">${label}</span><input data-list="${key}" value="${esc(d[key].join(', '))}"></label>`;
+  const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${d[key].map((v, i) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
   const dataSec = store.mode === 'sheet'
     ? `<p class="muted" style="margin:0 0 10px;font-size:14px">ข้อมูลเก็บในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกกับระบบนี้ ทุกคนที่มีสิทธิ์แก้ไขชีตจะเห็นข้อมูลเดียวกัน</p>${state.sheetUrl ? `<a class="btn" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}`
     : `<p class="muted" style="margin:0 0 10px;font-size:14px">โหมดตัวอย่าง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ถ้าจะใช้งานจริงร่วมกันทั้งทีม ให้ติดตั้งกับ Google Sheet ตามคู่มือ README</p>
@@ -1235,14 +1277,18 @@ function renderSettings() {
         <li>เคสที่เลือกเองไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
       </ul>
       <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (เลือกเอง)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
-    <div class="sec"><div class="sec-head"><h2>หมวดงานและน้ำหนัก P4P</h2><p>แต้ม/หน่วย = เวลา × น้ำหนัก × แต้มมาตรฐาน</p></div>
+    <div class="sec"><div class="sec-head"><h2>เทคนิคและน้ำหนัก P4P</h2><p>แต้ม/ราย = เวลา × น้ำหนัก × แต้มมาตรฐาน · เทคนิคใหม่จะเป็นปุ่มในฟอร์มแจกเคสและมีคิวของตัวเอง</p></div>
       <div class="form-grid" style="margin-bottom:12px">
         <label class="field"><span class="lbl">แต้มมาตรฐาน (แต้ม/นาที)</span><input type="number" step="any" data-k="rate" value="${esc(d.rate)}"></label>
       </div>
-      <div class="table-wrap set-table"><table><thead><tr><th>หมวด</th><th style="text-align:left">ชื่อในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/หน่วย</th><th style="text-align:left">รอบคิว</th><th>New MU</th><th>แสดง</th></tr></thead>
-      <tbody>${catRows}${actRows}</tbody></table></div></div>
-    <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>คั่นแต่ละค่าด้วยเครื่องหมายจุลภาค</p></div>
-      <div class="form-grid">${listField('doctors', 'Doc (แพทย์)')}${listField('types', 'Type')}${listField('aims', 'Aim')}${listField('techniques', 'Technique (SRS)')}</div></div>
+      <div class="cat-list">${catCards}</div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="cat">+ เพิ่มเทคนิค</button></div></div>
+    <div class="sec"><div class="sec-head"><h2>กิจกรรมนับครั้ง</h2><p>กิจกรรมใหม่จะเป็นตัวเลือกในหน้า "RC และกิจกรรม" และนับแต้มในสรุป P4P</p></div>
+      <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
+    <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
+      <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}</div></div>
+    <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
   updateSaveBar();
@@ -1270,6 +1316,7 @@ async function saveSettings() {
   if (new Set(codes).size !== codes.length) return toast('รหัสนักฟิสิกส์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
+  if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
   const btn = $('#save-settings');
   btn.disabled = true;
@@ -1416,8 +1463,7 @@ function syncLogForm() {
   else hint.className = 'hint';
   const cfg = state.config;
   let pts = 0, how = '';
-  if (kind === 'rc') { pts = unitPts(cfg.acts.rc.min, cfg.acts.rc.w); how = `${cfg.acts.rc.label} ${cfg.acts.rc.min} นาที × ${cfg.acts.rc.w}`; }
-  else if (kind === 'dqa') { pts = unitPts(cfg.acts.dqa.min, cfg.acts.dqa.w); how = `${cfg.acts.dqa.label} ${cfg.acts.dqa.min} นาที × ${cfg.acts.dqa.w}`; }
+  if (isCountKind(kind)) { const a = cfg.acts[kind]; pts = unitPts(a.min, a.w); how = `${a.label} ${a.min} นาที × ${a.w}`; }
   else { pts = unitPts($('#l-min').value, $('#l-k').value); how = `${$('#l-min').value || 0} นาที × k ${$('#l-k').value || 0}`; }
   $('#l-preview').innerHTML = `${esc(how)} × ${cfg.rate} = <b>${num(pts, 3)}</b> แต้ม`;
 }
@@ -1427,8 +1473,10 @@ function openLog(id, preset = {}) {
   const c = preset.caseId ? state.cases.find(x => x.id === preset.caseId) : null;
   editingLog = l ? clone(l) : { id: '', kind: preset.kind || 'rc', date: today(), caseId: preset.caseId || '', hn: c ? c.hn : '', name: c ? c.name : '' };
   logMpTouched = false;
-  chipGroup($('#l-kind'), 'kind', LOG_KINDS.map(k => k.key), editingLog.kind);
-  $$('#l-kind span').forEach((s, i) => { s.textContent = LOG_KINDS[i].label; });
+  const kinds = logKinds();
+  if (!kinds.some(k => k.key === editingLog.kind)) kinds.push(kindOf(editingLog.kind));
+  chipGroup($('#l-kind'), 'kind', kinds.map(k => k.key), editingLog.kind);
+  $$('#l-kind span').forEach((s, i) => { s.textContent = kinds[i].label; });
   const codes = activeStaff().map(s => s.code);
   if (editingLog.mp && !codes.includes(editingLog.mp)) codes.push(editingLog.mp);
   $('#l-mp').innerHTML = opt('', '— เลือก —', editingLog.mp) + codes.map(code => opt(code, code, editingLog.mp)).join('');
@@ -1464,7 +1512,7 @@ async function submitLog(e) {
     if (i < 0) state.logs.push(rec); else state.logs[i] = rec;
     logDlg.close();
     render();
-    toast(isNew ? `บันทึก ${LOG_KINDS.find(k => k.key === kind).label} ให้ ${mp} แล้ว` : 'บันทึกการแก้ไขแล้ว');
+    toast(isNew ? `บันทึก ${kindOf(kind).label} ให้ ${mp} แล้ว` : 'บันทึกการแก้ไขแล้ว');
   } catch (err) { toast('บันทึกไม่สำเร็จ: ' + errMsg(err), { err: true }); }
   finally { btn.disabled = false; }
 }
@@ -1673,6 +1721,17 @@ document.addEventListener('click', e => {
   if (ds.month) { state.month = shiftMonth(state.month, +ds.month); return render(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
+  if (ds.add === 'cat') {
+    const last = draft.cats[draft.cats.length - 1] || {};
+    draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true });
+    renderSettings(); $$('[data-k^="cats."][data-k$=".label"]').pop().select(); return;
+  }
+  if (ds.add === 'act') {
+    draft.acts = { ...draft.acts, ['a' + uid()]: { label: 'กิจกรรมใหม่', group: 'กิจกรรมอื่น', min: 30, w: 1 } };
+    renderSettings(); $$('[data-k^="acts."][data-k$=".label"]').pop().select(); return;
+  }
+  if (ds.delact) { const acts = { ...draft.acts }; delete acts[ds.delact]; draft.acts = acts; return renderSettings(); }
+  if (ds.rmopt) { const [k, i] = ds.rmopt.split('.'); draft[k].splice(+i, 1); return renderSettings(); }
   if (ds.add === 'position') { draft.positions.push({ id: 'pos-' + uid(), label: 'ตำแหน่งใหม่', base: 0, guarantee: draft.guarantee }); renderSettings(); $$('[data-k^="positions."][data-k$=".label"]').pop().select(); return; }
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.up) { const i = +ds.up; [draft.staff[i - 1], draft.staff[i]] = [draft.staff[i], draft.staff[i - 1]]; return renderSettings(); }
@@ -1735,8 +1794,24 @@ settingsEl.addEventListener('input', e => {
   }
   updateSaveBar();
 });
+// เพิ่มตัวเลือกในฟอร์ม: กด Enter หรือออกจากช่อง
+function addOption(el) {
+  const v = str(el.value), key = el.dataset.addopt;
+  el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
+  if (!v) return;
+  if (!draft[key].includes(v)) draft[key].push(v);
+  setTimeout(() => {
+    renderSettings();
+    const again = $(`[data-addopt="${key}"]`);
+    if (again) again.focus();
+  }, 0);
+}
+settingsEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.addopt) { e.preventDefault(); addOption(e.target); }
+});
 settingsEl.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.addopt) { addOption(el); return; }
   if (el.dataset.role !== undefined) {
     // เปลี่ยนตำแหน่ง: มีผลตั้งแต่เดือนนี้ เก็บของเดือนก่อนหน้าไว้
     const roles = draft.staff[+el.dataset.role].roles = draft.staff[+el.dataset.role].roles || [];
