@@ -291,6 +291,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 
 /* settings */
 .set-list{display:grid;gap:8px}
+.rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
+.rules b{color:var(--fg);font-weight:500}
 .set-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr) 180px auto auto;grid-template-areas:"idx code name pos act btns";gap:8px;align-items:center}
 .set-row .idx{grid-area:idx}.set-row .code{grid-area:code}.set-row .name{grid-area:name}.set-row .pos{grid-area:pos}.set-row .check{grid-area:act}.set-row .btns{grid-area:btns;display:flex;gap:2px}
 .set-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
@@ -487,7 +489,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <form class="dlg" id="leave-form" novalidate>
     <header class="dlg-head"><h2 id="leave-title">วันลา</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
-      <p class="preview" style="margin:0">ในวันที่ลา ระบบจะไม่แจกเคสให้ (นับตามวัน In ของเคส) เคสจะวนไปให้คนถัดไปในคิวแทน</p>
+      <p class="preview" style="margin:0">ในวันที่ลา (นับตามวัน In ของเคส) ถ้าถึงคิวคนนั้น ระบบจะข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> ไม่ชดเชยเมื่อกลับมาทำงาน</p>
       <div class="leave-add">
         <label class="field"><span class="lbl">MP</span><select id="v-mp"></select></label>
         <label class="field"><span class="lbl">ตั้งแต่</span><input type="date" id="v-from"></label>
@@ -798,7 +800,7 @@ function pickNext(o, trace) {
   let p = 0, lastAuto = null, pointerDone = !pointer;
   const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
   list.forEach(c => {
-    if (!pointerDone && c.created > pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
     const j = idx(c.mp);
     if (j < 0) return;
     if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
@@ -1226,7 +1228,12 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
       <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มประกัน/เดือน</th><th>แต้มตั้งต้น/เดือน</th><th>เริ่มเดือนที่</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="position">+ เพิ่มตำแหน่ง</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>คิวหมุนเวียน</h2><p>ตำแหน่งคิวของแต่ละเทคนิค เปลี่ยนได้ทันที ตอนแจกจริงระบบข้ามคนที่ลา และคนที่มีเคสเลือกเองรอหักคิว</p></div>
+    <div class="sec"><div class="sec-head"><h2>คิวหมุนเวียน</h2><p>ตำแหน่งคิวของแต่ละเทคนิค เปลี่ยนได้ทันที</p></div>
+      <ul class="rules">
+        <li>แจกอัตโนมัติวนตามลำดับทีมด้านบน แยกคิวตามเทคนิค</li>
+        <li>ถึงคิวคนที่ลาในวัน In ของเคส หรือปิด "ปฏิบัติงาน" ไว้ ระบบข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> จนกว่าจะกลับมาทำงาน ไม่ชดเชยภายหลัง</li>
+        <li>เคสที่เลือกเองไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
+      </ul>
       <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (เลือกเอง)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
     <div class="sec"><div class="sec-head"><h2>หมวดงานและน้ำหนัก P4P</h2><p>แต้ม/หน่วย = เวลา × น้ำหนัก × แต้มมาตรฐาน</p></div>
       <div class="form-grid" style="margin-bottom:12px">
@@ -1526,7 +1533,7 @@ function syncIntake() {
   const q = queueInfo(k.id, date);
   if (!q.code) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(NOBODY)}</span>`; return; }
   const why = [];
-  q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
+  q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสเลือกเองไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
   box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}
     <small>${k.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${esc(k.label)}${why.length ? ` · ข้าม ${esc(why.join(', '))}` : ''} · ${pts}</small></span>`;
 }

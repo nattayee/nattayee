@@ -148,7 +148,7 @@ function pickNext_(o, trace) {
   let p = 0, lastAuto = null, pointerDone = !pointer;
   const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
   list.forEach(c => {
-    if (!pointerDone && c.created > pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
     const j = idx(c.mp);
     if (j < 0) return;
     if (c.how === 'manual') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
