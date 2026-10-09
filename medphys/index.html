@@ -114,6 +114,14 @@ button{cursor:pointer}
 .assign small{display:block;font-size:12.5px;color:var(--muted)}
 .assign.warn{color:var(--late)}
 .chips.cats span small,.chips.people span small{margin-left:7px;font:500 11px var(--mono);opacity:.65}
+.combo{position:relative}
+.combo-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:300px;overflow-y:auto;margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.combo-list li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13.5px;line-height:1.4}
+.combo-list li[aria-selected="true"],.combo-list li:hover{background:var(--accent-soft)}
+.combo-list .code{font:500 13px var(--mono)}
+.combo-list small{display:block;color:var(--muted);font-size:12px}
+.dx{display:inline-flex;gap:5px;align-items:baseline;max-width:100%}
+.dx b{font:500 12px var(--mono);color:var(--fg)}
 .dose-row{display:grid;grid-template-columns:120px 96px 110px minmax(0,1fr);gap:10px 12px;align-items:start}
 .total{display:flex;align-items:center;min-height:36px;font:500 15px var(--mono);white-space:nowrap}
 .freq-field input{margin-top:6px}
@@ -361,6 +369,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <label class="field"><span class="lbl">Name</span><input id="i-name"></label>
           <div class="field doc-field plan-field"><span class="lbl">Doc</span><div class="chips" id="i-doc" role="radiogroup" aria-label="Doc"></div></div>
         </div>
+        <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
         <div class="field"><span class="lbl">เทคนิค</span><div class="chips cats" id="i-cat" role="radiogroup" aria-label="เทคนิค"></div></div>
         <div class="intake-mid plan-field">
           <div class="field"><span class="lbl">Type</span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
@@ -454,6 +463,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field"><span class="lbl">HN</span><input id="f-hn" inputmode="numeric" autocomplete="off" required></label>
         <label class="field"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
       </div>
+      <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="f-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="f-dx-list" role="listbox" hidden></ul></div></div>
       <div class="field plan-only"><span class="lbl">Doc</span><div class="chips" id="f-doc" role="radiogroup" aria-label="Doc"></div></div>
       <div class="field plan-only"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
       <div class="field plan-only"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
@@ -582,6 +592,7 @@ const DEFAULT_CONFIG = {
     rc:  { label: 'Quality Checklist',    group: 'งานห้องวางแผนการรักษา', min: 20, w: 1.5 },
   },
   queue: {},     // คนถัดไปที่ตั้งเองรายหมวด { cat: { code, at } }
+  icdExtra: [],  // รหัส ICD-10 ที่หน่วยงานเพิ่มเอง { code, name, th }
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
 };
 // ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
@@ -597,7 +608,7 @@ function logKinds() {
 const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -644,6 +655,7 @@ function normCase(o) {
   for (const f of ['ct', 'in', 'fin', 'eval']) c[f] = dateStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
+  c.icd = c.icd.toUpperCase();
   c.how = c.how === 'manual' ? 'manual' : c.how ? 'auto' : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
@@ -702,6 +714,7 @@ function mergeConfig(c) {
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
+  out.icdExtra = Array.isArray(c.icdExtra) ? c.icdExtra.map(x => ({ code: str(x && x.code).toUpperCase(), name: str(x && x.name), th: str(x && x.th) })).filter(x => x.code) : [];
   out.carry = c.carry && typeof c.carry === 'object' ? c.carry : {};
   return out;
 }
@@ -747,24 +760,24 @@ function demoDb() {
   let n = 0, hn = 999000100;
   const cases = [];
   const mk = (cat, mp, o) => cases.push({ id: 'demo-c' + (++n), cat, mp, hn: String(++hn), created: new Date(t0 + n * 36e5).toISOString(), ...o });
-  mk('vmbt', 'JR', { ct: d(-10), in: d(-9), sim: d(5), fin: d(-6), eval: d(-5), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
-  mk('vmbt', 'WM', { ct: d(-8), in: d(-7), sim: d(7), fin: d(-3), type: 'New', doc: 'SC', aim: 'Curative', note: 'DIBH', dpf: '2', fx: '25', freq: 'Daily' });
-  mk('vmbt', 'NY', { ct: d(-5), in: d(-4), sim: d(8), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
-  mk('vmbt', 'WS', { ct: d(-1), in: d(0), sim: d(12), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
-  mk('vmetc', 'JR', { ct: d(-7), in: d(-6), sim: d(2), fin: d(-2), type: 'New', doc: 'TC', aim: 'Curative', dpf: '1.8', fx: '28', freq: 'Daily' });
-  mk('vmetc', 'WM', { ct: d(-5), in: d(-5), sim: d(-5), fin: d(-5), eval: d(-5), type: 'Emer low', doc: 'SC', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
-  mk('vmetc', 'NY', { ct: d(-3), in: d(-2), sim: d(1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '39', freq: 'Daily' });
-  mk('vmhn', 'WS', { ct: d(-14), in: d(-8), sim: d(-1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '35', freq: 'Daily' });
-  mk('vmhn', 'JR', { ct: d(-9), in: d(-4), sim: d(3), fin: d(-1), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '33', freq: 'Daily' });
-  mk('vmhn', 'WM', { ct: d(-1), in: d(-1), sim: d(-1), fin: d(-1), eval: d(-1), type: 'Emer high', doc: 'TA', aim: 'Palliative', dpf: '4', fx: '5', freq: 'Daily' });
-  mk('3d', 'NY', { ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
-  mk('3d', 'WS', { ct: d(-2), in: d(-2), sim: d(-2), fin: d(-2), eval: d(-2), type: 'Emer low', doc: 'TA', aim: 'Palliative', dpf: '8', fx: '1', freq: 'Single fraction' });
-  mk('3d', 'JR', { ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
-  mk('srs', 'WM', { ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT', dpf: '8', fx: '3', freq: 'EOD' });
-  mk('vmchest', 'NY', { ct: d(-4), in: d(-4), sim: d(2), fin: d(-1), type: 'Replan', doc: 'TA', aim: 'On tx', dpf: '1.5', fx: '30', freq: 'BID' });
-  mk('brachy', 'JR', { in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
-  mk('brachy', 'JR', { in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
-  mk('brachy', 'WS', { in: d(-1), dpf: '7', fx: '4', freq: 'Weekly' });
+  mk('vmbt', 'JR', { icd: 'C50.4', ct: d(-10), in: d(-9), sim: d(5), fin: d(-6), eval: d(-5), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
+  mk('vmbt', 'WM', { icd: 'C50.9', ct: d(-8), in: d(-7), sim: d(7), fin: d(-3), type: 'New', doc: 'SC', aim: 'Curative', note: 'DIBH', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('vmbt', 'NY', { icd: 'C50.2', ct: d(-5), in: d(-4), sim: d(8), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
+  mk('vmbt', 'WS', { icd: 'C50.9', ct: d(-1), in: d(0), sim: d(12), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('vmetc', 'JR', { icd: 'C53.9', ct: d(-7), in: d(-6), sim: d(2), fin: d(-2), type: 'New', doc: 'TC', aim: 'Curative', dpf: '1.8', fx: '28', freq: 'Daily' });
+  mk('vmetc', 'WM', { icd: 'C79.5', ct: d(-5), in: d(-5), sim: d(-5), fin: d(-5), eval: d(-5), type: 'Emer low', doc: 'SC', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
+  mk('vmetc', 'NY', { icd: 'C61', ct: d(-3), in: d(-2), sim: d(1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '39', freq: 'Daily' });
+  mk('vmhn', 'WS', { icd: 'C11.9', ct: d(-14), in: d(-8), sim: d(-1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '35', freq: 'Daily' });
+  mk('vmhn', 'JR', { icd: 'C11.9', ct: d(-9), in: d(-4), sim: d(3), fin: d(-1), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '33', freq: 'Daily' });
+  mk('vmhn', 'WM', { icd: 'C13.9', ct: d(-1), in: d(-1), sim: d(-1), fin: d(-1), eval: d(-1), type: 'Emer high', doc: 'TA', aim: 'Palliative', dpf: '4', fx: '5', freq: 'Daily' });
+  mk('3d', 'NY', { icd: 'C79.5', ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
+  mk('3d', 'WS', { icd: 'C79.5', ct: d(-2), in: d(-2), sim: d(-2), fin: d(-2), eval: d(-2), type: 'Emer low', doc: 'TA', aim: 'Palliative', dpf: '8', fx: '1', freq: 'Single fraction' });
+  mk('3d', 'JR', { icd: 'C20', ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
+  mk('srs', 'WM', { icd: 'C79.3', ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT', dpf: '8', fx: '3', freq: 'EOD' });
+  mk('vmchest', 'NY', { icd: 'C34.1', ct: d(-4), in: d(-4), sim: d(2), fin: d(-1), type: 'Replan', doc: 'TA', aim: 'On tx', dpf: '1.5', fx: '30', freq: 'BID' });
+  mk('brachy', 'JR', { icd: 'C53.9', in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
+  mk('brachy', 'JR', { icd: 'C53.9', in: d(-7), dpf: '7', fx: '4', freq: 'Weekly' });
+  mk('brachy', 'WS', { icd: 'C53.9', in: d(-1), dpf: '7', fx: '4', freq: 'Weekly' });
   const logs = [];
   let m = 0;
   const lg = (kind, mp, date, o = {}) => logs.push({ id: 'demo-l' + (++m), kind, mp, date, created: new Date(t0 + m * 36e5).toISOString(), ...o });
@@ -1019,7 +1032,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1031,6 +1044,223 @@ function renderWork() {
     list.innerHTML = rows.slice(0, state.limit).map(c => caseRow(c, rcs[c.id] || [])).join('');
   }
   $('#more-wrap').hidden = rows.length <= state.limit;
+}
+
+
+/* ---------- ICD-10 (WHO) หมวดเนื้องอก C00–C97, D บางรหัส และรหัสที่ใช้ในรังสีรักษาบ่อย ---------- */
+const ICD10 = [
+  ['C00', 'Malignant neoplasm of lip', 'ริมฝีปาก'],
+  ['C01', 'Malignant neoplasm of base of tongue', 'โคนลิ้น'],
+  ['C02', 'Malignant neoplasm of other and unspecified parts of tongue', 'ลิ้น'],
+  ['C02.9', 'Malignant neoplasm of tongue, unspecified', 'ลิ้น'],
+  ['C03', 'Malignant neoplasm of gum', 'เหงือก'],
+  ['C04', 'Malignant neoplasm of floor of mouth', 'พื้นปาก'],
+  ['C05', 'Malignant neoplasm of palate', 'เพดานปาก'],
+  ['C06', 'Malignant neoplasm of other and unspecified parts of mouth', 'ช่องปาก'],
+  ['C07', 'Malignant neoplasm of parotid gland', 'ต่อมน้ำลายพาโรติด'],
+  ['C08', 'Malignant neoplasm of other and unspecified major salivary glands', 'ต่อมน้ำลาย'],
+  ['C09', 'Malignant neoplasm of tonsil', 'ต่อมทอนซิล'],
+  ['C09.9', 'Malignant neoplasm of tonsil, unspecified', 'ต่อมทอนซิล'],
+  ['C10', 'Malignant neoplasm of oropharynx', 'คอหอยส่วนปาก'],
+  ['C10.9', 'Malignant neoplasm of oropharynx, unspecified', 'คอหอยส่วนปาก'],
+  ['C11', 'Malignant neoplasm of nasopharynx', 'โพรงหลังจมูก'],
+  ['C11.9', 'Malignant neoplasm of nasopharynx, unspecified', 'โพรงหลังจมูก'],
+  ['C12', 'Malignant neoplasm of piriform sinus', 'ไพริฟอร์มไซนัส'],
+  ['C13', 'Malignant neoplasm of hypopharynx', 'คอหอยส่วนล่าง'],
+  ['C13.9', 'Malignant neoplasm of hypopharynx, unspecified', 'คอหอยส่วนล่าง'],
+  ['C14', 'Malignant neoplasm of other and ill-defined sites in the lip, oral cavity and pharynx', 'ช่องปากและคอหอย'],
+  ['C15', 'Malignant neoplasm of oesophagus', 'หลอดอาหาร'],
+  ['C15.9', 'Malignant neoplasm of oesophagus, unspecified', 'หลอดอาหาร'],
+  ['C16', 'Malignant neoplasm of stomach', 'กระเพาะอาหาร'],
+  ['C16.9', 'Malignant neoplasm of stomach, unspecified', 'กระเพาะอาหาร'],
+  ['C17', 'Malignant neoplasm of small intestine', 'ลำไส้เล็ก'],
+  ['C18', 'Malignant neoplasm of colon', 'ลำไส้ใหญ่'],
+  ['C18.9', 'Malignant neoplasm of colon, unspecified', 'ลำไส้ใหญ่'],
+  ['C19', 'Malignant neoplasm of rectosigmoid junction', 'รอยต่อลำไส้ใหญ่ซิกมอยด์กับไส้ตรง'],
+  ['C20', 'Malignant neoplasm of rectum', 'ไส้ตรง'],
+  ['C21', 'Malignant neoplasm of anus and anal canal', 'ทวารหนัก'],
+  ['C22', 'Malignant neoplasm of liver and intrahepatic bile ducts', 'ตับ'],
+  ['C22.0', 'Liver cell carcinoma', 'ตับ (HCC)'],
+  ['C22.1', 'Intrahepatic bile duct carcinoma', 'ท่อน้ำดีในตับ'],
+  ['C23', 'Malignant neoplasm of gallbladder', 'ถุงน้ำดี'],
+  ['C24', 'Malignant neoplasm of other and unspecified parts of biliary tract', 'ท่อน้ำดี'],
+  ['C25', 'Malignant neoplasm of pancreas', 'ตับอ่อน'],
+  ['C25.9', 'Malignant neoplasm of pancreas, unspecified', 'ตับอ่อน'],
+  ['C26', 'Malignant neoplasm of other and ill-defined digestive organs', 'ระบบทางเดินอาหารอื่น'],
+  ['C30', 'Malignant neoplasm of nasal cavity and middle ear', 'โพรงจมูกและหูชั้นกลาง'],
+  ['C31', 'Malignant neoplasm of accessory sinuses', 'ไซนัส'],
+  ['C32', 'Malignant neoplasm of larynx', 'กล่องเสียง'],
+  ['C32.9', 'Malignant neoplasm of larynx, unspecified', 'กล่องเสียง'],
+  ['C33', 'Malignant neoplasm of trachea', 'หลอดลมใหญ่'],
+  ['C34', 'Malignant neoplasm of bronchus and lung', 'ปอด'],
+  ['C34.0', 'Malignant neoplasm of main bronchus', 'ปอด (หลอดลมใหญ่)'],
+  ['C34.1', 'Malignant neoplasm of upper lobe, bronchus or lung', 'ปอดกลีบบน'],
+  ['C34.2', 'Malignant neoplasm of middle lobe, bronchus or lung', 'ปอดกลีบกลาง'],
+  ['C34.3', 'Malignant neoplasm of lower lobe, bronchus or lung', 'ปอดกลีบล่าง'],
+  ['C34.9', 'Malignant neoplasm of bronchus or lung, unspecified', 'ปอด'],
+  ['C37', 'Malignant neoplasm of thymus', 'ต่อมไทมัส'],
+  ['C38', 'Malignant neoplasm of heart, mediastinum and pleura', 'ช่องกลางทรวงอกและเยื่อหุ้มปอด'],
+  ['C39', 'Malignant neoplasm of other and ill-defined sites in the respiratory system and intrathoracic organs', 'ระบบหายใจอื่น'],
+  ['C40', 'Malignant neoplasm of bone and articular cartilage of limbs', 'กระดูกแขนขา'],
+  ['C41', 'Malignant neoplasm of bone and articular cartilage of other and unspecified sites', 'กระดูก'],
+  ['C43', 'Malignant melanoma of skin', 'เมลาโนมาผิวหนัง'],
+  ['C44', 'Other malignant neoplasms of skin', 'ผิวหนัง'],
+  ['C45', 'Mesothelioma', 'มีโซทีลิโอมา'],
+  ['C46', 'Kaposi sarcoma', 'คาโปซีซาร์โคมา'],
+  ['C47', 'Malignant neoplasm of peripheral nerves and autonomic nervous system', 'เส้นประสาทส่วนปลาย'],
+  ['C48', 'Malignant neoplasm of retroperitoneum and peritoneum', 'หลังเยื่อบุช่องท้องและเยื่อบุช่องท้อง'],
+  ['C49', 'Malignant neoplasm of other connective and soft tissue', 'เนื้อเยื่ออ่อน'],
+  ['C50', 'Malignant neoplasm of breast', 'เต้านม'],
+  ['C50.0', 'Malignant neoplasm of nipple and areola', 'เต้านม หัวนมและลานนม'],
+  ['C50.1', 'Malignant neoplasm of central portion of breast', 'เต้านม ส่วนกลาง'],
+  ['C50.2', 'Malignant neoplasm of upper-inner quadrant of breast', 'เต้านม ส่วนบนด้านใน'],
+  ['C50.3', 'Malignant neoplasm of lower-inner quadrant of breast', 'เต้านม ส่วนล่างด้านใน'],
+  ['C50.4', 'Malignant neoplasm of upper-outer quadrant of breast', 'เต้านม ส่วนบนด้านนอก'],
+  ['C50.5', 'Malignant neoplasm of lower-outer quadrant of breast', 'เต้านม ส่วนล่างด้านนอก'],
+  ['C50.6', 'Malignant neoplasm of axillary tail of breast', 'เต้านม ส่วนหางรักแร้'],
+  ['C50.8', 'Malignant neoplasm of overlapping lesion of breast', 'เต้านม หลายส่วน'],
+  ['C50.9', 'Malignant neoplasm of breast, unspecified', 'เต้านม'],
+  ['C51', 'Malignant neoplasm of vulva', 'ปากช่องคลอด'],
+  ['C52', 'Malignant neoplasm of vagina', 'ช่องคลอด'],
+  ['C53', 'Malignant neoplasm of cervix uteri', 'ปากมดลูก'],
+  ['C53.0', 'Malignant neoplasm of endocervix', 'ปากมดลูก ด้านใน'],
+  ['C53.1', 'Malignant neoplasm of exocervix', 'ปากมดลูก ด้านนอก'],
+  ['C53.8', 'Malignant neoplasm of overlapping lesion of cervix uteri', 'ปากมดลูก หลายส่วน'],
+  ['C53.9', 'Malignant neoplasm of cervix uteri, unspecified', 'ปากมดลูก'],
+  ['C54', 'Malignant neoplasm of corpus uteri', 'ตัวมดลูก'],
+  ['C54.1', 'Malignant neoplasm of endometrium', 'เยื่อบุโพรงมดลูก'],
+  ['C55', 'Malignant neoplasm of uterus, part unspecified', 'มดลูก'],
+  ['C56', 'Malignant neoplasm of ovary', 'รังไข่'],
+  ['C57', 'Malignant neoplasm of other and unspecified female genital organs', 'อวัยวะสืบพันธุ์สตรีอื่น'],
+  ['C58', 'Malignant neoplasm of placenta', 'รก'],
+  ['C60', 'Malignant neoplasm of penis', 'องคชาต'],
+  ['C61', 'Malignant neoplasm of prostate', 'ต่อมลูกหมาก'],
+  ['C62', 'Malignant neoplasm of testis', 'อัณฑะ'],
+  ['C63', 'Malignant neoplasm of other and unspecified male genital organs', 'อวัยวะสืบพันธุ์ชายอื่น'],
+  ['C64', 'Malignant neoplasm of kidney, except renal pelvis', 'ไต'],
+  ['C65', 'Malignant neoplasm of renal pelvis', 'กรวยไต'],
+  ['C66', 'Malignant neoplasm of ureter', 'ท่อไต'],
+  ['C67', 'Malignant neoplasm of bladder', 'กระเพาะปัสสาวะ'],
+  ['C67.9', 'Malignant neoplasm of bladder, unspecified', 'กระเพาะปัสสาวะ'],
+  ['C68', 'Malignant neoplasm of other and unspecified urinary organs', 'ทางเดินปัสสาวะอื่น'],
+  ['C69', 'Malignant neoplasm of eye and adnexa', 'ตา'],
+  ['C70', 'Malignant neoplasm of meninges', 'เยื่อหุ้มสมอง'],
+  ['C71', 'Malignant neoplasm of brain', 'สมอง'],
+  ['C71.0', 'Malignant neoplasm of cerebrum, except lobes and ventricles', 'สมองใหญ่'],
+  ['C71.1', 'Malignant neoplasm of frontal lobe', 'สมองกลีบหน้า'],
+  ['C71.2', 'Malignant neoplasm of temporal lobe', 'สมองกลีบขมับ'],
+  ['C71.3', 'Malignant neoplasm of parietal lobe', 'สมองกลีบข้าง'],
+  ['C71.4', 'Malignant neoplasm of occipital lobe', 'สมองกลีบท้ายทอย'],
+  ['C71.5', 'Malignant neoplasm of cerebral ventricle', 'โพรงสมอง'],
+  ['C71.6', 'Malignant neoplasm of cerebellum', 'สมองน้อย'],
+  ['C71.7', 'Malignant neoplasm of brain stem', 'ก้านสมอง'],
+  ['C71.8', 'Malignant neoplasm of overlapping lesion of brain', 'สมอง หลายส่วน'],
+  ['C71.9', 'Malignant neoplasm of brain, unspecified', 'สมอง'],
+  ['C72', 'Malignant neoplasm of spinal cord, cranial nerves and other parts of central nervous system', 'ไขสันหลังและระบบประสาทส่วนกลาง'],
+  ['C73', 'Malignant neoplasm of thyroid gland', 'ต่อมไทรอยด์'],
+  ['C74', 'Malignant neoplasm of adrenal gland', 'ต่อมหมวกไต'],
+  ['C75', 'Malignant neoplasm of other endocrine glands and related structures', 'ต่อมไร้ท่ออื่น'],
+  ['C76', 'Malignant neoplasm of other and ill-defined sites', 'ตำแหน่งไม่ชัดเจน'],
+  ['C77', 'Secondary and unspecified malignant neoplasm of lymph nodes', 'แพร่กระจายต่อมน้ำเหลือง'],
+  ['C77.0', 'Secondary and unspecified malignant neoplasm of lymph nodes of head, face and neck', 'แพร่กระจายต่อมน้ำเหลืองศีรษะและคอ'],
+  ['C78', 'Secondary malignant neoplasm of respiratory and digestive organs', 'แพร่กระจายระบบหายใจและทางเดินอาหาร'],
+  ['C78.0', 'Secondary malignant neoplasm of lung', 'แพร่กระจายไปปอด'],
+  ['C78.7', 'Secondary malignant neoplasm of liver and intrahepatic bile duct', 'แพร่กระจายไปตับ'],
+  ['C79', 'Secondary malignant neoplasm of other and unspecified sites', 'แพร่กระจายตำแหน่งอื่น'],
+  ['C79.3', 'Secondary malignant neoplasm of brain and cerebral meninges', 'แพร่กระจายไปสมอง'],
+  ['C79.4', 'Secondary malignant neoplasm of other and unspecified parts of nervous system', 'แพร่กระจายระบบประสาท'],
+  ['C79.5', 'Secondary malignant neoplasm of bone and bone marrow', 'แพร่กระจายไปกระดูก'],
+  ['C80', 'Malignant neoplasm, without specification of site', 'ไม่ทราบตำแหน่งต้นกำเนิด'],
+  ['C81', 'Hodgkin lymphoma', 'มะเร็งต่อมน้ำเหลืองฮอดจ์กิน'],
+  ['C82', 'Follicular lymphoma', 'มะเร็งต่อมน้ำเหลืองชนิดฟอลลิคูลาร์'],
+  ['C83', 'Non-follicular lymphoma', 'มะเร็งต่อมน้ำเหลือง'],
+  ['C84', 'Mature T/NK-cell lymphomas', 'มะเร็งต่อมน้ำเหลือง T/NK'],
+  ['C85', 'Other and unspecified types of non-Hodgkin lymphoma', 'มะเร็งต่อมน้ำเหลืองนอนฮอดจ์กิน'],
+  ['C86', 'Other specified types of T/NK-cell lymphoma', 'มะเร็งต่อมน้ำเหลือง T/NK'],
+  ['C88', 'Malignant immunoproliferative diseases', 'โรคภูมิคุ้มกันเจริญผิดปกติชนิดร้าย'],
+  ['C90', 'Multiple myeloma and malignant plasma cell neoplasms', 'มัยอีโลมา'],
+  ['C90.0', 'Multiple myeloma', 'มัลติเพิลมัยอีโลมา'],
+  ['C91', 'Lymphoid leukaemia', 'มะเร็งเม็ดเลือดขาวชนิดลิมฟอยด์'],
+  ['C92', 'Myeloid leukaemia', 'มะเร็งเม็ดเลือดขาวชนิดมัยอีลอยด์'],
+  ['C93', 'Monocytic leukaemia', 'มะเร็งเม็ดเลือดขาวชนิดโมโนไซต์'],
+  ['C94', 'Other leukaemias of specified cell type', 'มะเร็งเม็ดเลือดขาว'],
+  ['C95', 'Leukaemia of unspecified cell type', 'มะเร็งเม็ดเลือดขาว'],
+  ['C96', 'Other and unspecified malignant neoplasms of lymphoid, haematopoietic and related tissue', 'ระบบน้ำเหลืองและเม็ดเลือด'],
+  ['C97', 'Malignant neoplasms of independent (primary) multiple sites', 'หลายตำแหน่งปฐมภูมิ'],
+  ['D05', 'Carcinoma in situ of breast', 'เต้านม ระยะก่อนลุกลาม'],
+  ['D05.1', 'Intraductal carcinoma in situ', 'เต้านม DCIS'],
+  ['D06', 'Carcinoma in situ of cervix uteri', 'ปากมดลูก ระยะก่อนลุกลาม'],
+  ['D32', 'Benign neoplasm of meninges', 'เนื้องอกเยื่อหุ้มสมอง'],
+  ['D32.0', 'Benign neoplasm of cerebral meninges', 'เนื้องอกเยื่อหุ้มสมอง'],
+  ['D33', 'Benign neoplasm of brain and other parts of central nervous system', 'เนื้องอกสมอง (ไม่ร้าย)'],
+  ['D33.3', 'Benign neoplasm of cranial nerves', 'เนื้องอกเส้นประสาทสมอง'],
+  ['D35.2', 'Benign neoplasm of pituitary gland', 'เนื้องอกต่อมใต้สมอง'],
+  ['D43', 'Neoplasm of uncertain or unknown behaviour of brain and central nervous system', 'เนื้องอกสมอง (ไม่ทราบพฤติกรรม)'],
+  ['G50.0', 'Trigeminal neuralgia', 'ปวดเส้นประสาทใบหน้า'],
+  ['L91.0', 'Hypertrophic scar', 'คีลอยด์'],
+  ['Q28.2', 'Arteriovenous malformation of cerebral vessels', 'AVM หลอดเลือดสมอง'],
+];
+// รายการรวม: ICD-10 ในระบบ + รหัสที่เพิ่มเองในหน้าตั้งค่า (ชื่อที่เพิ่มเองมาก่อน)
+function icdList() {
+  const map = new Map(ICD10.map(([code, name, th]) => [code, { code, name, th }]));
+  for (const x of state.config.icdExtra) map.set(x.code, { code: x.code, name: x.name || (map.get(x.code) || {}).name || '', th: x.th || (map.get(x.code) || {}).th || '' });
+  return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+}
+const icdOf = code => icdList().find(x => x.code === code) || icdList().find(x => x.code === String(code).split('.')[0]);
+function icdSearch(q) {
+  q = str(q).toLowerCase();
+  if (!q) return [];
+  const list = icdList(), code = q.replace(/\s+/g, '').toUpperCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  const byCode = list.filter(x => x.code.startsWith(code));
+  const byText = list.filter(x => !x.code.startsWith(code) && words.every(w => `${x.name} ${x.th}`.toLowerCase().includes(w)));
+  return [...byCode, ...byText].slice(0, 10);
+}
+const ICD_RE = /^([A-Za-z]\d{2}(?:\.\d{1,2})?)(?=\s|$|[-–:])\s*[-–:]?\s*(.*)$/;
+function readDx(pre) {
+  const v = str($(`#${pre}-dx`).value);
+  const m = v.match(ICD_RE);
+  if (!m) return { icd: '', dx: v };
+  const code = m[1].toUpperCase(), e = icdList().find(x => x.code === code);
+  return { icd: code, dx: str(m[2]) || (e ? e.name : '') };
+}
+const dxValue = c => (c.icd ? `${c.icd} ${c.dx || ''}`.trim() : c.dx || '');
+const dxShort = c => { if (!c.icd) return c.dx || ''; const e = icdOf(c.icd); return (e && e.th) || c.dx || (e && e.name) || ''; };
+// ช่องค้นหา ICD-10 แบบรายการเลือก ใช้ทั้งฟอร์มแจกเคส (i) และฟอร์มแก้ไข (f)
+function setupCombo(pre) {
+  const input = $(`#${pre}-dx`), list = $(`#${pre}-dx-list`);
+  let items = [], active = -1;
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
+  const draw = () => {
+    items = icdSearch(input.value);
+    // พิมพ์รหัสครบตรงกับรายการเดียวแล้ว ไม่ต้องเปิดรายการบังปุ่มด้านล่าง
+    const typed = str(input.value).toUpperCase();
+    if (!items.length || (items.length === 1 && (items[0].code === typed || `${items[0].code} ${items[0].name}`.toUpperCase() === typed))) return close();
+    list.innerHTML = items.map((x, i) => `<li role="option" id="${pre}-dx-o${i}" data-i="${i}" aria-selected="${i === active}"><span class="code">${esc(x.code)}</span><span>${esc(x.th || x.name)}${x.th ? `<small>${esc(x.name)}</small>` : ''}</span></li>`).join('');
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    input.setAttribute('aria-activedescendant', active >= 0 ? `${pre}-dx-o${active}` : '');
+  };
+  const choose = i => { const x = items[i]; if (!x) return; input.value = `${x.code} ${x.name}`; close(); };
+  input.addEventListener('input', () => { active = -1; draw(); });
+  input.addEventListener('keydown', e => {
+    if (list.hidden) {
+      if (e.key === 'ArrowDown') draw();
+      if (e.key === 'Enter') {
+        // Enter ในช่องนี้ไม่ส่งฟอร์ม: ถ้าพิมพ์รหัสครบ เติมชื่อให้
+        e.preventDefault();
+        const x = icdList().find(y => y.code === str(input.value).toUpperCase());
+        if (x) input.value = `${x.code} ${x.name}`;
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(items.length - 1, active + 1); draw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(active < 0 ? 0 : active); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  list.addEventListener('mousedown', e => { const li = e.target.closest('li'); if (li) { e.preventDefault(); choose(+li.dataset.i); } });
+  input.addEventListener('blur', () => setTimeout(close, 120));
 }
 
 // ขนาดรังสี: "2 Gy × 25 fx (50 Gy) · Daily"
@@ -1089,7 +1319,8 @@ function caseRow(c, rcs) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
   const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>' : '';
   const dose = doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
-  const meta = simple ? [manualChip, dose, c.note && esc(c.note)] : [manualChip, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
+  const meta = simple ? [manualChip, dxs, dose, c.note && esc(c.note)] : [manualChip, dxs, c.doc && `<span>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1328,6 +1559,12 @@ function renderSettings() {
       <td class="mono" data-pts="acts.${key}">${num((+a.min || 0) * (+a.w || 0) * (+d.rate || 0), 3)}</td>
       <td>${['dqa', 'mu', 'rc'].includes(key) ? '' : `<button type="button" class="icon-btn" data-delact="${esc(key)}" aria-label="ลบกิจกรรม ${esc(a.label)}"${usedActs.has(key) ? ' disabled title="มีบันทึกแล้ว ลบไม่ได้"' : ''}>×</button>`}</td>
     </tr>`).join('');
+  const icdRows = d.icdExtra.map((x, i) => `<tr>
+      <td><input data-k="icdExtra.${i}.code" value="${esc(x.code)}" placeholder="C50.9" aria-label="รหัส ICD-10" style="width:110px;font-family:var(--mono);text-transform:uppercase"></td>
+      <td><input data-k="icdExtra.${i}.name" value="${esc(x.name)}" placeholder="ชื่อภาษาอังกฤษ" aria-label="ชื่อ"></td>
+      <td><input data-k="icdExtra.${i}.th" value="${esc(x.th)}" placeholder="ชื่อย่อภาษาไทย" aria-label="ชื่อไทย"></td>
+      <td><button type="button" class="icon-btn" data-del="icdExtra.${i}" aria-label="ลบรหัส ${esc(x.code)}">×</button></td>
+    </tr>`).join('');
   const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${d[key].map((v, i) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
   const dataSec = store.mode === 'sheet'
     ? `<p class="muted" style="margin:0 0 10px;font-size:14px">ข้อมูลเก็บในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกกับระบบนี้ ทุกคนที่มีสิทธิ์แก้ไขชีตจะเห็นข้อมูลเดียวกัน</p>${state.sheetUrl ? `<a class="btn" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}`
@@ -1358,6 +1595,9 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
       <div class="form-grid">${optEditor('doctors', 'Doc (แพทย์)')}${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
+    <div class="sec"><div class="sec-head"><h2>Diag (ICD-10)</h2><p>มีรหัส ICD-10 หมวดเนื้องอก C00–C97 และรหัสที่ใช้ในรังสีรักษาบ่อยให้ค้นหาอยู่แล้ว (${ICD10.length} รหัส) · เพิ่มรหัสย่อยหรือแก้ชื่อที่หน่วยงานใช้ได้ที่นี่ รหัสเดียวกับในระบบจะใช้ชื่อที่ตั้งเอง</p></div>
+      ${icdRows ? `<div class="table-wrap set-table"><table><thead><tr><th>รหัส</th><th style="text-align:left">ชื่อ (อังกฤษ)</th><th style="text-align:left">ชื่อย่อ (ไทย)</th><th></th></tr></thead><tbody>${icdRows}</tbody></table></div>` : ''}
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
@@ -1387,6 +1627,8 @@ async function saveSettings() {
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
   if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
+  draft.icdExtra = draft.icdExtra.filter(x => str(x.code) || str(x.name));
+  if (draft.icdExtra.some(x => !/^[A-Z]\d{2}(\.\d{1,2})?$/.test(str(x.code).toUpperCase()))) return toast('รหัส ICD-10 ต้องเป็นรูปแบบ เช่น C50 หรือ C50.9', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
   const btn = $('#save-settings');
   btn.disabled = true;
@@ -1446,6 +1688,7 @@ function openCase(id) {
   $('#f-oncall').checked = editingCase.sim === 'on call';
   $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
   fillDose('f', editingCase);
+  $('#f-dx').value = dxValue(editingCase);
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
@@ -1468,7 +1711,7 @@ async function submitCase(e) {
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
-    ...readDose('f'), updated: nowISO(),
+    ...readDose('f'), ...readDx('f'), updated: nowISO(),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -1668,6 +1911,7 @@ function fillIntake(c) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
   fillDose('i', c);
+  $('#i-dx').value = dxValue(c);
   renderIntake();
   const cat = $(`#i-cat input[value="${CSS.escape(c.cat)}"]`);
   if (cat) cat.checked = true;
@@ -1694,7 +1938,7 @@ async function submitIntake(e) {
     id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : 'auto', hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value,
     ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
     doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
-    tech: simple || !k.tech ? '' : chipValue($('#i-tech')), ...readDose('i'), updated: nowISO(),
+    tech: simple || !k.tech ? '' : chipValue($('#i-tech')), ...readDose('i'), ...readDx('i'), updated: nowISO(),
   });
   const btn = $('#i-save');
   btn.disabled = true;
@@ -1803,6 +2047,7 @@ document.addEventListener('click', e => {
     draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true });
     renderSettings(); $$('[data-k^="cats."][data-k$=".label"]').pop().select(); return;
   }
+  if (ds.add === 'icd') { draft.icdExtra.push({ code: '', name: '', th: '' }); renderSettings(); $$('[data-k^="icdExtra."][data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'act') {
     draft.acts = { ...draft.acts, ['a' + uid()]: { label: 'กิจกรรมใหม่', group: 'กิจกรรมอื่น', min: 30, w: 1 } };
     renderSettings(); $$('[data-k^="acts."][data-k$=".label"]').pop().select(); return;
@@ -1851,6 +2096,8 @@ caseForm.addEventListener('change', e => {
   if (e.target.name === 'ffreq') return onFreqChange('f', e.target);
   if (['f-cat', 'f-mp', 'f-oncall', 'f-in'].includes(e.target.id)) syncCaseForm();
 });
+setupCombo('i');
+setupCombo('f');
 caseForm.addEventListener('input', e => { if (e.target.id === 'f-dpf' || e.target.id === 'f-fx') syncDose('f'); });
 intake.addEventListener('submit', submitIntake);
 intake.addEventListener('change', e => {
@@ -1872,7 +2119,7 @@ settingsEl.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.k) {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
-    setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
+    setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase().trim() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
     refreshPts();
   } else if (el.dataset.list) {
     draft[el.dataset.list] = el.value.split(',').map(str).filter(Boolean);
