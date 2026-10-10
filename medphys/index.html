@@ -104,6 +104,9 @@ button{cursor:pointer}
 .gate-card p{margin:0;font-size:13.5px;color:var(--muted)}
 .gate-card .gate-err{color:var(--late)}
 .gate-card .gate-foot{font-size:12.5px}
+.setup-card{width:min(560px,100%)}
+.setup-steps{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
+.setup-steps b{font-weight:600}
 .gate-lpch{display:inline-flex;align-items:center;justify-content:center;gap:8px;color:var(--fg);text-decoration:none}
 .gate-lpch:hover{border-color:var(--accent);color:var(--accent)}
 .gate-home svg,.logout-btn svg{width:16px;height:16px;flex:none}
@@ -417,6 +420,21 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   </section>
 
   <p class="notice" id="ro-notice" hidden><b>ดูได้อย่างเดียว</b><span id="ro-text"></span></p>
+  <!-- ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า (ไม่มีการเข้าสู่ระบบ LPCH): บอกวิธีแก้ให้ชัด -->
+  <section class="gate" id="setup" hidden>
+    <div class="gate-card setup-card">
+      <div><h2>ยังไม่ได้เชื่อมกับ LPCH RO Workspace</h2><p>ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า ซึ่งไม่มีการเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน LPCH · ตรวจพบ: <b id="setup-found"></b></p></div>
+      <ol class="setup-steps">
+        <li>เปิด Google Sheet ของระบบ → <b>ส่วนขยาย → Apps Script</b></li>
+        <li>ไฟล์ <b>Code.gs</b>: กด Ctrl/⌘ + A แล้ววาง Code.gs ใหม่ทับทั้งไฟล์ → กด <b>บันทึก</b></li>
+        <li>เลือกฟังก์ชัน <b>checkSetup</b> → <b>เรียกใช้</b> → อนุญาตสิทธิ์ (ดูผลที่บันทึกการทำงาน)</li>
+        <li>ปุ่ม <b>การทำให้ใช้งานได้ (Deploy)</b> → <b>จัดการการทำให้ใช้งานได้ (Manage deployments)</b> → กด <b>ดินสอ (Edit)</b> → ช่อง <b>เวอร์ชัน (Version)</b> เลือก <b>เวอร์ชันใหม่ (New version)</b> → ดำเนินการในฐานะ <b>ฉัน (Me)</b> · ผู้มีสิทธิ์ <b>ทุกคน (Anyone)</b> → <b>ทำให้ใช้งานได้ (Deploy)</b></li>
+        <li>เปิดลิงก์นี้อีกครั้ง จะเจอหน้าเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน LPCH</li>
+      </ol>
+      <p class="gate-foot">ถ้าข้อ 4 เลือกเวอร์ชันเดิม หรือกด "การทำให้ใช้งานได้รายการใหม่" ลิงก์นี้จะยังเป็นรุ่นเก่า</p>
+      <button type="button" class="btn" id="setup-skip">ใช้ระบบแบบเดิมไปก่อน</button>
+    </div>
+  </section>
   <p class="notice warn" id="api-notice" hidden><b>Code.gs รุ่นเก่า</b><span id="api-text"></span></p>
 
   <p class="notice" id="demo-notice" hidden><b>ข้อมูลตัวอย่าง</b><span>ทุกอย่างบันทึกไว้ในเบราว์เซอร์นี้เท่านั้น เชื่อมกับ Google Sheet เพื่อใช้ร่วมกันทั้งทีม</span></p>
@@ -825,7 +843,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.3';
+const PAGE_VERSION = '2026-10-10.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1139,6 +1157,7 @@ function renderAcct() {
   const chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
   if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
+  else if (!gated && oldServer()) who = chip('ยังไม่เชื่อม LPCH', 'Code.gs รุ่นเก่า', 'ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า');
   else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
   else if (!gated && u.via === 'demo') who = chip(u.name, roleTag(), 'โหมดตัวอย่าง');
   $('#acct').innerHTML = home + who;
@@ -1147,8 +1166,16 @@ function render() {
   const gated = state.gate != null;
   renderAcct();
   renderFoot();
+  const setup = !gated && oldServer() && !state.setupSkipped;
   $('#gate').hidden = !gated;
-  $('.nav').hidden = gated;
+  $('#setup').hidden = !setup;
+  $('.nav').hidden = gated || setup;
+  if (setup) {
+    for (const v of ['work', 'logs', 'p4p', 'settings']) $('#view-' + v).hidden = true;
+    $('#demo-notice').hidden = $('#ro-notice').hidden = $('#api-notice').hidden = true;
+    $('#setup-found').textContent = state.codeVersion ? `Code.gs รุ่น ${state.codeVersion} (ต้องการ API ${NEEDS_API})` : 'Code.gs รุ่นก่อนเชื่อม LPCH';
+    return;
+  }
   if (gated) {
     for (const v of ['work', 'logs', 'p4p', 'settings']) $('#view-' + v).hidden = true;
     $('#demo-notice').hidden = $('#ro-notice').hidden = true;
@@ -1161,7 +1188,7 @@ function render() {
     $('.gate-home', lp).innerHTML = HOME_SVG;
     return;
   }
-  const oldApi = store.mode === 'sheet' && state.loaded && (state.api || 0) < NEEDS_API;
+  const oldApi = oldServer();
   $('#api-notice').hidden = !oldApi;
   if (oldApi) $('#api-text').textContent = `หน้าเว็บนี้ต้องใช้ Code.gs รุ่น ${NEEDS_API} ขึ้นไป (ในโปรเจกต์เป็นรุ่น ${state.api || 'เก่ากว่า 4'}) บางอย่างอาจใช้ไม่ได้ · วาง Code.gs ใหม่จากหน้าคัดลอกโค้ด แล้ว Deploy เวอร์ชันใหม่`;
   const ro = !canEdit();
@@ -2414,6 +2441,7 @@ document.addEventListener('click', e => {
     case 'clear-person': state.person = ''; return render();
     case 'more': state.limit += 60; return render();
     case 'retry': return refresh();
+    case 'setup-skip': state.setupSkipped = true; return render();
     case 'case-del': return deleteCase(t);
     case 'log-del': return deleteLog(t);
     case 'save-settings': return saveSettings();
@@ -2534,6 +2562,8 @@ function demoUser() {
   return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true };
 }
 const canEdit = () => state.user.canEdit !== false;
+// Code.gs บนเซิร์ฟเวอร์เก่ากว่าที่หน้าเว็บนี้ต้องการ (เช่นยังไม่ได้ Deploy เวอร์ชันใหม่)
+const oldServer = () => store.mode === 'sheet' && state.loaded && (state.api || 0) < NEEDS_API;
 const RO_MSG = 'บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) บัญชีนี้ดูได้อย่างเดียว';
 function showGate(why) {
   setToken('');
