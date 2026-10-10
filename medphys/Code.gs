@@ -23,7 +23,8 @@ const LPCH_CHECK_SECONDS = 300;
 // โหลดไม่ได้ (หรือไฟล์ไม่ครบ) จะใช้ไฟล์ index ในโปรเจกต์แทน
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
-// รุ่นของ API ฝั่งนี้ หน้าเว็บเตือนให้วาง Code.gs ใหม่ถ้าต่ำกว่าที่หน้าเว็บต้องการ
+// รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
+const CODE_VERSION = '2026-10-10.2';
 const API_LEVEL = 4;
 const CONFIG_SHEET = 'Config';
 const TABLES = {
@@ -92,6 +93,7 @@ function pageUrl_() {
 function page_(refresh) {
   const complete = h => !!h && /<\/html>\s*$/i.test(h);
   const url = pageUrl_();
+  let why = '';
   if (url) {
     const cache = CacheService.getScriptCache();
     let key = 0;
@@ -102,15 +104,31 @@ function page_(refresh) {
       try {
         const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
         html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
-      } catch (e) { html = ''; }
+        if (!html) why = 'GitHub ตอบ HTTP ' + res.getResponseCode();
+        else if (!complete(html)) why = 'ไฟล์จาก GitHub ไม่ครบ';
+      } catch (e) { html = ''; why = String(e.message || e); }
       if (complete(html)) cachePut_(cache, key, html, PAGE_CACHE_SECONDS);
     }
     if (complete(html)) return { html: html, source: 'github' };
   }
   let local = '';
   try { local = HtmlService.createHtmlOutputFromFile('index').getContent(); } catch (e) { local = ''; }
-  if (complete(local)) return { html: local, source: 'file' };
+  if (complete(local)) {
+    // โหลดจาก GitHub ไม่ได้ และไฟล์ index ในโปรเจกต์เก่ากว่า Code.gs: แสดงแถบเตือนบนหน้า (ใช้ได้กับหน้าเว็บทุกรุ่น)
+    const v = (/const PAGE_VERSION = '([^']+)'/.exec(local) || [])[1] || '';
+    if (url && v < CODE_VERSION.slice(0, 10)) local = warnBanner_(local, 'หน้าเว็บนี้เป็นรุ่นเก่า' + (v ? ' (' + v + ')' : '') +
+      ' จากไฟล์ index ในโปรเจกต์ เพราะโหลดจาก GitHub ไม่ได้: ' + why +
+      ' · เจ้าของไฟล์: เปิด Apps Script เลือกฟังก์ชัน checkSetup แล้วกดเรียกใช้ (อนุญาตการเชื่อมต่อภายนอก) แล้ว Deploy เวอร์ชันใหม่ หรือลบไฟล์ index ออก');
+    return { html: local, source: 'file', why: why };
+  }
   return { html: '<!doctype html><html><head><meta charset="utf-8"></head><body><p style="font:16px sans-serif;padding:24px">โหลดหน้าเว็บไม่ได้ ตรวจ PAGE_URL ใน Code.gs หรือวางไฟล์ index ให้ครบ (บรรทัดสุดท้ายต้องเป็น &lt;/html&gt;)</p></body></html>', source: 'none' };
+}
+
+function warnBanner_(html, text) {
+  const div = '<div role="alert" style="margin:0;padding:12px 16px;background:#fdecc8;color:#4a3000;font:14px/1.5 sans-serif;border-bottom:1px solid #e0b860">' +
+    String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) + '</div>';
+  const m = /<body(\s[^>]*)?>/i.exec(html);
+  return m ? html.slice(0, m.index + m[0].length) + div + html.slice(m.index + m[0].length) : div + html;
 }
 
 // แคชเก็บได้ไม่เกิน 100 KB ต่อค่า หน้าเว็บจึงแบ่งเก็บทีละ 30,000 ตัวอักษร (ภาษาไทยใช้ 3 ไบต์ต่อตัว)
@@ -156,6 +174,7 @@ function getData(token) {
   return {
     user: who_(token, ss, config),
     api: API_LEVEL,
+    codeVersion: CODE_VERSION,
     homeUrl: lpchUrl_(),
     cases: readTable_(ss, 'cases'),
     logs: readTable_(ss, 'logs'),
@@ -616,6 +635,29 @@ function lpchLogout(token) {
   return true;
 }
 
+/**
+ * รันจากหน้าแก้ไขสคริปต์ (เลือก checkSetup แล้วกดเรียกใช้): ตรวจทุกอย่างที่หน้าเว็บต้องใช้ และขออนุญาตสิทธิ์ที่ยังขาด
+ * ดูผลที่ "บันทึกการทำงาน" แล้ว Deploy → จัดการการทำให้ใช้งานได้ → แก้ไข → เวอร์ชันใหม่ ให้ URL เดิมใช้โค้ดนี้
+ */
+function checkSetup() {
+  const out = ['Code.gs รุ่น ' + CODE_VERSION + ' (API ' + API_LEVEL + ')'];
+  const url = pageUrl_();
+  if (!url) out.push('• หน้าเว็บ: ใช้ไฟล์ index ในโปรเจกต์ (PAGE_URL = -)');
+  else {
+    const p = page_(true);
+    const v = (/const PAGE_VERSION = '([^']+)'/.exec(p.html) || [])[1] || 'ไม่ทราบ';
+    out.push(p.source === 'github' ? '✓ หน้าเว็บ: โหลดจาก GitHub ได้ รุ่น ' + v
+      : '✗ หน้าเว็บ: โหลดจาก GitHub ไม่ได้ (' + p.why + ') ' + (p.source === 'file' ? 'ใช้ไฟล์ index ในโปรเจกต์ รุ่น ' + v : 'และไม่มีไฟล์ index'));
+  }
+  out.push(setupLpch());
+  try { out.push('• ชีต: ' + SpreadsheetApp.getActive().getName() + ' · เคส ' + readTable_(SpreadsheetApp.getActive(), 'cases').length + ' รายการ'); } catch (e) { out.push('✗ ชีต: ' + e.message); }
+  out.push('ขั้นต่อไป: Deploy → จัดการการทำให้ใช้งานได้ → แก้ไข (ดินสอ) → เวอร์ชัน: เวอร์ชันใหม่ → ทำให้ใช้งานได้');
+  out.push('(อย่ากด "การทำให้ใช้งานได้รายการใหม่" เพราะจะได้ URL ใหม่ ลิงก์เดิมและปุ่มใน LPCH ยังเปิดรุ่นเก่า)');
+  out.push('เปิดระบบแล้วดูบรรทัดล่างสุดของหน้า ต้องเป็น "โหลดจาก GitHub · Code.gs รุ่น ' + CODE_VERSION + '"');
+  out.forEach(l => Logger.log(l));
+  return out.join('\n');
+}
+
 // รันจากหน้าแก้ไขสคริปต์: ตั้ง LPCH_URL แล้ว เชื่อมต่อได้ และ LPCH รองรับการใช้บัญชีร่วมกันหรือยัง
 function setupLpch() {
   const url = lpchUrl_();
@@ -632,7 +674,7 @@ function setupLpch() {
   Logger.log('LPCH_URL = ' + (url || '(ปิด)'));
   Logger.log(msg);
   Logger.log('Deploy: Execute as "Me" · Who has access "Anyone" · บันทึกได้เฉพาะ ' + LPCH_EDIT_ROLES.join(', ') + ' คนอื่นดูได้อย่างเดียว');
-  return msg;
+  return 'LPCH: ' + msg;
 }
 
 /* ---------- แอดมิน ---------- */

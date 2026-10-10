@@ -819,7 +819,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.1';
+const PAGE_VERSION = '2026-10-10.2';
 const NEEDS_API = 4;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1120,7 +1120,7 @@ function renderFoot() {
   const src = { github: 'โหลดจาก GitHub (อัปเดตอัตโนมัติ)', file: 'ไฟล์ index ในโปรเจกต์' }[window.MEDPHYS_PAGE_SOURCE] || '';
   const parts = [`หน้าเว็บรุ่น ${PAGE_VERSION}`];
   if (store.mode === 'local') parts.push('โหมดตัวอย่าง');
-  else { if (src) parts.push(src); parts.push(`Code.gs รุ่น ${state.api || '—'}`); }
+  else { if (src) parts.push(src); parts.push(`Code.gs รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}`); }
   $('#foot').textContent = parts.join(' · ');
 }
 function renderAcct() {
@@ -1130,7 +1130,7 @@ function renderAcct() {
   const chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
   if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + '<button type="button" class="link-btn" id="logout">ออกจากระบบ</button>';
-  else if (!gated && u.via === 'google') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');
+  else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
   else if (!gated && u.via === 'demo') who = chip(u.name, roleTag(), 'โหมดตัวอย่าง');
   $('#acct').innerHTML = home + who;
 }
@@ -2564,6 +2564,7 @@ async function refresh(quiet) {
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;
+    state.codeVersion = d.codeVersion || '';
     state.gate = null;
     state.sheetUrl = d.sheetUrl || '';
     state.demo = !!d.demo;
