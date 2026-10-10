@@ -86,6 +86,22 @@ button{cursor:pointer}
 .mark{flex:none;width:34px;height:34px;color:var(--accent)}
 .brand h1{margin:0;font-size:17px;font-weight:600;line-height:1.3;text-wrap:balance}
 .brand p{margin:0;font-size:13px;color:var(--muted)}
+.top-right{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px 14px;min-width:0;max-width:100%}
+.acct{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px;color:var(--muted)}
+.acct:empty{display:none}
+.home-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px 5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--fg);font-size:13.5px;text-decoration:none;white-space:nowrap}
+.home-btn:hover{border-color:var(--accent);color:var(--accent)}
+.home-btn svg{width:16px;height:16px;flex:none}
+.who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+.who .chip{margin-left:4px}
+.gate{display:grid;place-items:center;padding-block:24px 48px}
+.gate-card{display:grid;gap:14px;width:min(400px,100%);padding:24px;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.gate-card h2{margin:0 0 4px;font-size:18px;font-weight:600}
+.gate-card p{margin:0;font-size:13.5px;color:var(--muted)}
+.gate-card .gate-err{color:var(--late)}
+.gate-card .gate-foot{font-size:12.5px}
+.step-txt{font-size:12.5px;color:var(--muted);white-space:nowrap}
+div.c-main,div.lrow{cursor:default}
 .nav{display:flex;gap:2px;background:var(--sunken);padding:3px;border-radius:999px;max-width:100%;overflow-x:auto}
 .nav button{border:0;background:none;padding:6px 14px;border-radius:999px;color:var(--muted);font-size:14px;white-space:nowrap}
 .nav button[aria-current="page"]{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
@@ -367,19 +383,36 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <p>กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง</p>
       </div>
     </div>
-    <nav class="nav" aria-label="เมนู">
-      <button type="button" data-view="work">งาน</button>
-      <button type="button" data-view="logs">RC และกิจกรรม</button>
-      <button type="button" data-view="p4p">สรุป P4P</button>
-      <button type="button" data-view="settings">ตั้งค่า</button>
-    </nav>
+    <div class="top-right">
+      <div class="acct" id="acct"></div>
+      <nav class="nav" aria-label="เมนู">
+        <button type="button" data-view="work">งาน</button>
+        <button type="button" data-view="logs">RC และกิจกรรม</button>
+        <button type="button" data-view="p4p">สรุป P4P</button>
+        <button type="button" data-view="settings">ตั้งค่า</button>
+      </nav>
+    </div>
   </header>
+
+  <!-- เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace -->
+  <section class="gate" id="gate" hidden>
+    <form class="gate-card" id="gate-form" novalidate>
+      <div><h2>เข้าสู่ระบบ</h2><p>ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับ LPCH RO Workspace หรือกดเปิดระบบนี้จากหน้า LPCH</p></div>
+      <p class="gate-err" id="gate-err" role="alert" hidden></p>
+      <label class="field"><span class="lbl">ชื่อผู้ใช้ หรืออีเมล</span><input id="g-user" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+      <label class="field"><span class="lbl">รหัสผ่าน</span><input id="g-pass" type="password" autocomplete="current-password"></label>
+      <button type="submit" class="btn primary" id="g-save">เข้าสู่ระบบ</button>
+      <p class="gate-foot">บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) ตำแหน่งอื่นดูได้อย่างเดียว · ลืมรหัสผ่านให้รีเซ็ตที่ LPCH RO Workspace</p>
+    </form>
+  </section>
+
+  <p class="notice" id="ro-notice" hidden><b>ดูได้อย่างเดียว</b><span id="ro-text"></span></p>
 
   <p class="notice" id="demo-notice" hidden><b>ข้อมูลตัวอย่าง</b><span>ทุกอย่างบันทึกไว้ในเบราว์เซอร์นี้เท่านั้น เชื่อมกับ Google Sheet เพื่อใช้ร่วมกันทั้งทีม</span></p>
 
   <!-- งาน -->
   <section id="view-work" hidden>
-    <div class="sec">
+    <div class="sec" id="intake-sec">
       <div class="sec-head"><h2>แจกเคสใหม่</h2><p id="queue-note"></p></div>
       <form class="intake" id="intake" novalidate autocomplete="off">
         <div class="intake-top">
@@ -778,7 +811,28 @@ function mergeConfig(c) {
 
 /* ---------- ที่เก็บข้อมูล: Google Sheet (Apps Script) หรือเบราว์เซอร์ (โหมดตัวอย่าง) ---------- */
 const IN_SHEET = !!(window.google && google.script && google.script.run);
-const call = (fn, ...args) => new Promise((ok, fail) => google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn](...args));
+// บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
+const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+const LPCH_KEY = 'medphys-dispatch:lpch';
+let lpchToken = '';
+try { lpchToken = localStorage.getItem(LPCH_KEY) || ''; } catch (e) { lpchToken = ''; }
+function setToken(t) {
+  lpchToken = t || '';
+  try { if (lpchToken) localStorage.setItem(LPCH_KEY, lpchToken); else localStorage.removeItem(LPCH_KEY); } catch (e) { /* storage blocked */ }
+}
+let ssoError = window.MEDPHYS_LPCH_ERROR || '';
+if (window.MEDPHYS_LPCH_TOKEN) setToken(window.MEDPHYS_LPCH_TOKEN);
+if (IN_SHEET && (window.MEDPHYS_LPCH_TOKEN || window.MEDPHYS_LPCH_ERROR)) {   // เอา ?sso=… ออกจากแถบที่อยู่
+  try { google.script.history.replace(null, {}, ''); } catch (e) { /* runtime เก่า */ }
+}
+const LOGIN_MARK = 'LOGIN|';
+const call = (fn, ...args) => new Promise((ok, fail) => google.script.run.withSuccessHandler(ok).withFailureHandler(err => {
+  const m = errMsg(err), i = m.indexOf(LOGIN_MARK);
+  if (i < 0) return fail(err);
+  const why = m.slice(i + LOGIN_MARK.length);
+  showGate(why);
+  fail(Object.assign(new Error(why), { login: true }));
+})[fn](...args, lpchToken));
 const sheetStore = {
   mode: 'sheet',
   load: () => call('getData'),
@@ -869,7 +923,8 @@ function demoDb() {
 
 /* ---------- สถานะ ---------- */
 const state = {
-  config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true },
+  config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
+  gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60,
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
 };
@@ -1050,7 +1105,31 @@ function typeChip(t) {
   return `<span class="chip ${cls}">${esc(t)}</span>`;
 }
 
+const HOME_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 21v-5.5a2.5 2.5 0 0 1 5 0V21"/></svg>';
+function renderAcct() {
+  const u = state.user, gated = state.gate != null;
+  const home = state.homeUrl ? `<a class="home-btn" href="${esc(state.homeUrl)}" target="_top" rel="noopener" title="กลับหน้าหลัก LPCH RO Workspace">${HOME_SVG}<span>Home</span></a>` : '';
+  let who = '';
+  if (!gated && u.via === 'lpch') who = `<span class="who" title="${esc(u.username)}">${esc(u.name)}<span class="chip">${esc(u.role || '—')}</span></span><button type="button" class="link-btn" id="logout">ออกจากระบบ</button>`;
+  else if (!gated && u.via === 'google' && u.me) who = `<span class="who" title="บัญชี Google">${esc(u.me)}</span>`;
+  else if (!gated && u.via === 'demo') who = `<span class="who">${esc(u.name)}<span class="chip">${u.isAdmin ? 'MP · แอดมิน' : u.canEdit ? 'MP' : esc(u.role) + ' · ดูอย่างเดียว'}</span></span>`;
+  $('#acct').innerHTML = home + who;
+}
 function render() {
+  const gated = state.gate != null;
+  renderAcct();
+  $('#gate').hidden = !gated;
+  $('.nav').hidden = gated;
+  if (gated) {
+    for (const v of ['work', 'logs', 'p4p', 'settings']) $('#view-' + v).hidden = true;
+    $('#demo-notice').hidden = $('#ro-notice').hidden = true;
+    $('#gate-err').textContent = state.gate;
+    $('#gate-err').hidden = !state.gate;
+    return;
+  }
+  const ro = !canEdit();
+  $('#ro-notice').hidden = !ro;
+  if (ro) $('#ro-text').textContent = `บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP)${state.user.name ? ` · ${state.user.name}${state.user.role ? ` (${state.user.role})` : ''}` : ''}`;
   for (const v of ['work', 'logs', 'p4p', 'settings']) $('#view-' + v).hidden = state.view !== v;
   $$('.nav [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'));
   $('#demo-notice').hidden = store.mode !== 'local';
@@ -1078,6 +1157,8 @@ const meterHtml = r => `<span class="meter" aria-hidden="true"><i style="width:$
 const sumText = r => `${signed(-r.guarantee)}${r.carry ? ` ${signed(r.carry)}` : ''} ${signed(r.work)}`;
 
 function renderWork() {
+  $('#intake-sec').hidden = !canEdit();
+  $('#open-leaves').textContent = canEdit() ? 'จัดการวันลา' : 'ดูวันลา';
   renderIntake();
   const ym = thisMonth(), td = today();
   const p4p = computeP4P(ym);
@@ -1090,7 +1171,9 @@ function renderWork() {
     const today_ = state.leaves.filter(l => l.mp === s.code && l.from <= td && td <= l.to);
     const single = today_.find(l => l.from === td && l.to === td);
     const until = today_.map(l => l.to).sort().pop();
-    const btn = !today_.length
+    const btn = !canEdit()
+      ? (today_.length ? `<span class="leave-btn on">${single && today_.length === 1 ? 'ลาวันนี้' : `ลาถึง ${esc(fmtDay(until))}`}</span>` : '')
+      : !today_.length
       ? `<button type="button" class="leave-btn" data-leave-today="${esc(s.code)}" title="บันทึกว่า ${esc(s.code)} ลาวันนี้ ระบบจะไม่แจกเคสให้">ลาวันนี้</button>`
       : single && today_.length === 1
         ? `<button type="button" class="leave-btn on" data-unleave="${esc(single.id)}" title="ยกเลิกวันลาวันนี้">ลาวันนี้ ×</button>`
@@ -1469,20 +1552,22 @@ function caseRow(c, rcs) {
     dates = `<span>In ${esc(fmtDay(c.in) || '—')}</span><br>${simTxt}`;
   }
   let rc = '';
-  if (!simple) {
+  if (!simple && !canEdit()) rc = rcs.length ? `<span class="rc done">RC ${esc(rcs.map(l => l.mp).join(', '))}</span>` : '';
+  else if (!simple) {
     rc = rcs.length
       ? `<button type="button" class="rc done" data-logedit="${esc(rcs[rcs.length - 1].id)}" title="แก้ไข RC">RC ${esc(rcs.map(l => l.mp).join(', '))}</button>`
       : `<button type="button" class="rc" data-rc="${esc(c.id)}" title="บันทึก RC เคสนี้">+ RC</button>`;
   }
   let act;
-  if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวัน Finish เป็นวันนี้">Finish</button>`;
+  if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
+  else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวัน Finish เป็นวันนี้">Finish</button>`;
   else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวัน Evaluate เป็นวันนี้">Evaluate</button>`;
   else act = `<span class="done-mark">✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtDay(c.eval))}</span>`;
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
-    <button type="button" class="c-main" data-edit="${esc(c.id)}">
+    <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
       <span class="c-line"><span class="tag">${esc(k.label)}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
-    </button>
+    </${canEdit() ? 'button' : 'div'}>
     <div class="c-who">${av(c.mp)}${rc}</div>
     <div class="c-dates">${dates}</div>
     <div class="c-act">${act}</div>
@@ -1490,6 +1575,7 @@ function caseRow(c, rcs) {
 }
 
 function renderLogs() {
+  $('#add-other').hidden = $('#add-rc').hidden = !canEdit();
   const ym = state.month;
   const inMonth = state.logs.filter(l => l.date.startsWith(ym));
   const tabs = logTabs();
@@ -1518,12 +1604,12 @@ function renderLogs() {
       main = `${esc(l.title || kind.label)}<small>${esc(l.min || 0)} นาที × k ${esc(l.k || 0)}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
       pts = unitPts(l.min, l.k);
     }
-    return `<li><button type="button" class="lrow" data-logedit="${esc(l.id)}">
+    return `<li><${canEdit() ? `button type="button" class="lrow" data-logedit="${esc(l.id)}"` : 'div class="lrow"'}>
       <span class="l-date">${esc(fmtDay(l.date))}</span>
       <span class="l-kind">${av(l.mp)}<span class="chip" title="${esc(kind.label)}">${esc((cfg.acts[l.kind] && cfg.acts[l.kind].tab) || kind.label)}</span></span>
       <span class="l-main">${main}</span>
       <span class="l-pts">${num(pts, 3)}</span>
-    </button></li>`;
+    </${canEdit() ? 'button' : 'div'}></li>`;
   }).join('') : `<li class="empty-state">ยังไม่มีบันทึกใน${esc(fmtMonth(ym))}</li>`;
 }
 
@@ -1712,15 +1798,19 @@ function renderSettings() {
        <div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn" id="reset-demo">โหลดข้อมูลตัวอย่างใหม่</button><button type="button" class="btn danger" id="clear-all">ล้างเคสและกิจกรรมทั้งหมด</button></div>`;
   const admin = state.user.isAdmin;
   const roleBar = store.mode === 'local'
-    ? `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini"><button type="button" data-viewas="admin" aria-pressed="${admin}">แอดมิน</button><button type="button" data-viewas="user" aria-pressed="${!admin}">ผู้ใช้ทั่วไป</button></span><span>${admin ? 'แก้ไขการตั้งค่าได้' : 'ดูได้อย่างเดียว การตั้งค่าแก้ได้เฉพาะแอดมิน'}</span></div>`
+    ? (() => {
+      const r = pref.get('demoRole', 'admin');
+      const b = (v, l) => `<button type="button" data-viewas="${v}" aria-pressed="${r === v}">${l}</button>`;
+      return `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini">${b('admin', 'MP · แอดมิน')}${b('user', 'MP')}${b('viewer', 'ตำแหน่งอื่น')}</span><span>${admin ? 'แก้ไขการตั้งค่าได้' : canEdit() ? 'บันทึกงานได้ การตั้งค่าแก้ได้เฉพาะแอดมิน' : 'ดูได้อย่างเดียวทุกหน้า (RO, RTT, พยาบาล ฯลฯ)'}</span></div>`;
+    })()
     : admin
-      ? `<p class="muted" style="margin:0 0 16px;font-size:13px">คุณเป็นแอดมิน${state.user.me ? ` · ${esc(state.user.me)}` : ''}</p>`
-      : `<p class="notice"><b>ดูได้อย่างเดียว</b><span>การตั้งค่าแก้ได้เฉพาะแอดมิน · คุณเข้าสู่ระบบเป็น ${esc(state.user.me || 'ไม่ทราบอีเมล')}</span></p>`;
-  const adminSec = `<div class="sec"><div class="sec-head"><h2>แอดมิน</h2><p>เฉพาะแอดมินแก้การตั้งค่าได้ ผู้ใช้อื่นยังแจกเคส บันทึก RC และวันลาได้ตามปกติ</p></div>
-      ${store.mode === 'sheet'
-        ? `<p class="muted" style="margin:0 0 10px;font-size:13.5px">เจ้าของไฟล์ Google Sheet${state.user.owner ? ` (${esc(state.user.owner)})` : ''} เป็นแอดมินเสมอ · เพิ่มอีเมล Google ของแอดมินคนอื่นด้านล่าง</p>`
-        : '<p class="muted" style="margin:0 0 10px;font-size:13.5px">โหมดตัวอย่างไม่มีการเข้าสู่ระบบ ใช้ปุ่มมุมมองด้านบนเพื่อดูหน้าจอของผู้ใช้ทั่วไป · ตอนใช้กับ Google Sheet ระบบตรวจจากอีเมลที่เข้าสู่ระบบ</p>'}
-      ${optEditor('admins', 'อีเมลแอดมิน')}</div>`;
+      ? `<p class="muted" style="margin:0 0 16px;font-size:13px">คุณเป็นแอดมิน · ${esc(state.user.via === 'lpch' ? `${state.user.name} (${state.user.username})` : state.user.me || '')}</p>`
+      : `<p class="notice"><b>ดูได้อย่างเดียว</b><span>การตั้งค่าแก้ได้เฉพาะแอดมิน · คุณเข้าสู่ระบบเป็น ${esc(state.user.via === 'lpch' ? `${state.user.name} (${state.user.role})` : state.user.me || 'ไม่ทราบอีเมล')}</span></p>`;
+  const adminSec = `<div class="sec"><div class="sec-head"><h2>แอดมิน</h2><p>เฉพาะแอดมินแก้การตั้งค่าได้ · MP คนอื่นแจกเคส บันทึก RC และวันลาได้ตามปกติ · ตำแหน่งอื่นดูได้อย่างเดียว</p></div>
+      <p class="muted" style="margin:0 0 10px;font-size:13.5px">${store.mode === 'sheet'
+        ? `แอดมินของ LPCH RO Workspace ที่เป็น MP เป็นแอดมินที่นี่ด้วย · เจ้าของไฟล์ Google Sheet${state.user.owner ? ` (${esc(state.user.owner)})` : ''} เป็นแอดมินเสมอเมื่อเปิดด้วยบัญชี Google · เพิ่มชื่อผู้ใช้หรืออีเมล LPCH ของ MP ที่ให้เป็นแอดมินด้านล่าง`
+        : 'โหมดตัวอย่างไม่มีการเข้าสู่ระบบ ใช้ปุ่มมุมมองด้านบนเพื่อดูหน้าจอของแต่ละสิทธิ์ · ตอนใช้งานจริงเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace'}</p>
+      ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}</div>`;
   el.innerHTML = `${roleBar}<fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       <div class="set-list">${staffRows}</div>
@@ -1794,9 +1884,11 @@ async function saveSettings() {
   if (new Set(docs).size !== docs.length) return toast('รหัสแพทย์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
-  const { me, owner } = state.user;
-  const stillAdmin = (me && (me === owner || draft.admins.includes(me))) || (!draft.admins.length && !owner);
-  if (store.mode === 'sheet' && !stillAdmin) return toast(me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
+  const { me, owner, via, username, lpchAdmin } = state.user;
+  const stillAdmin = via === 'lpch'
+    ? lpchAdmin || (!!me && draft.admins.includes(me)) || draft.admins.includes(username)
+    : (me && (me === owner || draft.admins.includes(me))) || (!draft.admins.length && !owner);
+  if (store.mode === 'sheet' && !stillAdmin) return toast(via === 'lpch' ? `ต้องมีชื่อผู้ใช้ของคุณ (${username}) อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก` : me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
   if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
   draft.icdExtra = draft.icdExtra.filter(x => str(x.code) || str(x.name));
   if (draft.icdExtra.some(x => !/^[A-Z]\d{2}(\.\d{1,2})?$/.test(str(x.code).toUpperCase()))) return toast('รหัส ICD-10 ต้องเป็นรูปแบบ เช่น C50 หรือ C50.9', { err: true });
@@ -2213,11 +2305,12 @@ function renderLeaves() {
   const upcoming = state.leaves.filter(l => l.to >= td).sort((a, b) => a.from.localeCompare(b.from) || a.mp.localeCompare(b.mp));
   const past = state.leaves.length - upcoming.length;
   $('#leave-list').innerHTML = upcoming.length
-    ? upcoming.map(v => `<li class="vrow">${av(v.mp)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}</span><span class="note">${esc(v.note)}</span><button type="button" class="icon-btn" data-unleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.mp)} ${esc(rangeText(v))}">×</button></li>`).join('')
+    ? upcoming.map(v => `<li class="vrow">${av(v.mp)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}</span><span class="note">${esc(v.note)}</span>${canEdit() ? `<button type="button" class="icon-btn" data-unleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.mp)} ${esc(rangeText(v))}">×</button>` : ''}</li>`).join('')
     : '<li class="empty-state" style="padding:20px">ยังไม่มีวันลาที่กำลังจะถึง</li>';
   $('#leave-past').textContent = past ? `วันลาที่ผ่านไปแล้ว ${past} รายการ` : '';
 }
 function openLeaves() {
+  $('.leave-add', leaveForm).hidden = !canEdit();
   mpChips($('#v-mp'), 'vmp', chipValue($('#v-mp')));
   $('#v-from').value = today();
   $('#v-to').value = today();
@@ -2242,7 +2335,9 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, a');
   if (!t) return;
   const ds = t.dataset;
-  if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user.isAdmin = ds.viewas === 'admin'; draft = null; return render(); }
+  if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
+  if (t.id === 'logout') return logout();
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.rc || ds.logedit || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -2356,7 +2451,7 @@ settingsEl.addEventListener('input', e => {
 function addOption(el) {
   const key = el.dataset.addopt;
   const v = key === 'admins' ? str(el.value).toLowerCase() : str(el.value);
-  if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast('อีเมลไม่ถูกต้อง', { err: true }); return; }
+  if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) && !/^[a-z0-9._-]{3,30}$/.test(v)) { toast('ใส่ชื่อผู้ใช้ LPCH (a-z 0-9 . _ -) หรืออีเมล', { err: true }); return; }
   el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
   if (!v) return;
   if (!draft[key].includes(v)) draft[key].push(v);
@@ -2396,6 +2491,45 @@ $('#p4p-table').addEventListener('change', e => {
 });
 
 /* ---------- เริ่มต้น ---------- */
+// โหมดตัวอย่าง: สลับมุมมองแอดมิน / MP / ตำแหน่งอื่น (ดูอย่างเดียว) ได้ที่หน้าตั้งค่า
+function demoUser() {
+  const r = pref.get('demoRole', 'admin');
+  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true };
+}
+const canEdit = () => state.user.canEdit !== false;
+const RO_MSG = 'บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) บัญชีนี้ดูได้อย่างเดียว';
+function showGate(why) {
+  setToken('');
+  state.gate = ssoError || why || '';
+  ssoError = '';
+  state.loaded = false;
+  state.cases = []; state.logs = []; state.leaves = [];
+  render();
+  const u = $('#g-user');
+  if (u && !document.activeElement.closest('#gate-form')) u.focus();
+}
+async function logout() {
+  const t = lpchToken;
+  setToken('');
+  if (t) call('lpchLogout', t).catch(() => {});
+  showGate('');
+}
+$('#gate-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const user = str($('#g-user').value), pass = $('#g-pass').value, err = $('#gate-err'), btn = $('#g-save');
+  if (!user || !pass) { err.textContent = 'กรอกชื่อผู้ใช้และรหัสผ่าน'; err.hidden = false; return; }
+  btn.disabled = true;
+  err.hidden = true;
+  try {
+    const r = await call('lpchLogin', user, pass);
+    setToken(r.token);
+    $('#g-pass').value = '';
+    state.gate = null;
+    await refresh();
+    if (state.gate == null) toast(`เข้าสู่ระบบแล้ว · ${r.name}${r.canEdit ? '' : ' (ดูอย่างเดียว)'}`);
+  } catch (ex) { err.textContent = errMsg(ex); err.hidden = false; }
+  finally { btn.disabled = false; }
+});
 let movedOnce = false;
 async function refresh(quiet) {
   try {
@@ -2404,9 +2538,9 @@ async function refresh(quiet) {
     state.cases = (d.cases || []).map(normCase);
     state.logs = (d.logs || []).map(normLog);
     state.leaves = (d.leaves || []).map(normLeave);
-    state.user = store.mode === 'sheet'
-      ? { me: '', owner: '', isAdmin: true, ...(d.user || {}) }
-      : { me: '', owner: '', isAdmin: pref.get('demoRole', 'admin') !== 'user', demo: true };
+    state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
+    if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
+    state.gate = null;
     state.sheetUrl = d.sheetUrl || '';
     state.demo = !!d.demo;
     state.loaded = true;
@@ -2416,6 +2550,7 @@ async function refresh(quiet) {
       try { if (await store.moveActCases()) return refresh(quiet); } catch (e) { /* นับแต้มจากเคสเดิมไปก่อน */ }
     }
   } catch (e) {
+    if (e && e.login) return;   // แสดงช่องเข้าสู่ระบบแล้ว
     if (quiet) return;
     state.error = errMsg(e);
   }
@@ -2427,7 +2562,7 @@ $('#i-in').value = today();
 render();
 refresh();
 if (store.mode === 'sheet') {
-  const idle = () => !document.hidden && !caseDlg.open && !logDlg.open && !leaveDlg.open && !settingsDirty();
+  const idle = () => state.gate == null && !document.hidden && !caseDlg.open && !logDlg.open && !leaveDlg.open && !settingsDirty();
   setInterval(() => { if (idle()) refresh(true); }, 60000);
   document.addEventListener('visibilitychange', () => { if (idle()) refresh(true); });
 }

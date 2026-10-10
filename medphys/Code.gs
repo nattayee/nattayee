@@ -5,9 +5,19 @@
  * เก็บข้อมูลในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกสคริปต์นี้ไว้
  * แท็บเดิมของไฟล์ P4P_Physics จะไม่ถูกแก้ไข (อ่านอย่างเดียวตอนนำเข้า)
  * วิธีติดตั้งอยู่ใน README.md
+ *
+ * บัญชี LPCH RO Workspace: เข้าสู่ระบบด้วยบัญชีเดียวกับ LPCH (กดจากปุ่มในหน้า LPCH จะมีบัตรผ่าน ?sso=… หรือกรอกชื่อผู้ใช้
+ * และรหัสผ่าน LPCH ที่หน้าแรก รหัสผ่านตรวจที่ LPCH ไม่เก็บที่นี่) ทุกคำขอตรวจบัญชีกับ LPCH (เก็บผลไว้ LPCH_CHECK_SECONDS)
+ * บันทึกข้อมูลได้เฉพาะตำแหน่งใน LPCH_EDIT_ROLES (MP) คนอื่นดูได้อย่างเดียว
+ * Deploy แบบ Execute as: Me · Who has access: Anyone แล้วรันฟังก์ชัน setupLpch เพื่อทดสอบการเชื่อมต่อ
+ * เปิดจากเมนูในชีตด้วยบัญชี Google ของเจ้าของไฟล์หรือแอดมินได้เหมือนเดิม
  */
 
 const APP_TITLE = 'ระบบกระจายงานฟิสิกส์การแพทย์';
+// URL /exec ของ LPCH RO Workspace (เปลี่ยนได้ที่ Script property LPCH_URL · ใส่ - เพื่อปิดและใช้บัญชี Google อย่างเดียว)
+const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกข้อมูลได้ ตำแหน่งอื่นดูได้อย่างเดียว
+const LPCH_CHECK_SECONDS = 300;
 const CONFIG_SHEET = 'Config';
 const TABLES = {
   cases: {
@@ -39,8 +49,23 @@ const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 
 /* ---------- หน้าเว็บและเมนู ---------- */
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
+function doGet(e) {
+  let html = HtmlService.createHtmlOutputFromFile('index').getContent();
+  // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
+  const sso = e && e.parameter && e.parameter.sso;
+  if (sso && lpchUrl_()) {
+    let tag;
+    try {
+      const r = lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(sso) }));
+      tag = 'window.MEDPHYS_LPCH_TOKEN = ' + JSON.stringify(String(r.token)).replace(/</g, '\\u003c') + ';';
+    } catch (err) {
+      tag = 'window.MEDPHYS_LPCH_ERROR = ' + JSON.stringify(String(err.message)).replace(/</g, '\\u003c') + ';';
+    }
+    const m = /<head(\s[^>]*)?>/i.exec(html);
+    const at = m ? m.index + m[0].length : 0;
+    html = html.slice(0, at) + '<script>' + tag + '</script>' + html.slice(at);
+  }
+  return HtmlService.createHtmlOutput(html)
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -61,11 +86,12 @@ function openApp() {
 
 /* ---------- API ที่หน้าเว็บเรียกผ่าน google.script.run ---------- */
 
-function getData() {
+function getData(token) {
   const ss = SpreadsheetApp.getActive();
   const config = readConfig_(ss);
   return {
-    user: adminInfo_(ss, config),
+    user: who_(token, ss, config),
+    homeUrl: lpchUrl_(),
     cases: readTable_(ss, 'cases'),
     logs: readTable_(ss, 'logs'),
     leaves: readTable_(ss, 'leaves'),
@@ -74,7 +100,8 @@ function getData() {
   };
 }
 
-function saveRecord(table, rec) {
+function saveRecord(table, rec, token) {
+  requireEdit_(token);
   const def = tableDef_(table);
   if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
   return withLock_(() => {
@@ -91,7 +118,8 @@ function saveRecord(table, rec) {
  * รับได้หลายเคส (หลายเทคนิคของผู้ป่วยคนเดียว) เคสแรกเลือก MP ตามคิวของเทคนิคนั้น
  * how = 'follow' ให้ MP คนเดียวกับเคสแรก (คิวไม่ขยับ หักคิวเมื่อวนมาถึง) · how = 'manual' ใช้ MP ที่เลือกมา
  */
-function addCases(recs) {
+function addCases(recs, token) {
+  requireEdit_(token);
   if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
   return withLock_(() => {
     const ss = SpreadsheetApp.getActive();
@@ -133,8 +161,8 @@ function addCases(recs) {
   });
 }
 
-function addCase(rec) {
-  return addCases([rec])[0];
+function addCase(rec, token) {
+  return addCases([rec], token)[0];
 }
 
 /*
@@ -184,7 +212,8 @@ function pickNext_(o, trace) {
   return i < 0 ? '' : staff[i].code;
 }
 
-function deleteRecord(table, id) {
+function deleteRecord(table, id, token) {
+  requireEdit_(token);
   tableDef_(table);
   return withLock_(() => {
     const sh = tableSheet_(SpreadsheetApp.getActive(), table);
@@ -194,9 +223,10 @@ function deleteRecord(table, id) {
   });
 }
 
-function saveConfig(config) {
+function saveConfig(config, token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมิน)' : ''));
   return withLock_(() => {
-    requireAdmin_(SpreadsheetApp.getActive());
     writeConfig_(SpreadsheetApp.getActive(), config || {});
     return true;
   });
@@ -399,7 +429,8 @@ function parseLegacy_(read, tz) {
  * ย้ายเคส Brachy / Hyperthermia ที่บันทึกไว้แบบเดิม (แท็บ Cases) ไปเป็นกิจกรรมในแท็บ Logs ครั้งเดียว
  * ใช้ id เดิม จึงรันซ้ำหรือนำเข้าซ้ำได้โดยไม่เกิดรายการซ้ำ คืนจำนวนที่ย้าย
  */
-function moveActCases() {
+function moveActCases(token) {
+  requireEdit_(token);
   return withLock_(() => {
     const ss = SpreadsheetApp.getActive();
     const old = readTable_(ss, 'cases').filter(c => MOVED_CATS.indexOf(c.cat) >= 0);
@@ -415,7 +446,135 @@ function moveActCases() {
   });
 }
 
+/* ---------- ผู้ใช้: บัญชี LPCH RO Workspace หรือบัญชี Google ---------- */
+
+/**
+ * ผู้ใช้ของคำขอนี้ {via, name, username, role, me, owner, canEdit, isAdmin, lpchAdmin}
+ * - เปิดลิงก์ LPCH (มี token): บันทึกได้เฉพาะ LPCH_EDIT_ROLES · แก้การตั้งค่าได้ถ้าเป็น MP และเป็นแอดมินของ LPCH หรืออยู่ในรายชื่อแอดมิน
+ * - บัญชี Google ที่เป็นเจ้าของไฟล์หรือแอดมิน (เช่นเปิดจากเมนูในชีต): ทำได้ทุกอย่าง
+ * - ปิด LPCH (LPCH_URL = -): ใช้บัญชี Google อย่างเดียวแบบเดิม
+ * ยังไม่ได้เข้าสู่ระบบ → Error ที่ขึ้นต้นด้วย LOGIN| หน้าเว็บจะแสดงช่องเข้าสู่ระบบ
+ */
+function who_(token, ss, cfg) {
+  ss = ss || SpreadsheetApp.getActive();
+  cfg = cfg || readConfig_(ss) || {};
+  const g = adminInfo_(ss, cfg);
+  const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
+  if (!lpchUrl_()) return google;
+  // เปิด LPCH แล้ว: บัญชี Google ข้ามการเข้าสู่ระบบได้เฉพาะเจ้าของไฟล์หรืออีเมลที่อยู่ในรายชื่อแอดมิน
+  const googleAdmin = !!g.me && (g.me === g.owner || adminList_(cfg).indexOf(g.me) >= 0);
+  let why = '';   // ไม่มี token = เพิ่งเปิดหน้า: แสดงช่องเข้าสู่ระบบเฉย ๆ ไม่ต้องมีข้อความเตือน
+  if (token) {
+    const p = lpchUser_(token);
+    if (!p.error) {
+      const admins = adminList_(cfg);
+      const listed = (!!p.email && admins.indexOf(p.email) >= 0) || admins.indexOf(p.username) >= 0;
+      return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
+        canEdit: p.canEdit, isAdmin: p.canEdit && (p.lpchAdmin || listed), lpchAdmin: p.lpchAdmin };
+    }
+    why = p.error;
+  }
+  if (googleAdmin) return Object.assign(google, { isAdmin: true });
+  throw new Error('LOGIN|' + why);
+}
+
+function requireEdit_(token) {
+  const u = who_(token);
+  if (!u.canEdit) throw new Error('บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (' + LPCH_EDIT_ROLES.join(', ') + ') · บัญชี ' + u.username + ' (' + u.role + ') ดูได้อย่างเดียว');
+  return u;
+}
+
+function lpchUrl_() {
+  let v = null;
+  try { v = PropertiesService.getScriptProperties().getProperty('LPCH_URL'); } catch (e) { v = null; }
+  v = String(v == null || v === '' ? LPCH_URL : v).trim();
+  return v === '-' ? '' : v;
+}
+
+// เรียก API ของ LPCH RO Workspace (doPost) หนึ่งครั้ง โยนข้อความผิดพลาดของ LPCH ต่อ
+function lpchCall_(req) {
+  const url = lpchUrl_();
+  if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ตั้ง Script property LPCH_URL)');
+  const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
+  let out = null;
+  try { out = JSON.parse(res.getContentText('UTF-8')); } catch (e) { out = null; }
+  if (!out) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') ผู้ดูแล: ตรวจ LPCH_URL และ Deploy ของ LPCH แบบ Who has access: Anyone');
+  if (!out.ok) throw new Error(out.error || 'LPCH RO Workspace ตอบกลับไม่สำเร็จ');
+  return out;
+}
+
+// สมาชิก LPCH ที่ใช้งานอยู่ทุกคนดูได้ บันทึกได้เฉพาะ LPCH_EDIT_ROLES
+function lpchProfile_(u) {
+  if (!u || !u.username) return { error: 'ไม่พบบัญชี LPCH RO Workspace' };
+  const role = String(u.role || '');
+  return {
+    username: String(u.username), name: String(u.fullName || u.username), role: role,
+    email: String(u.email || '').trim().toLowerCase(),
+    lpchAdmin: u.isAdmin === true || String(u.isAdmin).toUpperCase() === 'TRUE',
+    canEdit: LPCH_EDIT_ROLES.indexOf(role) >= 0,
+  };
+}
+
+// สมาชิกเจ้าของ token (ถาม LPCH ด้วยคำสั่ง me) เก็บผลไว้ LPCH_CHECK_SECONDS ระงับบัญชีใน LPCH ก็ใช้ที่นี่ไม่ได้ด้วย
+function lpchUser_(token) {
+  token = String(token || '');
+  if (!/^[\w-]{20,200}$/.test(token)) return { error: 'การเข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง' };
+  const cache = CacheService.getScriptCache(), key = 'lpch_' + token;
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  let p;
+  try { p = lpchProfile_(lpchCall_({ action: 'me', token: token }).user); } catch (e) {
+    if (e.message !== 'session_expired') throw e;   // LPCH ติดต่อไม่ได้: แจ้งตามจริง ไม่ออกจากระบบ
+    p = { error: 'การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' };
+  }
+  cache.put(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  return p;
+}
+
+// ผลการเข้าสู่ระบบของ LPCH ({token, user}) → {token, ...สมาชิก}
+function lpchFinish_(out) {
+  const p = lpchProfile_(out.user);
+  if (p.error) throw new Error(p.error);
+  CacheService.getScriptCache().put('lpch_' + out.token, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  return Object.assign({ token: out.token }, p);
+}
+
+// ช่องเข้าสู่ระบบในหน้าเว็บ: ชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านตรวจที่ LPCH ไม่เก็บที่นี่
+function lpchLogin(username, password) {
+  return lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
+}
+
+function lpchLogout(token) {
+  if (!token) return true;
+  CacheService.getScriptCache().remove('lpch_' + token);
+  try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
+  return true;
+}
+
+// รันจากหน้าแก้ไขสคริปต์: ตั้ง LPCH_URL แล้ว เชื่อมต่อได้ และ LPCH รองรับการใช้บัญชีร่วมกันหรือยัง
+function setupLpch() {
+  const url = lpchUrl_();
+  let msg;
+  if (!url) msg = '✗ ปิดการเชื่อม LPCH อยู่ (LPCH_URL = -) ใช้บัญชี Google อย่างเดียว';
+  else if (!/^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/.test(url)) msg = '✗ LPCH_URL ต้องเป็น https://script.google.com/macros/s/…/exec (ตอนนี้: ' + url + ')';
+  else {
+    try { lpchCall_({ action: 'ssoRedeem', ticket: 'check' }); msg = '✓ เชื่อมต่อ LPCH RO Workspace ได้'; } catch (e) {
+      msg = /หมดอายุ|ถูกใช้ไปแล้ว/.test(e.message) ? '✓ เชื่อมต่อ LPCH RO Workspace ได้ และรองรับการใช้บัญชีร่วมกันแล้ว'
+        : /ไม่รู้จักคำสั่ง/.test(e.message) ? '✗ LPCH RO Workspace ยังเป็น Code.gs เวอร์ชันเก่า: วาง Code.gs ใหม่แล้ว Deploy → New version'
+        : '✗ ' + e.message;
+    }
+  }
+  Logger.log('LPCH_URL = ' + (url || '(ปิด)'));
+  Logger.log(msg);
+  Logger.log('Deploy: Execute as "Me" · Who has access "Anyone" · บันทึกได้เฉพาะ ' + LPCH_EDIT_ROLES.join(', ') + ' คนอื่นดูได้อย่างเดียว');
+  return msg;
+}
+
 /* ---------- แอดมิน ---------- */
+
+function adminList_(cfg) {
+  return ((cfg && cfg.admins) || []).map(x => String(x).toLowerCase().trim()).filter(Boolean);
+}
 
 // เจ้าของไฟล์เป็นแอดมินเสมอ และเพิ่มอีเมลแอดมินได้ใน Config (admins)
 // ถ้ายังไม่มีรายชื่อแอดมินและหาเจ้าของไฟล์ไม่ได้ (เช่นไฟล์ใน Shared drive) ทุกคนแก้ได้จนกว่าจะตั้งแอดมิน
@@ -423,7 +582,7 @@ function adminInfo_(ss, cfg) {
   let me = '', owner = '';
   try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { /* ไม่ทราบอีเมล */ }
   try { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; } catch (e) { /* ไม่ทราบเจ้าของ */ }
-  const admins = ((cfg && cfg.admins) || []).map(x => String(x).toLowerCase().trim()).filter(Boolean);
+  const admins = adminList_(cfg);
   const isAdmin = (!!me && (me === owner || admins.indexOf(me) >= 0)) || (!admins.length && !owner);
   return { me: me, owner: owner, isAdmin: isAdmin };
 }
