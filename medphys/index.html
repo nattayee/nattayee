@@ -158,6 +158,9 @@ div.c-main,div.lrow{cursor:default}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
+.extra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 12px}
+.extra-grid .x-wide{grid-column:1/-1}
+.c-meta .xl{color:var(--faint)}
 .intake-mode{display:flex;flex-wrap:wrap;gap:14px 32px;align-items:flex-start}
 .link-btn{padding:0;border:0;background:none;color:var(--accent);font-size:12.5px;font-weight:500}
 .link-btn:hover{text-decoration:underline}
@@ -352,6 +355,10 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .seg-mini button{padding:3px 12px;border:0;border-radius:999px;background:none;color:var(--muted);font-size:13px}
 .seg-mini button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
 .cat-list{display:grid;gap:8px}
+.fld-l1{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto auto;gap:10px 14px;align-items:end}
+.fld-l1 .check,.fld-l1 .btns{display:flex;align-items:center;gap:2px;min-height:36px}
+.field-card .unit{font-size:12px;color:var(--faint)}
+@media (max-width:640px){.fld-l1{grid-template-columns:1fr 1fr}}
 .cat-card{display:grid;gap:10px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .cat-l1{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr;gap:10px}
 .cat-l2{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
@@ -475,6 +482,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="field plan-field"><span class="lbl"><label for="i-sim">Sim<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
           <label class="field note-field"><span class="lbl"><span>Note<b class="req" data-req="note" hidden>*</b></span></span><input id="i-note"></label>
         </div>
+        <div class="extra-grid" id="i-extra" hidden></div>
         <div class="intake-mode">
           <div class="field"><span class="lbl">วิธีแจก</span><div class="chips" id="i-mode" role="radiogroup" aria-label="วิธีแจก">
             <label><input type="radio" name="imode" value="auto" checked><span>อัตโนมัติตามคิว</span></label>
@@ -570,6 +578,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field plan-only"><span class="lbl">Finish</span><input type="date" id="f-fin"></label>
         <label class="field plan-only"><span class="lbl">Evaluate</span><input type="date" id="f-eval"></label>
       </div>
+      <div class="extra-grid" id="f-extra" hidden></div>
       <label class="field"><span class="lbl">Note</span><input id="f-note" autocomplete="off"></label>
       <p class="preview" id="f-preview"></p>
     </div>
@@ -649,6 +658,11 @@ const REQ_FIELDS = [
   { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Sim', plan: true },
   { key: 'note', label: 'Note' },
 ];
+// หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
+const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
+// ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'ชุด', 'Note', 'Created', 'Updated'];
+const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
 // เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
 const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 const BUILTIN_ACTS = ['dqa', 'mu', 'rc', ...MOVED_CATS];
@@ -675,6 +689,7 @@ const DEFAULT_CONFIG = {
   areas: ['Head', 'H&N', 'Chest', 'Abdomen', 'Pelvis', 'Extremity'],   // บริเวณที่ฉาย (อื่นๆ กรอกเองในฟอร์ม)
   admins: [],                                                          // อีเมลแอดมิน (เจ้าของไฟล์ Google Sheet เป็นแอดมินเสมอ)
   required: Object.fromEntries(REQ_FIELDS.map(f => [f.key, false])),   // ช่องบังคับกรอกในฟอร์มแจกเคส
+  fields: [],   // หัวข้อเพิ่มเติม { id, label, type, options, req, col } col = ชื่อคอลัมน์ในแท็บ Cases (ตั้งครั้งเดียวตอนสร้าง)
   // หมวดงาน = แท็บในไฟล์เดิม เรียงตามแบบฟอร์ม P4P
   cats: [
     { id: '3dbt',    label: '3D Breast',            p4p: '3D Breast/Chest',       group: '3D Planning',            min: 270,  w: 1.25, kind: 'plan',   mu: true,  rotate: 'case', on: true },
@@ -771,6 +786,7 @@ function dateStr(v) {
 function normCase(o) {
   const c = {};
   for (const f of CASE_FIELDS) c[f] = str(o[f]);
+  for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
   for (const f of ['ct', 'in', 'fin', 'eval']) c[f] = dateStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
@@ -840,6 +856,11 @@ function mergeConfig(c) {
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
+  const ftypes = FIELD_TYPES.map(t => t[0]);
+  out.fields = Array.isArray(c.fields) ? c.fields.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id))).map(x => ({
+    id: str(x.id), label: str(x.label), type: ftypes.includes(x.type) ? x.type : 'text',
+    options: Array.isArray(x.options) ? x.options.map(str).filter(Boolean) : [], req: !!x.req, col: str(x.col),
+  })) : [];
   out.icdExtra = Array.isArray(c.icdExtra) ? c.icdExtra.map(x => ({ code: str(x && x.code).toUpperCase(), name: str(x && x.name), th: str(x && x.th) })).filter(x => x.code) : [];
   out.carry = c.carry && typeof c.carry === 'object' ? c.carry : {};
   return out;
@@ -849,7 +870,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.7';
+const PAGE_VERSION = '2026-10-10.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1294,7 +1315,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1600,6 +1621,40 @@ function checkArea(pre) {
 }
 const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === OTHER ? str($(`#${pre}-freq-other`).value) : v; };
 const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), freq: readFreq(pre) });
+// หัวข้อเพิ่มเติม: วาดในฟอร์มแจกเคส (i) และหน้าแก้ไขเคส (f) · Code.gs รุ่นเก่ายังเก็บลงชีตไม่ได้ จึงซ่อนไว้
+const extraFieldsOn = () => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= EXTRA_API;
+const extraList = () => (extraFieldsOn() ? state.config.fields : []);
+const splitList = v => str(v).split(',').map(str).filter(Boolean);
+const extraText = (f, v) => (f.type === 'date' ? fmtDay(v) || str(v) : str(v));
+function renderExtra(pre, rec = {}) {
+  const box = $(`#${pre}-extra`), fields = extraList();
+  box.hidden = !fields.length;
+  box.dataset.sig = JSON.stringify(fields);
+  box.innerHTML = fields.map(f => {
+    const id = `${pre}-x-${f.id}`, v = str(rec['x_' + f.id]);
+    const multi = f.type === 'multi';
+    const lbl = `<span class="lbl"><span>${esc(f.label)}${pre === 'i' && f.req ? '<b class="req">*</b>' : ''}</span>${multi ? ' <span class="sub-lbl">เลือกได้หลายอย่าง</span>' : ''}</span>`;
+    if (f.type === 'pick' || multi) {
+      const sel = multi ? splitList(v) : v ? [v] : [];
+      const opts = [...f.options, ...sel.filter(x => !f.options.includes(x))];   // ค่าเดิมที่ตัวเลือกถูกลบไปแล้วยังเห็นและแก้ได้
+      return `<div class="field x-wide">${lbl}<div class="chips" id="${id}"${multi ? '' : ' role="radiogroup"'} aria-label="${esc(f.label)}">${opts.map(o => `<label><input type="${multi ? 'checkbox' : 'radio'}" name="${pre}x_${f.id}" value="${esc(o)}"${sel.includes(o) ? ' checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div></div>`;
+    }
+    const attrs = f.type === 'number' ? ' type="number" step="any" inputmode="decimal"' : f.type === 'date' ? ' type="date"' : ' autocomplete="off"';
+    return `<label class="field">${lbl}<input id="${id}"${attrs} value="${esc(v)}"></label>`;
+  }).join('');
+}
+function ensureExtra(pre) {
+  const box = $(`#${pre}-extra`);
+  if (box.dataset.sig !== JSON.stringify(extraList())) renderExtra(pre, box.dataset.sig ? readExtra(pre) : {});
+}
+function readExtra(pre) {
+  const out = {};
+  for (const f of extraList()) {
+    const el = $(`#${pre}-x-${f.id}`);
+    if (el) out['x_' + f.id] = f.type === 'multi' ? chipValues(el).join(', ') : f.type === 'pick' ? chipValue(el) : str(el.value);
+  }
+  return out;
+}
 function fillDose(pre, c) {
   $(`#${pre}-dpf`).value = c.dpf || '';
   $(`#${pre}-fx`).value = c.fx || '';
@@ -1616,7 +1671,8 @@ function caseRow(c, rcs) {
   const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
   const areaTxt = c.area && `<span>${esc(c.area)}</span>`;
   const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
-  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, c.note && `<span>${esc(c.note)}</span>`];
+  const extras = extraList().filter(f => str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
+  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, ...extras, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, ...extras, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1876,6 +1932,17 @@ function renderSettings() {
       <td><button type="button" class="icon-btn" data-del="icdExtra.${i}" aria-label="ลบรหัส ${esc(x.code)}">×</button></td>
     </tr>`).join('');
   const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${d[key].map((v, i) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
+  const fieldCards = d.fields.map((f, i) => `<div class="cat-card field-card">
+      <div class="fld-l1">
+        <label class="field"><span class="lbl">ชื่อหัวข้อ</span><input data-k="fields.${i}.label" value="${esc(f.label)}" placeholder="เช่น Bolus, 4D-CT, Protocol"></label>
+        <label class="field"><span class="lbl">ชนิด</span><select data-k="fields.${i}.type" data-retype>${FIELD_TYPES.map(([v, l]) => opt(v, l, f.type)).join('')}</select></label>
+        <label class="check"><input type="checkbox" data-k="fields.${i}.req"${f.req ? ' checked' : ''}> บังคับกรอก</label>
+        <span class="btns"><button type="button" class="icon-btn" data-up="fields.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fields.${i}" aria-label="ลบหัวข้อ ${esc(f.label)}">×</button></span>
+      </div>
+      ${f.type === 'pick' || f.type === 'multi' ? `<div class="opt-edit">${f.options.map((v, j) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="fields.${i}.options.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fields.${i}.options" placeholder="+ เพิ่มตัวเลือก" aria-label="เพิ่มตัวเลือกของ ${esc(f.label)}"></div>` : ''}
+      ${f.col && f.col !== str(f.label) ? `<span class="unit">คอลัมน์ในแท็บ Cases: ${esc(f.col)}</span>` : ''}
+    </div>`).join('');
+  const oldCode = extraFieldsOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>Code.gs บนเซิร์ฟเวอร์ยังเป็นรุ่นเก่า หัวข้อเพิ่มเติมจะแสดงในฟอร์มเมื่อวาง Code.gs รุ่นใหม่และ Deploy เวอร์ชันใหม่แล้ว</span></p>';
   const dataSec = store.mode === 'sheet'
     ? `<p class="muted" style="margin:0 0 10px;font-size:14px">ข้อมูลเก็บในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกกับระบบนี้ ทุกคนที่มีสิทธิ์แก้ไขชีตจะเห็นข้อมูลเดียวกัน</p>${state.sheetUrl ? `<a class="btn" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}`
     : `<p class="muted" style="margin:0 0 10px;font-size:14px">โหมดตัวอย่าง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ถ้าจะใช้งานจริงร่วมกันทั้งทีม ให้ติดตั้งกับ Google Sheet ตามคู่มือ README</p>
@@ -1923,7 +1990,11 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
       <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
-    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Sim บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน</p></div>
+    <div class="sec"><div class="sec-head"><h2>หัวข้อเพิ่มเติมในฟอร์มแจกเคส</h2><p>เพิ่มหัวข้อที่อยากเก็บ เช่น Bolus, 4D-CT, Protocol · แสดงต่อจากช่องวันที่ในฟอร์มแจกเคส ในหน้าแก้ไขเคส และในรายการเคส (ค้นหาได้) · เก็บเป็นคอลัมน์ของตัวเองในแท็บ Cases · ลบหัวข้อแล้วข้อมูลเดิมยังอยู่ในชีต</p></div>
+      ${oldCode}
+      ${fieldCards ? `<div class="cat-list">${fieldCards}</div>` : ''}
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="field">+ เพิ่มหัวข้อ</button></div></div>
+    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Sim บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน · หัวข้อเพิ่มเติมตั้งบังคับได้ที่หัวข้อนั้น</p></div>
       <div class="req-grid">
         <label class="check"><input type="checkbox" checked disabled> HN <small>บังคับเสมอ</small></label>
         <label class="check"><input type="checkbox" checked disabled> เทคนิค <small>บังคับเสมอ</small></label>
@@ -1943,6 +2014,7 @@ function renderSettings() {
 }
 const settingsDirty = () => !!draft && JSON.stringify(draft) !== JSON.stringify(state.config);
 function updateSaveBar() { const b = $('#savebar'); if (b) b.hidden = !settingsDirty(); }
+const getPath = (obj, path) => path.split('.').reduce((o, k) => o[k], obj);
 function setPath(obj, path, val) {
   const ks = path.split('.');
   let o = obj;
@@ -1974,6 +2046,21 @@ async function saveSettings() {
     : (me && (me === owner || draft.admins.includes(me))) || (!draft.admins.length && !owner);
   if (store.mode === 'sheet' && !stillAdmin) return toast(via === 'lpch' ? `ต้องมีชื่อผู้ใช้ของคุณ (${username}) อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก` : me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
   if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
+  draft.fields = draft.fields.filter(f => str(f.label) || f.options.length);
+  if (draft.fields.some(f => !str(f.label))) return toast('กรอกชื่อหัวข้อเพิ่มเติมให้ครบ', { err: true });
+  const flabels = draft.fields.map(f => str(f.label).toLowerCase());
+  if (new Set(flabels).size !== flabels.length) return toast('ชื่อหัวข้อเพิ่มเติมซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
+  const noOpt = draft.fields.find(f => (f.type === 'pick' || f.type === 'multi') && !f.options.length);
+  if (noOpt) return toast(`เพิ่มตัวเลือกของหัวข้อ "${str(noOpt.label)}" อย่างน้อย 1 อย่าง`, { err: true });
+  // ชื่อคอลัมน์ในแท็บ Cases ตั้งครั้งเดียวตอนสร้าง เปลี่ยนชื่อหัวข้อภายหลังก็ยังใช้คอลัมน์เดิม · ไม่ซ้ำคอลัมน์ของระบบ
+  const cols = new Set([...SHEET_COLS, ...draft.fields.map(f => str(f.col))].filter(Boolean).map(x => x.toLowerCase()));
+  draft.fields.forEach(f => {
+    if (str(f.col)) return;
+    let col = str(f.label), n = 2;
+    while (cols.has(col.toLowerCase())) col = `${str(f.label)} (${n++})`;
+    f.col = col;
+    cols.add(col.toLowerCase());
+  });
   draft.icdExtra = draft.icdExtra.filter(x => str(x.code) || str(x.name));
   if (draft.icdExtra.some(x => !/^[A-Z]\d{2}(\.\d{1,2})?$/.test(str(x.code).toUpperCase()))) return toast('รหัส ICD-10 ต้องเป็นรูปแบบ เช่น C50 หรือ C50.9', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
@@ -2035,6 +2122,7 @@ function openCase(id) {
   fillDose('f', editingCase);
   $('#f-dx').value = dxValue(editingCase);
   renderArea('f', editingCase.area);
+  renderExtra('f', editingCase);
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
@@ -2057,7 +2145,7 @@ async function submitCase(e) {
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
-    ...readDose('f'), ...readDx('f'), area: readArea('f'), updated: nowISO(),
+    ...readDose('f'), ...readDx('f'), area: readArea('f'), ...readExtra('f'), updated: nowISO(),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -2199,7 +2287,10 @@ function missingRequired(ks) {
     dpf: () => str($('#i-dpf').value), fx: () => str($('#i-fx').value), freq: () => readFreq('i'),
     ct: () => $('#i-ct').value, sim: () => $('#i-oncall').checked || $('#i-sim').value, note: () => str($('#i-note').value),
   };
-  return REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !filled[f.key]()) || null;
+  const need = REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !filled[f.key]());
+  if (need) return need;
+  const vals = readExtra('i'), x = extraList().find(f => f.req && !vals['x_' + f.id]);
+  return x ? { key: 'x-' + x.id, label: x.label, pick: x.type === 'pick' || x.type === 'multi' } : null;
 }
 // ลำดับที่กดเลือกเทคนิค: เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกันและหักคิวของเทคนิคนั้น
 let catOrder = [];
@@ -2224,6 +2315,7 @@ function renderIntake() {
   }
   ensureFreq('i');
   ensureArea('i');
+  ensureExtra('i');
   $$('[data-req]', intake).forEach(el => { el.hidden = !cfg.required[el.dataset.req]; });
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
@@ -2284,6 +2376,7 @@ function fillIntake(c) {
   }
   fillDose('i', c);
   renderArea('i', c.area || '');
+  renderExtra('i', c);
   $('#i-dx').value = dxValue(c);
   renderIntake();
   const cats = c.cats || (c.cat ? [c.cat] : []);
@@ -2316,7 +2409,7 @@ async function submitIntake(e) {
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
   const batch = catIds.length > 1 ? 'b-' + uid() : '';
-  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i') };
+  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i') };
   const recs = catIds.map((id, i) => {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
@@ -2448,7 +2541,8 @@ document.addEventListener('click', e => {
     renderSettings(); $$('[data-k^="acts."][data-k$=".label"]').pop().select(); return;
   }
   if (ds.delact) { const acts = { ...draft.acts }; delete acts[ds.delact]; draft.acts = acts; return renderSettings(); }
-  if (ds.rmopt) { const [k, i] = ds.rmopt.split('.'); draft[k].splice(+i, 1); return renderSettings(); }
+  if (ds.rmopt) { const j = ds.rmopt.lastIndexOf('.'); getPath(draft, ds.rmopt.slice(0, j)).splice(+ds.rmopt.slice(j + 1), 1); return renderSettings(); }
+  if (ds.add === 'field') { draft.fields.push({ id: 'f' + uid(), label: '', type: 'text', options: [], req: false, col: '' }); renderSettings(); $$('[data-k^="fields."][data-k$=".label"]').pop().focus(); return; }
   if (ds.add === 'position') { draft.positions.push({ id: 'pos-' + uid(), label: 'ตำแหน่งใหม่', base: 0, guarantee: draft.guarantee }); renderSettings(); $$('[data-k^="positions."][data-k$=".label"]').pop().select(); return; }
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.up) { const [list, n] = ds.up.split('.'), i = +n, arr = draft[list]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return renderSettings(); }
@@ -2537,9 +2631,11 @@ function addOption(el) {
   const key = el.dataset.addopt;
   const v = key === 'admins' ? str(el.value).toLowerCase() : str(el.value);
   if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) && !/^[a-z0-9._-]{3,30}$/.test(v)) { toast('ใส่ชื่อผู้ใช้ LPCH (a-z 0-9 . _ -) หรืออีเมล', { err: true }); return; }
+  if (key.endsWith('.options') && v.includes(',')) { toast('ตัวเลือกใส่จุลภาค (,) ไม่ได้ เพิ่มทีละตัวเลือก', { err: true }); return; }
   el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
   if (!v) return;
-  if (!draft[key].includes(v)) draft[key].push(v);
+  const list = getPath(draft, key);
+  if (!list.includes(v)) list.push(v);
   setTimeout(() => {
     renderSettings();
     const again = $(`[data-addopt="${key}"]`);
@@ -2552,6 +2648,7 @@ settingsEl.addEventListener('keydown', e => {
 settingsEl.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.addopt) { addOption(el); return; }
+  if (el.dataset.retype !== undefined) { setPath(draft, el.dataset.k, el.value); renderSettings(); return; }   // ปุ่มเลือก = มีช่องตัวเลือก
   if (el.dataset.role !== undefined) {
     // เปลี่ยนตำแหน่ง: มีผลตั้งแต่เดือนนี้ เก็บของเดือนก่อนหน้าไว้
     const roles = draft.staff[+el.dataset.role].roles = draft.staff[+el.dataset.role].roles || [];

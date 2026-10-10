@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-10.5';
-const API_LEVEL = 5;
+const CODE_VERSION = '2026-10-10.6';
+const API_LEVEL = 6;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -185,7 +185,7 @@ function getData(token) {
     api: API_LEVEL,
     codeVersion: CODE_VERSION,
     homeUrl: lpchUrl_(),
-    cases: readTable_(ss, 'cases'),
+    cases: readTable_(ss, 'cases', config),
     logs: readTable_(ss, 'logs'),
     leaves: readTable_(ss, 'leaves'),
     config: config,
@@ -195,13 +195,15 @@ function getData(token) {
 
 function saveRecord(table, rec, token) {
   requireEdit_(token);
-  const def = tableDef_(table);
+  tableDef_(table);
   if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
   return withLock_(() => {
-    const sh = tableSheet_(ss_(), table);
+    const ss = ss_();
+    const cfg = table === 'cases' ? readConfig_(ss) : null;   // หัวข้อเพิ่มเติมที่แอดมินตั้ง เป็นคอลัมน์ของ Cases
+    const sh = tableSheet_(ss, table, cfg);
     const header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, rec.id) || sh.getLastRow() + 1;
-    writeFields_(sh, row, header, def.fields, rec);
+    writeFields_(sh, row, header, tableDef_(table, cfg).fields, rec);
     return rec;
   });
 }
@@ -247,9 +249,10 @@ function addCases(recs, token) {
       cases.push(rec);
       out.push(rec);
     });
-    const sh = tableSheet_(ss, 'cases');
+    const sh = tableSheet_(ss, 'cases', cfg);
     const header = headerOf_(sh);
-    out.forEach(rec => writeFields_(sh, sh.getLastRow() + 1, header, TABLES.cases.fields, rec));
+    const fields = tableDef_('cases', cfg).fields;
+    out.forEach(rec => writeFields_(sh, sh.getLastRow() + 1, header, fields, rec));
     return out;
   });
 }
@@ -728,14 +731,32 @@ function requireAdmin_(ss) {
 
 /* ---------- ตัวช่วย ---------- */
 
-function tableDef_(table) {
+// ส่ง cfg มาด้วยเมื่อต้องการคอลัมน์ของหัวข้อเพิ่มเติม (แท็บ Cases)
+function tableDef_(table, cfg) {
   const def = TABLES[table];
   if (!def) throw new Error('ไม่รู้จักตาราง ' + table);
-  return def;
+  if (table !== 'cases' || !cfg) return def;
+  return { sheet: def.sheet, fields: def.fields.concat(extraFields_(cfg)) };
 }
 
-function tableSheet_(ss, table) {
-  const def = tableDef_(table);
+// หัวข้อเพิ่มเติมในฟอร์มแจกเคส (config.fields) → [คีย์ x_<id>, ชื่อคอลัมน์] ชื่อคอลัมน์คือชื่อหัวข้อตอนสร้าง
+// ข้ามชื่อที่ซ้ำกับคอลัมน์ของระบบหรือซ้ำกันเอง กันอ่านเขียนผิดคอลัมน์
+function extraFields_(cfg) {
+  const taken = {};
+  TABLES.cases.fields.forEach(f => { taken[f[1].toLowerCase()] = true; });
+  return (Array.isArray(cfg && cfg.fields) ? cfg.fields : [])
+    .filter(f => f && /^[\w-]{1,40}$/.test(String(f.id || '')))
+    .map(f => ['x_' + f.id, String(f.col || f.label || '').trim()])
+    .filter(f => {
+      const k = f[1].toLowerCase();
+      if (!k || taken[k]) return false;
+      taken[k] = true;
+      return true;
+    });
+}
+
+function tableSheet_(ss, table, cfg) {
+  const def = tableDef_(table, cfg);
   let sh = ss.getSheetByName(def.sheet);
   if (!sh) {
     sh = ss.insertSheet(def.sheet);
@@ -752,8 +773,8 @@ function headerOf_(sh) {
   return n ? sh.getRange(1, 1, 1, n).getValues()[0].map(v => String(v).trim()) : [];
 }
 
-function readTable_(ss, table) {
-  const def = tableDef_(table);
+function readTable_(ss, table, cfg) {
+  const def = tableDef_(table, cfg);
   const sh = ss.getSheetByName(def.sheet);
   if (!sh || sh.getLastRow() < 2) return [];
   const tz = ss.getSpreadsheetTimeZone();
