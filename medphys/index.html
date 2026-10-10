@@ -97,6 +97,9 @@ button{cursor:pointer}
 .who .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .who .chip{flex:none;font-weight:500}
 .notice.warn{background:var(--warn-soft,var(--sunken));color:var(--fg)}
+.notice.err{background:var(--late-soft);color:var(--fg)}
+.notice.err b{color:var(--late)}
+.notice .btn{padding:3px 12px;font-size:13px}
 .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
 .gate{display:grid;place-items:center;padding-block:24px 48px}
 .gate-card{display:grid;gap:14px;width:min(400px,100%);padding:24px;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-sm)}
@@ -437,6 +440,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="button" class="btn" id="setup-skip">ใช้ระบบแบบเดิมไปก่อน</button>
     </div>
   </section>
+  <p class="notice err" id="load-notice" role="alert" hidden><b>โหลดข้อมูลไม่สำเร็จ</b><span id="load-text"></span><button type="button" class="btn" id="retry-top">ลองใหม่</button></p>
   <p class="notice warn" id="api-notice" hidden><b>Code.gs รุ่นเก่า</b><span id="api-text"></span></p>
 
   <p class="notice" id="demo-notice" hidden><b>ข้อมูลตัวอย่าง</b><span>ทุกอย่างบันทึกไว้ในเบราว์เซอร์นี้เท่านั้น เชื่อมกับ Google Sheet เพื่อใช้ร่วมกันทั้งทีม</span></p>
@@ -845,7 +849,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.5';
+const PAGE_VERSION = '2026-10-10.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1145,11 +1149,20 @@ function typeChip(t) {
 const LOGOUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>';
 const USER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
 const HOME_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 21v-5.5a2.5 2.5 0 0 1 5 0V21"/></svg>';
+// คำแนะนำสำหรับข้อผิดพลาดที่พบบ่อยของ Apps Script
+function loadHint(msg) {
+  const m = String(msg);
+  if (/PERMISSION_DENIED|reading from storage|HTTP 403|authuser/i.test(m)) return 'เบราว์เซอร์นี้เข้าสู่ระบบ Google หลายบัญชีพร้อมกัน ซึ่ง Apps Script ใช้ร่วมกันไม่ได้: เปิดลิงก์ในหน้าต่างไม่ระบุตัวตน (Incognito) หรือออกจากบัญชี Google อื่นก่อน';
+  if (/Authorization is required|ต้องได้รับอนุญาต|permission to call|do not have permission/i.test(m)) return 'เจ้าของไฟล์: เปิด Apps Script รันฟังก์ชัน checkSetup เพื่ออนุญาตสิทธิ์ แล้ว Deploy เวอร์ชันใหม่';
+  const nf = /(?:Script function not found|is not a function)[^A-Za-z]*([A-Za-z_]\w*)?/.exec(m);
+  if (nf) return 'Code.gs บนลิงก์นี้เป็นรุ่นเก่า (ไม่มีฟังก์ชันที่หน้าเว็บเรียก): วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+  return 'ถ้ายังไม่หาย ส่งข้อความนี้ให้ผู้ดูแลระบบ';
+}
 function renderFoot() {
   const src = { github: 'โหลดจาก GitHub (อัปเดตอัตโนมัติ)', file: 'ไฟล์ index ในโปรเจกต์' }[window.MEDPHYS_PAGE_SOURCE] || '';
   const parts = [`หน้าเว็บรุ่น ${PAGE_VERSION}`];
   if (store.mode === 'local') parts.push('โหมดตัวอย่าง');
-  else { if (src) parts.push(src); if (state.loaded) parts.push(`Code.gs รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}`); }
+  else { if (src) parts.push(src); if (!state.loaded && state.error) parts.push('โหลดข้อมูลไม่สำเร็จ'); if (state.loaded) parts.push(`Code.gs รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}`); }
   $('#foot').textContent = parts.join(' · ');
 }
 function renderAcct() {
@@ -1159,6 +1172,7 @@ function renderAcct() {
   const chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
   if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
+  else if (!gated && store.mode === 'sheet' && !state.loaded) who = chip(state.error ? 'เชื่อมต่อไม่สำเร็จ' : 'กำลังตรวจสอบผู้ใช้…', state.error ? 'ดูแถบสีแดง' : 'รอสักครู่', 'ยังไม่ทราบผู้ใช้');
   else if (!gated && oldServer()) who = chip('ยังไม่เชื่อม LPCH', 'Code.gs รุ่นเก่า', 'ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า');
   else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
   else if (!gated && u.via === 'demo') who = chip(u.name, roleTag(), 'โหมดตัวอย่าง');
@@ -1190,11 +1204,14 @@ function render() {
     $('.gate-home', lp).innerHTML = HOME_SVG;
     return;
   }
+  const loadErr = store.mode === 'sheet' && !state.loaded && !!state.error;
+  $('#load-notice').hidden = !loadErr;
+  if (loadErr) $('#load-text').textContent = `${state.error}${loadHint(state.error) ? ' · ' + loadHint(state.error) : ''}`;
   const oldApi = oldServer();
   $('#api-notice').hidden = !oldApi;
   if (oldApi) $('#api-text').textContent = `หน้าเว็บนี้ต้องใช้ Code.gs รุ่น ${NEEDS_API} ขึ้นไป (ในโปรเจกต์เป็นรุ่น ${state.api || 'เก่ากว่า 4'}) บางอย่างอาจใช้ไม่ได้ · วาง Code.gs ใหม่จากหน้าคัดลอกโค้ด แล้ว Deploy เวอร์ชันใหม่`;
   const ro = !canEdit();
-  $('#ro-notice').hidden = !ro;
+  $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);   // ยังไม่ทราบผู้ใช้: ยังไม่บอกว่าดูอย่างเดียว
   if (ro) $('#ro-text').textContent = `บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP)${state.user.name ? ` · ${state.user.name}${state.user.role ? ` (${state.user.role})` : ''}` : ''}`;
   for (const v of ['work', 'logs', 'p4p', 'settings']) $('#view-' + v).hidden = state.view !== v;
   $$('.nav [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'));
@@ -2442,7 +2459,7 @@ document.addEventListener('click', e => {
     case 'add-other': { const t = logTabs().find(x => x.key === state.logKind); return openLog(null, { kind: t && t.kinds[0] !== 'rc' ? t.kinds[0] : 'acad' }); }
     case 'clear-person': state.person = ''; return render();
     case 'more': state.limit += 60; return render();
-    case 'retry': return refresh();
+    case 'retry': case 'retry-top': state.error = ''; render(); return refresh();
     case 'setup-skip': state.setupSkipped = true; return render();
     case 'case-del': return deleteCase(t);
     case 'log-del': return deleteLog(t);
@@ -2630,6 +2647,7 @@ async function refresh(quiet) {
   render();
 }
 if (!['work', 'logs', 'p4p', 'settings'].includes(state.view)) state.view = 'work';
+if (store.mode === 'sheet') state.user = { me: '', owner: '', isAdmin: false, canEdit: false, pending: true };
 $('#i-in').value = today();
 render();
 refresh();
