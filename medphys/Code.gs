@@ -18,6 +18,13 @@ const APP_TITLE = 'ระบบกระจายงานฟิสิกส์�
 const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกข้อมูลได้ ตำแหน่งอื่นดูได้อย่างเดียว
 const LPCH_CHECK_SECONDS = 300;
+// หน้าเว็บ (index.html) โหลดจาก GitHub อัตโนมัติ จึงได้หน้าเว็บรุ่นล่าสุดเสมอ ไม่ต้องวางไฟล์ index ใหม่ทุกครั้ง
+// เปลี่ยนได้ที่ Script property PAGE_URL · ใส่ - เพื่อใช้ไฟล์ index ในโปรเจกต์ · เปิด …/exec?refresh=1 เพื่อโหลดรุ่นล่าสุดทันที
+// โหลดไม่ได้ (หรือไฟล์ไม่ครบ) จะใช้ไฟล์ index ในโปรเจกต์แทน
+const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
+const PAGE_CACHE_SECONDS = 600;
+// รุ่นของ API ฝั่งนี้ หน้าเว็บเตือนให้วาง Code.gs ใหม่ถ้าต่ำกว่าที่หน้าเว็บต้องการ
+const API_LEVEL = 4;
 const CONFIG_SHEET = 'Config';
 const TABLES = {
   cases: {
@@ -50,24 +57,80 @@ const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 /* ---------- หน้าเว็บและเมนู ---------- */
 
 function doGet(e) {
-  let html = HtmlService.createHtmlOutputFromFile('index').getContent();
+  const p = (e && e.parameter) || {};
+  const page = page_(!!p.refresh);
+  const vars = { MEDPHYS_PAGE_SOURCE: page.source };
   // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
-  const sso = e && e.parameter && e.parameter.sso;
-  if (sso && lpchUrl_()) {
-    let tag;
-    try {
-      const r = lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(sso) }));
-      tag = 'window.MEDPHYS_LPCH_TOKEN = ' + JSON.stringify(String(r.token)).replace(/</g, '\\u003c') + ';';
-    } catch (err) {
-      tag = 'window.MEDPHYS_LPCH_ERROR = ' + JSON.stringify(String(err.message)).replace(/</g, '\\u003c') + ';';
+  if (p.sso && lpchUrl_()) {
+    try { vars.MEDPHYS_LPCH_TOKEN = String(lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(p.sso) })).token); } catch (err) {
+      vars.MEDPHYS_LPCH_ERROR = String(err.message);
     }
-    const m = /<head(\s[^>]*)?>/i.exec(html);
-    const at = m ? m.index + m[0].length : 0;
-    html = html.slice(0, at) + '<script>' + tag + '</script>' + html.slice(at);
   }
-  return HtmlService.createHtmlOutput(html)
+  return HtmlService.createHtmlOutput(inject_(page.html, vars))
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// ค่าให้หน้าเว็บ (window.X = ...) ใส่ไว้ต้น <head>
+function inject_(html, vars) {
+  const tag = '<script>' + Object.keys(vars).map(k => 'window.' + k + ' = ' + JSON.stringify(vars[k]).replace(/</g, '\\u003c') + ';').join('') + '</script>';
+  const m = /<head(\s[^>]*)?>/i.exec(html);
+  const at = m ? m.index + m[0].length : 0;
+  return html.slice(0, at) + tag + html.slice(at);
+}
+
+/* ---------- หน้าเว็บ: GitHub (เก็บไว้ PAGE_CACHE_SECONDS) หรือไฟล์ index ในโปรเจกต์ ---------- */
+
+function pageUrl_() {
+  let v = null;
+  try { v = PropertiesService.getScriptProperties().getProperty('PAGE_URL'); } catch (e) { v = null; }
+  v = String(v == null || v === '' ? PAGE_URL : v).trim();
+  return v === '-' ? '' : v;
+}
+
+// {html, source: 'github' | 'file' | 'none'} · หน้าเว็บที่ไม่ครบ (ไม่มี </html> ท้ายไฟล์) ไม่ใช้ กันวางไม่ครบแล้วเว็บพัง
+function page_(refresh) {
+  const complete = h => !!h && /<\/html>\s*$/i.test(h);
+  const url = pageUrl_();
+  if (url) {
+    const cache = CacheService.getScriptCache();
+    let key = 0;
+    for (let i = 0; i < url.length; i++) key = (key * 31 + url.charCodeAt(i)) | 0;
+    key = 'page' + (key >>> 0).toString(36);
+    let html = refresh ? '' : cacheGet_(cache, key);
+    if (!complete(html)) {
+      try {
+        const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+        html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
+      } catch (e) { html = ''; }
+      if (complete(html)) cachePut_(cache, key, html, PAGE_CACHE_SECONDS);
+    }
+    if (complete(html)) return { html: html, source: 'github' };
+  }
+  let local = '';
+  try { local = HtmlService.createHtmlOutputFromFile('index').getContent(); } catch (e) { local = ''; }
+  if (complete(local)) return { html: local, source: 'file' };
+  return { html: '<!doctype html><html><head><meta charset="utf-8"></head><body><p style="font:16px sans-serif;padding:24px">โหลดหน้าเว็บไม่ได้ ตรวจ PAGE_URL ใน Code.gs หรือวางไฟล์ index ให้ครบ (บรรทัดสุดท้ายต้องเป็น &lt;/html&gt;)</p></body></html>', source: 'none' };
+}
+
+// แคชเก็บได้ไม่เกิน 100 KB ต่อค่า หน้าเว็บจึงแบ่งเก็บทีละ 30,000 ตัวอักษร (ภาษาไทยใช้ 3 ไบต์ต่อตัว)
+function cachePut_(cache, key, text, seconds) {
+  const size = 30000, parts = {};
+  let n = 0;
+  for (let i = 0; i < text.length; i += size) parts[key + '_' + (n++)] = text.slice(i, i + size);
+  parts[key + '_n'] = String(n);
+  try { cache.putAll(parts, seconds); } catch (e) { /* แคชเต็ม: โหลดใหม่ครั้งหน้า */ }
+}
+
+function cacheGet_(cache, key) {
+  const n = Number(cache.get(key + '_n') || 0);
+  if (!n) return '';
+  const keys = [];
+  for (let i = 0; i < n; i++) keys.push(key + '_' + i);
+  const got = cache.getAll(keys);
+  let text = '';
+  for (let i = 0; i < n; i++) { if (got[keys[i]] == null) return ''; text += got[keys[i]]; }
+  return text;
 }
 
 function onOpen() {
@@ -80,7 +143,8 @@ function onOpen() {
 }
 
 function openApp() {
-  const html = HtmlService.createHtmlOutputFromFile('index').setWidth(1200).setHeight(820);
+  const page = page_(false);
+  const html = HtmlService.createHtmlOutput(inject_(page.html, { MEDPHYS_PAGE_SOURCE: page.source })).setWidth(1200).setHeight(820);
   SpreadsheetApp.getUi().showModalDialog(html, APP_TITLE);
 }
 
@@ -91,6 +155,7 @@ function getData(token) {
   const config = readConfig_(ss);
   return {
     user: who_(token, ss, config),
+    api: API_LEVEL,
     homeUrl: lpchUrl_(),
     cases: readTable_(ss, 'cases'),
     logs: readTable_(ss, 'logs'),
