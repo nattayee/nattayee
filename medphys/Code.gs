@@ -24,7 +24,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-10.3';
+const CODE_VERSION = '2026-10-10.4';
 const API_LEVEL = 5;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -61,6 +61,11 @@ const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  // …/exec?ping=1 ตรวจว่าลิงก์นี้รัน Code.gs รุ่นไหน (ไม่มีข้อมูลผู้ป่วย) ถ้าเห็นหน้าระบบแทน JSON แปลว่ายังเป็นรุ่นเก่า
+  if (p.ping) {
+    return ContentService.createTextOutput(JSON.stringify({ app: 'medphys-dispatch', codeVersion: CODE_VERSION, api: API_LEVEL,
+      lpch: !!lpchUrl_(), page: pageUrl_() ? 'github' : 'file', clean: oldCode_().length === 0 }, null, 1)).setMimeType(ContentService.MimeType.JSON);
+  }
   const page = page_(!!p.refresh);
   const vars = { MEDPHYS_PAGE_SOURCE: page.source };
   // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
@@ -643,8 +648,19 @@ function lpchLogout(token) {
  * รันจากหน้าแก้ไขสคริปต์ (เลือก checkSetup แล้วกดเรียกใช้): ตรวจทุกอย่างที่หน้าเว็บต้องใช้ และขออนุญาตสิทธิ์ที่ยังขาด
  * ดูผลที่ "บันทึกการทำงาน" แล้ว Deploy → จัดการการทำให้ใช้งานได้ → แก้ไข → เวอร์ชันใหม่ ให้ URL เดิมใช้โค้ดนี้
  */
+// ฟังก์ชันของไฟล์นี้ที่ถูกไฟล์ .gs อื่นในโปรเจกต์ประกาศทับ (เช่นโค้ดรุ่นเก่าที่ยังค้างอยู่) ไฟล์ที่โหลดทีหลังชนะ
+function oldCode_() {
+  return [['doGet', doGet, 'page_('], ['getData', getData, 'API_LEVEL'], ['saveRecord', saveRecord, 'requireEdit_'],
+    ['addCases', addCases, 'requireEdit_'], ['openApp', openApp, 'page_(']]
+    .filter(x => typeof x[1] !== 'function' || String(x[1]).indexOf(x[2]) < 0).map(x => x[0]);
+}
+
 function checkSetup() {
   const out = ['Code.gs รุ่น ' + CODE_VERSION + ' (API ' + API_LEVEL + ')'];
+  const dup = oldCode_();
+  out.push(dup.length
+    ? '✗ มีไฟล์ .gs อื่นในโปรเจกต์ที่มี ' + dup.join(', ') + ' ของโค้ดเก่า ทับโค้ดใหม่อยู่: ลบไฟล์ .gs อื่นให้เหลือ Code.gs ไฟล์เดียว'
+    : '✓ ไม่มีโค้ดเก่าค้างในไฟล์อื่น');
   const url = pageUrl_();
   if (!url) out.push('• หน้าเว็บ: ใช้ไฟล์ index ในโปรเจกต์ (PAGE_URL = -)');
   else {
@@ -657,7 +673,8 @@ function checkSetup() {
   try { out.push('• ชีต: ' + SpreadsheetApp.getActive().getName() + ' · เคส ' + readTable_(SpreadsheetApp.getActive(), 'cases').length + ' รายการ'); } catch (e) { out.push('✗ ชีต: ' + e.message); }
   out.push('ขั้นต่อไป: Deploy → จัดการการทำให้ใช้งานได้ → แก้ไข (ดินสอ) → เวอร์ชัน: เวอร์ชันใหม่ → ทำให้ใช้งานได้');
   out.push('(อย่ากด "การทำให้ใช้งานได้รายการใหม่" เพราะจะได้ URL ใหม่ ลิงก์เดิมและปุ่มใน LPCH ยังเปิดรุ่นเก่า)');
-  out.push('เปิดระบบแล้วดูบรรทัดล่างสุดของหน้า ต้องเป็น "โหลดจาก GitHub · Code.gs รุ่น ' + CODE_VERSION + '"');
+  out.push('ตรวจลิงก์: เปิด …/exec?ping=1 ต้องเห็น "codeVersion": "' + CODE_VERSION + '" ถ้าเห็นหน้าระบบแทน แปลว่าลิงก์นั้นยังเป็นรุ่นเก่า');
+  out.push('ถ้าลิงก์ที่ใช้อยู่ไม่อยู่ในรายการ "จัดการการทำให้ใช้งานได้" ของโปรเจกต์นี้ แปลว่าลิงก์นั้นมาจากโปรเจกต์ Apps Script อื่น');
   out.forEach(l => Logger.log(l));
   return out.join('\n');
 }
