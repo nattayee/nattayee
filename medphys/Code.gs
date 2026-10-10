@@ -2,7 +2,9 @@
  * ระบบกระจายงานฟิสิกส์การแพทย์ — ส่วนหลังบ้าน (Google Apps Script)
  * กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง
  *
- * เก็บข้อมูลในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกสคริปต์นี้ไว้
+ * เก็บข้อมูลในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกสคริปต์นี้ไว้ (เปิดจากชีต → ส่วนขยาย → Apps Script)
+ * ถ้าเป็นโปรเจกต์ Apps Script แยก (ไม่ได้ผูกชีต) ใช้ชีตใน Script property SHEET_ID (ID หรือลิงก์ของชีต)
+ * ถ้ายังไม่ได้ตั้ง จะสร้างชีตเก็บข้อมูลใหม่ให้ครั้งแรกแล้วจำไว้ใน SHEET_ID (รัน checkSetup เพื่อดูลิงก์ชีต)
  * แท็บเดิมของไฟล์ P4P_Physics จะไม่ถูกแก้ไข (อ่านอย่างเดียวตอนนำเข้า)
  * วิธีติดตั้งอยู่ใน README.md
  *
@@ -24,7 +26,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-10.4';
+const CODE_VERSION = '2026-10-10.5';
 const API_LEVEL = 5;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -64,7 +66,7 @@ function doGet(e) {
   // …/exec?ping=1 ตรวจว่าลิงก์นี้รัน Code.gs รุ่นไหน (ไม่มีข้อมูลผู้ป่วย) ถ้าเห็นหน้าระบบแทน JSON แปลว่ายังเป็นรุ่นเก่า
   if (p.ping) {
     return ContentService.createTextOutput(JSON.stringify({ app: 'medphys-dispatch', codeVersion: CODE_VERSION, api: API_LEVEL,
-      lpch: !!lpchUrl_(), page: pageUrl_() ? 'github' : 'file', clean: oldCode_().length === 0 }, null, 1)).setMimeType(ContentService.MimeType.JSON);
+      lpch: !!lpchUrl_(), page: pageUrl_() ? 'github' : 'file', sheet: sheetSource_(), clean: oldCode_().length === 0 }, null, 1)).setMimeType(ContentService.MimeType.JSON);
   }
   const page = page_(!!p.refresh);
   const vars = { MEDPHYS_PAGE_SOURCE: page.source };
@@ -176,7 +178,7 @@ function openApp() {
 /* ---------- API ที่หน้าเว็บเรียกผ่าน google.script.run ---------- */
 
 function getData(token) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   const config = readConfig_(ss);
   return {
     user: who_(token, ss, config),
@@ -196,7 +198,7 @@ function saveRecord(table, rec, token) {
   const def = tableDef_(table);
   if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
   return withLock_(() => {
-    const sh = tableSheet_(SpreadsheetApp.getActive(), table);
+    const sh = tableSheet_(ss_(), table);
     const header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, rec.id) || sh.getLastRow() + 1;
     writeFields_(sh, row, header, def.fields, rec);
@@ -213,7 +215,7 @@ function addCases(recs, token) {
   requireEdit_(token);
   if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
   return withLock_(() => {
-    const ss = SpreadsheetApp.getActive();
+    const ss = ss_();
     const cfg = readConfig_(ss) || {};
     const staff = Array.isArray(cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code, active: true }));
     const leaves = readTable_(ss, 'leaves');
@@ -307,7 +309,7 @@ function deleteRecord(table, id, token) {
   requireEdit_(token);
   tableDef_(table);
   return withLock_(() => {
-    const sh = tableSheet_(SpreadsheetApp.getActive(), table);
+    const sh = tableSheet_(ss_(), table);
     const row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
     return !!row;
@@ -318,7 +320,7 @@ function saveConfig(config, token) {
   const u = who_(token);
   if (!u.isAdmin) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมิน)' : ''));
   return withLock_(() => {
-    writeConfig_(SpreadsheetApp.getActive(), config || {});
+    writeConfig_(ss_(), config || {});
     return true;
   });
 }
@@ -339,7 +341,7 @@ const LEGACY_HEADERS = {
 };
 
 function importLegacy() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   requireAdmin_(ss);
   const tz = ss.getSpreadsheetTimeZone();
   const found = parseLegacy_(name => {
@@ -364,12 +366,11 @@ function importLegacy() {
     writeConfig_(ss, cfg);
     return result;
   });
-  SpreadsheetApp.getUi().alert(
-    'นำเข้าข้อมูลแล้ว',
-    'เคสใหม่ ' + added.cases + ' รายการ · RC และกิจกรรม ' + added.logs + ' รายการ\n' +
-    'รายการที่เคยนำเข้าแล้วจะไม่ถูกเพิ่มซ้ำ และตั้งคิวถัดไปตามแถวว่างในแท็บเดิมให้แล้ว',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  const msg = 'เคสใหม่ ' + added.cases + ' รายการ · RC และกิจกรรม ' + added.logs + ' รายการ\n' +
+    'รายการที่เคยนำเข้าแล้วจะไม่ถูกเพิ่มซ้ำ และตั้งคิวถัดไปตามแถวว่างในแท็บเดิมให้แล้ว';
+  // รันจากหน้าแก้ไขสคริปต์ (ไม่ได้เปิดจากชีต) ไม่มีหน้าต่างแจ้ง ดูผลใน Execution log แทน
+  try { SpreadsheetApp.getUi().alert('นำเข้าข้อมูลแล้ว', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { Logger.log('นำเข้าข้อมูลแล้ว: ' + msg); }
+  return msg;
 }
 
 /**
@@ -523,7 +524,7 @@ function parseLegacy_(read, tz) {
 function moveActCases(token) {
   requireEdit_(token);
   return withLock_(() => {
-    const ss = SpreadsheetApp.getActive();
+    const ss = ss_();
     const old = readTable_(ss, 'cases').filter(c => MOVED_CATS.indexOf(c.cat) >= 0);
     if (!old.length) return 0;
     appendNew_(ss, 'logs', old.map(c => ({
@@ -547,7 +548,7 @@ function moveActCases(token) {
  * ยังไม่ได้เข้าสู่ระบบ → Error ที่ขึ้นต้นด้วย LOGIN| หน้าเว็บจะแสดงช่องเข้าสู่ระบบ
  */
 function who_(token, ss, cfg) {
-  ss = ss || SpreadsheetApp.getActive();
+  ss = ss || ss_();
   cfg = cfg || readConfig_(ss) || {};
   const g = adminInfo_(ss, cfg);
   const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
@@ -670,7 +671,12 @@ function checkSetup() {
       : '✗ หน้าเว็บ: โหลดจาก GitHub ไม่ได้ (' + p.why + ') ' + (p.source === 'file' ? 'ใช้ไฟล์ index ในโปรเจกต์ รุ่น ' + v : 'และไม่มีไฟล์ index'));
   }
   out.push(setupLpch());
-  try { out.push('• ชีต: ' + SpreadsheetApp.getActive().getName() + ' · เคส ' + readTable_(SpreadsheetApp.getActive(), 'cases').length + ' รายการ'); } catch (e) { out.push('✗ ชีต: ' + e.message); }
+  try {
+    const ss = ss_();
+    const from = { bound: 'ชีตที่ผูกสคริปต์', property: 'Script property SHEET_ID' }[sheetSource_()] || 'ไม่ทราบ';
+    out.push('✓ ชีตเก็บข้อมูล: ' + ss.getName() + ' (' + from + ') · เคส ' + readTable_(ss, 'cases').length + ' รายการ');
+    out.push('  ' + ss.getUrl());
+  } catch (e) { out.push('✗ ชีตเก็บข้อมูล: ' + e.message); }
   out.push('ขั้นต่อไป: Deploy → จัดการการทำให้ใช้งานได้ → แก้ไข (ดินสอ) → เวอร์ชัน: เวอร์ชันใหม่ → ทำให้ใช้งานได้');
   out.push('(อย่ากด "การทำให้ใช้งานได้รายการใหม่" เพราะจะได้ URL ใหม่ ลิงก์เดิมและปุ่มใน LPCH ยังเปิดรุ่นเก่า)');
   out.push('ตรวจลิงก์: เปิด …/exec?ping=1 ต้องเห็น "codeVersion": "' + CODE_VERSION + '" ถ้าเห็นหน้าระบบแทน แปลว่าลิงก์นั้นยังเป็นรุ่นเก่า');
@@ -844,12 +850,63 @@ function safeText_(v) {
 
 // เขียนชีตทีละคน (ล็อกเดียวทั้งสคริปต์ ทุกผู้ใช้ใช้ร่วมกัน) รอคิวได้ไม่เกิน 20 วินาที
 // flush ก่อนปล่อยล็อก ให้คนถัดไปอ่านข้อมูลที่เพิ่งเขียนเสมอ (เช่น แจกเคสพร้อมกันจะไม่ได้คนเดียวกัน)
+let LOCKED_ = false;
 function withLock_(fn) {
+  if (LOCKED_) return fn();   // ถือล็อกอยู่แล้วในคำขอนี้
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new Error('มีคนกำลังบันทึกข้อมูลอยู่ รอสักครู่แล้วลองใหม่');
+  LOCKED_ = true;
   try {
     return fn();
   } finally {
+    LOCKED_ = false;
     try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); }
   }
+}
+
+/* ---------- ชีตเก็บข้อมูล ---------- */
+
+// ชีตที่ผูกสคริปต์ → ชีตใน Script property SHEET_ID → สร้างชีตใหม่ครั้งแรกแล้วจำ ID ไว้ใน SHEET_ID
+let SS_ = null;
+function ss_() {
+  if (SS_) return SS_;
+  const bound = SpreadsheetApp.getActive();
+  if (bound) return (SS_ = bound);
+  const id = sheetIdProp_();
+  if (id) return (SS_ = openSheet_(id));
+  // สร้างภายใต้ล็อก กันสองคนเปิดครั้งแรกพร้อมกันแล้วได้ชีตคนละไฟล์
+  return (SS_ = withLock_(() => {
+    const again = sheetIdProp_();
+    if (again) return openSheet_(again);
+    const ss = SpreadsheetApp.create(APP_TITLE + ' (ข้อมูล)');
+    ss.setSpreadsheetTimeZone('Asia/Bangkok');
+    const first = ss.getSheets()[0];
+    first.setName(TABLES.cases.sheet);
+    first.setFrozenRows(1);
+    PropertiesService.getScriptProperties().setProperty('SHEET_ID', ss.getId());
+    return ss;
+  }));
+}
+
+// ID จาก Script property SHEET_ID (ใส่ได้ทั้ง ID และลิงก์ของชีต) ไม่ได้ตั้ง = ''
+function sheetIdProp_() {
+  const raw = String(PropertiesService.getScriptProperties().getProperty('SHEET_ID') || '').trim();
+  if (!raw) return '';
+  const m = /\/d\/([\w-]{20,})/.exec(raw) || /^([\w-]{20,})$/.exec(raw);
+  if (!m) throw new Error('Script property SHEET_ID ต้องเป็น ID หรือลิงก์ของ Google Sheet (ตอนนี้: ' + raw + ')');
+  return m[1];
+}
+
+function openSheet_(id) {
+  try { return SpreadsheetApp.openById(id); } catch (e) {
+    throw new Error('เปิดชีตใน Script property SHEET_ID ไม่ได้ (' + e.message + ') ตรวจ ID และบัญชีที่ Deploy ต้องแก้ไขชีตนั้นได้');
+  }
+}
+
+// ใช้ชีตจากไหน (ไม่สร้างชีต) bound | property | none (none = จะสร้างใหม่เมื่อใช้งานครั้งแรก)
+function sheetSource_() {
+  try {
+    if (SpreadsheetApp.getActive()) return 'bound';
+    return sheetIdProp_() ? 'property' : 'none';
+  } catch (e) { return 'error'; }
 }
