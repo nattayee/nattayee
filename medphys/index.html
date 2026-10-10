@@ -158,6 +158,12 @@ div.c-main,div.lrow{cursor:default}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
+.sites{display:grid;gap:10px}.sites:empty{display:none}
+.site{display:grid;gap:12px;padding:12px;border:1px dashed var(--line);border-radius:12px}
+.site-head{display:flex;align-items:center;justify-content:space-between;min-height:24px;font-size:13px;color:var(--muted)}
+.site-head b{font-weight:600;color:var(--fg)}
+.add-site-row{margin-top:-4px}
+.add-site-row .btn{min-height:32px;padding:4px 10px;font-size:13.5px}
 .extra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 12px}
 .extra-grid .x-wide{grid-column:1/-1}
 .c-meta .xl{color:var(--faint)}
@@ -464,18 +470,21 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         </div>
         <div class="field dx-field"><span class="lbl"><span>Diag (ICD-10)<b class="req" data-req="dx" hidden>*</b></span></span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
         <div class="field"><span class="lbl"><span>เทคนิค<b class="req" title="บังคับเสมอ">*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกัน</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
-        <div class="field with-other"><span class="lbl"><span>บริเวณที่ฉาย<b class="req" data-req="area" hidden>*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
         <div class="intake-mid plan-field">
           <div class="field"><span class="lbl"><span>Type<b class="req" data-req="type" hidden>*</b></span></span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
           <div class="field"><span class="lbl"><span>Aim<b class="req" data-req="aim" hidden>*</b></span></span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
+          <div class="field" id="i-room-field"><span class="lbl"><span>ห้องฉาย<b class="req" data-req="room" hidden>*</b></span></span><div class="chips" id="i-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
           <div class="field" id="i-tech-field"><span class="lbl"><span>Technique<b class="req" data-req="tech" hidden>*</b></span></span><div class="chips" id="i-tech" role="radiogroup" aria-label="Technique"></div></div>
         </div>
+        <div class="field with-other"><span class="lbl"><span>บริเวณที่ฉาย<b class="req" data-req="area" hidden>*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="i-area" aria-label="บริเวณที่ฉาย"></div><input id="i-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
         <div class="dose-row">
           <label class="field"><span class="lbl"><span>Dose/fx (Gy)<b class="req" data-req="dpf" hidden>*</b></span></span><input type="number" id="i-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
           <label class="field"><span class="lbl"><span>Fx<b class="req" data-req="fx" hidden>*</b></span></span><input type="number" id="i-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
           <div class="field"><span class="lbl">รวม</span><output class="total" id="i-total" for="i-dpf i-fx">–</output></div>
           <div class="field freq-field"><span class="lbl"><span>ความถี่ในการฉาย<b class="req" data-req="freq" hidden>*</b></span></span><div class="chips" id="i-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="i-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
         </div>
+        <div class="sites" id="i-sites"></div>
+        <div class="add-site-row"><button type="button" class="btn ghost" id="i-addsite" data-addsite="i">+ เพิ่มบริเวณที่ฉาย</button></div>
         <div class="intake-dates">
           <label class="field plan-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
@@ -560,17 +569,20 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
       </div>
       <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="f-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="f-dx-list" role="listbox" hidden></ul></div></div>
-      <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="f-area" aria-label="บริเวณที่ฉาย"></div><input id="f-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
       <div class="field plan-only"><span class="lbl">Doc</span><div class="chips" id="f-doc" role="radiogroup" aria-label="Doc"></div></div>
       <div class="field plan-only"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
       <div class="field plan-only"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
+      <div class="field plan-only" id="f-room-field"><span class="lbl">ห้องฉาย</span><div class="chips" id="f-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
       <div class="field plan-only" id="tech-field"><span class="lbl">Technique</span><div class="chips" id="f-tech" role="radiogroup" aria-label="Technique"></div></div>
+      <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="f-area" aria-label="บริเวณที่ฉาย"></div><input id="f-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
       <div class="dose-row">
           <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="f-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
           <label class="field"><span class="lbl">Fx</span><input type="number" id="f-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
           <div class="field"><span class="lbl">รวม</span><output class="total" id="f-total" for="f-dpf f-fx">–</output></div>
           <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="f-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="f-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
         </div>
+      <div class="sites" id="f-sites"></div>
+      <div class="add-site-row"><button type="button" class="btn ghost" id="f-addsite" data-addsite="f">+ เพิ่มบริเวณที่ฉาย</button></div>
       <div class="dates">
         <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
         <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
@@ -654,6 +666,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 const REQ_FIELDS = [
   { key: 'name', label: 'Name' }, { key: 'doc', label: 'Doc', plan: true, pick: true }, { key: 'dx', label: 'Diag (ICD-10)' },
   { key: 'area', label: 'บริเวณที่ฉาย', pick: true }, { key: 'type', label: 'Type', plan: true, pick: true }, { key: 'aim', label: 'Aim', plan: true, pick: true },
+  { key: 'room', label: 'ห้องฉาย', plan: true, pick: true },
   { key: 'tech', label: 'Technique', plan: true, pick: true }, { key: 'dpf', label: 'Dose/fx' }, { key: 'fx', label: 'Fx' },
   { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Sim', plan: true },
   { key: 'note', label: 'Note' },
@@ -661,8 +674,9 @@ const REQ_FIELDS = [
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
-const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'ชุด', 'Note', 'Created', 'Updated'];
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
 const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
+const ROOM_API = 7;    // Code.gs ที่เก็บห้องฉายและบริเวณที่ฉายเพิ่มเติมได้
 // เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
 const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 const BUILTIN_ACTS = ['dqa', 'mu', 'rc', ...MOVED_CATS];
@@ -687,6 +701,7 @@ const DEFAULT_CONFIG = {
   techniques: ['SRS', 'SRT', 'SBRT', 'CSI', 'HA'],
   freqs: ['Daily', 'EOD', 'BID', 'Single fraction'],                  // ความถี่ในการฉาย (อื่นๆ กรอกเองในฟอร์ม)
   areas: ['Head', 'H&N', 'Chest', 'Abdomen', 'Pelvis', 'Extremity'],   // บริเวณที่ฉาย (อื่นๆ กรอกเองในฟอร์ม)
+  rooms: ['Infinity', 'Precise', 'VersaHD'],                           // ห้องฉาย
   admins: [],                                                          // อีเมลแอดมิน (เจ้าของไฟล์ Google Sheet เป็นแอดมินเสมอ)
   required: Object.fromEntries(REQ_FIELDS.map(f => [f.key, false])),   // ช่องบังคับกรอกในฟอร์มแจกเคส
   fields: [],   // หัวข้อเพิ่มเติม { id, label, type, options, req, col } col = ชื่อคอลัมน์ในแท็บ Cases (ตั้งครั้งเดียวตอนสร้าง)
@@ -742,7 +757,7 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'dpf', 'fx', 'freq', 'area', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -786,6 +801,7 @@ function dateStr(v) {
 function normCase(o) {
   const c = {};
   for (const f of CASE_FIELDS) c[f] = str(o[f]);
+  if (Array.isArray(o.sites)) c.sites = o.sites.length ? JSON.stringify(o.sites) : '';   // บริเวณที่ฉายเพิ่มเติม เก็บเป็น JSON
   for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
   for (const f of ['ct', 'in', 'fin', 'eval']) c[f] = dateStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
@@ -834,7 +850,7 @@ function mergeConfig(c) {
       return { code, name: str(s.name), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
     }).filter(s => s.code);
   }
-  for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
+  for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas', 'rooms']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
   // แพทย์: ค่าเก่าเป็นรายการรหัสล้วน ['SC', ...] แปลงเป็น { code, name }
   if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => (x && typeof x === 'object' ? { code: str(x.code).toUpperCase(), name: str(x.name) } : { code: str(x).toUpperCase(), name: '' })).filter(x => x.code);
   const moved = {}; // ค่าที่เคยตั้งให้เทคนิค Brachy/Hyperthermia ใช้ต่อเป็นค่าของกิจกรรม
@@ -857,7 +873,9 @@ function mergeConfig(c) {
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
-  out.fields = Array.isArray(c.fields) ? c.fields.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id))).map(x => ({
+  // หัวข้อเพิ่มเติมที่ใช้คอลัมน์เดียวกับช่องของระบบ (เช่นเคยตั้ง "ห้องฉาย" เอง) ให้ช่องของระบบอ่านคอลัมน์นั้นแทน
+  const sysCols = SHEET_COLS.map(x => x.toLowerCase());
+  out.fields = Array.isArray(c.fields) ? c.fields.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id)) && !sysCols.includes(str(x.col).toLowerCase())).map(x => ({
     id: str(x.id), label: str(x.label), type: ftypes.includes(x.type) ? x.type : 'text',
     options: Array.isArray(x.options) ? x.options.map(str).filter(Boolean) : [], req: !!x.req, col: str(x.col),
   })) : [];
@@ -870,7 +888,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.8';
+const PAGE_VERSION = '2026-10-10.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -946,7 +964,7 @@ function demoDb() {
   const t0 = Date.now() - 30 * 864e5;
   let n = 0, hn = 999000100;
   const cases = [];
-  const mk = (cat, mp, o) => cases.push({ id: 'demo-c' + (++n), cat, mp, hn: String(++hn), created: new Date(t0 + n * 36e5).toISOString(), ...o });
+  const mk = (cat, mp, o) => cases.push({ id: 'demo-c' + (++n), cat, mp, hn: String(++hn), created: new Date(t0 + n * 36e5).toISOString(), room: ['Infinity', 'Precise', 'VersaHD'][n % 3], ...o });
   mk('vmbt', 'JR', { icd: 'C50.4', ct: d(-10), in: d(-9), sim: d(5), fin: d(-6), eval: d(-5), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
   mk('vmbt', 'WM', { icd: 'C50.9', ct: d(-8), in: d(-7), sim: d(7), fin: d(-3), type: 'New', doc: 'SC', aim: 'Curative', note: 'DIBH', dpf: '2', fx: '25', freq: 'Daily' });
   mk('vmbt', 'NY', { icd: 'C50.2', ct: d(-5), in: d(-4), sim: d(8), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2.67', fx: '15', freq: 'Daily' });
@@ -957,7 +975,7 @@ function demoDb() {
   mk('vmhn', 'WS', { icd: 'C11.9', ct: d(-14), in: d(-8), sim: d(-1), type: 'New', doc: 'SC', aim: 'Curative', dpf: '2', fx: '35', freq: 'Daily' });
   mk('vmhn', 'JR', { icd: 'C11.9', ct: d(-9), in: d(-4), sim: d(3), fin: d(-1), type: 'New', doc: 'TA', aim: 'Curative', dpf: '2', fx: '33', freq: 'Daily' });
   mk('vmhn', 'WM', { icd: 'C13.9', ct: d(-1), in: d(-1), sim: d(-1), fin: d(-1), eval: d(-1), type: 'Emer high', doc: 'TA', aim: 'Palliative', dpf: '4', fx: '5', freq: 'Daily' });
-  mk('3d', 'NY', { icd: 'C79.5', ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative', dpf: '3', fx: '10', freq: 'Daily' });
+  mk('3d', 'NY', { icd: 'C79.5', ct: d(-3), in: d(-3), sim: d(0), type: 'New', doc: 'TA', aim: 'Palliative', area: 'Spine', dpf: '3', fx: '10', freq: 'Daily', sites: JSON.stringify([{ area: 'Pelvis', dpf: '8', fx: '1', freq: 'Single fraction' }]) });
   mk('3d', 'WS', { icd: 'C79.5', ct: d(-2), in: d(-2), sim: d(-2), fin: d(-2), eval: d(-2), type: 'Emer low', doc: 'TA', aim: 'Palliative', dpf: '8', fx: '1', freq: 'Single fraction' });
   mk('3d', 'JR', { icd: 'C20', ct: d(0), in: d(0), sim: d(4), type: 'New', doc: 'PM', aim: 'Curative', dpf: '2', fx: '25', freq: 'Daily' });
   mk('srs', 'WM', { icd: 'C79.3', ct: d(-2), in: d(-2), sim: d(7), type: 'New', doc: 'SC', aim: 'Curative', tech: 'SRT', dpf: '8', fx: '3', freq: 'EOD' });
@@ -1315,7 +1333,7 @@ function renderWork() {
     if (state.tab === 'done' && st !== 'done') return false;
     if (state.cat && c.cat !== state.cat) return false;
     if (state.person && c.mp !== state.person && !(rcs[c.id] || []).some(l => l.mp === state.person)) return false;
-    if (q && !`${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase().includes(q)) return false;
+    if (q && !`${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${parseSites(c).map(siteText).join(' ')} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const due = c => (c.sim === 'on call' ? '0000' : c.sim || '9999');
@@ -1621,8 +1639,54 @@ function checkArea(pre) {
 }
 const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === OTHER ? str($(`#${pre}-freq-other`).value) : v; };
 const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), freq: readFreq(pre) });
+// ฟีเจอร์ที่ต้องใช้ Code.gs รุ่นใหม่ (เก็บลงชีตได้) · Code.gs รุ่นเก่าจะซ่อนไว้ ไม่ให้กรอกแล้วหาย
+const serverHas = api => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= api;
+const roomSitesOn = () => serverHas(ROOM_API);
+// ฉายหลายที่ (ขนาดรังสีต่างกัน): บริเวณแรกอยู่ในช่อง area/dpf/fx/freq ของเคส บริเวณถัดไปเก็บใน sites เป็น JSON
+function parseSites(c) {
+  let a = [];
+  try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), freq: str(x.freq) })) : [];
+}
+const siteText = x => [x.area, doseText(x)].filter(Boolean).join(' · ');
+let siteSeq = 0;
+// ใช้ฟังก์ชันเดียวกับบริเวณแรก (renderArea, fillDose, readDose ฯลฯ) ด้วย pre ของแต่ละบริเวณ เช่น is1, fs2
+function addSite(base, x = {}) {
+  const pre = `${base}s${++siteSeq}`;
+  $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}">
+    <div class="site-head"><b></b><button type="button" class="icon-btn" data-rmsite="${pre}" aria-label="ลบบริเวณนี้">×</button></div>
+    <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="${pre}-area" aria-label="บริเวณที่ฉาย (เพิ่มเติม)"></div><input id="${pre}-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+    <div class="dose-row">
+      <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="${pre}-dpf" min="0" step="any" inputmode="decimal" placeholder="8"></label>
+      <label class="field"><span class="lbl">Fx</span><input type="number" id="${pre}-fx" min="1" step="1" inputmode="numeric" placeholder="1"></label>
+      <div class="field"><span class="lbl">รวม</span><output class="total" id="${pre}-total">–</output></div>
+      <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="${pre}-freq" role="radiogroup" aria-label="ความถี่ (เพิ่มเติม)"></div><input id="${pre}-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
+    </div>
+  </div>`);
+  renderArea(pre, x.area || '');
+  fillDose(pre, x);
+  syncSites(base);
+  return pre;
+}
+function renderSites(base, list) {
+  $(`#${base}-sites`).innerHTML = '';
+  list.forEach(x => addSite(base, x));
+  syncSites(base);
+}
+const sitePres = base => $$(`#${base}-sites .site`).map(el => el.dataset.site);
+function syncSites(base) {
+  const on = roomSitesOn();
+  $$(`#${base}-sites .site-head b`).forEach((b, i) => { b.textContent = `บริเวณที่ ${i + 2}`; });
+  $(`#${base}-sites`).hidden = !on;
+  $(`#${base}-addsite`).parentElement.hidden = !on;
+}
+const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre) })).filter(x => x.area || x.dpf || x.fx || x.freq);
+function checkSites(base) {
+  for (const pre of sitePres(base)) { const err = checkDose(pre) || checkArea(pre); if (err) return err; }
+  return '';
+}
 // หัวข้อเพิ่มเติม: วาดในฟอร์มแจกเคส (i) และหน้าแก้ไขเคส (f) · Code.gs รุ่นเก่ายังเก็บลงชีตไม่ได้ จึงซ่อนไว้
-const extraFieldsOn = () => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= EXTRA_API;
+const extraFieldsOn = () => serverHas(EXTRA_API);
 const extraList = () => (extraFieldsOn() ? state.config.fields : []);
 const splitList = v => str(v).split(',').map(str).filter(Boolean);
 const extraText = (f, v) => (f.type === 'date' ? fmtDay(v) || str(v) : str(v));
@@ -1671,8 +1735,10 @@ function caseRow(c, rcs) {
   const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
   const areaTxt = c.area && `<span>${esc(c.area)}</span>`;
   const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
+  const more = parseSites(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`);
+  const room = c.room && `<span title="ห้องฉาย">${esc(c.room)}</span>`;
   const extras = extraList().filter(f => str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
-  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, ...extras, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, c.aim && `<span>${esc(c.aim)}</span>`, ...extras, c.note && `<span>${esc(c.note)}</span>`];
+  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, ...more, ...extras, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, ...more, c.aim && `<span>${esc(c.aim)}</span>`, room, ...extras, c.note && `<span>${esc(c.note)}</span>`];
   let dates;
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
@@ -1989,7 +2055,8 @@ function renderSettings() {
       <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">แถบ</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th>HN</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
-      <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}</div></div>
+      <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('rooms', 'ห้องฉาย')}</div>
+      ${roomSitesOn() ? '' : '<p class="notice" style="margin:12px 0 0"><b>ต้องอัปเดต Code.gs</b><span>ห้องฉายและปุ่มเพิ่มบริเวณที่ฉายจะแสดงในฟอร์มเมื่อวาง Code.gs รุ่นใหม่และ Deploy เวอร์ชันใหม่แล้ว</span></p>'}</div>
     <div class="sec"><div class="sec-head"><h2>หัวข้อเพิ่มเติมในฟอร์มแจกเคส</h2><p>เพิ่มหัวข้อที่อยากเก็บ เช่น Bolus, 4D-CT, Protocol · แสดงต่อจากช่องวันที่ในฟอร์มแจกเคส ในหน้าแก้ไขเคส และในรายการเคส (ค้นหาได้) · เก็บเป็นคอลัมน์ของตัวเองในแท็บ Cases · ลบหัวข้อแล้วข้อมูลเดิมยังอยู่ในชีต</p></div>
       ${oldCode}
       ${fieldCards ? `<div class="cat-list">${fieldCards}</div>` : ''}
@@ -2093,12 +2160,15 @@ function fillCaseSelects(c) {
   chipGroup($('#f-doc'), 'doc', withCur(docCodes(), c.doc), c.doc, docName);
   chipGroup($('#f-type'), 'type', withCur(state.config.types, c.type), c.type);
   chipGroup($('#f-aim'), 'aim', withCur(state.config.aims, c.aim), c.aim);
+  chipGroup($('#f-room'), 'room', withCur(state.config.rooms, c.room), c.room);
   chipGroup($('#f-tech'), 'tech', withCur(state.config.techniques, c.tech), c.tech);
 }
 function syncCaseForm() {
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
   $$('.plan-only', caseForm).forEach(el => { el.hidden = simple; });
+  if (!roomSitesOn()) $('#f-room-field').hidden = true;
+  syncSites('f');
   $('#tech-field').hidden = simple || !k.tech;
   $('#f-in-lbl').textContent = simple ? 'Date' : 'In';
   $('#f-sim').disabled = $('#f-oncall').checked;
@@ -2123,6 +2193,7 @@ function openCase(id) {
   $('#f-dx').value = dxValue(editingCase);
   renderArea('f', editingCase.area);
   renderExtra('f', editingCase);
+  renderSites('f', parseSites(editingCase));
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
@@ -2133,7 +2204,7 @@ async function submitCase(e) {
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
   if (!chipValue($('#f-mp'))) { focusChips($('#f-mp')); return toast('เลือก MP ผู้รับเคส', { err: true }); }
-  const doseErr = checkDose('f') || checkArea('f');
+  const doseErr = checkDose('f') || checkArea('f') || checkSites('f');
   if (doseErr) return toast(doseErr, { err: true });
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
@@ -2146,6 +2217,7 @@ async function submitCase(e) {
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
     ...readDose('f'), ...readDx('f'), area: readArea('f'), ...readExtra('f'), updated: nowISO(),
+    ...(roomSitesOn() ? { room: simple ? '' : chipValue($('#f-room')), sites: readSites('f') } : {}),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -2283,11 +2355,11 @@ function missingRequired(ks) {
   const req = state.config.required, plan = ks.some(k => k.kind !== 'simple');
   const filled = {
     name: () => str($('#i-name').value), doc: () => chipValue($('#i-doc')), dx: () => str($('#i-dx').value),
-    area: () => readArea('i'), type: () => chipValue($('#i-type')), aim: () => chipValue($('#i-aim')), tech: () => chipValue($('#i-tech')),
+    area: () => readArea('i'), type: () => chipValue($('#i-type')), aim: () => chipValue($('#i-aim')), tech: () => chipValue($('#i-tech')), room: () => chipValue($('#i-room')),
     dpf: () => str($('#i-dpf').value), fx: () => str($('#i-fx').value), freq: () => readFreq('i'),
     ct: () => $('#i-ct').value, sim: () => $('#i-oncall').checked || $('#i-sim').value, note: () => str($('#i-note').value),
   };
-  const need = REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !filled[f.key]());
+  const need = REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !(f.key === 'room' && !roomSitesOn()) && !filled[f.key]());
   if (need) return need;
   const vals = readExtra('i'), x = extraList().find(f => f.req && !vals['x_' + f.id]);
   return x ? { key: 'x-' + x.id, label: x.label, pick: x.type === 'pick' || x.type === 'multi' } : null;
@@ -2308,7 +2380,7 @@ function renderIntake() {
     const who = nextFor(k.id, date);
     return `<label title="${esc(k.p4p)}: คนถัดไป ${esc(who || '—')}"><input type="checkbox" name="icat" value="${esc(k.id)}"${cur.includes(k.id) ? ' checked' : ''}><span>${esc(k.label)}<small>${esc(who || '–')}</small></span></label>`;
   }).join('');
-  for (const [id, name, list] of [['#i-doc', 'idoc', docCodes()], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-tech', 'itech', cfg.techniques]]) {
+  for (const [id, name, list] of [['#i-doc', 'idoc', docCodes()], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-room', 'iroom', cfg.rooms], ['#i-tech', 'itech', cfg.techniques]]) {
     const el = $(id);
     const sel = el.children.length ? chipValue(el) : (name === 'itype' ? 'New' : '');
     chipGroup(el, name, list, sel, name === 'idoc' ? docName : null);
@@ -2316,6 +2388,8 @@ function renderIntake() {
   ensureFreq('i');
   ensureArea('i');
   ensureExtra('i');
+  for (const pre of sitePres('i')) { ensureArea(pre); ensureFreq(pre); }
+  syncSites('i');
   $$('[data-req]', intake).forEach(el => { el.hidden = !cfg.required[el.dataset.req]; });
   const pick = chipValue($('#i-pick'));
   $('#i-pick').innerHTML = activeStaff().map(s => `<label><input type="radio" name="ipick" value="${esc(s.code)}"${s.code === pick ? ' checked' : ''}><span>${esc(s.code)}${onLeave(s.code, date) ? '<small>ลา</small>' : ''}</span></label>`).join('');
@@ -2328,6 +2402,7 @@ function syncIntake() {
   const allSimple = ks.length > 0 && ks.every(k => k.kind === 'simple');
   $$('.plan-field', intake).forEach(el => { el.hidden = allSimple; });
   $('#i-tech-field').hidden = !ks.some(k => k.tech);
+  $('#i-room-field').hidden = !roomSitesOn();
   $('#i-in-lbl').textContent = allSimple ? 'Date' : 'In';
   $('#i-sim').disabled = $('#i-oncall').checked;
   const date = $('#i-in').value || today();
@@ -2371,12 +2446,13 @@ function fillIntake(c) {
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#i-' + f).value = c[f] || '';
   $('#i-oncall').checked = c.sim === 'on call';
   $('#i-sim').value = c.sim === 'on call' ? '' : c.sim || '';
-  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
+  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-room', c.room], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
   fillDose('i', c);
   renderArea('i', c.area || '');
   renderExtra('i', c);
+  renderSites('i', parseSites(c));
   $('#i-dx').value = dxValue(c);
   renderIntake();
   const cats = c.cats || (c.cat ? [c.cat] : []);
@@ -2396,7 +2472,7 @@ async function submitIntake(e) {
   if (!hn) { $('#i-hn').focus(); return toast('กรอก HN ก่อนแจกเคส', { err: true }); }
   if (!catIds.length) return toast('เลือกเทคนิคอย่างน้อย 1 อย่างก่อนแจกเคส', { err: true });
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
-  const inputErr = checkDose('i') || checkArea('i');
+  const inputErr = checkDose('i') || checkArea('i') || checkSites('i');
   if (inputErr) return toast(inputErr, { err: true });
   const need = missingRequired(catIds.map(catOf));
   if (need) {
@@ -2409,14 +2485,14 @@ async function submitIntake(e) {
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
   const batch = catIds.length > 1 ? 'b-' + uid() : '';
-  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i') };
+  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i'), ...(roomSitesOn() ? { sites: readSites('i') } : {}) };
   const recs = catIds.map((id, i) => {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
     return normCase({
       ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : i ? 'follow' : 'auto', batch,
       ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
-      doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))),
+      doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))), room: roomSitesOn() ? plan(chipValue($('#i-room'))) : '',
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
     });
   });
@@ -2529,6 +2605,8 @@ document.addEventListener('click', e => {
   if (ds.logtab !== undefined) { state.logKind = ds.logtab; return render(); }
   if (ds.month) { state.month = shiftMonth(state.month, +ds.month); return render(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
+  if (ds.addsite) { const pre = addSite(ds.addsite); $(`#${pre}-area input`).focus(); return; }
+  if (ds.rmsite) { const base = ds.rmsite.replace(/s\d+$/, ''); t.closest('.site').remove(); syncSites(base); return; }
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'cat') {
     const last = draft.cats[draft.cats.length - 1] || {};
@@ -2582,26 +2660,32 @@ document.addEventListener('click', e => {
 
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
+// ชิปบริเวณที่ฉาย / ความถี่ ของทุกบริเวณ (id เป็น <pre>-area, <pre>-freq) และช่อง Dose/fx, Fx (<pre>-dpf, <pre>-fx)
+function siteChip(e) {
+  const box = e.target.closest('.chips'), m = box && /^(.+)-(area|freq)$/.exec(box.id);
+  if (!m) return false;
+  if (m[2] === 'freq') onFreqChange(m[1], e.target); else syncArea(m[1], e.target.value === OTHER);
+  return true;
+}
+function doseInput(e) { const m = /^(.+)-(dpf|fx)$/.exec(e.target.id || ''); if (m) syncDose(m[1]); }
 caseForm.addEventListener('submit', submitCase);
 caseForm.addEventListener('change', e => {
-  if (e.target.name === 'ffreq') return onFreqChange('f', e.target);
-  if (e.target.name === 'farea') return syncArea('f', e.target.value === OTHER);
+  if (siteChip(e)) return;
   if (e.target.id === 'f-in') mpChips($('#f-mp'), 'fmp', chipValue($('#f-mp')), e.target.value || today());
   if (['f-cat', 'f-oncall', 'f-in'].includes(e.target.id) || e.target.name === 'fmp') syncCaseForm();
 });
 setupCombo('i');
 setupCombo('f');
-caseForm.addEventListener('input', e => { if (e.target.id === 'f-dpf' || e.target.id === 'f-fx') syncDose('f'); });
+caseForm.addEventListener('input', doseInput);
 intake.addEventListener('submit', submitIntake);
 const clearMissing = e => { const f = e.target.closest && e.target.closest('.field.missing'); if (f) f.classList.remove('missing'); };
 intake.addEventListener('change', e => {
   clearMissing(e);
-  if (e.target.name === 'ifreq') return onFreqChange('i', e.target);
-  if (e.target.name === 'iarea') return syncArea('i', e.target.value === OTHER);
+  if (siteChip(e)) return;
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); }
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
-intake.addEventListener('input', e => { clearMissing(e); if (e.target.id === 'i-dpf' || e.target.id === 'i-fx') syncDose('i'); });
+intake.addEventListener('input', e => { clearMissing(e); doseInput(e); });
 leaveForm.addEventListener('submit', e => {
   e.preventDefault();
   addLeave(chipValue($('#v-mp')), $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });
