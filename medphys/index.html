@@ -162,6 +162,15 @@ div.c-main,div.lrow{cursor:default}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
+.cnts{display:flex;flex-wrap:wrap;gap:8px 12px}
+.cnt{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:13.5px}
+.cnt>span{white-space:nowrap}
+.cnt button{width:28px;height:28px;padding:0;border:0;border-radius:50%;background:var(--sunken);color:var(--fg);font-size:16px;line-height:1}
+.cnt button:hover{background:var(--accent-soft);color:var(--accent)}
+.cnt input{width:44px;min-height:28px;padding:2px 4px;text-align:center;font-family:var(--mono);-moz-appearance:textfield}
+.cnt input::-webkit-inner-spin-button,.cnt input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.cnt.many{border-color:var(--accent)}
+.n-field{max-width:180px}
 .sites{display:grid;gap:10px}.sites:empty{display:none}
 .site{display:grid;gap:12px;padding:12px;border:1px dashed var(--line);border-radius:12px}
 .site-head{display:flex;align-items:center;justify-content:space-between;min-height:24px;font-size:13px;color:var(--muted)}
@@ -476,6 +485,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         </div>
         <div class="field dx-field"><span class="lbl"><span>Diag (ICD-10)<b class="req" data-req="dx" hidden>*</b></span></span><div class="combo"><input id="i-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="i-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="i-dx-list" role="listbox" hidden></ul></div></div>
         <div class="field"><span class="lbl"><span>เทคนิค<b class="req" title="บังคับเสมอ">*</b></span> <span class="sub-lbl">เลือกได้หลายอย่าง เทคนิคแรกแจกตามคิว เทคนิคถัดไปให้คนเดียวกัน</span></span><div class="chips cats" id="i-cat" aria-label="เทคนิค"></div></div>
+        <div class="field" id="i-cnt-field" hidden><span class="lbl"><span style="white-space:nowrap">จำนวนครั้ง</span> <span class="sub-lbl">เกิน 1 = นับหลายคิวและแต้มหลายเท่า คนที่ได้จะถูกข้ามตามจำนวนเมื่อคิววนมาถึง</span></span><div class="cnts" id="i-cnt"></div></div>
         <div class="intake-mid plan-field">
           <div class="field"><span class="lbl"><span>Type<b class="req" data-req="type" hidden>*</b></span></span><div class="chips" id="i-type" role="radiogroup" aria-label="Type"></div></div>
           <div class="field"><span class="lbl"><span>Aim<b class="req" data-req="aim" hidden>*</b></span></span><div class="chips" id="i-aim" role="radiogroup" aria-label="Aim"></div></div>
@@ -570,6 +580,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field"><span class="lbl">หมวด</span><select id="f-cat"></select></label>
         <div class="field"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><div class="chips people" id="f-mp" role="radiogroup" aria-label="MP"></div></div>
       </div>
+      <label class="field n-field" id="f-n-field"><span class="lbl">จำนวนครั้ง</span><input type="number" id="f-n" min="1" max="20" step="1" inputmode="numeric"></label>
       <div class="row2">
         <label class="field"><span class="lbl">HN</span><input id="f-hn" inputmode="numeric" autocomplete="off" required></label>
         <label class="field"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
@@ -680,9 +691,11 @@ const REQ_FIELDS = [
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
-const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
 const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
 const ROOM_API = 7;    // Code.gs ที่เก็บห้องฉายและบริเวณที่ฉายเพิ่มเติมได้
+const COUNT_API = 8;   // Code.gs ที่เก็บจำนวนครั้งและนับในคิวได้
+const MAX_N = 20;
 // เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
 const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 const BUILTIN_ACTS = ['dqa', 'mu', 'rc', ...MOVED_CATS];
@@ -763,7 +776,9 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+// จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
+const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -814,6 +829,7 @@ function normCase(o) {
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
   c.how = c.how === 'manual' || c.how === 'follow' ? c.how : c.how ? 'auto' : '';
+  c.n = unitsOf(c) > 1 ? String(unitsOf(c)) : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
   return c;
@@ -894,7 +910,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.11';
+const PAGE_VERSION = '2026-10-10.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1074,10 +1090,13 @@ function pickNext(o, trace) {
     if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
     const j = idx(c.mp);
     if (j < 0) return;
-    if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + 1; return; }
+    // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
+    const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+    if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
     const trial = Object.assign({}, credit);
     if (select(p, c.in, trial) === j) Object.assign(credit, trial);
     p = (j + 1) % n;
+    if (k > 1) credit[c.mp] = (credit[c.mp] || 0) + k - 1;
     lastAuto = c;
   });
   if (!pointerDone) { p = idx(pointer.code); lastAuto = null; }
@@ -1125,13 +1144,14 @@ function computeP4P(ym) {
   const people = {};
   const ensure = code => (people[code] = people[code] || { code, counts: {}, acad: 0, admin: 0, acadN: 0, adminN: 0 });
   cfg.staff.forEach(s => ensure(s.code));
-  const add = (r, key) => { r.counts[key] = (r.counts[key] || 0) + 1; };
+  const add = (r, key, times = 1) => { r.counts[key] = (r.counts[key] || 0) + times; };
   for (const c of state.cases) {
     if (!c.mp || !c.in.startsWith(ym)) continue;
-    if (MOVED_CATS.includes(c.cat) && cfg.acts[c.cat]) { add(ensure(c.mp), c.cat); continue; } // ยังไม่ได้ย้ายเป็นกิจกรรม
+    const u = unitsOf(c);   // จำนวนครั้ง
+    if (MOVED_CATS.includes(c.cat) && cfg.acts[c.cat]) { add(ensure(c.mp), c.cat, u); continue; } // ยังไม่ได้ย้ายเป็นกิจกรรม
     const r = ensure(c.mp), k = catOf(c.cat);
-    add(r, 'cat:' + k.id);
-    if (k.mu) add(r, 'mu');
+    add(r, 'cat:' + k.id, u);
+    if (k.mu) add(r, 'mu', u);
   }
   for (const l of state.logs) {
     if (!l.mp || !l.date.startsWith(ym)) continue;
@@ -1798,7 +1818,7 @@ function caseRow(c, rcs) {
   else act = `<span class="done-mark">✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtDay(c.eval))}</span>`;
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
-      <span class="c-line"><span class="tag">${esc(k.label)}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
+      <span class="c-line"><span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
     </${canEdit() ? 'button' : 'div'}>
     <div class="c-who">${av(c.mp)}${rc}</div>
@@ -2195,6 +2215,7 @@ function syncCaseForm() {
   const simple = k.kind === 'simple';
   $$('.plan-only', caseForm).forEach(el => { el.hidden = simple; });
   if (!roomSitesOn()) $('#f-room-field').hidden = true;
+  $('#f-n-field').hidden = !countsOn();
   syncSites('f');
   $('#tech-field').hidden = simple || !k.tech;
   $('#f-in-lbl').textContent = simple ? 'Date' : 'In';
@@ -2204,8 +2225,9 @@ function syncCaseForm() {
   const changed = mp && editingCase.mp && mp !== editingCase.mp;
   hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
   hint.className = mp && onLeave(mp, day) ? 'hint warn' : 'hint';
-  const extra = k.mu ? ` + New MU ${num(unitPts(state.config.acts.mu.min, state.config.acts.mu.w), 3)}` : '';
-  $('#f-preview').innerHTML = `${esc(k.p4p)} = <b>${num(unitPts(k.min, k.w), 3)}</b> แต้ม${extra} ให้ MP ตามวัน ${simple ? 'Date' : 'In'}`;
+  const times = countsOn() ? clampN($('#f-n').value) : 1, x = times > 1 ? ` × ${times} ครั้ง` : '';
+  const extra = k.mu ? ` + New MU ${num(unitPts(state.config.acts.mu.min, state.config.acts.mu.w), 3)}${x}` : '';
+  $('#f-preview').innerHTML = `${esc(k.p4p)} = <b>${num(unitPts(k.min, k.w), 3)}</b> แต้ม${x}${extra} ให้ MP ตามวัน ${simple ? 'Date' : 'In'}`;
 }
 function openCase(id) {
   const c = state.cases.find(x => x.id === id);
@@ -2214,6 +2236,7 @@ function openCase(id) {
   fillCaseSelects(editingCase);
   $('#case-title').textContent = `แก้ไขเคส ${c.hn || ''}`.trim();
   for (const f of ['hn', 'name', 'ct', 'in', 'fin', 'eval', 'note']) $('#f-' + f).value = editingCase[f] || '';
+  $('#f-n').value = unitsOf(editingCase);
   $('#f-oncall').checked = editingCase.sim === 'on call';
   $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
   fillDose('f', editingCase);
@@ -2231,6 +2254,8 @@ async function submitCase(e) {
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
   if (!chipValue($('#f-mp'))) { focusChips($('#f-mp')); return toast('เลือก MP ผู้รับเคส', { err: true }); }
+  const nv = $('#f-n').value;
+  if (countsOn() && nv !== '' && !(Number.isInteger(+nv) && +nv >= 1 && +nv <= MAX_N)) { $('#f-n').focus(); return toast(`จำนวนครั้งต้องเป็นจำนวนเต็ม 1–${MAX_N}`, { err: true }); }
   const doseErr = checkDose('f') || checkArea('f') || checkSites('f');
   if (doseErr) return toast(doseErr, { err: true });
   const k = catOf($('#f-cat').value);
@@ -2245,6 +2270,7 @@ async function submitCase(e) {
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
     ...readDose('f'), ...readDx('f'), area: readArea('f'), ...readExtra('f'), updated: nowISO(),
     ...(roomSitesOn() ? { room: simple ? '' : chipValue($('#f-room')), sites: readSites('f') } : {}),
+    ...(countsOn() ? { n: clampN(nv) } : {}),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
   if (rec.mp !== editingCase.mp) rec.how = 'manual';
@@ -2399,6 +2425,24 @@ function selectedCats() {
   on.forEach(id => { if (!catOrder.includes(id)) catOrder.push(id); });
   return catOrder.slice();
 }
+// จำนวนครั้งของแต่ละเทคนิคที่เลือก (ค่าเริ่มต้น 1) · Code.gs รุ่นเก่ายังไม่นับ จึงซ่อนไว้
+let catCount = {};
+const countsOn = () => serverHas(COUNT_API);
+const clampN = v => Math.min(MAX_N, Math.max(1, Math.floor(+v) || 1));
+const countOf = id => (countsOn() ? clampN(catCount[id]) : 1);
+function renderCounts(ids) {
+  const box = $('#i-cnt'), sig = ids.join('|');
+  $('#i-cnt-field').hidden = !ids.length || !countsOn();
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig;
+    box.innerHTML = ids.map(id => `<span class="cnt" data-cat="${esc(id)}"><span>${esc(catOf(id).label)}</span><button type="button" data-cntstep="-1" data-cntcat="${esc(id)}" aria-label="ลดจำนวนครั้ง ${esc(catOf(id).label)}">−</button><input type="number" min="1" max="${MAX_N}" step="1" inputmode="numeric" data-cnt="${esc(id)}" aria-label="จำนวนครั้ง ${esc(catOf(id).label)}"><button type="button" data-cntstep="1" data-cntcat="${esc(id)}" aria-label="เพิ่มจำนวนครั้ง ${esc(catOf(id).label)}">+</button></span>`).join('');
+  }
+  $$('.cnt', box).forEach(el => {
+    const id = el.dataset.cat, n = countOf(id), input = $('input', el);
+    if (document.activeElement !== input) input.value = n;
+    el.classList.toggle('many', n > 1);
+  });
+}
 function renderIntake() {
   const cfg = state.config;
   const date = $('#i-in').value || today();
@@ -2426,6 +2470,7 @@ function renderIntake() {
 }
 function syncIntake() {
   const ks = selectedCats().map(catOf);
+  renderCounts(ks.map(k => k.id));
   const allSimple = ks.length > 0 && ks.every(k => k.kind === 'simple');
   $$('.plan-field', intake).forEach(el => { el.hidden = allSimple; });
   $('#i-tech-field').hidden = !ks.some(k => k.tech);
@@ -2445,28 +2490,30 @@ function syncIntake() {
     return;
   }
   const named = code => { const s = state.config.staff.find(x => x.code === code); return `<b>${esc(code)}</b>${s && s.name ? ' · ' + esc(s.name) : ''}`; };
-  const labels = ks.map(k => k.label).join(', ');
-  const totalPts = ks.reduce((t, k) => t + unitPts(k.min, k.w), 0);
+  const times = k => (countOf(k.id) > 1 ? ` ×${countOf(k.id)}` : '');
+  const labels = ks.map(k => k.label + times(k)).join(', ');
+  const totalPts = ks.reduce((t, k) => t + unitPts(k.min, k.w) * countOf(k.id), 0);
   if (manual) {
     const pick = chipValue($('#i-pick'));
     if (!pick) { box.innerHTML = `${av('', 'lg')}<span>เลือกผู้รับเคส<small>คิวของ ${esc(labels)} จะไม่ขยับ</small></span>`; return; }
     if (onLeave(pick, date)) box.className = 'assign warn';
     box.innerHTML = `${av(pick, 'lg')}<span>ส่งให้ ${named(pick)} · เลือกเอง${ks.length > 1 ? ` ${ks.length} เทคนิค` : ''}
-      <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(labels)} ไม่ขยับ และจะข้าม ${esc(pick)} 1 ครั้ง${ks.length > 1 ? 'ในแต่ละคิว' : ''}เมื่อวนมาถึง · ${num(totalPts, 3)} แต้ม</small></span>`;
+      <small>${onLeave(pick, date) ? `${esc(pick)} ลา${dayTxt} · ` : ''}คิว ${esc(labels)} ไม่ขยับ และจะข้าม ${esc(pick)} ${ks.length > 1 ? 'ตามจำนวนครั้งในแต่ละคิว' : `${countOf(ks[0].id)} ครั้ง`}เมื่อวนมาถึง · ${num(totalPts, 3)} แต้ม</small></span>`;
     return;
   }
   const [main, ...rest] = ks;
   const q = queueInfo(main.id, date), why = [];
   q.skipped.forEach(x => { const t = `${x.code} (${x.why === 'away' ? 'ลา · เสียคิวนี้' : 'ได้เคสนอกคิวไปแล้ว'})`; if (!why.includes(t)) why.push(t); });
-  const note = `${main.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${main.label}${why.length ? ` · ข้าม ${why.join(', ')}` : ''} · ${num(unitPts(main.min, main.w), 3)} แต้ม`;
+  const extraTurns = countOf(main.id) - 1;
+  const note = `${main.rotate === 'day' ? 'คิวรายวัน' : 'คิว'} ${main.label}${why.length ? ` · ข้าม ${why.join(', ')}` : ''}${extraTurns > 0 ? ` · ${countOf(main.id)} ครั้ง: จะข้าม ${q.code || ''} อีก ${extraTurns} ครั้งเมื่อวนมาถึง` : ''} · ${num(unitPts(main.min, main.w) * countOf(main.id), 3)} แต้ม`;
   if (!q.code) { box.className = 'assign warn'; box.innerHTML = `${av('', 'lg')}<span>${esc(main.label)}: ${esc(NOBODY)}</span>`; return; }
   if (!rest.length) {
-    box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}<small>${esc(note)}</small></span>`;
+    box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)}${times(main)}<small>${esc(note)}</small></span>`;
     return;
   }
   box.innerHTML = `${av(q.code, 'lg')}<span>ส่งให้ ${named(q.code)} · ${ks.length} เทคนิค · ${num(totalPts, 3)} แต้ม
-    <small><b>${esc(main.label)}</b> เทคนิคแรก · ${esc(note)}</small>
-    ${rest.map(k => `<small><b>${esc(k.label)}</b> ตามเทคนิคแรก · คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(q.code)} 1 ครั้งเมื่อวนมาถึง · ${num(unitPts(k.min, k.w), 3)} แต้ม</small>`).join('')}</span>`;
+    <small><b>${esc(main.label + times(main))}</b> เทคนิคแรก · ${esc(note)}</small>
+    ${rest.map(k => `<small><b>${esc(k.label + times(k))}</b> ตามเทคนิคแรก · คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(q.code)} ${countOf(k.id)} ครั้งเมื่อวนมาถึง · ${num(unitPts(k.min, k.w) * countOf(k.id), 3)} แต้ม</small>`).join('')}</span>`;
 }
 function fillIntake(c) {
   $$('#i-cat input').forEach(i => { i.checked = false; });
@@ -2485,6 +2532,7 @@ function fillIntake(c) {
   const cats = c.cats || (c.cat ? [c.cat] : []);
   for (const id of cats) { const el = $(`#i-cat input[value="${CSS.escape(id)}"]`); if (el) el.checked = true; }
   catOrder = cats.slice();
+  catCount = { ...(c.counts || {}) };
   syncIntake();
 }
 function resetIntake() {
@@ -2517,7 +2565,7 @@ async function submitIntake(e) {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
     return normCase({
-      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : i ? 'follow' : 'auto', batch,
+      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : i ? 'follow' : 'auto', batch, n: countOf(k.id),
       ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
       doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))), room: roomSitesOn() ? plan(chipValue($('#i-room'))) : '',
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
@@ -2533,7 +2581,7 @@ async function submitIntake(e) {
     resetIntake();
     render();
     $('#i-hn').focus();
-    const summary = `${saved.map(x => catOf(x.cat).label).join(', ')} → ${saved[0].mp}`;
+    const summary = `${saved.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${saved[0].mp}`;
     toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (เทคนิคถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
@@ -2548,7 +2596,7 @@ async function undoAssign(list) {
     state.cases = state.cases.filter(x => !ids.has(x.id));
     render();
     const first = list.find(c => catOf(c.cat).kind !== 'simple') || list[0];
-    fillIntake({ ...first, cats: list.map(c => c.cat), tech: (list.find(c => c.tech) || {}).tech || '' });
+    fillIntake({ ...first, cats: list.map(c => c.cat), counts: Object.fromEntries(list.map(c => [c.cat, unitsOf(c)])), tech: (list.find(c => c.tech) || {}).tech || '' });
     toast(`ยกเลิกการแจกเคส ${first.hn} แล้ว ข้อมูลกลับมาอยู่ในฟอร์ม`);
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
@@ -2633,6 +2681,7 @@ document.addEventListener('click', e => {
   if (ds.logtab !== undefined) { state.logKind = ds.logtab; return render(); }
   if (ds.month) { state.month = shiftMonth(state.month, +ds.month); return render(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
+  if (ds.cntstep) { const id = ds.cntcat; catCount[id] = clampN(countOf(id) + +ds.cntstep); return syncIntake(); }
   if (ds.addsite) { const pre = addSite(ds.addsite); $(`#${pre}-area input`).focus(); return; }
   if (ds.rmsite) { const base = ds.rmsite.replace(/s\d+$/, ''); t.closest('.site').remove(); syncSites(base); return; }
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
@@ -2704,16 +2753,20 @@ caseForm.addEventListener('change', e => {
 });
 setupCombo('i');
 setupCombo('f');
-caseForm.addEventListener('input', doseInput);
+caseForm.addEventListener('input', e => { doseInput(e); if (e.target.id === 'f-n') syncCaseForm(); });
 intake.addEventListener('submit', submitIntake);
 const clearMissing = e => { const f = e.target.closest && e.target.closest('.field.missing'); if (f) f.classList.remove('missing'); };
 intake.addEventListener('change', e => {
   clearMissing(e);
   if (siteChip(e)) return;
-  if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); }
+  if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); else delete catCount[e.target.value]; }
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
-intake.addEventListener('input', e => { clearMissing(e); doseInput(e); });
+intake.addEventListener('input', e => {
+  clearMissing(e);
+  doseInput(e);
+  if (e.target.dataset.cnt && e.target.value !== '') { catCount[e.target.dataset.cnt] = clampN(e.target.value); syncIntake(); }
+});
 leaveForm.addEventListener('submit', e => {
   e.preventDefault();
   addLeave(chipValue($('#v-mp')), $('#v-from').value, $('#v-to').value, $('#v-note').value).then(ok => { if (ok) $('#v-note').value = ''; });
