@@ -104,6 +104,11 @@ button{cursor:pointer}
 .gate-card p{margin:0;font-size:13.5px;color:var(--muted)}
 .gate-card .gate-err{color:var(--late)}
 .gate-card .gate-foot{font-size:12.5px}
+.gate-lpch{display:inline-flex;align-items:center;justify-content:center;gap:8px;color:var(--fg);text-decoration:none}
+.gate-lpch:hover{border-color:var(--accent);color:var(--accent)}
+.gate-home svg,.logout-btn svg{width:16px;height:16px;flex:none}
+.logout-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px 5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--fg);font-size:13.5px;white-space:nowrap}
+.logout-btn:hover{border-color:var(--late);color:var(--late)}
 .step-txt{font-size:12.5px;color:var(--muted);white-space:nowrap}
 div.c-main,div.lrow{cursor:default}
 .nav{display:flex;gap:2px;background:var(--sunken);padding:3px;border-radius:999px;max-width:100%;overflow-x:auto}
@@ -401,12 +406,13 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <!-- เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace -->
   <section class="gate" id="gate" hidden>
     <form class="gate-card" id="gate-form" novalidate>
-      <div><h2>เข้าสู่ระบบ</h2><p>ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับ LPCH RO Workspace หรือกดเปิดระบบนี้จากหน้า LPCH</p></div>
+      <div><h2>เข้าสู่ระบบ</h2><p>ใช้ชื่อผู้ใช้และรหัสผ่านของ <b>LPCH RO Workspace</b></p></div>
       <p class="gate-err" id="gate-err" role="alert" hidden></p>
       <label class="field"><span class="lbl">ชื่อผู้ใช้ หรืออีเมล</span><input id="g-user" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
       <label class="field"><span class="lbl">รหัสผ่าน</span><input id="g-pass" type="password" autocomplete="current-password"></label>
       <button type="submit" class="btn primary" id="g-save">เข้าสู่ระบบ</button>
-      <p class="gate-foot">บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) ตำแหน่งอื่นดูได้อย่างเดียว · ลืมรหัสผ่านให้รีเซ็ตที่ LPCH RO Workspace</p>
+      <a class="btn gate-lpch" id="gate-lpch" href="#" target="_top" rel="noopener"><span class="gate-home"></span>ไปที่ LPCH RO Workspace</a>
+      <p class="gate-foot">หรือเข้าสู่ระบบที่ LPCH RO Workspace แล้วกดปุ่มระบบนี้ จะเข้าได้ทันที · บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) ตำแหน่งอื่นดูได้อย่างเดียว · ลืมรหัสผ่านให้รีเซ็ตที่ LPCH RO Workspace</p>
     </form>
   </section>
 
@@ -819,8 +825,8 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.2';
-const NEEDS_API = 4;
+const PAGE_VERSION = '2026-10-10.3';
+const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
 let lpchToken = '';
@@ -830,6 +836,8 @@ function setToken(t) {
   try { if (lpchToken) localStorage.setItem(LPCH_KEY, lpchToken); else localStorage.removeItem(LPCH_KEY); } catch (e) { /* storage blocked */ }
 }
 let ssoError = window.MEDPHYS_LPCH_ERROR || '';
+const SHEET_DIALOG = !!window.MEDPHYS_SHEET_DIALOG;   // เปิดจากเมนูในชีต: ใช้บัญชี Google ของเจ้าของไฟล์/แอดมินได้
+const LINK_TARGET = SHEET_DIALOG ? '_blank' : '_top';
 if (window.MEDPHYS_LPCH_TOKEN) setToken(window.MEDPHYS_LPCH_TOKEN);
 if (IN_SHEET && (window.MEDPHYS_LPCH_TOKEN || window.MEDPHYS_LPCH_ERROR)) {   // เอา ?sso=… ออกจากแถบที่อยู่
   try { google.script.history.replace(null, {}, ''); } catch (e) { /* runtime เก่า */ }
@@ -841,7 +849,7 @@ const call = (fn, ...args) => new Promise((ok, fail) => google.script.run.withSu
   const why = m.slice(i + LOGIN_MARK.length);
   showGate(why);
   fail(Object.assign(new Error(why), { login: true }));
-})[fn](...args, lpchToken));
+})[fn](...args, lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : '')));
 const sheetStore = {
   mode: 'sheet',
   load: () => call('getData'),
@@ -1114,22 +1122,23 @@ function typeChip(t) {
   return `<span class="chip ${cls}">${esc(t)}</span>`;
 }
 
+const LOGOUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>';
 const USER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
 const HOME_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 21v-5.5a2.5 2.5 0 0 1 5 0V21"/></svg>';
 function renderFoot() {
   const src = { github: 'โหลดจาก GitHub (อัปเดตอัตโนมัติ)', file: 'ไฟล์ index ในโปรเจกต์' }[window.MEDPHYS_PAGE_SOURCE] || '';
   const parts = [`หน้าเว็บรุ่น ${PAGE_VERSION}`];
   if (store.mode === 'local') parts.push('โหมดตัวอย่าง');
-  else { if (src) parts.push(src); parts.push(`Code.gs รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}`); }
+  else { if (src) parts.push(src); if (state.loaded) parts.push(`Code.gs รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}`); }
   $('#foot').textContent = parts.join(' · ');
 }
 function renderAcct() {
   const u = state.user, gated = state.gate != null;
-  const home = state.homeUrl ? `<a class="home-btn" href="${esc(state.homeUrl)}" target="_top" rel="noopener" title="กลับหน้าหลัก LPCH RO Workspace">${HOME_SVG}<span>Home</span></a>` : '';
+  const home = state.homeUrl ? `<a class="home-btn" href="${esc(state.homeUrl)}" target="${LINK_TARGET}" rel="noopener" title="กลับหน้าหลัก LPCH RO Workspace">${HOME_SVG}<span>Home</span></a>` : '';
   let who = '';
   const chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
-  if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + '<button type="button" class="link-btn" id="logout">ออกจากระบบ</button>';
+  if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
   else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
   else if (!gated && u.via === 'demo') who = chip(u.name, roleTag(), 'โหมดตัวอย่าง');
   $('#acct').innerHTML = home + who;
@@ -1145,6 +1154,11 @@ function render() {
     $('#demo-notice').hidden = $('#ro-notice').hidden = true;
     $('#gate-err').textContent = state.gate;
     $('#gate-err').hidden = !state.gate;
+    const lp = $('#gate-lpch');
+    lp.hidden = !state.homeUrl;
+    lp.href = state.homeUrl || '#';
+    lp.target = LINK_TARGET;
+    $('.gate-home', lp).innerHTML = HOME_SVG;
     return;
   }
   const oldApi = store.mode === 'sheet' && state.loaded && (state.api || 0) < NEEDS_API;
@@ -2536,6 +2550,7 @@ async function logout() {
   setToken('');
   if (t) call('lpchLogout', t).catch(() => {});
   showGate('');
+  toast('ออกจากระบบแล้ว');
 }
 $('#gate-form').addEventListener('submit', async e => {
   e.preventDefault();

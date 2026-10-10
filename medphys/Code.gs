@@ -24,8 +24,10 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-10.2';
-const API_LEVEL = 4;
+const CODE_VERSION = '2026-10-10.3';
+const API_LEVEL = 5;
+// หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
+const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
 const TABLES = {
   cases: {
@@ -162,7 +164,7 @@ function onOpen() {
 
 function openApp() {
   const page = page_(false);
-  const html = HtmlService.createHtmlOutput(inject_(page.html, { MEDPHYS_PAGE_SOURCE: page.source })).setWidth(1200).setHeight(820);
+  const html = HtmlService.createHtmlOutput(inject_(page.html, { MEDPHYS_PAGE_SOURCE: page.source, MEDPHYS_SHEET_DIALOG: true })).setWidth(1200).setHeight(820);
   SpreadsheetApp.getUi().showModalDialog(html, APP_TITLE);
 }
 
@@ -545,10 +547,12 @@ function who_(token, ss, cfg) {
   const g = adminInfo_(ss, cfg);
   const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
   if (!lpchUrl_()) return google;
-  // เปิด LPCH แล้ว: บัญชี Google ข้ามการเข้าสู่ระบบได้เฉพาะเจ้าของไฟล์หรืออีเมลที่อยู่ในรายชื่อแอดมิน
+  // เปิด LPCH แล้ว: เว็บใช้บัญชี LPCH เสมอ (รวมเจ้าของไฟล์) บัญชี Google ใช้ได้เฉพาะหน้าที่เปิดจากเมนูในชีต
+  // และต้องเป็นเจ้าของไฟล์หรืออีเมลในรายชื่อแอดมิน (Google ยืนยันตัวตนให้ ค่า SHEET_DIALOG ไม่ได้ให้สิทธิ์เพิ่มเอง)
   const googleAdmin = !!g.me && (g.me === g.owner || adminList_(cfg).indexOf(g.me) >= 0);
+  const fromSheet = token === SHEET_DIALOG;
   let why = '';   // ไม่มี token = เพิ่งเปิดหน้า: แสดงช่องเข้าสู่ระบบเฉย ๆ ไม่ต้องมีข้อความเตือน
-  if (token) {
+  if (token && !fromSheet) {
     const p = lpchUser_(token);
     if (!p.error) {
       const admins = adminList_(cfg);
@@ -558,7 +562,7 @@ function who_(token, ss, cfg) {
     }
     why = p.error;
   }
-  if (googleAdmin) return Object.assign(google, { isAdmin: true });
+  if (fromSheet && googleAdmin) return Object.assign(google, { isAdmin: true });
   throw new Error('LOGIN|' + why);
 }
 
