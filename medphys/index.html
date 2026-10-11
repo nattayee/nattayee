@@ -171,6 +171,7 @@ div.c-main,div.lrow{cursor:default}
 .cnt input::-webkit-inner-spin-button,.cnt input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .cnt.many{border-color:var(--accent)}
 .n-field{max-width:180px}
+.dt{display:grid;gap:6px}
 .sites{display:grid;gap:10px}.sites:empty{display:none}
 .site{display:grid;gap:12px;padding:12px;border:1px dashed var(--line);border-radius:12px}
 .site-head{display:flex;align-items:center;justify-content:space-between;min-height:24px;font-size:13px;color:var(--muted)}
@@ -604,8 +605,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
         <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
         <div class="field plan-only"><span class="lbl"><label for="f-sim">Sim</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
-        <label class="field plan-only"><span class="lbl">Finish</span><input type="date" id="f-fin"></label>
-        <label class="field plan-only"><span class="lbl">Evaluate</span><input type="date" id="f-eval"></label>
+        <div class="field plan-only"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
+        <div class="field plan-only"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
       </div>
       <div class="extra-grid" id="f-extra" hidden></div>
       <label class="field"><span class="lbl">Note</span><input id="f-note" autocomplete="off"></label>
@@ -801,6 +802,9 @@ const nowISO = () => new Date().toISOString();
 const DAY_FMT = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' });
 const MONTH_FMT = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 const fmtDay = s => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? DAY_FMT.format(parseISO(s)) : s || '');
+// Finish / Evaluate เก็บวันและเวลา "2026-10-11 14:32" (ข้อมูลเก่ามีแต่วัน)
+const nowStamp = () => { const d = new Date(); return `${iso(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtStamp = s => (s ? [fmtDay(s.slice(0, 10)), s.slice(11, 16)].filter(Boolean).join(' ') : '');
 const fmtMonth = ym => MONTH_FMT.format(parseISO(ym + '-01'));
 const num = (n, dp = 1) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: dp });
 const signed = (n, dp = 1) => (n >= 0 ? '+' : '−') + num(Math.abs(n), dp);
@@ -819,12 +823,17 @@ function dateStr(v) {
   if (m) { let y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543; return `${y}-${pad(m[2])}-${pad(m[1])}`; }
   return '';
 }
+function stampStr(v) {
+  const m = str(v).match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+  return m ? `${m[1]}-${pad(m[2])}-${pad(m[3])} ${pad(m[4])}:${m[5]}` : dateStr(v);
+}
 function normCase(o) {
   const c = {};
   for (const f of CASE_FIELDS) c[f] = str(o[f]);
   if (Array.isArray(o.sites)) c.sites = o.sites.length ? JSON.stringify(o.sites) : '';   // บริเวณที่ฉายเพิ่มเติม เก็บเป็น JSON
   for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
-  for (const f of ['ct', 'in', 'fin', 'eval']) c[f] = dateStr(c[f]);
+  for (const f of ['ct', 'in']) c[f] = dateStr(c[f]);
+  for (const f of ['fin', 'eval']) c[f] = stampStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
@@ -910,7 +919,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-10.12';
+const PAGE_VERSION = '2026-10-11.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1006,7 +1015,7 @@ function demoDb() {
   let m = 0;
   const lg = (kind, mp, date, o = {}) => logs.push({ id: 'demo-l' + (++m), kind, mp, date, created: new Date(t0 + m * 36e5).toISOString(), ...o });
   const rcBy = { JR: 'WM', WM: 'JR', NY: 'WS', WS: 'NY' };
-  for (const c of cases) if (c.eval) lg('rc', rcBy[c.mp], c.eval, { hn: c.hn, caseId: c.id });
+  for (const c of cases) if (c.eval) lg('rc', rcBy[c.mp], c.eval.slice(0, 10), { hn: c.hn, caseId: c.id });
   lg('rc', 'NY', d(-3), { hn: '999000080', note: 'RC Decay' });
   lg('brachy', 'JR', d(-7), { hn: '999000201' });
   lg('brachy', 'JR', d(-7), { hn: '999000202' });
@@ -1813,9 +1822,9 @@ function caseRow(c, rcs) {
   }
   let act;
   if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
-  else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวัน Finish เป็นวันนี้">Finish</button>`;
-  else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวัน Evaluate เป็นวันนี้">Evaluate</button>`;
-  else act = `<span class="done-mark">✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtDay(c.eval))}</span>`;
+  else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Finish เป็นตอนนี้">Finish</button>`;
+  else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Evaluate เป็นตอนนี้${c.fin ? ` · Finish ${esc(fmtStamp(c.fin))}` : ''}">Evaluate</button>`;
+  else act = `<span class="done-mark"${simple ? '' : ` title="Finish ${esc(fmtStamp(c.fin) || '—')} · Evaluate ${esc(fmtStamp(c.eval))}"`}>✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtStamp(c.eval))}</span>`;
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
       <span class="c-line"><span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
@@ -2235,7 +2244,8 @@ function openCase(id) {
   editingCase = clone(c);
   fillCaseSelects(editingCase);
   $('#case-title').textContent = `แก้ไขเคส ${c.hn || ''}`.trim();
-  for (const f of ['hn', 'name', 'ct', 'in', 'fin', 'eval', 'note']) $('#f-' + f).value = editingCase[f] || '';
+  for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#f-' + f).value = editingCase[f] || '';
+  for (const f of ['fin', 'eval']) { const v = editingCase[f] || ''; $('#f-' + f).value = v.slice(0, 10); $(`#f-${f}-time`).value = v.slice(11, 16); }
   $('#f-n').value = unitsOf(editingCase);
   $('#f-oncall').checked = editingCase.sim === 'on call';
   $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
@@ -2261,10 +2271,11 @@ async function submitCase(e) {
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
   const v = id => (simple ? '' : $('#f-' + id).value);
+  const stampOf = id => (v(id) ? [v(id), $(`#f-${id}-time`).value].filter(Boolean).join(' ') : '');
   const rec = normCase({
     ...editingCase,
     cat: k.id, mp: chipValue($('#f-mp')), hn, name: $('#f-name').value, note: $('#f-note').value, in: $('#f-in').value,
-    ct: v('ct'), fin: v('fin'), eval: v('eval'),
+    ct: v('ct'), fin: stampOf('fin'), eval: stampOf('eval'),
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
@@ -2301,13 +2312,13 @@ async function stepCase(id, field) {
   const c = state.cases.find(x => x.id === id);
   if (!c) return;
   const prev = clone(c);
-  c[field] = today();
-  if (field === 'eval' && !c.fin) c.fin = today();
+  c[field] = nowStamp();
+  if (field === 'eval' && !c.fin) c.fin = c[field];
   c.updated = nowISO();
   render();
   try {
     await store.save('cases', c);
-    toast(`${c.hn} · ${field === 'fin' ? 'Finish' : 'Evaluate'} ${fmtDay(today())}`, { undo: () => restoreCase(prev) });
+    toast(`${c.hn} · ${field === 'fin' ? 'Finish' : 'Evaluate'} ${fmtStamp(c[field])}`, { undo: () => restoreCase(prev) });
   } catch (e) { Object.assign(c, prev); render(); toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 async function restoreCase(prev) {
