@@ -430,8 +430,27 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .lbl .req{margin-left:3px;color:var(--late);font-weight:600}
 .field.missing .lbl{color:var(--late)}
 .field.missing input:not([type=checkbox]):not([type=radio]),.field.missing .chips span{border-color:var(--late)}
-.req-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 16px}
-.req-grid .check small{color:var(--faint);font-size:12px}
+.def-table th[scope=row],.def-table thead th{text-align:left}
+.def-table th[scope=row]{font-weight:500}
+.def-table td{width:100%;text-align:left;white-space:normal}
+.def-table td:last-child{width:auto}
+.def-table select{width:auto;max-width:100%;min-height:32px;padding:4px 8px}
+.def-table input:not([type=checkbox]):not(.num){width:min(260px,100%)}
+.def-chips{gap:4px}
+.def-chips span{padding:3px 10px;font-size:13px}
+.def-date{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.def-note{margin:8px 0 0;font-size:12.5px}
+@media (max-width:640px){
+  .def-table table,.def-table tbody{display:block}
+  .def-table thead{display:none}
+  .def-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .def-table tbody tr:last-child{border-bottom:0}
+  .def-table th[scope=row],.def-table td{width:auto;padding:0;border:0}
+  .def-table td:nth-of-type(1){grid-row:2;grid-column:1/-1}
+  .def-table td:nth-of-type(1):has(>.none){display:none}
+}
+.fld-def{display:grid;gap:5px;justify-items:start}
+.fld-def select,.fld-def input:not(.num){width:min(320px,100%)}
 .hint{font-size:12px;color:var(--accent)}
 .hint.warn{color:var(--warn)}
 .oncall{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
@@ -844,6 +863,16 @@ const REQ_FIELDS = [
   { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Start RT', plan: true },
   { key: 'note', label: 'Note' },
 ];
+// ช่องที่แอดมินตั้งค่าเริ่มต้นได้ (config.defaults) · ตัวเลือกมาจากรายการในตั้งค่า · วันที่เก็บเป็นจำนวนวันทำการนับจากวันแจก
+const DEF_KEYS = ['doc', 'cat', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'ct', 'sim', 'note'];
+const DEF_DATES = ['ct', 'sim'];
+const OFFSET_RE = /^-?\d{1,2}$/;
+function defOptions(key, cfg) {
+  if (key === 'cat') return cfg.cats.filter(k => k.on).map(k => [k.id, k.label]);
+  if (key === 'doc') return cfg.doctors.map(x => [x.code, x.name ? `${x.code} · ${x.name}` : x.code]);
+  const list = { type: cfg.types, aim: cfg.aims, room: cfg.rooms, tech: cfg.techniques, freq: cfg.freqs, area: cfg.areas }[key];
+  return list ? list.map(v => [v, v]) : null;
+}
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
@@ -906,6 +935,7 @@ const DEFAULT_CONFIG = {
   rooms: ['Infinity', 'Precise', 'VersaHD'],                           // ห้องฉาย
   admins: [],                                                          // อีเมลแอดมิน (เจ้าของไฟล์ Google Sheet เป็นแอดมินเสมอ)
   required: Object.fromEntries(REQ_FIELDS.map(f => [f.key, false])),   // ช่องบังคับกรอกในฟอร์มแจกเคส
+  defaults: { type: 'New' },   // ค่าเริ่มต้นในฟอร์มแจกเคส (ไม่มี = เว้นว่าง) · x_<id> = หัวข้อเพิ่มเติม
   fields: [],   // หัวข้อเพิ่มเติม { id, label, type, options, req, col } col = ชื่อคอลัมน์ในแท็บ Cases (ตั้งครั้งเดียวตอนสร้าง)
   // หมวดงาน = แท็บในไฟล์เดิม เรียงตามแบบฟอร์ม P4P
   cats: [
@@ -1102,6 +1132,37 @@ function mergeConfig(c) {
     const seen = new Set();
     out.holidays = c.holidays.filter(h => h && /^\d{4}-\d{2}-\d{2}$/.test(str(h.date)) && !seen.has(h.date) && seen.add(h.date)).map(h => ({ date: h.date, name: str(h.name) })).sort((a, b) => a.date.localeCompare(b.date));
   }
+  out.defaults = cleanDefaults(c.defaults && typeof c.defaults === 'object' ? c.defaults : d.defaults, out);
+  return out;
+}
+// ค่าเริ่มต้นที่ใช้ได้: ตัวเลือกที่ยังมีอยู่ ตัวเลขที่ถูกต้อง · วันที่ = วันทำการ −30 ถึง 90 จากวันแจก หรือ on call (Start RT)
+function cleanDefaults(src, cfg) {
+  const out = {}, parts = v => str(v).split(',').map(str).filter(Boolean);
+  const offset = v => (OFFSET_RE.test(v) && +v >= -30 && +v <= 90 ? String(+v) : '');
+  for (const key of DEF_KEYS) {
+    const v = str(src[key]), opts = defOptions(key, cfg);
+    if (!v) continue;
+    let ok;
+    if (key === 'area') ok = parts(v).filter(x => cfg.areas.includes(x)).join(', ');
+    else if (opts) ok = opts.some(o => o[0] === v) ? v : '';
+    else if (key === 'sim' && v === 'on call') ok = v;
+    else if (DEF_DATES.includes(key)) ok = offset(v);
+    else if (key === 'dpf') ok = +v > 0 ? v : '';
+    else if (key === 'fx') ok = Number.isInteger(+v) && +v > 0 ? v : '';
+    else ok = v;
+    if (ok) out[key] = ok;
+  }
+  for (const f of cfg.fields) {
+    const key = 'x_' + f.id, v = str(src[key]);
+    if (!v) continue;
+    let ok;
+    if (f.type === 'pick') ok = f.options.includes(v) ? v : '';
+    else if (f.type === 'multi') ok = parts(v).filter(x => f.options.includes(x)).join(', ');
+    else if (f.type === 'date') ok = offset(v);
+    else if (f.type === 'number') ok = isFinite(+v) ? v : '';
+    else ok = v;
+    if (ok) out[key] = ok;
+  }
   return out;
 }
 
@@ -1109,7 +1170,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.10';
+const PAGE_VERSION = '2026-10-11.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1534,6 +1595,7 @@ function render() {
   $$('.nav [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'));
   $('#demo-notice').hidden = store.mode !== 'local';
   $$('.month-label').forEach(el => { el.textContent = fmtMonth(state.month); });
+  if (!intakeTouched && intakeSig !== defaultsSig()) resetIntake();
   if (state.view === 'work') renderWork();
   else if (state.view === 'logs') renderLogs();
   else if (state.view === 'p4p') renderP4P();
@@ -2281,6 +2343,43 @@ function personTable(code, r, ym, carryCell) {
 }
 
 /* ---------- ตั้งค่า ---------- */
+// ตั้งค่าเริ่มต้นในฟอร์มแจกเคส: แถวเรียงตามฟอร์ม · ช่องที่ไม่มีค่าเริ่มต้นหรือไม่มีสวิตช์บังคับแสดง —
+const FORM_ROWS = ['hn', 'name', 'doc', 'dx', 'cat', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'ct', 'in', 'sim', 'note'];
+const ROW_LABEL = { hn: 'HN', cat: 'เทคนิค', in: 'In', dpf: 'Dose/fx (Gy)', ...Object.fromEntries(REQ_FIELDS.filter(f => f.key !== 'dpf').map(f => [f.key, f.label])) };
+const defPrev = v => { const ds = OFFSET_RE.test(str(v)) ? defaultDate(v) : ''; return ds ? `→ ${WD_FMT.format(parseISO(ds))} ${fmtDay(ds)}` : ''; };
+function defChips(key, options, v, label) {
+  const on = str(v).split(',').map(str);
+  return `<div class="chips def-chips" aria-label="ค่าเริ่มต้น ${esc(label)}">${options.map(o => `<label><input type="checkbox" data-defmulti="${esc(key)}" value="${esc(o)}"${on.includes(o) ? ' checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`;
+}
+function defDate(path, v, oncall, label) {
+  const call = oncall && v === 'on call';
+  return `<span class="def-date"><input type="number" class="num" data-k="${path}" value="${call ? '' : esc(v)}" min="-30" max="90" step="1" placeholder="ไม่มี" aria-label="ค่าเริ่มต้น ${esc(label)} (วันทำการจากวันแจก)"${call ? ' disabled' : ''}><span class="unit">วันทำการ</span><span class="unit" data-defprev="${path}">${call ? '' : defPrev(v)}</span>${oncall ? `<label class="check"><input type="checkbox" data-defoncall="${path}"${call ? ' checked' : ''}> on call</label>` : ''}</span>`;
+}
+function defControl(key, d) {
+  const v = str(d.defaults[key]), path = 'defaults.' + key, label = ROW_LABEL[key], opts = defOptions(key, d);
+  if (key === 'area') return defChips(key, d.areas, v, label);
+  if (opts) return `<select data-k="${path}" aria-label="ค่าเริ่มต้น ${esc(label)}">${opt('', 'ไม่มี', v)}${opts.map(([o, l]) => opt(o, l, v)).join('')}</select>`;
+  if (DEF_DATES.includes(key)) return defDate(path, v, key === 'sim', label);
+  if (key === 'dpf' || key === 'fx') return `<input type="number" class="num" data-k="${path}" value="${esc(v)}" min="${key === 'fx' ? 1 : 0}" step="${key === 'fx' ? 1 : 'any'}" inputmode="decimal" placeholder="ไม่มี" aria-label="ค่าเริ่มต้น ${esc(label)}">`;
+  return `<input data-k="${path}" value="${esc(v)}" placeholder="ไม่มี" aria-label="ค่าเริ่มต้น ${esc(label)}">`;
+}
+function defRows(d) {
+  return FORM_ROWS.map(key => {
+    const label = ROW_LABEL[key], always = key === 'hn' || key === 'cat' || key === 'in';
+    const def = key === 'in' ? '<span class="muted">วันแจก</span>' : DEF_KEYS.includes(key) ? defControl(key, d) : '<span class="muted none">—</span>';
+    const req = always ? '<label class="check"><input type="checkbox" checked disabled> บังคับเสมอ</label>'
+      : `<label class="check"><input type="checkbox" data-k="required.${key}"${d.required[key] ? ' checked' : ''}> บังคับ</label>`;
+    return `<tr><th scope="row">${esc(label)}</th><td>${def}</td><td>${req}</td></tr>`;
+  }).join('');
+}
+// ค่าเริ่มต้นของหัวข้อเพิ่มเติม (ตามชนิดของหัวข้อ)
+function defField(f, d) {
+  const path = `defaults.x_${f.id}`, v = str(d.defaults['x_' + f.id]), label = str(f.label) || 'หัวข้อนี้';
+  if (f.type === 'pick') return `<select data-k="${path}" aria-label="ค่าเริ่มต้น ${esc(label)}">${opt('', 'ไม่มี', v)}${f.options.map(o => opt(o, o, v)).join('')}</select>`;
+  if (f.type === 'multi') return f.options.length ? defChips('x_' + f.id, f.options, v, label) : '<span class="unit">เพิ่มตัวเลือกก่อน</span>';
+  if (f.type === 'date') return defDate(path, v, false, label);
+  return `<input${f.type === 'number' ? ' type="number" step="any" inputmode="decimal"' : ''} data-k="${path}" value="${esc(v)}" placeholder="ไม่มี" aria-label="ค่าเริ่มต้น ${esc(label)}">`;
+}
 function renderSettings() {
   if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); }
   const d = draft, el = $('#view-settings');
@@ -2371,6 +2470,7 @@ function renderSettings() {
         <span class="btns"><button type="button" class="icon-btn" data-up="fields.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fields.${i}" aria-label="ลบหัวข้อ ${esc(f.label)}">×</button></span>
       </div>
       ${f.type === 'pick' || f.type === 'multi' ? `<div class="opt-edit">${f.options.map((v, j) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="fields.${i}.options.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fields.${i}.options" placeholder="+ เพิ่มตัวเลือก" aria-label="เพิ่มตัวเลือกของ ${esc(f.label)}"></div>` : ''}
+      <div class="fld-def"><span class="lbl">ค่าเริ่มต้นในฟอร์มแจกเคส</span>${defField(f, d)}</div>
       ${f.col && f.col !== str(f.label) ? `<span class="unit">คอลัมน์ในแท็บ Cases: ${esc(f.col)}</span>` : ''}
     </div>`).join('');
   const oldCode = extraFieldsOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>Code.gs บนเซิร์ฟเวอร์ยังเป็นรุ่นเก่า หัวข้อเพิ่มเติมจะแสดงในฟอร์มเมื่อวาง Code.gs รุ่นใหม่และ Deploy เวอร์ชันใหม่แล้ว</span></p>';
@@ -2426,13 +2526,9 @@ function renderSettings() {
       ${oldCode}
       ${fieldCards ? `<div class="cat-list">${fieldCards}</div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="field">+ เพิ่มหัวข้อ</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน · หัวข้อเพิ่มเติมตั้งบังคับได้ที่หัวข้อนั้น</p></div>
-      <div class="req-grid">
-        <label class="check"><input type="checkbox" checked disabled> HN <small>บังคับเสมอ</small></label>
-        <label class="check"><input type="checkbox" checked disabled> เทคนิค <small>บังคับเสมอ</small></label>
-        <label class="check"><input type="checkbox" checked disabled> In <small>ใส่วันนี้ให้เอง</small></label>
-        ${REQ_FIELDS.map(f => `<label class="check"><input type="checkbox" data-k="required.${f.key}"${d.required[f.key] ? ' checked' : ''}> ${esc(f.label)}</label>`).join('')}
-      </div></div>
+    <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
+      <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
+      <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p></div>
     <div class="sec"><div class="sec-head"><h2>วันหยุด</h2><p>ไม่นับเป็นวันฉายรังสี ใช้คำนวณวันครบแสงและวันทำการในแดชบอร์ด · เสาร์–อาทิตย์หยุดเสมอ · วันหยุดตามจันทรคติ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา) และวันหยุดพิเศษเพิ่มเองได้</p></div>
       <div class="toolbar">${[new Date().getFullYear(), new Date().getFullYear() + 1].map(y => `<button type="button" class="btn" data-holfetch="${y}">ดึงวันหยุดราชการไทย ปี ${y + 543}</button>`).join('')}</div>
       ${d.holidays.length ? `<div class="table-wrap set-table" style="max-height:360px;overflow:auto"><table><thead><tr><th>วันที่</th><th style="text-align:left">ชื่อวันหยุด</th><th></th></tr></thead><tbody>${d.holidays.map((h, i) => `<tr>
@@ -3053,8 +3149,7 @@ function renderIntake() {
   }).join('');
   for (const [id, name, list] of [['#i-doc', 'idoc', docCodes()], ['#i-type', 'itype', cfg.types], ['#i-aim', 'iaim', cfg.aims], ['#i-room', 'iroom', cfg.rooms], ['#i-tech', 'itech', cfg.techniques]]) {
     const el = $(id);
-    const sel = el.children.length ? chipValue(el) : (name === 'itype' ? 'New' : '');
-    chipGroup(el, name, list, sel, name === 'idoc' ? docName : null);
+    chipGroup(el, name, list, chipValue(el), name === 'idoc' ? docName : null);
   }
   ensureFreq('i');
   ensureArea('i');
@@ -3116,6 +3211,8 @@ function syncIntake() {
     ${rest.map(k => `<small><b>${esc(k.label + times(k))}</b> ตามเทคนิคแรก · คิว ${esc(k.label)} ไม่ขยับ และจะข้าม ${esc(q.code)} ${countOf(k.id)} ครั้งเมื่อวนมาถึง · ${num(unitPts(k.min, k.w) * countOf(k.id), 3)} แต้ม</small>`).join('')}</span>`;
 }
 function fillIntake(c) {
+  if (!$('#i-type').children.length) renderIntake();   // ครั้งแรก: วาดปุ่มก่อนติ๊กค่า
+  $$('[data-defsel]', intake).forEach(el => el.removeAttribute('data-defsel'));   // ค่าที่ใส่ไม่ใช่ค่าเริ่มต้น (เช่นเลิกทำ) · resetIntake ตั้งใหม่เอง
   $$('#i-cat input').forEach(i => { i.checked = false; });
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#i-' + f).value = c[f] || '';
   $('#i-oncall').checked = c.sim === 'on call';
@@ -3135,8 +3232,37 @@ function fillIntake(c) {
   catCount = { ...(c.counts || {}) };
   syncIntake();
 }
+// ค่าเริ่มต้นของวันที่: วันทำการที่ n นับจากวันแจก (0 = วันแจก, ติดลบ = ย้อนหลัง) ข้ามเสาร์–อาทิตย์และวันหยุด
+function defaultDate(rule, from) {
+  const v = str(rule);
+  if (v === 'on call') return v;
+  if (!OFFSET_RE.test(v)) return '';
+  const hol = holidayMap(), step = +v < 0 ? -1 : 1;
+  let ds = from || today();
+  for (let n = Math.abs(+v); n > 0;) { ds = plusDays(ds, step); if (isWorkday(ds, hol)) n--; }
+  return ds;
+}
+function defaultCase() {
+  const d = state.config.defaults || {}, c = { in: today() };
+  for (const key of ['doc', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'note']) c[key] = d[key] || '';
+  if (!c.fx && /single/i.test(c.freq)) c.fx = '1';
+  c.ct = defaultDate(d.ct);
+  c.sim = defaultDate(d.sim);
+  c.cats = d.cat && state.config.cats.some(k => k.on && k.id === d.cat) ? [d.cat] : [];
+  for (const f of extraList()) { const v = d['x_' + f.id]; if (v) c['x_' + f.id] = f.type === 'date' ? defaultDate(v) : v; }
+  return c;
+}
+// ฟอร์มที่ยังไม่ได้แตะ: ใส่ค่าเริ่มต้นใหม่เมื่อแอดมินแก้ค่าเริ่มต้นหรือขึ้นวันใหม่ · แตะแล้วไม่ทับของที่กรอกไว้
+let intakeTouched = false, intakeSig = '';
+const defaultsSig = () => today() + JSON.stringify(state.config.defaults || {});
 function resetIntake() {
-  fillIntake({ in: today(), type: 'New' });
+  const c = defaultCase();
+  fillIntake(c);
+  if (c.dpf && c.fx) doseManual.i = ['fx', 'dpf'];   // แก้ Prescription แล้ว Fx คำนวณใหม่ Dose/fx คงไว้
+  // ปุ่มเลือกได้หลายอย่างที่ติ๊กค่าเริ่มต้นไว้: กดเลือกอย่างอื่นครั้งแรกจะเปลี่ยนแทน ไม่เพิ่มต่อจากค่าเริ่มต้น
+  for (const el of [$('#i-cat'), $('#i-area'), ...$$('#i-extra .chips')]) el.toggleAttribute('data-defsel', !!$('input[type=checkbox]:checked', el));
+  intakeTouched = false;
+  intakeSig = defaultsSig();
 }
 // แจกเคส: เลือกหลายเทคนิค = สร้างเคสแยกต่อเทคนิค ใช้ข้อมูลผู้ป่วยชุดเดียวกัน ให้คนเดียวกันทั้งหมด
 // เทคนิคแรกเดินคิวตามปกติ เทคนิคถัดไป (follow) คิวไม่ขยับ แต่หักคิวของคนนั้นเมื่อวนมาถึง แต้มนับตามแต่ละเทคนิค
@@ -3197,6 +3323,7 @@ async function undoAssign(list) {
     render();
     const first = list.find(c => catOf(c.cat).kind !== 'simple') || list[0];
     fillIntake({ ...first, cats: list.map(c => c.cat), counts: Object.fromEntries(list.map(c => [c.cat, unitsOf(c)])), tech: (list.find(c => c.tech) || {}).tech || '' });
+    intakeTouched = true;
     toast(`ยกเลิกการแจกเคส ${first.hn} แล้ว ข้อมูลกลับมาอยู่ในฟอร์ม`);
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
@@ -3409,7 +3536,12 @@ document.addEventListener('click', e => {
   if (ds.wunit) { pref.set('waitUnit', ds.wunit); return renderDash(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
   if (ds.cntstep) { const id = ds.cntcat; catCount[id] = clampN(countOf(id) + +ds.cntstep); return syncIntake(); }
-  if (ds.addsite) { const pre = addSite(ds.addsite); $(`#${pre}-area input`).focus(); return; }
+  if (ds.addsite) {
+    const freq = state.config.defaults.freq || '';
+    const pre = addSite(ds.addsite, { freq, fx: /single/i.test(freq) ? '1' : '' });
+    $(`#${pre}-area input`).focus();
+    return;
+  }
   if (ds.rmsite) { const base = ds.rmsite.replace(/s\d+$/, ''); t.closest('.site').remove(); syncSites(base); return; }
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'cat') {
@@ -3511,6 +3643,14 @@ setupCombo('f');
 caseForm.addEventListener('input', e => { doseInput(e); if (e.target.id === 'f-n') syncCaseForm(); });
 intake.addEventListener('submit', submitIntake);
 const clearMissing = e => { const f = e.target.closest && e.target.closest('.field.missing'); if (f) f.classList.remove('missing'); };
+// กดเลือกครั้งแรกในปุ่มที่ติ๊กค่าเริ่มต้นไว้ (เทคนิค บริเวณที่ฉาย ฯลฯ) = เปลี่ยนแทนค่าเริ่มต้น · ทำก่อนตัวจัดการอื่น
+intake.addEventListener('change', e => {
+  intakeTouched = true;
+  const box = e.target.type === 'checkbox' && e.target.closest('[data-defsel]');
+  if (!box) return;
+  box.removeAttribute('data-defsel');
+  if (e.target.checked) $$('input:checked', box).forEach(i => { if (i !== e.target) i.checked = false; });
+}, true);
 intake.addEventListener('change', e => {
   clearMissing(e);
   if (siteChip(e)) return;
@@ -3518,6 +3658,7 @@ intake.addEventListener('change', e => {
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => {
+  intakeTouched = true;
   clearMissing(e);
   doseInput(e);
   if (e.target.dataset.cnt && e.target.value !== '') { catCount[e.target.dataset.cnt] = clampN(e.target.value); syncIntake(); }
@@ -3541,6 +3682,10 @@ settingsEl.addEventListener('input', e => {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
     setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase().trim() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
     refreshPts();
+    const prev = $(`[data-defprev="${el.dataset.k}"]`);
+    if (prev) prev.textContent = defPrev(el.value);
+  } else if (el.dataset.defmulti) {
+    draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.list) {
     draft[el.dataset.list] = el.value.split(',').map(str).filter(Boolean);
   } else if (el.dataset.chk !== undefined) {
@@ -3572,7 +3717,13 @@ settingsEl.addEventListener('keydown', e => {
 settingsEl.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.addopt) { addOption(el); return; }
-  if (el.dataset.retype !== undefined) { setPath(draft, el.dataset.k, el.value); renderSettings(); return; }   // ปุ่มเลือก = มีช่องตัวเลือก
+  if (el.dataset.defoncall) { setPath(draft, el.dataset.defoncall, el.checked ? 'on call' : ''); renderSettings(); return; }
+  if (el.dataset.retype !== undefined) {   // ปุ่มเลือก = มีช่องตัวเลือก · ค่าเริ่มต้นเดิมใช้กับชนิดใหม่ไม่ได้
+    setPath(draft, el.dataset.k, el.value);
+    delete draft.defaults['x_' + getPath(draft, el.dataset.k.replace(/\.type$/, '')).id];
+    renderSettings();
+    return;
+  }
   if (el.dataset.role !== undefined) {
     // เปลี่ยนตำแหน่ง: มีผลตั้งแต่เดือนนี้ เก็บของเดือนก่อนหน้าไว้
     const roles = draft.staff[+el.dataset.role].roles = draft.staff[+el.dataset.role].roles || [];
