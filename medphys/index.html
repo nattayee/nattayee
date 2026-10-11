@@ -166,6 +166,12 @@ div.c-main,div.lrow{cursor:default}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
+/* กล่องแคบ (บริเวณที่ 2 ขึ้นไป หน้าแก้ไขเคส): ความถี่ลงไปอยู่แถวของตัวเอง ปุ่มไม่ถูกบีบเป็นแถวละปุ่ม */
+.site,.dlg-body{container-type:inline-size}
+@container (max-width:720px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
+.start-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.start-fx{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);white-space:nowrap}
+.start-fx input{width:76px;font-family:var(--mono);text-align:center}
 .cnts{display:flex;flex-wrap:wrap;gap:8px 12px}
 .cnt{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:13.5px}
 .cnt>span{white-space:nowrap}
@@ -991,7 +997,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.4';
+const PAGE_VERSION = '2026-10-11.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1841,15 +1847,26 @@ const stampsOn = () => serverHas(STAMP_API);
 function parseSites(c) {
   let a = [];
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
-  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq) })) : [];
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx) })) : [];
 }
-const siteText = x => [x.area, doseText(x)].filter(Boolean).join(' · ');
+// เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1
+const SITE_STARTS = [
+  { key: 'concurrent', label: 'Concurrent', title: 'ฉายพร้อมกับบริเวณที่ 1' },
+  { key: 'after', label: 'After', title: 'เริ่มหลังบริเวณที่ 1 ฉายครบ' },
+  { key: 'afterfx', label: 'After Fx', title: 'เริ่มหลัง Fx ที่กำหนดของบริเวณที่ 1' },
+];
+const startText = x => (x.start === 'afterfx' ? `After Fx ${x.startFx || '?'}` : (SITE_STARTS.find(v => v.key === x.start) || {}).label || '');
+const siteText = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), doseText(x)].filter(Boolean).join(' · ');
 let siteSeq = 0;
 // ใช้ฟังก์ชันเดียวกับบริเวณแรก (renderArea, fillDose, readDose ฯลฯ) ด้วย pre ของแต่ละบริเวณ เช่น is1, fs2
 function addSite(base, x = {}) {
   const pre = `${base}s${++siteSeq}`;
   $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}">
     <div class="site-head"><b></b><button type="button" class="icon-btn" data-rmsite="${pre}" aria-label="ลบบริเวณนี้">×</button></div>
+    <div class="field"><span class="lbl">เริ่มฉายเทียบกับบริเวณที่ 1</span><div class="start-row">
+      <div class="chips" id="${pre}-start" role="radiogroup" aria-label="เริ่มฉายเทียบกับบริเวณที่ 1">${SITE_STARTS.map(v => `<label title="${v.title}"><input type="radio" name="${pre}start" value="${v.key}"${x.start === v.key ? ' checked' : ''}><span>${v.label}</span></label>`).join('')}</div>
+      <label class="start-fx" id="${pre}-startfx-box"${x.start === 'afterfx' ? '' : ' hidden'}>ที่ <input type="number" id="${pre}-startfx" min="1" step="1" inputmode="numeric" value="${esc(x.startFx || '')}" aria-label="หลัง Fx ที่ของบริเวณที่ 1"> ของบริเวณที่ 1</label>
+    </div></div>
     <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="${pre}-area" aria-label="บริเวณที่ฉาย (เพิ่มเติม)"></div><input id="${pre}-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
     <div class="dose-row">
       <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="${pre}-dpf" min="0" step="any" inputmode="decimal" placeholder="8"></label>
@@ -1875,9 +1892,26 @@ function syncSites(base) {
   $(`#${base}-sites`).hidden = !on;
   $(`#${base}-addsite`).parentElement.hidden = !on;
 }
-const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq);
+function readStart(pre) {
+  const start = chipValue($(`#${pre}-start`));
+  return start ? { start, ...(start === 'afterfx' ? { startFx: str($(`#${pre}-startfx`).value) } : {}) } : {};
+}
+function syncStart(pre, focus) {
+  const on = chipValue($(`#${pre}-start`)) === 'afterfx';
+  $(`#${pre}-startfx-box`).hidden = !on;
+  if (on && focus) $(`#${pre}-startfx`).focus();
+}
+const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre), ...readStart(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq);
 function checkSites(base) {
-  for (const pre of sitePres(base)) { const err = checkDose(pre) || checkArea(pre); if (err) return err; }
+  const fx1 = +$(`#${base}-fx`).value || 0;
+  for (const pre of sitePres(base)) {
+    const err = checkDose(pre) || checkArea(pre);
+    if (err) return err;
+    if (chipValue($(`#${pre}-start`)) !== 'afterfx') continue;
+    const n = $(`#${pre}-startfx`).value;
+    if (!(Number.isInteger(+n) && +n >= 1)) { $(`#${pre}-startfx`).focus(); return 'ใส่ว่าเริ่มหลัง Fx ที่เท่าไรของบริเวณที่ 1'; }
+    if (fx1 && +n >= fx1) { $(`#${pre}-startfx`).focus(); return `หลัง Fx ที่ ${n} ไม่น้อยกว่าจำนวน Fx ของบริเวณที่ 1 (${fx1}) ใช้ "After" แทน`; }
+  }
   return '';
 }
 // หัวข้อเพิ่มเติม: วาดในฟอร์มแจกเคส (i) และหน้าแก้ไขเคส (f) · Code.gs รุ่นเก่ายังเก็บลงชีตไม่ได้ จึงซ่อนไว้
@@ -3063,9 +3097,11 @@ $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit =
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
 // ชิปบริเวณที่ฉาย / ความถี่ ของทุกบริเวณ (id เป็น <pre>-area, <pre>-freq) และช่อง Dose/fx, Fx (<pre>-dpf, <pre>-fx)
 function siteChip(e) {
-  const box = e.target.closest('.chips'), m = box && /^(.+)-(area|freq)$/.exec(box.id);
+  const box = e.target.closest('.chips'), m = box && /^(.+)-(area|freq|start)$/.exec(box.id);
   if (!m) return false;
-  if (m[2] === 'freq') onFreqChange(m[1], e.target); else syncArea(m[1], e.target.value === OTHER);
+  if (m[2] === 'freq') onFreqChange(m[1], e.target);
+  else if (m[2] === 'start') syncStart(m[1], e.target.checked && e.target.value === 'afterfx');
+  else syncArea(m[1], e.target.value === OTHER);
   return true;
 }
 function doseInput(e) { const m = /^(.+)-(dpf|fx|rx)$/.exec(e.target.id || ''); if (m) { markManual(m[1], m[2]); syncDose(m[1]); } }
