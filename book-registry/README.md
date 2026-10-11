@@ -10,6 +10,9 @@
 - นำเข้า / ส่งออกไฟล์ Excel (.xlsx) และพิมพ์ทะเบียนประจำปี
 - ใช้ได้ทั้งคอมพิวเตอร์และมือถือ ไม่ต้องติดตั้งแพ็กเกจเพิ่ม มีแค่ Node.js ก็พอ
 
+> ไม่มีเครื่องเปิดเซิร์ฟเวอร์? ใช้ **เวอร์ชัน Google Apps Script** ในโฟลเดอร์ [`apps-script/`](apps-script/README.md)
+> ซึ่งใช้ Google Sheet ทะเบียนเดิมเป็นฐานข้อมูลโดยตรง
+
 ## เริ่มใช้งาน
 
 1. ติดตั้ง [Node.js](https://nodejs.org) รุ่น 18 ขึ้นไป
@@ -68,3 +71,5 @@ npm test        # ทดสอบการอ่านไฟล์ Excel กา�
 | `lib/importer.js` | แปลงชีต Excel เป็นรายการทะเบียน (วันที่ อักขระไทย แถวว่าง) |
 | `lib/xlsx.js` | อ่าน/เขียนไฟล์ .xlsx โดยไม่ใช้แพ็กเกจภายนอก |
 | `public/` | หน้าเว็บ (HTML/CSS/JS ล้วน) |
+| `apps-script/` | เวอร์ชัน Google Apps Script (`Code.gs` + `Index.html`) |
+| `scripts/preview-apps-script.js` | เปิดดูเวอร์ชัน Apps Script ในเครื่องด้วย Google Sheet จำลอง |
