@@ -157,8 +157,12 @@ div.c-main,div.lrow{cursor:default}
 .combo-list small{display:block;color:var(--muted);font-size:12px}
 .dx{display:inline-flex;gap:5px;align-items:baseline;max-width:100%}
 .dx b{font:500 12px var(--mono);color:var(--fg)}
-.dose-row{display:grid;grid-template-columns:120px 96px 110px minmax(0,1fr);gap:10px 12px;align-items:start}
+.dose-row{display:grid;grid-template-columns:120px 96px 140px minmax(0,1fr);gap:10px 12px;align-items:start}
 .total{display:flex;align-items:center;min-height:36px;font:500 15px var(--mono);white-space:nowrap}
+/* Dose/fx × Fx = Prescription: ช่องที่ระบบคำนวณให้ */
+.calc-note{display:none;font-size:11px;color:var(--accent)}
+.field:has(input.calc) .calc-note{display:inline}
+.dose-row input.calc{background:var(--sunken);border-style:dashed;color:var(--fg)}
 .freq-field input,.with-other input[id$="-other"]{margin-top:6px}
 .sub-lbl{font-size:11.5px;color:var(--faint)}
 @media (max-width:620px){.dose-row{grid-template-columns:repeat(3,minmax(0,1fr))}.dose-row .freq-field{grid-column:1/-1}}
@@ -524,7 +528,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <div class="dose-row">
           <label class="field"><span class="lbl"><span>Dose/fx (Gy)<b class="req" data-req="dpf" hidden>*</b></span></span><input type="number" id="i-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
           <label class="field"><span class="lbl"><span>Fx<b class="req" data-req="fx" hidden>*</b></span></span><input type="number" id="i-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
-          <div class="field"><span class="lbl">รวม</span><output class="total" id="i-total" for="i-dpf i-fx">–</output></div>
+          <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="i-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
           <div class="field freq-field"><span class="lbl"><span>ความถี่ในการฉาย<b class="req" data-req="freq" hidden>*</b></span></span><div class="chips" id="i-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="i-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
         </div>
         <div class="sites" id="i-sites"></div>
@@ -623,7 +627,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="dose-row">
           <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="f-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
           <label class="field"><span class="lbl">Fx</span><input type="number" id="f-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
-          <div class="field"><span class="lbl">รวม</span><output class="total" id="f-total" for="f-dpf f-fx">–</output></div>
+          <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="f-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
           <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="f-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="f-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
         </div>
       <div class="sites" id="f-sites"></div>
@@ -749,7 +753,7 @@ const REQ_FIELDS = [
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
-const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Finish โดย', 'Evaluate โดย', 'MU Check', 'MU Check โดย', 'MU Check ค่า', 'D0', 'D0 โดย', 'D0 ค่า', 'Delta4', 'Delta4 โดย', 'Delta4 ค่า', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Finish โดย', 'Evaluate โดย', 'MU Check', 'MU Check โดย', 'MU Check ค่า', 'D0', 'D0 โดย', 'D0 ค่า', 'Delta4', 'Delta4 โดย', 'Delta4 ค่า', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'Prescription (Gy)', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
 const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
 const ROOM_API = 7;    // Code.gs ที่เก็บห้องฉายและบริเวณที่ฉายเพิ่มเติมได้
 const COUNT_API = 8;   // Code.gs ที่เก็บจำนวนครั้งและนับในคิวได้
@@ -846,7 +850,7 @@ const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && 
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -987,7 +991,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.2';
+const PAGE_VERSION = '2026-10-11.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1721,7 +1725,7 @@ function setupCombo(pre) {
 function doseText(c) {
   const parts = [];
   if (c.dpf || c.fx) {
-    const tot = (+c.dpf || 0) * (+c.fx || 0);
+    const tot = +c.rx > 0 ? +c.rx : (+c.dpf || 0) * (+c.fx || 0);   // Prescription ที่กรอกไว้ (ไม่ปัดจาก Dose/fx × Fx)
     parts.push(`${c.dpf ? c.dpf + ' Gy' : '? Gy'} × ${c.fx || '?'} fx${tot > 0 ? ` (${num(tot, 2)} Gy)` : ''}`);
   }
   if (c.freq) parts.push(c.freq);
@@ -1744,20 +1748,57 @@ function ensureFreq(pre) {
   const cur = el.dataset.sig ? chipValue(el) : '';
   renderFreq(pre, cur === OTHER ? (str($(`#${pre}-freq-other`).value) || OTHER) : cur);
 }
+// Dose/fx × Fx = Prescription: กรอก 2 ช่องไหนก็ได้ ช่องที่ไม่ได้กรอกเองล่าสุดคำนวณให้ (มีป้าย "คำนวณ")
+const DOSE_KEYS = ['dpf', 'fx', 'rx'];
+const doseManual = {};   // pre → ช่องที่ผู้ใช้กรอกเอง เรียงจากเก่าไปใหม่
+const trimNum = (n, dp) => String(+n.toFixed(dp));
+function markManual(pre, key) {
+  const el = $(`#${pre}-${key}`);
+  const list = (doseManual[pre] || []).filter(k => k !== key);
+  if (str(el.value) !== '') list.push(key);
+  doseManual[pre] = list;
+}
+function calcDose(pre) {
+  const el = k => $(`#${pre}-${k}`), v = k => parseFloat(el(k).value);
+  let manual = (doseManual[pre] || []).filter(k => str(el(k).value) !== '');
+  doseManual[pre] = manual;
+  const pair = manual.slice(-2), target = pair.length === 2 ? DOSE_KEYS.find(k => !pair.includes(k)) : '';
+  if (target) doseManual[pre] = manual = pair;   // ช่องที่กลายเป็นช่องคำนวณไม่นับเป็นช่องที่กรอกเองแล้ว
+  for (const k of DOSE_KEYS) {
+    if (k === target || manual.includes(k)) continue;
+    el(k).value = '';   // ค่าที่เคยคำนวณไว้แต่ตอนนี้กรอกไม่ครบ 2 ช่อง
+    el(k).classList.remove('calc');
+  }
+  for (const k of manual) el(k).classList.remove('calc');
+  if (!target) return;
+  const a = v(pair[0]), b = v(pair[1]);
+  let out = '';
+  if (a > 0 && b > 0) {
+    if (target === 'rx') out = trimNum(v('dpf') * v('fx'), 3);
+    else if (target === 'dpf') out = trimNum(v('rx') / v('fx'), 3);
+    else out = trimNum(v('rx') / v('dpf'), 2);
+  }
+  el(target).value = out;
+  el(target).classList.toggle('calc', out !== '');
+  el(target).title = out ? 'คำนวณจากอีก 2 ช่อง แก้ช่องนี้เองได้' : '';
+}
 function syncDose(pre) {
   $(`#${pre}-freq-other`).hidden = chipValue($(`#${pre}-freq`)) !== OTHER;
-  const tot = (parseFloat($(`#${pre}-dpf`).value) || 0) * (parseFloat($(`#${pre}-fx`).value) || 0);
-  $(`#${pre}-total`).textContent = tot > 0 ? `${num(tot, 2)} Gy` : '–';
+  calcDose(pre);
 }
 function onFreqChange(pre, input) {
-  if (/single/i.test(input.value) && input.checked && !$(`#${pre}-fx`).value) $(`#${pre}-fx`).value = 1;
+  if (/single/i.test(input.value) && input.checked && !$(`#${pre}-fx`).value) { $(`#${pre}-fx`).value = 1; markManual(pre, 'fx'); }
   syncDose(pre);
   if (input.value === OTHER && input.checked) $(`#${pre}-freq-other`).focus();
 }
 function checkDose(pre) {
-  const dpf = $(`#${pre}-dpf`).value, fx = $(`#${pre}-fx`).value;
+  const dpf = $(`#${pre}-dpf`).value, fx = $(`#${pre}-fx`).value, rx = $(`#${pre}-rx`).value;
   if (dpf && !(+dpf > 0)) { $(`#${pre}-dpf`).focus(); return 'Dose/fx ต้องมากกว่า 0'; }
-  if (fx && !(Number.isInteger(+fx) && +fx > 0)) { $(`#${pre}-fx`).focus(); return 'จำนวน Fx ต้องเป็นจำนวนเต็มบวก'; }
+  if (rx && !(+rx > 0)) { $(`#${pre}-rx`).focus(); return 'Prescription ต้องมากกว่า 0'; }
+  if (fx && !(Number.isInteger(+fx) && +fx > 0)) {
+    if ($(`#${pre}-fx`).classList.contains('calc')) { $(`#${pre}-rx`).focus(); return `Prescription ÷ Dose/fx ได้ ${fx} fx ซึ่งไม่เป็นจำนวนเต็ม ตรวจตัวเลขอีกครั้ง`; }
+    $(`#${pre}-fx`).focus(); return 'จำนวน Fx ต้องเป็นจำนวนเต็มบวก';
+  }
   if (chipValue($(`#${pre}-freq`)) === OTHER && !str($(`#${pre}-freq-other`).value)) { $(`#${pre}-freq-other`).focus(); return 'กรอกความถี่ในช่อง "อื่นๆ"'; }
   return '';
 }
@@ -1791,7 +1832,7 @@ function checkArea(pre) {
   return '';
 }
 const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === OTHER ? str($(`#${pre}-freq-other`).value) : v; };
-const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), freq: readFreq(pre) });
+const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), rx: str($(`#${pre}-rx`).value), freq: readFreq(pre) });
 // ฟีเจอร์ที่ต้องใช้ Code.gs รุ่นใหม่ (เก็บลงชีตได้) · Code.gs รุ่นเก่าจะซ่อนไว้ ไม่ให้กรอกแล้วหาย
 const serverHas = api => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= api;
 const roomSitesOn = () => serverHas(ROOM_API);
@@ -1800,7 +1841,7 @@ const stampsOn = () => serverHas(STAMP_API);
 function parseSites(c) {
   let a = [];
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
-  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), freq: str(x.freq) })) : [];
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq) })) : [];
 }
 const siteText = x => [x.area, doseText(x)].filter(Boolean).join(' · ');
 let siteSeq = 0;
@@ -1813,7 +1854,7 @@ function addSite(base, x = {}) {
     <div class="dose-row">
       <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="${pre}-dpf" min="0" step="any" inputmode="decimal" placeholder="8"></label>
       <label class="field"><span class="lbl">Fx</span><input type="number" id="${pre}-fx" min="1" step="1" inputmode="numeric" placeholder="1"></label>
-      <div class="field"><span class="lbl">รวม</span><output class="total" id="${pre}-total">–</output></div>
+      <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="${pre}-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
       <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="${pre}-freq" role="radiogroup" aria-label="ความถี่ (เพิ่มเติม)"></div><input id="${pre}-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
     </div>
   </div>`);
@@ -1834,7 +1875,7 @@ function syncSites(base) {
   $(`#${base}-sites`).hidden = !on;
   $(`#${base}-addsite`).parentElement.hidden = !on;
 }
-const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre) })).filter(x => x.area || x.dpf || x.fx || x.freq);
+const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq);
 function checkSites(base) {
   for (const pre of sitePres(base)) { const err = checkDose(pre) || checkArea(pre); if (err) return err; }
   return '';
@@ -1876,6 +1917,11 @@ function readExtra(pre) {
 function fillDose(pre, c) {
   $(`#${pre}-dpf`).value = c.dpf || '';
   $(`#${pre}-fx`).value = c.fx || '';
+  $(`#${pre}-rx`).value = c.rx || '';
+  // Prescription ที่ไม่เท่ากับ Dose/fx × Fx คือกรอกเอง (Dose/fx คำนวณ) · ไม่อย่างนั้น Prescription คำนวณจาก Dose/fx × Fx
+  const typedRx = +c.rx > 0 && +c.dpf > 0 && +c.fx > 0 && Math.abs(c.dpf * c.fx - c.rx) > 0.0005;
+  const has = k => str(c[k]) !== '';
+  doseManual[pre] = typedRx ? ['fx', 'rx'] : has('dpf') && has('fx') ? ['dpf', 'fx'] : DOSE_KEYS.filter(has);
   renderFreq(pre, c.freq || '');
 }
 
@@ -2998,7 +3044,7 @@ function siteChip(e) {
   if (m[2] === 'freq') onFreqChange(m[1], e.target); else syncArea(m[1], e.target.value === OTHER);
   return true;
 }
-function doseInput(e) { const m = /^(.+)-(dpf|fx)$/.exec(e.target.id || ''); if (m) syncDose(m[1]); }
+function doseInput(e) { const m = /^(.+)-(dpf|fx|rx)$/.exec(e.target.id || ''); if (m) { markManual(m[1], m[2]); syncDose(m[1]); } }
 caseForm.addEventListener('submit', submitCase);
 caseForm.addEventListener('change', e => {
   if (siteChip(e)) return;
