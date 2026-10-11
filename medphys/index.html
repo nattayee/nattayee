@@ -991,7 +991,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.3';
+const PAGE_VERSION = '2026-10-11.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3024,6 +3024,30 @@ document.addEventListener('click', e => {
 // ปิด dialog เมื่อแตะพื้นหลัง
 for (const dlg of [caseDlg, logDlg, leaveDlg, pinDlg]) dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 // กดชิปที่เลือกอยู่ซ้ำเพื่อยกเลิกการเลือก
+// ช่องวันที่ที่ว่าง (คอม): คลิกแล้วขึ้นวันนี้ เดือนและปีเป็นปัจจุบัน พิมพ์แค่วันที่
+// ไม่ได้แก้อะไรแล้วออกจากช่อง กลับเป็นว่าง (ช่องที่ไม่บังคับจะได้ไม่มีวันที่ติดมาเอง) · มือถือใช้ปฏิทินของเครื่องตามเดิม
+const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+const isDateBox = el => el && el.matches && el.matches('input[type="date"]');
+const DATE_KEYS = /^(\d|Backspace|Delete|ArrowUp|ArrowDown|PageUp|PageDown|Enter)$/;
+document.addEventListener('focusin', e => {
+  const el = e.target;
+  if (coarse || !isDateBox(el) || el.value || el.disabled || el.readOnly) return;
+  el.value = today();
+  el.dataset.prefill = '1';
+});
+const keepDate = e => { if (isDateBox(e.target)) delete e.target.dataset.prefill; };
+document.addEventListener('input', keepDate, true);
+document.addEventListener('change', keepDate, true);
+document.addEventListener('keydown', e => { if (DATE_KEYS.test(e.key)) keepDate(e); }, true);
+// คลิกที่ไอคอนปฏิทิน = ตั้งใจเลือกวัน (เลือกวันนี้ในปฏิทินไม่มีเหตุการณ์ input)
+document.addEventListener('click', e => { if (isDateBox(e.target) && e.offsetX > e.target.clientWidth - 36) keepDate(e); }, true);
+document.addEventListener('focusout', e => {
+  const el = e.target;
+  if (!isDateBox(el) || !el.dataset.prefill) return;
+  delete el.dataset.prefill;
+  el.value = '';
+});
+
 document.addEventListener('pointerdown', e => {
   const input = e.target.closest('.chips label') && $('input', e.target.closest('.chips label'));
   if (input) input.dataset.was = input.checked ? '1' : '';
