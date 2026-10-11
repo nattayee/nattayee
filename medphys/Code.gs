@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-11.3';
-const API_LEVEL = 11;
+const CODE_VERSION = '2026-10-11.4';
+const API_LEVEL = 12;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -602,6 +602,67 @@ function stampCase(id, step, value, pin, token) {
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
   });
+}
+
+/* ---------- วันหยุดราชการไทย (ปฏิทินวันหยุดสาธารณะของ Google) ---------- */
+
+const TH_HOLIDAY_CAL = 'th.th#holiday@group.v.calendar.google.com';   // ชื่อภาษาไทย
+const EN_HOLIDAY_CAL = 'en.th#holiday@group.v.calendar.google.com';   // ใช้แยกวันหยุดจริงกับวันสำคัญ (Observance)
+
+// วันหยุดของปีนั้น [{ date, name }] ตัดวันสำคัญที่ไม่ใช่วันหยุดออก · เก็บผลไว้ 6 ชั่วโมง
+function thaiHolidays(year, token) {
+  who_(token);
+  year = Math.floor(+year);
+  if (!(year >= 2000 && year < 2100)) throw new Error('ปีไม่ถูกต้อง');
+  const cache = CacheService.getScriptCache(), key = 'thhol_' + year, hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const fetchCal = id => {
+    const res = UrlFetchApp.fetch('https://calendar.google.com/calendar/ical/' + encodeURIComponent(id) + '/public/basic.ics', { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode());
+    return parseIcs_(res.getContentText('UTF-8'));
+  };
+  let th;
+  try { th = fetchCal(TH_HOLIDAY_CAL); } catch (e) { throw new Error('ดึงปฏิทินวันหยุดจาก Google ไม่ได้ (' + e.message + ')'); }
+  let en = [];
+  try { en = fetchCal(EN_HOLIDAY_CAL); } catch (e) { en = []; }
+  const observance = {};
+  en.forEach(ev => { if (/observance/i.test(ev.desc)) observance[ev.uid] = true; });
+  const byDate = {};
+  th.filter(ev => ev.date.slice(0, 4) === String(year) && !observance[ev.uid] && !/observance|วันสำคัญ|การปฏิบัติตาม/i.test(ev.desc))
+    .forEach(ev => { byDate[ev.date] = byDate[ev.date] ? byDate[ev.date] + ' / ' + ev.name : ev.name; });
+  const out = Object.keys(byDate).sort().map(d => ({ date: d, name: byDate[d] }));
+  cache.put(key, JSON.stringify(out), 6 * 3600);
+  return out;
+}
+
+// อ่านไฟล์ iCalendar: เหตุการณ์ทั้งวัน → [{ date, name, desc, uid }] (หลายวันแตกเป็นรายวัน)
+function parseIcs_(text) {
+  const lines = String(text).replace(/\r?\n[ \t]/g, '').split(/\r?\n/);
+  const events = [];
+  let ev = null;
+  lines.forEach(line => {
+    if (line === 'BEGIN:VEVENT') { ev = {}; return; }
+    if (line === 'END:VEVENT') { if (ev && ev.start) events.push(ev); ev = null; return; }
+    if (!ev) return;
+    const i = line.indexOf(':');
+    if (i < 0) return;
+    const k = line.slice(0, i).split(';')[0], v = line.slice(i + 1).replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+    if (k === 'DTSTART') ev.start = v.slice(0, 8);
+    else if (k === 'DTEND') ev.end = v.slice(0, 8);
+    else if (k === 'SUMMARY') ev.name = v;
+    else if (k === 'DESCRIPTION') ev.desc = v;
+    else if (k === 'UID') ev.uid = v;
+  });
+  const ymd = s => s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  const next = d => { const t = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + 1)); return t.toISOString().slice(0, 10); };
+  const out = [];
+  events.forEach(e => {
+    if (!/^\d{8}$/.test(e.start)) return;
+    const end = /^\d{8}$/.test(e.end || '') ? ymd(e.end) : '';
+    let d = ymd(e.start), n = 0;
+    do { out.push({ date: d, name: e.name || '', desc: e.desc || '', uid: e.uid || '' }); d = next(d); } while (end && d < end && ++n < 31);
+  });
+  return out;
 }
 
 /* ---------- รหัส PIN 4 หลักของแต่ละคน (ยืนยันตัวตอนกดปุ่มขั้นตอน) ---------- */
