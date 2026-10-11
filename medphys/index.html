@@ -1276,7 +1276,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.17';
+const PAGE_VERSION = '2026-10-11.18';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3515,7 +3515,7 @@ function renderCounts(ids) {
 }
 function renderIntake() {
   const cfg = state.config;
-  const date = $('#i-in').value || today();
+  const date = $('#i-in').value || workdayFrom(today());
   const cur = chipValues($('#i-cat'));
   $('#i-cat').innerHTML = cfg.cats.filter(k => k.on).map(k => {
     const who = nextFor(k.id, date);
@@ -3546,7 +3546,7 @@ function syncIntake() {
   $('#i-room-field').hidden = !roomSitesOn();
   $('#i-in-lbl').textContent = allSimple ? 'Date' : 'In';
   $('#i-sim').disabled = $('#i-oncall').checked;
-  const date = $('#i-in').value || today();
+  const date = $('#i-in').value || workdayFrom(today());
   const dayTxt = date === today() ? 'วันนี้' : `วัน ${fmtDay(date)}`;
   const manual = chipValue($('#i-mode')) === 'manual';
   $('#i-pick-field').hidden = !manual;
@@ -3607,19 +3607,21 @@ function fillIntake(c) {
   catCount = { ...(c.counts || {}) };
   syncIntake();
 }
+// วันทำการวันแรกที่ไม่ก่อน ds (วันนี้เป็นเสาร์–อาทิตย์หรือวันหยุด → วันทำการถัดไป)
+function workdayFrom(ds) { const hol = holidayMap(); let d = ds; for (let i = 0; i < 60 && !isWorkday(d, hol); i++) d = plusDays(d, 1); return d; }
 // ค่าเริ่มต้นของวันที่: วันทำการที่ n นับจากวันแจก (0 = วันแจก, ติดลบ = ย้อนหลัง) ข้ามเสาร์–อาทิตย์และวันหยุด
 function defaultDate(rule, from) {
   const v = str(rule);
   if (v === 'on call') return v;
   if (!OFFSET_RE.test(v)) return '';
   const hol = holidayMap(), step = +v < 0 ? -1 : 1;
-  let ds = from || today();
+  let ds = from || workdayFrom(today());
   for (let n = Math.abs(+v); n > 0;) { ds = plusDays(ds, step); if (isWorkday(ds, hol)) n--; }
   return ds;
 }
 // Dose/fx, Fx, ความถี่, ห้องฉาย ใส่ทีหลังโดย applyRules (ขึ้นกับเทคนิคและ ICD-10)
 function defaultCase() {
-  const d = state.config.defaults || {}, c = { in: today() };
+  const d = state.config.defaults || {}, c = { in: workdayFrom(today()) };
   for (const key of ['doc', 'type', 'aim', 'tech', 'area', 'note']) c[key] = d[key] || '';
   c.ct = defaultDate(d.ct);
   c.sim = defaultDate(d.sim);
@@ -3677,6 +3679,8 @@ async function submitIntake(e) {
   if (!state.loaded) return toast('รอโหลดข้อมูลให้เสร็จก่อน', { err: true });
   const inputErr = checkDose('i') || checkArea('i') || checkSites('i');
   if (inputErr) return toast(inputErr, { err: true });
+  const offBox = ['i-ct', 'i-in', 'i-sim'].map(id => $('#' + id)).find(el => !el.closest('[hidden]') && !el.disabled && offDayText(el.value));
+  if (offBox) { flagField(offBox); offBox.focus(); return toast(offDayMsg(offBox, offBox.value), { err: true }); }
   const need = missingRequired(catIds.map(catOf));
   if (need) {
     const el = $('#i-' + need.key), target = el.matches('input') ? el : $('input', el);
@@ -3688,7 +3692,7 @@ async function submitIntake(e) {
   const pick = manual ? chipValue($('#i-pick')) : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
   const batch = catIds.length > 1 ? 'b-' + uid() : '';
-  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || today(), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i'), ...(roomSitesOn() ? { sites: readSites('i') } : {}) };
+  const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || workdayFrom(today()), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i'), ...(roomSitesOn() ? { sites: readSites('i') } : {}) };
   const recs = catIds.map((id, i) => {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
@@ -3995,12 +3999,16 @@ for (const dlg of [caseDlg, logDlg, leaveDlg, pinDlg]) dlg.addEventListener('cli
 const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
 const isDateBox = el => el && el.matches && el.matches('input[type="date"]');
 const DATE_KEYS = /^(\d|Backspace|Delete|ArrowUp|ArrowDown|PageUp|PageDown|Enter)$/;
+// เข้าช่องวันที่ครั้งแรกเท่านั้น: เบราว์เซอร์ส่ง focusin ซ้ำเมื่อโฟกัสย้ายระหว่าง วัน/เดือน/ปี ภายในช่อง (เช่นหลังเปลี่ยนค่า)
 document.addEventListener('focusin', e => {
   const el = e.target;
-  if (coarse || !isDateBox(el) || el.value || el.disabled || el.readOnly) return;
-  el.value = today();
+  if (!isDateBox(el) || el.dataset.focus) return;
+  el.dataset.focus = '1';
+  if (isWorkdayBox(el)) { el.dataset.ok = el.value; delete el.dataset.typed; }   // ค่าที่จะคืนให้ถ้าเลือกวันหยุด
+  if (coarse || el.value || el.disabled || el.readOnly) return;
+  el.value = isWorkdayBox(el) ? workdayFrom(today()) : today();
   el.dataset.prefill = '1';
-});
+}, true);
 const keepDate = e => { if (isDateBox(e.target)) delete e.target.dataset.prefill; };
 document.addEventListener('input', keepDate, true);
 document.addEventListener('change', keepDate, true);
@@ -4009,10 +4017,44 @@ document.addEventListener('keydown', e => { if (DATE_KEYS.test(e.key)) keepDate(
 document.addEventListener('click', e => { if (isDateBox(e.target) && e.offsetX > e.target.clientWidth - 36) keepDate(e); }, true);
 document.addEventListener('focusout', e => {
   const el = e.target;
+  if (isDateBox(el)) delete el.dataset.focus;
   if (!isDateBox(el) || !el.dataset.prefill) return;
   delete el.dataset.prefill;
   el.value = '';
 });
+
+// CT-Sim, In, Start RT ต้องเป็นวันทำการ: เสาร์–อาทิตย์และวันหยุด (ตั้งค่า → วันหยุด) แจ้งเตือนแล้วคืนค่าเดิม
+// เลือกจากปฏิทินตรวจทันที · พิมพ์เองตรวจตอนออกจากช่อง (ระหว่างพิมพ์ค่ายังไม่ครบ เช่นวันที่ 3 ก่อนจะเป็น 31)
+const WORKDAY_BOXES = { 'i-ct': 'CT-Sim', 'i-in': 'In', 'i-sim': 'Start RT', 'f-ct': 'CT-Sim', 'f-in': 'In', 'f-sim': 'Start RT' };
+const isWorkdayBox = el => isDateBox(el) && !!WORKDAY_BOXES[el.id];
+function offDayText(ds) {
+  if (!/^(19|20)\d\d-\d\d-\d\d$/.test(str(ds))) return '';
+  const hol = holidayMap();
+  if (hol[ds]) return `เป็นวันหยุด (${hol[ds]})`;
+  const w = parseISO(ds).getDay();
+  return w === 0 ? 'เป็นวันอาทิตย์' : w === 6 ? 'เป็นวันเสาร์' : '';
+}
+const offDayMsg = (el, ds) => `${fmtDay(ds)} ${parseISO(ds).getFullYear() + 543} ${offDayText(ds)} · ${el.id === 'i-in' && $('#i-in-lbl').textContent === 'Date' ? 'วันที่' : WORKDAY_BOXES[el.id]} ต้องเป็นวันทำการ`;
+function flagField(el) {
+  const f = el.closest('.field');
+  if (!f) return;
+  f.classList.add('missing');
+  setTimeout(() => f.classList.remove('missing'), 2500);
+}
+function checkWorkdayBox(el) {
+  const v = el.value;
+  if (!v || v === el.dataset.ok || !offDayText(v)) { if (/^(19|20)\d\d-/.test(v) || !v) el.dataset.ok = v; return true; }
+  toast(offDayMsg(el, v), { err: true });
+  el.value = el.dataset.ok || '';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  flagField(el);   // หลังเหตุการณ์ input (ฟอร์มล้างกรอบแดงเมื่อมีการกรอก)
+  return false;
+}
+document.addEventListener('keydown', e => { if (isWorkdayBox(e.target) && /^(\d|ArrowUp|ArrowDown|PageUp|PageDown)$/.test(e.key)) e.target.dataset.typed = '1'; }, true);
+// ไม่รับ: หยุดเหตุการณ์เดิม (ค่าที่คืนแล้วส่งเหตุการณ์ใหม่ให้ส่วนอื่นไปแล้ว)
+document.addEventListener('change', e => { if (isWorkdayBox(e.target) && !e.target.dataset.typed && !checkWorkdayBox(e.target)) e.stopImmediatePropagation(); }, true);
+document.addEventListener('focusout', e => { const el = e.target; if (isWorkdayBox(el)) { delete el.dataset.typed; checkWorkdayBox(el); } }, true);
 
 document.addEventListener('pointerdown', e => {
   const input = e.target.closest('.chips label') && $('input', e.target.closest('.chips label'));
@@ -4246,7 +4288,7 @@ async function refresh(quiet) {
 }
 if (!VIEWS.includes(state.view)) state.view = 'work';
 if (store.mode === 'sheet') state.user = { me: '', owner: '', isAdmin: false, canEdit: false, pending: true };
-$('#i-in').value = today();
+$('#i-in').value = workdayFrom(today());
 render();
 window.MEDPHYS_STARTED = true;   // ตัวตรวจในส่วนหัวไม่ต้องแสดงข้อผิดพลาด
 refresh();
