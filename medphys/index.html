@@ -522,8 +522,9 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .opt-new:focus{box-shadow:none}
 .rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
 .rules b{color:var(--fg);font-weight:500}
-.set-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr) 180px auto auto;grid-template-areas:"idx code name pos act btns";gap:8px;align-items:center}
-.set-row .idx{grid-area:idx}.set-row .code{grid-area:code}.set-row .name{grid-area:name}.set-row .pos{grid-area:pos}.set-row .check{grid-area:act}.set-row .btns{grid-area:btns;display:flex;gap:2px}
+.set-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr) minmax(0,1fr) 170px auto auto;grid-template-areas:"idx code name title pos act btns";gap:8px;align-items:center}
+.set-row.doc-row{grid-template-columns:30px 84px minmax(0,1fr) auto;grid-template-areas:"idx code name btns"}
+.set-row .idx{grid-area:idx}.set-row .code{grid-area:code}.set-row .name{grid-area:name}.set-row .title{grid-area:title}.set-row .pos{grid-area:pos}.set-row .check{grid-area:act}.set-row .btns{grid-area:btns;display:flex;gap:2px}
 .set-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
 .set-row.doc-row{grid-template-columns:30px 84px minmax(0,1fr) auto;grid-template-areas:"idx code name btns"}
 .check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
@@ -533,7 +534,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .savebar{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;margin-top:20px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .savebar span{margin-right:auto;font-size:13px;color:var(--muted)}
-@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". pos pos act"}.set-row.doc-row{grid-template-areas:"idx code name btns"}}
+@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". title title title" ". pos pos act"}.set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns"}}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:14px;opacity:0;pointer-events:none;transform:translate(-50%,16px);transition:opacity .18s,transform .18s}
 .toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
@@ -682,6 +683,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <span class="spacer"></span>
       <span class="muted" id="p4p-rule" style="font-size:13px"></span>
+      <button type="button" class="btn" id="p4p-xlsx" title="แบบจัดเก็บคะแนนภาระงาน (Activity base) ของเดือนนี้ 1 แผ่นงานต่อคน พิมพ์ A4 แนวนอน">ดาวน์โหลด Excel</button>
     </div>
     <div class="cards" id="p4p-cards"></div>
     <div class="sec">
@@ -943,6 +945,7 @@ const TH_FIXED_HOLIDAYS = [
 const thaiFixedHolidays = y => TH_FIXED_HOLIDAYS.map(([md, name]) => ({ date: `${y}-${md}`, name }));
 const DEFAULT_CONFIG = {
   rate: 0.143,          // คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที) กลุ่ม A5.1
+  p4pGroup: 'A5.1 (นักรังสีการแพทย์ งานฟิสิกส์การแพทย์)',   // กลุ่มที่ ในหัวแบบจัดเก็บคะแนนภาระงาน (ไฟล์ Excel)
   guarantee: 1200,      // แต้มประกันตั้งต้นของตำแหน่งใหม่
   // ตำแหน่ง: base = แต้มตั้งต้นที่บวกเข้าแต้มที่ทำได้ทุกเดือน (ในไฟล์เดิมคือ "แต้มต่อ")
   positions: [
@@ -1113,6 +1116,7 @@ function mergeConfig(c) {
   if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
   const out = { ...d };
   out.rate = +c.rate > 0 ? +c.rate : d.rate;
+  out.p4pGroup = c.p4pGroup !== undefined ? str(c.p4pGroup) : d.p4pGroup;
   out.guarantee = c.guarantee !== '' && isFinite(+c.guarantee) && c.guarantee != null ? +c.guarantee : d.guarantee;
   out.positions = Array.isArray(c.positions) && c.positions.length
     ? c.positions.filter(x => x && x.id).map(x => ({ id: str(x.id), label: str(x.label) || str(x.id), base: +x.base || 0, guarantee: x.guarantee !== '' && x.guarantee != null && isFinite(+x.guarantee) ? Math.abs(+x.guarantee) : out.guarantee }))
@@ -1123,7 +1127,7 @@ function mergeConfig(c) {
     out.staff = c.staff.map(s => {
       const code = str(s.code).toUpperCase();
       const roles = Array.isArray(s.roles) ? s.roles.filter(r => r && /^\d{4}-\d{2}$/.test(r.from) && r.role).map(r => ({ from: r.from, role: str(r.role) })).sort((a, b) => a.from.localeCompare(b.from)) : [];
-      return { code, name: str(s.name), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
+      return { code, name: str(s.name), title: str(s.title), active: s.active !== false, roles: roles.length ? roles : defRoles(code) };
     }).filter(s => s.code);
   }
   for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas', 'rooms']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
@@ -1213,7 +1217,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.12';
+const PAGE_VERSION = '2026-10-11.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1471,26 +1475,36 @@ function rcIndex() {
   return map;
 }
 // แต้ม P4P รายคน: นับเคสตามวัน In และกิจกรรมตามวันที่บันทึก
+// งานของเดือน: items = { mp, key, date, n } (เคสนับตามวัน In: เทคนิค + New MU · บันทึก: กิจกรรมนับครั้ง)
+// notes = งานวิชาการ/บริหาร (บันทึกละรายการ) · who = ทุกคนที่มีงานหรือบันทึกในเดือนนี้
+function p4pWork(ym) {
+  const cfg = state.config, items = [], notes = [], who = new Set();
+  for (const c of state.cases) {
+    if (!c.mp || !c.in.startsWith(ym)) continue;
+    const u = unitsOf(c);   // จำนวนครั้ง
+    who.add(c.mp);
+    if (MOVED_CATS.includes(c.cat) && cfg.acts[c.cat]) { items.push({ mp: c.mp, key: c.cat, date: c.in, n: u }); continue; } // ยังไม่ได้ย้ายเป็นกิจกรรม
+    const k = catOf(c.cat);
+    items.push({ mp: c.mp, key: 'cat:' + k.id, date: c.in, n: u });
+    if (k.mu) items.push({ mp: c.mp, key: 'mu', date: c.in, n: u });
+  }
+  for (const l of state.logs) {
+    if (!l.mp || !l.date.startsWith(ym)) continue;
+    who.add(l.mp);
+    if (l.kind === 'acad' || l.kind === 'admin') notes.push(l);
+    else if (l.kind !== 'mu' && cfg.acts[l.kind]) items.push({ mp: l.mp, key: l.kind, date: l.date, n: 1 });
+  }
+  return { items, notes, who };
+}
 function computeP4P(ym) {
   const cfg = state.config;
   const people = {};
   const ensure = code => (people[code] = people[code] || { code, counts: {}, acad: 0, admin: 0, acadN: 0, adminN: 0 });
   cfg.staff.forEach(s => ensure(s.code));
-  const add = (r, key, times = 1) => { r.counts[key] = (r.counts[key] || 0) + times; };
-  for (const c of state.cases) {
-    if (!c.mp || !c.in.startsWith(ym)) continue;
-    const u = unitsOf(c);   // จำนวนครั้ง
-    if (MOVED_CATS.includes(c.cat) && cfg.acts[c.cat]) { add(ensure(c.mp), c.cat, u); continue; } // ยังไม่ได้ย้ายเป็นกิจกรรม
-    const r = ensure(c.mp), k = catOf(c.cat);
-    add(r, 'cat:' + k.id, u);
-    if (k.mu) add(r, 'mu', u);
-  }
-  for (const l of state.logs) {
-    if (!l.mp || !l.date.startsWith(ym)) continue;
-    const r = ensure(l.mp);
-    if (l.kind === 'acad' || l.kind === 'admin') { r[l.kind] += unitPts(l.min, l.k); r[l.kind + 'N']++; }
-    else if (l.kind !== 'mu' && cfg.acts[l.kind]) add(r, l.kind);
-  }
+  const { items, notes, who } = p4pWork(ym);
+  who.forEach(ensure);
+  for (const x of items) people[x.mp].counts[x.key] = (people[x.mp].counts[x.key] || 0) + x.n;
+  for (const l of notes) { const r = people[l.mp]; r[l.kind] += unitPts(l.min, l.k); r[l.kind + 'N']++; }
   const carry = (cfg.carry && cfg.carry[ym]) || {};
   for (const r of Object.values(people)) {
     let work = r.acad + r.admin;
@@ -2310,6 +2324,7 @@ function renderP4P() {
   $('#p4p-who').innerHTML = [['', 'ทุกคน'], ...staff.map(c => [c, c])]
     .map(([v, l]) => `<button type="button" class="tab" role="tab" data-who="${esc(v)}" aria-selected="${state.who === v}">${esc(l)}</button>`).join('');
   $('#p4p-all-wrap').hidden = !state.who;
+  if (!$('#p4p-xlsx').disabled) $('#p4p-xlsx').textContent = `ดาวน์โหลด Excel ${state.who ? `(${state.who})` : '(ทุกคน)'}`;
   $('#p4p-all').checked = state.allRows;
 
   const cell = n => (n ? `<td>${n}</td>` : '<td class="zero">–</td>');
@@ -2386,6 +2401,218 @@ function personTable(code, r, ym, carryCell) {
   return `<table>${head}<tbody>${rows.join('')}</tbody>${foot}</table>`;
 }
 
+/* ---------- แบบจัดเก็บคะแนนภาระงาน (Activity base) เป็นไฟล์ Excel ---------- */
+// 1 แผ่นงานต่อคน · 3 หน้า A4 แนวนอนแบบแบบฟอร์มเดิม: งานห้อง/3D/IMRT · VMAT/Brachy/Hyperthermia · วิชาการ/บริหาร + สรุปแต้ม
+// ตัวเลขมาจากการคำนวณเดียวกับหน้า P4P (p4pWork) · ช่องรวมและแต้มเป็นสูตร แก้จำนวนในไฟล์แล้วคำนวณใหม่ได้
+const EXCELJS_URLS = ['https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'];
+let excelLib = null;
+function loadExcel() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  const from = i => new Promise((ok, fail) => {
+    const el = document.createElement('script');
+    el.src = EXCELJS_URLS[i];
+    el.onload = () => (window.ExcelJS ? ok(window.ExcelJS) : fail(new Error('ไฟล์ไม่ถูกต้อง')));
+    el.onerror = () => { el.remove(); fail(new Error('โหลดไม่ได้')); };
+    document.head.appendChild(el);
+  }).catch(e => (i + 1 < EXCELJS_URLS.length ? from(i + 1) : Promise.reject(e)));
+  excelLib = excelLib || from(0).catch(() => { excelLib = null; throw new Error('โหลดตัวสร้างไฟล์ Excel ไม่ได้ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่'); });
+  return excelLib;
+}
+// แถวในแบบฟอร์ม P4P ที่หน่วยงานยังไม่มีเป็นเทคนิค/กิจกรรม ใส่ไว้ให้ครบตามแบบฟอร์ม (นับเป็น 0) · มีชื่อเดียวกันในตั้งค่าแล้วใช้ของตั้งค่า
+const P4P_FORM_ROWS = [
+  { group: '3D Planning', label: '3D Brain tumor', min: 130, w: 2 },
+  { group: 'IMRT', after: '3D Planning', label: 'IM Brain tumor', min: 250, w: 1.5 },
+  { group: 'IMRT', after: '3D Planning', label: 'IM Abdomen/Pelvis', min: 280, w: 1.5 },
+  { group: 'IMRT', after: '3D Planning', label: 'IM Chest', min: 460, w: 2 },
+  { group: 'IMRT', after: '3D Planning', label: 'IM H&N', min: 600, w: 2 },
+  { group: 'IMRT', after: '3D Planning', label: 'Auto Breast', min: 200, w: 1.5 },
+];
+const P4P_PAGE_ROWS = 17;   // แถวกลุ่ม + กิจกรรมต่อหน้า (เท่าแบบฟอร์มเดิม) ไม่พอขึ้นหน้าใหม่ ไม่ตัดกลุ่มกลางหน้า
+const P4P_GROUP_FILL = { 'งานห้องเตรียมอุปกรณ์ฉายรังสี': 'FF8DB5F8', 'งานห้องวางแผนการรักษา': 'FF989898' };
+const XL_GREEN = 'FF7AD592', XL_HEAD = 'FF8FD7DC', XL_TITLE = 'FFD2F1DA', XL_GROUP = 'FFFFFF00', XL_FONT = 'TH Sarabun PSK';
+const WD_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+const thaiDigits = v => String(v).replace(/\d/g, d => '๐๑๒๓๔๕๖๗๘๙'[d]);
+const colName = n => { let out = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + ((n - 1) % 26)) + out; return out; };   // 1 → A
+const round6 = n => Math.round(n * 1e6) / 1e6;
+function p4pFormSections() {
+  const secs = p4pSections().map(x => ({ title: x.title, items: x.items.map(it => (it.key === 'rc' ? { ...it, label: state.config.acts.rc.label } : it)) }));   // แบบฟอร์มไม่มี "(RC)"
+  const has = new Set(secs.flatMap(x => x.items.map(it => it.label.toLowerCase())));
+  for (const row of P4P_FORM_ROWS) {
+    if (has.has(row.label.toLowerCase())) continue;
+    let sec = secs.find(x => x.title === row.group);
+    if (!sec) {
+      sec = { title: row.group, items: [] };
+      const after = secs.findIndex(x => x.title === row.after), vmat = secs.findIndex(x => x.title === 'VMAT');
+      secs.splice(after >= 0 ? after + 1 : vmat >= 0 ? vmat : secs.length, 0, sec);
+    }
+    sec.items.push({ key: '', label: row.label, unit: 'ราย', min: row.min, w: row.w });
+  }
+  return secs;
+}
+// จำนวนรายวันของแต่ละคน { code: { key: { 'YYYY-MM-DD': n } } } และงานวิชาการ/บริหารเป็นรายการ
+function p4pDaily(ym) {
+  const out = {}, { items, notes } = p4pWork(ym);
+  for (const x of items) { const k = ((out[x.mp] = out[x.mp] || {})[x.key] = out[x.mp][x.key] || {}); k[x.date] = (k[x.date] || 0) + x.n; }
+  return { counts: out, notes };
+}
+function p4pSheet(wb, code, ym, r, counts, notes) {
+  const cfg = state.config, s = cfg.staff.find(x => x.code === code) || {}, hol = holidayMap();
+  const [y, m] = ym.split('-').map(Number), nd = new Date(y, m, 0).getDate();
+  const days = Array.from({ length: nd }, (_, i) => `${ym}-${pad(i + 1)}`), off = days.map(ds => !isWorkday(ds, hol));
+  const C = { no: 1, act: 2, unit: 3, min: 4, w: 5, pts: 6, day: 7, sum: 7 + nd, got: 8 + nd }, L = colName, last = C.got;
+  const ws = wb.addWorksheet(code, { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.2, right: 0.2, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 } } });
+  ws.columns = [3.2, 25, 4.2, 5.4, 5.4, 5.8, ...days.map(() => 3.7), 5.2, 7.6].map(width => ({ width }));
+  const thin = { style: 'thin' }, box = { top: thin, left: thin, bottom: thin, right: thin };
+  const put = (row, col, value, st = {}) => {
+    const c = ws.getCell(row, col);
+    if (value !== undefined) c.value = value;
+    c.font = { name: XL_FONT, size: st.size || 12, bold: !!st.bold };
+    c.alignment = { horizontal: st.h || 'center', vertical: 'middle', ...(st.rot ? { textRotation: st.rot, wrapText: true } : {}) };
+    if (st.border !== false) c.border = box;
+    if (st.fill) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st.fill } };
+    if (st.fmt) c.numFmt = st.fmt;
+    return c;
+  };
+  const span = (row, c1, row2, c2, value, st) => { for (let rr = row; rr <= row2; rr++) for (let cc = c1; cc <= c2; cc++) put(rr, cc, rr === row && cc === c1 ? value : undefined, st); ws.mergeCells(row, c1, row2, c2); };
+  const dayStyle = (i, st = {}) => (off[i] ? { ...st, fill: XL_GREEN } : st);
+  const sumF = rw => ({ formula: `SUM(${L(C.day)}${rw}:${L(C.sum - 1)}${rw})` });
+  let row = 0, no = 0;
+  const totals = [];
+  const head = () => {
+    const name = s.name || code, title = s.title || r.position.label;
+    span(++row, 1, row, last, `แบบจัดเก็บคะแนนภาระงาน (Activity base)     ชื่อ ${name}     ตำแหน่ง ${title}`, { size: 14, fill: XL_TITLE, border: false });
+    span(++row, 1, row, last, `คะแนนแต้มประกัน  ${num(r.guarantee, 2)} แต้ม   คะแนนมาตรฐานตำแหน่ง ${cfg.rate} แต้ม/นาที   ${cfg.p4pGroup ? `กลุ่มที่  ${cfg.p4pGroup}` : ''}`, { size: 14, border: false });
+    span(++row, 1, row, C.day + 10, 'ปริมาณงาน (รายวัน/รายสัปดาห์/รายเดือน) :  ', { size: 14, h: 'right', border: false });
+    span(row, C.day + 11, row, C.day + 14, new Intl.DateTimeFormat('th-TH', { month: 'long' }).format(new Date(y, m - 1, 1)), { size: 14, h: 'left', border: false });
+    span(row, C.day + 15, row, C.day + 17, thaiDigits(y + 543), { size: 14, h: 'left', border: false });
+    [1, 2, 3].forEach(i => { ws.getRow(row - 3 + i).height = 21; });
+    ws.getRow(++row).height = 8;
+    const h1 = ++row, h2 = ++row;
+    for (const [col, text, rot, size] of [[C.no, 'ลำดับ', 90, 11], [C.act, 'กิจกรรม', 0, 12], [C.unit, 'หน่วยนับ', 90, 11], [C.min, 'เวลา', 90, 11], [C.w, 'น้ำหนักค่างาน', 90, 11], [C.pts, 'แต้ม Point', 90, 11]]) span(h1, col, h2, col, text, { rot, size, fill: XL_HEAD });
+    days.forEach((ds, i) => { put(h1, C.day + i, i + 1, dayStyle(i)); put(h2, C.day + i, WD_SHORT[parseISO(ds).getDay()], dayStyle(i, { size: 10 })); });
+    span(h1, C.sum, h2, C.sum, 'รวม');
+    span(h1, C.got, h2, C.got, 'ทำได้');
+    ws.getRow(h1).height = 28;
+    ws.getRow(h2).height = 28;
+  };
+  const blankDays = dash => days.forEach((_, i) => put(row, C.day + i, dash ? '-' : null, dayStyle(i)));
+  const group = (title, fill) => {
+    put(++row, C.no, null);
+    put(row, C.act, title, { h: 'left', fill: fill || XL_GROUP });
+    for (const col of [C.unit, C.min, C.w, C.pts, C.sum, C.got]) put(row, col, null);
+    blankDays(false);
+  };
+  // แถวกิจกรรม: per = { 'YYYY-MM-DD': n } · แต้ม/หน่วย = เวลา × น้ำหนัก × แต้มมาตรฐาน (สูตร)
+  const line = (label, unit, min, w, per) => {
+    const pts = (+min || 0) * (+w || 0) * cfg.rate, n = days.reduce((t, ds) => t + ((per && per[ds]) || 0), 0);
+    put(++row, C.no, ++no);
+    put(row, C.act, label, { h: 'left' });
+    put(row, C.unit, unit);
+    put(row, C.min, +min || 0);
+    put(row, C.w, +w || 0, { fmt: '0.00' });
+    put(row, C.pts, { formula: `${L(C.min)}${row}*${L(C.w)}${row}*${cfg.rate}`, result: round6(pts) }, { size: 11 });
+    days.forEach((ds, i) => put(row, C.day + i, (per && per[ds]) || '-', dayStyle(i)));
+    put(row, C.sum, { ...sumF(row), result: n }, { size: 11 });
+    put(row, C.got, { formula: `${L(C.sum)}${row}*${L(C.pts)}${row}`, result: round6(n * pts) }, { size: 11, fmt: '0.00' });
+    return n * pts;
+  };
+  const filler = (dash) => {
+    put(++row, C.no, null);
+    for (const col of [C.act, C.unit, C.min, C.w, C.pts, C.sum, C.got]) put(row, col, null);
+    blankDays(dash);
+  };
+  const total = (first, got) => {
+    const rw = ++row, cnt = { formula: `SUM(${L(C.sum)}${first}:${L(C.sum)}${rw - 1})` };
+    put(rw, C.sum, cnt, { size: 11, bold: true });
+    put(rw, C.got, { formula: `SUM(${L(C.got)}${first}:${L(C.got)}${rw - 1})`, result: round6(got) }, { size: 11, bold: true, fmt: '0.00' });
+    totals.push({ row: rw, got });
+    return rw;
+  };
+  const endPage = () => ws.getRow(row).addPageBreak();
+  // หน้า 1–2 (หรือมากกว่า): กิจกรรมนับครั้งและเทคนิค แบ่งหน้าตามกลุ่ม
+  const pages = [];
+  let cur = [], used = 0;
+  for (const sec of p4pFormSections()) {
+    const h = sec.items.length + 1;
+    if (used && used + h > P4P_PAGE_ROWS) { pages.push(cur); cur = []; used = 0; }
+    cur.push(sec);
+    used += h;
+  }
+  if (cur.length) pages.push(cur);
+  for (const page of pages) {
+    head();
+    const first = row + 1;
+    let got = 0, n = 0;
+    for (const sec of page) {
+      group(sec.title, P4P_GROUP_FILL[sec.title]);
+      n++;
+      for (const it of sec.items) { got += line(it.label, it.unit, it.min, it.w, it.key ? counts[it.key] : null); n++; }
+    }
+    for (; n < P4P_PAGE_ROWS; n++) filler(false);
+    total(first, got);
+    endPage();
+  }
+  // หน้าสุดท้าย: งานวิชาการ งานบริหาร (บันทึกละแถว) และสรุปแต้ม
+  head();
+  const first = row + 1;
+  let got = 0;
+  for (const [kind, title, min] of [['acad', 'งานวิชาการ', 10], ['admin', 'งานบริหาร', 3]]) {
+    group(title);
+    no = 0;
+    const list = notes.filter(l => l.kind === kind && l.mp === code).sort((a, b) => a.date.localeCompare(b.date) || str(a.created).localeCompare(str(b.created)));
+    list.forEach(l => { got += line(l.title, 'นาที', +l.min || 0, +l.k || 0, { [l.date]: 1 }); });
+    for (let i = list.length; i < min; i++) filler(true);
+  }
+  const notesRow = total(first, got);
+  row++;
+  const sumRows = {};
+  const sumCols = [C.sum - 5, C.sum - 1];
+  const workGot = totals.reduce((t, x) => t + x.got, 0);
+  for (const [key, label, value, fmt] of [
+    ['g', 'แต้มประกัน', r.guarantee], ['c', 'แต้มต่อ', r.carry],
+    ['t', 'แต้มที่ทำได้', null, '0.00'], ['d', 'ส่วนต่างแต้ม', null, '0.00'],
+  ]) {
+    sumRows[key] = ++row;
+    span(row, sumCols[0], row, sumCols[1], label, { size: 12, bold: true });
+    let v = value;
+    if (key === 't') v = { formula: `SUM(${totals.map(x => `${L(C.got)}${x.row}`).join(',')})+${L(C.sum)}${sumRows.c}`, result: round6(workGot + r.carry) };
+    if (key === 'd') v = { formula: `${L(C.sum)}${sumRows.t}-${L(C.sum)}${sumRows.g}`, result: round6(workGot + r.carry - r.guarantee) };
+    span(row, C.sum, row, C.got, v, { size: 12, bold: true, fmt });
+  }
+  ws.pageSetup.printArea = `A1:${L(last)}${row}`;
+  return { notesRow, total: workGot + r.carry };
+}
+async function exportP4P(btn) {
+  const ym = state.month, people = computeP4P(ym), { counts, notes } = p4pDaily(ym);
+  const staff = state.config.staff.map(x => x.code);
+  for (const c in people) if (!staff.includes(c)) staff.push(c);
+  const codes = state.who ? [state.who] : staff.filter(c => (state.config.staff.find(x => x.code === c) || {}).active !== false || people[c].work);
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้างไฟล์…';
+  try {
+    const ExcelJS = await loadExcel();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'ระบบกระจายงานฟิสิกส์การแพทย์';
+    wb.calcProperties.fullCalcOnLoad = true;
+    for (const c of codes) p4pSheet(wb, c, ym, people[c], counts[c] || {}, notes);
+    const [y, m] = ym.split('-').map(Number);
+    const file = `P4P-${y + 543}-${pad(m)}${state.who ? '-' + state.who : ''}.xlsx`;   // ชื่อไฟล์ภาษาอังกฤษ: บางเบราว์เซอร์ไม่รับชื่อไทย
+    saveBlob(new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), file);
+    toast(`ดาวน์โหลด ${file} แล้ว (${codes.length} คน)`);
+  } catch (e) { toast('สร้างไฟล์ Excel ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
 /* ---------- ตั้งค่า ---------- */
 // ตั้งค่าเริ่มต้นในฟอร์มแจกเคส: แถวเรียงตามฟอร์ม · ช่องที่ไม่มีค่าเริ่มต้นหรือไม่มีสวิตช์บังคับแสดง —
 const FORM_ROWS = ['hn', 'name', 'doc', 'dx', 'cat', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'ct', 'in', 'sim', 'note'];
@@ -2460,6 +2687,7 @@ function renderSettings() {
       <span class="idx">${i + 1}</span>
       <input class="code" data-k="staff.${i}.code" value="${esc(s.code)}" maxlength="4" aria-label="รหัส" placeholder="รหัส" style="text-transform:uppercase;font-family:var(--mono)">
       <input class="name" data-k="staff.${i}.name" value="${esc(s.name)}" aria-label="ชื่อ-สกุล" placeholder="ชื่อ-สกุล (ไม่บังคับ)">
+      <input class="title" data-k="staff.${i}.title" value="${esc(s.title || '')}" aria-label="ตำแหน่งในแบบจัดเก็บคะแนนภาระงาน" placeholder="ตำแหน่งในแบบฟอร์ม P4P (ไม่บังคับ)">
       <select class="pos" data-role="${i}" aria-label="ตำแหน่ง" title="${esc(hist)}">${d.positions.map(x => opt(x.id, x.label, cur)).join('')}</select>
       <label class="check"><input type="checkbox" data-k="staff.${i}.active"${s.active ? ' checked' : ''}> ปฏิบัติงาน</label>
       <span class="btns"><button type="button" class="icon-btn" data-up="staff.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="staff.${i}" aria-label="ลบ">×</button></span>
@@ -2581,6 +2809,7 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>เทคนิคและน้ำหนัก P4P</h2><p>แต้ม/ราย = เวลา × น้ำหนัก × แต้มมาตรฐาน · เทคนิคใหม่จะเป็นปุ่มในฟอร์มแจกเคสและมีคิวของตัวเอง</p></div>
       <div class="form-grid" style="margin-bottom:12px">
         <label class="field"><span class="lbl">แต้มมาตรฐาน (แต้ม/นาที)</span><input type="number" step="any" data-k="rate" value="${esc(d.rate)}"></label>
+        <label class="field"><span class="lbl">กลุ่มที่ (หัวแบบจัดเก็บคะแนนภาระงาน)</span><input data-k="p4pGroup" value="${esc(d.p4pGroup)}" placeholder="เช่น A5.1 (นักรังสีการแพทย์ งานฟิสิกส์การแพทย์)"></label>
       </div>
       <div class="cat-list">${catCards}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="cat">+ เพิ่มเทคนิค</button></div></div>
@@ -3670,6 +3899,7 @@ document.addEventListener('click', e => {
   switch (t.id) {
     case 'open-leaves': return openLeaves();
     case 'i-clear': resetIntake(); return $('#i-hn').focus();
+    case 'p4p-xlsx': return exportP4P(t);
     case 'add-rc': return openLog(null, { kind: 'rc' });
     case 'add-other': { const t = logTabs().find(x => x.key === state.logKind); return openLog(null, { kind: t && t.kinds[0] !== 'rc' ? t.kinds[0] : 'acad' }); }
     case 'clear-person': state.person = ''; return render();
