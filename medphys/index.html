@@ -7,8 +7,8 @@
 <script>/* หน้าเว็บเริ่มทำงานไม่ได้ (สคริปต์ผิดพลาด หรือได้รับหน้าเว็บมาไม่ครบ): บอกสาเหตุบนจอแทนหน้าว่าง
    สคริปต์ที่ Google Apps Script ส่งมาเพี้ยน: เทียบกับต้นฉบับบน GitHub บอกจุดที่ต่าง แล้วใช้สคริปต์ต้นฉบับแทน (รุ่นเดียวกันเท่านั้น) */(function(){
 var SRC='https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
-var errs=[],shown=false,box=null,recovering=false;
-window.addEventListener('error',function(e){errs.push((e.message||'ข้อผิดพลาด')+(e.lineno?' (บรรทัด '+e.lineno+':'+e.colno+')':''));});
+var errs=[],shown=false,box=null,recovering=false,probing=false;
+window.addEventListener('error',function(e){if(probing)return;errs.push((e.message||'ข้อผิดพลาด')+(e.lineno?' (บรรทัด '+e.lineno+':'+e.colno+')':''));});
 window.addEventListener('unhandledrejection',function(e){var r=e.reason;errs.push('Promise: '+(r&&r.message||r));});
 function add(tag,text,css){var el=document.createElement(tag);el.textContent=text;if(css)el.style.cssText=css;box.appendChild(el);return el;}
 var CODE='display:block;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fde8e5;font:12.5px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word';
@@ -28,6 +28,17 @@ add('div','ลองกดโหลดใหม่ ถ้ายังเป็�
 var b=add('button','โหลดใหม่','margin-top:10px;padding:6px 14px;border:1px solid #c0392b;border-radius:8px;background:#fff;color:#5c1a14;font:inherit;cursor:pointer');
 b.onclick=function(){location.reload();};
 document.body.insertBefore(box,document.body.firstChild);}
+// จุดที่อ่านไม่ได้ในสคริปต์ที่ได้รับ: คอมไพล์ด้วย new Function ก่อน (ไม่รัน) ถ้าอ่านไม่ได้จริง ใส่เป็น <script> ใหม่เพื่อให้เบราว์เซอร์บอกบรรทัดและตำแหน่ง
+function locate(text){
+try{new Function(text);return '';}catch(e){if(!(e instanceof SyntaxError))return '';}
+var at=null,h=function(e){at=[e.lineno,e.colno];if(e.preventDefault)e.preventDefault();};
+probing=true;window.addEventListener('error',h);
+try{var t=document.createElement('script');t.text=text;document.body.appendChild(t);t.parentNode.removeChild(t);}catch(e){}
+window.removeEventListener('error',h);probing=false;
+if(!at)return '';
+var ls=text.split('\n'),n=at[0],c=at[1],out=[];
+for(var k=Math.max(1,n-2);k<=Math.min(ls.length,n+1);k++){var l=ls[k-1],a=k===n?Math.max(0,c-90):0;out.push((k===n?'> ':'  ')+k+': '+(a?'…':'')+l.slice(a,a+180));}
+return '\nจุดที่อ่านไม่ได้ในสคริปต์ที่ได้รับ บรรทัด '+n+':'+c+'\n'+out.join('\n');}
 // สคริปต์หลักอ่านไม่ได้: หาจุดที่ต่างจากต้นฉบับ แล้วรันต้นฉบับ
 function recover(){
 var mine=mainScript(document);if(recovering||!mine||!window.fetch||!window.DOMParser)return show();recovering=true;
@@ -36,7 +47,7 @@ fetch(SRC+'?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw n
 var orig=mainScript(new DOMParser().parseFromString(html,'text/html'));orig=orig?orig.text:'';
 var i=0,max=Math.min(orig.length,got.length);while(i<max&&orig.charCodeAt(i)===got.charCodeAt(i))i++;
 var diff=orig===got?'สคริปต์ที่ได้รับตรงกับต้นฉบับ':'ต่างจากต้นฉบับที่ตำแหน่ง '+i+' (บรรทัด '+(orig.slice(0,i).split('\n').length)+' ของสคริปต์) · ต้นฉบับ '+orig.length+' ตัวอักษร ได้รับ '+got.length
-+'\nต้นฉบับ: '+JSON.stringify(orig.slice(Math.max(0,i-60),i+60))+'\nได้รับ:  '+JSON.stringify(got.slice(Math.max(0,i-60),i+60));
++'\nต้นฉบับ: '+JSON.stringify(orig.slice(Math.max(0,i-60),i+60))+'\nได้รับ:  '+JSON.stringify(got.slice(Math.max(0,i-60),i+60))+locate(got);
 window.MEDPHYS_BOOT_DIFF=diff;
 if(orig&&orig!==got&&version(orig)===version(got)){
 var el=document.createElement('script');el.text=orig;document.body.appendChild(el);
@@ -1265,7 +1276,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.15';
+const PAGE_VERSION = '2026-10-11.16';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
