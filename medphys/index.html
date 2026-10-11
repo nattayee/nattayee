@@ -283,7 +283,7 @@ input[type="checkbox"]{width:auto;min-height:0;accent-color:var(--accent)}
 .c-dates .sim.ok,.c-dates .sim.ok b{color:var(--ok);font-weight:500}
 .c-dates .sim.warn,.c-dates .sim.warn b{color:var(--warn);font-weight:500}
 .c-dates .sim.late,.c-dates .sim.late b{color:var(--late);font-weight:500}
-/* ปุ่มบันทึกขั้นตอน (Finish, Evaluate, MU Check, D0, Delta4) ใต้ข้อมูลเคส */
+/* ปุ่มบันทึกขั้นตอน (Finish, Evaluate, Dose check, F0, Delta4, SRS MapCheck) ใต้ข้อมูลเคส */
 .checks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:-2px}
 .chk-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
 .chk{display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border:1px solid var(--accent);border-radius:999px;background:none;color:var(--accent);font-size:12.5px;font-weight:500;white-space:nowrap}
@@ -759,20 +759,29 @@ const REQ_FIELDS = [
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
-const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Finish โดย', 'Evaluate โดย', 'MU Check', 'MU Check โดย', 'MU Check ค่า', 'D0', 'D0 โดย', 'D0 ค่า', 'Delta4', 'Delta4 โดย', 'Delta4 ค่า', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'Prescription (Gy)', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Finish โดย', 'Evaluate โดย', 'Dose check', 'Dose check โดย', 'Dose check ค่า', 'F0', 'F0 โดย', 'F0 ค่า', 'Delta4', 'Delta4 โดย', 'Delta4 ค่า', 'SRS MapCheck', 'SRS MapCheck โดย', 'SRS MapCheck ค่า', 'MU Check', 'MU Check โดย', 'MU Check ค่า', 'D0', 'D0 โดย', 'D0 ค่า', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'Prescription (Gy)', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
 const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
 const ROOM_API = 7;    // Code.gs ที่เก็บห้องฉายและบริเวณที่ฉายเพิ่มเติมได้
 const COUNT_API = 8;   // Code.gs ที่เก็บจำนวนครั้งและนับในคิวได้
 const STAMP_API = 9;   // Code.gs ที่มีปุ่มบันทึกขั้นตอนพร้อมรหัส PIN (stampCase, setPin)
-// ปุ่มบันทึกขั้นตอนของเคสวางแผน: กดแล้วใส่รหัส PIN 4 หลัก บันทึกคนกด วันและเวลา (และค่า สำหรับ MU Check, D0, Delta4)
+// ปุ่มบันทึกขั้นตอนของเคสวางแผน: กดแล้วใส่รหัส PIN 4 หลัก บันทึกคนกด วันและเวลา (และค่า สำหรับ Dose check, F0, Delta4, SRS MapCheck)
+// key เดิม mu / d0 คงไว้ (ข้อมูลที่บันทึกแล้วใช้ต่อได้) เปลี่ยนแค่ชื่อที่แสดง
 const STEPS = [
   { key: 'fin', label: 'Finish' },
   { key: 'eval', label: 'Evaluate' },
-  { key: 'mu', label: 'MU Check', value: true, hint: 'เช่น 1.2%' },
-  { key: 'd0', label: 'D0', value: true, hint: 'ค่าที่วัดได้' },
+  { key: 'mu', label: 'Dose check', value: true, hint: 'เช่น 1.2%' },
+  { key: 'd0', label: 'F0', value: true, hint: 'ค่าที่วัดได้' },
   { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5%' },
+  { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5%' },
 ];
-const CHECKS = ['mu', 'd0', 'd4'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
+const CHECKS = ['mu', 'd0', 'd4', 'mc'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
+const MC_API = 11;   // Code.gs ที่รู้จัก SRS MapCheck
+// ปุ่มที่เพิ่มเข้ามาทีหลังเปิดตามค่าเริ่มต้นนี้ จนกว่าแอดมินจะตั้งเอง (SRS MapCheck เฉพาะเทคนิค SRS)
+const CHECK_DEFAULT = { mu: () => true, d0: () => true, d4: () => true, mc: k => /srs/i.test(`${k.id} ${k.label}`) };
+function catChecks(x, k) {
+  const seen = Array.isArray(x.checksSeen) ? x.checksSeen : Array.isArray(x.checks) ? ['mu', 'd0', 'd4'] : [];
+  return CHECKS.filter(v => (seen.includes(v) ? x.checks.includes(v) : CHECK_DEFAULT[v](k)));
+}
 const MAX_N = 20;
 // เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
 const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
@@ -856,7 +865,7 @@ const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && 
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -910,7 +919,7 @@ function normCase(o) {
   if (Array.isArray(o.sites)) c.sites = o.sites.length ? JSON.stringify(o.sites) : '';   // บริเวณที่ฉายเพิ่มเติม เก็บเป็น JSON
   for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
   for (const f of ['ct', 'in']) c[f] = dateStr(c[f]);
-  for (const f of ['fin', 'eval', 'mu', 'd0', 'd4']) c[f] = stampStr(c[f]);
+  for (const f of ['fin', 'eval', 'mu', 'd0', 'd4', 'mc']) c[f] = stampStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
@@ -967,7 +976,7 @@ function mergeConfig(c) {
     out.cats = c.cats.filter(x => x && x.id && !MOVED_CATS.includes(x.id)).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
       return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false, kind: x.kind === 'simple' ? 'simple' : 'plan', tech: !!x.tech, group: str(x.group) || base.group || 'อื่น ๆ',
-        checks: Array.isArray(x.checks) ? CHECKS.filter(v => x.checks.includes(v)) : CHECKS.slice() };
+        checks: catChecks(x, x), checksSeen: CHECKS.slice() };
     });
   }
   if ((c.acts && typeof c.acts === 'object') || Object.keys(moved).length) {
@@ -997,7 +1006,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.5';
+const PAGE_VERSION = '2026-10-11.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1145,6 +1154,7 @@ const state = {
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
 };
 let draft = null;      // ตั้งค่าที่ยังไม่บันทึก
+let draftBase = '';    // การตั้งค่าตอนเริ่ม draft (ยังไม่ได้แก้ = เท่ากัน)
 let editingCase = null, editingLog = null, logMpTouched = false;
 const NOBODY = 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)';
 
@@ -2016,7 +2026,7 @@ function caseRow(c, rcs) {
   </li>`;
 }
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
-const stepsOf = k => STEPS.filter(x => !x.value || (Array.isArray(k.checks) ? k.checks : CHECKS).includes(x.key));
+const stepsOf = k => STEPS.filter(x => (!x.value || (Array.isArray(k.checks) ? k.checks : catChecks({}, k)).includes(x.key)) && (x.key !== 'mc' || serverHas(MC_API)));
 const firstName = v => str(v).split(/\s+/)[0];
 function stepChip(c, x) {
   const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '';
@@ -2167,7 +2177,7 @@ function personTable(code, r, ym, carryCell) {
 
 /* ---------- ตั้งค่า ---------- */
 function renderSettings() {
-  if (!draft) draft = clone(state.config);
+  if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); }
   const d = draft, el = $('#view-settings');
   const ymNow = thisMonth();
   const since = from => (from <= '2000-12' ? 'เริ่มต้น' : fmtMonth(from));
@@ -2228,7 +2238,7 @@ function renderSettings() {
         <span class="spacer"></span>
         <button type="button" class="icon-btn" data-del="cats.${i}" aria-label="ลบเทคนิค ${esc(k.label)}"${usedCats.has(k.id) ? ' disabled title="มีเคสแล้ว ลบไม่ได้ ใช้การปิด แสดงในฟอร์ม แทน"' : ''}>×</button>
       </div>
-      ${k.kind === 'simple' ? '' : `<div class="cat-l2"><span class="mini">ปุ่มในรายการเคส: Finish, Evaluate และ</span>${CHECKS.map(v => `<label class="check"><input type="checkbox" data-chk="${i}" value="${v}"${(Array.isArray(k.checks) ? k.checks : CHECKS).includes(v) ? ' checked' : ''}> ${STEPS.find(x => x.key === v).label}</label>`).join('')}</div>`}
+      ${k.kind === 'simple' ? '' : `<div class="cat-l2"><span class="mini">ปุ่มในรายการเคส: Finish, Evaluate และ</span>${CHECKS.map(v => `<label class="check"><input type="checkbox" data-chk="${i}" value="${v}"${(Array.isArray(k.checks) ? k.checks : catChecks({}, k)).includes(v) ? ' checked' : ''}> ${STEPS.find(x => x.key === v).label}</label>`).join('')}</div>`}
     </div>`).join('');
   const actNote = { mu: 'นับจากเคสวางแผนอัตโนมัติ', rc: 'บันทึกจากปุ่ม RC' };
   const actRows = Object.entries(d.acts).map(([key, a]) => `<tr>
@@ -2815,7 +2825,7 @@ async function undoAssign(list) {
 }
 
 /* ---------- ปุ่มบันทึกขั้นตอน และรหัส PIN ---------- */
-// กด Finish / Evaluate / MU Check / D0 / Delta4 → ใส่ค่า (ถ้ามี) และรหัส PIN 4 หลักของตัวเอง → บันทึกคนกด วันเวลา
+// กด Finish / Evaluate / Dose check / F0 / Delta4 / SRS MapCheck → ใส่ค่า (ถ้ามี) และรหัส PIN 4 หลักของตัวเอง → บันทึกคนกด วันเวลา
 // ยังไม่มีรหัส PIN: ตั้งในหน้าต่างเดียวกันแล้วบันทึกต่อทันที · ตั้ง/เปลี่ยนรหัสได้ที่ชื่อผู้ใช้มุมขวาบน
 const pinDlg = $('#pin-dlg'), pinForm = $('#pin-form');
 const PIN_RE = /^\d{4}$/;
@@ -3021,7 +3031,7 @@ document.addEventListener('click', e => {
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'cat') {
     const last = draft.cats[draft.cats.length - 1] || {};
-    draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true, checks: CHECKS.slice() });
+    draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true, checks: ['mu', 'd0', 'd4'], checksSeen: CHECKS.slice() });
     renderSettings(); $$('[data-k^="cats."][data-k$=".label"]').pop().select(); return;
   }
   if (ds.add === 'icd') { draft.icdExtra.push({ code: '', name: '', th: '' }); renderSettings(); $$('[data-k^="icdExtra."][data-k$=".code"]').pop().focus(); return; }
@@ -3149,8 +3159,9 @@ settingsEl.addEventListener('input', e => {
   } else if (el.dataset.list) {
     draft[el.dataset.list] = el.value.split(',').map(str).filter(Boolean);
   } else if (el.dataset.chk !== undefined) {
-    const cat = draft.cats[+el.dataset.chk], cur = Array.isArray(cat.checks) ? cat.checks : CHECKS;
+    const cat = draft.cats[+el.dataset.chk], cur = Array.isArray(cat.checks) ? cat.checks : catChecks({}, cat);
     cat.checks = CHECKS.filter(v => (v === el.value ? el.checked : cur.includes(v)));
+    cat.checksSeen = CHECKS.slice();
   }
   updateSaveBar();
 });
@@ -3248,6 +3259,9 @@ async function refresh(quiet) {
   try {
     const d = await store.load();
     state.config = mergeConfig(d.config);
+    // หน้าตั้งค่าที่วาดไว้ก่อนข้อมูลมาถึง (เปิดหน้าเว็บที่หน้าตั้งค่า) ใช้ค่าเริ่มต้นอยู่: ถ้ายังไม่ได้แก้ วาดใหม่จากข้อมูลจริง
+    // ไม่อย่างนั้นกดบันทึกจะเอาค่าเริ่มต้นไปทับการตั้งค่าจริง
+    if (draft && JSON.stringify(draft) === draftBase) draft = null;
     state.cases = (d.cases || []).map(normCase);
     state.logs = (d.logs || []).map(normLog);
     state.leaves = (d.leaves || []).map(normLeave);

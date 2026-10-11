@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-11.2';
-const API_LEVEL = 10;
+const CODE_VERSION = '2026-10-11.3';
+const API_LEVEL = 11;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -37,11 +37,12 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['how', 'วิธีแจก'], ['n', 'จำนวนครั้ง'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
       ['fin', 'Finish'], ['eval', 'Evaluate'],
-      // ปุ่มบันทึกขั้นตอน: วันเวลา คนกด และค่า (MU Check, D0, Delta4) เขียนผ่าน stampCase เท่านั้น
+      // ปุ่มบันทึกขั้นตอน: วันเวลา คนกด และค่า (Dose check, F0, Delta4, SRS MapCheck) เขียนผ่าน stampCase เท่านั้น
       ['finBy', 'Finish โดย'], ['evalBy', 'Evaluate โดย'],
-      ['mu', 'MU Check'], ['muBy', 'MU Check โดย'], ['muVal', 'MU Check ค่า'],
-      ['d0', 'D0'], ['d0By', 'D0 โดย'], ['d0Val', 'D0 ค่า'],
+      ['mu', 'Dose check'], ['muBy', 'Dose check โดย'], ['muVal', 'Dose check ค่า'],
+      ['d0', 'F0'], ['d0By', 'F0 โดย'], ['d0Val', 'F0 ค่า'],
       ['d4', 'Delta4'], ['d4By', 'Delta4 โดย'], ['d4Val', 'Delta4 ค่า'],
+      ['mc', 'SRS MapCheck'], ['mcBy', 'SRS MapCheck โดย'], ['mcVal', 'SRS MapCheck ค่า'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -565,11 +566,13 @@ function moveActCases(token) {
   });
 }
 
-/* ---------- ปุ่มบันทึกขั้นตอนของเคส (Finish, Evaluate, MU Check, D0, Delta4) ---------- */
+/* ---------- ปุ่มบันทึกขั้นตอนของเคส (Finish, Evaluate, Dose check, F0, Delta4, SRS MapCheck) ---------- */
 
-const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'MU Check', d0: 'D0', d4: 'Delta4' };
-const STEP_VALUES = ['mu', 'd0', 'd4'];   // ต้องกรอกค่า
-const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val'];
+const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck' };
+const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
+const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal'];
+// ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
+const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
 /**
  * กดปุ่มขั้นตอนของเคส: ตรวจรหัส PIN ของคนกด แล้วบันทึกวันเวลา (เวลาเซิร์ฟเวอร์) ชื่อคนกด และค่า
@@ -878,7 +881,11 @@ function tableSheet_(ss, table, cfg) {
     sh = ss.insertSheet(def.sheet);
     sh.setFrozenRows(1);
   }
-  const header = headerOf_(sh);
+  let header = headerOf_(sh);
+  if (table === 'cases' && header.some(h => RENAMED_COLS[h] && header.indexOf(RENAMED_COLS[h]) < 0)) {
+    header = header.map(h => (RENAMED_COLS[h] && header.indexOf(RENAMED_COLS[h]) < 0 ? RENAMED_COLS[h] : h));
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+  }
   const missing = def.fields.map(f => f[1]).filter(h => header.indexOf(h) < 0);
   if (missing.length) sh.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
   return sh;
@@ -896,7 +903,9 @@ function readTable_(ss, table, cfg) {
   const tz = ss.getSpreadsheetTimeZone();
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
   const header = values.shift().map(v => String(v).trim());
-  const cols = def.fields.map(f => header.indexOf(f[1]));
+  const oldName = {};
+  Object.keys(RENAMED_COLS).forEach(k => { oldName[RENAMED_COLS[k]] = k; });
+  const cols = def.fields.map(f => (header.indexOf(f[1]) >= 0 || !oldName[f[1]] ? header.indexOf(f[1]) : header.indexOf(oldName[f[1]])));
   if (cols[0] < 0) return [];
   return values
     .filter(r => String(r[cols[0]]).trim() !== '')
