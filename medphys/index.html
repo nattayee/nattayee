@@ -526,6 +526,9 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   .rule-table td:last-child{position:absolute;top:8px;right:6px}
   .rule-table td .num{width:100%}
 }
+.nav-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:8px 12px;align-items:center;min-height:40px}
+.nav-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
+.nav-row .btns{display:flex;gap:2px}
 .fld-def{display:grid;gap:5px;justify-items:start}
 .fld-def select,.fld-def input:not(.num){width:min(320px,100%)}
 .hint{font-size:12px;color:var(--accent)}
@@ -1055,6 +1058,8 @@ const DEFAULT_CONFIG = {
   // วันหยุด (ไม่ฉายรังสี) { date, name } · เริ่มต้นด้วยวันหยุดที่ตรงวันทุกปีของปีนี้และปีหน้า ดึงทั้งหมดได้ในตั้งค่า
   holidays: [new Date().getFullYear(), new Date().getFullYear() + 1].flatMap(thaiFixedHolidays),
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
+  // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
+  nav: ['work', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true })),
 };
 // ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
 function logKinds() {
@@ -1083,6 +1088,8 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const VIEWS = ['work', 'dash', 'logs', 'p4p', 'settings'];
+const VIEW_LABEL = { work: 'งาน', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
+const navOn = (view, cfg = state.config) => view === 'settings' || !(cfg.nav || []).some(x => x.view === view && !x.on);
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
@@ -1226,6 +1233,10 @@ function mergeConfig(c) {
     out.holidays = c.holidays.filter(h => h && /^\d{4}-\d{2}-\d{2}$/.test(str(h.date)) && !seen.has(h.date) && seen.add(h.date)).map(h => ({ date: h.date, name: str(h.name) })).sort((a, b) => a.date.localeCompare(b.date));
   }
   out.defaults = cleanDefaults(c.defaults && typeof c.defaults === 'object' ? c.defaults : d.defaults, out);
+  // แถบเมนู: แถบที่รู้จักตามลำดับที่ตั้ง (ซ้ำตัดทิ้ง) แถบใหม่ที่ยังไม่อยู่ในรายการต่อท้าย
+  const navSeen = new Set();
+  out.nav = [...(Array.isArray(c.nav) ? c.nav : []).filter(x => x && VIEWS.includes(x.view) && !navSeen.has(x.view) && navSeen.add(x.view)),
+    ...VIEWS.filter(v => !navSeen.has(v)).map(view => ({ view, on: true }))].map(x => ({ view: x.view, on: x.view === 'settings' || x.on !== false }));
   return out;
 }
 // ค่าเริ่มต้นที่ใช้ได้: ตัวเลือกที่ยังมีอยู่ ตัวเลขที่ถูกต้อง · วันที่ = วันทำการ −30 ถึง 90 จากวันแจก หรือ on call (Start RT)
@@ -1276,7 +1287,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.18';
+const PAGE_VERSION = '2026-10-11.19';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1671,6 +1682,13 @@ function renderAcct() {
   $('#home-slot').innerHTML = home;
   $('#acct').innerHTML = who;   // ชื่อผู้ใช้และปุ่มออกจากระบบอยู่ขวาสุด
 }
+// แถบเมนูตามที่แอดมินตั้ง: ย้ายปุ่มเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
+function renderNav() {
+  const nav = $('.nav'), list = state.config.nav || [], sig = list.map(x => x.view + (x.on ? '' : '-')).join(',');
+  if (nav.dataset.sig === sig) return;
+  nav.dataset.sig = sig;
+  for (const x of list) { const b = $(`[data-view="${x.view}"]`, nav); if (!b) continue; b.hidden = !navOn(x.view); nav.appendChild(b); }
+}
 function render() {
   const gated = state.gate != null;
   renderTheme();
@@ -1707,6 +1725,8 @@ function render() {
   const ro = !canEdit();
   $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);   // ยังไม่ทราบผู้ใช้: ยังไม่บอกว่าดูอย่างเดียว
   if (ro) $('#ro-text').textContent = `บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP)${state.user.name ? ` · ${state.user.name}${state.user.role ? ` (${state.user.role})` : ''}` : ''}`;
+  renderNav();
+  if (!navOn(state.view)) state.view = (state.config.nav.find(x => x.on) || { view: 'settings' }).view;
   for (const v of VIEWS) $('#view-' + v).hidden = state.view !== v;
   $$('.nav [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'));
   $('#demo-notice').hidden = store.mode !== 'local';
@@ -2913,6 +2933,12 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
     <datalist id="dl-tabs">${[...new Set(Object.values(d.acts).map(a => str(a.tab)).filter(Boolean))].map(t => `<option value="${esc(t)}"></option>`).join('')}</datalist>
+    <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับและแถบที่แสดงด้านบน ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · "ตั้งค่า" แสดงเสมอ</p></div>
+      <div class="set-list nav-list">${d.nav.map((x, i) => `<div class="nav-row">
+        <span class="idx">${i + 1}</span><span class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</span>
+        <label class="check"><input type="checkbox" data-k="nav.${i}.on"${x.view === 'settings' ? ' checked disabled' : x.on ? ' checked' : ''}> แสดง</label>
+        <span class="btns"><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></span>
+      </div>`).join('')}</div></div>
     ${adminSec}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     </fieldset>
