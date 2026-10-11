@@ -2598,12 +2598,22 @@ async function exportP4P(btn) {
     for (const c of codes) p4pSheet(wb, c, ym, people[c], counts[c] || {}, notes);
     const [y, m] = ym.split('-').map(Number);
     const file = `P4P-${y + 543}-${pad(m)}${state.who ? '-' + state.who : ''}.xlsx`;   // ชื่อไฟล์ภาษาอังกฤษ: บางเบราว์เซอร์ไม่รับชื่อไทย
-    saveBlob(new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), file);
-    toast(`ดาวน์โหลด ${file} แล้ว (${codes.length} คน)`);
+    const saved = await saveBlob(new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), file);
+    toast(saved ? `ดาวน์โหลด ${file} แล้ว (${codes.length} คน)` : 'ยกเลิกการดาวน์โหลด');
   } catch (e) { toast('สร้างไฟล์ Excel ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { btn.disabled = false; btn.textContent = label; }
 }
-function saveBlob(blob, name) {
+// หน้าตัวอย่างบน claude.ai: ให้หน้าเว็บเสนอไฟล์ผ่านความสามารถ downloads (ผู้ใช้ยืนยันก่อนบันทึก) · ที่อื่นใช้ลิงก์ดาวน์โหลดปกติ
+async function saveBlob(blob, name) {
+  const host = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads').catch(() => null) : null;
+  if (host) {
+    try { await host.save({ filename: name, data: blob }); return true; }
+    catch (e) {
+      const code = e && e.code;
+      if (code === 'declined') return false;
+      if (!['unavailable', 'not_granted', 'capability_disabled', 'capability_removed'].includes(code)) throw new Error((e && e.message) || 'บันทึกไฟล์ไม่ได้');
+    }
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -2611,6 +2621,7 @@ function saveBlob(blob, name) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  return true;
 }
 
 /* ---------- ตั้งค่า ---------- */
