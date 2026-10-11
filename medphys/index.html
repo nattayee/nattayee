@@ -279,7 +279,7 @@ input[type="checkbox"]{width:auto;min-height:0;accent-color:var(--accent)}
 .step{padding:4px 14px;border:1px solid var(--accent);border-radius:999px;background:none;color:var(--accent);font-size:13px;font-weight:500;white-space:nowrap}
 .step:hover{background:var(--accent-soft)}
 .done-mark{font-size:13px;color:var(--ok);white-space:nowrap}
-/* วัน Sim: เกิน 3 วันสีเขียว 2–3 วันสีเหลือง 1 วันหรือเลยแล้วสีแดง */
+/* วัน Start RT (เดิมเรียก Sim): เกิน 3 วันสีเขียว 2–3 วันสีเหลือง 1 วันหรือเลยแล้วสีแดง */
 .c-dates .sim.ok,.c-dates .sim.ok b{color:var(--ok);font-weight:500}
 .c-dates .sim.warn,.c-dates .sim.warn b{color:var(--warn);font-weight:500}
 .c-dates .sim.late,.c-dates .sim.late b{color:var(--late);font-weight:500}
@@ -542,7 +542,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <div class="intake-dates">
           <label class="field plan-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
-          <div class="field plan-field"><span class="lbl"><label for="i-sim">Sim<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
+          <div class="field plan-field"><span class="lbl"><label for="i-sim">Start RT<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
           <label class="field note-field"><span class="lbl"><span>Note<b class="req" data-req="note" hidden>*</b></span></span><input id="i-note"></label>
         </div>
         <div class="extra-grid" id="i-extra" hidden></div>
@@ -641,7 +641,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="dates">
         <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
         <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
-        <div class="field plan-only"><span class="lbl"><label for="f-sim">Sim</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
+        <div class="field plan-only"><span class="lbl"><label for="f-sim">Start RT</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
         <div class="field plan-only" id="f-fin-field"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
         <div class="field plan-only" id="f-eval-field"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
       </div>
@@ -753,7 +753,7 @@ const REQ_FIELDS = [
   { key: 'area', label: 'บริเวณที่ฉาย', pick: true }, { key: 'type', label: 'Type', plan: true, pick: true }, { key: 'aim', label: 'Aim', plan: true, pick: true },
   { key: 'room', label: 'ห้องฉาย', plan: true, pick: true },
   { key: 'tech', label: 'Technique', plan: true, pick: true }, { key: 'dpf', label: 'Dose/fx' }, { key: 'fx', label: 'Fx' },
-  { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Sim', plan: true },
+  { key: 'freq', label: 'ความถี่ในการฉาย', pick: true }, { key: 'ct', label: 'CT-Sim', plan: true }, { key: 'sim', label: 'Start RT', plan: true },
   { key: 'note', label: 'Note' },
 ];
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
@@ -1006,7 +1006,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.7';
+const PAGE_VERSION = '2026-10-11.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1987,8 +1987,8 @@ function caseRow(c, rcs) {
   if (simple) {
     dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
   } else {
-    let simTxt = '<span>Sim —</span>';
-    if (c.sim === 'on call') simTxt = `<span class="${st === 'done' ? '' : 'warn'}">Sim on call</span>`;
+    let simTxt = '<span>Start RT —</span>';
+    if (c.sim === 'on call') simTxt = `<span class="${st === 'done' ? '' : 'warn'}">Start RT on call</span>`;
     else if (c.sim) {
       const dd = daysFrom(c.sim);
       let rel = '', cls = '';
@@ -1996,7 +1996,7 @@ function caseRow(c, rcs) {
         rel = dd < 0 ? `เลย ${-dd} วัน` : dd === 0 ? 'วันนี้' : `อีก ${dd} วัน`;
         cls = dd > 3 ? 'ok' : dd >= 2 ? 'warn' : 'late';   // เกิน 3 วัน เขียว · 2–3 วัน เหลือง · 1 วันหรือน้อยกว่า แดง
       }
-      simTxt = `<span class="sim ${cls}">Sim <b>${esc(fmtDay(c.sim))}</b>${rel ? ` · ${rel}` : ''}</span>`;
+      simTxt = `<span class="sim ${cls}">Start RT <b>${esc(fmtDay(c.sim))}</b>${rel ? ` · ${rel}` : ''}</span>`;
     }
     dates = `<span>In ${esc(fmtDay(c.in) || '—')}</span><br>${simTxt}`;
   }
@@ -2321,7 +2321,7 @@ function renderSettings() {
       ${oldCode}
       ${fieldCards ? `<div class="cat-list">${fieldCards}</div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="field">+ เพิ่มหัวข้อ</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Sim บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน · หัวข้อเพิ่มเติมตั้งบังคับได้ที่หัวข้อนั้น</p></div>
+    <div class="sec"><div class="sec-head"><h2>ช่องบังคับกรอก</h2><p>ติ๊กช่องที่ต้องกรอกก่อนกด "แจกเคส" (มี * ในฟอร์ม) ที่ไม่ติ๊กคือไม่บังคับ · Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะเมื่อเลือกเทคนิคที่เป็นงานวางแผน · หัวข้อเพิ่มเติมตั้งบังคับได้ที่หัวข้อนั้น</p></div>
       <div class="req-grid">
         <label class="check"><input type="checkbox" checked disabled> HN <small>บังคับเสมอ</small></label>
         <label class="check"><input type="checkbox" checked disabled> เทคนิค <small>บังคับเสมอ</small></label>
