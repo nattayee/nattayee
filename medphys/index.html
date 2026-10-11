@@ -4,25 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ระบบกระจายงานฟิสิกส์การแพทย์</title>
-<script>/* หน้าเว็บเริ่มทำงานไม่ได้ (สคริปต์ผิดพลาด หรือได้รับหน้าเว็บมาไม่ครบ): บอกสาเหตุบนจอแทนหน้าว่าง */(function(){
-var errs=[],shown=false;
+<script>/* หน้าเว็บเริ่มทำงานไม่ได้ (สคริปต์ผิดพลาด หรือได้รับหน้าเว็บมาไม่ครบ): บอกสาเหตุบนจอแทนหน้าว่าง
+   สคริปต์ที่ Google Apps Script ส่งมาเพี้ยน: เทียบกับต้นฉบับบน GitHub บอกจุดที่ต่าง แล้วใช้สคริปต์ต้นฉบับแทน (รุ่นเดียวกันเท่านั้น) */(function(){
+var SRC='https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
+var errs=[],shown=false,box=null,recovering=false;
 window.addEventListener('error',function(e){errs.push((e.message||'ข้อผิดพลาด')+(e.lineno?' (บรรทัด '+e.lineno+':'+e.colno+')':''));});
 window.addEventListener('unhandledrejection',function(e){var r=e.reason;errs.push('Promise: '+(r&&r.message||r));});
-function check(){
+function add(tag,text,css){var el=document.createElement(tag);el.textContent=text;if(css)el.style.cssText=css;box.appendChild(el);return el;}
+var CODE='display:block;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fde8e5;font:12.5px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word';
+// ข้อความ "PAGE_VERSION" ประกอบทีละส่วน: Code.gs อ่านรุ่นหน้าเว็บจากข้อความนี้ ตัวตรวจต้องไม่มีข้อความเดียวกัน
+var VER=new RegExp('const PAGE_'+'VERSION = \'(\\d[^\']*)\'');
+function mainScript(doc){var ss=doc.getElementsByTagName('script'),m=null;for(var i=0;i<ss.length;i++)if(VER.test(ss[i].text))m=ss[i];return m;}
+function version(t){var m=VER.exec(t||'');return m?m[1]:'';}
+function show(){
 if(shown||window.MEDPHYS_STARTED||!document.body)return;shown=true;
 var end=!!document.getElementById('page-end'),n=document.documentElement.outerHTML.length;
-var box=document.createElement('div');box.id='boot-error';box.setAttribute('role','alert');
+box=document.createElement('div');box.id='boot-error';box.setAttribute('role','alert');
 box.style.cssText='margin:16px auto;max-width:760px;padding:16px 18px;border:1px solid #c0392b;border-radius:12px;background:#fff6f5;color:#5c1a14;font:14px/1.6 system-ui,sans-serif';
-var add=function(tag,text,css){var el=document.createElement(tag);el.textContent=text;if(css)el.style.cssText=css;box.appendChild(el);return el;};
 add('b','หน้าเว็บเริ่มทำงานไม่สำเร็จ','display:block;font-size:15px');
 add('div',end?'สคริปต์ของหน้าเว็บหยุดทำงานตอนเริ่ม':'ได้รับหน้าเว็บมาไม่ครบ ('+n.toLocaleString()+' ตัวอักษร) อาจเป็นเพราะการเชื่อมต่อขาด หรือหน้าเว็บใหญ่เกินที่ Google Apps Script ส่งได้');
-for(var i=0;i<errs.length&&i<5;i++)add('code',errs[i],'display:block;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fde8e5;font:12.5px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word');
+for(var i=0;i<errs.length&&i<5;i++)add('code',errs[i],CODE);
 add('div','ลองกดโหลดใหม่ ถ้ายังเป็นอยู่ ส่งภาพหน้าจอนี้ให้ผู้ดูแลระบบ','margin-top:8px');
 var b=add('button','โหลดใหม่','margin-top:10px;padding:6px 14px;border:1px solid #c0392b;border-radius:8px;background:#fff;color:#5c1a14;font:inherit;cursor:pointer');
 b.onclick=function(){location.reload();};
 document.body.insertBefore(box,document.body.firstChild);}
-document.addEventListener('DOMContentLoaded',function(){setTimeout(check,4000);});
-setTimeout(check,20000);
+// สคริปต์หลักอ่านไม่ได้: หาจุดที่ต่างจากต้นฉบับ แล้วรันต้นฉบับ
+function recover(){
+var mine=mainScript(document);if(recovering||!mine||!window.fetch||!window.DOMParser)return show();recovering=true;
+var got=mine.text;
+fetch(SRC+'?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('GitHub HTTP '+r.status);return r.text();}).then(function(html){
+var orig=mainScript(new DOMParser().parseFromString(html,'text/html'));orig=orig?orig.text:'';
+var i=0,max=Math.min(orig.length,got.length);while(i<max&&orig.charCodeAt(i)===got.charCodeAt(i))i++;
+var diff=orig===got?'สคริปต์ที่ได้รับตรงกับต้นฉบับ':'ต่างจากต้นฉบับที่ตำแหน่ง '+i+' (บรรทัด '+(orig.slice(0,i).split('\n').length)+' ของสคริปต์) · ต้นฉบับ '+orig.length+' ตัวอักษร ได้รับ '+got.length
++'\nต้นฉบับ: '+JSON.stringify(orig.slice(Math.max(0,i-60),i+60))+'\nได้รับ:  '+JSON.stringify(got.slice(Math.max(0,i-60),i+60));
+window.MEDPHYS_BOOT_DIFF=diff;
+if(orig&&orig!==got&&version(orig)===version(got)){
+var el=document.createElement('script');el.text=orig;document.body.appendChild(el);
+if(window.MEDPHYS_STARTED){window.MEDPHYS_RECOVERED=diff;
+var note=document.createElement('details');note.id='boot-recovered';note.style.cssText='margin:8px auto;max-width:1100px;padding:8px 14px;border:1px solid #d9a441;border-radius:10px;background:#fff8e6;color:#5a4210;font:13px/1.6 system-ui,sans-serif';
+var sm=document.createElement('summary');sm.textContent='หน้าเว็บที่ Google ส่งมาเพี้ยน ระบบใช้สคริปต์ต้นฉบับจาก GitHub แทน (ใช้งานได้ตามปกติ) · กดดูรายละเอียดแล้วส่งภาพให้ผู้ดูแลระบบ';sm.style.cursor='pointer';note.appendChild(sm);
+var pre=document.createElement('code');pre.textContent=diff;pre.style.cssText=CODE;note.appendChild(pre);document.body.insertBefore(note,document.body.firstChild);return;}}
+show();add('div','เทียบกับต้นฉบับบน GitHub (รุ่น '+(version(orig)||'?')+' · ได้รับรุ่น '+(version(got)||'?')+')','margin-top:10px;font-weight:600');add('code',diff,CODE);
+}).catch(function(e){show();add('code','เทียบกับต้นฉบับไม่ได้: '+(e&&e.message||e),CODE);});}
+document.addEventListener('DOMContentLoaded',function(){
+if(window.MEDPHYS_STARTED)return;
+var syntax=false;for(var i=0;i<errs.length;i++)if(/SyntaxError|Invalid or unexpected token|Unexpected/.test(errs[i]))syntax=true;
+if(syntax)recover();else setTimeout(show,4000);});
+setTimeout(show,20000);
 })();</script>
 <script>/* โหมดกลางวัน/กลางคืนที่เลือกไว้ ตั้งก่อนวาดหน้า ไม่ให้กะพริบ */try{var t=JSON.parse(localStorage.getItem('medphys-pref:theme'));if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1237,7 +1265,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.14';
+const PAGE_VERSION = '2026-10-11.15';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
