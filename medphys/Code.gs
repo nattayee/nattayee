@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-10.8';
-const API_LEVEL = 8;
+const CODE_VERSION = '2026-10-11.1';
+const API_LEVEL = 9;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -36,7 +36,13 @@ const TABLES = {
     sheet: 'Cases',
     fields: [
       ['id', 'id'], ['cat', 'หมวด'], ['mp', 'MP'], ['how', 'วิธีแจก'], ['n', 'จำนวนครั้ง'], ['ct', 'CT-Sim'], ['in', 'In'], ['sim', 'Sim'],
-      ['fin', 'Finish'], ['eval', 'Evaluate'], ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
+      ['fin', 'Finish'], ['eval', 'Evaluate'],
+      // ปุ่มบันทึกขั้นตอน: วันเวลา คนกด และค่า (MU Check, D0, Delta4) เขียนผ่าน stampCase เท่านั้น
+      ['finBy', 'Finish โดย'], ['evalBy', 'Evaluate โดย'],
+      ['mu', 'MU Check'], ['muBy', 'MU Check โดย'], ['muVal', 'MU Check ค่า'],
+      ['d0', 'D0'], ['d0By', 'D0 โดย'], ['d0Val', 'D0 ค่า'],
+      ['d4', 'Delta4'], ['d4By', 'Delta4 โดย'], ['d4Val', 'Delta4 ค่า'],
+      ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
       ['sites', 'บริเวณเพิ่มเติม'],   // ฉายหลายที่: บริเวณที่ 2 เป็นต้นไป [{area, dpf, fx, freq}] (JSON)
@@ -182,8 +188,10 @@ function openApp() {
 function getData(token) {
   const ss = ss_();
   const config = readConfig_(ss);
+  const user = who_(token, ss, config);
+  user.hasPin = !!pinRecord_(user);
   return {
-    user: who_(token, ss, config),
+    user: user,
     api: API_LEVEL,
     codeVersion: CODE_VERSION,
     homeUrl: lpchUrl_(),
@@ -204,8 +212,19 @@ function saveRecord(table, rec, token) {
     const cfg = table === 'cases' ? readConfig_(ss) : null;   // หัวข้อเพิ่มเติมที่แอดมินตั้ง เป็นคอลัมน์ของ Cases
     const sh = tableSheet_(ss, table, cfg);
     const header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, rec.id) || sh.getLastRow() + 1;
-    writeFields_(sh, row, header, tableDef_(table, cfg).fields, rec);
+    const found = findRow_(sh, header.indexOf('id') + 1, rec.id);
+    let fields = tableDef_(table, cfg).fields;
+    // เคสที่มีอยู่แล้ว: ช่องของปุ่มบันทึกขั้นตอนเติมได้เฉพาะช่องที่ยังว่าง ไม่เขียนทับหรือลบ (คนอื่นอาจเพิ่งกด)
+    // แก้หรือล้างได้ทาง stampCase เท่านั้น
+    if (found && table === 'cases') {
+      const cur = sh.getRange(found, 1, 1, header.length).getValues()[0];
+      fields = fields.filter(f => {
+        if (STAMP_FIELDS.indexOf(f[0]) < 0) return true;
+        const col = header.indexOf(f[1]);
+        return (col < 0 || String(cur[col] == null ? '' : cur[col]).trim() === '') && String(rec[f[0]] == null ? '' : rec[f[0]]).trim() !== '';
+      });
+    }
+    writeFields_(sh, found || sh.getLastRow() + 1, header, fields, rec);
     return rec;
   });
 }
@@ -544,6 +563,98 @@ function moveActCases(token) {
     old.map(c => findRow_(sh, idCol, c.id)).filter(r => r > 0).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
     return old.length;
   });
+}
+
+/* ---------- ปุ่มบันทึกขั้นตอนของเคส (Finish, Evaluate, MU Check, D0, Delta4) ---------- */
+
+const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'MU Check', d0: 'D0', d4: 'Delta4' };
+const STEP_VALUES = ['mu', 'd0', 'd4'];   // ต้องกรอกค่า
+const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val'];
+
+/**
+ * กดปุ่มขั้นตอนของเคส: ตรวจรหัส PIN ของคนกด แล้วบันทึกวันเวลา (เวลาเซิร์ฟเวอร์) ชื่อคนกด และค่า
+ * value = null คือล้างขั้นตอนนั้น (เลิกทำหรือบันทึกผิด) · เขียนเฉพาะช่องของขั้นตอนนั้น ไม่ทับข้อมูลอื่นของเคส
+ * Evaluate ก่อน Finish: Finish ได้เวลาเดียวกัน · คืนเคสหลังบันทึก
+ */
+function stampCase(id, step, value, pin, token) {
+  const u = requireEdit_(token);
+  if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
+  const clear = value === null;
+  const val = clear ? '' : String(value == null ? '' : value).trim().slice(0, 60);
+  if (!clear && STEP_VALUES.indexOf(step) >= 0 && !val) throw new Error('กรอกค่า ' + STEP_NAMES[step] + ' ก่อนบันทึก');
+  checkPin_(u, pin);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const at = clear ? '' : Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+    const by = clear ? '' : String(u.name || u.username || u.me || '');
+    const set = {};
+    set[step] = at;
+    set[step + 'By'] = by;
+    if (STEP_VALUES.indexOf(step) >= 0) set[step + 'Val'] = val;
+    const finCol = header.indexOf('Finish') + 1;
+    if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
+    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+  });
+}
+
+/* ---------- รหัส PIN 4 หลักของแต่ละคน (ยืนยันตัวตอนกดปุ่มขั้นตอน) ---------- */
+// เก็บแบบแฮชพร้อม salt ใน Script properties (คนที่เปิดชีตก็ไม่เห็น) · ใส่ผิด PIN_TRIES ครั้ง ล็อก PIN_LOCK_SECONDS
+
+const PIN_TRIES = 5;
+const PIN_LOCK_SECONDS = 300;
+
+function pinKey_(u) {
+  return 'PIN_' + (u.via === 'lpch' ? 'lpch:' + String(u.username).toLowerCase() : 'google:' + String(u.me || '').toLowerCase());
+}
+
+function pinHash_(salt, pin) {
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pin, Utilities.Charset.UTF_8));
+}
+
+function pinRecord_(u) {
+  if (!u || (u.via === 'lpch' ? !u.username : !u.me)) return null;
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
+}
+
+function checkPin_(u, pin) {
+  const rec = pinRecord_(u);
+  if (!rec) throw new Error('PIN|ยังไม่ได้ตั้งรหัส PIN');
+  const cache = CacheService.getScriptCache(), key = 'pintry_' + pinKey_(u);
+  const tries = +(cache.get(key) || 0);
+  if (tries >= PIN_TRIES) throw new Error('ใส่รหัส PIN ผิด ' + PIN_TRIES + ' ครั้ง รอ 5 นาทีแล้วลองใหม่');
+  if (!/^\d{4}$/.test(String(pin == null ? '' : pin)) || pinHash_(rec.s, String(pin)) !== rec.h) {
+    cache.put(key, String(tries + 1), PIN_LOCK_SECONDS);
+    const left = PIN_TRIES - tries - 1;
+    throw new Error('รหัส PIN ไม่ถูกต้อง' + (left > 0 ? ' (ใส่ได้อีก ' + left + ' ครั้ง)' : ' รอ 5 นาทีแล้วลองใหม่'));
+  }
+  cache.remove(key);
+}
+
+// ตั้งหรือเปลี่ยนรหัส PIN ของตัวเอง · มีรหัสอยู่แล้วต้องใส่ proof = { pin: รหัสเดิม } หรือ { password: รหัสผ่าน LPCH } (ลืม PIN)
+function setPin(pin, proof, token) {
+  const u = who_(token);
+  pin = String(pin == null ? '' : pin);
+  if (!/^\d{4}$/.test(pin)) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4 หลัก');
+  if (pinRecord_(u)) {
+    proof = proof || {};
+    if (proof.pin != null && proof.pin !== '') checkPin_(u, proof.pin);
+    else if (proof.password && u.via === 'lpch') checkLpchPassword_(u.username, proof.password);
+    else throw new Error('ใส่รหัส PIN เดิม' + (u.via === 'lpch' ? ' หรือรหัสผ่าน LPCH' : '') + ' เพื่อเปลี่ยนรหัส PIN');
+  }
+  const salt = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperty(pinKey_(u), JSON.stringify({ s: salt, h: pinHash_(salt, pin), at: new Date().toISOString() }));
+  CacheService.getScriptCache().remove('pintry_' + pinKey_(u));
+  return true;
+}
+
+// ลืม PIN: ตรวจรหัสผ่านกับ LPCH (เข้าสู่ระบบแล้วออกทันที) รหัสผ่านไม่ถูกเก็บที่นี่
+function checkLpchPassword_(username, password) {
+  const out = lpchCall_({ action: 'login', username: String(username), password: String(password) });
+  try { lpchCall_({ action: 'logout', token: out.token }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
 }
 
 /* ---------- ผู้ใช้: บัญชี LPCH RO Workspace หรือบัญชี Google ---------- */

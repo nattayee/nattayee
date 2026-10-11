@@ -269,6 +269,33 @@ input[type="checkbox"]{width:auto;min-height:0;accent-color:var(--accent)}
 .step{padding:4px 14px;border:1px solid var(--accent);border-radius:999px;background:none;color:var(--accent);font-size:13px;font-weight:500;white-space:nowrap}
 .step:hover{background:var(--accent-soft)}
 .done-mark{font-size:13px;color:var(--ok);white-space:nowrap}
+/* วัน Sim: เกิน 3 วันสีเขียว 2–3 วันสีเหลือง 1 วันหรือเลยแล้วสีแดง */
+.c-dates .sim.ok,.c-dates .sim.ok b{color:var(--ok);font-weight:500}
+.c-dates .sim.warn,.c-dates .sim.warn b{color:var(--warn);font-weight:500}
+.c-dates .sim.late,.c-dates .sim.late b{color:var(--late);font-weight:500}
+/* ปุ่มบันทึกขั้นตอน (Finish, Evaluate, MU Check, D0, Delta4) ใต้ข้อมูลเคส */
+.checks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:-2px}
+.chk-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
+.chk{display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border:1px solid var(--accent);border-radius:999px;background:none;color:var(--accent);font-size:12.5px;font-weight:500;white-space:nowrap}
+button.chk:hover{background:var(--accent-soft)}
+span.chk{border-color:var(--line);color:var(--muted)}
+.chk.done{border-color:transparent;background:var(--ok-soft);color:var(--ok)}
+button.chk.done:hover{background:var(--ok-soft);box-shadow:inset 0 0 0 1px var(--ok)}
+.chk b{font-weight:600;font-family:var(--mono);font-size:12px}
+.chk-cap{padding-left:4px;font-size:11px;line-height:1.3;color:var(--faint);white-space:nowrap}
+.stamps{display:grid;gap:4px;margin:0;padding:10px 12px;border-radius:8px;background:var(--sunken);font-size:13px}
+.stamps div{display:flex;flex-wrap:wrap;gap:4px 10px}
+.stamps b{min-width:80px;font-weight:500}
+.stamps span{color:var(--muted)}
+/* รหัส PIN */
+.pin-what{margin:0;font-size:13.5px;color:var(--muted)}
+.pin-what b{color:var(--fg);font-weight:500}
+.pin-input{max-width:160px;font-family:var(--mono);font-size:20px;letter-spacing:.5em;text-align:center}
+.pin-err{margin:0;font-size:13px;color:var(--late)}
+.linkish{padding:0;border:0;background:none;color:var(--accent);font-size:13px;text-decoration:underline;justify-self:start}
+button.who{padding:0;border:0;background:none;font:inherit;cursor:pointer}
+button.who:hover .nm{text-decoration:underline}
+.pin-badge{flex:none;padding:1px 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:500}
 .row.fresh{background:var(--accent-soft);transition:background 1.2s}
 .empty-state{padding:36px 16px;text-align:center;color:var(--muted);font-size:14px}
 .more{display:flex;justify-content:center;margin-top:10px}
@@ -605,9 +632,10 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
         <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
         <div class="field plan-only"><span class="lbl"><label for="f-sim">Sim</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
-        <div class="field plan-only"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
-        <div class="field plan-only"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
+        <div class="field plan-only" id="f-fin-field"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
+        <div class="field plan-only" id="f-eval-field"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
       </div>
+      <div class="stamps" id="f-stamps" hidden></div>
       <div class="extra-grid" id="f-extra" hidden></div>
       <label class="field"><span class="lbl">Note</span><input id="f-note" autocomplete="off"></label>
       <p class="preview" id="f-preview"></p>
@@ -654,6 +682,35 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 </dialog>
 
 <!-- วันลา -->
+<dialog id="pin-dlg" aria-labelledby="pin-title">
+  <form class="dlg" id="pin-form" novalidate autocomplete="off">
+    <header class="dlg-head"><h2 id="pin-title">ยืนยันด้วยรหัส PIN</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <p class="pin-what" id="pin-what"></p>
+      <label class="field" id="pin-val-field"><span class="lbl" id="pin-val-lbl">ค่า</span><input id="pin-val" autocomplete="off"></label>
+      <div class="field" id="pin-new-box">
+        <p class="pin-what" id="pin-new-note"></p>
+        <div class="row2">
+          <label class="field"><span class="lbl">รหัส PIN ใหม่ (ตัวเลข 4 หลัก)</span><input class="pin-input" id="pin-new" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password"></label>
+          <label class="field"><span class="lbl">ใส่อีกครั้ง</span><input class="pin-input" id="pin-new2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password"></label>
+        </div>
+      </div>
+      <div class="field" id="pin-proof-box">
+        <label class="field"><span class="lbl" id="pin-proof-lbl">รหัส PIN เดิม</span><input class="pin-input" id="pin-proof" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <button type="button" class="linkish" id="pin-forgot">ลืมรหัส PIN? ใช้รหัสผ่าน LPCH แทน</button>
+      </div>
+      <label class="field" id="pin-field"><span class="lbl">รหัส PIN ของคุณ</span><input class="pin-input" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+      <p class="pin-err" id="pin-err" role="alert" hidden></p>
+    </div>
+    <footer class="dlg-foot">
+      <button type="button" class="btn ghost danger" id="pin-clear" hidden>ล้างการบันทึก</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>ยกเลิก</button>
+      <button type="submit" class="btn primary" id="pin-save">บันทึก</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="leave-dlg" aria-labelledby="leave-title">
   <form class="dlg" id="leave-form" novalidate>
     <header class="dlg-head"><h2 id="leave-title">วันลา</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
@@ -692,10 +749,20 @@ const REQ_FIELDS = [
 // หัวข้อเพิ่มเติมที่แอดมินตั้งเอง (config.fields) เก็บในเคสเป็น x_<id> และเป็นคอลัมน์ของตัวเองในแท็บ Cases
 const FIELD_TYPES = [['text', 'ข้อความ'], ['number', 'ตัวเลข'], ['date', 'วันที่'], ['pick', 'ปุ่มเลือก 1 อย่าง'], ['multi', 'ปุ่มเลือกได้หลายอย่าง']];
 // ชื่อคอลัมน์ของระบบในแท็บ Cases (ตรงกับ TABLES.cases ใน Code.gs) หัวข้อเพิ่มเติมใช้ชื่อซ้ำไม่ได้
-const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
+const SHEET_COLS = ['id', 'หมวด', 'MP', 'วิธีแจก', 'จำนวนครั้ง', 'CT-Sim', 'In', 'Sim', 'Finish', 'Evaluate', 'Finish โดย', 'Evaluate โดย', 'MU Check', 'MU Check โดย', 'MU Check ค่า', 'D0', 'D0 โดย', 'D0 ค่า', 'Delta4', 'Delta4 โดย', 'Delta4 ค่า', 'Type', 'HN', 'Name', 'ICD-10', 'Diagnosis', 'Doc', 'Aim', 'Technique', 'ห้องฉาย', 'Dose/fx (Gy)', 'Fx', 'ความถี่', 'บริเวณที่ฉาย', 'บริเวณเพิ่มเติม', 'ชุด', 'Note', 'Created', 'Updated'];
 const EXTRA_API = 6;   // Code.gs ที่เก็บหัวข้อเพิ่มเติมลงชีตได้
 const ROOM_API = 7;    // Code.gs ที่เก็บห้องฉายและบริเวณที่ฉายเพิ่มเติมได้
 const COUNT_API = 8;   // Code.gs ที่เก็บจำนวนครั้งและนับในคิวได้
+const STAMP_API = 9;   // Code.gs ที่มีปุ่มบันทึกขั้นตอนพร้อมรหัส PIN (stampCase, setPin)
+// ปุ่มบันทึกขั้นตอนของเคสวางแผน: กดแล้วใส่รหัส PIN 4 หลัก บันทึกคนกด วันและเวลา (และค่า สำหรับ MU Check, D0, Delta4)
+const STEPS = [
+  { key: 'fin', label: 'Finish' },
+  { key: 'eval', label: 'Evaluate' },
+  { key: 'mu', label: 'MU Check', value: true, hint: 'เช่น 1.2%' },
+  { key: 'd0', label: 'D0', value: true, hint: 'ค่าที่วัดได้' },
+  { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5%' },
+];
+const CHECKS = ['mu', 'd0', 'd4'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
 const MAX_N = 20;
 // เดิม Brachy และ Hyperthermia เป็นเทคนิคแจกตามคิว ตอนนี้เป็นกิจกรรมนับครั้ง (รหัสเดิม) เคสเก่าย้ายไปเป็นบันทึกกิจกรรม
 const MOVED_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
@@ -779,7 +846,7 @@ const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && 
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -833,7 +900,7 @@ function normCase(o) {
   if (Array.isArray(o.sites)) c.sites = o.sites.length ? JSON.stringify(o.sites) : '';   // บริเวณที่ฉายเพิ่มเติม เก็บเป็น JSON
   for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
   for (const f of ['ct', 'in']) c[f] = dateStr(c[f]);
-  for (const f of ['fin', 'eval']) c[f] = stampStr(c[f]);
+  for (const f of ['fin', 'eval', 'mu', 'd0', 'd4']) c[f] = stampStr(c[f]);
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
@@ -889,7 +956,8 @@ function mergeConfig(c) {
   if (Array.isArray(c.cats) && c.cats.some(x => x && x.id && !MOVED_CATS.includes(x.id))) {
     out.cats = c.cats.filter(x => x && x.id && !MOVED_CATS.includes(x.id)).map(x => {
       const base = d.cats.find(y => y.id === x.id) || { group: 'อื่น ๆ', kind: 'plan', mu: true, rotate: 'case', on: true };
-      return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false, kind: x.kind === 'simple' ? 'simple' : 'plan', tech: !!x.tech, group: str(x.group) || base.group || 'อื่น ๆ' };
+      return { ...base, ...x, label: str(x.label) || base.label || x.id, p4p: str(x.p4p) || base.p4p || str(x.label) || x.id, min: +x.min || 0, w: +x.w || 0, mu: !!x.mu, rotate: x.rotate === 'day' || x.rotate === false ? 'day' : 'case', on: x.on !== false, kind: x.kind === 'simple' ? 'simple' : 'plan', tech: !!x.tech, group: str(x.group) || base.group || 'อื่น ๆ',
+        checks: Array.isArray(x.checks) ? CHECKS.filter(v => x.checks.includes(v)) : CHECKS.slice() };
     });
   }
   if ((c.acts && typeof c.acts === 'object') || Object.keys(moved).length) {
@@ -919,7 +987,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.1';
+const PAGE_VERSION = '2026-10-11.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -952,6 +1020,8 @@ const sheetStore = {
   remove: (table, id) => call('deleteRecord', table, id),
   saveConfig: cfg => call('saveConfig', cfg),
   moveActCases: () => call('moveActCases'),
+  stamp: (id, step, value, pin) => call('stampCase', id, step, value, pin),
+  setPin: (pin, proof) => call('setPin', pin, proof),
 };
 function localStore() {
   const KEY = 'medphys-dispatch:v1';
@@ -985,9 +1055,34 @@ function localStore() {
     },
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
     saveConfig: async cfg => { db.config = clone(cfg); persist(); return true; },
+    // โหมดตัวอย่าง: รหัส PIN เก็บแบบแฮชในเบราว์เซอร์นี้ แยกตามมุมมอง
+    stamp: async (id, step, value, pin) => {
+      if (!demoPin.get()) throw new Error('PIN|ยังไม่ได้ตั้งรหัส PIN');
+      if (demoPin.hash(pin) !== demoPin.get()) throw new Error('รหัส PIN ไม่ถูกต้อง');
+      const c = db.cases.find(x => x.id === id);
+      if (!c) throw new Error('ไม่พบเคสนี้');
+      const clear = value === null, at = clear ? '' : nowStamp(), by = clear ? '' : state.user.name;
+      c[step] = at; c[step + 'By'] = by;
+      if (CHECKS.includes(step)) c[step + 'Val'] = clear ? '' : str(value);
+      if (step === 'eval' && !clear && !c.fin) { c.fin = at; c.finBy = by; }
+      persist();
+      return clone(c);
+    },
+    setPin: async (pin, proof) => {
+      if (!/^\d{4}$/.test(pin)) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4 หลัก');
+      if (demoPin.get() && !(proof && proof.pin != null && demoPin.hash(proof.pin) === demoPin.get()) && !(proof && proof.password)) throw new Error('รหัส PIN เดิมไม่ถูกต้อง');
+      demoPin.set(demoPin.hash(pin));
+      return true;
+    },
     reset: async withDemo => { db = withDemo ? demoDb() : { cases: [], logs: [], leaves: [], config: db.config, demo: false }; persist(); },
   };
 }
+const demoPin = {
+  key: () => 'medphys-dispatch:pin:' + pref.get('demoRole', 'admin'),
+  hash: pin => { let h = 2166136261; for (const ch of 'medphys:' + String(pin)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); },
+  get() { try { return localStorage.getItem(this.key()) || ''; } catch (e) { return ''; } },
+  set(v) { try { localStorage.setItem(this.key(), v); } catch (e) { /* โหมดส่วนตัว */ } },
+};
 const store = IN_SHEET ? sheetStore : localStore();
 
 function demoDb() {
@@ -1263,8 +1358,10 @@ function renderAcct() {
   const u = state.user, gated = state.gate != null;
   const home = state.homeUrl ? `<a class="home-btn" href="${esc(state.homeUrl)}" target="${LINK_TARGET}" rel="noopener" title="กลับหน้าหลัก LPCH RO Workspace">${HOME_SVG}<span>Home</span></a>` : '';
   let who = '';
-  const chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
+  let chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
+  // กดชื่อผู้ใช้ = ตั้งหรือเปลี่ยนรหัส PIN ของตัวเอง (ใช้ยืนยันตอนกดปุ่มบันทึกขั้นตอน)
+  if (stampsOn() && (state.loaded || store.mode === 'local')) chip = (name, tag, title) => `<button type="button" class="who" id="pin-btn" title="${esc(title)} · กดเพื่อ${u.hasPin ? 'เปลี่ยน' : 'ตั้ง'}รหัส PIN">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span>${u.hasPin || !u.canEdit ? '' : '<span class="pin-badge">ตั้ง PIN</span>'}</button>`;
   if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
   else if (!gated && store.mode === 'sheet' && !state.loaded) who = chip(state.error ? 'เชื่อมต่อไม่สำเร็จ' : 'กำลังตรวจสอบผู้ใช้…', state.error ? 'ดูแถบสีแดง' : 'รอสักครู่', 'ยังไม่ทราบผู้ใช้');
   else if (!gated && oldServer()) who = chip('ยังไม่เชื่อม LPCH', 'Code.gs รุ่นเก่า', 'ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า');
@@ -1698,6 +1795,7 @@ const readDose = pre => ({ dpf: str($(`#${pre}-dpf`).value), fx: str($(`#${pre}-
 // ฟีเจอร์ที่ต้องใช้ Code.gs รุ่นใหม่ (เก็บลงชีตได้) · Code.gs รุ่นเก่าจะซ่อนไว้ ไม่ให้กรอกแล้วหาย
 const serverHas = api => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= api;
 const roomSitesOn = () => serverHas(ROOM_API);
+const stampsOn = () => serverHas(STAMP_API);
 // ฉายหลายที่ (ขนาดรังสีต่างกัน): บริเวณแรกอยู่ในช่อง area/dpf/fx/freq ของเคส บริเวณถัดไปเก็บใน sites เป็น JSON
 function parseSites(c) {
   let a = [];
@@ -1805,11 +1903,10 @@ function caseRow(c, rcs) {
       const dd = daysFrom(c.sim);
       let rel = '', cls = '';
       if (st !== 'done') {
-        if (dd < 0) { rel = `เลย ${-dd} วัน`; cls = 'late'; }
-        else if (dd === 0) { rel = 'วันนี้'; cls = 'late'; }
-        else { rel = `อีก ${dd} วัน`; cls = dd <= 2 ? 'warn' : ''; }
+        rel = dd < 0 ? `เลย ${-dd} วัน` : dd === 0 ? 'วันนี้' : `อีก ${dd} วัน`;
+        cls = dd > 3 ? 'ok' : dd >= 2 ? 'warn' : 'late';   // เกิน 3 วัน เขียว · 2–3 วัน เหลือง · 1 วันหรือน้อยกว่า แดง
       }
-      simTxt = `<span>Sim <b>${esc(fmtDay(c.sim))}</b>${rel ? ` · <span class="${cls}">${rel}</span>` : ''}</span>`;
+      simTxt = `<span class="sim ${cls}">Sim <b>${esc(fmtDay(c.sim))}</b>${rel ? ` · ${rel}` : ''}</span>`;
     }
     dates = `<span>In ${esc(fmtDay(c.in) || '—')}</span><br>${simTxt}`;
   }
@@ -1821,7 +1918,9 @@ function caseRow(c, rcs) {
       : `<button type="button" class="rc" data-rc="${esc(c.id)}" title="บันทึก RC เคสนี้">+ RC</button>`;
   }
   let act;
-  if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
+  const strip = !simple && stampsOn() ? `<div class="checks">${stepsOf(k).map(x => stepChip(c, x)).join('')}</div>` : '';
+  if (strip && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
+  else if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
   else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Finish เป็นตอนนี้">Finish</button>`;
   else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Evaluate เป็นตอนนี้${c.fin ? ` · Finish ${esc(fmtStamp(c.fin))}` : ''}">Evaluate</button>`;
   else act = `<span class="done-mark"${simple ? '' : ` title="Finish ${esc(fmtStamp(c.fin) || '—')} · Evaluate ${esc(fmtStamp(c.eval))}"`}>✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtStamp(c.eval))}</span>`;
@@ -1833,7 +1932,21 @@ function caseRow(c, rcs) {
     <div class="c-who">${av(c.mp)}${rc}</div>
     <div class="c-dates">${dates}</div>
     <div class="c-act">${act}</div>
+    ${strip}
   </li>`;
+}
+// ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
+const stepsOf = k => STEPS.filter(x => !x.value || (Array.isArray(k.checks) ? k.checks : CHECKS).includes(x.key));
+const firstName = v => str(v).split(/\s+/)[0];
+function stepChip(c, x) {
+  const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '';
+  const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
+  const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
+  const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>` : '';
+  const btn = canEdit()
+    ? `<button type="button" class="chk${at ? ' done' : ''}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
+    : `<span class="chk${at ? ' done' : ''}">${text}</span>`;
+  return `<span class="chk-wrap">${btn}${cap}</span>`;
 }
 
 function renderLogs() {
@@ -2035,6 +2148,7 @@ function renderSettings() {
         <span class="spacer"></span>
         <button type="button" class="icon-btn" data-del="cats.${i}" aria-label="ลบเทคนิค ${esc(k.label)}"${usedCats.has(k.id) ? ' disabled title="มีเคสแล้ว ลบไม่ได้ ใช้การปิด แสดงในฟอร์ม แทน"' : ''}>×</button>
       </div>
+      ${k.kind === 'simple' ? '' : `<div class="cat-l2"><span class="mini">ปุ่มในรายการเคส: Finish, Evaluate และ</span>${CHECKS.map(v => `<label class="check"><input type="checkbox" data-chk="${i}" value="${v}"${(Array.isArray(k.checks) ? k.checks : CHECKS).includes(v) ? ' checked' : ''}> ${STEPS.find(x => x.key === v).label}</label>`).join('')}</div>`}
     </div>`).join('');
   const actNote = { mu: 'นับจากเคสวางแผนอัตโนมัติ', rc: 'บันทึกจากปุ่ม RC' };
   const actRows = Object.entries(d.acts).map(([key, a]) => `<tr>
@@ -2224,6 +2338,14 @@ function syncCaseForm() {
   const simple = k.kind === 'simple';
   $$('.plan-only', caseForm).forEach(el => { el.hidden = simple; });
   if (!roomSitesOn()) $('#f-room-field').hidden = true;
+  // ปุ่มบันทึกขั้นตอนใช้รหัส PIN: วันเวลา Finish / Evaluate แก้ที่ปุ่มในรายการเคส ที่นี่แสดงอย่างเดียว
+  const stamped = stampsOn() && !simple;
+  if (stampsOn()) $('#f-fin-field').hidden = $('#f-eval-field').hidden = true;
+  $('#f-stamps').hidden = !stamped;
+  if (stamped) $('#f-stamps').innerHTML = stepsOf(k).map(x => {
+    const at = editingCase[x.key], val = x.value ? editingCase[x.key + 'Val'] : '';
+    return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at)].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
+  }).join('') + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
   $('#f-n-field').hidden = !countsOn();
   syncSites('f');
   $('#tech-field').hidden = simple || !k.tech;
@@ -2275,7 +2397,7 @@ async function submitCase(e) {
   const rec = normCase({
     ...editingCase,
     cat: k.id, mp: chipValue($('#f-mp')), hn, name: $('#f-name').value, note: $('#f-note').value, in: $('#f-in').value,
-    ct: v('ct'), fin: stampOf('fin'), eval: stampOf('eval'),
+    ct: v('ct'), fin: stampsOn() ? (simple ? '' : editingCase.fin) : stampOf('fin'), eval: stampsOn() ? (simple ? '' : editingCase.eval) : stampOf('eval'),
     sim: simple ? '' : ($('#f-oncall').checked ? 'on call' : $('#f-sim').value),
     doc: simple ? '' : chipValue($('#f-doc')), type: simple ? '' : chipValue($('#f-type')),
     aim: simple ? '' : chipValue($('#f-aim')), tech: simple || !k.tech ? '' : chipValue($('#f-tech')),
@@ -2612,6 +2734,123 @@ async function undoAssign(list) {
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 
+/* ---------- ปุ่มบันทึกขั้นตอน และรหัส PIN ---------- */
+// กด Finish / Evaluate / MU Check / D0 / Delta4 → ใส่ค่า (ถ้ามี) และรหัส PIN 4 หลักของตัวเอง → บันทึกคนกด วันเวลา
+// ยังไม่มีรหัส PIN: ตั้งในหน้าต่างเดียวกันแล้วบันทึกต่อทันที · ตั้ง/เปลี่ยนรหัสได้ที่ชื่อผู้ใช้มุมขวาบน
+const pinDlg = $('#pin-dlg'), pinForm = $('#pin-form');
+const PIN_RE = /^\d{4}$/;
+let pinCtx = null;
+function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidden = !msg; }
+const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]'));
+function syncPinForm() {
+  const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
+  $('#pin-new-box').hidden = has && !set;
+  $('#pin-new-note').hidden = set;
+  $('#pin-new-note').textContent = 'คุณยังไม่ได้ตั้งรหัส PIN ตั้งรหัสตัวเลข 4 หลักของคุณก่อน แล้วระบบจะบันทึกให้ทันที (ใช้รหัสนี้ทุกครั้งที่กดปุ่มบันทึกขั้นตอน)';
+  $('#pin-proof-box').hidden = !(set && has);
+  $('#pin-forgot').hidden = !lpch || pinCtx.forgot;
+  const proof = $('#pin-proof');
+  proof.className = pinCtx.forgot ? '' : 'pin-input';
+  proof.maxLength = pinCtx.forgot ? 200 : 4;
+  proof.inputMode = pinCtx.forgot ? 'text' : 'numeric';
+  $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
+  $('#pin-field').hidden = set || !has;
+  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : 'บันทึก';
+  for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
+  pinErr('');
+}
+function openStamp(id, key) {
+  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key);
+  if (!c || !x) return;
+  const at = c[key], val = x.value ? c[key + 'Val'] : '';
+  pinCtx = { mode: 'stamp', id, step: key, forgot: false, auto: !at };   // บันทึกแล้ว: ต้องเลือกเองว่าบันทึกใหม่หรือล้าง
+  $('#pin-title').textContent = `${x.label} · ${c.hn || ''}`;
+  $('#pin-what').innerHTML = at
+    ? `บันทึกแล้วโดย <b>${esc(c[key + 'By'] || '—')}</b> ${esc(fmtStamp(at))}${val ? ` · ค่า <b>${esc(val)}</b>` : ''}<br>บันทึกใหม่จะแทนที่ของเดิมด้วยชื่อของคุณและเวลาตอนนี้ หรือกด "ล้างการบันทึก"`
+    : `${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''} · บันทึกวันเวลาตอนนี้ในชื่อ <b>${esc(state.user.name || state.user.me || '')}</b>`;
+  $('#pin-val-field').hidden = !x.value;
+  $('#pin-val-lbl').textContent = `ค่า ${x.label}`;
+  $('#pin-val').placeholder = x.hint || '';
+  $('#pin-val').value = val || '';
+  $('#pin-clear').hidden = !at;
+  syncPinForm();
+  pinDlg.showModal();
+  (x.value && !val ? $('#pin-val') : firstPinInput()).focus();
+}
+function openPinSettings() {
+  pinCtx = { mode: 'set', forgot: false };
+  $('#pin-title').textContent = state.user.hasPin ? 'เปลี่ยนรหัส PIN' : 'ตั้งรหัส PIN';
+  $('#pin-what').innerHTML = `รหัส PIN ตัวเลข 4 หลักของ <b>${esc(state.user.name || state.user.me || '')}</b> ใช้ยืนยันทุกครั้งที่กดปุ่ม ${STEPS.map(x => x.label).join(', ')}`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
+async function submitPin(e, clear) {
+  if (e) e.preventDefault();
+  const ctx = pinCtx, btn = $('#pin-save');
+  if (!ctx || btn.disabled) return;
+  const has = !!state.user.hasPin, needNew = ctx.mode === 'set' || !has;
+  const newPin = $('#pin-new').value;
+  if (ctx.mode === 'set' && has && !(ctx.forgot ? $('#pin-proof').value : PIN_RE.test($('#pin-proof').value))) { $('#pin-proof').focus(); return pinErr(ctx.forgot ? 'ใส่รหัสผ่าน LPCH' : 'ใส่รหัส PIN เดิม 4 หลัก'); }
+  if (needNew && !PIN_RE.test(newPin)) { $('#pin-new').focus(); return pinErr('รหัส PIN ต้องเป็นตัวเลข 4 หลัก'); }
+  if (needNew && newPin !== $('#pin-new2').value) { $('#pin-new2').focus(); return pinErr('รหัส PIN สองช่องไม่ตรงกัน'); }
+  const pin = needNew ? newPin : $('#pin').value;
+  if (!PIN_RE.test(pin)) { $('#pin').focus(); return pinErr('ใส่รหัส PIN 4 หลักของคุณ'); }
+  const x = ctx.mode === 'stamp' ? STEPS.find(v => v.key === ctx.step) : null;
+  const value = clear ? null : x && x.value ? str($('#pin-val').value) : '';
+  if (x && x.value && !clear && !value) { $('#pin-val').focus(); return pinErr(`กรอกค่า ${x.label} ก่อนบันทึก`); }
+  btn.disabled = true;
+  pinErr('');
+  try {
+    if (needNew) {
+      await store.setPin(newPin, ctx.mode === 'set' && has ? (ctx.forgot ? { password: $('#pin-proof').value } : { pin: $('#pin-proof').value }) : null);
+      state.user.hasPin = true;
+      renderAcct();
+    }
+    if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
+    await doStamp(ctx.id, ctx.step, value, pin);
+    pinDlg.close();
+  } catch (err) {
+    const m = errMsg(err);
+    if (m.includes('PIN|')) { state.user.hasPin = false; renderAcct(); syncPinForm(); pinErr('ยังไม่ได้ตั้งรหัส PIN ตั้งรหัสใหม่ด้านบน'); return; }
+    pinErr(m.replace(/^Error:\s*/, ''));
+    for (const id of ['#pin', '#pin-proof']) $(id).value = '';
+    const f = firstPinInput(); if (f) f.focus();
+  } finally { btn.disabled = false; }
+}
+async function doStamp(id, step, value, pin) {
+  const prev = clone(state.cases.find(c => c.id === id) || {});
+  const rec = normCase(await store.stamp(id, step, value, pin));
+  const i = state.cases.findIndex(c => c.id === id);
+  if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+  render();
+  const x = STEPS.find(v => v.key === step);
+  if (value === null) { toast(`${rec.hn} · ล้าง ${x.label} แล้ว`); return; }
+  // เลิกทำได้เฉพาะการบันทึกครั้งแรก (ล้างกลับเป็นว่าง) บันทึกทับของเดิมย้อนกลับไม่ได้
+  const fresh = !prev[step], steps = step === 'eval' && !prev.fin && rec.fin ? ['eval', 'fin'] : [step];
+  const val = x.value ? rec[step + 'Val'] : '';
+  toast(`${rec.hn} · ${x.label}${val ? ' ' + val : ''} · ${firstName(rec[step + 'By'])} ${fmtStamp(rec[step])}`, fresh ? { undo: () => undoStamp(id, steps, pin) } : {});
+}
+async function undoStamp(id, steps, pin) {
+  try {
+    let rec = null;
+    for (const k of steps) rec = normCase(await store.stamp(id, k, null, pin));
+    const i = state.cases.findIndex(c => c.id === id);
+    if (i >= 0 && rec) state.cases[i] = rec;
+    render();
+    toast('เลิกทำแล้ว');
+  } catch (e) { toast('เลิกทำไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+pinForm.addEventListener('submit', e => submitPin(e));
+// ใส่ PIN ครบ 4 หลักแล้วบันทึกเลย (ขั้นตอนที่ยังไม่เคยบันทึก) ยังไม่กรอกค่าจะบอกให้กรอก
+$('#pin').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+  if (PIN_RE.test(e.target.value) && pinCtx && pinCtx.auto) submitPin();
+});
+for (const id of ['#pin-new', '#pin-new2']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
+
 /* ---------- วันลา ---------- */
 const leaveDlg = $('#leave-dlg'), leaveForm = $('#leave-form');
 const rangeText = v => (v.from === v.to ? fmtDay(v.from) : `${fmtDay(v.from)} – ${fmtDay(v.to)}`);
@@ -2677,7 +2916,10 @@ document.addEventListener('click', e => {
   if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
   if (t.id === 'logout') return logout();
   if (t.id === 'theme-btn') return toggleTheme();
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.rc || ds.logedit || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
+  if (t.id === 'pin-btn') return openPinSettings();
+  if (t.id === 'pin-forgot') { pinCtx.forgot = true; syncPinForm(); return $('#pin-proof').focus(); }
+  if (t.id === 'pin-clear') return submitPin(null, true);
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.stamp || ds.rc || ds.logedit || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -2685,6 +2927,7 @@ document.addEventListener('click', e => {
   if (ds.openLeaves !== undefined) return openLeaves();
   if (ds.edit) return openCase(ds.edit);
   if (ds.step) return stepCase(ds.id, ds.step);
+  if (ds.stamp) return openStamp(ds.id, ds.stamp);
   if (ds.rc) { const c = state.cases.find(x => x.id === ds.rc); return openLog(null, { kind: 'rc', caseId: c && c.id }); }
   if (ds.logedit) return openLog(ds.logedit);
   if (ds.mate) { state.person = state.person === ds.mate ? '' : ds.mate; state.limit = 60; return render(); }
@@ -2698,7 +2941,7 @@ document.addEventListener('click', e => {
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'cat') {
     const last = draft.cats[draft.cats.length - 1] || {};
-    draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true });
+    draft.cats.push({ id: 'c-' + uid(), label: 'เทคนิคใหม่', p4p: 'เทคนิคใหม่', group: last.group || 'อื่น ๆ', kind: 'plan', min: 60, w: 1, rotate: 'case', mu: true, tech: false, on: true, checks: CHECKS.slice() });
     renderSettings(); $$('[data-k^="cats."][data-k$=".label"]').pop().select(); return;
   }
   if (ds.add === 'icd') { draft.icdExtra.push({ code: '', name: '', th: '' }); renderSettings(); $$('[data-k^="icdExtra."][data-k$=".code"]').pop().focus(); return; }
@@ -2733,7 +2976,7 @@ document.addEventListener('click', e => {
   }
 });
 // ปิด dialog เมื่อแตะพื้นหลัง
-for (const dlg of [caseDlg, logDlg, leaveDlg]) dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+for (const dlg of [caseDlg, logDlg, leaveDlg, pinDlg]) dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 // กดชิปที่เลือกอยู่ซ้ำเพื่อยกเลิกการเลือก
 document.addEventListener('pointerdown', e => {
   const input = e.target.closest('.chips label') && $('input', e.target.closest('.chips label'));
@@ -2799,6 +3042,9 @@ settingsEl.addEventListener('input', e => {
     refreshPts();
   } else if (el.dataset.list) {
     draft[el.dataset.list] = el.value.split(',').map(str).filter(Boolean);
+  } else if (el.dataset.chk !== undefined) {
+    const cat = draft.cats[+el.dataset.chk], cur = Array.isArray(cat.checks) ? cat.checks : CHECKS;
+    cat.checks = CHECKS.filter(v => (v === el.value ? el.checked : cur.includes(v)));
   }
   updateSaveBar();
 });
@@ -2852,7 +3098,7 @@ $('#p4p-table').addEventListener('change', e => {
 // โหมดตัวอย่าง: สลับมุมมองแอดมิน / MP / ตำแหน่งอื่น (ดูอย่างเดียว) ได้ที่หน้าตั้งค่า
 function demoUser() {
   const r = pref.get('demoRole', 'admin');
-  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true };
+  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true, hasPin: !!demoPin.get() };
 }
 const canEdit = () => state.user.canEdit !== false;
 // Code.gs บนเซิร์ฟเวอร์เก่ากว่าที่หน้าเว็บนี้ต้องการ (เช่นยังไม่ได้ Deploy เวอร์ชันใหม่)
