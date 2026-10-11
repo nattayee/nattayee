@@ -449,6 +449,24 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   .def-table td:nth-of-type(1){grid-row:2;grid-column:1/-1}
   .def-table td:nth-of-type(1):has(>.none){display:none}
 }
+.sub-h{margin:20px 0 4px;font-size:14px;font-weight:600}
+.rule-table td{text-align:left;white-space:normal}
+.rule-table thead th{text-align:left}
+.rule-table select{width:auto;max-width:100%;min-height:32px;padding:4px 8px}
+.rule-when{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.rule-when .icd-in{width:84px;min-width:0;font-family:var(--mono);text-transform:uppercase}
+.rule-rx{color:var(--muted);font:12.5px var(--mono)}
+@media (max-width:760px){
+  .rule-table table,.rule-table tbody{display:block}
+  .rule-table thead{display:none}
+  .rule-table tr{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;padding:10px 44px 12px 12px;border-bottom:1px solid var(--line)}
+  .rule-table tbody tr:last-child{border-bottom:0}
+  .rule-table td{display:grid;gap:3px;padding:0;border:0}
+  .rule-table td[data-lbl]::before{content:attr(data-lbl);font-size:11.5px;color:var(--faint)}
+  .rule-table td:first-child{grid-column:1/-1}
+  .rule-table td:last-child{position:absolute;top:8px;right:6px}
+  .rule-table td .num{width:100%}
+}
 .fld-def{display:grid;gap:5px;justify-items:start}
 .fld-def select,.fld-def input:not(.num){width:min(320px,100%)}
 .hint{font-size:12px;color:var(--accent)}
@@ -867,6 +885,18 @@ const REQ_FIELDS = [
 const DEF_KEYS = ['doc', 'cat', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'ct', 'sim', 'note'];
 const DEF_DATES = ['ct', 'sim'];
 const OFFSET_RE = /^-?\d{1,2}$/;
+// ค่าเริ่มต้นตามเงื่อนไข (config.defaults.rules): เลือกเทคนิค / Technique / ICD-10 ที่ตรง แล้วใส่ Dose/fx, Fx, ความถี่, ห้องฉายให้
+// ตรงหลายกฎ: Technique > เทคนิค (เทคนิคแรก) > ICD-10 (รหัสยาวกว่าก่อน) > ค่าเริ่มต้นทั่วไป · Dose/fx กับ Fx มาคู่กันจากกฎเดียว
+const RULE_KEYS = ['dpf', 'fx', 'freq', 'room'];
+const ICD_PREFIX_RE = /^[A-Z]\d{1,2}(\.\d{1,2})?$/;
+// กฎตั้งต้น (จนกว่าแอดมินจะบันทึกเอง): Breast 16 fx · SRS 1 fx · Prostate (C61) 2.5 Gy × 28 fx
+function seedRules(cfg) {
+  return [
+    ...cfg.cats.filter(k => /breast/i.test(k.label)).map(k => ({ on: 'cat', match: k.id, fx: '16' })),
+    { on: 'tech', match: 'SRS', fx: '1' },
+    { on: 'icd', match: 'C61', dpf: '2.5', fx: '28' },
+  ];
+}
 function defOptions(key, cfg) {
   if (key === 'cat') return cfg.cats.filter(k => k.on).map(k => [k.id, k.label]);
   if (key === 'doc') return cfg.doctors.map(x => [x.code, x.name ? `${x.code} · ${x.name}` : x.code]);
@@ -1080,7 +1110,7 @@ function normLeave(o) {
 }
 function mergeConfig(c) {
   const d = clone(DEFAULT_CONFIG);
-  if (!c || typeof c !== 'object') return d;
+  if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
   const out = { ...d };
   out.rate = +c.rate > 0 ? +c.rate : d.rate;
   out.guarantee = c.guarantee !== '' && isFinite(+c.guarantee) && c.guarantee != null ? +c.guarantee : d.guarantee;
@@ -1163,6 +1193,19 @@ function cleanDefaults(src, cfg) {
     else ok = v;
     if (ok) out[key] = ok;
   }
+  // กฎที่ยังใช้ได้ (เทคนิค/Technique ที่ยังมีอยู่ รหัส ICD-10 ถูกรูปแบบ) และมีค่าอย่างน้อย 1 ช่อง · ยังไม่เคยบันทึก = กฎตั้งต้น
+  out.rules = (Array.isArray(src.rules) ? src.rules : seedRules(cfg)).map(r => {
+    if (!r || typeof r !== 'object') return null;
+    const on = str(r.on), match = on === 'icd' ? str(r.match).toUpperCase() : str(r.match);
+    const valid = on === 'cat' ? cfg.cats.some(k => k.id === match) : on === 'tech' ? cfg.techniques.includes(match) : on === 'icd' && ICD_PREFIX_RE.test(match);
+    if (!valid) return null;
+    const x = { on, match };
+    if (+r.dpf > 0) x.dpf = str(r.dpf);
+    if (Number.isInteger(+r.fx) && +r.fx > 0) x.fx = str(r.fx);
+    if (cfg.freqs.includes(str(r.freq))) x.freq = str(r.freq);
+    if (cfg.rooms.includes(str(r.room))) x.room = str(r.room);
+    return Object.keys(x).length > 2 ? x : null;
+  }).filter(Boolean);
   return out;
 }
 
@@ -1170,7 +1213,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.11';
+const PAGE_VERSION = '2026-10-11.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1870,7 +1913,7 @@ const dxShort = c => { if (!c.icd) return c.dx || ''; const e = icdOf(c.icd); re
 // ช่องค้นหา ICD-10 แบบรายการเลือก ใช้ทั้งฟอร์มแจกเคส (i) และฟอร์มแก้ไข (f)
 function setupCombo(pre) {
   const input = $(`#${pre}-dx`), list = $(`#${pre}-dx-list`);
-  let items = [], active = -1;
+  let items = [], active = -1, closeTimer = 0;
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
   const draw = () => {
     items = icdSearch(input.value);
@@ -1882,8 +1925,9 @@ function setupCombo(pre) {
     input.setAttribute('aria-expanded', 'true');
     input.setAttribute('aria-activedescendant', active >= 0 ? `${pre}-dx-o${active}` : '');
   };
-  const choose = i => { const x = items[i]; if (!x) return; input.value = `${x.code} ${x.name}`; close(); };
-  input.addEventListener('input', () => { active = -1; draw(); });
+  const changed = () => input.dispatchEvent(new Event('change', { bubbles: true }));
+  const choose = i => { const x = items[i]; if (!x) return; input.value = `${x.code} ${x.name}`; close(); changed(); };
+  input.addEventListener('input', () => { clearTimeout(closeTimer); active = -1; draw(); });
   input.addEventListener('keydown', e => {
     if (list.hidden) {
       if (e.key === 'ArrowDown') draw();
@@ -1891,7 +1935,7 @@ function setupCombo(pre) {
         // Enter ในช่องนี้ไม่ส่งฟอร์ม: ถ้าพิมพ์รหัสครบ เติมชื่อให้
         e.preventDefault();
         const x = icdList().find(y => y.code === str(input.value).toUpperCase());
-        if (x) input.value = `${x.code} ${x.name}`;
+        if (x) { input.value = `${x.code} ${x.name}`; changed(); }
       }
       return;
     }
@@ -1901,7 +1945,7 @@ function setupCombo(pre) {
     else if (e.key === 'Escape') { e.preventDefault(); close(); }
   });
   list.addEventListener('mousedown', e => { const li = e.target.closest('li'); if (li) { e.preventDefault(); choose(+li.dataset.i); } });
-  input.addEventListener('blur', () => setTimeout(close, 120));
+  input.addEventListener('blur', () => { closeTimer = setTimeout(close, 120); });   // กลับมาพิมพ์ก่อนครบเวลา = ไม่ปิด
 }
 
 // ขนาดรังสี: "2 Gy × 25 fx (50 Gy) · Daily"
@@ -2372,6 +2416,30 @@ function defRows(d) {
     return `<tr><th scope="row">${esc(label)}</th><td>${def}</td><td>${req}</td></tr>`;
   }).join('');
 }
+// ค่าเริ่มต้นตามเทคนิค / Technique / ICD-10: แถวละกฎ
+const icdHint = code => { const e = icdList().find(x => x.code === code); return e ? e.th || e.name : ICD_PREFIX_RE.test(code) ? `ทุกรหัสที่ขึ้นต้นด้วย ${code}` : ''; };
+const ruleRx = r => (+r.dpf > 0 && +r.fx > 0 ? `${trimNum(r.dpf * r.fx, 2)} Gy` : '');
+function ruleRows(d) {
+  return d.defaults.rules.map((r, i) => {
+    const cur = r.on === 'icd' ? 'icd:' : `${r.on}:${r.match}`;
+    const group = (on, label, opts) => {
+      const gone = r.on === on && !opts.some(o => o[0] === r.match) ? opt(cur, `${r.match} (ไม่มีแล้ว)`, cur) : '';
+      return `<optgroup label="${label}">${gone}${opts.map(([v, l]) => opt(`${on}:${v}`, l, cur)).join('')}</optgroup>`;
+    };
+    const when = `<select data-rule="${i}" data-rk="target" aria-label="เงื่อนไขที่ ${i + 1}">${group('cat', 'เทคนิค', d.cats.map(k => [k.id, k.label]))}${group('tech', 'Technique', d.techniques.map(v => [v, `Technique ${v}`]))}<optgroup label="ICD-10">${opt('icd:', 'ICD-10 …', cur)}</optgroup></select>`
+      + (r.on === 'icd' ? `<input class="icd-in" data-rule="${i}" data-rk="match" value="${esc(r.match)}" placeholder="เช่น C61" maxlength="6" aria-label="รหัส ICD-10 ของกฎที่ ${i + 1}"><span class="unit" data-ruleicd="${i}">${esc(icdHint(r.match))}</span>` : '');
+    const num = (k, attrs) => `<input type="number" class="num" data-rule="${i}" data-rk="${k}" value="${esc(r[k] || '')}" ${attrs} placeholder="—" aria-label="${k === 'dpf' ? 'Dose/fx' : 'Fx'} ของกฎที่ ${i + 1}">`;
+    const pick = (k, list, label) => `<select data-rule="${i}" data-rk="${k}" aria-label="${label} ของกฎที่ ${i + 1}">${opt('', '—', r[k] || '')}${list.map(v => opt(v, v, r[k] || '')).join('')}</select>`;
+    return `<tr>
+      <td data-lbl="เมื่อเลือก"><div class="rule-when">${when}</div></td>
+      <td data-lbl="Dose/fx (Gy)">${num('dpf', 'min="0" step="any" inputmode="decimal"')}</td>
+      <td data-lbl="Fx">${num('fx', 'min="1" step="1" inputmode="numeric"')}</td>
+      <td data-lbl="Prescription" class="rule-rx" data-rulerx="${i}">${ruleRx(r)}</td>
+      <td data-lbl="ความถี่">${pick('freq', d.freqs, 'ความถี่')}</td>
+      <td data-lbl="ห้องฉาย">${pick('room', d.rooms, 'ห้องฉาย')}</td>
+      <td><button type="button" class="icon-btn" data-delrule="${i}" aria-label="ลบกฎที่ ${i + 1}">×</button></td></tr>`;
+  }).join('');
+}
 // ค่าเริ่มต้นของหัวข้อเพิ่มเติม (ตามชนิดของหัวข้อ)
 function defField(f, d) {
   const path = `defaults.x_${f.id}`, v = str(d.defaults['x_' + f.id]), label = str(f.label) || 'หัวข้อนี้';
@@ -2528,7 +2596,11 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="field">+ เพิ่มหัวข้อ</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
       <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
-      <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p></div>
+      <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p>
+      <h3 class="sub-h">ค่าเริ่มต้นตามเทคนิคหรือ ICD-10</h3>
+      <p class="muted def-note" style="margin:0 0 10px">เลือกเทคนิค, Technique หรือ Diag ที่ตรงในฟอร์มแล้วใส่ค่าเหล่านี้ให้แทนค่าเริ่มต้นด้านบน เฉพาะช่องที่ยังไม่ได้แก้เอง · ตรงหลายกฎ: Technique ก่อน แล้วเทคนิคแรก แล้ว ICD-10 · ICD-10 ใส่รหัสหรือต้นรหัส เช่น C61 หรือ C50 (รวม C50.0–C50.9)</p>
+      ${d.defaults.rules.length ? `<div class="table-wrap set-table rule-table"><table><thead><tr><th>เมื่อเลือก</th><th>Dose/fx (Gy)</th><th>Fx</th><th>Prescription</th><th>ความถี่</th><th>ห้องฉาย</th><th></th></tr></thead><tbody>${ruleRows(d)}</tbody></table></div>` : ''}
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="rule">+ เพิ่มค่าเริ่มต้นตามเทคนิคหรือ ICD-10</button></div></div>
     <div class="sec"><div class="sec-head"><h2>วันหยุด</h2><p>ไม่นับเป็นวันฉายรังสี ใช้คำนวณวันครบแสงและวันทำการในแดชบอร์ด · เสาร์–อาทิตย์หยุดเสมอ · วันหยุดตามจันทรคติ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา) และวันหยุดพิเศษเพิ่มเองได้</p></div>
       <div class="toolbar">${[new Date().getFullYear(), new Date().getFullYear() + 1].map(y => `<button type="button" class="btn" data-holfetch="${y}">ดึงวันหยุดราชการไทย ปี ${y + 543}</button>`).join('')}</div>
       ${d.holidays.length ? `<div class="table-wrap set-table" style="max-height:360px;overflow:auto"><table><thead><tr><th>วันที่</th><th style="text-align:left">ชื่อวันหยุด</th><th></th></tr></thead><tbody>${d.holidays.map((h, i) => `<tr>
@@ -2614,6 +2686,8 @@ async function saveSettings() {
   draft.holidays = draft.holidays.filter(h => /^\d{4}-\d{2}-\d{2}$/.test(str(h.date)));
   draft.icdExtra = draft.icdExtra.filter(x => str(x.code) || str(x.name));
   if (draft.icdExtra.some(x => !/^[A-Z]\d{2}(\.\d{1,2})?$/.test(str(x.code).toUpperCase()))) return toast('รหัส ICD-10 ต้องเป็นรูปแบบ เช่น C50 หรือ C50.9', { err: true });
+  const badRule = draft.defaults.rules.find(r => r.on === 'icd' && RULE_KEYS.some(k => str(r[k])) && !ICD_PREFIX_RE.test(str(r.match).toUpperCase()));
+  if (badRule) return toast(str(badRule.match) ? `รหัส ICD-10 "${str(badRule.match)}" ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ใช้ไม่ได้ ใส่แบบ C61 หรือ C50.9` : 'ใส่รหัส ICD-10 ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ให้ครบ', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
   const btn = $('#save-settings');
   btn.disabled = true;
@@ -3213,6 +3287,7 @@ function syncIntake() {
 function fillIntake(c) {
   if (!$('#i-type').children.length) renderIntake();   // ครั้งแรก: วาดปุ่มก่อนติ๊กค่า
   $$('[data-defsel]', intake).forEach(el => el.removeAttribute('data-defsel'));   // ค่าที่ใส่ไม่ใช่ค่าเริ่มต้น (เช่นเลิกทำ) · resetIntake ตั้งใหม่เอง
+  autoVals = {};   // ค่าที่ใส่มา = ของผู้ใช้ กฎไม่ทับ (ช่องว่างยังเติมได้)
   $$('#i-cat input').forEach(i => { i.checked = false; });
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#i-' + f).value = c[f] || '';
   $('#i-oncall').checked = c.sim === 'on call';
@@ -3242,23 +3317,50 @@ function defaultDate(rule, from) {
   for (let n = Math.abs(+v); n > 0;) { ds = plusDays(ds, step); if (isWorkday(ds, hol)) n--; }
   return ds;
 }
+// Dose/fx, Fx, ความถี่, ห้องฉาย ใส่ทีหลังโดย applyRules (ขึ้นกับเทคนิคและ ICD-10)
 function defaultCase() {
   const d = state.config.defaults || {}, c = { in: today() };
-  for (const key of ['doc', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'note']) c[key] = d[key] || '';
-  if (!c.fx && /single/i.test(c.freq)) c.fx = '1';
+  for (const key of ['doc', 'type', 'aim', 'tech', 'area', 'note']) c[key] = d[key] || '';
   c.ct = defaultDate(d.ct);
   c.sim = defaultDate(d.sim);
   c.cats = d.cat && state.config.cats.some(k => k.on && k.id === d.cat) ? [d.cat] : [];
   for (const f of extraList()) { const v = d['x_' + f.id]; if (v) c['x_' + f.id] = f.type === 'date' ? defaultDate(v) : v; }
   return c;
 }
+// Dose/fx, Fx, ความถี่, ห้องฉาย ที่ควรเป็นตามเทคนิคแรก Technique และ ICD-10 ที่เลือกอยู่
+function ruleTarget() {
+  const d = state.config.defaults || {}, ks = selectedCats().map(catOf), main = ks[0];
+  const tech = ks.some(k => k.tech && k.kind !== 'simple') ? chipValue($('#i-tech')) : '', icd = readDx('i').icd;
+  const hit = r => (r.on === 'cat' ? !!main && r.match === main.id : r.on === 'tech' ? !!tech && r.match === tech : !!icd && icd.startsWith(r.match));
+  const rank = r => (r.on === 'tech' ? 200 : r.on === 'cat' ? 100 : r.match.length);
+  const t = Object.fromEntries(RULE_KEYS.map(k => [k, d[k] || '']));
+  for (const r of (d.rules || []).filter(hit).sort((a, b) => rank(a) - rank(b))) {
+    if (r.dpf || r.fx) { t.dpf = r.dpf || ''; t.fx = r.fx || ''; }
+    if (r.freq) t.freq = r.freq;
+    if (r.room) t.room = r.room;
+  }
+  if (!t.fx && /single/i.test(t.freq)) t.fx = '1';
+  return t;
+}
+// ใส่ค่าตามกฎเฉพาะช่องที่ยังไม่ได้แก้เอง (ค่ายังเท่าที่ระบบใส่ไว้) · เปลี่ยนเทคนิคหรือ ICD-10 แล้วเปลี่ยนตาม
+// Dose/fx กับ Fx เป็นคู่: แก้ช่องใดช่องหนึ่งหรือกรอก Prescription เองแล้ว ไม่เปลี่ยนทั้งคู่
+let autoVals = {};
+function applyRules() {
+  const t = ruleTarget(), a = autoVals, v = k => str($(`#i-${k}`).value);
+  if (v('dpf') === str(a.dpf) && v('fx') === str(a.fx) && !(doseManual.i || []).includes('rx')) {
+    for (const k of ['dpf', 'fx']) { $(`#i-${k}`).value = t[k]; a[k] = t[k]; }
+    doseManual.i = ['fx', 'dpf'].filter(k => t[k]);   // ค่าจากกฎเก่าสุด: กรอก Prescription แล้ว Fx คำนวณใหม่
+  }
+  if (readFreq('i') === str(a.freq)) { setChip($('#i-freq'), t.freq); a.freq = t.freq; }
+  if (chipValue($('#i-room')) === str(a.room)) { setChip($('#i-room'), t.room); a.room = t.room; }
+  syncDose('i');
+}
 // ฟอร์มที่ยังไม่ได้แตะ: ใส่ค่าเริ่มต้นใหม่เมื่อแอดมินแก้ค่าเริ่มต้นหรือขึ้นวันใหม่ · แตะแล้วไม่ทับของที่กรอกไว้
 let intakeTouched = false, intakeSig = '';
 const defaultsSig = () => today() + JSON.stringify(state.config.defaults || {});
 function resetIntake() {
-  const c = defaultCase();
-  fillIntake(c);
-  if (c.dpf && c.fx) doseManual.i = ['fx', 'dpf'];   // แก้ Prescription แล้ว Fx คำนวณใหม่ Dose/fx คงไว้
+  fillIntake(defaultCase());
+  applyRules();
   // ปุ่มเลือกได้หลายอย่างที่ติ๊กค่าเริ่มต้นไว้: กดเลือกอย่างอื่นครั้งแรกจะเปลี่ยนแทน ไม่เพิ่มต่อจากค่าเริ่มต้น
   for (const el of [$('#i-cat'), $('#i-area'), ...$$('#i-extra .chips')]) el.toggleAttribute('data-defsel', !!$('input[type=checkbox]:checked', el));
   intakeTouched = false;
@@ -3560,6 +3662,8 @@ document.addEventListener('click', e => {
   if (ds.add === 'position') { draft.positions.push({ id: 'pos-' + uid(), label: 'ตำแหน่งใหม่', base: 0, guarantee: draft.guarantee }); renderSettings(); $$('[data-k^="positions."][data-k$=".label"]').pop().select(); return; }
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.up) { const [list, n] = ds.up.split('.'), i = +n, arr = draft[list]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return renderSettings(); }
+  if (ds.add === 'rule') { draft.defaults.rules.push({ on: 'icd', match: '' }); renderSettings(); $$('.icd-in').pop().focus(); return; }
+  if (ds.delrule) { draft.defaults.rules.splice(+ds.delrule, 1); return renderSettings(); }
   if (ds.add === 'holiday') { draft.holidays.push({ date: '', name: '' }); renderSettings(); $$('[data-k^="holidays."][data-k$=".date"]').pop().focus(); return; }
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
@@ -3655,11 +3759,13 @@ intake.addEventListener('change', e => {
   clearMissing(e);
   if (siteChip(e)) return;
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); else delete catCount[e.target.value]; }
+  if (e.target.name === 'icat' || e.target.name === 'itech' || e.target.id === 'i-dx') applyRules();
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => {
   intakeTouched = true;
   clearMissing(e);
+  if (e.target.id === 'i-dx') applyRules();
   doseInput(e);
   if (e.target.dataset.cnt && e.target.value !== '') { catCount[e.target.dataset.cnt] = clampN(e.target.value); syncIntake(); }
 });
@@ -3684,6 +3790,12 @@ settingsEl.addEventListener('input', e => {
     refreshPts();
     const prev = $(`[data-defprev="${el.dataset.k}"]`);
     if (prev) prev.textContent = defPrev(el.value);
+  } else if (el.dataset.rule !== undefined && el.dataset.rk !== 'target') {
+    const i = +el.dataset.rule, r = draft.defaults.rules[i], k = el.dataset.rk, v = k === 'match' ? str(el.value).toUpperCase() : str(el.value);
+    if (v) r[k] = v; else delete r[k];
+    const rx = $(`[data-rulerx="${i}"]`), hint = $(`[data-ruleicd="${i}"]`);
+    if (rx) rx.textContent = ruleRx(r);
+    if (hint) hint.textContent = icdHint(r.match);
   } else if (el.dataset.defmulti) {
     draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.list) {
@@ -3717,6 +3829,14 @@ settingsEl.addEventListener('keydown', e => {
 settingsEl.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.addopt) { addOption(el); return; }
+  if (el.dataset.rk === 'target') {
+    const r = draft.defaults.rules[+el.dataset.rule], j = el.value.indexOf(':'), on = el.value.slice(0, j);
+    r.match = on === 'icd' ? (r.on === 'icd' ? r.match : '') : el.value.slice(j + 1);
+    r.on = on;
+    renderSettings();
+    if (on === 'icd') $(`.icd-in[data-rule="${el.dataset.rule}"]`).focus();
+    return;
+  }
   if (el.dataset.defoncall) { setPath(draft, el.dataset.defoncall, el.checked ? 'on call' : ''); renderSettings(); return; }
   if (el.dataset.retype !== undefined) {   // ปุ่มเลือก = มีช่องตัวเลือก · ค่าเริ่มต้นเดิมใช้กับชนิดใหม่ไม่ได้
     setPath(draft, el.dataset.k, el.value);
