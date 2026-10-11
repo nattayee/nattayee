@@ -666,7 +666,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="seg-mini" id="dash-rooms" aria-label="ห้องฉาย"></div>
     </div>
     <div class="sec">
-      <div class="sec-head"><h2>ปฏิทินห้องฉาย</h2><p>สัปดาห์เริ่มวันจันทร์ · นับเป็นจำนวนผู้ป่วย · วันฉายนับจาก Start RT, Fx และความถี่ ข้ามเสาร์–อาทิตย์และวันหยุด (ตั้งค่า → วันหยุด) · กดวันเพื่อดูรายชื่อ</p></div>
+      <div class="sec-head"><h2>ปฏิทินห้องฉาย</h2><p>สัปดาห์เริ่มวันอาทิตย์ · นับเป็นจำนวนผู้ป่วย · วันฉายนับจาก Start RT, Fx และความถี่ ข้ามเสาร์–อาทิตย์และวันหยุด (ตั้งค่า → วันหยุด) · กดวันเพื่อดูรายชื่อ</p></div>
       <div class="cal-opts" id="dash-metrics" aria-label="เลือกสิ่งที่แสดงในปฏิทิน"></div>
       <div class="cal" id="dash-cal"></div>
       <div class="cal-day" id="dash-day" hidden></div>
@@ -1109,7 +1109,7 @@ function mergeConfig(c) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.9';
+const PAGE_VERSION = '2026-10-11.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2636,14 +2636,14 @@ function renderDash() {
   const rooms = dashRooms();
   $('#dash-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-droom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   $('#dash-metrics').innerHTML = DASH_METRICS.map(m => `<button type="button" data-dmetric="${m.key}" aria-pressed="${metrics.includes(m.key)}"><i class="ev-dot ev-${m.key}"></i>${esc(m.label)}</button>`).join('');
-  // ปฏิทินเดือนที่เลือก: เริ่มวันจันทร์ ครบสัปดาห์
+  // ปฏิทินเดือนที่เลือก: เริ่มวันอาทิตย์ ครบสัปดาห์
   const ym = state.month, first = parseISO(ym + '-01');
-  const from = plusDays(iso(first), -((first.getDay() + 6) % 7));
+  const from = plusDays(iso(first), -first.getDay());
   const lastDay = iso(new Date(first.getFullYear(), first.getMonth() + 1, 0));
-  const to = plusDays(lastDay, 6 - ((parseISO(lastDay).getDay() + 6) % 7));
+  const to = plusDays(lastDay, 6 - parseISO(lastDay).getDay());
   const { tx, ev, hol } = dashIndex(from, to, room);
   const td = today();
-  let cells = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'].map(w => `<div class="cal-h">${w}</div>`).join('');
+  let cells = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(w => `<div class="cal-h">${w}</div>`).join('');
   for (let ds = from; ds <= to; ds = nextDate(ds)) {
     const out = ds.slice(0, 7) !== ym, off = !isWorkday(ds, hol);
     const lines = [];
