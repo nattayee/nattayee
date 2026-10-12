@@ -1047,11 +1047,15 @@ const OFFSET_RE = /^-?\d{1,2}$/;
 const RULE_KEYS = ['dpf', 'fx', 'freq', 'room', 'area', 'aim'];
 const ICD_PREFIX_RE = /^[A-Z]\d{1,2}(\.\d{1,2})?$/;
 // กฎตั้งต้น (จนกว่าแอดมินจะบันทึกเอง): Breast 16 fx · SRS 1 fx · Prostate (C61) 2.5 Gy × 28 fx
+// Type → Aim จากไฟล์ P4P เดิม (Aim ที่ใช้บ่อยที่สุดของแต่ละ Type) · ไฟล์ไม่มีห้องฉายและบริเวณที่ฉาย จึงไม่มีกฎของเทคนิค
+const TYPE_AIM_SEED = [['New', 'Curative'], ['Emer low', 'Palliative'], ['Emer high', 'Palliative'], ['Replan', 'On tx'], ['Adap', 'On tx'], ['CP', 'Curative']];
+const typeAimSeed = () => TYPE_AIM_SEED.map(([match, aim]) => ({ on: 'type', match, aim }));
 function seedRules(cfg) {
   return [
     ...cfg.cats.filter(k => /breast/i.test(k.label)).map(k => ({ on: 'cat', match: k.id, fx: '16' })),
     { on: 'tech', match: 'SRS', fx: '1' },
     { on: 'icd', match: 'C61', dpf: '2.5', fx: '28' },
+    ...typeAimSeed(),
   ];
 }
 function defOptions(key, cfg) {
@@ -1407,7 +1411,11 @@ function cleanDefaults(src, cfg) {
     if (ok) out[key] = ok;
   }
   // กฎที่ยังใช้ได้ (เทคนิค/Technique ที่ยังมีอยู่ รหัส ICD-10 ถูกรูปแบบ) และมีค่าอย่างน้อย 1 ช่อง · ยังไม่เคยบันทึก = กฎตั้งต้น
-  out.rules = (Array.isArray(src.rules) ? src.rules : seedRules(cfg)).map(r => {
+  // กฎที่บันทึกไว้ก่อนมีเงื่อนไข Type: เติม Type → Aim ให้ครั้งเดียว (typeAim = เติมแล้ว ลบทีหลังก็ไม่กลับมา)
+  let rules = Array.isArray(src.rules) ? src.rules : seedRules(cfg);
+  if (Array.isArray(src.rules) && !src.typeAim && !rules.some(r => r && r.on === 'type')) rules = [...rules, ...typeAimSeed()];
+  out.typeAim = true;
+  out.rules = rules.map(r => {
     if (!r || typeof r !== 'object') return null;
     const on = str(r.on), match = on === 'icd' ? str(r.match).toUpperCase() : str(r.match);
     const valid = on === 'cat' ? cfg.cats.some(k => k.id === match) : on === 'tech' ? cfg.techniques.includes(match) : on === 'type' ? cfg.types.includes(match) : on === 'icd' && ICD_PREFIX_RE.test(match);
@@ -1429,7 +1437,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.10';
+const PAGE_VERSION = '2026-10-12.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
