@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.3';
-const API_LEVEL = 15;
+const CODE_VERSION = '2026-10-12.4';
+const API_LEVEL = 16;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -43,6 +43,8 @@ const TABLES = {
       ['d0', 'F0'], ['d0By', 'F0 โดย'], ['d0Val', 'F0 ค่า'],
       ['d4', 'Delta4'], ['d4By', 'Delta4 โดย'], ['d4Val', 'Delta4 ค่า'],
       ['mc', 'SRS MapCheck'], ['mcBy', 'SRS MapCheck โดย'], ['mcVal', 'SRS MapCheck ค่า'],
+      // หมายเหตุของค่า (ใส่ตอนบันทึกค่า ไม่บังคับ)
+      ['muNote', 'Dose check หมายเหตุ'], ['d0Note', 'F0 หมายเหตุ'], ['d4Note', 'Delta4 หมายเหตุ'], ['mcNote', 'SRS MapCheck หมายเหตุ'],
       ['pc', 'Plan complete'], ['pcBy', 'Plan complete โดย'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
@@ -594,7 +596,7 @@ function moveActCases(token) {
 
 const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck', pc: 'Plan complete' };
 const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
-const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy'];
+const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote'];
 // ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
 const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
@@ -609,8 +611,8 @@ function stampCase(id, step, value, pin, token) {
   return stampSteps_(id, steps, pin, token);
 }
 
-// ช่องกรอกค่าใต้ปุ่ม Dose check, F0, Delta4, SRS MapCheck: บันทึกหลายค่าของเคสเดียวพร้อมกัน ใส่ PIN ครั้งเดียว
-// values = { mu: '1.2%', d0: '0.3' } · ล้างการบันทึกทำทีละขั้นตอนที่ stampCase
+// ช่องกรอกค่าใต้ปุ่ม Dose check, F0, Delta4, SRS MapCheck: บันทึกค่า (หลายค่าพร้อมกันได้) ใส่ PIN ครั้งเดียว
+// values = { mu: '1.2%', d4: { value: '88%', note: 'หมายเหตุ' } } · ล้างการบันทึกทำทีละขั้นตอนที่ stampCase
 function stampSteps(id, values, pin, token) {
   const keys = Object.keys(values || {});
   if (!keys.length) throw new Error('กรอกค่าก่อนบันทึก');
@@ -620,10 +622,14 @@ function stampSteps(id, values, pin, token) {
 
 function stampSteps_(id, steps, pin, token) {
   const u = requireEdit_(token);
-  const keys = Object.keys(steps), vals = {};
+  const keys = Object.keys(steps), vals = {}, notes = {};
   keys.forEach(step => {
     if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
-    const value = steps[step];
+    let value = steps[step];
+    if (value && typeof value === 'object') {
+      if (value.note != null) notes[step] = String(value.note).trim().slice(0, 200);
+      value = value.value;
+    }
     vals[step] = value === null ? null : String(value == null ? '' : value).trim().slice(0, 60);
     if (value !== null && STEP_VALUES.indexOf(step) >= 0 && !vals[step]) throw new Error('กรอกค่า ' + STEP_NAMES[step] + ' ก่อนบันทึก');
   });
@@ -642,6 +648,7 @@ function stampSteps_(id, steps, pin, token) {
       set[step] = at;
       set[step + 'By'] = by;
       if (STEP_VALUES.indexOf(step) >= 0) set[step + 'Val'] = clear ? '' : vals[step];
+      if (STEP_VALUES.indexOf(step) >= 0 && (clear || step in notes)) set[step + 'Note'] = clear ? '' : notes[step];
       if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
     });
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
