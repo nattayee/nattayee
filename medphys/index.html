@@ -181,7 +181,7 @@ button{cursor:pointer}
 .step-txt{font-size:12.5px;color:var(--muted);white-space:nowrap}
 div.c-main,div.lrow{cursor:default}
 .nav{display:flex;gap:2px;background:var(--sunken);padding:3px;border-radius:999px;max-width:100%;overflow-x:auto}
-.nav button{border:0;background:none;padding:6px 14px;border-radius:999px;color:var(--muted);font-size:14px;white-space:nowrap}
+.nav button{border:0;background:none;padding:6px 11px;border-radius:999px;color:var(--muted);font-size:14px;white-space:nowrap}
 .nav button[aria-current="page"]{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
 .notice{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:13px;color:var(--muted);background:var(--sunken);border-radius:8px;padding:8px 12px;margin-bottom:22px}
 .notice b{color:var(--fg);font-weight:500}
@@ -473,6 +473,25 @@ button.who:hover .nm{text-decoration:underline}
 .nav-dot{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;padding:0 4px;border-radius:999px;background:var(--late);color:var(--surface);font:600 10.5px/1 var(--mono);vertical-align:1px}
 .nav-dot.warn{background:var(--warn)}
 .wait-custom{margin-top:10px}
+/* ตารางแจกเคส */
+#queue-tabs{margin-bottom:10px}
+.queue-sum{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-bottom:10px}
+.qs{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.qs b{font:600 14px var(--mono)}
+.qs small{padding:0 6px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px}
+.qs-note{font-size:12.5px}
+.queue-table table{font-size:13px}
+.queue-table th,.queue-table td{white-space:nowrap;text-align:left}
+.queue-table td.q-num,.queue-table th:first-child{color:var(--faint);font:12px var(--mono);text-align:right}
+.queue-table .q-how{color:var(--muted);font-size:12px}
+.queue-table tr.q-skip td{background:var(--sunken)}
+.queue-table tr.q-skip .q-how{color:var(--warn)}
+.queue-table tr.q-credit .q-how{color:var(--accent)}
+.queue-table tr.q-ptr td{background:var(--accent-soft);color:var(--accent);font-size:12.5px}
+.queue-table tr.q-next td{background:var(--accent-soft)}
+.queue-table tr.q-next .q-how{color:var(--accent);font-weight:600}
+.queue-table tr.q-later td{color:var(--faint)}
+.queue-table tr.q-later .av{opacity:.55}
 .skip-nav{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
 .skip-table td,.skip-table thead th:not(:first-child){text-align:center}
 .skip-table .num{width:64px;min-height:32px;padding:4px 6px;text-align:center;font-family:var(--mono)}
@@ -700,6 +719,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <nav class="nav" aria-label="เมนู">
         <button type="button" data-view="work">งาน</button>
         <button type="button" data-view="pend">งานรอ</button>
+        <button type="button" data-view="queue">ตารางแจกเคส</button>
         <button type="button" data-view="dash">แดชบอร์ด</button>
         <button type="button" data-view="logs">RC และกิจกรรม</button>
         <button type="button" data-view="p4p">สรุป P4P</button>
@@ -850,6 +870,18 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     </div>
     <div class="cards pend-cards" id="pend-cards"></div>
     <ul class="list" id="pend-list" hidden></ul>
+  </section>
+
+  <!-- ตารางแจกเคส: ช่องคิวของแต่ละเทคนิคตามลำดับทีม เหมือนแท็บเทคนิคในไฟล์ P4P เดิม -->
+  <section id="view-queue" hidden>
+    <div class="toolbar">
+      <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
+      <span class="spacer"></span>
+      <span class="muted" id="queue-note" style="font-size:13px"></span>
+    </div>
+    <div class="tabs" role="tablist" id="queue-tabs"></div>
+    <div class="queue-sum" id="queue-sum"></div>
+    <div class="table-wrap queue-table" id="queue-table"></div>
   </section>
 
   <section id="view-dash" hidden>
@@ -1184,7 +1216,7 @@ const DEFAULT_CONFIG = {
   holidays: [new Date().getFullYear(), new Date().getFullYear() + 1].flatMap(thaiFixedHolidays),
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
-  nav: ['work', 'pend', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true, guest: true })),
+  nav: ['work', 'pend', 'queue', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
@@ -1216,8 +1248,8 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['work', 'pend', 'dash', 'logs', 'p4p', 'settings'];
-const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
+const VIEWS = ['work', 'pend', 'queue', 'dash', 'logs', 'p4p', 'settings'];
+const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
 // แถบที่ผู้ใช้นี้เห็น: MP ตาม "แสดง" ("ตั้งค่า" แสดงเสมอ) · ตำแหน่งอื่น (ดูอย่างเดียว) เฉพาะแถบที่ติ๊กทั้ง "แสดง" และ "ตำแหน่งอื่น"
 // โหมดตัวอย่าง: "ตั้งค่า" แสดงเสมอ (ปุ่มเปลี่ยนมุมมองอยู่ในหน้านั้น)
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด) ใช้แบบ MP ไปก่อน
@@ -1385,7 +1417,8 @@ function mergeConfig(c) {
   for (const v of VIEWS) {
     if (navSeen.has(v)) continue;
     const prev = VIEWS.slice(0, VIEWS.indexOf(v)).reverse().find(p => nav.some(x => x.view === p));
-    nav.splice(prev ? nav.findIndex(x => x.view === prev) + 1 : 0, 0, { view: v, on: true });
+    const before = prev ? nav.find(x => x.view === prev) : null;   // ตำแหน่งอื่นดูได้ตามแถบก่อนหน้า (เช่น ตารางแจกเคส ตาม งานรอ)
+    nav.splice(prev ? nav.findIndex(x => x.view === prev) + 1 : 0, 0, { view: v, on: true, guest: !before || before.guest !== false });
   }
   out.nav = nav.map(x => ({ view: x.view, on: x.view === 'settings' || x.on !== false, guest: x.guest !== false }));
   const qaNum = v => (v === '' || v == null || !isFinite(+v) ? '' : +v);
@@ -1451,7 +1484,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.12';
+const PAGE_VERSION = '2026-10-12.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1716,6 +1749,117 @@ function queueInfo(catId, date) {
   const code = pickNext(queueInput(catId, date), t);
   return { code, start: t.start, credit: t.credit || {}, skipped: t.skipped || [] };
 }
+/*
+ * ตารางแจกเคส: ช่องคิวตามลำดับทีม (เหมือนคอลัมน์ MP ที่เติมไว้ในไฟล์เดิม) แต่ละช่องคือเคสที่ได้ หรือเหตุที่ข้าม
+ * เดินคิวแบบเดียวกับ pickNext: แจกอัตโนมัติ = ช่องของคนนั้น · ข้ามเพราะลา/ปิดปฏิบัติงาน = ช่องว่าง (เสียคิว)
+ * ข้ามเพราะหักคิว = ช่องนั้นเป็นเคสที่ได้นอกคิว (เลือกเอง / ตามเทคนิคแรก / จำนวนครั้ง) หรือหักคิวรายเดือน
+ * คืน { rows, next, pending } · rows: { type: case | credit | away | pass | pointer, code, date, c, token, slot }
+ */
+function queueSlots(catId) {
+  // หักคิวรายเดือนนับถึงเดือนของเคสล่าสุด (เคสที่ In ล่วงหน้า) หรือเดือนนี้
+  const last = state.cases.filter(c => c.cat === catId && isDay(c.in)).reduce((m, c) => (c.in > m ? c.in : m), today());
+  const o = queueInput(catId, last), staff = o.staff, n = staff.length, rows = [];
+  if (!n) return { rows, next: [], pending: {} };
+  const idx = code => staff.findIndex(x => x.code === code);
+  const away = (code, day) => o.leaves.some(l => l.mp === code && l.from <= day && day <= (l.to || l.from));
+  const free = (i, day) => staff[i].active !== false && !away(staff[i].code, day);
+  const cloneTok = t => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.slice()]));
+  const walk = (start, day, cr, tok, rec) => {
+    let limit = n;
+    Object.keys(cr).forEach(k => { limit += n * cr[k]; });
+    for (let step = 0; step < limit; step++) {
+      const i = (start + step) % n, code = staff[i].code;
+      if (!free(i, day)) { rec.push({ type: 'away', code, date: day, why: staff[i].active === false ? 'off' : 'leave' }); continue; }
+      if (cr[code] > 0) { cr[code]--; rec.push({ type: 'credit', code, date: day, token: (tok[code] || []).shift() || { kind: 'manual' } }); continue; }
+      return i;
+    }
+    return -1;
+  };
+  const pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
+  let credit = {}, tok = {}, p = 0, lastAuto = null, pointerDone = !pointer;
+  const give = (code, k, token) => { credit[code] = (credit[code] || 0) + k; for (let x = 0; x < k; x++) (tok[code] = tok[code] || []).push(token); };
+  const skipDays = Object.keys(o.skips || {}).filter(ym => ym <= o.date.slice(0, 7)).map(ym => ({ created: ym + '-01', skip: o.skips[ym] }));
+  const list = o.cases.concat(skipDays).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  list.forEach(c => {
+    if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; rows.push({ type: 'pointer', code: pointer.code, date: dateStr(pointer.at) }); }
+    if (c.skip) { Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) give(code, m, { kind: 'skip', ym: c.created.slice(0, 7) }); }); return; }
+    const j = idx(c.mp);
+    if (j < 0) return;
+    const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+    if (c.how === 'manual' || c.how === 'follow') { give(c.mp, k, { kind: c.how, c }); return; }
+    if (o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp) rows.push({ type: 'case', code: c.mp, date: c.in, c, same: true });   // วันเดียวกันคนเดิม (รอบคิวรายวัน)
+    else {
+      const trial = Object.assign({}, credit), tt = cloneTok(tok), rec = [];
+      if (walk(p, c.in, trial, tt, rec) === j) { credit = trial; tok = tt; rows.push(...rec); }
+      else if (rows.some(r => r.type === 'case' && r.code)) for (let i = p; i !== j; i = (i + 1) % n) rows.push({ type: 'pass', code: staff[i].code, date: c.in });   // ไม่ตรงคิว (เช่นแก้ผู้รับภายหลัง) · เคสแรกสุด = จุดเริ่มคิว
+      rows.push({ type: 'case', code: c.mp, date: c.in, c });
+    }
+    p = (j + 1) % n;
+    if (k > 1) give(c.mp, k - 1, { kind: 'extra', c });
+    lastAuto = c;
+  });
+  if (!pointerDone) { p = idx(pointer.code); rows.push({ type: 'pointer', code: pointer.code, date: dateStr(pointer.at) }); }
+  let slot = 0;
+  rows.forEach(r => { if (r.type !== 'pointer' && !r.same) slot++; r.slot = r.type === 'pointer' ? 0 : slot; });
+  // รอบถัดไป (วันนี้): ช่องที่จะข้าม แล้วคนที่ได้เคสถัดไป และคนที่เหลือในรอบ
+  const td = today(), next = [], cr = Object.assign({}, credit), tt = cloneTok(tok);
+  if (o.byDay && lastAuto && lastAuto.in === td && free(idx(lastAuto.mp), td)) next.push({ type: 'next', code: lastAuto.mp, same: true });
+  else {
+    const got = walk(p, td, cr, tt, next);
+    if (got >= 0) { next.push({ type: 'next', code: staff[got].code }); for (let x = 1; x < n; x++) next.push({ type: 'later', code: staff[(got + x) % n].code }); }
+  }
+  next.forEach(r => { if (!r.same) r.slot = ++slot; });
+  const pending = {};
+  Object.keys(tt).forEach(code => { if (tt[code].length) pending[code] = tt[code]; });
+  return { rows, next, pending };
+}
+const TOKEN_LABEL = { manual: 'เลือกเอง', follow: 'ตามเทคนิคแรก', extra: 'จำนวนครั้ง', skip: 'หักคิวรายเดือน' };
+function renderQueue() {
+  const used = new Set(state.cases.map(c => c.cat));
+  const cats = state.config.cats.filter(k => k.on || used.has(k.id));
+  let cat = pref.get('queueCat', '');
+  if (!cats.some(k => k.id === cat)) cat = (cats[0] || {}).id || '';
+  $('#queue-tabs').innerHTML = cats.map(k => `<button type="button" class="tab" role="tab" data-qcat="${esc(k.id)}" aria-selected="${k.id === cat}">${esc(k.label)}</button>`).join('');
+  const box = $('#queue-table');
+  if (!cat) { box.innerHTML = '<p class="empty-state">ยังไม่มีเทคนิค</p>'; $('#queue-sum').innerHTML = ''; return; }
+  const { rows, next, pending } = queueSlots(cat), ym = state.month, isNow = ym === thisMonth();
+  const inMonth = rows.filter(r => r.date && r.date.slice(0, 7) === ym);
+  const k = catOf(cat);
+  $('#queue-note').textContent = `${k.label} · ลำดับ ${state.config.staff.map(x => x.code).join(' → ')}${k.rotate === 'day' ? ' · รอบคิวรายวัน' : ''}`;
+  // จำนวนเคสของแต่ละคนในเดือนนี้ (รวมเคสนอกคิว)
+  const count = {};
+  for (const r of inMonth) if (r.type === 'case' || (r.type === 'credit' && r.token.c)) count[r.code] = (count[r.code] || 0) + 1;
+  $('#queue-sum').innerHTML = state.config.staff.map(x => `<span class="qs">${av(x.code)}<b>${count[x.code] || 0}</b>${pending[x.code] ? `<small title="ถูกข้ามเมื่อคิววนมาถึง">รอหักคิว ${pending[x.code].length}</small>` : ''}</span>`).join('')
+    + `<span class="muted qs-note">เคสใน${esc(fmtMonth(ym))}</span>`;
+  const cell = v => `<td>${v || ''}</td>`;
+  const caseCells = c => [fmtDay(c.ct), fmtDay(c.in), c.sim === 'on call' ? 'on call' : fmtDay(c.sim), c.fin ? fmtDay(c.fin.slice(0, 10)) : '', c.eval ? fmtDay(c.eval.slice(0, 10)) : '', c.type, `<span class="hn">${esc(c.hn || '')}</span>`, c.name, c.doc, c.aim, c.note].map((v, i) => (i === 6 ? `<td>${v}</td>` : cell(esc(v || '')))).join('');
+  const blank = '<td></td>'.repeat(11);
+  const row = r => {
+    if (r.type === 'pointer') return `<tr class="q-ptr"><td></td><td colspan="13">ตั้งคิวเองให้เริ่มที่ ${esc(r.code)} · ${esc(fmtDay(r.date))}</td></tr>`;
+    const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
+    if (r.type === 'case') {
+      const how = r.same ? 'วันเดียวกัน' : unitsOf(r.c) > 1 ? `×${unitsOf(r.c)}` : '';
+      return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`;
+    }
+    if (r.type === 'credit') {
+      const t = r.token, label = TOKEN_LABEL[t.kind] || 'หักคิว';
+      if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>`;
+      return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(label)} ${esc(t.ym ? fmtMonth(t.ym) : '')} · ข้าม ${esc(fmtDay(r.date))}</td></tr>`;
+    }
+    const why = r.type === 'away' ? (r.why === 'off' ? 'ปิดปฏิบัติงาน · เสียคิว' : 'ลา · เสียคิว') : 'ข้ามคิว';
+    return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(why)} ${esc(fmtDay(r.date))}</td></tr>`;
+  };
+  const upcoming = isNow ? next.map(r => {
+    const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
+    if (r.type === 'next') return `<tr class="q-next">${mp}<td colspan="11"><b>คิวถัดไป</b>${r.same ? ' (วันนี้คนเดิม รอบคิวรายวัน)' : ''}</td><td class="q-how">◀ ตอนนี้อยู่ที่นี่</td></tr>`;
+    if (r.type === 'later') return `<tr class="q-later">${mp}${blank}<td></td></tr>`;
+    if (r.type === 'credit') return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`;
+    return `<tr class="q-later q-skip">${mp}${blank}<td class="q-how">จะข้าม · ${r.why === 'off' ? 'ปิดปฏิบัติงาน' : 'ลาวันนี้'}</td></tr>`;
+  }).join('') : '';
+  const body = inMonth.map(row).join('') + upcoming;
+  box.innerHTML = `<table><thead><tr><th>#</th><th>MP</th><th>CT-Sim</th><th>In</th><th>Start RT</th><th>Finish</th><th>Evaluate</th><th>Type</th><th>HN</th><th>Name</th><th>Doc</th><th>Aim</th><th>Note</th><th>คิว</th></tr></thead>
+    <tbody>${body || `<tr><td colspan="14" class="empty-state">ไม่มีเคสของ${esc(k.label)}ใน${esc(fmtMonth(ym))}</td></tr>`}</tbody></table>`;
+}
 function setNext(catId, code) {
   state.config.queue = { ...state.config.queue, [catId]: { code, at: nowISO() } };
 }
@@ -1931,6 +2075,7 @@ function render() {
   else if (state.view === 'p4p') renderP4P();
   else if (state.view === 'dash') renderDash();
   else if (state.view === 'pend') renderPend();
+  else if (state.view === 'queue') renderQueue();
   else renderSettings();
 }
 
@@ -4424,6 +4569,7 @@ document.addEventListener('click', e => {
     pref.set('dashPeriod', ds.dperiod);
     return renderDash();
   }
+  if (ds.qcat) { pref.set('queueCat', ds.qcat); return renderQueue(); }
   if (ds.skipmonth) { skipYm = shiftMonth(skipMonth(), +ds.skipmonth); return renderSettings(); }
   if (ds.calview) { pref.set('calView', ds.calview); dash.day = ''; return renderDash(); }
   if (ds.calnav !== undefined) return calMove(+ds.calnav);

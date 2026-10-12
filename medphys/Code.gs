@@ -26,7 +26,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.5';
+const CODE_VERSION = '2026-10-12.6';
 const API_LEVEL = 17;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -210,11 +210,14 @@ function getData(token) {
 
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
-const GUEST_TABLES = { cases: ['work', 'pend', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work'] };
+const NAV_PREV = { queue: 'pend' };
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'] };
 function guestNeeds_(user, config) {
   const out = {};
   const nav = config && Array.isArray(config.nav) ? config.nav : [];
   const off = nav.filter(x => x && (x.on === false || x.guest === false)).map(x => String(x.view));
+  // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ทำตามแถบก่อนหน้า (ตารางแจกเคส ตาม งานรอ) เหมือนหน้าเว็บ
+  Object.keys(NAV_PREV).forEach(v => { if (nav.length && !nav.some(x => x && x.view === v) && off.indexOf(NAV_PREV[v]) >= 0) off.push(v); });
   Object.keys(GUEST_TABLES).forEach(t => { out[t] = user.canEdit || GUEST_TABLES[t].some(v => off.indexOf(v) < 0); });
   return out;
 }
