@@ -85,6 +85,9 @@ const MSG = {
     loginRequired: 'กรุณากรอกชื่อผู้ใช้หรืออีเมล และรหัสผ่าน',
     ssoInvalid: 'ลิงก์เข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง',
     workspaceDown: 'ติดต่อ LPCH RO Workspace ไม่ได้ ({err}) กรุณาลองใหม่ ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ',
+    wsNeedsAnyone: 'Workspace ตอบเป็นหน้าลงชื่อเข้าใช้ Google: ในโปรเจกต์ Workspace ไปที่ Deploy → จัดการการทำให้ใช้งานได้ → ✏️ แล้วตั้ง "ผู้มีสิทธิ์เข้าถึง" เป็น "ทุกคน" (Anyone) ไม่ใช่ "ทุกคนที่มีบัญชี Google"',
+    wsNoDoPost: 'เวอร์ชันที่ Deploy ของ Workspace ไม่มีฟังก์ชัน doPost: วาง Code.gs ล่าสุดของ Workspace แล้ว Deploy เป็นเวอร์ชันใหม่ (ใช้ลิงก์ /exec เดิม)',
+    wsHtml: 'Workspace ตอบเป็นหน้าเว็บแทนข้อมูล ({title}) ตรวจว่า WORKSPACE_URL ใน Code.gs ตรงกับลิงก์ /exec ของ Workspace',
     noData: 'ไม่มีข้อมูล',
     busy: 'มีผู้ใช้อื่นกำลังบันทึกข้อมูลอยู่ กรุณารอสักครู่แล้วลองใหม่',
     technique: 'กรุณาเลือกรูปแบบการใส่ หรือกรอกในช่อง "อื่นๆ" (ไม่เกิน 100 ตัวอักษร)',
@@ -109,6 +112,9 @@ const MSG = {
     loginRequired: 'Please enter your username or email and password',
     ssoInvalid: 'This sign-in link is not valid. Please log in again',
     workspaceDown: 'Could not reach LPCH RO Workspace ({err}). Please try again, or tell the administrator',
+    wsNeedsAnyone: 'Workspace answered with a Google sign-in page: in the Workspace project open Deploy → Manage deployments → ✏️ and set "Who has access" to "Anyone", not "Anyone with Google account"',
+    wsNoDoPost: 'The deployed Workspace version has no doPost function: paste the latest Workspace Code.gs and deploy a new version (keep the same /exec link)',
+    wsHtml: 'Workspace answered with a web page instead of data ({title}). Check that WORKSPACE_URL in Code.gs is the Workspace /exec link',
     noData: 'No data',
     busy: 'Someone else is saving right now. Please wait a moment and try again',
     technique: 'Please choose an insertion type, or type one under "Other" (up to 100 characters)',
@@ -294,11 +300,13 @@ function workspace_(req, lang) {
     throw new Error(msg_(lang, 'workspaceDown', { err: e.message }));
   }
   let out;
+  const text = res.getContentText('UTF-8');
   try {
-    out = JSON.parse(res.getContentText('UTF-8'));
+    out = JSON.parse(text);
   } catch (e) {
-    // ได้หน้า HTML แทน JSON: มักเป็นเพราะ Workspace ไม่ได้ Deploy แบบ Who has access: Anyone
-    throw new Error(msg_(lang, 'workspaceDown', { err: 'HTTP ' + res.getResponseCode() }));
+    // ได้หน้า HTML แทน JSON: บอกสาเหตุจากเนื้อหาของหน้า
+    console.warn('workspace_: HTTP ' + res.getResponseCode() + ' ไม่ใช่ JSON: ' + text.slice(0, 500));
+    throw new Error(msg_(lang, 'workspaceDown', { err: 'HTTP ' + res.getResponseCode() + ' · ' + workspaceHtmlReason_(text, lang) }));
   }
   if (!out || !out.ok) {
     const err = out && out.error;
@@ -306,6 +314,14 @@ function workspace_(req, lang) {
     throw new Error(err || msg_(lang, 'workspaceDown', { err: '?' }));
   }
   return out;
+}
+
+/** Workspace ตอบเป็นหน้า HTML: เดาสาเหตุจากเนื้อหา (หน้าลงชื่อเข้าใช้ Google / ไม่มี doPost / อื่นๆ) */
+function workspaceHtmlReason_(html, lang) {
+  if (/accounts\.google\.com|ServiceLogin|signin\/v2|identifier/i.test(html)) return msg_(lang, 'wsNeedsAnyone');
+  if (/doPost/.test(html)) return msg_(lang, 'wsNoDoPost');
+  const m = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
+  return msg_(lang, 'wsHtml', { title: (m ? m[1] : html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 80) || '-' });
 }
 
 /* ------------------------------------------------------------------ */
