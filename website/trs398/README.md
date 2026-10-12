@@ -27,7 +27,10 @@
    (Deploy แบบ Who has access: **Anyone** — แอป TRS-398 เรียก API ของ LPCH จากเซิร์ฟเวอร์)
 2. **TRS-398:** เปิดโปรเจกต์ Apps Script ของ TRS-398 → วาง `WebApp.gs` ทับ `Code.gs` ทั้งไฟล์ → บันทึก
    (บรรทัดสุดท้ายต้องเป็น `// ----- สิ้นสุดไฟล์ WebApp.gs …`)
-3. ⚙ Project Settings → Script properties → เพิ่ม `LPCH_URL` = URL `/exec` ของ LPCH RO Workspace → Save
+3. URL ของ LPCH RO Workspace ใส่ไว้ใน `WebApp.gs` แล้ว (`WEBAPP.LPCH_URL` =
+   `https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec`)
+   ไม่ต้องตั้ง Script property `LPCH_URL` อีก — ถ้ามีค่าเก่าค้างอยู่ก็ไม่ถูกใช้ ลบทิ้งได้
+   (ถ้าย้าย Workspace ไป URL ใหม่ ให้แก้ `LPCH_URL` ใน `WebApp.gs` แล้ว Deploy → New version)
 4. รันฟังก์ชัน `setupLogin` หนึ่งครั้ง (อนุญาตสิทธิ์ "เชื่อมต่อบริการภายนอก" ถ้าถาม) — Execution log บรรทัดสุดท้ายต้องเป็น
    `✓ เชื่อมต่อ LPCH RO Workspace ได้ และรองรับการใช้บัญชีร่วมกันแล้ว` (ถ้าขึ้น ✗ ให้แก้ตามข้อความ)
 5. Deploy → Manage deployments → Edit → **New version** ทั้ง deployment ① แอป และ ② เข้าสู่ระบบ

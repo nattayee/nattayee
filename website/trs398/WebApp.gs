@@ -21,8 +21,9 @@
  *      APP_ORIGIN), every page load asks deployment 3 in a hidden frame for the Google account signed in right
  *      now, so the recorder follows whoever is signed in. First use (approval) or browsers that block it fall
  *      back to the "Sign in with Google" button.
- *   5. Shared accounts with LPCH RO Workspace (optional): Script property LPCH_URL = the /exec URL of the LPCH RO
- *      Workspace web app (deployed with Who has access: Anyone). Members then sign in with their LPCH username or
+ *   5. Shared accounts with LPCH RO Workspace: WEBAPP.LPCH_URL = the /exec URL of the LPCH RO Workspace web app
+ *      (deployed with Who has access: Anyone; the Script property LPCH_URL is used only when WEBAPP.LPCH_URL is
+ *      blank, so an old address left there no longer matters). Members then sign in with their LPCH username or
  *      email + password, or arrive already signed in from the "เปิดแอป" button there (a one-use ticket, ?sso=…).
  *      Passwords stay in LPCH (checked through its API, never kept here); every use re-checks the account with
  *      LPCH (cached LPCH_CHECK_SECONDS), so an account suspended there is out here too. Only LPCH_ROLES and LPCH
@@ -35,7 +36,9 @@ var WEBAPP = {
   EDITORS: ['nattayee@gmail.com'],
   USER_HEADER: 'ผู้บันทึก (Gmail)',
   PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/lpch-ro-workspace-website-96j4r6/website/trs398/index.html',
-  // LPCH RO Workspace accounts (Script property LPCH_URL): who may use this app, and how long a check is trusted
+  // LPCH RO Workspace accounts: its /exec URL (sign-in, account checks, "เปิดแอป" tickets), who may use this app,
+  // and how long a check is trusted. Blank LPCH_URL = use the Script property LPCH_URL instead.
+  LPCH_URL: 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec',
   LPCH_ROLES: ['MP'],          // professions allowed (LPCH admins always are); ['*'] = every approved member
   LPCH_CHECK_SECONDS: 300,
   LPCH_HEADER: 'บัญชี LPCH',
@@ -144,12 +147,12 @@ function user_(token) { var w = who_(token); return w ? w.email : ''; }
 
 // ---------------------------------------------------------------- LPCH RO Workspace accounts
 
-function lpchUrl_() { return prop_('LPCH_URL').trim(); }
+function lpchUrl_() { return String(WEBAPP.LPCH_URL || prop_('LPCH_URL')).trim(); }
 
 /** One call to the LPCH RO Workspace API (its doPost); throws its error message. */
 function lpchCall_(req) {
   var url = lpchUrl_();
-  if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ผู้ดูแล: ตั้ง Script property LPCH_URL)');
+  if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ผู้ดูแล: ใส่ LPCH_URL ใน WebApp.gs)');
   var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
   var out = null;
   try { out = JSON.parse(res.getContentText('UTF-8')); } catch (e) { out = null; }
@@ -205,7 +208,10 @@ function setupLogin() {
   secret_();
   Logger.log('APP_URL   = ' + (prop_('APP_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment แอป Execute as Me)'));
   Logger.log('LOGIN_URL = ' + (prop_('LOGIN_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ deployment เข้าสู่ระบบ User accessing)'));
-  Logger.log('LPCH_URL  = ' + (prop_('LPCH_URL') || '(ยังไม่ได้ตั้ง: URL /exec ของ LPCH RO Workspace เพื่อใช้บัญชีร่วมกัน)'));
+  Logger.log('LPCH_URL  = ' + (lpchUrl_() || '(ยังไม่ได้ตั้ง: URL /exec ของ LPCH RO Workspace เพื่อใช้บัญชีร่วมกัน)'));
+  if (WEBAPP.LPCH_URL && prop_('LPCH_URL') && prop_('LPCH_URL').trim() !== WEBAPP.LPCH_URL) {
+    Logger.log('  (Script property LPCH_URL = ' + prop_('LPCH_URL') + ' ไม่ได้ใช้แล้ว เพราะใช้ค่าใน WebApp.gs — ลบทิ้งได้)');
+  }
   Logger.log('ตั้งค่าที่ Project Settings → Script properties (ชื่อต้องตรงตัวพิมพ์ ไม่มีช่องว่าง)');
   Logger.log(checkLpch_());
 }
@@ -213,7 +219,7 @@ function setupLogin() {
 /** Can this app reach LPCH RO Workspace and does that copy know the shared-login commands? (text for the log) */
 function checkLpch_() {
   var url = lpchUrl_();
-  if (!url) return '✗ ยังไม่ได้ตั้ง LPCH_URL — ช่องเข้าสู่ระบบด้วยบัญชี LPCH จะไม่แสดง';
+  if (!url) return '✗ ยังไม่ได้ตั้ง LPCH_URL (ใน WebApp.gs) — ช่องเข้าสู่ระบบด้วยบัญชี LPCH จะไม่แสดง';
   if (!BACK_RE.test(url)) return '✗ LPCH_URL ต้องเป็น https://script.google.com/macros/s/…/exec (ตอนนี้: ' + url + ')';
   try { lpchCall_({ action: 'ssoRedeem', ticket: 'check' }); }
   catch (e) {
@@ -395,7 +401,7 @@ function apiInfo(token, pageOrigin) {
   }
   var auto = loginUrl_() && prop_('APP_ORIGIN') && !account_() ? loginUrl_() + '?login=1&embed=1' : '';
   // Shown to nattayee only: what other accounts still need before they see "Signed in as …"
-  var missing = account_() === WEBAPP.OWNER_EMAIL ? ['APP_URL', 'LOGIN_URL', 'LPCH_URL'].filter(function (k) { return !prop_(k); }) : [];
+  var missing = account_() === WEBAPP.OWNER_EMAIL ? ['APP_URL', 'LOGIN_URL', 'LPCH_URL'].filter(function (k) { return k === 'LPCH_URL' ? !lpchUrl_() : !prop_(k); }) : [];
   var w = who_(token);
   return { account: w ? w.email : '', name: w && w.name || '', via: w ? w.via : '', notice: WHO_NOTICE_,
     viaToken: !account_() && !!w, lpchLogin: !!lpchUrl_(), loginUrl: loginUrl_(), autoLoginSrc: auto, setupMissing: missing,
