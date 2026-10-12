@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>HDR Activity</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f9; --card: #ffffff; --ink: #14181f; --ink-2: #555d6b; --line: #e3e6eb;
+      --accent: #2a78d6; --planning: #eb6834; --ok: #11843b; --bad: #d03b3b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111418; --card: #1b1f25; --ink: #eef0f3; --ink-2: #a7afbb; --line: #2c323b;
+              --accent: #4b93ea; --planning: #e07448; --ok: #3cc46c; --bad: #ef6b6b; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink);
+           font: 15px/1.5 "IBM Plex Sans Thai", system-ui, sans-serif; }
+    header { background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 16px; }
+    header h1 { margin: 0; font-size: 1.35rem; }
+    header p { margin: 2px 0 0; color: var(--ink-2); }
+    main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+           grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+    @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+    h2 { font-size: 1rem; margin: 0 0 10px; }
+    label { display: block; font-size: .9rem; font-weight: 600; margin-bottom: 10px; }
+    input, select, button { font: inherit; width: 100%; margin-top: 4px; padding: 8px 10px; min-height: 40px;
+           border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+    button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: progress; }
+    .preview { font-size: .9rem; color: var(--ink-2); min-height: 3em; margin-bottom: 10px; }
+    .preview b { color: var(--ink); }
+    .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+    .src { font-size: .85rem; color: var(--ink-2); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
+    .charts { display: grid; gap: 16px; min-width: 0; }
+    .box { position: relative; height: 260px; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child, th:last-child, td:last-child { text-align: left; }
+    th { color: var(--ink-2); font-weight: 600; }
+    #msg { margin-top: 8px; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>HDR Activity</h1>
+    <p>งานฟิสิกส์การแพทย์ กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>บันทึกค่าประจำวัน</h2>
+      <form id="form">
+        <label>วันที่<input type="date" id="date" required></label>
+        <label>Planning (GBq)<input type="number" id="planning" step="any" min="0" required placeholder="เช่น 62.04"></label>
+        <label>MP<select id="mp"></select></label>
+        <div class="preview" id="preview">กำลังโหลดข้อมูลจากชีต…</div>
+        <button type="submit" id="save" disabled>บันทึกลงชีต</button>
+        <div id="msg" role="status"></div>
+      </form>
+      <div class="src" id="src"></div>
+    </section>
+    <section class="charts">
+      <div class="card"><h2>Activity: Calculation เทียบกับ Planning</h2><div class="box"><canvas id="c1"></canvas></div></div>
+      <div class="card"><h2>% ความต่าง <span style="font-weight:400;color:var(--ink-2)">(Planning − Calculation) ÷ Planning × 100 · เส้นประ = เกณฑ์ ±<span id="tolText"></span>%</span></h2>
+        <div class="box"><canvas id="c2"></canvas></div></div>
+      <div class="card"><h2>ข้อมูลล่าสุด</h2>
+        <div class="wrap"><table>
+          <thead><tr><th>วันที่</th><th>Calculation</th><th>Planning</th><th>%Diff</th><th>MP</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    var TOLERANCE = 1;  // เกณฑ์ ± % (แก้ได้)
+    var DAY = 86400000;
+    var data = null, chart1 = null, chart2 = null;
+    var $ = function (id) { return document.getElementById(id); };
+    $('tolText').textContent = TOLERANCE;
+
+    function toTime(iso) { var p = iso.split('-'); return new Date(+p[0], p[1] - 1, +p[2]).getTime(); }
+    function fmtDate(t) { return new Date(t).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }); }
+    function pct(v) { return v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'; }
+    function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    /* สูตรเดียวกับชีต: A = A0 · e^(−(0.693/T½)·t), %Diff = (Planning − A) / Planning × 100 */
+    function calcAt(iso) {
+      var s = data.source;
+      var t = Math.round((toTime(iso) - toTime(s.refDate)) / DAY);
+      return s.a0 * Math.pow(s.e, -(0.693 / s.halfLife) * t);
+    }
+
+    function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+    function updatePreview() {
+      if (!data) return;
+      var iso = $('date').value, p = parseFloat($('planning').value);
+      if (!iso) { $('preview').textContent = ''; return; }
+      var c = calcAt(iso);
+      var html = 'Calculation <b>' + c.toFixed(4) + ' GBq</b>';
+      if (p > 0) {
+        var d = (p - c) / p * 100, pass = Math.abs(d) <= TOLERANCE;
+        html += '<br>%Diff <b>' + pct(d) + '</b> <span class="' + (pass ? 'ok' : 'bad') + '">' + (pass ? '✓ ผ่านเกณฑ์' : '▲ เกินเกณฑ์') + '</span>';
+      }
+      $('preview').innerHTML = html;
+    }
+
+    function render(d) {
+      data = d;
+      var s = d.source;
+      $('src').textContent = 'Source ' + s.serial + ' (' + s.isotope + ') · A0 ' + s.a0 + ' GBq · ' + s.refDate + ' · T½ ' + s.halfLife + ' วัน';
+      $('mp').innerHTML = '<option value="">—</option>' + d.mpList.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
+      $('save').disabled = false;
+      updatePreview();
+
+      var recs = d.records.filter(function (r) { return r.calc != null; })
+        .map(function (r) { return Object.assign({ t: toTime(r.date) }, r); })
+        .sort(function (a, b) { return a.t - b.t; });
+      $('rows').innerHTML = recs.slice(-15).reverse().map(function (r) {
+        var bad = r.diff != null && Math.abs(r.diff) > TOLERANCE;
+        return '<tr><td>' + fmtDate(r.t) + '</td><td>' + r.calc.toFixed(4) + '</td><td>' + (r.planning == null ? '–' : r.planning) +
+          '</td><td class="' + (r.diff == null ? '' : bad ? 'bad' : 'ok') + '">' + pct(r.diff) + '</td><td>' + esc(r.mp) + '</td></tr>';
+      }).join('');
+      drawCharts(recs);
+    }
+
+    function drawCharts(recs) {
+      var grid = css('--line'), ink2 = css('--ink-2');
+      var x0 = recs.length ? recs[0].t : 0, x1 = recs.length ? recs[recs.length - 1].t : 1;
+      var axisX = { type: 'linear', min: x0, max: x1, grid: { color: grid }, ticks: { color: ink2, maxRotation: 0, callback: fmtDate } };
+      var base = function (yTitle) {
+        return { responsive: true, maintainAspectRatio: false, animation: false, parsing: false,
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          plugins: { legend: { labels: { color: ink2, usePointStyle: true, boxWidth: 8 } },
+            tooltip: { callbacks: { title: function (i) { return i.length ? fmtDate(i[0].parsed.x) : ''; } } } },
+          scales: { x: axisX, y: { grid: { color: grid }, ticks: { color: ink2 }, title: { display: true, text: yTitle, color: ink2 } } } };
+      };
+      var withP = recs.filter(function (r) { return r.planning != null; });
+      var withD = recs.filter(function (r) { return r.diff != null; });
+      var data1 = { datasets: [
+        { label: 'Calculation', data: recs.map(function (r) { return { x: r.t, y: r.calc }; }), borderColor: css('--accent'),
+          backgroundColor: css('--accent'), pointRadius: 0, borderWidth: 2 },
+        { label: 'Planning', data: withP.map(function (r) { return { x: r.t, y: r.planning }; }), showLine: false,
+          borderColor: css('--card'), backgroundColor: css('--planning'), pointRadius: 3.5, pointBorderWidth: 1 } ] };
+      var line = function (y) { return [{ x: x0, y: y }, { x: x1, y: y }]; };
+      var data2 = { datasets: [
+        { label: '%Diff', data: withD.map(function (r) { return { x: r.t, y: r.diff }; }), borderColor: css('--accent'),
+          backgroundColor: withD.map(function (r) { return Math.abs(r.diff) > TOLERANCE ? css('--bad') : css('--accent'); }),
+          pointStyle: withD.map(function (r) { return Math.abs(r.diff) > TOLERANCE ? 'triangle' : 'circle'; }),
+          pointRadius: withD.map(function (r) { return Math.abs(r.diff) > TOLERANCE ? 6 : 3; }), borderWidth: 1 },
+        { label: '±' + TOLERANCE + '%', data: line(TOLERANCE), borderColor: ink2, borderDash: [5, 4], pointRadius: 0, borderWidth: 1 },
+        { label: '', data: line(-TOLERANCE), borderColor: ink2, borderDash: [5, 4], pointRadius: 0, borderWidth: 1 } ] };
+      var o2 = base('%Diff');
+      o2.scales.y.suggestedMin = -TOLERANCE * 1.5; o2.scales.y.suggestedMax = TOLERANCE * 1.5;
+      o2.plugins.legend.labels.filter = function (i) { return i.text !== ''; };
+      if (chart1) chart1.destroy(); if (chart2) chart2.destroy();
+      chart1 = new Chart($('c1'), { type: 'line', data: data1, options: base('GBq') });
+      chart2 = new Chart($('c2'), { type: 'line', data: data2, options: o2 });
+    }
+
+    function fail(err) {
+      $('save').disabled = false;
+      $('msg').className = 'bad';
+      $('msg').textContent = 'ผิดพลาด: ' + (err && err.message ? err.message : err);
+    }
+
+    $('form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var iso = $('date').value, p = $('planning').value;
+      if (!iso || !(parseFloat(p) > 0)) { fail('กรุณากรอกวันที่และค่า Planning'); return; }
+      $('save').disabled = true; $('msg').className = ''; $('msg').textContent = 'กำลังบันทึก…';
+      google.script.run.withSuccessHandler(function (d) {
+        render(d);
+        $('msg').className = 'ok'; $('msg').textContent = 'บันทึกลงชีตแล้ว';
+        $('planning').value = ''; updatePreview();
+      }).withFailureHandler(fail).addRecord(iso, p, $('mp').value);
+    });
+    ['date', 'planning'].forEach(function (id) { $(id).addEventListener('input', updatePreview); });
+
+    $('date').value = today();
+    google.script.run.withSuccessHandler(render).withFailureHandler(fail).getData();
+  </script>
+</body>
+</html>
