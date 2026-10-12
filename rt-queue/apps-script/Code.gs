@@ -609,3 +609,5 @@ function validate_(input) {
   b.cbct = b.cbctFx.length > 0 || Boolean(b.verifyDate);
   return b;
 }
+
+// ----- สิ้นสุดไฟล์ Code.gs (ระบบนัดคิวเทคนิคพิเศษ) — ถ้าไม่เห็นบรรทัดนี้ใน Apps Script แสดงว่าวางโค้ดมาไม่ครบ -----
