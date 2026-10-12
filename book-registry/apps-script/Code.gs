@@ -5,7 +5,8 @@
  * แถวหัวตาราง: เลขทะเบียนส่ง | ที่ | ลงวันที่ | จาก | ถึง | เรื่อง | การปฏิบัติ | หมายเหตุ
  * เลขทะเบียนส่งรันต่อจากข้อมูลในชีต และยังเปิดดู/แก้ในชีตได้ตามปกติ
  *
- * @OnlyCurrentDoc
+ * เริ่มใช้กับไฟล์ใหม่: เมนู "ทะเบียนหนังสือ › คัดลอกข้อมูลจากไฟล์เดิม" ในชีต
+ * (ต้องอ่านไฟล์เดิม สคริปต์จึงขอสิทธิ์เข้าถึง Google ชีตของผู้ใช้)
  */
 
 var HEADER = ['เลขทะเบียนส่ง', 'ที่', 'ลงวันที่', 'จาก', 'ถึง', 'เรื่อง', 'การปฏิบัติ', 'หมายเหตุ'];
@@ -40,6 +41,75 @@ function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('ทะเบียนหนังสือส่ง')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** เมนูในชีต */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('ทะเบียนหนังสือ')
+    .addItem('คัดลอกข้อมูลจากไฟล์เดิม…', 'copyFromOldSheet')
+    .addToUi();
+}
+
+/** ถามลิงก์ไฟล์เดิม แล้วคัดลอกทะเบียนทุกปีมาไว้ในไฟล์นี้ */
+function copyFromOldSheet() {
+  var ui = SpreadsheetApp.getUi();
+  var res = ui.prompt('คัดลอกข้อมูลจากไฟล์เดิม',
+    'วางลิงก์ Google Sheet ทะเบียนเดิม (ไฟล์ Excel ต้องเปิดด้วย Google ชีตและบันทึกเป็น Google ชีตก่อน)',
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    var result = importFromSpreadsheet(res.getResponseText());
+    var lines = result.years.map(function (y) {
+      return y.skipped
+        ? 'ปี ' + y.year + ': ข้าม (ไฟล์นี้มีข้อมูลปีนี้อยู่แล้ว)'
+        : 'ปี ' + y.year + ': ' + y.count + ' รายการ  เลขถัดไป ' + y.nextNo;
+    });
+    ui.alert('คัดลอกเรียบร้อย', lines.join('\n'), ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert('คัดลอกไม่สำเร็จ', err.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * คัดลอกทะเบียนทุกชีตปีจากไฟล์ url มาเป็นชีตใหม่ในไฟล์นี้ (ข้อมูลที่จัดระเบียบแล้ว)
+ * ไฟล์เดิมไม่ถูกแก้ ปีที่ไฟล์นี้มีข้อมูลอยู่แล้วจะถูกข้าม เลขถัดไป = เลขว่างตัวแรกของปีนั้น
+ */
+function importFromSpreadsheet(url) {
+  var source;
+  try {
+    source = SpreadsheetApp.openByUrl(String(url || '').trim());
+  } catch (err) {
+    throw new Error('เปิดไฟล์เดิมไม่ได้ ตรวจลิงก์และสิทธิ์การเข้าถึงไฟล์ (' + err.message + ')');
+  }
+  return withLock_(function (ss, tz) {
+    if (source.getId && ss.getId && source.getId() === ss.getId()) throw new Error('ลิงก์นี้คือไฟล์ปัจจุบัน กรุณาวางลิงก์ไฟล์เดิม');
+    var srcTz = source.getSpreadsheetTimeZone();
+    var found = [];
+    source.getSheets().forEach(function (sheet) {
+      var year = sheetYear_(sheet.getName());
+      if (year && !found.some(function (f) { return f.year === year; })) found.push({ year: year, sheet: sheet });
+    });
+    if (!found.length) throw new Error('ไม่พบชีตที่ตั้งชื่อเป็นปี พ.ศ. (เช่น 2569) ในไฟล์เดิม');
+    found.sort(function (a, b) { return a.year - b.year; });
+
+    var years = found.map(function (f) {
+      var existing = findYearSheet_(ss, f.year);
+      if (existing && readSheet_(existing, f.year, tz).records.length) return { year: f.year, skipped: true };
+      var records = readSheet_(f.sheet, f.year, srcTz).records.sort(function (a, b) { return a.no - b.no; });
+      var sheet = existing || createYearSheet_(ss, f.year);
+      writeRecords_(sheet, records, tz);
+      var next = firstFreeNumber_(records.map(function (r) { return r.no; }));
+      setCounter_(f.year, next);
+      return { year: f.year, count: records.length, nextNo: next };
+    });
+
+    // ลบชีตว่างที่ติดมากับไฟล์ใหม่ (เช่น "ชีต1")
+    ss.getSheets().forEach(function (sheet) {
+      if (!sheetYear_(sheet.getName()) && sheet.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sheet);
+    });
+    return { years: years.reverse() };
+  });
 }
 
 // ============================================================ API (เรียกจากหน้าเว็บผ่าน google.script.run)
@@ -263,6 +333,36 @@ function writeRow_(sheet, row, cols, values, tz) {
   });
   range.setNumberFormats([formats]);
   range.setValues([cells]);
+}
+
+/** เขียนรายการทั้งหมดต่อจากหัวตาราง (ใช้ตอนคัดลอกจากไฟล์เดิม) */
+function writeRecords_(sheet, records, tz) {
+  if (!records.length) return;
+  var cols = findHeader_(sheet.getDataRange().getValues()).cols;
+  var start = sheet.getLastRow() + 1;
+  var need = start + records.length - 1;
+  if (need > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), need - sheet.getMaxRows() + 50);
+  var width = Math.max.apply(null, FIELDS.map(function (f) { return cols[f]; })) + 1;
+  var values = [];
+  var formats = [];
+  records.forEach(function (r) {
+    var line = [];
+    var fmt = [];
+    for (var i = 0; i < width; i++) { line.push(''); fmt.push('@'); }
+    FIELDS.forEach(function (f) {
+      var i = cols[f];
+      if (f === 'no') { line[i] = r.no; fmt[i] = '0'; }
+      else if (f === 'date') {
+        line[i] = r.date ? Utilities.parseDate(r.date, tz, 'yyyy-MM-dd') : r.dateText;
+        fmt[i] = r.date ? DATE_FORMAT : '@';
+      } else line[i] = r[f] || '';
+    });
+    values.push(line);
+    formats.push(fmt);
+  });
+  var range = sheet.getRange(start, 1, records.length, width);
+  range.setNumberFormats(formats);
+  range.setValues(values);
 }
 
 function findYearSheet_(ss, year) {

@@ -133,3 +133,34 @@ test('doGet: เปิดหน้าเว็บจากไฟล์ Index', (
   const { api } = fixture();
   assert.equal(api.doGet().name, 'Index');
 });
+
+test('importFromSpreadsheet: คัดลอกทะเบียนจากไฟล์เดิมมาไฟล์ใหม่ แล้วออกเลขต่อ', () => {
+  const OLD = 'https://docs.google.com/spreadsheets/d/old/edit';
+  const old = [
+    HEADER,
+    [1, REF, { y: 2569, m: 1, d: 6 }, 'ฟิสิกส์การแพทย์', 'ผู้อำนวยการ', 'ขอลงนาม', 'ก'],
+    ['', '', '', '', '', 'ต่อบรรทัด'],
+    [2, REF, '13/8-69', 'ฟิสิกส์การแพทย์', 'ผู้อำนวยการ', 'ขอมูล', 'ข'],
+    [3], [4],
+    [42, REF, 'ไม่ทราบ', '', '', 'จองไว้', ''],
+  ];
+  const { api, ss, tz, ui } = loadAppsScript({ ชีต1: [] }, { others: { [OLD]: { 2569: old, 2568: [HEADER, [61, REF, '1/12/2025', '', '', 'x', '']] } } });
+
+  ui.promptAnswer = OLD;
+  api.copyFromOldSheet();
+  assert.equal(ui.alerts[0].title, 'คัดลอกเรียบร้อย');
+  assert.match(ui.alerts[0].msg, /ปี 2569: 3 รายการ {2}เลขถัดไป 3/);
+  assert.deepEqual(ss.getSheets().map(s => s.getName()), ['2569', '2568']);
+  assert.deepEqual(rowOf(ss, tz, '2569', 2), [1, REF, '2026-01-06', 'ฟิสิกส์การแพทย์', 'ผู้อำนวยการ', 'ขอลงนาม ต่อบรรทัด', 'ก', '']);
+  assert.equal(rowOf(ss, tz, '2569', 3)[5], 'ข้อมูล');
+  assert.equal(rowOf(ss, tz, '2569', 4)[2], 'ไม่ทราบ');
+
+  assert.equal(api.createRecord({ date: '2026-10-12', subject: 'ใหม่' }).no, 3);
+  assert.deepEqual(rowOf(ss, tz, '2569', 5).slice(0, 1), [3]);
+
+  // คัดลอกซ้ำ: ปีที่มีข้อมูลแล้วจะถูกข้าม ไม่ทับของใหม่
+  const again = api.importFromSpreadsheet(OLD);
+  assert.deepEqual(again.years.map(y => !!y.skipped), [true, true]);
+  assert.throws(() => api.importFromSpreadsheet('https://docs.google.com/spreadsheets/d/nope'), /เปิดไฟล์เดิมไม่ได้/);
+  assert.throws(() => api.importFromSpreadsheet(ss.getUrl()), /ไฟล์ปัจจุบัน/);
+});

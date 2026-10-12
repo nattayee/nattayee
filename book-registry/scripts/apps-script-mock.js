@@ -152,14 +152,19 @@ class MockSheet {
 }
 
 class MockSpreadsheet {
-  constructor(sheets, tz) {
+  constructor(sheets, tz, id = 'mock') {
     this.sheets = sheets;
     this.tz = tz;
+    this.id = id;
   }
+
+  getId() { return this.id; }
+
+  deleteSheet(sheet) { this.sheets = this.sheets.filter(s => s !== sheet); }
 
   getSheets() { return [...this.sheets]; }
   getSpreadsheetTimeZone() { return this.tz; }
-  getUrl() { return 'https://docs.google.com/spreadsheets/d/mock/edit'; }
+  getUrl() { return `https://docs.google.com/spreadsheets/d/${this.id}/edit`; }
   getSheetByName(name) { return this.sheets.find(s => s.name === name) || null; }
 
   insertSheet(name, index) {
@@ -174,18 +179,43 @@ class MockSpreadsheet {
  * โหลด Code.gs พร้อมสเปรดชีตจำลอง
  * sheets: { ชื่อชีต: แถว[][] } ค่าในเซลล์ใช้ { y, m, d } แทนเซลล์วันที่
  */
-function loadAppsScript(sheets, { tz = 'Asia/Bangkok' } = {}) {
+function makeSpreadsheet(sheets, tz, id) {
   const toCell = v => (v && typeof v === 'object' && 'y' in v ? dateInTz(v.y, v.m, v.d, tz) : v);
-  const ss = new MockSpreadsheet(
+  return new MockSpreadsheet(
     Object.entries(sheets).map(([name, rows]) => new MockSheet(name, rows.map(line => line.map(toCell)))),
     tz,
+    id,
   );
+}
+
+/** others: { ลิงก์: { ชื่อชีต: แถว[][] } } = ไฟล์อื่นที่เปิดได้ด้วย openByUrl */
+function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {} } = {}) {
+  const ss = makeSpreadsheet(sheets, tz, 'mock');
+  const files = Object.fromEntries(Object.entries(others).map(([url, s], i) => [url, makeSpreadsheet(s, tz, `other${i}`)]));
+  files[ss.getUrl()] = ss;
+  const ui = { alerts: [], promptAnswer: null };
   const props = new Map();
   const locks = { held: false };
 
   const context = vm.createContext({
     Utilities,
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, flush() {} },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ss,
+      flush() {},
+      openByUrl(url) {
+        if (!files[url]) throw new Error('ไม่พบไฟล์');
+        return files[url];
+      },
+      getUi: () => ({
+        ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' },
+        Button: { OK: 'OK', CANCEL: 'CANCEL' },
+        prompt: () => ({
+          getSelectedButton: () => (ui.promptAnswer === null ? 'CANCEL' : 'OK'),
+          getResponseText: () => ui.promptAnswer,
+        }),
+        alert: (title, msg) => { ui.alerts.push({ title, msg }); },
+      }),
+    },
     PropertiesService: {
       getScriptProperties: () => ({
         getProperty: k => (props.has(k) ? props.get(k) : null),
@@ -214,10 +244,10 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok' } = {}) {
 
   // แปลงผลลัพธ์ข้าม realm ให้เป็นอ็อบเจกต์ธรรมดา (เหมือนที่ google.script.run ส่งกลับมาเป็น JSON)
   const api = {};
-  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet']) {
+  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet', 'importFromSpreadsheet', 'copyFromOldSheet']) {
     api[fn] = (...args) => JSON.parse(JSON.stringify(context[fn](...JSON.parse(JSON.stringify(args))) ?? null));
   }
-  return { api, ss, props, tz };
+  return { api, ss, props, tz, ui, files };
 }
 
 module.exports = { loadAppsScript, dateInTz };
