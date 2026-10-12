@@ -429,8 +429,9 @@ button.who:hover .nm{text-decoration:underline}
 .cal-day li button{padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left}
 .cal-day li button:hover .hn{text-decoration:underline}
 .cal-day .muted{font-size:12.5px}
-.dash-pend .card .big{margin-top:8px}
-.dash-pend .card small{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
+.pend-cards{margin-bottom:12px}
+.pend-cards .card .big{margin-top:8px}
+.pend-cards .card small{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
 .wait-custom{margin-top:10px}
 .wait-custom select{width:auto}
 @media (max-width:640px){
@@ -620,6 +621,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="button" class="theme-btn" id="theme-btn"></button>
       <nav class="nav" aria-label="เมนู">
         <button type="button" data-view="work">งาน</button>
+        <button type="button" data-view="pend">งานรอ</button>
         <button type="button" data-view="dash">แดชบอร์ด</button>
         <button type="button" data-view="logs">RC และกิจกรรม</button>
         <button type="button" data-view="p4p">สรุป P4P</button>
@@ -760,6 +762,17 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   </section>
 
   <!-- แดชบอร์ด -->
+  <!-- งานรอ -->
+  <section id="view-pend" hidden>
+    <div class="toolbar">
+      <span class="muted" id="pend-note" style="font-size:13px"></span>
+      <span class="spacer"></span>
+      <div class="seg-mini" id="pend-rooms" aria-label="ห้องฉาย"></div>
+    </div>
+    <div class="cards pend-cards" id="pend-cards"></div>
+    <ul class="list" id="pend-list" hidden></ul>
+  </section>
+
   <section id="view-dash" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
@@ -771,11 +784,6 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="cal-opts" id="dash-metrics" aria-label="เลือกสิ่งที่แสดงในปฏิทิน"></div>
       <div class="cal" id="dash-cal"></div>
       <div class="cal-day" id="dash-day" hidden></div>
-    </div>
-    <div class="sec">
-      <div class="sec-head"><h2>งานรอ</h2><p id="dash-pend-note"></p></div>
-      <div class="cards dash-pend" id="dash-pend"></div>
-      <ul class="list" id="dash-pend-list" hidden></ul>
     </div>
     <div class="sec">
       <div class="sec-head"><h2>สถิติแต่ละเทคนิค</h2><p id="dash-stat-note"></p></div>
@@ -1059,7 +1067,7 @@ const DEFAULT_CONFIG = {
   holidays: [new Date().getFullYear(), new Date().getFullYear() + 1].flatMap(thaiFixedHolidays),
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
-  nav: ['work', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true })),
+  nav: ['work', 'pend', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true })),
 };
 // ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
 function logKinds() {
@@ -1087,8 +1095,8 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['work', 'dash', 'logs', 'p4p', 'settings'];
-const VIEW_LABEL = { work: 'งาน', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
+const VIEWS = ['work', 'pend', 'dash', 'logs', 'p4p', 'settings'];
+const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
 const navOn = (view, cfg = state.config) => view === 'settings' || !(cfg.nav || []).some(x => x.view === view && !x.on);
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
@@ -1233,10 +1241,15 @@ function mergeConfig(c) {
     out.holidays = c.holidays.filter(h => h && /^\d{4}-\d{2}-\d{2}$/.test(str(h.date)) && !seen.has(h.date) && seen.add(h.date)).map(h => ({ date: h.date, name: str(h.name) })).sort((a, b) => a.date.localeCompare(b.date));
   }
   out.defaults = cleanDefaults(c.defaults && typeof c.defaults === 'object' ? c.defaults : d.defaults, out);
-  // แถบเมนู: แถบที่รู้จักตามลำดับที่ตั้ง (ซ้ำตัดทิ้ง) แถบใหม่ที่ยังไม่อยู่ในรายการต่อท้าย
+  // แถบเมนู: แถบที่รู้จักตามลำดับที่ตั้ง (ซ้ำตัดทิ้ง) · แถบใหม่ที่ยังไม่อยู่ในรายการ แทรกต่อจากแถบที่อยู่ก่อนหน้าในลำดับตั้งต้น
   const navSeen = new Set();
-  out.nav = [...(Array.isArray(c.nav) ? c.nav : []).filter(x => x && VIEWS.includes(x.view) && !navSeen.has(x.view) && navSeen.add(x.view)),
-    ...VIEWS.filter(v => !navSeen.has(v)).map(view => ({ view, on: true }))].map(x => ({ view: x.view, on: x.view === 'settings' || x.on !== false }));
+  const nav = (Array.isArray(c.nav) ? c.nav : []).filter(x => x && VIEWS.includes(x.view) && !navSeen.has(x.view) && navSeen.add(x.view));
+  for (const v of VIEWS) {
+    if (navSeen.has(v)) continue;
+    const prev = VIEWS.slice(0, VIEWS.indexOf(v)).reverse().find(p => nav.some(x => x.view === p));
+    nav.splice(prev ? nav.findIndex(x => x.view === prev) + 1 : 0, 0, { view: v, on: true });
+  }
+  out.nav = nav.map(x => ({ view: x.view, on: x.view === 'settings' || x.on !== false }));
   return out;
 }
 // ค่าเริ่มต้นที่ใช้ได้: ตัวเลือกที่ยังมีอยู่ ตัวเลขที่ถูกต้อง · วันที่ = วันทำการ −30 ถึง 90 จากวันแจก หรือ on call (Start RT)
@@ -1287,7 +1300,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-11.19';
+const PAGE_VERSION = '2026-10-12.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1736,6 +1749,7 @@ function render() {
   else if (state.view === 'logs') renderLogs();
   else if (state.view === 'p4p') renderP4P();
   else if (state.view === 'dash') renderDash();
+  else if (state.view === 'pend') renderPend();
   else renderSettings();
 }
 
@@ -3154,7 +3168,6 @@ function renderDash() {
   }
   $('#dash-cal').innerHTML = cells;
   renderDashDay(tx, ev, hol, metrics, room, rooms);
-  renderPending(room);
   renderDashStats();
   renderWait();
 }
@@ -3194,15 +3207,21 @@ function pendingOf(key, room) {
     return !c[key] && stepsOf(k).some(x => x.key === key) && recentCase(c);
   }).sort((a, b) => (isDay(a.sim) ? a.sim : '9') .localeCompare(isDay(b.sim) ? b.sim : '9') || a.in.localeCompare(b.in));
 }
+// หน้างานรอ: การ์ดต่อขั้นตอน กดการ์ดเพื่อดูรายการพร้อมปุ่มบันทึก · กรองห้องได้ (จำไว้แยกจากแดชบอร์ด)
+function renderPend() {
+  const room = pref.get('pendRoom', ''), rooms = dashRooms();
+  $('#pend-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-proom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
+  renderPending(rooms.includes(room) ? room : '');
+}
 function renderPending(room) {
   const steps = PEND_STEPS();
   if (dash.pend && !steps.some(x => x.key === dash.pend)) dash.pend = '';
-  $('#dash-pend-note').textContent = 'กดการ์ดเพื่อดูรายชื่อ · Dose check / F0 / Delta4 / SRS MapCheck นับเฉพาะเคสที่ยังไม่ Evaluate หรือ Start RT ไม่เกิน 7 วันที่แล้ว';
-  $('#dash-pend').innerHTML = steps.map(x => {
+  $('#pend-note').textContent = 'กดการ์ดเพื่อดูรายชื่อ · Dose check / F0 / Delta4 / SRS MapCheck นับเฉพาะเคสที่ยังไม่ Evaluate หรือ Start RT ไม่เกิน 7 วันที่แล้ว';
+  $('#pend-cards').innerHTML = steps.map(x => {
     const list = pendingOf(x.key, room), soon = list.find(c => isDay(c.sim));
     return `<button type="button" class="card" data-dpend="${x.key}" aria-pressed="${dash.pend === x.key}"><div class="card-top"><span>รอ ${esc(x.label)}</span></div><span class="big">${list.length}</span><small>${soon ? `Start RT เร็วสุด ${esc(fmtDay(soon.sim))}` : '&nbsp;'}</small></button>`;
   }).join('');
-  const box = $('#dash-pend-list');
+  const box = $('#pend-list');
   if (!dash.pend) { box.hidden = true; box.innerHTML = ''; return; }
   const list = pendingOf(dash.pend, room), rcs = rcIndex();
   batchIndex = {};
@@ -3963,7 +3982,8 @@ document.addEventListener('click', e => {
   if (ds.droom !== undefined) { pref.set('dashRoom', ds.droom); return renderDash(); }
   if (ds.dmetric) { const cur = pref.get('dashMetrics', ['tx', 'start', 'end']); pref.set('dashMetrics', cur.includes(ds.dmetric) ? cur.filter(k => k !== ds.dmetric) : [...cur, ds.dmetric]); return renderDash(); }
   if (ds.dday) { dash.day = dash.day === ds.dday ? '' : ds.dday; renderDash(); if (dash.day) $('#dash-day').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
-  if (ds.dpend) { dash.pend = dash.pend === ds.dpend ? '' : ds.dpend; return renderDash(); }
+  if (ds.dpend) { dash.pend = dash.pend === ds.dpend ? '' : ds.dpend; return renderPend(); }
+  if (ds.proom !== undefined) { pref.set('pendRoom', ds.proom); return renderPend(); }
   if (ds.dperiod) { pref.set('dashPeriod', ds.dperiod); return renderDash(); }
   if (ds.wunit) { pref.set('waitUnit', ds.wunit); return renderDash(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
