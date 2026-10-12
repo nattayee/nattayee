@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDR Activity – งานฟิสิกส์การแพทย์ กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</title>
+  <meta name="description" content="บันทึกค่า activity ของแหล่งกำเนิดรังสี HDR รายวัน เทียบกับค่าที่คำนวณจากการสลายตัว พร้อมกราฟและ % ความต่าง">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div>
+        <h1>HDR Activity</h1>
+        <p class="subtitle">งานฟิสิกส์การแพทย์ กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</p>
+      </div>
+      <button type="button" id="themeToggle" class="btn ghost" aria-label="สลับธีมสว่าง/มืด">ธีม: อัตโนมัติ</button>
+    </div>
+    <nav class="wrap tabs" role="tablist">
+      <button role="tab" class="tab active" data-tab="dashboard" aria-selected="true">ภาพรวม &amp; บันทึกค่า</button>
+      <button role="tab" class="tab" data-tab="records" aria-selected="false">ตารางข้อมูล</button>
+      <button role="tab" class="tab" data-tab="sources" aria-selected="false">แหล่งกำเนิดรังสี &amp; ตั้งค่า</button>
+      <button role="tab" class="tab" data-tab="import" aria-selected="false">นำเข้า / ส่งออก</button>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <!-- ============ ภาพรวม ============ -->
+    <section id="tab-dashboard" class="tab-panel active" role="tabpanel">
+      <div id="emptyHint" class="notice" hidden></div>
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="dash-grid">
+        <form id="entryForm" class="card entry" autocomplete="off">
+          <h2 id="entryTitle">บันทึกค่าประจำวัน</h2>
+          <label>วันที่ / เวลาที่วัด
+            <input type="datetime-local" id="fDate" required>
+          </label>
+          <label>Activity ที่วัดได้ <span class="unit-label"></span>
+            <input type="number" id="fMeasured" step="any" min="0" inputmode="decimal" required placeholder="เช่น 10.215">
+          </label>
+          <label>Activity คำนวณ <span class="unit-label"></span> <span class="opt">(เว้นว่าง = คำนวณจากการสลายตัว)</span>
+            <input type="number" id="fExpected" step="any" min="0" inputmode="decimal">
+          </label>
+          <label>ผู้วัด / หมายเหตุ
+            <input type="text" id="fNote" maxlength="200" placeholder="ไม่บังคับ">
+          </label>
+          <div class="preview" id="entryPreview" aria-live="polite"></div>
+          <div class="row-btns">
+            <button type="submit" class="btn primary" id="entrySubmit">บันทึก</button>
+            <button type="button" class="btn ghost" id="entryCancel" hidden>ยกเลิกการแก้ไข</button>
+          </div>
+        </form>
+
+        <div class="charts">
+          <div class="filters" role="group" aria-label="ช่วงเวลา">
+            <div class="seg" id="rangeSeg">
+              <button type="button" data-range="30">30 วัน</button>
+              <button type="button" data-range="90">90 วัน</button>
+              <button type="button" data-range="365">1 ปี</button>
+              <button type="button" data-range="all">ทั้งหมด</button>
+            </div>
+            <label class="inline">แหล่งกำเนิด
+              <select id="sourceFilter"><option value="all">ทั้งหมด</option></select>
+            </label>
+          </div>
+          <figure class="card chart-card">
+            <figcaption>
+              <h2>Activity: ค่าคำนวณ เทียบกับ ค่าที่วัดได้</h2>
+              <p class="muted">เส้นคือ activity ที่คำนวณจากการสลายตัว จุดคือค่าที่กรอก</p>
+            </figcaption>
+            <div class="chart-box"><canvas id="activityChart" aria-label="กราฟ activity คำนวณเทียบกับค่าที่วัด" role="img"></canvas></div>
+          </figure>
+          <figure class="card chart-card">
+            <figcaption>
+              <h2>% ความต่าง</h2>
+              <p class="muted">(วัดได้ − คำนวณ) ÷ คำนวณ × 100 · เส้นประคือเกณฑ์ ±<span class="tol-label"></span>% · ▲ = เกินเกณฑ์</p>
+            </figcaption>
+            <div class="chart-box"><canvas id="diffChart" aria-label="กราฟเปอร์เซ็นต์ความต่าง" role="img"></canvas></div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ตารางข้อมูล ============ -->
+    <section id="tab-records" class="tab-panel" role="tabpanel">
+      <div class="card">
+        <div class="card-head">
+          <h2>ข้อมูลที่บันทึก <span class="muted" id="recordCount"></span></h2>
+          <div class="row-btns">
+            <button type="button" class="btn ghost" id="exportCsv">ส่งออก CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>วันที่ / เวลา</th>
+                <th>แหล่งกำเนิด</th>
+                <th class="num">คำนวณ (<span class="unit-text"></span>)</th>
+                <th class="num">วัดได้ (<span class="unit-text"></span>)</th>
+                <th class="num">% ต่าง</th>
+                <th>สถานะ</th>
+                <th>หมายเหตุ</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="recordBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ แหล่งกำเนิด & ตั้งค่า ============ -->
+    <section id="tab-sources" class="tab-panel" role="tabpanel">
+      <div class="two-col">
+        <div class="card">
+          <h2>แหล่งกำเนิดรังสี (Source)</h2>
+          <p class="muted">ใส่ค่า activity อ้างอิงจากใบรับรอง (certificate) แต่ละครั้งที่เปลี่ยน source ระบบจะเลือก source ที่ใช้งานอยู่ ณ วันที่วัดโดยอัตโนมัติ</p>
+          <form id="sourceForm" class="grid-form" autocomplete="off">
+            <label>Serial / ชื่อ source
+              <input type="text" id="sSerial" required maxlength="60" placeholder="เช่น D36G-1234">
+            </label>
+            <label>Activity อ้างอิง <span class="unit-label"></span>
+              <input type="number" id="sActivity" step="any" min="0" required inputmode="decimal">
+            </label>
+            <label>วันที่ / เวลาอ้างอิง (calibration)
+              <input type="datetime-local" id="sRefDate" required>
+            </label>
+            <label>วันที่เริ่มใช้งาน <span class="opt">(ไม่บังคับ)</span>
+              <input type="datetime-local" id="sStart">
+            </label>
+            <div class="row-btns full">
+              <button type="submit" class="btn primary" id="sourceSubmit">เพิ่ม source</button>
+              <button type="button" class="btn ghost" id="sourceCancel" hidden>ยกเลิกการแก้ไข</button>
+            </div>
+          </form>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Serial</th><th class="num">Activity อ้างอิง</th><th>วันที่อ้างอิง</th><th>เริ่มใช้</th><th class="num">Activity วันนี้</th><th></th></tr></thead>
+              <tbody id="sourceBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>ตั้งค่า</h2>
+          <form id="settingsForm" class="grid-form" autocomplete="off">
+            <label>ไอโซโทป
+              <select id="setIsotope">
+                <option value="Ir-192">Ir-192 (T½ 73.83 วัน)</option>
+                <option value="Co-60">Co-60 (T½ 1925.28 วัน)</option>
+                <option value="custom">กำหนดเอง</option>
+              </select>
+            </label>
+            <label>ครึ่งชีวิต (วัน)
+              <input type="number" id="setHalfLife" step="any" min="0.0001" required>
+            </label>
+            <label>หน่วย activity
+              <select id="setUnit">
+                <option>Ci</option><option>mCi</option><option>GBq</option><option>TBq</option><option>U</option>
+              </select>
+            </label>
+            <label>เกณฑ์ยอมรับ ± (%)
+              <input type="number" id="setTol" step="any" min="0" required>
+            </label>
+            <label>ทศนิยมของ activity
+              <input type="number" id="setDecimals" step="1" min="0" max="6" required>
+            </label>
+            <label>รูปแบบปี
+              <select id="setYear"><option value="be">พ.ศ.</option><option value="ce">ค.ศ.</option></select>
+            </label>
+            <div class="row-btns full"><button type="submit" class="btn primary">บันทึกการตั้งค่า</button></div>
+          </form>
+          <p class="muted small">สูตร: A(t) = A₀ · e<sup>−ln2 · Δt / T½</sup> · % ต่าง = (วัดได้ − คำนวณ) / คำนวณ × 100</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ นำเข้า / ส่งออก ============ -->
+    <section id="tab-import" class="tab-panel" role="tabpanel">
+      <div class="card">
+        <h2>นำเข้าข้อมูลจาก Google Sheets</h2>
+        <p class="muted">ชีตต้องแชร์แบบ “ทุกคนที่มีลิงก์ดูได้” ระบบจะดึงข้อมูลเป็น CSV แล้วให้เลือกคอลัมน์ก่อนนำเข้า</p>
+        <div class="grid-form">
+          <label class="full">ลิงก์ Google Sheets
+            <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
+          </label>
+          <label>ชื่อแท็บ <span class="opt">(ไม่บังคับ)</span>
+            <input type="text" id="sheetTab" placeholder="เช่น Sheet1">
+          </label>
+          <div class="row-btns end"><button type="button" class="btn primary" id="fetchSheet">ดึงข้อมูล</button></div>
+        </div>
+        <details class="alt-import">
+          <summary>หรือ นำเข้าจากไฟล์ CSV / วางข้อมูล</summary>
+          <div class="grid-form">
+            <label class="full">เลือกไฟล์ CSV
+              <input type="file" id="csvFile" accept=".csv,text/csv,text/plain">
+            </label>
+            <label class="full">หรือวางข้อมูล (คัดลอกจากชีตได้โดยตรง)
+              <textarea id="csvPaste" rows="5" placeholder="วันที่,Activity คำนวณ,Activity วัดได้"></textarea>
+            </label>
+            <div class="row-btns full"><button type="button" class="btn ghost" id="parsePaste">อ่านข้อมูลที่วาง</button></div>
+          </div>
+        </details>
+
+        <div id="mapper" hidden>
+          <h3>จับคู่คอลัมน์</h3>
+          <div class="grid-form">
+            <label>แถวหัวตาราง (ลำดับที่)
+              <input type="number" id="mapHeader" min="1" step="1">
+            </label>
+            <label>ลำดับวันที่ในชีต
+              <select id="mapOrder"><option value="dmy">วัน/เดือน/ปี</option><option value="mdy">เดือน/วัน/ปี</option></select>
+            </label>
+            <label>คอลัมน์วันที่ *<select id="mapDate"></select></label>
+            <label>คอลัมน์เวลา<select id="mapTime"></select></label>
+            <label>คอลัมน์ activity ที่วัดได้ *<select id="mapMeasured"></select></label>
+            <label>คอลัมน์ activity คำนวณ<select id="mapExpected"></select></label>
+            <label>คอลัมน์หมายเหตุ<select id="mapNote"></select></label>
+            <label>วิธีนำเข้า
+              <select id="mapMode"><option value="append">เพิ่มต่อ (ข้ามแถวซ้ำ)</option><option value="replace">แทนที่ข้อมูลทั้งหมด</option></select>
+            </label>
+          </div>
+          <p class="muted small" id="mapSummary"></p>
+          <div class="table-wrap"><table class="data" id="mapPreview"></table></div>
+          <div class="row-btns"><button type="button" class="btn primary" id="doImport">นำเข้า</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>สำรอง / กู้คืนข้อมูล</h2>
+        <p class="muted">ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ควรส่งออกไฟล์สำรองเป็นระยะ หรือใช้ย้ายข้อมูลไปเครื่องอื่น</p>
+        <div class="row-btns">
+          <button type="button" class="btn ghost" id="exportJson">ส่งออกไฟล์สำรอง (JSON)</button>
+          <label class="btn ghost file-btn">กู้คืนจากไฟล์สำรอง<input type="file" id="importJson" accept=".json,application/json"></label>
+          <button type="button" class="btn danger" id="clearAll">ลบข้อมูลทั้งหมด</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap site-footer muted small">HDR Activity · งานฟิสิกส์การแพทย์ กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง</footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
