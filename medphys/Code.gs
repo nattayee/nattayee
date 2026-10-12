@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.4';
-const API_LEVEL = 16;
+const CODE_VERSION = '2026-10-12.5';
+const API_LEVEL = 17;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -276,7 +276,7 @@ function addCases(recs, token) {
         rec.mp = pickNext_({
           staff: staff, leaves: leaves, date: date, byDay: byDay,
           cases: cases.filter(c => c.cat === rec.cat),
-          pointer: (cfg.queue || {})[rec.cat] || null,
+          pointer: (cfg.queue || {})[rec.cat] || null, skips: catSkips_(cfg, rec.cat),
         });
       }
       if (!rec.mp) throw new Error((cat ? cat.label + ': ' : '') + 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
@@ -294,6 +294,13 @@ function addCases(recs, token) {
   });
 }
 
+// หักคิวรายเดือนของเทคนิคนี้ { 'YYYY-MM': { code: n } } จาก config.skips { 'YYYY-MM': { cat: { code: n } } }
+function catSkips_(cfg, cat) {
+  const all = cfg && cfg.skips && typeof cfg.skips === 'object' ? cfg.skips : {}, out = {};
+  Object.keys(all).forEach(ym => { if (all[ym] && all[ym][cat]) out[ym] = all[ym][cat]; });
+  return out;
+}
+
 function addCase(rec, token) {
   return addCases([rec], token)[0];
 }
@@ -305,6 +312,7 @@ function addCase(rec, token) {
  * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
  * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
  * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
+ * - skips: หักคิวรายเดือนที่แอดมินตั้ง ข้ามคนนั้นตามจำนวนครั้งเมื่อคิววนมาถึง (เหมือนเคสเลือกเอง)
  */
 function pickNext_(o, trace) {
   const staff = o.staff, n = staff.length;
@@ -327,9 +335,12 @@ function pickNext_(o, trace) {
   const pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
   const credit = {};
   let p = 0, lastAuto = null, pointerDone = !pointer;
-  const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  // หักคิวรายเดือนที่แอดมินตั้ง (o.skips = { 'YYYY-MM': { code: n } }): นับตั้งแต่ต้นเดือนนั้น ใช้ไม่หมดยกไปเดือนถัดไป
+  const skipDays = Object.keys(o.skips || {}).filter(ym => ym <= String(o.date || '').slice(0, 7)).map(ym => ({ created: ym + '-01', skip: o.skips[ym] }));
+  const list = o.cases.concat(skipDays).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
   list.forEach(c => {
     if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    if (c.skip) { Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) credit[code] = (credit[code] || 0) + m; }); return; }
     const j = idx(c.mp);
     if (j < 0) return;
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)

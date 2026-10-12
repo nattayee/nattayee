@@ -473,6 +473,9 @@ button.who:hover .nm{text-decoration:underline}
 .nav-dot{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;padding:0 4px;border-radius:999px;background:var(--late);color:var(--surface);font:600 10.5px/1 var(--mono);vertical-align:1px}
 .nav-dot.warn{background:var(--warn)}
 .wait-custom{margin-top:10px}
+.skip-nav{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
+.skip-table td,.skip-table thead th:not(:first-child){text-align:center}
+.skip-table .num{width:64px;min-height:32px;padding:4px 6px;text-align:center;font-family:var(--mono)}
 /* มุมมองปฏิทิน */
 .cal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:10px}
 .cal-nav{display:inline-flex;align-items:center;gap:6px}
@@ -1105,7 +1108,8 @@ const MC_API = 11;   // Code.gs ที่รู้จัก SRS MapCheck
 const PC_API = 13;   // Code.gs ที่รู้จัก Plan complete
 const EDIT_PIN_API = 14;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขเคส (editCase, removeCase)
 const STAMPS_API = 15;   // Code.gs ที่บันทึกหลายค่าพร้อมกัน (stampSteps) · รุ่นเก่าบันทึกทีละค่า
-const NOTE_API = 16;   // Code.gs ที่เก็บหมายเหตุของค่า (Dose check หมายเหตุ ฯลฯ) · รุ่นเก่าไม่มีช่องหมายเหตุ
+const NOTE_API = 16;
+const SKIP_API = 17;   // Code.gs ที่ใช้หักคิวรายเดือน (config.skips) ตอนแจกเคส   // Code.gs ที่เก็บหมายเหตุของค่า (Dose check หมายเหตุ ฯลฯ) · รุ่นเก่าไม่มีช่องหมายเหตุ
 // ปุ่มที่ต้องใช้ Code.gs รุ่นใหม่ (รุ่นเก่าจะซ่อนไว้ เพราะบันทึกลงชีตไม่ได้)
 const stepOn = x => serverHas({ mc: MC_API, pc: PC_API }[x.key] || 0);
 // ปุ่มที่เพิ่มเข้ามาทีหลังเปิดตามค่าเริ่มต้นนี้ จนกว่าแอดมินจะตั้งเอง (SRS MapCheck เฉพาะเทคนิค SRS)
@@ -1181,6 +1185,7 @@ const DEFAULT_CONFIG = {
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
   nav: ['work', 'pend', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true, guest: true })),
+  skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
   qa: { mu: { dir: '', ok: '', warn: '' }, d0: { dir: '', ok: '', warn: '' }, d4: { dir: 'high', ok: 95, warn: 90 }, mc: { dir: 'high', ok: 95, warn: 90 } },
@@ -1349,6 +1354,15 @@ function mergeConfig(c) {
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
+  // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } · เก็บเฉพาะจำนวนเต็ม 1–20
+  out.skips = {};
+  for (const [ym, cats] of Object.entries(c.skips && typeof c.skips === 'object' ? c.skips : {})) {
+    if (!/^\d{4}-\d{2}$/.test(ym) || !cats || typeof cats !== 'object') continue;
+    for (const [cat, by] of Object.entries(cats)) for (const [code, n] of Object.entries(by && typeof by === 'object' ? by : {})) {
+      const v = Math.floor(+n);
+      if (v >= 1 && v <= 20) ((out.skips[ym] = out.skips[ym] || {})[cat] = out.skips[ym][cat] || {})[code] = v;
+    }
+  }
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
@@ -1437,7 +1451,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.11';
+const PAGE_VERSION = '2026-10-12.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1601,6 +1615,8 @@ const state = {
 };
 let draft = null;      // ตั้งค่าที่ยังไม่บันทึก
 let draftBase = '';    // การตั้งค่าตอนเริ่ม draft (ยังไม่ได้แก้ = เท่ากัน)
+let skipYm = '';       // เดือนที่แสดงในตาราง หักคิวรายเดือน (ว่าง = เดือนนี้)
+const skipMonth = () => skipYm || thisMonth();
 let editingCase = null, editingLog = null, logMpTouched = false;
 const NOBODY = 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)';
 
@@ -1633,6 +1649,7 @@ function caseStep(c) {
  * - ข้ามคนที่ลาในวันนั้นหรือปิด "ปฏิบัติงาน" (เคสเลือกเองที่ค้างยังรออยู่)
  * - byDay: เคสวันเดียวกันให้คนเดิม (Brachy/Hyperthermia) วันใหม่จึงวนต่อ
  * - pointer: ตำแหน่งคิวที่ตั้งเองในหน้าตั้งค่า มีผลกับเคสที่แจกหลังจากนั้น
+ * - skips: หักคิวรายเดือนที่แอดมินตั้ง ข้ามคนนั้นตามจำนวนครั้งเมื่อคิววนมาถึง (เหมือนเคสเลือกเอง)
  */
 function pickNext(o, trace) {
   const staff = o.staff, n = staff.length;
@@ -1655,9 +1672,12 @@ function pickNext(o, trace) {
   const pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
   const credit = {};
   let p = 0, lastAuto = null, pointerDone = !pointer;
-  const list = o.cases.slice().sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  // หักคิวรายเดือนที่แอดมินตั้ง (o.skips = { 'YYYY-MM': { code: n } }): นับตั้งแต่ต้นเดือนนั้น ใช้ไม่หมดยกไปเดือนถัดไป
+  const skipDays = Object.keys(o.skips || {}).filter(ym => ym <= String(o.date || '').slice(0, 7)).map(ym => ({ created: ym + '-01', skip: o.skips[ym] }));
+  const list = o.cases.concat(skipDays).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
   list.forEach(c => {
     if (!pointerDone && c.created >= pointer.at) { p = idx(pointer.code); pointerDone = true; lastAuto = null; }
+    if (c.skip) { Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) credit[code] = (credit[code] || 0) + m; }); return; }
     const j = idx(c.mp);
     if (j < 0) return;
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
@@ -1679,11 +1699,17 @@ const onLeave = (code, date) => state.leaves.some(l => l.mp === code && l.from <
 function queueInput(catId, date, ignoreLeave) {
   return {
     staff: state.config.staff, leaves: ignoreLeave ? [] : state.leaves,
-    cases: state.cases.filter(c => c.cat === catId), pointer: state.config.queue[catId] || null,
+    cases: state.cases.filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId),
     byDay: catOf(catId).rotate === 'day', date: date || today(),
   };
 }
 const nextFor = (catId, date, ignoreLeave) => pickNext(queueInput(catId, date, ignoreLeave));
+// หักคิวรายเดือนของเทคนิคนี้ { 'YYYY-MM': { code: n } } (Code.gs รุ่นเก่ายังไม่รู้จัก → ไม่ใช้ ให้คิวในหน้าเว็บตรงกับที่ Code.gs แจก)
+function catSkips(catId) {
+  const all = skipsOn() ? state.config.skips || {} : {}, out = {};
+  for (const ym of Object.keys(all)) if (all[ym][catId]) out[ym] = all[ym][catId];
+  return out;
+}
 // ใครได้เคส ข้ามใครเพราะอะไร ตำแหน่งคิว และเคสเลือกเองที่ยังรอหักคิว
 function queueInfo(catId, date) {
   const t = {};
@@ -2328,6 +2354,7 @@ const roomSitesOn = () => serverHas(ROOM_API);
 const stampsOn = () => serverHas(STAMP_API);
 const editPinOn = () => serverHas(EDIT_PIN_API);
 const noteOn = () => serverHas(NOTE_API);
+const skipsOn = () => serverHas(SKIP_API);
 // ฉายหลายที่ (ขนาดรังสีต่างกัน): บริเวณแรกอยู่ในช่อง area/dpf/fx/freq ของเคส บริเวณถัดไปเก็บใน sites เป็น JSON
 function parseSites(c) {
   let a = [];
@@ -3082,7 +3109,12 @@ function renderSettings() {
         <li>ถึงคิวคนที่ลาในวัน In ของเคส หรือปิด "ปฏิบัติงาน" ไว้ ระบบข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> จนกว่าจะกลับมาทำงาน ไม่ชดเชยภายหลัง</li>
         <li>เคสที่เลือกเอง และเทคนิคถัดไปที่แจกพร้อมเทคนิคแรก ไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
       </ul>
-      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (ได้นอกคิว)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div></div>
+      <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (ได้นอกคิว)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div>
+      <h3 class="sub-h">หักคิวรายเดือน</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ใส่จำนวนครั้งที่ให้ข้ามคนนั้นในคิวของเทคนิคนั้น (เหมือนได้เคสนอกคิวไปแล้ว) · เริ่มนับตั้งแต่ต้นเดือนที่ตั้ง ใช้ไม่หมดยกไปเดือนถัดไป · ยอดที่ยังค้างดูได้ที่ "รอหักคิว" ด้านบน</p>
+      ${skipsOn() ? `<div class="skip-nav"><button type="button" class="icon-btn" data-skipmonth="-1" aria-label="เดือนก่อน">‹</button><b>${esc(fmtMonth(skipMonth()))}</b><button type="button" class="icon-btn" data-skipmonth="1" aria-label="เดือนถัดไป">›</button></div>
+      <div class="table-wrap set-table skip-table"><table><thead><tr><th>เทคนิค</th>${d.staff.map(x => `<th>${esc(x.code)}</th>`).join('')}</tr></thead><tbody>${d.cats.filter(k => k.on).map(k => `<tr><th scope="row">${esc(k.label)}</th>${d.staff.map(x => `<td><input type="number" class="num" min="0" max="20" step="1" inputmode="numeric" data-skip="${skipMonth()}|${esc(k.id)}|${esc(x.code)}" value="${esc(((d.skips[skipMonth()] || {})[k.id] || {})[x.code] || '')}" placeholder="0" aria-label="หักคิว ${esc(k.label)} ของ ${esc(x.code)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+        : '<p class="notice" style="margin:0"><b>ต้องอัปเดต Code.gs</b><span>หักคิวรายเดือนใช้ได้เมื่อวาง Code.gs รุ่นใหม่และ Deploy เวอร์ชันใหม่แล้ว</span></p>'}</div>
     <div class="sec"><div class="sec-head"><h2>เทคนิคและน้ำหนัก P4P</h2><p>แต้ม/ราย = เวลา × น้ำหนัก × แต้มมาตรฐาน · เทคนิคใหม่จะเป็นปุ่มในฟอร์มแจกเคสและมีคิวของตัวเอง</p></div>
       <div class="form-grid" style="margin-bottom:12px">
         <label class="field"><span class="lbl">แต้มมาตรฐาน (แต้ม/นาที)</span><input type="number" step="any" data-k="rate" value="${esc(d.rate)}"></label>
@@ -4392,6 +4424,7 @@ document.addEventListener('click', e => {
     pref.set('dashPeriod', ds.dperiod);
     return renderDash();
   }
+  if (ds.skipmonth) { skipYm = shiftMonth(skipMonth(), +ds.skipmonth); return renderSettings(); }
   if (ds.calview) { pref.set('calView', ds.calview); dash.day = ''; return renderDash(); }
   if (ds.calnav !== undefined) return calMove(+ds.calnav);
   if (t.id === 'dash-range-cal') { const r = calRange(); pref.set('dashFrom', r.from); pref.set('dashTo', r.to); renderDashStats(); renderWait(); return; }
@@ -4603,6 +4636,14 @@ function settingsEdit(el) {
     const rx = $(`[data-rulerx="${i}"]`), hint = $(`[data-ruleicd="${i}"]`);
     if (rx) rx.textContent = ruleRx(r);
     if (hint) hint.textContent = icdHint(r.match);
+  } else if (el.dataset.skip) {   // หักคิวรายเดือน: 1–20 ครั้ง · ว่างหรือ 0 = ไม่หัก
+    const [ym, cat, code] = el.dataset.skip.split('|'), v = Math.min(20, Math.floor(+el.value) || 0), sk = draft.skips;
+    if (v >= 1) ((sk[ym] = sk[ym] || {})[cat] = sk[ym][cat] || {})[code] = v;
+    else if (sk[ym] && sk[ym][cat]) {
+      delete sk[ym][cat][code];
+      if (!Object.keys(sk[ym][cat]).length) delete sk[ym][cat];
+      if (!Object.keys(sk[ym]).length) delete sk[ym];
+    }
   } else if (el.dataset.defmulti) {
     draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.list) {
