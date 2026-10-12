@@ -7,7 +7,8 @@
 
 const STORE_KEY = 'hdr-activity-v1';
 const THEME_KEY = 'hdr-activity-theme';
-const DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1BX2NyFl9HosiyNAq1nEwghkw0c3K_zfmeTPQi_4cZZ4/edit?usp=sharing';
+const DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1_AlJgpz9x5gqFVBrkN1EEeMync2Jg2RbzIdxg5Iovnw/edit';
+const OLD_SHEET_ID = '1BX2NyFl9HosiyNAq1nEwghkw0c3K_zfmeTPQi_4cZZ4'; // ชีตเดิม ย้ายข้อมูลไปชีตใหม่แล้ว
 const ISOTOPES = { 'Co-60': 1925.2, 'Ir-192': 73.83 };
 const DAY = 86400000;
 const LN2 = Math.LN2;
@@ -35,6 +36,7 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return d;
     const s = JSON.parse(raw);
+    if (s.settings && (s.settings.sheetUrl || '').includes(OLD_SHEET_ID)) s.settings.sheetUrl = DEFAULT_SHEET;
     return {
       settings: { ...d.settings, ...(s.settings || {}) },
       sources: Array.isArray(s.sources) ? s.sources : [],
