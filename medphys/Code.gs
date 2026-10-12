@@ -26,7 +26,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.7';
+const CODE_VERSION = '2026-10-12.8';
 const API_LEVEL = 18;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -850,9 +850,15 @@ function lpchCall_(req) {
   const url = lpchUrl_();
   if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ตั้ง Script property LPCH_URL)');
   const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
+  const body = String(res.getContentText('UTF-8') || '');
   let out = null;
-  try { out = JSON.parse(res.getContentText('UTF-8')); } catch (e) { out = null; }
-  if (!out) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') ผู้ดูแล: ตรวจ LPCH_URL และ Deploy ของ LPCH แบบ Who has access: Anyone');
+  try { out = JSON.parse(body); } catch (e) { out = null; }
+  if (!out) {
+    // สคริปต์ของ LPCH พังหรือถูกวางโค้ดอื่นทับ: Apps Script ตอบหน้า Error (HTML, HTTP 200) เช่น "Script function not found: doPost"
+    const why = ((/<title>Error<\/title>[\s\S]*<div[^>]*>([^<]{3,200})<\/div>\s*<\/body>/.exec(body) || [])[1] || '').trim();
+    if (/doPost/.test(why)) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้: Apps Script ที่ LPCH_URL ไม่มี doPost (' + why + ') แปลว่าโปรเจกต์ของ LPCH ถูกวางโค้ดอื่นทับ เช่น Code.gs ของระบบนี้ · ผู้ดูแล: วาง Code.gs ของ LPCH RO Workspace กลับในโปรเจกต์ LPCH แล้ว Deploy เวอร์ชันใหม่');
+    throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + (why ? ': ' + why : '') + ') ผู้ดูแล: ตรวจ LPCH_URL และ Deploy ของ LPCH แบบ Who has access: Anyone');
+  }
   if (!out.ok) throw new Error(out.error || 'LPCH RO Workspace ตอบกลับไม่สำเร็จ');
   return out;
 }
