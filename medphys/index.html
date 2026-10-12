@@ -473,6 +473,41 @@ button.who:hover .nm{text-decoration:underline}
 .nav-dot{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;padding:0 4px;border-radius:999px;background:var(--late);color:var(--surface);font:600 10.5px/1 var(--mono);vertical-align:1px}
 .nav-dot.warn{background:var(--warn)}
 .wait-custom{margin-top:10px}
+/* มุมมองปฏิทิน */
+.cal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:10px}
+.cal-nav{display:inline-flex;align-items:center;gap:6px}
+.cal-nav button{min-width:30px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--fg);font-size:14px}
+.cal-nav button:hover{background:var(--hover)}
+.cal-nav .cal-today{font-size:12.5px;color:var(--muted)}
+#cal-label{min-width:120px;font-weight:600;font-size:14px;text-align:center}
+.cal.cal-none{display:none}
+.cal-week .cal-d{min-height:150px}
+.cal-legend{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+.cal-months{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.cal-months.cal-3m{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mm{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.mm h3{margin:0;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600}
+.mm-g{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));padding:4px}
+.mm-h{padding:3px 0;font-size:11px;color:var(--muted);text-align:center}
+.mm-d{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;min-width:0;min-height:32px;padding:4px 0;border:0;border-radius:6px;background:none;color:var(--fg);cursor:pointer}
+.cal-3m .mm-d{min-height:52px}
+.mm-d::before{content:'';position:absolute;inset:1px;border-radius:6px;background:var(--accent);opacity:var(--heat,0);pointer-events:none}
+.mm-d > *{position:relative}
+.mm-d:hover{box-shadow:inset 0 0 0 1px var(--line)}
+.mm-d[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--accent)}
+.mm-n{min-width:22px;border-radius:999px;font:500 12px/1.6 var(--mono);text-align:center}
+.mm-d.off .mm-n{color:var(--faint)}
+.mm-d.hol .mm-n{color:var(--late)}
+.mm-d.today .mm-n{background:var(--accent);color:var(--accent-fg)}
+.mm-c{font:600 11px/1.2 var(--mono);color:var(--fg)}
+.mm-dots{display:flex;gap:2px}
+.mm-dots .ev-dot{width:5px;height:5px;border-radius:50%}
+.mm-dots .ev-dot.ev-start{background:var(--ok)}.mm-dots .ev-dot.ev-end{background:var(--p2)}.mm-dots .ev-dot.ev-ct{background:var(--p4)}
+.mm-dots .ev-dot.ev-in{background:var(--p6)}.mm-dots .ev-dot.ev-fin{background:var(--p1)}.mm-dots .ev-dot.ev-eval{background:var(--p3)}
+.dash-range{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px;color:var(--muted)}
+.dash-range label{display:inline-flex;align-items:center;gap:6px}
+.dash-range input{width:auto;min-height:32px;padding:4px 8px}
+@media (max-width:900px){.cal-months.cal-3m{grid-template-columns:minmax(0,1fr)}}
 .wait-custom select{width:auto}
 @media (max-width:640px){
   .cal{grid-template-columns:minmax(0,1fr)}
@@ -822,13 +857,20 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     </div>
     <div class="sec">
       <div class="sec-head"><h2>ปฏิทินห้องฉาย</h2><p>สัปดาห์เริ่มวันอาทิตย์ · นับเป็นจำนวนผู้ป่วย · วันฉายนับจาก Start RT, Fx และความถี่ ข้ามเสาร์–อาทิตย์และวันหยุด (ตั้งค่า → วันหยุด) · กดวันเพื่อดูรายชื่อ</p></div>
+      <div class="cal-bar">
+        <div class="seg-mini" id="cal-views" aria-label="มุมมองปฏิทิน"></div>
+        <div class="cal-nav"><button type="button" data-calnav="-1" aria-label="ก่อนหน้า">‹</button><span id="cal-label"></span><button type="button" data-calnav="1" aria-label="ถัดไป">›</button><button type="button" class="cal-today" data-calnav="0">วันนี้</button></div>
+      </div>
       <div class="cal-opts" id="dash-metrics" aria-label="เลือกสิ่งที่แสดงในปฏิทิน"></div>
       <div class="cal" id="dash-cal"></div>
+      <p class="cal-legend" id="cal-legend" hidden></p>
       <div class="cal-day" id="dash-day" hidden></div>
     </div>
     <div class="sec">
       <div class="sec-head"><h2>สถิติแต่ละเทคนิค</h2><p id="dash-stat-note"></p></div>
-      <div class="toolbar"><div class="seg-mini" id="dash-period" aria-label="ช่วงเวลา"></div></div>
+      <div class="toolbar"><div class="seg-mini" id="dash-period" aria-label="ช่วงเวลา"></div>
+        <span class="dash-range" id="dash-range" hidden><label>ตั้งแต่ <input type="date" id="dash-from"></label><label>ถึง <input type="date" id="dash-to"></label>
+          <button type="button" class="linkish" id="dash-range-cal">ใช้ช่วงของปฏิทินด้านบน</button></span></div>
       <div class="table-wrap" id="dash-stats"></div>
     </div>
     <div class="sec">
@@ -1383,7 +1425,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.8';
+const PAGE_VERSION = '2026-10-12.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3232,7 +3274,7 @@ const roomOf = c => c.room || NO_ROOM;
 const roomLabel = r => (r === NO_ROOM ? 'ไม่ระบุห้อง' : r);
 const WD_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'short' });
 const LONG_DAY_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const dash = { day: '', pend: '' };
+const dash = { day: '', pend: '', at: '' };   // at = วันที่ปฏิทินกำลังแสดง (มุมมองวัน/สัปดาห์/3 เดือน/ปี)
 // ข้อมูลปฏิทินของช่วงวันที่: กำลังฉายรายห้อง (ผู้ป่วยไม่ซ้ำ) และเหตุการณ์แต่ละอย่างรายวัน
 function dashIndex(from, to, room) {
   const hol = holidayMap(), tx = {}, ev = {};
@@ -3267,33 +3309,113 @@ function dashRooms() {
   if (state.cases.some(c => !c.room && catOf(c.cat).kind !== 'simple' && isDay(c.sim))) rooms.push(NO_ROOM);
   return rooms;
 }
+// มุมมองปฏิทิน: วัน · สัปดาห์ · เดือน (ตามเดือนด้านบน) · 3 เดือน · ปี (จำไว้ในเบราว์เซอร์)
+const CAL_VIEWS = [['day', 'วัน'], ['week', 'สัปดาห์'], ['month', 'เดือน'], ['3m', '3 เดือน'], ['year', 'ปี']];
+const YEAR_FMT = new Intl.DateTimeFormat('th-TH', { year: 'numeric' });
+const calView = () => { const v = pref.get('calView', 'month'); return CAL_VIEWS.some(x => x[0] === v) ? v : 'month'; };
+const monthEnd = ym => iso(new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0));
+const fmtDayY = ds => `${fmtDay(ds)} ${YEAR_FMT.format(parseISO(ds)).replace(/\D+/g, '').slice(-2)}`;
+// ช่วงวันที่ของมุมมองปัจจุบัน { from, to, months? }
+function calRange(view = calView(), at = dash.at) {
+  if (view === 'day') return { from: at, to: at };
+  if (view === 'week') { const from = plusDays(at, -parseISO(at).getDay()); return { from, to: plusDays(from, 6) }; }
+  if (view === 'month') { const ym = at.slice(0, 7); return { from: ym + '-01', to: monthEnd(ym) }; }
+  const n = view === '3m' ? 3 : 12, m0 = view === '3m' ? at.slice(0, 7) : at.slice(0, 4) + '-01';
+  const months = Array.from({ length: n }, (_, i) => shiftMonth(m0, i));
+  return { from: months[0] + '-01', to: monthEnd(months[n - 1]), months };
+}
+function calLabel(view, r) {
+  if (view === 'day') return LONG_DAY_FMT.format(parseISO(r.from));
+  if (view === 'week') return `${fmtDay(r.from)} – ${fmtDayY(r.to)}`;
+  if (view === 'month') return fmtMonth(r.from.slice(0, 7));
+  if (view === '3m') return `${fmtMonth(r.months[0])} – ${fmtMonth(r.months[2])}`;
+  return YEAR_FMT.format(parseISO(r.from));
+}
+// เลื่อนปฏิทิน: ‹ › ตามมุมมอง · 0 = วันนี้ · เดือนด้านบนตามไปด้วย
+function calMove(step) {
+  const v = calView(), at = dash.at;
+  if (!step) dash.at = today();
+  else if (v === 'day') dash.at = plusDays(at, step);
+  else if (v === 'week') dash.at = plusDays(at, 7 * step);
+  else dash.at = shiftMonth(at.slice(0, 7), step * (v === 'month' ? 1 : v === '3m' ? 3 : 12)) + '-01';
+  state.month = dash.at.slice(0, 7);
+  dash.day = v === 'day' ? dash.at : '';
+  render();
+}
 function renderDash() {
   const metrics = pref.get('dashMetrics', ['tx', 'start', 'end']).filter(k => DASH_METRICS.some(m => m.key === k));
   const room = pref.get('dashRoom', '');
   const rooms = dashRooms();
   $('#dash-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-droom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   $('#dash-metrics').innerHTML = DASH_METRICS.map(m => `<button type="button" data-dmetric="${m.key}" aria-pressed="${metrics.includes(m.key)}"><i class="ev-dot ev-${m.key}"></i>${esc(m.label)}</button>`).join('');
-  // ปฏิทินเดือนที่เลือก: เริ่มวันอาทิตย์ ครบสัปดาห์
-  const ym = state.month, first = parseISO(ym + '-01');
-  const from = plusDays(iso(first), -first.getDay());
-  const lastDay = iso(new Date(first.getFullYear(), first.getMonth() + 1, 0));
-  const to = plusDays(lastDay, 6 - parseISO(lastDay).getDay());
+  const view = calView(), td = today();
+  // วันที่ที่ปฏิทินแสดงอยู่ในเดือนที่เลือกด้านบนเสมอ (เปลี่ยนเดือนด้านบน = ปฏิทินไปเดือนนั้น)
+  if (!dash.at || dash.at.slice(0, 7) !== state.month) dash.at = td.slice(0, 7) === state.month ? td : state.month + '-01';
+  if (view === 'day') dash.day = dash.at;
+  $('#cal-views').innerHTML = CAL_VIEWS.map(([v, l]) => `<button type="button" data-calview="${v}" aria-pressed="${view === v}">${l}</button>`).join('');
+  const r = calRange(view);
+  $('#cal-label').textContent = calLabel(view, r);
+  $('#cal-legend').hidden = true;
+  const box = $('#dash-cal');
+  if (view === 'day') {   // วันเดียว: รายชื่อของวันนั้น (ด้านล่าง)
+    box.className = 'cal cal-none';
+    box.innerHTML = '';
+    const { tx, ev, hol } = dashIndex(r.from, r.to, room);
+    return renderDashRest(tx, ev, hol, metrics, room, rooms);
+  }
+  if (view === '3m' || view === 'year') {
+    const { tx, ev, hol } = dashIndex(r.from, r.to, room);
+    box.className = `cal-months cal-${view}`;
+    box.innerHTML = calMonths(r.months, view, tx, ev, hol, metrics, room, rooms);
+    return renderDashRest(tx, ev, hol, metrics, room, rooms);
+  }
+  // สัปดาห์ / เดือน: ตารางเริ่มวันอาทิตย์ ครบสัปดาห์
+  const ym = r.from.slice(0, 7);
+  const from = plusDays(r.from, -parseISO(r.from).getDay()), to = plusDays(r.to, 6 - parseISO(r.to).getDay());
   const { tx, ev, hol } = dashIndex(from, to, room);
-  const td = today();
-  let cells = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(w => `<div class="cal-h">${w}</div>`).join('');
+  let cells = WD_SHORT.map(w => `<div class="cal-h">${w}</div>`).join('');
   for (let ds = from; ds <= to; ds = nextDate(ds)) {
-    const out = ds.slice(0, 7) !== ym, off = !isWorkday(ds, hol);
+    const out = view === 'month' && ds.slice(0, 7) !== ym, off = !isWorkday(ds, hol);
     const lines = [];
     if (metrics.includes('tx')) {
       const byRoom = tx[ds] || {};
-      for (const r of (room ? [room] : rooms)) { const n = uniq(byRoom[r]).length; if (n) lines.push(`<span class="cal-r"><i>${esc(roomLabel(r))}</i> <b>${n}</b></span>`); }
+      for (const rm of (room ? [room] : rooms)) { const n = uniq(byRoom[rm]).length; if (n) lines.push(`<span class="cal-r"><i>${esc(roomLabel(rm))}</i> <b>${n}</b></span>`); }
     }
     const chips = DASH_METRICS.filter(m => m.key !== 'tx' && metrics.includes(m.key)).map(m => { const n = evList(m.key, (ev[m.key] || {})[ds]).length; return n ? `<span class="ev-${m.key}" title="${esc(m.label)}">${esc(m.label.split(' ')[0])} ${n}</span>` : ''; }).join('');
     cells += `<button type="button" class="cal-d${out ? ' out' : ''}${off ? ' off' : ''}${ds === td ? ' today' : ''}" data-dday="${ds}" aria-pressed="${dash.day === ds}">
       <span class="cal-top"><span class="cal-n">${+ds.slice(8)}</span><span class="cal-wd">${esc(WD_FMT.format(parseISO(ds)))}</span></span>
       ${hol[ds] ? `<span class="cal-hol">${esc(hol[ds])}</span>` : ''}${lines.join('')}${chips ? `<span class="cal-ev">${chips}</span>` : ''}</button>`;
   }
-  $('#dash-cal').innerHTML = cells;
+  box.className = `cal${view === 'week' ? ' cal-week' : ''}`;
+  box.innerHTML = cells;
+  renderDashRest(tx, ev, hol, metrics, room, rooms);
+}
+// 3 เดือน / ปี: ปฏิทินเดือนเล็ก สีเข้มตามจำนวนผู้ป่วยที่กำลังฉาย (หรือจำนวนเหตุการณ์ที่เลือก ถ้าไม่ได้เลือก "กำลังฉาย")
+function calMonths(months, view, tx, ev, hol, metrics, room, rooms) {
+  const td = today(), evKeys = DASH_METRICS.filter(m => m.key !== 'tx' && metrics.includes(m.key));
+  const countOf = ds => (metrics.includes('tx')
+    ? uniq((room ? [room] : rooms).flatMap(rm => (tx[ds] || {})[rm] || [])).length
+    : evKeys.reduce((t, m) => t + evList(m.key, (ev[m.key] || {})[ds]).length, 0));
+  const all = {};
+  let max = 0;
+  for (const ym of months) for (let ds = ym + '-01'; ds <= monthEnd(ym); ds = nextDate(ds)) { all[ds] = countOf(ds); max = Math.max(max, all[ds]); }
+  const what = metrics.includes('tx') ? 'ผู้ป่วยกำลังฉาย' : evKeys.length ? evKeys.map(m => m.label).join(' + ') : '';
+  const leg = $('#cal-legend');
+  leg.hidden = false;
+  leg.innerHTML = what ? `สีเข้ม = ${esc(what)} มาก (สูงสุด ${max} ต่อวัน)${view === '3m' ? ' · ตัวเลขใต้วันที่ = จำนวน' : ' · ชี้ที่วันเพื่อดูจำนวน'} · กดวันเพื่อดูรายชื่อ` : 'เลือกสิ่งที่แสดงด้านบนเพื่อดูสีตามจำนวน · กดวันเพื่อดูรายชื่อ';
+  return months.map(ym => {
+    const lead = parseISO(ym + '-01').getDay();
+    let cells = WD_SHORT.map(w => `<span class="mm-h">${w.replace('.', '')}</span>`).join('') + '<span></span>'.repeat(lead);
+    for (let ds = ym + '-01'; ds <= monthEnd(ym); ds = nextDate(ds)) {
+      const n = all[ds], off = !isWorkday(ds, hol);
+      const dots = view === '3m' ? evKeys.filter(m => evList(m.key, (ev[m.key] || {})[ds]).length).map(m => `<i class="ev-dot ev-${m.key}"></i>`).join('') : '';
+      const tip = [fmtDayY(ds), hol[ds], what && n ? `${what} ${n}` : '', ...evKeys.map(m => { const k = evList(m.key, (ev[m.key] || {})[ds]).length; return k ? `${m.label} ${k}` : ''; })].filter(Boolean).join(' · ');
+      cells += `<button type="button" class="mm-d${off ? ' off' : ''}${hol[ds] ? ' hol' : ''}${ds === td ? ' today' : ''}" data-dday="${ds}" aria-pressed="${dash.day === ds}" title="${esc(tip)}" style="--heat:${max && n ? (0.1 + 0.4 * n / max).toFixed(2) : 0}"><span class="mm-n">${+ds.slice(8)}</span>${view === '3m' ? `<span class="mm-c">${n || ''}</span>${dots ? `<span class="mm-dots">${dots}</span>` : ''}` : ''}</button>`;
+    }
+    return `<div class="mm"><h3>${esc(fmtMonth(ym))}</h3><div class="mm-g">${cells}</div></div>`;
+  }).join('');
+}
+function renderDashRest(tx, ev, hol, metrics, room, rooms) {
   renderDashDay(tx, ev, hol, metrics, room, rooms);
   renderDashStats();
   renderWait();
@@ -3383,9 +3505,22 @@ function renderPending(room) {
   box.innerHTML = list.length ? list.slice(0, 100).map(c => caseRow(c, rcs[c.id] || [])).join('') : '<li class="empty-state">ไม่มีงานรอ</li>';
 }
 // ช่วงเวลาของสถิติ: ตามวัน In
-const DASH_PERIODS = [['month', 'เดือนที่เลือก'], ['3m', '3 เดือน'], ['12m', '12 เดือน'], ['all', 'ทั้งหมด']];
+const DASH_PERIODS = [['month', 'เดือนที่เลือก'], ['3m', '3 เดือน'], ['12m', '12 เดือน'], ['all', 'ทั้งหมด'], ['custom', 'กำหนดเอง']];
+// กำหนดเอง: ช่วงวันที่ (ตั้งแต่ – ถึง) เลือกจากปฏิทิน · ว่างด้านใด = ไม่จำกัดด้านนั้น · กลับด้านให้เอง
+function customRange() {
+  let a = pref.get('dashFrom', ''), b = pref.get('dashTo', '');
+  if (!isDay(a)) a = '';
+  if (!isDay(b)) b = '';
+  if (a && b && a > b) [a, b] = [b, a];
+  return { a, b };
+}
 function periodCases() {
   const p = pref.get('dashPeriod', 'month');
+  if (p === 'custom') {
+    const { a, b } = customRange();
+    const list = state.cases.filter(c => isDay(c.in) && (!a || c.in >= a) && (!b || c.in <= b));
+    return { list, label: a || b ? `${a ? fmtDayY(a) : 'เคสแรก'} – ${b ? fmtDayY(b) : 'ล่าสุด'}` : 'ทุกเคส', p };
+  }
   const end = shiftMonth(state.month, 1) + '-01';
   const start = p === 'month' ? state.month + '-01' : p === '3m' ? shiftMonth(state.month, -2) + '-01' : p === '12m' ? shiftMonth(state.month, -11) + '-01' : '';
   const list = state.cases.filter(c => isDay(c.in) && (!start || (c.in >= start && c.in < end)));
@@ -3395,6 +3530,12 @@ function periodCases() {
 function renderDashStats() {
   const { list, label, p } = periodCases();
   $('#dash-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${p === v}">${l}</button>`).join('');
+  $('#dash-range').hidden = p !== 'custom';
+  if (p === 'custom') {   // ไม่ทับช่องที่กำลังพิมพ์
+    const { a, b } = customRange();
+    if (document.activeElement !== $('#dash-from')) $('#dash-from').value = a;
+    if (document.activeElement !== $('#dash-to')) $('#dash-to').value = b;
+  }
   $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้`;
   const hol = holidayMap(), td = today(), rooms = dashRooms();
   const onToday = state.cases.filter(c => { const sc = catOf(c.cat).kind !== 'simple' && caseSchedule(c, hol); return sc && sc.days.has(td); });
@@ -4226,7 +4367,15 @@ document.addEventListener('click', e => {
   if (ds.dday) { dash.day = dash.day === ds.dday ? '' : ds.dday; renderDash(); if (dash.day) $('#dash-day').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
   if (ds.dpend) { dash.pend = dash.pend === ds.dpend ? '' : ds.dpend; return renderPend(); }
   if (ds.proom !== undefined) { pref.set('pendRoom', ds.proom); return renderPend(); }
-  if (ds.dperiod) { pref.set('dashPeriod', ds.dperiod); return renderDash(); }
+  if (ds.dperiod) {
+    // กำหนดเองครั้งแรก: เริ่มที่เดือนที่เลือก
+    if (ds.dperiod === 'custom' && !pref.get('dashFrom', '') && !pref.get('dashTo', '')) { pref.set('dashFrom', state.month + '-01'); pref.set('dashTo', monthEnd(state.month)); }
+    pref.set('dashPeriod', ds.dperiod);
+    return renderDash();
+  }
+  if (ds.calview) { pref.set('calView', ds.calview); dash.day = ''; return renderDash(); }
+  if (ds.calnav !== undefined) return calMove(+ds.calnav);
+  if (t.id === 'dash-range-cal') { const r = calRange(); pref.set('dashFrom', r.from); pref.set('dashTo', r.to); renderDashStats(); renderWait(); return; }
   if (ds.wunit) { pref.set('waitUnit', ds.wunit); return renderDash(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
   if (ds.cntstep) { const id = ds.cntcat; catCount[id] = clampN(countOf(id) + +ds.cntstep); return syncIntake(); }
@@ -4498,6 +4647,8 @@ settingsEl.addEventListener('change', e => {
 });
 $('#p4p-all').addEventListener('change', e => { state.allRows = e.target.checked; renderP4P(); });
 for (const [id, key] of [['#wait-cat', 'waitCat'], ['#wait-from', 'waitFrom'], ['#wait-to', 'waitTo']]) $(id).addEventListener('change', e => { pref.set(key, e.target.value); renderWait(); });
+// ช่วงวันที่กำหนดเองของสถิติและระยะเวลารอคอย
+for (const [id, key] of [['#dash-from', 'dashFrom'], ['#dash-to', 'dashTo']]) $(id).addEventListener('change', e => { pref.set(key, e.target.value); renderDashStats(); renderWait(); });
 $('#p4p-table').addEventListener('change', e => {
   const code = e.target.dataset.carry;
   if (!code) return;
