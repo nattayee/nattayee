@@ -21,8 +21,8 @@
 3. **ตารางข้อมูล**: ดู แก้ไข และลบรายการ รวมทั้งส่งออกเป็น CSV
 4. **นำเข้า / ส่งออก**:
    - ดึงข้อมูลจาก Google Sheets (ชีตต้องแชร์แบบ “ทุกคนที่มีลิงก์ดูได้”) แล้วจับคู่คอลัมน์ก่อนนำเข้า
-     โดยค่าเริ่มต้นจะใส่ลิงก์ชีต [HDR Activity BB-AC1142](https://docs.google.com/spreadsheets/d/1_AlJgpz9x5gqFVBrkN1EEeMync2Jg2RbzIdxg5Iovnw/edit) ไว้ให้แล้ว และจับคู่คอลัมน์ Date / Planning / MP ให้อัตโนมัติ
-     ชีตนี้มีข้อมูลเดิมครบ แท็บ Data ใช้กรอกค่ารายวัน (Date, Planning, MP) ส่วนแท็บ Sources เก็บค่า source และเกณฑ์
+     โดยค่าเริ่มต้นจะใส่ลิงก์ชีต [Brachy_therapy_Activity](https://docs.google.com/spreadsheets/d/1NUgqDvc540aHviRw-8IaO86FT7CwwJktmiA_dPbDFlQ/edit) ไว้ให้แล้ว และจับคู่คอลัมน์ Date / Planning / MP ให้อัตโนมัติ
+     (แท็บ Record คือข้อมูลรายวัน, แท็บ Cal คือค่า source และสูตร)
      แถวที่อ่านไม่ได้ (เช่น ปีพิมพ์ผิด หรือไม่มีค่า Planning) จะแจ้งเลขแถวไว้ให้ไปแก้ในชีต
    - นำเข้าจากไฟล์ CSV หรือคัดลอกข้อมูลจากชีตมาวางก็ได้
    - สำรองข้อมูลและกู้คืนด้วยไฟล์ JSON

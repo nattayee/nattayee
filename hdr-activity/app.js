@@ -7,8 +7,9 @@
 
 const STORE_KEY = 'hdr-activity-v1';
 const THEME_KEY = 'hdr-activity-theme';
-const DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1_AlJgpz9x5gqFVBrkN1EEeMync2Jg2RbzIdxg5Iovnw/edit';
-const OLD_SHEET_ID = '1BX2NyFl9HosiyNAq1nEwghkw0c3K_zfmeTPQi_4cZZ4'; // ชีตเดิม ย้ายข้อมูลไปชีตใหม่แล้ว
+const DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1NUgqDvc540aHviRw-8IaO86FT7CwwJktmiA_dPbDFlQ/edit';
+// ชีตที่เคยใช้ก่อนหน้า — ลิงก์ที่บันทึกไว้จะถูกย้ายมาที่ DEFAULT_SHEET
+const OLD_SHEET_IDS = ['1BX2NyFl9HosiyNAq1nEwghkw0c3K_zfmeTPQi_4cZZ4', '1_AlJgpz9x5gqFVBrkN1EEeMync2Jg2RbzIdxg5Iovnw'];
 const ISOTOPES = { 'Co-60': 1925.2, 'Ir-192': 73.83 };
 const DAY = 86400000;
 const LN2 = Math.LN2;
@@ -36,7 +37,7 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return d;
     const s = JSON.parse(raw);
-    if (s.settings && (s.settings.sheetUrl || '').includes(OLD_SHEET_ID)) s.settings.sheetUrl = DEFAULT_SHEET;
+    if (s.settings && OLD_SHEET_IDS.some((id) => (s.settings.sheetUrl || '').includes(id))) s.settings.sheetUrl = DEFAULT_SHEET;
     return {
       settings: { ...d.settings, ...(s.settings || {}) },
       sources: Array.isArray(s.sources) ? s.sources : [],
