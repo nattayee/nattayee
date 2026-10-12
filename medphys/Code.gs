@@ -26,7 +26,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.8';
+const CODE_VERSION = '2026-10-12.7';
 const API_LEVEL = 18;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -82,24 +82,15 @@ function doGet(e) {
   }
   const page = page_(!!p.refresh);
   const vars = { MEDPHYS_PAGE_SOURCE: page.source };
-  // ?embed=cal: ปฏิทินห้องฉายอย่างเดียว ให้หน้าแรกของ LPCH RO Workspace ฝังได้ (u = ชื่อผู้ใช้ LPCH ที่เปิดอยู่ · theme = light/dark)
-  const embed = p.embed === 'cal';
-  if (embed) {
-    vars.MEDPHYS_EMBED = 'cal';
-    if (p.u) vars.MEDPHYS_EMBED_USER = String(p.u).slice(0, 64);
-    if (p.theme === 'light' || p.theme === 'dark') vars.MEDPHYS_THEME = p.theme;
-  }
   // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
   if (p.sso && lpchUrl_()) {
     try { vars.MEDPHYS_LPCH_TOKEN = String(lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(p.sso) })).token); } catch (err) {
       vars.MEDPHYS_LPCH_ERROR = String(err.message);
     }
   }
-  const out = HtmlService.createHtmlOutput(inject_(page.html, vars))
+  return HtmlService.createHtmlOutput(inject_(page.html, vars))
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  // ฝังในเว็บอื่นได้เฉพาะโหมดปฏิทิน (ดูอย่างเดียว) หน้าเต็มของระบบยังห้ามฝังเหมือนเดิม
-  return embed ? out.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL) : out;
 }
 
 // ค่าให้หน้าเว็บ (window.X = ...) ใส่ไว้ต้น <head>
