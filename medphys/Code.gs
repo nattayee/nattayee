@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.1';
-const API_LEVEL = 13;
+const CODE_VERSION = '2026-10-12.2';
+const API_LEVEL = 14;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -192,17 +192,29 @@ function getData(token) {
   const config = readConfig_(ss);
   const user = who_(token, ss, config);
   user.hasPin = !!pinRecord_(user);
+  const need = guestNeeds_(user, config);
   return {
     user: user,
     api: API_LEVEL,
     codeVersion: CODE_VERSION,
     homeUrl: lpchUrl_(),
-    cases: readTable_(ss, 'cases', config),
-    logs: readTable_(ss, 'logs'),
-    leaves: readTable_(ss, 'leaves'),
+    cases: need.cases ? readTable_(ss, 'cases', config) : [],
+    logs: need.logs ? readTable_(ss, 'logs') : [],
+    leaves: need.leaves ? readTable_(ss, 'leaves') : [],
     config: config,
     sheetUrl: ss.getUrl(),
   };
+}
+
+// ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
+// ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
+const GUEST_TABLES = { cases: ['work', 'pend', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work'] };
+function guestNeeds_(user, config) {
+  const out = {};
+  const nav = config && Array.isArray(config.nav) ? config.nav : [];
+  const off = nav.filter(x => x && (x.on === false || x.guest === false)).map(x => String(x.view));
+  Object.keys(GUEST_TABLES).forEach(t => { out[t] = user.canEdit || GUEST_TABLES[t].some(v => off.indexOf(v) < 0); });
+  return out;
 }
 
 function saveRecord(table, rec, token) {
@@ -343,6 +355,17 @@ function deleteRecord(table, id, token) {
     if (row) sh.deleteRow(row);
     return !!row;
   });
+}
+
+// หน้าแก้ไขเคส: บันทึกหรือลบต้องยืนยันด้วยรหัส PIN ของคนที่เข้าสู่ระบบ (เหมือนปุ่มบันทึกขั้นตอน)
+function editCase(rec, pin, token) {
+  checkPin_(requireEdit_(token), pin);
+  return saveRecord('cases', rec, token);
+}
+
+function removeCase(id, pin, token) {
+  checkPin_(requireEdit_(token), pin);
+  return deleteRecord('cases', id, token);
 }
 
 function saveConfig(config, token) {
