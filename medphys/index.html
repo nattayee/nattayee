@@ -354,13 +354,18 @@ span.chk{border-color:var(--line);color:var(--muted)}
 button.chk.done:hover{background:var(--ok-soft);box-shadow:inset 0 0 0 1px var(--ok)}
 .chk b{font-weight:600;font-family:var(--mono);font-size:12px}
 .chk-cap{padding-left:4px;font-size:11px;line-height:1.3;color:var(--faint);white-space:nowrap}
-/* ช่องกรอกค่าใต้ปุ่ม และปุ่มบันทึกระดับเดียวกับช่อง */
-.chk-in{width:0;min-width:max(100%, 72px);height:26px;min-height:0;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);font:12px var(--mono)}
+/* ช่องกรอกค่าใต้ปุ่ม (ท้ายช่องเป็น %) และปุ่ม ✓ บันทึกทีละค่า · กว้างเท่าปุ่มด้านบน อย่างน้อย 100px */
+.chk-line{display:flex;gap:4px;width:0;min-width:max(100%, 100px)}
+.chk-field{position:relative;flex:1;min-width:0}
+.chk-in{width:100%;height:26px;min-height:0;padding:2px 20px 2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);font:12px var(--mono)}
 .chk-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .chk-in::placeholder{color:var(--faint)}
-.chk-go{align-self:flex-end}
-.chk-save{height:26px;padding:0 14px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-fg);font-size:12.5px;font-weight:500}
-.chk-save:disabled{background:var(--sunken);color:var(--faint);cursor:default}
+.chk-field .pct{position:absolute;top:50%;right:7px;transform:translateY(-50%);font:12px var(--mono);color:var(--faint);pointer-events:none}
+.no-pct .pct{display:none}
+.chk-ok{display:inline-grid;place-items:center;flex:none;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:var(--accent);color:var(--accent-fg)}
+.chk-ok svg{width:15px;height:15px}
+.chk-ok:hover:not(:disabled){background:var(--accent-hover)}
+.chk-ok:disabled{background:var(--sunken);color:var(--faint);cursor:default}
 .stamps{display:grid;gap:4px;margin:0;padding:10px 12px;border-radius:8px;background:var(--sunken);font-size:13px}
 .stamps div{display:flex;flex-wrap:wrap;gap:4px 10px}
 .stamps b{min-width:80px;font-weight:500}
@@ -1004,14 +1009,18 @@ const STAMP_API = 9;   // Code.gs ที่มีปุ่มบันทึก�
 const STEPS = [
   { key: 'fin', label: 'Finish' },
   { key: 'eval', label: 'Evaluate' },
-  { key: 'mu', label: 'Dose check', value: true, hint: 'เช่น 1.2%', ph: '1.2%' },
-  { key: 'd0', label: 'F0', value: true, hint: 'ค่าที่วัดได้', ph: 'ค่า' },
-  { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5%', ph: '98.5%' },
-  { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5%', ph: '98.5%' },
+  { key: 'mu', label: 'Dose check', value: true, hint: 'เช่น 1.2 (เป็น %)', ph: '1.2' },
+  { key: 'd0', label: 'F0', value: true, hint: 'เช่น 0.5 (เป็น %)', ph: '0.5' },
+  { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5 (เป็น %)', ph: '98.5' },
+  { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5 (เป็น %)', ph: '98.5' },
   { key: 'pc', label: 'Plan complete' },
 ];
 const CHECKS = ['mu', 'd0', 'd4', 'mc'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
-const stampDraft = {};   // ค่าที่พิมพ์ในช่องใต้ปุ่มแต่ยังไม่บันทึก { caseId: { mu: '1.2%' } } (แถวถูกวาดใหม่ได้โดยค่าไม่หาย)
+const stampDraft = {};   // ค่าที่พิมพ์ในช่องใต้ปุ่มแต่ยังไม่บันทึก { caseId: { mu: '1.2' } } (แถวถูกวาดใหม่ได้โดยค่าไม่หาย)
+// ค่าเริ่มต้นเป็น %: พิมพ์แค่ตัวเลขบันทึกเป็น "1.2%" · พิมพ์หน่วยหรือข้อความอื่นเองบันทึกตามที่พิมพ์
+const PLAIN_NUM = /^[-+]?(\d+\.?\d*|\.\d+)$/;
+const withPct = v => (PLAIN_NUM.test(str(v)) ? str(v) + '%' : str(v));
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const MC_API = 11;   // Code.gs ที่รู้จัก SRS MapCheck
 const PC_API = 13;   // Code.gs ที่รู้จัก Plan complete
 const EDIT_PIN_API = 14;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขเคส (editCase, removeCase)
@@ -1331,7 +1340,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.5';
+const PAGE_VERSION = '2026-10-12.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2396,21 +2405,20 @@ function caseRow(c, rcs) {
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
 const stepsOf = k => STEPS.filter(x => (!x.value || (Array.isArray(k.checks) ? k.checks : catChecks({}, k)).includes(x.key)) && stepOn(x));
 const firstName = v => str(v).split(/\s+/)[0];
-// ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม และปุ่ม "บันทึก" ต่อจากค่าสุดท้าย
-// กรอกได้หลายช่องแล้วกดบันทึกครั้งเดียว (ใส่รหัส PIN) · Enter ในช่อง = บันทึก
-function stepStrip(c, k) {
-  const steps = stepsOf(k), vals = steps.filter(x => x.value);
-  const open = canEdit() ? vals.filter(x => !c[x.key]) : [];
-  const d = stampDraft[c.id] || {}, has = open.some(x => str(d[x.key]));
-  const save = open.length ? `<span class="chk-wrap chk-go"><button type="button" class="chk-save" data-stampsave="${esc(c.id)}"${has ? '' : ' disabled'} title="บันทึกค่าที่กรอก (ใส่รหัส PIN)">บันทึก</button></span>` : '';
-  return `<div class="checks">${steps.map(x => stepChip(c, x) + (x === vals[vals.length - 1] ? save : '')).join('')}</div>`;
+// ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม (หน่วย % เป็นค่าเริ่มต้น) และปุ่ม ✓ บันทึกทีละค่า
+// กด ✓ หรือ Enter ในช่อง → ใส่รหัส PIN → บันทึกค่านั้น
+const stepStrip = (c, k) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x)).join('')}</div>`;
+function valueBox(c, x) {
+  const v = (stampDraft[c.id] || {})[x.key] || '';
+  return `<span class="chk-line${v && !PLAIN_NUM.test(str(v)) ? ' no-pct' : ''}"><span class="chk-field"><input class="chk-in" data-stampin="${x.key}" data-id="${esc(c.id)}" value="${esc(v)}" placeholder="${esc(x.ph || '')}" inputmode="decimal" aria-label="ค่า ${esc(x.label)} (%)" autocomplete="off"><span class="pct" aria-hidden="true">%</span></span>`
+    + `<button type="button" class="chk-ok" data-stampsave="${x.key}" data-id="${esc(c.id)}"${str(v) ? '' : ' disabled'} aria-label="บันทึก ${esc(x.label)}" title="บันทึก ${esc(x.label)} (ใส่รหัส PIN)">${CHECK_SVG}</button></span>`;
 }
 function stepChip(c, x) {
   const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '';
   const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
   const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>`
-    : x.value && canEdit() ? `<input class="chk-in" data-stampin="${x.key}" data-id="${esc(c.id)}" value="${esc((stampDraft[c.id] || {})[x.key] || '')}" placeholder="${esc(x.ph || '')}" aria-label="ค่า ${esc(x.label)}" autocomplete="off">` : '';
+    : x.value && canEdit() ? valueBox(c, x) : '';
   const btn = canEdit()
     ? `<button type="button" class="chk${at ? ' done' : ''}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="chk${at ? ' done' : ''}">${text}</span>`;
@@ -3933,20 +3941,20 @@ function openCasePin(mode, rec) {
   pinDlg.showModal();
   firstPinInput().focus();
 }
-// ปุ่ม "บันทึก" ใต้ค่า: บันทึกทุกค่าที่กรอกของเคสนี้ด้วยรหัส PIN ครั้งเดียว
-function openValsPin(id) {
-  const c = state.cases.find(x => x.id === id);
-  if (!c) return;
-  const d = stampDraft[id] || {}, vals = {};
-  for (const x of stepsOf(catOf(c.cat))) if (x.value && !c[x.key] && str(d[x.key])) vals[x.key] = str(d[x.key]);
-  if (!Object.keys(vals).length) {
-    const f = $$(`[data-stampin][data-id="${id}"]`).find(el => el.offsetParent);
+// ปุ่ม ✓ ใต้ค่า: บันทึกค่าในช่องนั้นด้วยรหัส PIN
+function openValsPin(id, key) {
+  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key);
+  if (!c || !x) return;
+  const v = withPct((stampDraft[id] || {})[key]);
+  if (!v) {
+    const f = $$(`[data-stampin="${key}"][data-id="${id}"]`).find(el => el.offsetParent);
     if (f) f.focus();
-    return toast('กรอกค่าในช่องใต้ปุ่มก่อนบันทึก', { err: true });
+    return toast(`กรอกค่า ${x.label} ก่อนบันทึก`, { err: true });
   }
+  const vals = { [key]: v };
   pinCtx = { mode: 'vals', id, vals, forgot: false, auto: true };
-  $('#pin-title').textContent = `บันทึกค่า · ${c.hn || ''}`;
-  $('#pin-what').innerHTML = `${Object.entries(vals).map(([k, v]) => `${esc(STEPS.find(x => x.key === k).label)} <b>${esc(v)}</b>`).join(' · ')}<br>บันทึกวันเวลาตอนนี้ในชื่อ <b>${esc(state.user.name || state.user.me || '')}</b>`;
+  $('#pin-title').textContent = `${x.label} · ${c.hn || ''}`;
+  $('#pin-what').innerHTML = `${esc(x.label)} <b>${esc(v)}</b> · ${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''}<br>บันทึกวันเวลาตอนนี้ในชื่อ <b>${esc(state.user.name || state.user.me || '')}</b>`;
   $('#pin-val-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
@@ -3975,7 +3983,7 @@ async function submitPin(e, clear) {
   const pin = needNew ? newPin : $('#pin').value;
   if (!PIN_RE.test(pin)) { $('#pin').focus(); return pinErr('ใส่รหัส PIN 4 หลักของคุณ'); }
   const x = ctx.mode === 'stamp' ? STEPS.find(v => v.key === ctx.step) : null;
-  const value = clear ? null : x && x.value ? str($('#pin-val').value) : '';
+  const value = clear ? null : x && x.value ? withPct($('#pin-val').value) : '';
   if (x && x.value && !clear && !value) { $('#pin-val').focus(); return pinErr(`กรอกค่า ${x.label} ก่อนบันทึก`); }
   btn.disabled = true;
   pinErr('');
@@ -4047,19 +4055,21 @@ $('#pin').addEventListener('input', e => {
   if (PIN_RE.test(e.target.value) && pinCtx && pinCtx.auto) submitPin();
 });
 for (const id of ['#pin-new', '#pin-new2']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
-// ช่องกรอกค่าใต้ปุ่ม: จำค่าที่พิมพ์ · ปุ่มบันทึกกดได้เมื่อมีค่าอย่างน้อยหนึ่งช่อง · Enter = บันทึก
+// ช่องกรอกค่าใต้ปุ่ม: จำค่าที่พิมพ์ · ✓ กดได้เมื่อมีค่า · พิมพ์หน่วยเองแล้วซ่อน % ท้ายช่อง · Enter = บันทึกช่องนั้น
 document.addEventListener('input', e => {
   const el = e.target;
   if (!el.dataset || !el.dataset.stampin) return;
-  const d = stampDraft[el.dataset.id] = stampDraft[el.dataset.id] || {};
-  if (str(el.value)) d[el.dataset.stampin] = el.value; else delete d[el.dataset.stampin];
-  const btn = $('[data-stampsave]', el.closest('.checks'));
-  if (btn) btn.disabled = !Object.keys(d).length;
+  const d = stampDraft[el.dataset.id] = stampDraft[el.dataset.id] || {}, v = str(el.value);
+  if (v) d[el.dataset.stampin] = el.value; else delete d[el.dataset.stampin];
+  if (!Object.keys(d).length) delete stampDraft[el.dataset.id];
+  const line = el.closest('.chk-line');
+  line.classList.toggle('no-pct', !!v && !PLAIN_NUM.test(v));
+  $('[data-stampsave]', line).disabled = !v;
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || !e.target.dataset || !e.target.dataset.stampin) return;
   e.preventDefault();
-  openValsPin(e.target.dataset.id);
+  openValsPin(e.target.dataset.id, e.target.dataset.stampin);
 });
 
 /* ---------- วันลา ---------- */
@@ -4139,7 +4149,7 @@ document.addEventListener('click', e => {
   if (ds.edit) return openCase(ds.edit);
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp);
-  if (ds.stampsave) return openValsPin(ds.stampsave);
+  if (ds.stampsave) return openValsPin(ds.id, ds.stampsave);
   if (ds.rc) { const c = state.cases.find(x => x.id === ds.rc); return openLog(null, { kind: 'rc', caseId: c && c.id }); }
   if (ds.logedit) return openLog(ds.logedit);
   if (ds.mate) { state.person = state.person === ds.mate ? '' : ds.mate; state.limit = 60; return render(); }
