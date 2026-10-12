@@ -160,6 +160,8 @@ class MockSpreadsheet {
 
   getId() { return this.id; }
 
+  getName() { return 'ทะเบียนหนังสือส่ง'; }
+
   deleteSheet(sheet) { this.sheets = this.sheets.filter(s => s !== sheet); }
 
   getSheets() { return [...this.sheets]; }
@@ -189,7 +191,7 @@ function makeSpreadsheet(sheets, tz, id) {
 }
 
 /** others: { ลิงก์: { ชื่อชีต: แถว[][] } } = ไฟล์อื่นที่เปิดได้ด้วย openByUrl */
-function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {} } = {}) {
+function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true } = {}) {
   const ss = makeSpreadsheet(sheets, tz, 'mock');
   const files = Object.fromEntries(Object.entries(others).map(([url, s], i) => [url, makeSpreadsheet(s, tz, `other${i}`)]));
   files[ss.getUrl()] = ss;
@@ -200,7 +202,12 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {} } = {}) {
   const context = vm.createContext({
     Utilities,
     SpreadsheetApp: {
-      getActiveSpreadsheet: () => ss,
+      getActiveSpreadsheet: () => (context.__bound ? ss : null),
+      openById(id) {
+        const found = Object.values(files).find(f => f.getId() === id);
+        if (!found) throw new Error('ไม่พบไฟล์');
+        return found;
+      },
       flush() {},
       openByUrl(url) {
         if (!files[url]) throw new Error('ไม่พบไฟล์');
@@ -239,15 +246,17 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {} } = {}) {
       },
     },
   });
+  context.__bound = bound;
   const code = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
   vm.runInContext(code, context, { filename: 'Code.gs' });
 
   // แปลงผลลัพธ์ข้าม realm ให้เป็นอ็อบเจกต์ธรรมดา (เหมือนที่ google.script.run ส่งกลับมาเป็น JSON)
   const api = {};
-  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet', 'importFromSpreadsheet', 'copyFromOldSheet']) {
+  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet', 'importFromSpreadsheet', 'copyFromOldSheet', 'linkThisSheet']) {
     api[fn] = (...args) => JSON.parse(JSON.stringify(context[fn](...JSON.parse(JSON.stringify(args))) ?? null));
   }
-  return { api, ss, props, tz, ui, files };
+  const setBound = v => { context.__bound = v; };
+  return { api, ss, props, tz, ui, files, setBound };
 }
 
 module.exports = { loadAppsScript, dateInTz };

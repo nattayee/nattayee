@@ -9,6 +9,10 @@
  * (ต้องอ่านไฟล์เดิม สคริปต์จึงขอสิทธิ์เข้าถึง Google ชีตของผู้ใช้)
  */
 
+// (ไม่บังคับ) ID ของ Google Sheet ทะเบียน — ส่วนที่อยู่ระหว่าง /d/ กับ /edit ในลิงก์ชีต
+// ปกติไม่ต้องใส่: กดเมนู "ทะเบียนหนังสือ › เชื่อมเว็บแอปกับชีตนี้" ในชีตครั้งเดียว ระบบจะจำให้เอง
+var SPREADSHEET_ID = '';
+
 var HEADER = ['เลขทะเบียนส่ง', 'ที่', 'ลงวันที่', 'จาก', 'ถึง', 'เรื่อง', 'การปฏิบัติ', 'หมายเหตุ'];
 var FIELDS = ['no', 'ref', 'date', 'from', 'to', 'subject', 'action', 'note'];
 var TEXT_FIELDS = ['ref', 'from', 'to', 'subject', 'action', 'note'];
@@ -47,8 +51,16 @@ function doGet() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('ทะเบียนหนังสือ')
+    .addItem('เชื่อมเว็บแอปกับชีตนี้', 'linkThisSheet')
     .addItem('คัดลอกข้อมูลจากไฟล์เดิม…', 'copyFromOldSheet')
     .addToUi();
+}
+
+/** จำชีตนี้ไว้ให้เว็บแอปใช้ (เว็บแอปไม่รู้ว่า "ชีตที่เปิดอยู่" คือไฟล์ไหน) */
+function linkThisSheet() {
+  var ss = spreadsheet_();
+  SpreadsheetApp.getUi().alert('เชื่อมเรียบร้อย', 'เว็บแอปจะใช้ชีต "' + ss.getName() + '" — กดรีเฟรชหน้าเว็บแอปได้เลย',
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /** ถามลิงก์ไฟล์เดิม แล้วคัดลอกทะเบียนทุกปีมาไว้ในไฟล์นี้ */
@@ -404,10 +416,27 @@ function firstFreeNumber_(numbers) {
   return n;
 }
 
+/**
+ * ชีตทะเบียน: ถ้ารันจากในชีต (เมนู) ใช้ชีตนั้นและจำ ID ไว้
+ * ถ้ารันเป็นเว็บแอป ใช้ SPREADSHEET_ID หรือ ID ที่จำไว้
+ */
 function spreadsheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('ไม่พบ Google Sheet — ต้องสร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของชีตทะเบียน');
-  return ss;
+  var props = PropertiesService.getScriptProperties();
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) {
+    if (!SPREADSHEET_ID && props.getProperty('SPREADSHEET_ID') !== active.getId()) props.setProperty('SPREADSHEET_ID', active.getId());
+    if (!SPREADSHEET_ID || SPREADSHEET_ID === active.getId()) return active;
+  }
+  var id = SPREADSHEET_ID || props.getProperty('SPREADSHEET_ID');
+  if (!id) {
+    throw new Error('เว็บแอปยังไม่ได้เชื่อมกับ Google Sheet — เปิดชีตทะเบียน รีเฟรชหน้า แล้วกดเมนู ' +
+      '"ทะเบียนหนังสือ › เชื่อมเว็บแอปกับชีตนี้" (หรือใส่ SPREADSHEET_ID ที่บรรทัดบนสุดของ Code.gs)');
+  }
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (err) {
+    throw new Error('เปิด Google Sheet ทะเบียนไม่ได้ (ID ' + id + ') ตรวจว่ามีสิทธิ์แก้ไขชีตนี้: ' + err.message);
+  }
 }
 
 function withLock_(fn) {

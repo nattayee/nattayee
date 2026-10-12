@@ -164,3 +164,18 @@ test('importFromSpreadsheet: คัดลอกทะเบียนจากไ
   assert.throws(() => api.importFromSpreadsheet('https://docs.google.com/spreadsheets/d/nope'), /เปิดไฟล์เดิมไม่ได้/);
   assert.throws(() => api.importFromSpreadsheet(ss.getUrl()), /ไฟล์ปัจจุบัน/);
 });
+
+test('เว็บแอปที่ไม่มีชีตที่เปิดอยู่: ใช้ ID ที่จำไว้จากเมนูในชีต', () => {
+  const { api, setBound, props, ui } = fixture();
+  setBound(false);
+  assert.throws(() => api.getState(), /ยังไม่ได้เชื่อม/);
+
+  setBound(true);
+  api.linkThisSheet();
+  assert.equal(ui.alerts.at(-1).title, 'เชื่อมเรียบร้อย');
+  assert.equal(props.get('SPREADSHEET_ID'), 'mock');
+
+  setBound(false);
+  assert.equal(api.getState().nextNo[2569], 4);
+  assert.equal(api.createRecord({ date: '2026-10-12', subject: 'จากเว็บแอป' }).no, 4);
+});
