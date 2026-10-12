@@ -1383,7 +1383,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.7';
+const PAGE_VERSION = '2026-10-12.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4413,8 +4413,8 @@ logForm.addEventListener('change', e => {
 logForm.addEventListener('input', e => { if (e.target.id === 'l-min' || e.target.id === 'l-k') syncLogForm(); });
 
 const settingsEl = $('#view-settings');
-settingsEl.addEventListener('input', e => {
-  const el = e.target;
+// แก้ค่าในหน้าตั้งค่า (ใช้ได้ทั้ง input และ change: เบราว์เซอร์บางตัว เช่น Safari รุ่นเก่า ไม่ส่ง input ตอนติ๊กช่อง)
+function settingsEdit(el) {
   if (el.dataset.k) {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
     setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase().trim() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
@@ -4445,7 +4445,8 @@ settingsEl.addEventListener('input', e => {
     cat.checksSeen = CHECKS.slice();
   }
   updateSaveBar();
-});
+}
+settingsEl.addEventListener('input', e => settingsEdit(e.target));
 // เพิ่มตัวเลือกในฟอร์ม: กด Enter หรือออกจากช่อง
 function addOption(el) {
   const key = el.dataset.addopt;
@@ -4467,6 +4468,7 @@ settingsEl.addEventListener('keydown', e => {
 });
 settingsEl.addEventListener('change', e => {
   const el = e.target;
+  if (el.type === 'checkbox' || el.tagName === 'SELECT') settingsEdit(el);   // ซ้ำกับ input ก็ไม่เป็นไร (ตั้งค่าเดิมซ้ำ)
   if (el.dataset.addopt) { addOption(el); return; }
   if (el.dataset.rk === 'target') {
     const r = draft.defaults.rules[+el.dataset.rule], j = el.value.indexOf(':'), on = el.value.slice(0, j);
