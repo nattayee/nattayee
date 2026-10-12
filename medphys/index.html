@@ -1041,9 +1041,10 @@ const REQ_FIELDS = [
 const DEF_KEYS = ['doc', 'cat', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'freq', 'ct', 'sim', 'note'];
 const DEF_DATES = ['ct', 'sim'];
 const OFFSET_RE = /^-?\d{1,2}$/;
-// ค่าเริ่มต้นตามเงื่อนไข (config.defaults.rules): เลือกเทคนิค / Technique / ICD-10 ที่ตรง แล้วใส่ Dose/fx, Fx, ความถี่, ห้องฉายให้
-// ตรงหลายกฎ: Technique > เทคนิค (เทคนิคแรก) > ICD-10 (รหัสยาวกว่าก่อน) > ค่าเริ่มต้นทั่วไป · Dose/fx กับ Fx มาคู่กันจากกฎเดียว
-const RULE_KEYS = ['dpf', 'fx', 'freq', 'room'];
+// ค่าเริ่มต้นตามเงื่อนไข (config.defaults.rules): เลือกเทคนิค / Technique / Type / ICD-10 ที่ตรง
+// แล้วใส่ Dose/fx, Fx, ความถี่, ห้องฉาย, บริเวณที่ฉาย, Aim ให้ (เช่น เทคนิค → ห้องฉายและบริเวณที่ฉาย · Type → Aim)
+// ตรงหลายกฎ: Technique > เทคนิค (เทคนิคแรก) > Type > ICD-10 (รหัสยาวกว่าก่อน) > ค่าเริ่มต้นทั่วไป · Dose/fx กับ Fx มาคู่กันจากกฎเดียว
+const RULE_KEYS = ['dpf', 'fx', 'freq', 'room', 'area', 'aim'];
 const ICD_PREFIX_RE = /^[A-Z]\d{1,2}(\.\d{1,2})?$/;
 // กฎตั้งต้น (จนกว่าแอดมินจะบันทึกเอง): Breast 16 fx · SRS 1 fx · Prostate (C61) 2.5 Gy × 28 fx
 function seedRules(cfg) {
@@ -1409,13 +1410,16 @@ function cleanDefaults(src, cfg) {
   out.rules = (Array.isArray(src.rules) ? src.rules : seedRules(cfg)).map(r => {
     if (!r || typeof r !== 'object') return null;
     const on = str(r.on), match = on === 'icd' ? str(r.match).toUpperCase() : str(r.match);
-    const valid = on === 'cat' ? cfg.cats.some(k => k.id === match) : on === 'tech' ? cfg.techniques.includes(match) : on === 'icd' && ICD_PREFIX_RE.test(match);
+    const valid = on === 'cat' ? cfg.cats.some(k => k.id === match) : on === 'tech' ? cfg.techniques.includes(match) : on === 'type' ? cfg.types.includes(match) : on === 'icd' && ICD_PREFIX_RE.test(match);
     if (!valid) return null;
     const x = { on, match };
     if (+r.dpf > 0) x.dpf = str(r.dpf);
     if (Number.isInteger(+r.fx) && +r.fx > 0) x.fx = str(r.fx);
     if (cfg.freqs.includes(str(r.freq))) x.freq = str(r.freq);
     if (cfg.rooms.includes(str(r.room))) x.room = str(r.room);
+    const area = parts(r.area).filter(v => cfg.areas.includes(v)).join(', ');
+    if (area) x.area = area;
+    if (cfg.aims.includes(str(r.aim))) x.aim = str(r.aim);
     return Object.keys(x).length > 2 ? x : null;
   }).filter(Boolean);
   return out;
@@ -1425,7 +1429,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.9';
+const PAGE_VERSION = '2026-10-12.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2916,7 +2920,7 @@ function ruleRows(d) {
       const gone = r.on === on && !opts.some(o => o[0] === r.match) ? opt(cur, `${r.match} (ไม่มีแล้ว)`, cur) : '';
       return `<optgroup label="${label}">${gone}${opts.map(([v, l]) => opt(`${on}:${v}`, l, cur)).join('')}</optgroup>`;
     };
-    const when = `<select data-rule="${i}" data-rk="target" aria-label="เงื่อนไขที่ ${i + 1}">${group('cat', 'เทคนิค', d.cats.map(k => [k.id, k.label]))}${group('tech', 'Technique', d.techniques.map(v => [v, `Technique ${v}`]))}<optgroup label="ICD-10">${opt('icd:', 'ICD-10 …', cur)}</optgroup></select>`
+    const when = `<select data-rule="${i}" data-rk="target" aria-label="เงื่อนไขที่ ${i + 1}">${group('cat', 'เทคนิค', d.cats.map(k => [k.id, k.label]))}${group('tech', 'Technique', d.techniques.map(v => [v, `Technique ${v}`]))}${group('type', 'Type', d.types.map(v => [v, `Type ${v}`]))}<optgroup label="ICD-10">${opt('icd:', 'ICD-10 …', cur)}</optgroup></select>`
       + (r.on === 'icd' ? `<input class="icd-in" data-rule="${i}" data-rk="match" value="${esc(r.match)}" placeholder="เช่น C61" maxlength="6" aria-label="รหัส ICD-10 ของกฎที่ ${i + 1}"><span class="unit" data-ruleicd="${i}">${esc(icdHint(r.match))}</span>` : '');
     const num = (k, attrs) => `<input type="number" class="num" data-rule="${i}" data-rk="${k}" value="${esc(r[k] || '')}" ${attrs} placeholder="—" aria-label="${k === 'dpf' ? 'Dose/fx' : 'Fx'} ของกฎที่ ${i + 1}">`;
     const pick = (k, list, label) => `<select data-rule="${i}" data-rk="${k}" aria-label="${label} ของกฎที่ ${i + 1}">${opt('', '—', r[k] || '')}${list.map(v => opt(v, v, r[k] || '')).join('')}</select>`;
@@ -2927,6 +2931,8 @@ function ruleRows(d) {
       <td data-lbl="Prescription" class="rule-rx" data-rulerx="${i}">${ruleRx(r)}</td>
       <td data-lbl="ความถี่">${pick('freq', d.freqs, 'ความถี่')}</td>
       <td data-lbl="ห้องฉาย">${pick('room', d.rooms, 'ห้องฉาย')}</td>
+      <td data-lbl="บริเวณที่ฉาย">${pick('area', [...d.areas, ...(r.area && !d.areas.includes(r.area) ? [r.area] : [])], 'บริเวณที่ฉาย')}</td>
+      <td data-lbl="Aim">${pick('aim', d.aims, 'Aim')}</td>
       <td><button type="button" class="icon-btn" data-delrule="${i}" aria-label="ลบกฎที่ ${i + 1}">×</button></td></tr>`;
   }).join('');
 }
@@ -3089,10 +3095,10 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
       <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
       <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p>
-      <h3 class="sub-h">ค่าเริ่มต้นตามเทคนิคหรือ ICD-10</h3>
-      <p class="muted def-note" style="margin:0 0 10px">เลือกเทคนิค, Technique หรือ Diag ที่ตรงในฟอร์มแล้วใส่ค่าเหล่านี้ให้แทนค่าเริ่มต้นด้านบน เฉพาะช่องที่ยังไม่ได้แก้เอง · ตรงหลายกฎ: Technique ก่อน แล้วเทคนิคแรก แล้ว ICD-10 · ICD-10 ใส่รหัสหรือต้นรหัส เช่น C61 หรือ C50 (รวม C50.0–C50.9)</p>
-      ${d.defaults.rules.length ? `<div class="table-wrap set-table rule-table"><table><thead><tr><th>เมื่อเลือก</th><th>Dose/fx (Gy)</th><th>Fx</th><th>Prescription</th><th>ความถี่</th><th>ห้องฉาย</th><th></th></tr></thead><tbody>${ruleRows(d)}</tbody></table></div>` : ''}
-      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="rule">+ เพิ่มค่าเริ่มต้นตามเทคนิคหรือ ICD-10</button></div></div>
+      <h3 class="sub-h">ค่าเริ่มต้นตามเทคนิค, Type หรือ ICD-10</h3>
+      <p class="muted def-note" style="margin:0 0 10px">เลือกเทคนิค, Technique, Type หรือ Diag ที่ตรงในฟอร์มแล้วใส่ค่าเหล่านี้ให้แทนค่าเริ่มต้นด้านบน เฉพาะช่องที่ยังไม่ได้แก้เอง (เช่น เทคนิค → ห้องฉายและบริเวณที่ฉาย · Type → Aim) · ตรงหลายกฎ: Technique ก่อน แล้วเทคนิคแรก แล้ว Type แล้ว ICD-10 · ICD-10 ใส่รหัสหรือต้นรหัส เช่น C61 หรือ C50 (รวม C50.0–C50.9)</p>
+      ${d.defaults.rules.length ? `<div class="table-wrap set-table rule-table"><table><thead><tr><th>เมื่อเลือก</th><th>Dose/fx (Gy)</th><th>Fx</th><th>Prescription</th><th>ความถี่</th><th>ห้องฉาย</th><th>บริเวณที่ฉาย</th><th>Aim</th><th></th></tr></thead><tbody>${ruleRows(d)}</tbody></table></div>` : ''}
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="rule">+ เพิ่มค่าเริ่มต้นตามเงื่อนไข</button></div></div>
     <div class="sec"><div class="sec-head"><h2>วันหยุด</h2><p>ไม่นับเป็นวันฉายรังสี ใช้คำนวณวันครบแสงและวันทำการในแดชบอร์ด · เสาร์–อาทิตย์หยุดเสมอ · วันหยุดตามจันทรคติ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา) และวันหยุดพิเศษเพิ่มเองได้</p></div>
       <div class="toolbar">${[new Date().getFullYear(), new Date().getFullYear() + 1].map(y => `<button type="button" class="btn" data-holfetch="${y}">ดึงวันหยุดราชการไทย ปี ${y + 543}</button>`).join('')}</div>
       ${d.holidays.length ? `<div class="table-wrap set-table" style="max-height:360px;overflow:auto"><table><thead><tr><th>วันที่</th><th style="text-align:left">ชื่อวันหยุด</th><th></th></tr></thead><tbody>${d.holidays.map((h, i) => `<tr>
@@ -3966,27 +3972,26 @@ function defaultDate(rule, from) {
   for (let n = Math.abs(+v); n > 0;) { ds = plusDays(ds, step); if (isWorkday(ds, hol)) n--; }
   return ds;
 }
-// Dose/fx, Fx, ความถี่, ห้องฉาย ใส่ทีหลังโดย applyRules (ขึ้นกับเทคนิคและ ICD-10)
+// Dose/fx, Fx, ความถี่, ห้องฉาย, บริเวณที่ฉาย, Aim ใส่ทีหลังโดย applyRules (ขึ้นกับเทคนิค Type และ ICD-10)
 function defaultCase() {
   const d = state.config.defaults || {}, c = { in: workdayFrom(today()) };
-  for (const key of ['doc', 'type', 'aim', 'tech', 'area', 'note']) c[key] = d[key] || '';
+  for (const key of ['doc', 'type', 'tech', 'note']) c[key] = d[key] || '';
   c.ct = defaultDate(d.ct);
   c.sim = defaultDate(d.sim);
   c.cats = d.cat && state.config.cats.some(k => k.on && k.id === d.cat) ? [d.cat] : [];
   for (const f of extraList()) { const v = d['x_' + f.id]; if (v) c['x_' + f.id] = f.type === 'date' ? defaultDate(v) : v; }
   return c;
 }
-// Dose/fx, Fx, ความถี่, ห้องฉาย ที่ควรเป็นตามเทคนิคแรก Technique และ ICD-10 ที่เลือกอยู่
+// ค่าที่ควรเป็นตามเทคนิคแรก Technique Type และ ICD-10 ที่เลือกอยู่
 function ruleTarget() {
   const d = state.config.defaults || {}, ks = selectedCats().map(catOf), main = ks[0];
-  const tech = ks.some(k => k.tech && k.kind !== 'simple') ? chipValue($('#i-tech')) : '', icd = readDx('i').icd;
-  const hit = r => (r.on === 'cat' ? !!main && r.match === main.id : r.on === 'tech' ? !!tech && r.match === tech : !!icd && icd.startsWith(r.match));
-  const rank = r => (r.on === 'tech' ? 200 : r.on === 'cat' ? 100 : r.match.length);
+  const tech = ks.some(k => k.tech && k.kind !== 'simple') ? chipValue($('#i-tech')) : '', icd = readDx('i').icd, type = chipValue($('#i-type'));
+  const hit = r => (r.on === 'cat' ? !!main && r.match === main.id : r.on === 'tech' ? !!tech && r.match === tech : r.on === 'type' ? !!type && r.match === type : !!icd && icd.startsWith(r.match));
+  const rank = r => (r.on === 'tech' ? 200 : r.on === 'cat' ? 100 : r.on === 'type' ? 50 : r.match.length);
   const t = Object.fromEntries(RULE_KEYS.map(k => [k, d[k] || '']));
   for (const r of (d.rules || []).filter(hit).sort((a, b) => rank(a) - rank(b))) {
     if (r.dpf || r.fx) { t.dpf = r.dpf || ''; t.fx = r.fx || ''; }
-    if (r.freq) t.freq = r.freq;
-    if (r.room) t.room = r.room;
+    for (const k of ['freq', 'room', 'area', 'aim']) if (r[k]) t[k] = r[k];
   }
   if (!t.fx && /single/i.test(t.freq)) t.fx = '1';
   return t;
@@ -4002,6 +4007,12 @@ function applyRules() {
   }
   if (readFreq('i') === str(a.freq)) { setChip($('#i-freq'), t.freq); a.freq = t.freq; }
   if (chipValue($('#i-room')) === str(a.room)) { setChip($('#i-room'), t.room); a.room = t.room; }
+  if (chipValue($('#i-aim')) === str(a.aim)) { setChip($('#i-aim'), t.aim); a.aim = t.aim; }
+  if (readArea('i') === str(a.area) && str(t.area) !== str(a.area)) {   // บริเวณที่ฉายที่ระบบใส่: กดเลือกครั้งแรกจะเปลี่ยนแทน
+    renderArea('i', t.area);
+    a.area = t.area;
+    $('#i-area').toggleAttribute('data-defsel', !!t.area);
+  }
   syncDose('i');
 }
 // ฟอร์มที่ยังไม่ได้แตะ: ใส่ค่าเริ่มต้นใหม่เมื่อแอดมินแก้ค่าเริ่มต้นหรือขึ้นวันใหม่ · แตะแล้วไม่ทับของที่กรอกไว้
@@ -4539,7 +4550,7 @@ intake.addEventListener('change', e => {
   clearMissing(e);
   if (siteChip(e)) return;
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); else delete catCount[e.target.value]; }
-  if (e.target.name === 'icat' || e.target.name === 'itech' || e.target.id === 'i-dx') applyRules();
+  if (e.target.name === 'icat' || e.target.name === 'itech' || e.target.name === 'itype' || e.target.id === 'i-dx') applyRules();
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => {
