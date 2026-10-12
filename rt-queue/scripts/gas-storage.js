@@ -1,7 +1,9 @@
 
-  // Google Apps Script: Code.gs functions via google.script.run, signed in with LPCH RO Workspace.
-  // Inserted into apps-script/Index.html by scripts/build.js.
-  const TOKEN_KEY = 'rtq-workspace-token';
+  // Google Apps Script: Code.gs functions via google.script.run, signed in with LPCH RO Workspace
+  // (same flow as TRS-398 / Linac QA). Inserted into apps-script/Index.html by scripts/build.js.
+  // The LPCH session token is kept in this browser and sent with every call; Code.gs checks it with LPCH.
+  // It arrives from LPCH ("เข้าสู่ระบบอัตโนมัติ", ?sso=… exchanged by doGet) or from the sign-in dialog.
+  const TOKEN_KEY = 'rt-queue:lpch';
   const gs = (fn, ...args) => new Promise((resolve, reject) => {
     const runner = google.script.run
       .withSuccessHandler(resolve)
@@ -17,9 +19,17 @@
   let token = '';
   try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch { /* storage blocked: sign in each visit */ }
   function saveToken(t) {
-    token = t;
-    try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+    token = t || '';
+    try { if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
   }
+  let ssoError = window.RTQ_LPCH_ERROR || '';
+  if (window.RTQ_LPCH_TOKEN) saveToken(window.RTQ_LPCH_TOKEN);
+  if (window.RTQ_LPCH_TOKEN || window.RTQ_LPCH_ERROR) {   // drop ?sso=… from the address bar
+    try { google.script.history.replace(null, {}, ''); } catch { /* not available */ }
+  }
+  // Code.gs reports a missing/expired/refused sign-in as "session_expired: <reason>".
+  const expiredReason = (err) => /^session_expired/.test(err.message)
+    ? (err.message.replace(/^session_expired:?\s*/, '') || 'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง') : null;
 
   // Shows the sign-in dialog; resolves with the user once the Workspace accepts the password.
   let pendingSignIn = null;
@@ -29,11 +39,11 @@
         $('loginForm').onsubmit = async (e) => {
           e.preventDefault();
           const login = $('l-user').value.trim(), password = $('l-pass').value;
-          if (!login || !password) { $('loginError').textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'; return; }
+          if (!login || !password) { $('loginError').textContent = 'กรุณากรอกชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่าน'; return; }
           $('loginBtn').disabled = true;
           $('loginError').textContent = '';
           try {
-            const res = await gs('login', login, password);
+            const res = await gs('lpchLogin', login, password);
             saveToken(res.token);
             $('l-pass').value = '';
             $('loginDlg').close();
@@ -64,17 +74,18 @@
     try {
       return await gs(fn, token, ...args);
     } catch (err) {
-      if (err.message !== 'session_expired') throw err;
+      const why = expiredReason(err);
+      if (why === null) throw err;
       saveToken('');
-      signIn('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง').then(afterSignIn);
-      throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบแล้วลองอีกครั้ง');
+      signIn(why).then(afterSignIn);
+      throw new Error('ต้องเข้าสู่ระบบใหม่ก่อน แล้วลองอีกครั้ง');
     }
   }
 
   $('logoutBtn').addEventListener('click', async () => {
     const old = token;
     saveToken('');
-    gs('logout', old).catch(() => { /* the session is dropped locally either way */ });
+    gs('lpchLogout', old).catch(() => { /* the session is dropped locally either way */ });
     setUser(null);
     state.bookings = [];
     render();
@@ -89,29 +100,19 @@
   };
 
   async function initStore() {
-    // Opened from LPCH RO Workspace with ?sso=<ticket>: exchange it for a session, then drop it from the URL.
-    const params = await new Promise((resolve) => {
-      try { google.script.url.getLocation((loc) => resolve((loc && loc.parameter) || {})); } catch { resolve({}); }
-    });
-    let message = '';
-    if (params.sso) {
-      try {
-        const res = await gs('ssoLogin', params.sso);
-        saveToken(res.token);
-      } catch (err) {
-        message = err.message;
-      }
-      try { google.script.history.replace(null, {}, ''); } catch { /* not available */ }
-    }
+    let message = ssoError;
+    ssoError = '';
     for (;;) {
       if (!token) await signIn(message);
       try {
         const data = await gs('getInitData', token);
         return { ...data, mode: 'บันทึกใน Google Sheets', csv: false };
       } catch (err) {
-        if (err.message !== 'session_expired') throw err;
+        const why = expiredReason(err);
+        if (why === null) throw err;
         saveToken('');
-        message = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง';
+        message = why;
       }
     }
   }
+  

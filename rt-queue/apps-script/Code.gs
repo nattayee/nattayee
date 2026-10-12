@@ -9,16 +9,21 @@
  *
  * วันหยุด: แก้ไข/เพิ่มได้ในชีต "วันหยุด" (คอลัมน์ วันที่ แบบ yyyy-mm-dd และชื่อวันหยุด)
  *
- * การเข้าสู่ระบบ: ใช้บัญชีของ LPCH RO Workspace (AUTH_API_URL)
- * - เปิดจากปุ่ม/เมนูใน Workspace ที่ตั้ง "เข้าสู่ระบบอัตโนมัติ" → เข้าได้ทันที (?sso=<บัตรผ่าน>)
- * - เปิดลิงก์นี้ตรงๆ → กรอกชื่อผู้ใช้และรหัสผ่านของ Workspace
- * - Workspace ต้อง Deploy แบบ Who has access: Anyone (เพื่อให้สคริปต์นี้เรียก API ได้)
- * - หลังวางโค้ดครั้งแรก ให้เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง เพื่ออนุญาตสิทธิ์เชื่อมต่อภายนอก
+ * การเข้าสู่ระบบ: ใช้บัญชีของ LPCH RO Workspace แบบเดียวกับ TRS-398 และ Linac QA
+ * - กดจาก LPCH RO Workspace (ลิงก์ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ") → แนบบัตรผ่าน ?sso=… ใช้ได้ครั้งเดียว อายุ 2 นาที
+ *   doGet นำไปแลกเป็นการเข้าสู่ระบบให้ทันที
+ * - เปิดลิงก์นี้ตรงๆ → กรอกชื่อผู้ใช้ (หรืออีเมล) + รหัสผ่านของ LPCH (ตรวจที่ LPCH — แอปนี้ไม่เก็บรหัสผ่าน)
+ * - ตรวจบัญชีกับ LPCH ทุกครั้งที่ใช้ (เก็บผลไว้ LPCH_CHECK_SECONDS) บัญชีที่ถูกระงับใน LPCH ก็เข้าไม่ได้
+ * - URL ของ LPCH: Script property LPCH_URL (⚙ Project Settings → Script properties) หรือค่า LPCH_URL ด้านล่าง
+ * - LPCH RO Workspace ต้อง Deploy แบบ Who has access: Anyone
+ * - แอปนี้ Deploy แบบ Execute as: Me · Who has access: Anyone
+ * - หลังวางโค้ด เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง (อนุญาต "เชื่อมต่อบริการภายนอก") → ดูผลใน Execution log
  */
 const SPREADSHEET_ID = '';
-// เว็บแอป LPCH RO Workspace (.../exec) ที่ใช้ตรวจชื่อผู้ใช้ รหัสผ่าน และบัตรผ่าน SSO
-const AUTH_API_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
-const AUTH_CACHE_SECONDS = 600;   // ตรวจสถานะบัญชีกับ Workspace ซ้ำทุก 10 นาที
+// LPCH RO Workspace accounts
+const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+const LPCH_ROLES = ['*'];          // ตำแหน่งที่ใช้ได้ (ผู้ดูแลระบบ LPCH ใช้ได้เสมอ) เช่น ['RO', 'MP', 'RTT'] · ['*'] = สมาชิกทุกคนที่อนุมัติแล้ว
+const LPCH_CHECK_SECONDS = 300;
 const SHEET_NAME = 'นัดเทคนิคพิเศษ';
 const HOLIDAY_SHEET_NAME = 'วันหยุด';
 const AUTO_SPREADSHEET_TITLE = 'ระบบนัดคิวเทคนิคพิเศษ รังสีรักษา รพ.มะเร็งลำปาง';
@@ -137,8 +142,23 @@ const HOLIDAYS_SEED = [
 ];
 // HOLIDAYS:END
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+function doGet(e) {
+  let html = HtmlService.createHtmlOutputFromFile('Index').getContent();
+  // From LPCH RO Workspace ("เข้าสู่ระบบอัตโนมัติ"): a one-use ticket, exchanged here for a sign-in
+  const sso = e && e.parameter && e.parameter.sso;
+  if (sso) {
+    let tag;
+    try {
+      const r = lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(sso) }));
+      tag = 'window.RTQ_LPCH_TOKEN = ' + JSON.stringify(r.token) + ';';
+    } catch (err) {
+      tag = 'window.RTQ_LPCH_ERROR = ' + JSON.stringify(String(err.message)).replace(/</g, '\\u003c') + ';';
+    }
+    const m = /<head(\s[^>]*)?>/i.exec(html);
+    const at = m ? m.index + m[0].length : 0;
+    html = html.slice(0, at) + '<script>' + tag + '</script>' + html.slice(at);
+  }
+  return HtmlService.createHtmlOutput(html)
     .setTitle('นัดคิวเทคนิคพิเศษ รังสีรักษา')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -146,36 +166,43 @@ function doGet() {
 // ---------- functions called from Index.html via google.script.run ----------
 // ทุกฟังก์ชันที่อ่าน/เขียนข้อมูลรับ token ของ LPCH RO Workspace เป็นอาร์กิวเมนต์แรก
 
-/** Run once from the editor after pasting: grants permissions and checks the Workspace connection. */
+/** Run once from the editor after pasting: grants permissions, prepares the sheets and checks LPCH. */
 function setup() {
   const ss = getSpreadsheet_();
   getSheet_(ss);
   listHolidays_(ss);
-  const res = UrlFetchApp.fetch(AUTH_API_URL, {
-    method: 'post', contentType: 'application/json', payload: JSON.stringify({ action: 'me', token: '' }), muteHttpExceptions: true,
-  });
-  let ok = false;
-  try { ok = JSON.parse(res.getContentText()).error === 'session_expired'; } catch (e) { /* not JSON */ }
   Logger.log('ชีตข้อมูล: ' + ss.getUrl());
-  Logger.log(ok ? 'เชื่อมต่อ LPCH RO Workspace ได้' :
-    'เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') — ตรวจ AUTH_API_URL และให้ Workspace Deploy แบบ Who has access: Anyone');
+  return setupLpch();
 }
 
-function login(username, password) {
-  const out = authCall_({ action: 'login', username: String(username || ''), password: String(password || '') });
-  return { token: out.token, user: rememberUser_(out.token, out.user) };
+// Run from the editor: is LPCH_URL set, reachable, and does that copy know the shared-login commands?
+function setupLpch() {
+  const url = lpchUrl_();
+  let msg;
+  if (!url) msg = '✗ ยังไม่ได้ตั้ง LPCH_URL (Project Settings → Script properties หรือค่า LPCH_URL ใน Code.gs)';
+  else if (!/^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[\w-]+\/(exec|dev)$/.test(url)) msg = '✗ LPCH_URL ต้องเป็น https://script.google.com/macros/s/…/exec (ตอนนี้: ' + url + ')';
+  else {
+    try { lpchCall_({ action: 'ssoRedeem', ticket: 'check' }); msg = '✓ เชื่อมต่อ LPCH RO Workspace ได้'; } catch (e) {
+      msg = /หมดอายุ|ถูกใช้ไปแล้ว/.test(e.message) ? '✓ เชื่อมต่อ LPCH RO Workspace ได้ และรองรับการใช้บัญชีร่วมกันแล้ว'
+        : /ไม่รู้จักคำสั่ง/.test(e.message) ? '✗ LPCH RO Workspace ยังเป็น Code.gs เวอร์ชันเก่า: วาง Code.gs ใหม่แล้ว Deploy → New version'
+        : '✗ ' + e.message;
+    }
+  }
+  Logger.log('LPCH_URL = ' + (url || '(ยังไม่ได้ตั้ง)'));
+  Logger.log(msg);
+  Logger.log('Deploy แอปนี้: Execute as "Me" · Who has access "Anyone"');
+  return msg;
 }
 
-/** Exchanges a one-time ticket from LPCH RO Workspace (?sso=…) for a session. */
-function ssoLogin(ticket) {
-  const out = authCall_({ action: 'ssoRedeem', ticket: String(ticket || '') });
-  return { token: out.token, user: rememberUser_(out.token, out.user) };
+/** Called by the sign-in dialog: username (or email) and password are checked by LPCH, never stored here. */
+function lpchLogin(username, password) {
+  return lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
 }
 
-function logout(token) {
+function lpchLogout(token) {
   if (!token) return true;
-  CacheService.getScriptCache().remove(authKey_(token));
-  try { authCall_({ action: 'logout', token: String(token) }); } catch (e) { /* already gone */ }
+  CacheService.getScriptCache().remove('lpch_' + token);
+  try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* the session just expires */ }
   return true;
 }
 
@@ -235,47 +262,71 @@ function deleteBooking(token, id) {
   });
 }
 
-// ---------- sign-in via LPCH RO Workspace ----------
+// ---------- LPCH RO Workspace accounts (same as TRS-398 / Linac QA) ----------
 
-/** POSTs an action to the Workspace JSON API; throws its Thai error message (or 'session_expired'). */
-function authCall_(req) {
+function lpchUrl_() {
+  return String(PropertiesService.getScriptProperties().getProperty('LPCH_URL') || LPCH_URL || '').trim();
+}
+
+// One call to the LPCH RO Workspace API (its doPost); throws its error message.
+function lpchCall_(req) {
+  const url = lpchUrl_();
+  if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ผู้ดูแล: ตั้ง Script property LPCH_URL)');
   let res;
   try {
-    res = UrlFetchApp.fetch(AUTH_API_URL, {
-      method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true,
-    });
+    res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
   } catch (e) {
-    throw new Error('เชื่อมต่อระบบล็อกอิน LPCH RO Workspace ไม่ได้ กรุณาลองใหม่');
+    throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ กรุณาลองใหม่');
   }
-  let out;
-  try {
-    out = JSON.parse(res.getContentText());
-  } catch (e) {
-    throw new Error('ระบบล็อกอิน LPCH RO Workspace ตอบกลับไม่ถูกต้อง (ผู้ดูแลระบบ: ตรวจ AUTH_API_URL และให้ Workspace Deploy แบบ Who has access: Anyone)');
-  }
-  if (!out || !out.ok) throw new Error((out && out.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+  let out = null;
+  try { out = JSON.parse(res.getContentText('UTF-8')); } catch (e) { out = null; }
+  if (!out) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') ผู้ดูแล: ตรวจ LPCH_URL และ Deploy แบบ Who has access: Anyone');
+  if (!out.ok) throw new Error(out.error || 'LPCH RO Workspace ตอบกลับไม่สำเร็จ');
   return out;
 }
 
-function authKey_(token) {
-  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token), Utilities.Charset.UTF_8);
-  return 'auth_' + Utilities.base64EncodeWebSafe(digest);
+// The LPCH member as this app sees them, or {error} when they may not use it.
+function lpchProfile_(u) {
+  if (!u) return { error: 'ไม่พบบัญชี LPCH RO Workspace' };
+  const admin = u.isAdmin === true || String(u.isAdmin).toUpperCase() === 'TRUE';
+  if (!admin && LPCH_ROLES.indexOf('*') === -1 && LPCH_ROLES.indexOf(u.role) === -1) {
+    return { error: 'บัญชี ' + u.username + ' (' + u.role + ') ไม่มีสิทธิ์ใช้ระบบนัดคิว — ใช้ได้เฉพาะ ' + LPCH_ROLES.join(', ') + ' และผู้ดูแลระบบ' };
+  }
+  return { username: String(u.username || ''), fullName: String(u.fullName || u.username || ''), role: String(u.role || ''), isAdmin: admin };
 }
 
-function rememberUser_(token, user) {
-  const u = { username: String(user.username || ''), fullName: String(user.fullName || user.username || ''),
-    role: String(user.role || ''), isAdmin: !!user.isAdmin };
-  CacheService.getScriptCache().put(authKey_(token), JSON.stringify(u), AUTH_CACHE_SECONDS);
-  return u;
-}
-
-/** The signed-in user for a Workspace token (checked with the Workspace at most every AUTH_CACHE_SECONDS). */
-function requireUser_(token) {
-  if (!token) throw new Error('session_expired');
-  const hit = CacheService.getScriptCache().get(authKey_(token));
+// The member behind an LPCH session (the page's token): asks LPCH ("me"), trusted for LPCH_CHECK_SECONDS.
+function lpchUser_(token) {
+  token = String(token || '');
+  if (!/^[\w-]{20,200}$/.test(token)) return { error: 'การเข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง' };
+  const cache = CacheService.getScriptCache(), key = 'lpch_' + token;
+  const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
-  const out = authCall_({ action: 'me', token: String(token) });
-  return rememberUser_(token, out.user);
+  let p;
+  try { p = lpchProfile_(lpchCall_({ action: 'me', token: token }).user); } catch (e) {
+    if (e.message !== 'session_expired') throw e;   // LPCH unreachable: say so rather than sign the person out
+    p = { error: 'การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' };
+  }
+  cache.put(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  return p;
+}
+
+// An LPCH sign-in ({token, user}) checked for this app: returns {token, user} or throws why not.
+function lpchFinish_(out) {
+  const p = lpchProfile_(out.user);
+  if (p.error) {
+    try { lpchCall_({ action: 'logout', token: out.token }); } catch (e) { /* the session just expires */ }
+    throw new Error(p.error);
+  }
+  CacheService.getScriptCache().put('lpch_' + out.token, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  return { token: out.token, user: p };
+}
+
+/** The signed-in member, or an error starting with "session_expired:" that makes the page ask to sign in. */
+function requireUser_(token) {
+  const w = lpchUser_(token);
+  if (w.error) throw new Error('session_expired: ' + w.error);
+  return w;
 }
 
 function userLabel_(u) {
