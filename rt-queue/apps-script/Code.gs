@@ -278,11 +278,28 @@ function lpchCall_(req) {
   } catch (e) {
     throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ กรุณาลองใหม่');
   }
+  const body = res.getContentText('UTF-8');
   let out = null;
-  try { out = JSON.parse(res.getContentText('UTF-8')); } catch (e) { out = null; }
-  if (!out) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') ผู้ดูแล: ตรวจ LPCH_URL และ Deploy แบบ Who has access: Anyone');
+  try { out = JSON.parse(body); } catch (e) { out = null; }
+  if (!out) throw new Error('เชื่อมต่อ LPCH RO Workspace ไม่ได้ (HTTP ' + res.getResponseCode() + ') — ' + lpchPageHint_(body));
   if (!out.ok) throw new Error(out.error || 'LPCH RO Workspace ตอบกลับไม่สำเร็จ');
   return out;
+}
+
+// LPCH answered with a web page instead of JSON: which page it was, and what its admin should change.
+function lpchPageHint_(body) {
+  body = String(body || '');
+  const title = ((/<title[^>]*>([^<]*)</i.exec(body) || [])[1] || '').trim();
+  const text = body.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/(function not found|ไม่พบฟังก์ชัน)[^<]{0,40}doPost/i.test(body)) {
+    return 'LPCH RO Workspace เวอร์ชันที่ Deploy อยู่ยังไม่มีฟังก์ชัน doPost: ผู้ดูแล LPCH วาง Code.gs ล่าสุด แล้ว Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy';
+  }
+  if (/accounts\.google\.com|ServiceLogin/i.test(body) || /sign in|ลงชื่อเข้าใช้|Google Accounts|บัญชี Google/i.test(title)) {
+    return 'LPCH RO Workspace ให้ลงชื่อเข้าใช้ Google ก่อน (ยังไม่ได้เปิดให้แอปอื่นเรียกใช้): ผู้ดูแล LPCH เข้า Deploy → Manage deployments → ✏️ Edit ' +
+      'ตั้ง Execute as: Me และ Who has access: Anyone (ไม่ใช่ "Anyone with Google account") → Version: New version → Deploy';
+  }
+  return 'LPCH ตอบกลับเป็นหน้าเว็บ' + (title ? ' "' + title + '"' : '') + ' แทนข้อมูล: ผู้ดูแล LPCH ตรวจ LPCH_URL และ Deploy แบบ Execute as: Me · Who has access: Anyone' +
+    (text ? ' [' + text.slice(0, 160) + ']' : '');
 }
 
 // The LPCH member as this app sees them, or {error} when they may not use it.
