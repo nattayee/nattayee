@@ -11,9 +11,17 @@ var SHEET_NAME = 'Record';
 var FIRST_ROW = 2;
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('HDR Activity')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  // ชื่อไฟล์ HTML ที่ยอมรับ (ตัวพิมพ์เล็ก/ใหญ่ต่างกันใน Apps Script)
+  var names = ['index', 'Index', 'index.html', 'Index.html'];
+  for (var i = 0; i < names.length; i++) {
+    try {
+      return HtmlService.createHtmlOutputFromFile(names[i])
+        .setTitle('HDR Activity')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } catch (e) { /* ลองชื่อถัดไป */ }
+  }
+  throw new Error('ไม่พบไฟล์ HTML ชื่อ "index" — ในหน้า Apps Script กด + ข้างคำว่า "ไฟล์" → HTML ' +
+    'แล้วพิมพ์ชื่อ index (ไม่ต้องพิมพ์ .html) จากนั้นวางโค้ดจากกล่อง index.html');
 }
 
 function sheet_() {
