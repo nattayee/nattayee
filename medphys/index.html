@@ -354,6 +354,13 @@ span.chk{border-color:var(--line);color:var(--muted)}
 button.chk.done:hover{background:var(--ok-soft);box-shadow:inset 0 0 0 1px var(--ok)}
 .chk b{font-weight:600;font-family:var(--mono);font-size:12px}
 .chk-cap{padding-left:4px;font-size:11px;line-height:1.3;color:var(--faint);white-space:nowrap}
+/* ช่องกรอกค่าใต้ปุ่ม และปุ่มบันทึกระดับเดียวกับช่อง */
+.chk-in{width:0;min-width:max(100%, 72px);height:26px;min-height:0;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);font:12px var(--mono)}
+.chk-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.chk-in::placeholder{color:var(--faint)}
+.chk-go{align-self:flex-end}
+.chk-save{height:26px;padding:0 14px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-fg);font-size:12.5px;font-weight:500}
+.chk-save:disabled{background:var(--sunken);color:var(--faint);cursor:default}
 .stamps{display:grid;gap:4px;margin:0;padding:10px 12px;border-radius:8px;background:var(--sunken);font-size:13px}
 .stamps div{display:flex;flex-wrap:wrap;gap:4px 10px}
 .stamps b{min-width:80px;font-weight:500}
@@ -997,16 +1004,18 @@ const STAMP_API = 9;   // Code.gs ที่มีปุ่มบันทึก�
 const STEPS = [
   { key: 'fin', label: 'Finish' },
   { key: 'eval', label: 'Evaluate' },
-  { key: 'mu', label: 'Dose check', value: true, hint: 'เช่น 1.2%' },
-  { key: 'd0', label: 'F0', value: true, hint: 'ค่าที่วัดได้' },
-  { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5%' },
-  { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5%' },
+  { key: 'mu', label: 'Dose check', value: true, hint: 'เช่น 1.2%', ph: '1.2%' },
+  { key: 'd0', label: 'F0', value: true, hint: 'ค่าที่วัดได้', ph: 'ค่า' },
+  { key: 'd4', label: 'Delta4', value: true, hint: 'เช่น 98.5%', ph: '98.5%' },
+  { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5%', ph: '98.5%' },
   { key: 'pc', label: 'Plan complete' },
 ];
 const CHECKS = ['mu', 'd0', 'd4', 'mc'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
+const stampDraft = {};   // ค่าที่พิมพ์ในช่องใต้ปุ่มแต่ยังไม่บันทึก { caseId: { mu: '1.2%' } } (แถวถูกวาดใหม่ได้โดยค่าไม่หาย)
 const MC_API = 11;   // Code.gs ที่รู้จัก SRS MapCheck
 const PC_API = 13;   // Code.gs ที่รู้จัก Plan complete
 const EDIT_PIN_API = 14;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขเคส (editCase, removeCase)
+const STAMPS_API = 15;   // Code.gs ที่บันทึกหลายค่าพร้อมกัน (stampSteps) · รุ่นเก่าบันทึกทีละค่า
 // ปุ่มที่ต้องใช้ Code.gs รุ่นใหม่ (รุ่นเก่าจะซ่อนไว้ เพราะบันทึกลงชีตไม่ได้)
 const stepOn = x => serverHas({ mc: MC_API, pc: PC_API }[x.key] || 0);
 // ปุ่มที่เพิ่มเข้ามาทีหลังเปิดตามค่าเริ่มต้นนี้ จนกว่าแอดมินจะตั้งเอง (SRS MapCheck เฉพาะเทคนิค SRS)
@@ -1322,7 +1331,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.4';
+const PAGE_VERSION = '2026-10-12.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1356,6 +1365,7 @@ const sheetStore = {
   saveConfig: cfg => call('saveConfig', cfg),
   moveActCases: () => call('moveActCases'),
   stamp: (id, step, value, pin) => call('stampCase', id, step, value, pin),
+  stampMany: (id, values, pin) => call('stampSteps', id, values, pin),
   editCase: (rec, pin) => call('editCase', rec, pin),
   removeCase: (id, pin) => call('removeCase', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
@@ -1380,6 +1390,19 @@ function localStore() {
     if (!demoPin.get()) throw new Error('PIN|ยังไม่ได้ตั้งรหัส PIN');
     if (demoPin.hash(pin) !== demoPin.get()) throw new Error('รหัส PIN ไม่ถูกต้อง');
   };
+  const stampLocal = (id, steps, pin) => {
+    demoCheckPin(pin);
+    const c = db.cases.find(x => x.id === id);
+    if (!c) throw new Error('ไม่พบเคสนี้');
+    for (const [step, value] of Object.entries(steps)) {
+      const clear = value === null, at = clear ? '' : nowStamp(), by = clear ? '' : state.user.name;
+      c[step] = at; c[step + 'By'] = by;
+      if (CHECKS.includes(step)) c[step + 'Val'] = clear ? '' : str(value);
+      if (step === 'eval' && !clear && !c.fin) { c.fin = at; c.finBy = by; }
+    }
+    persist();
+    return clone(c);
+  };
   return {
     mode: 'local',
     load: async () => clone(db),
@@ -1398,17 +1421,8 @@ function localStore() {
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
     saveConfig: async cfg => { db.config = clone(cfg); persist(); return true; },
     // โหมดตัวอย่าง: รหัส PIN เก็บแบบแฮชในเบราว์เซอร์นี้ แยกตามมุมมอง
-    stamp: async (id, step, value, pin) => {
-      demoCheckPin(pin);
-      const c = db.cases.find(x => x.id === id);
-      if (!c) throw new Error('ไม่พบเคสนี้');
-      const clear = value === null, at = clear ? '' : nowStamp(), by = clear ? '' : state.user.name;
-      c[step] = at; c[step + 'By'] = by;
-      if (CHECKS.includes(step)) c[step + 'Val'] = clear ? '' : str(value);
-      if (step === 'eval' && !clear && !c.fin) { c.fin = at; c.finBy = by; }
-      persist();
-      return clone(c);
-    },
+    stamp: async (id, step, value, pin) => stampLocal(id, { [step]: value }, pin),
+    stampMany: async (id, values, pin) => stampLocal(id, values, pin),
     editCase: async (rec, pin) => { demoCheckPin(pin); upsert(db.cases, clone(rec)); persist(); return rec; },
     removeCase: async (id, pin) => { demoCheckPin(pin); db.cases = db.cases.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
@@ -2362,7 +2376,7 @@ function caseRow(c, rcs) {
       : `<button type="button" class="rc" data-rc="${esc(c.id)}" title="บันทึก RC เคสนี้">+ RC</button>`;
   }
   let act;
-  const strip = !simple && stampsOn() ? `<div class="checks">${stepsOf(k).map(x => stepChip(c, x)).join('')}</div>` : '';
+  const strip = !simple && stampsOn() ? stepStrip(c, k) : '';
   if (strip && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
   else if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
   else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Finish เป็นตอนนี้">Finish</button>`;
@@ -2382,11 +2396,21 @@ function caseRow(c, rcs) {
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
 const stepsOf = k => STEPS.filter(x => (!x.value || (Array.isArray(k.checks) ? k.checks : catChecks({}, k)).includes(x.key)) && stepOn(x));
 const firstName = v => str(v).split(/\s+/)[0];
+// ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม และปุ่ม "บันทึก" ต่อจากค่าสุดท้าย
+// กรอกได้หลายช่องแล้วกดบันทึกครั้งเดียว (ใส่รหัส PIN) · Enter ในช่อง = บันทึก
+function stepStrip(c, k) {
+  const steps = stepsOf(k), vals = steps.filter(x => x.value);
+  const open = canEdit() ? vals.filter(x => !c[x.key]) : [];
+  const d = stampDraft[c.id] || {}, has = open.some(x => str(d[x.key]));
+  const save = open.length ? `<span class="chk-wrap chk-go"><button type="button" class="chk-save" data-stampsave="${esc(c.id)}"${has ? '' : ' disabled'} title="บันทึกค่าที่กรอก (ใส่รหัส PIN)">บันทึก</button></span>` : '';
+  return `<div class="checks">${steps.map(x => stepChip(c, x) + (x === vals[vals.length - 1] ? save : '')).join('')}</div>`;
+}
 function stepChip(c, x) {
   const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '';
   const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
-  const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>` : '';
+  const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>`
+    : x.value && canEdit() ? `<input class="chk-in" data-stampin="${x.key}" data-id="${esc(c.id)}" value="${esc((stampDraft[c.id] || {})[x.key] || '')}" placeholder="${esc(x.ph || '')}" aria-label="ค่า ${esc(x.label)}" autocomplete="off">` : '';
   const btn = canEdit()
     ? `<button type="button" class="chk${at ? ' done' : ''}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="chk${at ? ' done' : ''}">${text}</span>`;
@@ -3889,7 +3913,7 @@ function openStamp(id, key) {
   $('#pin-val-field').hidden = !x.value;
   $('#pin-val-lbl').textContent = `ค่า ${x.label}`;
   $('#pin-val').placeholder = x.hint || '';
-  $('#pin-val').value = val || '';
+  $('#pin-val').value = val || (stampDraft[id] || {})[key] || '';   // ค่าที่พิมพ์ไว้ในช่องใต้ปุ่ม
   $('#pin-clear').hidden = !at;
   syncPinForm();
   pinDlg.showModal();
@@ -3903,6 +3927,26 @@ function openCasePin(mode, rec) {
   $('#pin-what').innerHTML = mode === 'del'
     ? `ลบเคสนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ยืนยันด้วยรหัส PIN ของ ${who}`
     : `${what} · ยืนยันการแก้ไขด้วยรหัส PIN ของ ${who}`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
+// ปุ่ม "บันทึก" ใต้ค่า: บันทึกทุกค่าที่กรอกของเคสนี้ด้วยรหัส PIN ครั้งเดียว
+function openValsPin(id) {
+  const c = state.cases.find(x => x.id === id);
+  if (!c) return;
+  const d = stampDraft[id] || {}, vals = {};
+  for (const x of stepsOf(catOf(c.cat))) if (x.value && !c[x.key] && str(d[x.key])) vals[x.key] = str(d[x.key]);
+  if (!Object.keys(vals).length) {
+    const f = $$(`[data-stampin][data-id="${id}"]`).find(el => el.offsetParent);
+    if (f) f.focus();
+    return toast('กรอกค่าในช่องใต้ปุ่มก่อนบันทึก', { err: true });
+  }
+  pinCtx = { mode: 'vals', id, vals, forgot: false, auto: true };
+  $('#pin-title').textContent = `บันทึกค่า · ${c.hn || ''}`;
+  $('#pin-what').innerHTML = `${Object.entries(vals).map(([k, v]) => `${esc(STEPS.find(x => x.key === k).label)} <b>${esc(v)}</b>`).join(' · ')}<br>บันทึกวันเวลาตอนนี้ในชื่อ <b>${esc(state.user.name || state.user.me || '')}</b>`;
   $('#pin-val-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
@@ -3944,6 +3988,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
     if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); return; }
     if (ctx.mode === 'del') { await store.removeCase(ctx.id, pin); caseDeleted(ctx.id); pinDlg.close(); return; }
+    if (ctx.mode === 'vals') { await doStamps(ctx.id, ctx.vals, pin); pinDlg.close(); return; }
     await doStamp(ctx.id, ctx.step, value, pin);
     pinDlg.close();
   } catch (err) {
@@ -3957,6 +4002,7 @@ async function submitPin(e, clear) {
 async function doStamp(id, step, value, pin) {
   const prev = clone(state.cases.find(c => c.id === id) || {});
   const rec = normCase(await store.stamp(id, step, value, pin));
+  if (stampDraft[id]) delete stampDraft[id][step];
   const i = state.cases.findIndex(c => c.id === id);
   if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
   render();
@@ -3966,6 +4012,23 @@ async function doStamp(id, step, value, pin) {
   const fresh = !prev[step], steps = step === 'eval' && !prev.fin && rec.fin ? ['eval', 'fin'] : [step];
   const val = x.value ? rec[step + 'Val'] : '';
   toast(`${rec.hn} · ${x.label}${val ? ' ' + val : ''} · ${firstName(rec[step + 'By'])} ${fmtStamp(rec[step])}`, fresh ? { undo: () => undoStamp(id, steps, pin) } : {});
+}
+// บันทึกหลายค่าพร้อมกัน · Code.gs รุ่นเก่า (ไม่มี stampSteps) บันทึกทีละค่าด้วย PIN เดียวกัน
+async function doStamps(id, vals, pin) {
+  const keys = Object.keys(vals), d = stampDraft[id] || {};
+  let rec = null;
+  const apply = r => {
+    rec = normCase(r);
+    const i = state.cases.findIndex(c => c.id === id);
+    if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+  };
+  try {
+    if (serverHas(STAMPS_API)) { apply(await store.stampMany(id, vals, pin)); keys.forEach(k => delete d[k]); }
+    else for (const k of keys) { apply(await store.stamp(id, k, vals[k], pin)); delete d[k]; }
+  } finally { if (rec) render(); }
+  if (!Object.keys(d).length) delete stampDraft[id];
+  const by = rec[keys[0] + 'By'];
+  toast(`${rec.hn} · ${keys.map(k => `${STEPS.find(x => x.key === k).label} ${rec[k + 'Val']}`).join(' · ')} · ${firstName(by)} ${fmtStamp(rec[keys[0]])}`, { undo: () => undoStamp(id, keys, pin) });
 }
 async function undoStamp(id, steps, pin) {
   try {
@@ -3984,6 +4047,20 @@ $('#pin').addEventListener('input', e => {
   if (PIN_RE.test(e.target.value) && pinCtx && pinCtx.auto) submitPin();
 });
 for (const id of ['#pin-new', '#pin-new2']) $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
+// ช่องกรอกค่าใต้ปุ่ม: จำค่าที่พิมพ์ · ปุ่มบันทึกกดได้เมื่อมีค่าอย่างน้อยหนึ่งช่อง · Enter = บันทึก
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (!el.dataset || !el.dataset.stampin) return;
+  const d = stampDraft[el.dataset.id] = stampDraft[el.dataset.id] || {};
+  if (str(el.value)) d[el.dataset.stampin] = el.value; else delete d[el.dataset.stampin];
+  const btn = $('[data-stampsave]', el.closest('.checks'));
+  if (btn) btn.disabled = !Object.keys(d).length;
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.dataset || !e.target.dataset.stampin) return;
+  e.preventDefault();
+  openValsPin(e.target.dataset.id);
+});
 
 /* ---------- วันลา ---------- */
 const leaveDlg = $('#leave-dlg'), leaveForm = $('#leave-form');
@@ -4053,7 +4130,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-btn') return openPinSettings();
   if (t.id === 'pin-forgot') { pinCtx.forgot = true; syncPinForm(); return $('#pin-proof').focus(); }
   if (t.id === 'pin-clear') return submitPin(null, true);
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.stamp || ds.rc || ds.logedit || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -4062,6 +4139,7 @@ document.addEventListener('click', e => {
   if (ds.edit) return openCase(ds.edit);
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp);
+  if (ds.stampsave) return openValsPin(ds.stampsave);
   if (ds.rc) { const c = state.cases.find(x => x.id === ds.rc); return openLog(null, { kind: 'rc', caseId: c && c.id }); }
   if (ds.logedit) return openLog(ds.logedit);
   if (ds.mate) { state.person = state.person === ds.mate ? '' : ds.mate; state.limit = 60; return render(); }

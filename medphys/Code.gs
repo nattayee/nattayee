@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.2';
-const API_LEVEL = 14;
+const CODE_VERSION = '2026-10-12.3';
+const API_LEVEL = 15;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -604,25 +604,46 @@ const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose che
  * Evaluate ก่อน Finish: Finish ได้เวลาเดียวกัน · คืนเคสหลังบันทึก
  */
 function stampCase(id, step, value, pin, token) {
+  const steps = {};
+  steps[step] = value;
+  return stampSteps_(id, steps, pin, token);
+}
+
+// ช่องกรอกค่าใต้ปุ่ม Dose check, F0, Delta4, SRS MapCheck: บันทึกหลายค่าของเคสเดียวพร้อมกัน ใส่ PIN ครั้งเดียว
+// values = { mu: '1.2%', d0: '0.3' } · ล้างการบันทึกทำทีละขั้นตอนที่ stampCase
+function stampSteps(id, values, pin, token) {
+  const keys = Object.keys(values || {});
+  if (!keys.length) throw new Error('กรอกค่าก่อนบันทึก');
+  if (keys.some(k => values[k] === null)) throw new Error('ล้างการบันทึกทีละขั้นตอน');
+  return stampSteps_(id, values, pin, token);
+}
+
+function stampSteps_(id, steps, pin, token) {
   const u = requireEdit_(token);
-  if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
-  const clear = value === null;
-  const val = clear ? '' : String(value == null ? '' : value).trim().slice(0, 60);
-  if (!clear && STEP_VALUES.indexOf(step) >= 0 && !val) throw new Error('กรอกค่า ' + STEP_NAMES[step] + ' ก่อนบันทึก');
+  const keys = Object.keys(steps), vals = {};
+  keys.forEach(step => {
+    if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
+    const value = steps[step];
+    vals[step] = value === null ? null : String(value == null ? '' : value).trim().slice(0, 60);
+    if (value !== null && STEP_VALUES.indexOf(step) >= 0 && !vals[step]) throw new Error('กรอกค่า ' + STEP_NAMES[step] + ' ก่อนบันทึก');
+  });
   checkPin_(u, pin);
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const at = clear ? '' : Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
-    const by = clear ? '' : String(u.name || u.username || u.me || '');
-    const set = {};
-    set[step] = at;
-    set[step + 'By'] = by;
-    if (STEP_VALUES.indexOf(step) >= 0) set[step + 'Val'] = val;
+    const now = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+    const name = String(u.name || u.username || u.me || '');
     const finCol = header.indexOf('Finish') + 1;
-    if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
+    const set = {};
+    keys.forEach(step => {
+      const clear = vals[step] === null, at = clear ? '' : now, by = clear ? '' : name;
+      set[step] = at;
+      set[step + 'By'] = by;
+      if (STEP_VALUES.indexOf(step) >= 0) set[step + 'Val'] = clear ? '' : vals[step];
+      if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
+    });
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
   });
