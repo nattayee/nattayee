@@ -38,16 +38,20 @@
       <div class="dash-grid">
         <form id="entryForm" class="card entry" autocomplete="off">
           <h2 id="entryTitle">บันทึกค่าประจำวัน</h2>
-          <label>วันที่ / เวลาที่วัด
-            <input type="datetime-local" id="fDate" required>
+          <label>วันที่
+            <input type="date" id="fDate" required>
           </label>
-          <label>Activity ที่วัดได้ <span class="unit-label"></span>
-            <input type="number" id="fMeasured" step="any" min="0" inputmode="decimal" required placeholder="เช่น 10.215">
+          <label>ค่าที่กรอก (Planning) <span class="unit-label"></span>
+            <input type="number" id="fMeasured" step="any" min="0" inputmode="decimal" required placeholder="เช่น 62.04">
           </label>
           <label>Activity คำนวณ <span class="unit-label"></span> <span class="opt">(เว้นว่าง = คำนวณจากการสลายตัว)</span>
             <input type="number" id="fExpected" step="any" min="0" inputmode="decimal">
           </label>
-          <label>ผู้วัด / หมายเหตุ
+          <label>ผู้ตรวจ (MP)
+            <input type="text" id="fOperator" maxlength="40" list="operatorList" placeholder="เช่น JR">
+            <datalist id="operatorList"></datalist>
+          </label>
+          <label>หมายเหตุ
             <input type="text" id="fNote" maxlength="200" placeholder="ไม่บังคับ">
           </label>
           <div class="preview" id="entryPreview" aria-live="polite"></div>
@@ -71,15 +75,15 @@
           </div>
           <figure class="card chart-card">
             <figcaption>
-              <h2>Activity: ค่าคำนวณ เทียบกับ ค่าที่วัดได้</h2>
+              <h2>Activity: ค่าคำนวณ เทียบกับ ค่าที่กรอก (Planning)</h2>
               <p class="muted">เส้นคือ activity ที่คำนวณจากการสลายตัว จุดคือค่าที่กรอก</p>
             </figcaption>
-            <div class="chart-box"><canvas id="activityChart" aria-label="กราฟ activity คำนวณเทียบกับค่าที่วัด" role="img"></canvas></div>
+            <div class="chart-box"><canvas id="activityChart" aria-label="กราฟ activity คำนวณเทียบกับค่าที่กรอก" role="img"></canvas></div>
           </figure>
           <figure class="card chart-card">
             <figcaption>
               <h2>% ความต่าง</h2>
-              <p class="muted">(วัดได้ − คำนวณ) ÷ คำนวณ × 100 · เส้นประคือเกณฑ์ ±<span class="tol-label"></span>% · ▲ = เกินเกณฑ์</p>
+              <p class="muted">(Planning − คำนวณ) ÷ คำนวณ × 100 · เส้นประคือเกณฑ์ ±<span class="tol-label"></span>% · ▲ = เกินเกณฑ์</p>
             </figcaption>
             <div class="chart-box"><canvas id="diffChart" aria-label="กราฟเปอร์เซ็นต์ความต่าง" role="img"></canvas></div>
           </figure>
@@ -100,12 +104,13 @@
           <table class="data">
             <thead>
               <tr>
-                <th>วันที่ / เวลา</th>
+                <th>วันที่</th>
                 <th>แหล่งกำเนิด</th>
                 <th class="num">คำนวณ (<span class="unit-text"></span>)</th>
-                <th class="num">วัดได้ (<span class="unit-text"></span>)</th>
+                <th class="num">Planning (<span class="unit-text"></span>)</th>
                 <th class="num">% ต่าง</th>
                 <th>สถานะ</th>
+                <th>MP</th>
                 <th>หมายเหตุ</th>
                 <th></th>
               </tr>
@@ -129,11 +134,11 @@
             <label>Activity อ้างอิง <span class="unit-label"></span>
               <input type="number" id="sActivity" step="any" min="0" required inputmode="decimal">
             </label>
-            <label>วันที่ / เวลาอ้างอิง (calibration)
-              <input type="datetime-local" id="sRefDate" required>
+            <label>วันที่อ้างอิง (Acceptance / calibration)
+              <input type="date" id="sRefDate" required>
             </label>
             <label>วันที่เริ่มใช้งาน <span class="opt">(ไม่บังคับ)</span>
-              <input type="datetime-local" id="sStart">
+              <input type="date" id="sStart">
             </label>
             <div class="row-btns full">
               <button type="submit" class="btn primary" id="sourceSubmit">เพิ่ม source</button>
@@ -153,8 +158,8 @@
           <form id="settingsForm" class="grid-form" autocomplete="off">
             <label>ไอโซโทป
               <select id="setIsotope">
+                <option value="Co-60">Co-60 (T½ 1925.2 วัน)</option>
                 <option value="Ir-192">Ir-192 (T½ 73.83 วัน)</option>
-                <option value="Co-60">Co-60 (T½ 1925.28 วัน)</option>
                 <option value="custom">กำหนดเอง</option>
               </select>
             </label>
@@ -163,7 +168,7 @@
             </label>
             <label>หน่วย activity
               <select id="setUnit">
-                <option>Ci</option><option>mCi</option><option>GBq</option><option>TBq</option><option>U</option>
+                <option>GBq</option><option>TBq</option><option>Ci</option><option>mCi</option><option>U</option>
               </select>
             </label>
             <label>เกณฑ์ยอมรับ ± (%)
@@ -177,7 +182,7 @@
             </label>
             <div class="row-btns full"><button type="submit" class="btn primary">บันทึกการตั้งค่า</button></div>
           </form>
-          <p class="muted small">สูตร: A(t) = A₀ · e<sup>−ln2 · Δt / T½</sup> · % ต่าง = (วัดได้ − คำนวณ) / คำนวณ × 100</p>
+          <p class="muted small">สูตร: A(t) = A₀ · e<sup>−ln2 · Δt / T½</sup> · % ต่าง = (Planning − คำนวณ) / คำนวณ × 100</p>
         </div>
       </div>
     </section>
@@ -203,7 +208,7 @@
               <input type="file" id="csvFile" accept=".csv,text/csv,text/plain">
             </label>
             <label class="full">หรือวางข้อมูล (คัดลอกจากชีตได้โดยตรง)
-              <textarea id="csvPaste" rows="5" placeholder="วันที่,Activity คำนวณ,Activity วัดได้"></textarea>
+              <textarea id="csvPaste" rows="5" placeholder="Date,Calculation,%Diff,Planning,MP"></textarea>
             </label>
             <div class="row-btns full"><button type="button" class="btn ghost" id="parsePaste">อ่านข้อมูลที่วาง</button></div>
           </div>
@@ -219,9 +224,10 @@
               <select id="mapOrder"><option value="dmy">วัน/เดือน/ปี</option><option value="mdy">เดือน/วัน/ปี</option></select>
             </label>
             <label>คอลัมน์วันที่ *<select id="mapDate"></select></label>
-            <label>คอลัมน์เวลา<select id="mapTime"></select></label>
-            <label>คอลัมน์ activity ที่วัดได้ *<select id="mapMeasured"></select></label>
+            <label>คอลัมน์เวลา <span class="opt">(ถ้ามี)</span><select id="mapTime"></select></label>
+            <label>คอลัมน์ค่าที่กรอก (Planning) *<select id="mapMeasured"></select></label>
             <label>คอลัมน์ activity คำนวณ<select id="mapExpected"></select></label>
+            <label>คอลัมน์ผู้ตรวจ (MP)<select id="mapOperator"></select></label>
             <label>คอลัมน์หมายเหตุ<select id="mapNote"></select></label>
             <label>วิธีนำเข้า
               <select id="mapMode"><option value="append">เพิ่มต่อ (ข้ามแถวซ้ำ)</option><option value="replace">แทนที่ข้อมูลทั้งหมด</option></select>

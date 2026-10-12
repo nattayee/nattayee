@@ -8,7 +8,7 @@
 const STORE_KEY = 'hdr-activity-v1';
 const THEME_KEY = 'hdr-activity-theme';
 const DEFAULT_SHEET = 'https://docs.google.com/spreadsheets/d/1BX2NyFl9HosiyNAq1nEwghkw0c3K_zfmeTPQi_4cZZ4/edit?usp=sharing';
-const ISOTOPES = { 'Ir-192': 73.83, 'Co-60': 1925.28 };
+const ISOTOPES = { 'Co-60': 1925.2, 'Ir-192': 73.83 };
 const DAY = 86400000;
 const LN2 = Math.LN2;
 
@@ -20,10 +20,11 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 function defaults() {
   return {
     settings: {
-      isotope: 'Ir-192', halfLife: ISOTOPES['Ir-192'], unit: 'Ci', tolerance: 5,
-      decimals: 3, yearStyle: 'be', dateOrder: 'dmy', sheetUrl: DEFAULT_SHEET, sheetTab: '',
+      isotope: 'Co-60', halfLife: ISOTOPES['Co-60'], unit: 'GBq', tolerance: 1,
+      decimals: 4, yearStyle: 'be', dateOrder: 'mdy', sheetUrl: DEFAULT_SHEET, sheetTab: '',
     },
-    sources: [],
+    // source ที่ใช้อยู่ตามชีตของงาน (BB-AC1142, A0 74.64 GBq, acceptance 14/05/2025)
+    sources: [{ id: 'bb-ac1142', serial: 'BB-AC1142', activity: 74.64, refDate: '2025-05-14', start: '' }],
     records: [],
   };
 }
@@ -60,8 +61,13 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 /* ---------------- time helpers ---------------- */
 
 const pad = (n) => String(n).padStart(2, '0');
+function toLocalDate(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/** วันที่อย่างเดียว ถ้าเวลาเป็น 00:00 มิฉะนั้นมีเวลาด้วย */
 function toLocalInput(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const day = toLocalDate(d);
+  return d.getHours() || d.getMinutes() ? `${day}T${pad(d.getHours())}:${pad(d.getMinutes())}` : day;
 }
 function parseLocal(s) {
   if (!s) return null;
@@ -74,11 +80,16 @@ function locale() {
 }
 function fmtDate(t, withTime = true) {
   const opts = { day: 'numeric', month: 'short', year: '2-digit' };
-  if (withTime) Object.assign(opts, { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(t);
+  if (withTime && (d.getHours() || d.getMinutes())) Object.assign(opts, { hour: '2-digit', minute: '2-digit' });
   return new Date(t).toLocaleString(locale(), opts);
 }
 function fmtAct(v) {
   return v == null || !isFinite(v) ? '–' : v.toFixed(state.settings.decimals);
+}
+/** ค่าที่ผู้ใช้กรอก: แสดงตามที่กรอก ไม่เติมศูนย์ */
+function fmtVal(v) {
+  return v == null || !isFinite(v) ? '–' : String(+v.toFixed(state.settings.decimals));
 }
 function fmtPct(v) {
   if (v == null || !isFinite(v)) return '–';
@@ -287,6 +298,8 @@ function renderCharts() {
   const surface = cssVar('--surface');
   const critical = cssVar('--critical');
   const muted = cssVar('--muted');
+  const dense = recs.length > 60; // ข้อมูลเยอะ → จุดเล็กลง ไม่ให้บังเส้น
+  const pr = dense ? 3 : 5;
 
   /* --- กราฟ activity --- */
   const curve = expectedCurve(recs);
@@ -295,18 +308,18 @@ function renderCharts() {
     datasets: [
       {
         label: 'Activity คำนวณ', data: curve, borderColor: s1, backgroundColor: s1,
-        borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, tension: 0, spanGaps: false, order: 2,
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, tension: 0, spanGaps: false, order: 0,
       },
       {
-        label: 'Activity ที่วัดได้', data: measured, tooltipTarget: true, showLine: false, borderColor: surface, backgroundColor: s2,
-        borderWidth: 2, pointRadius: 5, pointHoverRadius: 7, pointHitRadius: 10, order: 1,
+        label: 'ค่าที่กรอก (Planning)', data: measured, tooltipTarget: true, showLine: false, borderColor: surface, backgroundColor: s2,
+        borderWidth: dense ? 1 : 2, pointRadius: pr, pointHoverRadius: pr + 3, pointHitRadius: 10, order: 1,
       },
     ],
   };
   const actOpts = baseOptions(`Activity (${unit})`);
   actOpts.plugins.tooltip.callbacks.label = (item) => {
     const r = item.raw.rec;
-    return [` วัดได้: ${fmtAct(r.measured)} ${unit}`, ` คำนวณ: ${fmtAct(r.expected)} ${unit}`, ` ต่าง: ${fmtPct(r.diff)}`];
+    return [` Planning: ${fmtVal(r.measured)} ${unit}`, ` คำนวณ: ${fmtAct(r.expected)} ${unit}`, ` ต่าง: ${fmtPct(r.diff)}`].concat(r.operator ? [` MP: ${r.operator}`] : []);
   };
 
   /* --- กราฟ % ความต่าง --- */
@@ -319,9 +332,9 @@ function renderCharts() {
     datasets: [
       {
         label: '% ความต่าง', data: diffPts, tooltipTarget: true, borderColor: s1, backgroundColor: diffs.map((r) => (r.status === 'bad' ? critical : s1)),
-        pointBorderColor: surface, pointBorderWidth: 1.5, borderWidth: 1.5, tension: 0,
+        pointBorderColor: surface, pointBorderWidth: dense ? 1 : 1.5, borderWidth: dense ? 1 : 1.5, tension: 0,
         pointStyle: diffs.map((r) => (r.status === 'bad' ? 'triangle' : 'circle')),
-        pointRadius: diffs.map((r) => (r.status === 'bad' ? 7 : 4.5)), pointHoverRadius: 8, pointHitRadius: 10,
+        pointRadius: diffs.map((r) => (r.status === 'bad' ? 7 : dense ? 3.5 : 4.5)), pointHoverRadius: 8, pointHitRadius: 10,
       },
       { label: `เกณฑ์ ±${tol}%`, data: line(tol), borderColor: muted, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, pointStyle: 'line' },
       { label: '_low', data: line(-tol), borderColor: muted, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0 },
@@ -347,7 +360,7 @@ function renderCharts() {
   ];
   diffOpts.plugins.tooltip.callbacks.label = (item) => {
     const r = item.raw.rec;
-    return [` ${r.status === 'bad' ? '▲ เกินเกณฑ์' : '● ผ่านเกณฑ์'}: ${fmtPct(r.diff)}`, ` วัดได้ ${fmtAct(r.measured)} / คำนวณ ${fmtAct(r.expected)} ${unit}`];
+    return [` ${r.status === 'bad' ? '▲ เกินเกณฑ์' : '● ผ่านเกณฑ์'}: ${fmtPct(r.diff)}`, ` Planning ${fmtVal(r.measured)} / คำนวณ ${fmtAct(r.expected)} ${unit}`];
   };
 
   if (activityChart) {
@@ -389,7 +402,7 @@ function renderTiles() {
   const unit = state.settings.unit;
   const all = evaluatedRecords();
   const recs = filteredRecords();
-  const now = Date.now();
+  const now = parseLocal(toLocalDate(new Date())); // คำนวณ ณ วันนี้ (นับเป็นวันเต็มเหมือนในชีต)
   const cur = sourceAt(now);
   const last = all[all.length - 1];
   const outN = recs.filter((r) => r.status === 'bad').length;
@@ -399,9 +412,9 @@ function renderTiles() {
   const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
   const statusTxt = (r) => (r.status === 'ok' ? '<span class="status ok">✓ ผ่านเกณฑ์</span>' : r.status === 'bad' ? '<span class="status bad">▲ เกินเกณฑ์</span>' : '');
   $('#tiles').innerHTML = [
-    tile('Activity คำนวณ ณ ขณะนี้', cur ? `${fmtAct(decay(cur, now))} <small>${esc(unit)}</small>` : '–',
-      cur ? `Source ${esc(cur.serial)} · ${((now - parseLocal(cur.refDate)) / DAY).toFixed(1)} วันหลังวันอ้างอิง` : 'ยังไม่ได้เพิ่ม source'),
-    tile('ค่าที่วัดล่าสุด', last ? `${fmtAct(last.measured)} <small>${esc(unit)}</small>` : '–', last ? fmtDate(last.t) : 'ยังไม่มีข้อมูล'),
+    tile('Activity คำนวณ ณ วันนี้', cur ? `${fmtAct(decay(cur, now))} <small>${esc(unit)}</small>` : '–',
+      cur ? `Source ${esc(cur.serial)} · t = ${Math.round((now - parseLocal(cur.refDate)) / DAY)} วัน` : 'ยังไม่ได้เพิ่ม source'),
+    tile('ค่าที่กรอกล่าสุด (Planning)', last ? `${fmtVal(last.measured)} <small>${esc(unit)}</small>` : '–', last ? fmtDate(last.t) : 'ยังไม่มีข้อมูล'),
     tile('% ความต่างล่าสุด', last ? fmtPct(last.diff) : '–', last ? `${statusTxt(last)} (เกณฑ์ ±${state.settings.tolerance}%)` : '–'),
     tile('เกินเกณฑ์ในช่วงที่เลือก', `${outN} <small>/ ${recs.length} ครั้ง</small>`, meanAbs != null ? `เฉลี่ย |% ต่าง| ${meanAbs.toFixed(2)}%` : '–'),
   ].join('');
@@ -409,7 +422,7 @@ function renderTiles() {
   const hint = $('#emptyHint');
   if (!state.records.length) {
     hint.hidden = false;
-    hint.innerHTML = 'ยังไม่มีข้อมูล — เริ่มจาก <a href="#" data-goto="sources">เพิ่ม source</a> แล้วกรอกค่าที่วัดได้ หรือ <a href="#" data-goto="import">นำเข้าข้อมูลจาก Google Sheets</a>';
+    hint.innerHTML = 'ยังไม่มีข้อมูล — เริ่มจาก <a href="#" data-goto="sources">เพิ่ม source</a> แล้วกรอกค่า Planning หรือ <a href="#" data-goto="import">นำเข้าข้อมูลจาก Google Sheets</a>';
   } else if (!state.sources.length && all.some((r) => r.expected == null)) {
     hint.hidden = false;
     hint.innerHTML = 'บางรายการยังคำนวณ % ความต่างไม่ได้ — <a href="#" data-goto="sources">เพิ่ม source (activity อ้างอิง + วันที่)</a> เพื่อให้ระบบคำนวณการสลายตัว';
@@ -436,15 +449,16 @@ function renderRecords() {
       <td>${esc(fmtDate(r.t))}</td>
       <td>${r.src && r.expectedFrom === 'decay' ? esc(r.src.serial) : r.expectedFrom === 'manual' ? '<span class="muted">กรอกเอง</span>' : '<span class="muted">–</span>'}</td>
       <td class="num">${fmtAct(r.expected)}</td>
-      <td class="num">${fmtAct(r.measured)}</td>
+      <td class="num">${fmtVal(r.measured)}</td>
       <td class="num">${fmtPct(r.diff)}</td>
       <td>${statusCell(r)}</td>
+      <td>${esc(r.operator)}</td>
       <td class="note">${esc(r.note)}</td>
       <td class="actions">
         <button type="button" class="btn ghost small" data-edit="${esc(r.id)}">แก้ไข</button>
         <button type="button" class="btn ghost small danger" data-del="${esc(r.id)}">ลบ</button>
       </td>
-    </tr>`).join('') : '<tr><td colspan="8" class="empty">ยังไม่มีข้อมูล</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="9" class="empty">ยังไม่มีข้อมูล</td></tr>';
 }
 
 $('#recordBody').addEventListener('click', (e) => {
@@ -462,12 +476,12 @@ $('#recordBody').addEventListener('click', (e) => {
 
 function renderSources() {
   const unit = state.settings.unit;
-  const now = Date.now();
+  const now = parseLocal(toLocalDate(new Date()));
   const srcs = sortedSources().reverse();
   $('#sourceBody').innerHTML = srcs.length ? srcs.map((s) => `
     <tr>
       <td>${esc(s.serial)}</td>
-      <td class="num">${fmtAct(s.activity)} ${esc(unit)}</td>
+      <td class="num">${fmtVal(s.activity)} ${esc(unit)}</td>
       <td>${esc(fmtDate(parseLocal(s.refDate)))}</td>
       <td>${s.start ? esc(fmtDate(parseLocal(s.start))) : '<span class="muted">= วันอ้างอิง</span>'}</td>
       <td class="num">${fmtAct(decay(s, now))} ${esc(unit)}</td>
@@ -538,6 +552,7 @@ function entryValues() {
     date: $('#fDate').value,
     measured: num($('#fMeasured').value),
     expected: num($('#fExpected').value),
+    operator: $('#fOperator').value.trim(),
     note: $('#fNote').value.trim(),
   };
 }
@@ -556,10 +571,17 @@ function updatePreview() {
 }
 ['#fDate', '#fMeasured', '#fExpected'].forEach((s) => $(s).addEventListener('input', updatePreview));
 
+/** รายชื่อผู้ตรวจ (MP) ที่เคยกรอก สำหรับเลือกเร็ว */
+function renderOperators() {
+  const names = [...new Set(state.records.map((r) => (r.operator || '').trim()).filter(Boolean))].sort();
+  $('#operatorList').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join('');
+}
+
 function resetEntryForm() {
   ui.editingRecord = null;
   $('#entryForm').reset();
-  $('#fDate').value = toLocalInput(new Date());
+  $('#fDate').value = toLocalDate(new Date());
+  renderOperators();
   $('#entryTitle').textContent = 'บันทึกค่าประจำวัน';
   $('#entrySubmit').textContent = 'บันทึก';
   $('#entryCancel').hidden = true;
@@ -569,9 +591,10 @@ function startEditRecord(id) {
   const r = state.records.find((x) => x.id === id);
   if (!r) return;
   ui.editingRecord = id;
-  $('#fDate').value = r.date;
+  $('#fDate').value = r.date.slice(0, 10);
   $('#fMeasured').value = r.measured ?? '';
   $('#fExpected').value = r.expected ?? '';
+  $('#fOperator').value = r.operator || '';
   $('#fNote').value = r.note || '';
   $('#entryTitle').textContent = 'แก้ไขข้อมูล';
   $('#entrySubmit').textContent = 'บันทึกการแก้ไข';
@@ -585,11 +608,13 @@ $('#entryForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const v = entryValues();
   if (!parseLocal(v.date) || v.measured == null) {
-    toast('กรุณากรอกวันที่และค่าที่วัดได้', true);
+    toast('กรุณากรอกวันที่และค่า Planning', true);
     return;
   }
   if (ui.editingRecord) {
-    Object.assign(state.records.find((r) => r.id === ui.editingRecord), v);
+    const rec = state.records.find((r) => r.id === ui.editingRecord);
+    if (rec.date.slice(0, 10) === v.date) v.date = rec.date; // คงเวลาเดิม (ถ้ามี) เมื่อไม่ได้เปลี่ยนวันที่
+    Object.assign(rec, v);
     toast('แก้ไขแล้ว');
   } else {
     state.records.push({ id: uid(), ...v });
@@ -707,9 +732,9 @@ function parseDateCell(raw, order) {
   }
   let y; let mo; let d;
   let m;
-  if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(s))) {
+  if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/.exec(s))) {
     [y, mo, d] = [+m[1], +m[2], +m[3]];
-  } else if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/.exec(s))) {
+  } else if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?!\d)/.exec(s))) {
     let a = +m[1]; let b = +m[2];
     if (order === 'mdy' && a <= 12 && b <= 31) [mo, d] = [a, b];
     else if (a > 12) [d, mo] = [a, b];
@@ -754,11 +779,28 @@ function guessColumn(headers, patterns, exclude = []) {
   return -1;
 }
 
+/** เดาลำดับวัน/เดือน จากหัวคอลัมน์ (เช่น "Date(M/D/Y)") หรือจากค่าที่วันหรือเดือนเกิน 12 */
+function detectDateOrder(header, values) {
+  const h = header.toLowerCase().replace(/\s/g, '');
+  if (/m\/d\/y|mm\/dd|ด\/ว\//.test(h)) return 'mdy';
+  if (/d\/m\/y|dd\/mm|ว\/ด\//.test(h)) return 'dmy';
+  let dmy = 0;
+  let mdy = 0;
+  for (const v of values) {
+    const m = /^\s*(\d{1,2})[-/.](\d{1,2})[-/.]\d{2,4}/.exec(v || '');
+    if (!m) continue;
+    if (+m[1] > 12) dmy++;
+    if (+m[2] > 12) mdy++;
+  }
+  if (mdy > dmy) return 'mdy';
+  if (dmy > mdy) return 'dmy';
+  return null;
+}
+
 function setupMapper(rows, sourceLabel) {
   if (!rows.length) { toast('ไม่พบข้อมูล', true); return; }
   ui.parsed = { rows, sourceLabel };
-  const order = $('#mapOrder').value;
-  const h = guessHeaderRow(rows, order);
+  const h = guessHeaderRow(rows, $('#mapOrder').value);
   $('#mapHeader').max = rows.length;
   $('#mapHeader').value = h + 1;
   buildColumnSelects(true);
@@ -774,37 +816,42 @@ function headerCells() {
   return { hi, headers: Array.from({ length: width }, (_, i) => (head[i] || '').trim() || `คอลัมน์ ${i + 1}`) };
 }
 
+const MAP_IDS = { mapDate: false, mapTime: true, mapMeasured: false, mapExpected: true, mapOperator: true, mapNote: true };
+
 function buildColumnSelects(autoGuess) {
   const { rows } = ui.parsed;
   const { hi, headers } = headerCells();
-  const order = $('#mapOrder').value;
   const opts = (optional) => (optional ? '<option value="-1">— ไม่ใช้ —</option>' : '') +
     headers.map((h, i) => `<option value="${i}">${esc(h)}</option>`).join('');
-  const ids = { mapDate: false, mapTime: true, mapMeasured: false, mapExpected: true, mapNote: true };
   const prev = {};
-  for (const id of Object.keys(ids)) { prev[id] = $('#' + id).value; $('#' + id).innerHTML = opts(ids[id]); }
+  for (const id of Object.keys(MAP_IDS)) { prev[id] = $('#' + id).value; $('#' + id).innerHTML = opts(MAP_IDS[id]); }
 
   if (autoGuess) {
-    const data = rows.slice(hi + 1, hi + 30);
+    const data = rows.slice(hi + 1, hi + 40);
     const lower = headers.map((x) => x.toLowerCase());
     let date = guessColumn(lower, [/วันที่|date|วัน/]);
-    if (date < 0) date = headers.findIndex((_, i) => data.filter((r) => parseDateCell(r[i], order)).length > data.length / 2);
-    const time = guessColumn(lower, [/เวลา|time/], [date]);
-    let expected = guessColumn(lower, [/คำนวณ|calc|expect|theor|ทฤษฎี|decay|สลาย|nominal|ref/], [date, time]);
-    let measured = guessColumn(lower, [/วัด|measur|well|chamber|electrometer|ค่าที่ได้|actual|อ่าน|reading/], [date, time, expected]);
-    const numericCols = headers.map((_, i) => i).filter((i) => ![date, time].includes(i) &&
-      data.filter((r) => parseNumCell(r[i]) != null).length > data.length / 2 &&
-      !/%|diff|ต่าง|error/i.test(lower[i]));
-    if (measured < 0) measured = numericCols.find((i) => i !== expected) ?? -1;
-    if (expected < 0 && numericCols.length >= 2) expected = numericCols.find((i) => i !== measured) ?? -1;
-    const note = guessColumn(lower, [/หมายเหตุ|note|remark|ผู้วัด|ผู้บันทึก|operator/], [date, time, measured, expected]);
-    $('#mapDate').value = Math.max(0, date);
+    if (date < 0) date = headers.findIndex((_, i) => data.filter((r) => parseDateCell(r[i], 'dmy')).length > data.length / 2);
+    date = Math.max(0, date);
+    const order = detectDateOrder(headers[date], rows.slice(hi + 1).map((r) => r[date]));
+    if (order) $('#mapOrder').value = order;
+    const time = guessColumn(lower, [/เวลา|^time/], [date]);
+    let measured = guessColumn(lower, [/planning|plan|tps|กรอก|วัด|measur|well|chamber|electrometer|actual|reading/], [date, time]);
+    // ใช้คอลัมน์ค่าคำนวณจากชีตเฉพาะเมื่อยังไม่มี source ให้แอปคำนวณเอง
+    let expected = state.sources.length ? -1 : guessColumn(lower, [/คำนวณ|calc|expect|theor|ทฤษฎี|decay|สลาย|nominal/], [date, time, measured]);
+    const filled = (i) => data.filter((r) => parseNumCell(r[i]) != null).length > data.length / 2;
+    const numericCols = headers.map((_, i) => i).filter((i) => ![date, time].includes(i) && filled(i) &&
+      !/%|diff|ต่าง|error|date|วัน/i.test(lower[i]));
+    if (measured < 0) measured = numericCols.find((i) => i !== expected) ?? 0;
+    const operator = guessColumn(lower, [/^mp$|ผู้ตรวจ|ผู้วัด|ผู้บันทึก|operator|physicist|initial/], [date, time, measured, expected]);
+    const note = guessColumn(lower, [/หมายเหตุ|note|remark|comment/], [date, time, measured, expected, operator]);
+    $('#mapDate').value = date;
     $('#mapTime').value = time;
-    $('#mapMeasured').value = Math.max(0, measured);
+    $('#mapMeasured').value = measured;
     $('#mapExpected').value = expected;
+    $('#mapOperator').value = operator;
     $('#mapNote').value = note;
   } else {
-    for (const id of Object.keys(ids)) if ([...$('#' + id).options].some((o) => o.value === prev[id])) $('#' + id).value = prev[id];
+    for (const id of Object.keys(MAP_IDS)) if ([...$('#' + id).options].some((o) => o.value === prev[id])) $('#' + id).value = prev[id];
   }
   renderMapPreview();
 }
@@ -814,13 +861,19 @@ function mappedRows() {
   const { hi } = headerCells();
   const order = $('#mapOrder').value;
   const col = (id) => +$('#' + id).value;
-  const [cd, ct, cm, ce, cn] = ['mapDate', 'mapTime', 'mapMeasured', 'mapExpected', 'mapNote'].map(col);
+  const [cd, ct, cm, ce, co, cn] = ['mapDate', 'mapTime', 'mapMeasured', 'mapExpected', 'mapOperator', 'mapNote'].map(col);
   const out = [];
-  let skipped = 0;
-  for (const r of rows.slice(hi + 1)) {
-    const d = parseDateCell(r[cd], order);
-    const measured = parseNumCell(r[cm]);
-    if (!d || measured == null) { skipped++; continue; }
+  const skipped = [];
+  rows.slice(hi + 1).forEach((r, k) => {
+    const rawDate = (r[cd] || '').trim();
+    const rawVal = (r[cm] || '').trim();
+    if (!rawDate && !rawVal) return; // แถวว่าง (เช่นแถวที่ลากสูตรไว้ล่วงหน้า)
+    const d = parseDateCell(rawDate, order);
+    const measured = parseNumCell(rawVal);
+    if (!d || measured == null) {
+      skipped.push({ row: hi + 2 + k, date: rawDate, why: !d ? 'วันที่อ่านไม่ได้' : 'ไม่มีค่า' });
+      return;
+    }
     if (ct >= 0) {
       const tp = parseTimePart(r[ct]);
       if (tp) d.setHours(tp[0], tp[1]);
@@ -829,21 +882,25 @@ function mappedRows() {
       date: toLocalInput(d),
       measured,
       expected: ce >= 0 ? parseNumCell(r[ce]) : null,
+      operator: co >= 0 ? (r[co] || '').trim() : '',
       note: cn >= 0 ? (r[cn] || '').trim() : '',
     });
-  }
+  });
   return { out, skipped };
 }
 
 function renderMapPreview() {
   const { out, skipped } = mappedRows();
   const unit = state.settings.unit;
-  $('#mapSummary').textContent = `อ่านได้ ${out.length} แถว` + (skipped ? ` · ข้าม ${skipped} แถวที่ไม่มีวันที่หรือค่าที่วัด` : '') +
+  const skipTxt = skipped.length
+    ? ` · ข้าม ${skipped.length} แถว: ` + skipped.slice(0, 6).map((x) => `แถว ${x.row}${x.date ? ` (“${x.date}”)` : ''} ${x.why}`).join(', ') + (skipped.length > 6 ? ' …' : '')
+    : '';
+  $('#mapSummary').textContent = `อ่านได้ ${out.length} แถว` + skipTxt +
     (out.length && $('#mapExpected').value === '-1' && !state.sources.length ? ' · ยังไม่มีค่าคำนวณ: เลือกคอลัมน์ค่าคำนวณ หรือเพิ่ม source หลังนำเข้า' : '');
   const sample = out.slice(0, 8).map((x) => evaluate(x));
-  $('#mapPreview').innerHTML = `<thead><tr><th>วันที่ / เวลา</th><th class="num">คำนวณ (${esc(unit)})</th><th class="num">วัดได้ (${esc(unit)})</th><th class="num">% ต่าง</th><th>หมายเหตุ</th></tr></thead><tbody>` +
-    (sample.length ? sample.map((r) => `<tr><td>${esc(fmtDate(r.t))}</td><td class="num">${fmtAct(r.expected)}</td><td class="num">${fmtAct(r.measured)}</td><td class="num">${fmtPct(r.diff)}</td><td class="note">${esc(r.note)}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty">ไม่มีแถวที่อ่านได้ — ลองเปลี่ยนแถวหัวตารางหรือคอลัมน์</td></tr>') + '</tbody>';
+  $('#mapPreview').innerHTML = `<thead><tr><th>วันที่</th><th class="num">คำนวณ (${esc(unit)})</th><th class="num">Planning (${esc(unit)})</th><th class="num">% ต่าง</th><th>MP</th><th>หมายเหตุ</th></tr></thead><tbody>` +
+    (sample.length ? sample.map((r) => `<tr><td>${esc(fmtDate(r.t))}</td><td class="num">${fmtAct(r.expected)}</td><td class="num">${fmtVal(r.measured)}</td><td class="num">${fmtPct(r.diff)}</td><td>${esc(r.operator)}</td><td class="note">${esc(r.note)}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">ไม่มีแถวที่อ่านได้ — ลองเปลี่ยนแถวหัวตารางหรือคอลัมน์</td></tr>') + '</tbody>';
   $('#doImport').textContent = `นำเข้า ${out.length} แถว`;
   $('#doImport').disabled = !out.length;
 }
@@ -853,7 +910,7 @@ $('#mapOrder').addEventListener('change', () => {
   state.settings.dateOrder = $('#mapOrder').value; save();
   if (ui.parsed) renderMapPreview();
 });
-['#mapDate', '#mapTime', '#mapMeasured', '#mapExpected', '#mapNote'].forEach((s) => $(s).addEventListener('change', renderMapPreview));
+Object.keys(MAP_IDS).forEach((id) => $('#' + id).addEventListener('change', renderMapPreview));
 
 $('#doImport').addEventListener('click', () => {
   const { out } = mappedRows();
@@ -879,41 +936,85 @@ $('#doImport').addEventListener('click', () => {
   showTab('dashboard');
 });
 
-function sheetCsvUrls(url, tab) {
+function sheetRef(url, tab) {
   const m = /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/.exec(url);
   if (!m) return null;
-  const id = m[1];
   const g = /[#&?]gid=(\d+)/.exec(url);
-  const sel = tab ? `&sheet=${encodeURIComponent(tab)}` : g ? `&gid=${g[1]}` : '';
-  const urls = [`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv${sel}`];
-  if (!tab) urls.push(`https://docs.google.com/spreadsheets/d/${id}/export?format=csv${g ? `&gid=${g[1]}` : ''}`);
-  return urls;
+  const base = `https://docs.google.com/spreadsheets/d/${m[1]}`;
+  return {
+    base,
+    sel: tab ? `&sheet=${encodeURIComponent(tab)}` : g ? `&gid=${g[1]}` : '',
+    csvExport: tab ? null : `${base}/export?format=csv${g ? `&gid=${g[1]}` : ''}`,
+  };
+}
+
+/** แปลงเซลล์ของ gviz: วันที่เป็น ISO (ไม่ต้องเดาลำดับวัน/เดือน), ตัวเลขเต็มความละเอียด, อื่น ๆ ตามที่แสดงในชีต */
+function gvizCell(c, type) {
+  if (!c || c.v == null) return c && c.f != null ? String(c.f) : '';
+  const d = typeof c.v === 'string' && /^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+))?/.exec(c.v);
+  if (d) {
+    const day = `${d[1]}-${pad(+d[2] + 1)}-${pad(+d[3])}`;
+    return d[4] != null && (+d[4] || +d[5]) ? `${day}T${pad(+d[4])}:${pad(+d[5])}` : day;
+  }
+  if (type === 'number' && typeof c.v === 'number') return String(c.v);
+  return c.f != null ? String(c.f) : String(c.v);
+}
+
+/** ดึงผ่าน JSONP ของ Google Visualization — ใช้ได้แม้เปิดไฟล์ index.html โดยตรง (ไม่ติด CORS) */
+function fetchSheetJsonp(ref) {
+  return new Promise((resolve, reject) => {
+    const cb = `hdrSheetCb_${Date.now()}`;
+    const script = document.createElement('script');
+    const done = () => { clearTimeout(timer); delete window[cb]; script.remove(); };
+    const timer = setTimeout(() => { done(); reject(new Error('หมดเวลา')); }, 20000);
+    window[cb] = (resp) => {
+      done();
+      if (!resp || resp.status === 'error') {
+        reject(new Error((resp && resp.errors && resp.errors[0] && (resp.errors[0].detailed_message || resp.errors[0].message)) || 'อ่านชีตไม่ได้'));
+        return;
+      }
+      const { cols, rows } = resp.table;
+      const out = [];
+      if (cols.some((c) => c.label)) out.push(cols.map((c) => c.label || ''));
+      for (const r of rows) out.push(cols.map((col, i) => gvizCell(r.c[i], col.type)));
+      resolve(out.filter((r) => r.some((c) => c.trim() !== '')));
+    };
+    script.onerror = () => { done(); reject(new Error('ชีตไม่ได้เปิดสิทธิ์ให้ทุกคนที่มีลิงก์ดูได้')); };
+    script.src = `${ref.base}/gviz/tq?tqx=out:json;responseHandler:${cb}${ref.sel}`;
+    document.head.appendChild(script);
+  });
+}
+
+async function fetchSheetCsv(url) {
+  const res = await fetch(url, { redirect: 'follow' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const text = await res.text();
+  if (/^\s*<!doctype html|<html/i.test(text)) throw new Error('ชีตไม่ได้เปิดสิทธิ์ให้ทุกคนที่มีลิงก์ดูได้');
+  return parseCSV(text);
 }
 
 $('#fetchSheet').addEventListener('click', async () => {
   const url = $('#sheetUrl').value.trim();
   const tab = $('#sheetTab').value.trim();
-  const urls = sheetCsvUrls(url, tab);
-  if (!urls) { toast('ลิงก์ Google Sheets ไม่ถูกต้อง', true); return; }
+  const ref = sheetRef(url, tab);
+  if (!ref) { toast('ลิงก์ Google Sheets ไม่ถูกต้อง', true); return; }
   state.settings.sheetUrl = url;
   state.settings.sheetTab = tab;
   save();
   const btn = $('#fetchSheet');
   btn.disabled = true;
   btn.textContent = 'กำลังดึงข้อมูล…';
+  const attempts = [() => fetchSheetJsonp(ref), () => fetchSheetCsv(`${ref.base}/gviz/tq?tqx=out:csv${ref.sel}`)];
+  if (ref.csvExport) attempts.push(() => fetchSheetCsv(ref.csvExport));
   let lastErr = null;
   try {
-    for (const u of urls) {
+    for (const attempt of attempts) {
       try {
-        const res = await fetch(u, { redirect: 'follow' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        if (/^\s*<!doctype html|<html/i.test(text)) throw new Error('ชีตไม่ได้เปิดสิทธิ์ให้ทุกคนที่มีลิงก์ดูได้');
-        setupMapper(parseCSV(text), 'Google Sheets');
+        setupMapper(await attempt(), 'Google Sheets');
         toast('ดึงข้อมูลสำเร็จ — ตรวจสอบการจับคู่คอลัมน์');
         return;
       } catch (err) {
-        lastErr = err;
+        lastErr = lastErr || err;
       }
     }
     toast('ดึงข้อมูลไม่สำเร็จ: ' + (lastErr ? lastErr.message : '') + ' — ตรวจสอบการแชร์ชีต หรือดาวน์โหลดเป็น CSV แล้วนำเข้าแทน', true);
@@ -951,11 +1052,11 @@ const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"
 
 $('#exportCsv').addEventListener('click', () => {
   const unit = state.settings.unit;
-  const head = ['วันที่', 'เวลา', 'Source', `Activity คำนวณ (${unit})`, `Activity วัดได้ (${unit})`, '% ต่าง', 'สถานะ', 'หมายเหตุ'];
+  const head = ['วันที่', 'เวลา', 'Source', `Activity คำนวณ (${unit})`, `Planning (${unit})`, '% ต่าง', 'สถานะ', 'MP', 'หมายเหตุ'];
   const lines = evaluatedRecords().map((r) => [
     r.date.slice(0, 10), r.date.slice(11, 16), r.expectedFrom === 'decay' ? r.src.serial : r.expectedFrom === 'manual' ? 'กรอกเอง' : '',
     r.expected != null ? r.expected.toFixed(6) : '', r.measured, r.diff != null ? r.diff.toFixed(3) : '',
-    r.status === 'ok' ? 'ผ่าน' : r.status === 'bad' ? 'เกินเกณฑ์' : '', r.note,
+    r.status === 'ok' ? 'ผ่าน' : r.status === 'bad' ? 'เกินเกณฑ์' : '', r.operator, r.note,
   ].map(csvCell).join(','));
   download(`hdr-activity-${today()}.csv`, '﻿' + [head.join(','), ...lines].join('\n'), 'text/csv;charset=utf-8');
 });
@@ -989,6 +1090,7 @@ function renderAll() {
   $$('.unit-text').forEach((el) => { el.textContent = state.settings.unit; });
   $$('.tol-label').forEach((el) => { el.textContent = state.settings.tolerance; });
   renderFilters();
+  renderOperators();
   renderTiles();
   renderRecords();
   renderSources();
