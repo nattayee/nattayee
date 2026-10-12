@@ -7,6 +7,8 @@
  *   J2:K14 = ค่าคงที่ของ source (Serial, Acceptance date, A0, T1/2, e)
  */
 
+// ID ของชีต Brachy_therapy_Activity (ส่วนที่อยู่ระหว่าง /d/ กับ /edit ในลิงก์ชีต)
+var SPREADSHEET_ID = '1NUgqDvc540aHviRw-8IaO86FT7CwwJktmiA_dPbDFlQ';
 var SHEET_NAME = 'Record';
 var FIRST_ROW = 2;
 
@@ -24,15 +26,19 @@ function doGet() {
     'แล้วพิมพ์ชื่อ index (ไม่ต้องพิมพ์ .html) จากนั้นวางโค้ดจากกล่อง index.html');
 }
 
+/** ใช้ได้ทั้งสคริปต์ที่สร้างจากในชีต และสคริปต์แยกที่สร้างจาก script.google.com */
+function ss_() {
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
 function sheet_() {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  var sh = ss_().getSheetByName(SHEET_NAME);
   if (!sh) throw new Error('ไม่พบแท็บ "' + SHEET_NAME + '" ในชีตนี้');
   return sh;
 }
 
 function iso_(d) {
-  var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
-  return Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  return Utilities.formatDate(d, ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
 }
 
 function num_(v) {
@@ -99,7 +105,7 @@ function addRecord(dateIso, planning, mp) {
       sh.getRange(row - 1, 3, 1, 2).copyTo(sh.getRange(row, 3, 1, 2));
       sh.getRange(row - 1, 7).copyTo(sh.getRange(row, 7));
     }
-    var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    var tz = ss_().getSpreadsheetTimeZone();
     sh.getRange(row, 1).setValue(Utilities.parseDate(dateIso, tz, 'yyyy-MM-dd'));
     sh.getRange(row, 5).setValue(value);
     sh.getRange(row, 6).setValue(String(mp || ''));
