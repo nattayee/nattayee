@@ -48,7 +48,7 @@ const CONFIG = {
   // (open …/exec?refresh=1 to load them at once). Leave empty to use the Index file instead.
   PAGE_URL: 'https://raw.githubusercontent.com/nattayee/nattayee/claude/lpch-ro-workspace-website-96j4r6/website/linac-qa/index.html',
   // LPCH RO Workspace accounts (Script property LPCH_URL, or put the /exec URL here)
-  LPCH_URL: '',
+  LPCH_URL: 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec',
   LPCH_ROLES: ['MP'],       // professions allowed (LPCH admins always are); ['*'] = every approved member
   LPCH_CHECK_SECONDS: 300
 };
