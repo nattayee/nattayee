@@ -7,7 +7,7 @@
  * โครงสร้าง:
  *   nav   — เมนูด้านบน (เรียงตามลำดับ) แต่ละเมนูอ้างถึง key ใน pages; ถ้ามี children จะเป็น dropdown
  *   pages — เนื้อหาแต่ละหน้า: apps = การ์ดเว็บแอป (ปุ่มเปิด), groups = กล่องรายการลิงก์, widgets = ส่วนพิเศษ
- *           (widgets ที่มี: "calculators", "constraints", "announcements", "quicklinks", "subpages")
+ *           (widgets ที่มี: "calculators", "constraints", "announcements", "quicklinks", "dashcal", "subpages")
  */
 /*
  * เว็บแอป Apps Script อื่นที่ใช้บัญชีเว็บนี้ (sso: true = ลิงก์แนบบัตรผ่าน ssoTicket ใน Code.gs แอปจึงเข้าสู่ระบบให้อัตโนมัติ)
@@ -29,6 +29,15 @@ var LINAC_QA_APP = {
   note: "เปิดในแท็บใหม่ · เข้าสู่ระบบให้อัตโนมัติด้วยบัญชี LPCH RO Workspace",
   sso: true,
   url: "https://script.google.com/macros/s/AKfycbzbr7zos77u_DMBvXs-JLKsYiCdLXwuzTL0dQugLDLtVGUq47xYPESaWSeakd8k2WWO/exec",
+};
+
+/*
+ * ระบบกระจายงานฟิสิกส์การแพทย์ — หน้าแรกฝังปฏิทินห้องฉายของแถบแดชบอร์ด (…/exec?embed=cal, dashcal.js)
+ * ต้องใช้ Code.gs ของระบบนั้นรุ่น 2026-10-12.8 ขึ้นไป (อนุญาตให้ฝังเฉพาะ ?embed=cal)
+ */
+var MEDPHYS_APP = {
+  label: "ระบบกระจายงานฟิสิกส์การแพทย์",
+  url: "https://script.google.com/macros/s/AKfycbzbb97RT1RdFDzVp0EB10ecOSFjtNCxcL_mSOPnD5ofSPzUA6FmNSO6P9h3vCUep3oa/exec",
 };
 
 window.SITE = {
@@ -135,7 +144,7 @@ window.SITE = {
 
   pages: {
     home: {
-      widgets: ["quicklinks"],
+      widgets: ["quicklinks", "dashcal"],   // dashcal: ปฏิทินห้องฉาย ใต้ปุ่ม Workspace (dashcal.js)
       sidebar: "team",   // แถบขวา: สถานะทีม (status.js)
     },
 
