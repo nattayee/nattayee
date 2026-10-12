@@ -25,7 +25,7 @@
  * The Workspace web app must also be deployed with Who has access: Anyone.
  * Open a tab directly with ?tab=frac | gap | brachy | ref
  */
-var WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+var WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/practical-cerf-k0tdhp/tdf-calculator/apps-script/Index.html';
 var PAGE_CACHE_SECONDS = 600;
 
