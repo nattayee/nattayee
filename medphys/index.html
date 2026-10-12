@@ -1140,8 +1140,9 @@ const MC_API = 11;   // Code.gs ที่รู้จัก SRS MapCheck
 const PC_API = 13;   // Code.gs ที่รู้จัก Plan complete
 const EDIT_PIN_API = 14;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขเคส (editCase, removeCase)
 const STAMPS_API = 15;   // Code.gs ที่บันทึกหลายค่าพร้อมกัน (stampSteps) · รุ่นเก่าบันทึกทีละค่า
-const NOTE_API = 16;
-const SKIP_API = 17;   // Code.gs ที่ใช้หักคิวรายเดือน (config.skips) ตอนแจกเคส   // Code.gs ที่เก็บหมายเหตุของค่า (Dose check หมายเหตุ ฯลฯ) · รุ่นเก่าไม่มีช่องหมายเหตุ
+const NOTE_API = 16;   // Code.gs ที่เก็บหมายเหตุของค่า (Dose check หมายเหตุ ฯลฯ) · รุ่นเก่าไม่มีช่องหมายเหตุ
+const SKIP_API = 17;   // Code.gs ที่ใช้หักคิวรายเดือน (config.skips) ตอนแจกเคส
+const LOG_PIN_API = 18;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขกิจกรรม (editLog, removeLog)
 // ปุ่มที่ต้องใช้ Code.gs รุ่นใหม่ (รุ่นเก่าจะซ่อนไว้ เพราะบันทึกลงชีตไม่ได้)
 const stepOn = x => serverHas({ mc: MC_API, pc: PC_API }[x.key] || 0);
 // ปุ่มที่เพิ่มเข้ามาทีหลังเปิดตามค่าเริ่มต้นนี้ จนกว่าแอดมินจะตั้งเอง (SRS MapCheck เฉพาะเทคนิค SRS)
@@ -1484,7 +1485,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.13';
+const PAGE_VERSION = '2026-10-12.14';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1521,6 +1522,8 @@ const sheetStore = {
   stampMany: (id, values, pin) => call('stampSteps', id, values, pin),
   editCase: (rec, pin) => call('editCase', rec, pin),
   removeCase: (id, pin) => call('removeCase', id, pin),
+  editLog: (rec, pin) => call('editLog', rec, pin),
+  removeLog: (id, pin) => call('removeLog', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
   holidays: year => call('thaiHolidays', year),
 };
@@ -1580,6 +1583,8 @@ function localStore() {
     stampMany: async (id, values, pin) => stampLocal(id, values, pin),
     editCase: async (rec, pin) => { demoCheckPin(pin); upsert(db.cases, clone(rec)); persist(); return rec; },
     removeCase: async (id, pin) => { demoCheckPin(pin); db.cases = db.cases.filter(x => x.id !== id); persist(); return true; },
+    editLog: async (rec, pin) => { demoCheckPin(pin); upsert(db.logs, clone(rec)); persist(); return rec; },
+    removeLog: async (id, pin) => { demoCheckPin(pin); db.logs = db.logs.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
       if (!/^\d{4}$/.test(pin)) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4 หลัก');
       if (demoPin.get() && !(proof && proof.pin != null && demoPin.hash(proof.pin) === demoPin.get()) && !(proof && proof.password)) throw new Error('รหัส PIN เดิมไม่ถูกต้อง');
@@ -2498,6 +2503,7 @@ const serverHas = api => store.mode !== 'sheet' || !state.loaded || (state.api |
 const roomSitesOn = () => serverHas(ROOM_API);
 const stampsOn = () => serverHas(STAMP_API);
 const editPinOn = () => serverHas(EDIT_PIN_API);
+const logPinOn = () => serverHas(LOG_PIN_API);
 const noteOn = () => serverHas(NOTE_API);
 const skipsOn = () => serverHas(SKIP_API);
 // ฉายหลายที่ (ขนาดรังสีต่างกัน): บริเวณแรกอยู่ในช่อง area/dpf/fx/freq ของเคส บริเวณถัดไปเก็บใน sites เป็น JSON
@@ -3985,28 +3991,36 @@ async function submitLog(e) {
     updated: nowISO(),
   });
   const isNew = !editingLog.id;
+  if (!isNew && logPinOn()) return openLogPin('logedit', rec);   // แก้รายการเดิม: ยืนยันด้วยรหัส PIN ก่อนบันทึก
   const btn = $('#log-save');
   btn.disabled = true;
   try {
     await store.save('logs', rec);
-    const i = state.logs.findIndex(x => x.id === rec.id);
-    if (i < 0) state.logs.push(rec); else state.logs[i] = rec;
-    logDlg.close();
-    render();
-    toast(isNew ? `บันทึก ${kindOf(kind).label} ให้ ${mp} แล้ว` : 'บันทึกการแก้ไขแล้ว');
+    logSaved(rec, isNew);
   } catch (err) { toast('บันทึกไม่สำเร็จ: ' + errMsg(err), { err: true }); }
   finally { btn.disabled = false; }
 }
+function logSaved(rec, isNew) {
+  const i = state.logs.findIndex(x => x.id === rec.id);
+  if (i < 0) state.logs.push(rec); else state.logs[i] = rec;
+  logDlg.close();
+  render();
+  toast(isNew ? `บันทึก ${kindOf(rec.kind).label} ให้ ${rec.mp} แล้ว` : 'บันทึกการแก้ไขแล้ว');
+}
 async function deleteLog(btn) {
+  if (logPinOn()) return openLogPin('logdel', editingLog);   // รหัส PIN เป็นการยืนยันการลบ
   if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { delete btn.dataset.armed; btn.textContent = 'ลบ'; }, 3500); return; }
   const id = editingLog.id;
   try {
     await store.remove('logs', id);
-    state.logs = state.logs.filter(l => l.id !== id);
-    logDlg.close();
-    render();
-    toast('ลบรายการแล้ว');
+    logDeleted(id);
   } catch (e) { toast('ลบไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+function logDeleted(id) {
+  state.logs = state.logs.filter(l => l.id !== id);
+  logDlg.close();
+  render();
+  toast('ลบรายการแล้ว');
 }
 
 /* ---------- แจกเคสใหม่ ---------- */
@@ -4287,9 +4301,10 @@ function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidd
 const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]'));
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
+  const del = pinCtx.mode === 'del' || pinCtx.mode === 'logdel';
   $('#pin-new-box').hidden = has && !set;
   $('#pin-new-note').hidden = set;
-  $('#pin-new-note').textContent = `คุณยังไม่ได้ตั้งรหัส PIN ตั้งรหัสตัวเลข 4 หลักของคุณก่อน แล้วระบบจะ${pinCtx.mode === 'del' ? 'ลบ' : 'บันทึก'}ให้ทันที (ใช้รหัสนี้ทุกครั้งที่กดปุ่มบันทึกขั้นตอน แก้ไขหรือลบเคส)`;
+  $('#pin-new-note').textContent = `คุณยังไม่ได้ตั้งรหัส PIN ตั้งรหัสตัวเลข 4 หลักของคุณก่อน แล้วระบบจะ${del ? 'ลบ' : 'บันทึก'}ให้ทันที (ใช้รหัสนี้ทุกครั้งที่กดปุ่มบันทึกขั้นตอน แก้ไขหรือลบเคสและกิจกรรม)`;
   $('#pin-proof-box').hidden = !(set && has);
   $('#pin-forgot').hidden = !lpch || pinCtx.forgot;
   const proof = $('#pin-proof');
@@ -4298,8 +4313,8 @@ function syncPinForm() {
   proof.inputMode = pinCtx.forgot ? 'text' : 'numeric';
   $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
   $('#pin-field').hidden = set || !has;
-  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : 'บันทึก';
-  $('#pin-save').classList.toggle('danger', pinCtx.mode === 'del');
+  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'logdel' ? 'ลบรายการ' : 'บันทึก';
+  $('#pin-save').classList.toggle('danger', del);
   for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
   pinErr('');
 }
@@ -4338,6 +4353,22 @@ function openCasePin(mode, rec) {
   pinDlg.showModal();
   firstPinInput().focus();
 }
+// หน้าแก้ไขกิจกรรม (RC งานวิชาการ ฯลฯ): บันทึกการแก้ไข (logedit) หรือลบ (logdel) ต้องใส่รหัส PIN เหมือนหน้าแก้ไขเคส
+function openLogPin(mode, rec) {
+  pinCtx = { mode, rec, id: rec.id, forgot: false, auto: mode === 'logedit' };
+  const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`;
+  const what = [kindOf(rec.kind).label, rec.mp, fmtDay(rec.date), rec.hn, rec.title].filter(Boolean).map(esc).join(' · ');
+  $('#pin-title').textContent = `${mode === 'logdel' ? 'ลบกิจกรรม' : 'บันทึกการแก้ไขกิจกรรม'} · ${kindOf(rec.kind).label}${rec.hn ? ' ' + rec.hn : ''}`;
+  $('#pin-what').innerHTML = mode === 'logdel'
+    ? `ลบรายการนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ยืนยันด้วยรหัส PIN ของ ${who}`
+    : `${what} · ยืนยันการแก้ไขด้วยรหัส PIN ของ ${who}`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-note-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
 // ปุ่ม ✓ ใต้ค่า: บันทึกค่าในช่องนั้นด้วยรหัส PIN
 function openValsPin(id, key) {
   const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key);
@@ -4364,7 +4395,7 @@ function openPinSettings() {
   pinCtx = { mode: 'set', forgot: false };
   $('#pin-title').textContent = state.user.hasPin ? 'เปลี่ยนรหัส PIN' : 'ตั้งรหัส PIN';
   $('#pin-note-field').hidden = true;
-  $('#pin-what').innerHTML = `รหัส PIN ตัวเลข 4 หลักของ <b>${esc(state.user.name || state.user.me || '')}</b> ใช้ยืนยันทุกครั้งที่กดปุ่ม ${STEPS.filter(stepOn).map(x => x.label).join(', ')}${editPinOn() ? ' และตอนบันทึกหรือลบในหน้าแก้ไขเคส' : ''}`;
+  $('#pin-what').innerHTML = `รหัส PIN ตัวเลข 4 หลักของ <b>${esc(state.user.name || state.user.me || '')}</b> ใช้ยืนยันทุกครั้งที่กดปุ่ม ${STEPS.filter(stepOn).map(x => x.label).join(', ')}${editPinOn() ? ` และตอนบันทึกหรือลบในหน้าแก้ไขเคส${logPinOn() ? 'และหน้าแก้ไขกิจกรรม' : ''}` : ''}`;
   $('#pin-val-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
@@ -4396,6 +4427,8 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
     if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); return; }
     if (ctx.mode === 'del') { await store.removeCase(ctx.id, pin); caseDeleted(ctx.id); pinDlg.close(); return; }
+    if (ctx.mode === 'logedit') { await store.editLog(ctx.rec, pin); logSaved(ctx.rec, false); pinDlg.close(); return; }
+    if (ctx.mode === 'logdel') { await store.removeLog(ctx.id, pin); logDeleted(ctx.id); pinDlg.close(); return; }
     const note = $('#pin-note-field').hidden ? undefined : str($('#pin-note').value);
     if (ctx.mode === 'vals') { await doStamps(ctx.id, { [ctx.key]: note === undefined ? ctx.value : { value: ctx.value, note } }, pin); pinDlg.close(); return; }
     await doStamp(ctx.id, ctx.step, value, pin, note);

@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-12.6';
-const API_LEVEL = 17;
+const CODE_VERSION = '2026-10-12.7';
+const API_LEVEL = 18;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -382,6 +382,17 @@ function editCase(rec, pin, token) {
 function removeCase(id, pin, token) {
   checkPin_(requireEdit_(token), pin);
   return deleteRecord('cases', id, token);
+}
+
+// หน้าแก้ไขกิจกรรม (RC งานวิชาการ ฯลฯ): บันทึกการแก้ไขหรือลบต้องยืนยันด้วยรหัส PIN เหมือนหน้าแก้ไขเคส
+function editLog(rec, pin, token) {
+  checkPin_(requireEdit_(token), pin);
+  return saveRecord('logs', rec, token);
+}
+
+function removeLog(id, pin, token) {
+  checkPin_(requireEdit_(token), pin);
+  return deleteRecord('logs', id, token);
 }
 
 function saveConfig(config, token) {
