@@ -112,15 +112,6 @@
       return section("Workspace", "เลือกส่วนงาน", manage + '<div class="grid tiles">' + tiles + "</div>");
     },
 
-    // ปฏิทินห้องฉายจากแดชบอร์ดของระบบกระจายงานฟิสิกส์การแพทย์ (dashcal.js ใส่กรอบลงใน .dcal-box)
-    dashcal: function () {
-      if (typeof MEDPHYS_APP === "undefined" || !window.DashCal) return "";
-      return '<section class="section dcal" id="dashCalRoot" aria-label="ปฏิทินห้องฉาย">' +
-        '<div class="dcal-head"><div><h2>ปฏิทินห้องฉาย</h2><p class="lead">จาก' + esc(MEDPHYS_APP.label) + "</p></div>" +
-        '<a class="chip" href="' + esc(MEDPHYS_APP.url) + '" target="_blank" rel="noopener" data-sso="' + esc(MEDPHYS_APP.url) + '">เปิดแดชบอร์ด ↗</a></div>' +
-        '<div class="card flush dcal-box"></div><p class="dcal-hint" hidden></p></section>';
-    },
-
     subpages: function (page) {
       var nav = findNav(page);
       var kids = (nav && nav.item.children) || [];
@@ -318,10 +309,8 @@
   var unmountInbox = null;
 
   var unmountTeam = null;
-  var unmountDashCal = null;
   function unmountWidgets() {
     if (unmountTeam) { unmountTeam(); unmountTeam = null; }
-    if (unmountDashCal) { unmountDashCal(); unmountDashCal = null; }
     if (unmountChat) { unmountChat(); unmountChat = null; }
     if (unmountInbox) { unmountInbox(); unmountInbox = null; }
   }
@@ -385,8 +374,6 @@
     if (adminRoot) Auth.mountAdmin(adminRoot);
     var teamRoot = document.getElementById("teamRoot");
     if (teamRoot && window.Status) unmountTeam = window.Status.mountTeam(teamRoot);
-    var dashCal = document.getElementById("dashCalRoot");
-    if (dashCal && window.DashCal) unmountDashCal = window.DashCal.mount(dashCal);
     var stSet = document.getElementById("statusSettingsRoot");
     if (stSet && window.Status) window.Status.mountSettings(stSet);
     var menusRoot = document.getElementById("menusRoot");
