@@ -8,7 +8,7 @@
   var authScreen = document.getElementById("authScreen");
 
   // Member pages (not in the top menu).
-  S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิกและการเปลี่ยนรหัสผ่าน", widgets: ["account"] };
+  S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิก การเปลี่ยนรหัสผ่าน และอุปกรณ์ที่เข้าสู่ระบบ", widgets: ["account"] };
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
   S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true };
@@ -27,7 +27,7 @@
   function link(label, url, sso) {
     if (!url || url === "#") return '<span class="placeholder">' + esc(label) + "</span>";
     return '<a href="' + esc(url) + '"' + (isExternal(url) ? ' target="_blank" rel="noopener"' : "") +
-      (sso ? ' data-sso="' + esc(url) + '"' : "") + ">" + esc(label) + "</a>";
+      (sso ? ' data-sso="' + esc(url) + '" data-sso-app="' + esc(label) + '"' : "") + ">" + esc(label) + "</a>";
   }
 
   function section(title, lead, body) {
@@ -103,7 +103,7 @@
     quicklinks: function () {
       var tiles = S.quickLinks.map(function (q) {
         return '<a class="card tile" href="' + esc(q.url) + '"' + (isExternal(q.url) ? ' target="_blank" rel="noopener"' : "") +
-          (q.sso ? ' data-sso="' + esc(q.url) + '"' : "") + ">" +
+          (q.sso ? ' data-sso="' + esc(q.url) + '" data-sso-app="' + esc(q.label) + '"' : "") + ">" +
           '<span class="tile-icon" aria-hidden="true">' + esc(q.icon || "") + "</span>" +
           "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc || "") + "</span></div></a>";
       }).join("");
@@ -201,7 +201,7 @@
     if (p.apps) {
       html += section("", "", '<div class="grid wide">' + p.apps.map(function (a) {
         return '<a class="card app-card" href="' + esc(a.url) + '"' + (isExternal(a.url) ? ' target="_blank" rel="noopener"' : "") +
-          (a.sso ? ' data-sso="' + esc(a.url) + '"' : "") + ">" +
+          (a.sso ? ' data-sso="' + esc(a.url) + '" data-sso-app="' + esc(a.label) + '"' : "") + ">" +
           '<span class="app-icon" aria-hidden="true">' + (a.icon || "🔗") + "</span>" +
           '<div class="app-body"><strong>' + esc(a.label) + "</strong>" +
           (a.desc ? "<span>" + esc(a.desc) + "</span>" : "") +
@@ -326,7 +326,10 @@
     clearTimeout(ssoTimer);
     var links = app.querySelectorAll("a[data-sso]");
     if (!links.length || !Auth.remote) return;
-    Auth.call("ssoTicket").then(function (r) {
+    // the app(s) this ticket opens: the login shows up under that name in บัญชีของฉัน › อุปกรณ์ที่เข้าสู่ระบบ
+    var apps = [];
+    links.forEach(function (a) { var n = a.getAttribute("data-sso-app"); if (n && apps.indexOf(n) === -1) apps.push(n); });
+    Auth.call("ssoTicket", { app: apps.join(" / ").slice(0, 80) }).then(function (r) {
       links.forEach(function (a) {
         var base = a.getAttribute("data-sso");
         a.href = base + (base.indexOf("?") === -1 ? "?" : "&") + "sso=" + encodeURIComponent(r.ticket);

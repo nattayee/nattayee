@@ -85,16 +85,20 @@
 
     function find(d, username) { return d.users.filter(function (u) { return u.username === username; })[0]; }
 
-    function session(d, username) {
+    function session(d, username, r, via) {
       var token = uuid();
-      d.sessions.push({ token: token, username: username, expiresAt: Date.now() + 7 * 864e5 });
+      d.sessions.push({ token: token, username: username, expiresAt: Date.now() + 7 * 864e5,
+        createdAt: Date.now(), ua: String((r && r.ua) || "").slice(0, 300), via: via });
       return token;
     }
+    function sid(token) { var h = 0x811c9dc5, h2 = 5381; for (var i = 0; i < token.length; i++) { h = Math.imul(h ^ token.charCodeAt(i), 16777619) >>> 0; h2 = ((h2 << 5) + h2 + token.charCodeAt(i)) >>> 0; }
+      return ("0000000" + h.toString(16)).slice(-8) + ("0000000" + h2.toString(16)).slice(-8); }
 
     function requireUser(d, token) {
       var s = d.sessions.filter(function (x) { return x.token === token && x.expiresAt > Date.now(); })[0];
       var u = s && find(d, s.username);
       if (!u || u.status !== "active") fail("session_expired");
+      s.lastSeen = Date.now();
       return u;
     }
 
@@ -136,7 +140,7 @@
           status: first ? "active" : "pending", isAdmin: first, createdAt: Date.now(), lastLogin: null };
         d.users.push(u);
         if (u.status === "pending") return { status: "pending", message: "สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน" };
-        return { status: "active", token: session(d, username), user: pub(u) };
+        return { status: "active", token: session(d, username, r, "register"), user: pub(u) };
       },
       login: function (d, r) {
         var u = byLogin(d, String(r.username || "").trim().toLowerCase());
@@ -144,12 +148,30 @@
         if (u.status === "pending") fail("บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ");
         if (u.status !== "active") fail("บัญชีของคุณถูกระงับการใช้งาน");
         u.lastLogin = Date.now();
-        return { token: session(d, u.username), user: pub(u) };
+        return { token: session(d, u.username, r, "login"), user: pub(u) };
       },
       me: function (d, r) { return { user: pub(requireUser(d, r.token)) }; },
       logout: function (d, r) {
         d.sessions = d.sessions.filter(function (s) { return s.token !== r.token; });
         return {};
+      },
+      sessionList: function (d, r) {
+        var u = requireUser(d, r.token);
+        return { sessions: d.sessions.filter(function (s) { return s.username === u.username && s.expiresAt > Date.now(); }).map(function (s) {
+          return { id: sid(s.token), current: s.token === r.token, ua: s.ua || "", via: s.via || "", app: "",
+            createdAt: s.createdAt || null, expiresAt: s.expiresAt, lastSeen: s.lastSeen || null };
+        }).sort(function (a, b) { return (b.current - a.current) || ((b.lastSeen || b.createdAt || 0) - (a.lastSeen || a.createdAt || 0)); }) };
+      },
+      sessionRevoke: function (d, r) {
+        var u = requireUser(d, r.token), count = 0, self = false;
+        d.sessions = d.sessions.filter(function (s) {
+          if (s.username !== u.username || (r.others === true ? s.token === r.token : sid(s.token) !== r.id)) return true;
+          if (s.token === r.token) self = true;
+          count++;
+          return false;
+        });
+        if (r.others !== true && !count) fail("การเข้าสู่ระบบนี้ออกจากระบบไปแล้ว");
+        return { count: count, self: self, message: self ? "ออกจากระบบเครื่องนี้แล้ว" : r.others === true ? "ออกจากระบบเครื่องอื่น " + count + " รายการแล้ว" : "ออกจากระบบเครื่องนั้นแล้ว" };
       },
       changePassword: function (d, r) {
         var u = requireUser(d, r.token);
@@ -250,8 +272,11 @@
   var user = null;
   var listeners = [];
 
+  // Sign-ins record the browser they came from (บัญชีของฉัน › อุปกรณ์ที่เข้าสู่ระบบ)
+  var UA_ACTIONS = { login: 1, register: 1, ssoTicket: 1 };
   function call(action, data) {
     var req = Object.assign({ action: action, token: token }, data || {});
+    if (UA_ACTIONS[action]) req.ua = String(navigator.userAgent || "").slice(0, 300);
     return (gas ? gasCall(req) : remote ? remoteCall(req) : LocalBackend(req)).then(function (res) {
       if (!res.ok) {
         if (res.error === "session_expired") { setSession(null, null); throw new Error("กรุณาเข้าสู่ระบบใหม่"); }
@@ -536,7 +561,8 @@
           '<p class="auth-error" role="alert" hidden></p><p class="auth-msg ok" hidden></p>' +
           '<button type="submit" class="auth-submit">บันทึก</button>' +
         "</form></div>" +
-      "</div>";
+      "</div>" +
+      '<div class="card sess-card" id="sessionsCard"></div>';
 
     function wire(form, run) {
       var err = form.querySelector(".auth-error");
@@ -571,6 +597,91 @@
       send: function (f) { return call("changePassword", { oldPassword: f.oldPassword.value, newPassword: f.newPassword.value }); },
       done: function () { el.querySelector(".password-form").reset(); },
     });
+
+    mountSessions(el.querySelector("#sessionsCard"));
+  }
+
+  /* ---------------- Account: where this account is signed in ---------------- */
+
+  // "Chrome · Windows" and an icon from a browser's user agent
+  function deviceOf(ua) {
+    ua = String(ua || "");
+    var os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows"
+      : /CrOS/.test(ua) ? "ChromeOS" : /Macintosh|Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    var br = /\bLine\//.test(ua) ? "LINE" : /FBAN|FBAV/.test(ua) ? "Facebook" : /SamsungBrowser/.test(ua) ? "Samsung Internet"
+      : /Edg(A|iOS)?\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\/|FxiOS/.test(ua) ? "Firefox"
+      : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+    var phone = /iPhone|Android.*Mobile|Windows Phone/.test(ua), tablet = /iPad|Android/.test(ua) && !phone;
+    return { name: [br, os].filter(Boolean).join(" · "), icon: phone ? "📱" : tablet ? "📲" : "💻" };
+  }
+
+  function seenText(ms) {
+    var m = Math.round((Date.now() - ms) / 60000);
+    if (m < 3) return "🟢 ใช้งานอยู่ตอนนี้";
+    if (m < 60) return "ใช้งานล่าสุด " + m + " นาทีที่แล้ว";
+    return "ใช้งานล่าสุด " + Math.round(m / 60) + " ชั่วโมงที่แล้ว";
+  }
+
+  function mountSessions(box) {
+    var list = [], msg = null;
+
+    function row(s) {
+      var d = deviceOf(s.ua), title, icon = d.icon, sub = [];
+      if (s.via === "sso") { title = s.app || "แอปที่เชื่อมกับบัญชีนี้"; icon = "🔗"; if (d.name) sub.push("เปิดจากเว็บนี้บน " + d.name); }
+      else if (s.via === "app") { title = "แอปที่เชื่อมกับบัญชีนี้"; icon = "🔗"; sub.push("เข้าสู่ระบบด้วยรหัสผ่านในแอป (TRS-398, Linac QA …)"); }
+      else { title = d.name || "อุปกรณ์ไม่ทราบชนิด"; if (!s.ua) icon = "❔"; }
+      if (!s.ua && !s.via) sub.push("เข้าสู่ระบบก่อนที่ระบบจะบันทึกอุปกรณ์");
+      var times = [];
+      if (s.lastSeen) times.push(seenText(s.lastSeen));
+      if (s.createdAt) times.push("เข้าสู่ระบบ " + fmtDate(s.createdAt));
+      times.push("หมดอายุ " + fmtDate(s.expiresAt));
+      return '<li class="sess-row' + (s.current ? " current" : "") + '">' +
+        '<span class="sess-icon" aria-hidden="true">' + icon + "</span>" +
+        '<div class="sess-body"><div class="sess-title"><strong>' + esc(title) + "</strong>" + (s.current ? ' <span class="badge">เครื่องนี้</span>' : "") + "</div>" +
+          sub.map(function (x) { return '<div class="sess-sub">' + esc(x) + "</div>"; }).join("") +
+          '<div class="sess-sub">' + esc(times.join(" · ")) + "</div></div>" +
+        '<button type="button" class="chip danger" data-sess-out="' + esc(s.id) + '"' + (s.current ? " data-current" : "") + ">" +
+          (s.current ? "ออกจากระบบเครื่องนี้" : "ออกจากระบบ") + "</button></li>";
+    }
+
+    function render() {
+      var others = list.filter(function (s) { return !s.current; }).length;
+      box.innerHTML =
+        '<div class="sess-head"><h3>💻 อุปกรณ์ที่เข้าสู่ระบบ</h3><button type="button" class="chip" data-sess-reload>↻ รีเฟรช</button></div>' +
+        '<p class="sess-lead">เครื่องและแอปที่บัญชีนี้เข้าสู่ระบบอยู่ (แต่ละรายการอยู่ได้ 7 วันนับจากเข้าสู่ระบบ) · ไม่รู้จักเครื่องไหน กด "ออกจากระบบ" แล้วเปลี่ยนรหัสผ่าน</p>' +
+        (msg ? (msg.bad ? '<p class="auth-error">' : '<p class="auth-msg ok">') + esc(msg.text) + "</p>" : "") +
+        (list ? '<ul class="sess-list">' + list.map(row).join("") + "</ul>" : "") +
+        (others ? '<div class="sess-foot"><button type="button" class="chip danger" data-sess-others>ออกจากระบบเครื่องอื่นทั้งหมด (' + others + ")</button></div>" : "") +
+        '<p class="sess-note">แอปที่เปิดจากเว็บนี้ (เช่น TRS-398, Linac QA) นับเป็นการเข้าสู่ระบบ 1 รายการ · หลังกดออกจากระบบ แอปเหล่านั้นอาจยังใช้ต่อได้อีกไม่เกิน 5 นาที</p>';
+    }
+
+    function load(m) {
+      msg = m || null;
+      return call("sessionList").then(function (r) { list = r.sessions || []; render(); },
+        function (e) { list = null; msg = { text: e.message, bad: true }; render(); });
+    }
+
+    box.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("button");
+      if (!b || b.disabled) return;
+      if (b.hasAttribute("data-sess-reload")) { b.disabled = true; load(); return; }
+      var req = null, ask = "";
+      if (b.hasAttribute("data-sess-others")) { req = { others: true }; ask = "ออกจากระบบเครื่องอื่นทั้งหมด (ยกเว้นเครื่องนี้) ?"; }
+      else if (b.hasAttribute("data-sess-out")) {
+        req = { id: b.getAttribute("data-sess-out") };
+        if (b.hasAttribute("data-current")) ask = "ออกจากระบบเครื่องนี้ ?";
+      }
+      if (!req || (ask && !confirm(ask))) return;
+      b.disabled = true;
+      b.textContent = "กำลังออกจากระบบ…";
+      call("sessionRevoke", req).then(function (r) {
+        if (r.self) { setSession(null, null); return; }   // this device: back to the sign-in screen
+        load({ text: r.message });
+      }, function (ex) { load({ text: ex.message, bad: true }); });
+    });
+
+    box.innerHTML = '<div class="sess-head"><h3>💻 อุปกรณ์ที่เข้าสู่ระบบ</h3></div><p class="muted">กำลังโหลด…</p>';
+    load();
   }
 
   /* ---------------- Public API ---------------- */

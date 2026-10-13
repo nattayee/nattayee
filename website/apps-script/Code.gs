@@ -13,7 +13,7 @@
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions, Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
+ * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions (การเข้าสู่ระบบแต่ละเครื่อง), Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
  *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
@@ -44,7 +44,7 @@ var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/c
 var PAGE_CACHE_SECONDS = 600;
 
 var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin'];
-var SESSION_HEADERS = ['token', 'username', 'expiresAt'];
+var SESSION_HEADERS = ['token', 'username', 'expiresAt', 'createdAt', 'device'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
 var SETTINGS_HEADERS = ['username', 'quickReplies', 'updatedAt'];
@@ -57,7 +57,7 @@ var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบ�
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, sessionList: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -104,7 +104,7 @@ function loadPage_() {
 
 /** Called from the page with google.script.run.api(req). */
 function api(req) {
-  return handle_(req || {});
+  return handle_(req || {}, 'page');
 }
 
 /** JSON API for a static copy of the site hosted elsewhere (auth.apiUrl in data.js). */
@@ -115,10 +115,14 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: 'คำขอไม่ถูกต้อง' });
   }
-  return json_(handle_(req));
+  return json_(handle_(req, 'post'));
 }
 
-function handle_(req) {
+// How this request arrived: 'page' = this site (google.script.run), 'post' = doPost (TRS-398, Linac QA … or a static copy)
+var CHANNEL_ = 'page';
+
+function handle_(req, channel) {
+  CHANNEL_ = channel || 'page';
   var fn = ACTIONS[req.action];
   if (!fn) return { ok: false, error: 'ไม่รู้จักคำสั่ง ' + req.action };
   var lock = READ_ONLY[req.action] ? null : LockService.getScriptLock();
@@ -189,7 +193,7 @@ ACTIONS.register = function (req) {
     return { status: status, message: 'สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน' };
   }
   var u = findUser_(username);
-  return { status: status, token: createSession_(username), user: publicUser_(u) };
+  return { status: status, token: createSession_(username, { ua: req.ua, via: 'register' }), user: publicUser_(u) };
 };
 
 /** ชื่อผู้ใช้หรืออีเมล + รหัสผ่าน (แอป TRS-398 ก็ตรวจรหัสผ่านผ่านคำสั่งนี้) */
@@ -211,7 +215,7 @@ ACTIONS.login = function (req) {
   cache.remove(failKey);
   setUserField_(u, 'lastLogin', new Date());
   purgeSessions_();
-  return { token: createSession_(u.username), user: publicUser_(u) };
+  return { token: createSession_(u.username, { ua: req.ua, via: 'login' }), user: publicUser_(u) };
 };
 
 /* ---------------- เข้าแอปอื่นด้วยบัญชีนี้ (TRS-398 Output Calibration) ----------------
@@ -224,20 +228,24 @@ var SSO_SECONDS = 120;
 ACTIONS.ssoTicket = function (req) {
   var u = requireUser_(req.token);
   var ticket = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
-  CacheService.getScriptCache().put('sso_' + ticket, u.username, SSO_SECONDS);
+  // the browser that asked (ua) and the app the link opens: shown in "อุปกรณ์ที่เข้าสู่ระบบ"
+  CacheService.getScriptCache().put('sso_' + ticket, JSON.stringify({ u: u.username, ua: clip_(req.ua, 300), app: clip_(req.app, 80) }), SSO_SECONDS);
   return { ticket: ticket, expiresIn: SSO_SECONDS };
 };
 
 ACTIONS.ssoRedeem = function (req) {
   var key = 'sso_' + String(req.ticket || '').replace(/[^0-9a-f]/gi, '');
   var cache = CacheService.getScriptCache();
-  var username = key.length > 4 ? cache.get(key) : null;
-  if (!username) throw new Error('ลิงก์เข้าสู่ระบบหมดอายุหรือถูกใช้ไปแล้ว กรุณาเข้าสู่ระบบอีกครั้ง');
+  var raw = key.length > 4 ? cache.get(key) : null;
+  if (!raw) throw new Error('ลิงก์เข้าสู่ระบบหมดอายุหรือถูกใช้ไปแล้ว กรุณาเข้าสู่ระบบอีกครั้ง');
   cache.remove(key);   // ใช้ได้ครั้งเดียว
-  var u = findUser_(username);
+  var t;
+  try { t = JSON.parse(raw); } catch (e) { t = null; }
+  if (!t || typeof t !== 'object') t = { u: raw };   // ticket issued before this version: just the username
+  var u = findUser_(String(t.u || ''));
   if (!u || u.status !== 'active') throw new Error('บัญชีของคุณถูกระงับการใช้งาน');
   purgeSessions_();
-  return { token: createSession_(u.username), user: publicUser_(u) };
+  return { token: createSession_(u.username, { ua: t.ua, via: 'sso', app: t.app }), user: publicUser_(u) };
 };
 
 ACTIONS.me = function (req) {
@@ -251,6 +259,53 @@ ACTIONS.logout = function (req) {
     if (rows[i][0] === req.token) sheet.deleteRow(i + 1);
   }
   return {};
+};
+
+/* ---------------- อุปกรณ์ที่เข้าสู่ระบบ (บัญชีของฉัน) ----------------
+ * แต่ละแถวในชีต Sessions คือการเข้าสู่ระบบ 1 ครั้ง (1 เครื่อง/เบราว์เซอร์ หรือ 1 แอปที่เปิดผ่านบัตรผ่าน)
+ * หน้าเว็บได้รหัสอ้างอิง (id = SHA-256 ของ token 16 ตัวแรก) ไม่ได้ token ของเครื่องอื่น
+ * ใช้งานล่าสุด: จำไว้ใน cache 6 ชั่วโมง (ไม่เขียนชีตทุกครั้งที่ใช้งาน)
+ */
+var SEEN_SECONDS = 21600;
+
+ACTIONS.sessionList = function (req) {
+  var u = requireUser_(req.token);
+  var rows = sheet_('Sessions', SESSION_HEADERS).getDataRange().getValues(), now = Date.now(), out = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][1]) !== u.username) continue;
+    var expires = new Date(rows[i][2]).getTime();
+    if (!(expires > now)) continue;
+    var info = {};
+    try { info = JSON.parse(rows[i][4] || '{}') || {}; } catch (e) { info = {}; }
+    var token = String(rows[i][0]), created = rows[i][3] ? new Date(rows[i][3]).getTime() : null;
+    out.push({ id: sessionId_(token), current: token === req.token, ua: String(info.ua || ''), via: String(info.via || ''),
+      app: String(info.app || ''), createdAt: isFinite(created) ? created : null, expiresAt: expires, lastSeen: null });
+  }
+  var seen = out.length ? CacheService.getScriptCache().getAll(out.map(function (s) { return 'sseen_' + s.id; })) : {};
+  out.forEach(function (s) { var t = Number(seen['sseen_' + s.id] || 0); s.lastSeen = t || null; });
+  out.sort(function (a, b) {
+    return (b.current - a.current) || ((b.lastSeen || b.createdAt || 0) - (a.lastSeen || a.createdAt || 0));
+  });
+  return { sessions: out };
+};
+
+/** Sign out one of my logins ({id}) or every other one ({others: true}). */
+ACTIONS.sessionRevoke = function (req) {
+  var u = requireUser_(req.token);
+  var others = req.others === true, id = String(req.id || '');
+  if (!others && !/^[0-9a-f]{16}$/.test(id)) throw new Error('ไม่พบการเข้าสู่ระบบนี้');
+  var sheet = sheet_('Sessions', SESSION_HEADERS), rows = sheet.getDataRange().getValues(), count = 0, self = false;
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][1]) !== u.username) continue;
+    var token = String(rows[i][0]);
+    if (others ? token === req.token : sessionId_(token) !== id) continue;
+    if (token === req.token) self = true;
+    sheet.deleteRow(i + 1);
+    count++;
+  }
+  if (!others && !count) throw new Error('การเข้าสู่ระบบนี้ออกจากระบบไปแล้ว');
+  return { count: count, self: self,
+    message: self ? 'ออกจากระบบเครื่องนี้แล้ว' : others ? 'ออกจากระบบเครื่องอื่น ' + count + ' รายการแล้ว' : 'ออกจากระบบเครื่องนั้นแล้ว' };
 };
 
 ACTIONS.changePassword = function (req) {
@@ -1229,11 +1284,29 @@ function publicUser_(u) {
   };
 }
 
-function createSession_(username) {
+/**
+ * info: { ua: navigator.userAgent of the browser, via: 'login' | 'register' | 'sso', app: the app a ticket opened }
+ * A login that came through doPost without a browser (e.g. the password form inside TRS-398) is marked via 'app'.
+ */
+function createSession_(username, info) {
+  info = info || {};
   var token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
   var expires = new Date(Date.now() + SESSION_DAYS * 864e5);
-  sheet_('Sessions', SESSION_HEADERS).appendRow([token, username, expires]);
+  var ua = clip_(info.ua, 300), via = String(info.via || '');
+  if (!ua && CHANNEL_ === 'post' && via !== 'sso') via = 'app';
+  var device = JSON.stringify({ ua: ua, via: via, app: clip_(info.app, 80) });
+  var sheet = sheet_('Sessions', SESSION_HEADERS);
+  if (!sheet.getRange(1, 4).getValue()) sheet.getRange(1, 1, 1, SESSION_HEADERS.length).setValues([SESSION_HEADERS]);   // sheet made before these columns
+  sheet.appendRow([token, username, expires, new Date(), device]);
   return token;
+}
+
+function clip_(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n); }
+
+/** Non-secret reference to a login: the first 8 bytes of SHA-256(token) in hex. */
+function sessionId_(token) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token), Utilities.Charset.UTF_8).slice(0, 8)
+    .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
 }
 
 function requireUser_(token) {
@@ -1242,7 +1315,10 @@ function requireUser_(token) {
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][0] === token && new Date(rows[i][2]).getTime() > Date.now()) {
       var u = findUser_(String(rows[i][1]));
-      if (u && u.status === 'active') return u;
+      if (u && u.status === 'active') {
+        try { CacheService.getScriptCache().put('sseen_' + sessionId_(token), String(Date.now()), SEEN_SECONDS); } catch (e) { /* cache full */ }
+        return u;
+      }
       break;
     }
   }
