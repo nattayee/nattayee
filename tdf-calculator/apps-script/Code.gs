@@ -13,7 +13,9 @@
  *   - Next visits: the saved token is checked with  me ; sign-out calls  logout
  *
  * Calculation records and the physicist recheck live in a Google Sheet ("TDF Calculator Records", created by setup):
- *   - tdfSubmit   anyone signed in sends a calculation for recheck (status "pending")
+ *   - Only medical physicists (Workspace role MP) enter values: tdfSubmit, tdfSavePdf and tdfWithdraw refuse other roles,
+ *     who can still sign in and view the records and approved reports (tdfList)
+ *   - tdfSubmit   a medical physicist sends a calculation for recheck (status "pending")
  *   - tdfReview   a medical physicist (Workspace role MP) who did NOT do the calculation approves or rejects it;
  *                 approval needs their own recalculation to match, and is saved automatically with name and time
  *   - The page only builds the final PDF report for approved records
@@ -118,6 +120,7 @@ function tdfLogout(token) {
 /* ----- calculation records & physicist recheck ----- */
 
 var REVIEWER_ROLE = 'MP';          // Workspace role allowed to recheck
+var EDITOR_ROLE = 'MP';            // Workspace role allowed to enter values; everyone else signed in can only view
 var RECHECK_TOLERANCE = 0.05;      // TDF difference allowed between the submitted value and the recheck
 var LIST_LIMIT = 300;
 var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
@@ -143,7 +146,7 @@ function tdfList(token) {
 }
 
 function tdfSubmit(token, rec) {
-  var me = user_(token);
+  var me = editor_(token);
   rec = rec || {};
   var p = rec.patient || {};
   if (!TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
@@ -200,7 +203,7 @@ function tdfReview(token, id, decision, note, recheckTdf) {
  * reviewer of an approved record may send it, and a record keeps its first file.
  */
 function tdfSavePdf(token, id, base64, fileName) {
-  var me = user_(token);
+  var me = editor_(token);
   var bytes;
   try { bytes = Utilities.base64Decode(String(base64 || '')); } catch (e) { throw new Error('ไฟล์ PDF ไม่ถูกต้อง'); }
   if (!bytes.length || bytes.length > PDF_MAX_BYTES) throw new Error('ไฟล์ PDF ว่างหรือใหญ่เกินไป');
@@ -246,7 +249,7 @@ function pdfFolderLocked_(date) {
 
 /** The calculator withdraws their own record before it is approved. */
 function tdfWithdraw(token, id) {
-  var me = user_(token);
+  var me = editor_(token);
   return locked_(function () {
     var sh = records_();
     var found = findRecord_(sh, id);
@@ -357,6 +360,13 @@ function user_(token) {
   var u = session_(workspace_({ action: 'me', token: String(token) })).user;
   cache.put(key, JSON.stringify(u), 300);
   return u;
+}
+
+/** The signed-in user, who must be allowed to enter values (role MP); other roles only view. */
+function editor_(token) {
+  var me = user_(token);
+  if (me.role !== EDITOR_ROLE) throw new Error('ดูได้อย่างเดียว · การกรอกค่าและส่ง recheck ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + EDITOR_ROLE + ' ใน Workspace)');
+  return me;
 }
 
 function meKey_(token) {
