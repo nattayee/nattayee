@@ -144,6 +144,11 @@ button{cursor:pointer}
 .top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin-bottom:22px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .mark{flex:none;width:34px;height:34px;color:var(--accent)}
+.logo{flex:none;display:block;height:48px;width:auto;max-width:96px;border-radius:10px;object-fit:cover;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+.logo[hidden]{display:none}
+.logo-set{display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px}
+.logo-prev{display:grid;place-items:center;height:72px;width:auto;min-width:72px;max-width:144px;border-radius:12px;object-fit:cover;background:var(--surface);box-shadow:0 0 0 1px var(--line);color:var(--accent)}
+.logo-prev .mark{width:40px;height:40px}
 .brand h1{margin:0;font-size:17px;font-weight:600;line-height:1.3;text-wrap:balance}
 .brand p{margin:0;font-size:13px;color:var(--muted)}
 .top-right{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px 14px;min-width:0;max-width:100%;margin-left:auto}
@@ -707,7 +712,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <svg class="mark" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="10.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 2.5v8M17 23.5v8M2.5 17h8M23.5 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="17" r="2.2" fill="currentColor"/></svg>
+      <img class="logo" id="brand-logo" alt="โลโก้" hidden>
+      <svg class="mark" id="brand-mark" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="10.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 2.5v8M17 23.5v8M2.5 17h8M23.5 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="17" r="2.2" fill="currentColor"/></svg>
       <div>
         <h1>ระบบกระจายงานฟิสิกส์การแพทย์</h1>
         <p>กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง</p>
@@ -1163,7 +1169,12 @@ const TH_FIXED_HOLIDAYS = [
   ['12-10', 'วันรัฐธรรมนูญ'], ['12-31', 'วันสิ้นปี'],
 ];
 const thaiFixedHolidays = y => TH_FIXED_HOLIDAYS.map(([md, name]) => ({ date: `${y}-${md}`, name }));
+// โลโก้มุมซ้ายบน: รูป (data URL) ที่ย่อและตัดขอบในเบราว์เซอร์แล้ว เก็บในแท็บ Config · เซลล์หนึ่งเก็บได้ไม่เกิน 50,000 ตัวอักษร
+const LOGO_MAX = 40000;
+const LOGO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/]+=*$/;
+const logoOk = v => typeof v === 'string' && v.length <= LOGO_MAX && LOGO_RE.test(v);
 const DEFAULT_CONFIG = {
+  logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
   rate: 0.143,          // คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที) กลุ่ม A5.1
   p4pGroup: 'A5.1 (นักรังสีการแพทย์ งานฟิสิกส์การแพทย์)',   // กลุ่มที่ ในหัวแบบจัดเก็บคะแนนภาระงาน (ไฟล์ Excel)
   guarantee: 1200,      // แต้มประกันตั้งต้นของตำแหน่งใหม่
@@ -1351,6 +1362,7 @@ function mergeConfig(c) {
   const d = clone(DEFAULT_CONFIG);
   if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
   const out = { ...d };
+  out.logo = logoOk(c.logo) ? c.logo : '';
   out.rate = +c.rate > 0 ? +c.rate : d.rate;
   out.p4pGroup = c.p4pGroup !== undefined ? str(c.p4pGroup) : d.p4pGroup;
   out.guarantee = c.guarantee !== '' && isFinite(+c.guarantee) && c.guarantee != null ? +c.guarantee : d.guarantee;
@@ -1485,7 +1497,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-12.17';
+const PAGE_VERSION = '2026-10-13.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2029,9 +2041,21 @@ function renderNav() {
   nav.dataset.sig = sig;
   for (const x of list) { const b = $(`[data-view="${x.view}"]`, nav); if (!b) continue; b.hidden = !navOn(x.view); nav.appendChild(b); }
 }
+// โลโก้มุมซ้ายบน: จำไว้ในเบราว์เซอร์ หน้าเข้าสู่ระบบหรือตอนโหลดไม่สำเร็จจึงยังแสดงโลโก้ที่ตั้งไว้ได้
+function renderLogo() {
+  let src = state.config.logo;
+  if (state.loaded || store.mode !== 'sheet') pref.set('logo', src || '');
+  else if (!src) src = pref.get('logo', '');
+  if (!logoOk(src)) src = '';
+  const img = $('#brand-logo');
+  if ((img.getAttribute('src') || '') !== src) { if (src) img.src = src; else img.removeAttribute('src'); }
+  img.hidden = !src;
+  $('#brand-mark').style.display = src ? 'none' : '';
+}
 function render() {
   const gated = state.gate != null;
   renderTheme();
+  renderLogo();
   renderAcct();
   renderFoot();
   const setup = !gated && oldServer() && !state.setupSkipped;
@@ -3312,6 +3336,10 @@ function renderSettings() {
         <label class="mini"><i class="qa-sw warn"></i>เหลือง <span data-qaop="${k}">${op}</span><input type="number" step="any" class="num" data-k="qa.${k}.warn" value="${esc(r.warn)}" aria-label="ค่าสีเหลือง"></label>
         <span class="qa-prev" data-qaprev="${k}">${esc(qaText(r))}</span>
       </div>`; }).join('')}</div></div>
+    <div class="sec"><div class="sec-head"><h2>โลโก้</h2><p>รูปมุมซ้ายบนของทุกหน้า ทุกคนเห็น · ระบบย่อรูปให้เล็กลงและตัดขอบตรงกลาง (ความกว้างไม่เกิน 2 เท่าของความสูง) แล้วเก็บในแท็บ Config ของชีต · กดบันทึกด้านล่างเพื่อใช้</p></div>
+      <div class="logo-set">${d.logo ? `<img class="logo-prev" src="${esc(d.logo)}" alt="โลโก้ที่ตั้งไว้">` : `<span class="logo-prev" title="ไอคอนเดิม">${$('#brand-mark').outerHTML.replace(/ id="brand-mark"| style="[^"]*"/g, '')}</span>`}
+        <button type="button" class="btn ghost" data-logopick>${d.logo ? 'เปลี่ยนรูป…' : 'เลือกรูป…'}</button>${d.logo ? '<button type="button" class="btn ghost" data-logoclear>ใช้ไอคอนเดิม</button>' : ''}
+        <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
     <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับและแถบที่แสดงด้านบน ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · "แสดง" = MP เห็น ("ตั้งค่า" แสดงเสมอ)
       · "ตำแหน่งอื่น" = คนที่ไม่ใช่ MP (RO, RTT, พยาบาล ฯลฯ) ดูแถบนั้นได้ (ดูอย่างเดียว) ไม่ติ๊กเลยคือเข้าดูไม่ได้</p></div>
       <div class="set-list nav-list">${d.nav.map((x, i) => `<div class="nav-row">
@@ -4618,6 +4646,8 @@ document.addEventListener('click', e => {
     return;
   }
   if (ds.rmsite) { const base = ds.rmsite.replace(/s\d+$/, ''); t.closest('.site').remove(); syncSites(base); return; }
+  if (ds.logopick !== undefined) return $('#logo-file').click();
+  if (ds.logoclear !== undefined) { draft.logo = ''; renderSettings(); updateSaveBar(); return; }
   if (ds.add === 'staff') { draft.staff.push({ code: '', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] }); renderSettings(); $$('[data-k$=".code"]').pop().focus(); return; }
   if (ds.add === 'cat') {
     const last = draft.cats[draft.cats.length - 1] || {};
@@ -4836,6 +4866,44 @@ function settingsEdit(el) {
   updateSaveBar();
 }
 settingsEl.addEventListener('input', e => settingsEdit(e.target));
+// รูปโลโก้: ย่อให้สูง 160 px (ชัดบนจอความละเอียดสูง) ตัดขอบตรงกลางให้กว้าง 1–2 เท่าของความสูง
+// PNG/WebP (มักเป็นโลโก้พื้นใส) ลอง PNG ก่อน ใหญ่ไปค่อยเป็น JPEG พื้นขาว · ลดขนาดและคุณภาพจนไม่เกิน LOGO_MAX
+async function logoFromFile(file) {
+  if (!String(file.type).startsWith('image/')) throw new Error('เลือกไฟล์รูปภาพ (JPG, PNG)');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('เปิดรูปนี้ไม่ได้ ลองบันทึกเป็น JPG หรือ PNG ก่อน')); i.src = url; });
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) throw new Error('เปิดรูปนี้ไม่ได้');
+    const ar = Math.min(2, Math.max(1, w / h));
+    const sw = Math.min(w, h * ar), sh = Math.min(h, w / ar);
+    const draw = (H, bg) => {
+      const c = document.createElement('canvas');
+      c.height = H; c.width = Math.round(H * ar);
+      const g = c.getContext('2d');
+      g.imageSmoothingQuality = 'high';
+      if (bg) { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
+      g.drawImage(img, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      return c;
+    };
+    if (/png|webp|gif|svg/.test(file.type)) { const d = draw(160).toDataURL('image/png'); if (logoOk(d)) return d; }
+    for (const H of [160, 128, 96]) {
+      const c = draw(H, true);
+      for (const q of [0.86, 0.76, 0.66]) { const d = c.toDataURL('image/jpeg', q); if (logoOk(d)) return d; }
+    }
+    throw new Error('รูปนี้ย่อให้เล็กพอไม่ได้ ลองรูปอื่น');
+  } finally { URL.revokeObjectURL(url); }
+}
+async function pickLogo(el) {
+  const f = el.files && el.files[0];
+  if (!f) return;
+  try {
+    draft.logo = await logoFromFile(f);
+    renderSettings();
+    updateSaveBar();
+    toast('ได้รูปโลโก้แล้ว กด "บันทึก" ด้านล่างเพื่อใช้');
+  } catch (e) { toast(errMsg(e), { err: true }); }
+}
 // เพิ่มตัวเลือกในฟอร์ม: กด Enter หรือออกจากช่อง
 function addOption(el) {
   const key = el.dataset.addopt;
@@ -4857,6 +4925,7 @@ settingsEl.addEventListener('keydown', e => {
 });
 settingsEl.addEventListener('change', e => {
   const el = e.target;
+  if (el.id === 'logo-file') { pickLogo(el); return; }
   if (el.type === 'checkbox' || el.tagName === 'SELECT') settingsEdit(el);   // ซ้ำกับ input ก็ไม่เป็นไร (ตั้งค่าเดิมซ้ำ)
   if (el.dataset.addopt) { addOption(el); return; }
   if (el.dataset.rk === 'target') {
