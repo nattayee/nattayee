@@ -21,7 +21,7 @@
  */
 const SPREADSHEET_ID = '';
 // LPCH RO Workspace accounts
-const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwVlM9oxgSQMjjvc3mi39aGbIH4vEkaaUpSNWs4dd9oJHotjpfcyJMVBi5XcUFSAAM2/exec';
+const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_ROLES = ['*'];          // ตำแหน่งที่ใช้ได้ (ผู้ดูแลระบบ LPCH ใช้ได้เสมอ) เช่น ['RO', 'MP', 'RTT'] · ['*'] = สมาชิกทุกคนที่อนุมัติแล้ว
 const LPCH_CHECK_SECONDS = 300;
 const SHEET_NAME = 'นัดเทคนิคพิเศษ';
