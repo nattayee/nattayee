@@ -119,7 +119,7 @@ fieldset:disabled .btn, fieldset:disabled .seg button:not([aria-pressed="true"])
 .unit-input { display: flex; align-items: stretch; }
 .unit-input input { border-top-right-radius: 0; border-bottom-right-radius: 0; flex: 1; min-width: 0; }
 .unit-input span { display: grid; place-items: center; padding: 0 10px; font-size: .78rem; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-left: 0; border-radius: 0 8px 8px 0; font-family: var(--font-mono); }
-input[type="number"], input[type="text"], select {
+input[type="number"], input[type="text"], input[type="password"], select {
   width: 100%; font: 400 .95rem var(--font-mono); color: var(--ink); background: var(--surface-2);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-variant-numeric: tabular-nums;
 }
@@ -242,7 +242,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .org-foot { margin-top: 10px; font-size: .75rem; color: var(--muted); }
 .count.alert { background: var(--warn); color: var(--surface); }
 
-/* recheck bar */
+/* verify by a second physicist, on this screen */
 .review { display: grid; gap: 12px; margin-bottom: 18px; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .review-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .review-head h2 { margin: 0 0 4px; }
@@ -253,7 +253,12 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .review-grid .v { font: 500 1.4rem var(--font-mono); }
 .review-help { margin: 0; font-size: .82rem; color: var(--ink-2); }
 .review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.review-actions input { flex: 1 1 220px; font-family: var(--font-body); }
+.review-actions input[type="text"], .review-actions input[type="password"] { flex: 1 1 200px; font-family: var(--font-body); }
+.review-grid .v.sm { font: 500 .92rem/1.35 var(--font-body); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .review-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .review-grid > div:last-child { grid-column: 1 / -1; } }
+.review-actions .check { flex: 1 1 100%; }
+.vf-msg { margin: 0; font-size: .85rem; min-height: 1.2em; color: var(--crit); }
+.vf-msg.info { color: var(--ink-2); }
 .filters { width: 100%; }
 .filters button { flex: 1; padding: 7px 6px; }
 
@@ -359,7 +364,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       <div class="case-actions">
         <button type="button" class="btn ghost" id="ptClear">ผู้ป่วยใหม่</button>
         <button type="button" class="btn" id="histOpen">รายการคำนวณ<span class="count" id="histCount">0</span></button>
-        <button type="button" class="btn" id="histSave">ส่ง recheck</button>
+        <button type="button" class="btn" id="verifyBtn">Verify</button>
         <button type="button" class="btn primary" id="pdfBtn">สร้างรายงาน PDF</button>
       </div>
     </div>
@@ -373,27 +378,30 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     </fieldset>
   </section>
 
-  <section class="card review" id="reviewBar" aria-labelledby="rv-title" hidden>
+  <section class="card review" id="verifyBar" aria-labelledby="vf-title" hidden>
     <div class="review-head">
-      <div><h2 id="rv-title">Recheck โดยนักฟิสิกส์การแพทย์</h2>
-        <div class="review-sub">คำนวณโดย <b id="rvWho"></b> · <span id="rvPatient"></span></div></div>
-      <button type="button" class="btn ghost" id="rvCancel">ยกเลิก</button>
+      <div><h2 id="vf-title">Verify โดยนักฟิสิกส์การแพทย์คนที่ 2</h2>
+        <div class="review-sub">ผู้คำนวณ <b id="vfCalc"></b> · <span id="vfPatient"></span></div></div>
+      <button type="button" class="btn ghost" id="vfCancel">ยกเลิก</button>
     </div>
     <div class="review-grid">
-      <div><div class="k">TDF ที่ส่งมา</div><div class="v" id="rvSent">—</div></div>
-      <div><div class="k">คำนวณซ้ำได้</div><div class="v" id="rvMine">—</div></div>
-      <div><div class="k">ผล</div><span class="chip" id="rvMatch"></span></div>
+      <div><div class="k">การคำนวณ</div><div class="v sm" id="vfType">—</div></div>
+      <div><div class="k">TDF</div><div class="v" id="vfTdf">—</div></div>
+      <div><div class="k">สรุป</div><div class="v sm" id="vfSum">—</div></div>
     </div>
-    <p class="review-help">ระบบเปิดข้อมูลที่ส่งมาและคำนวณซ้ำบนเครื่องของคุณแล้ว ตรวจค่าที่ใช้คำนวณในแท็บด้านล่างให้ตรงกับแผนการรักษา เมื่อกดอนุมัติ ระบบจะบันทึกชื่อผู้ recheck เวลา และค่าที่คำนวณซ้ำให้อัตโนมัติ</p>
-    <div class="review-actions">
-      <input type="text" id="rvNote" maxlength="200" placeholder="หมายเหตุ (จำเป็นเมื่อไม่อนุมัติ)" aria-label="หมายเหตุการ recheck">
-      <button type="button" class="btn" id="rvReject">ไม่อนุมัติ</button>
-      <button type="button" class="btn primary" id="rvApprove">อนุมัติ</button>
-    </div>
+    <p class="review-help">นักฟิสิกส์การแพทย์คนที่ 2 ตรวจค่าที่ใช้คำนวณและผลบนหน้าจอนี้ แล้วกรอกชื่อผู้ใช้และรหัสผ่าน LPCH RO Workspace ของตนเองเพื่อยืนยัน
+      ระบบบันทึกชื่อผู้คำนวณ ผู้ verify และเวลาลงชีต แล้วสร้างรายงาน PDF และเก็บลง Google Drive ให้อัตโนมัติ (ไม่เก็บรหัสผ่าน)</p>
+    <form class="review-actions" id="vfForm" autocomplete="off">
+      <input type="text" id="vfUser" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ชื่อผู้ใช้ หรืออีเมล (นักฟิสิกส์คนที่ 2)" aria-label="ชื่อผู้ใช้ของนักฟิสิกส์คนที่ 2">
+      <input type="password" id="vfPass" autocomplete="new-password" placeholder="รหัสผ่าน" aria-label="รหัสผ่านของนักฟิสิกส์คนที่ 2">
+      <button type="submit" class="btn primary" id="vfSubmit">Verify</button>
+      <label class="check"><input type="checkbox" id="vfConfirm"> ข้าพเจ้าตรวจสอบค่าที่ใช้คำนวณและผลการคำนวณบนหน้าจอนี้แล้ว ถูกต้อง</label>
+    </form>
+    <p class="vf-msg" id="vfMsg" role="alert"></p>
   </section>
 
-  <div class="note info view-note" id="viewOnlyNote" hidden>ดูได้อย่างเดียว · การกรอกค่า คำนวณ และส่ง recheck ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง MP)
-    เปิดดูการคำนวณที่บันทึกไว้และรายงาน PDF ที่อนุมัติแล้วได้ที่ปุ่ม “รายการคำนวณ”</div>
+  <div class="note info view-note" id="viewOnlyNote" hidden>ดูได้อย่างเดียว · การกรอกค่า คำนวณ และ verify ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง MP)
+    เปิดดูการคำนวณที่บันทึกไว้และรายงาน PDF ที่ verify แล้วได้ที่ปุ่ม “รายการคำนวณ”</div>
 
   <nav class="tabs" role="tablist" aria-label="โหมดคำนวณ">
     <button role="tab" id="tab-frac" aria-controls="p-frac" aria-selected="true">Fractionated<small>ฉายแบบแบ่ง fraction</small></button>
@@ -582,8 +590,6 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   <input type="search" id="histSearch" placeholder="ค้นหา HN, ชื่อ, แพทย์ หรือผู้คำนวณ" aria-label="ค้นหารายการ">
   <div class="seg filters" role="group" aria-label="กรองรายการ">
     <button type="button" data-filter="all" aria-pressed="true">ทั้งหมด</button>
-    <button type="button" data-filter="review" aria-pressed="false">รอฉัน recheck</button>
-    <button type="button" data-filter="pending">รอ recheck</button>
     <button type="button" data-filter="mine" aria-pressed="false">ของฉัน</button>
   </div>
   <div class="hist-list" id="histList"></div>
@@ -1374,7 +1380,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   const patientName = (p) => ((p.prefix && p.prefix !== "-" ? p.prefix : "") + [p.first, p.last].filter(Boolean).join(" ")).trim();
   $("ptClear").addEventListener("click", () => { setPatient({}, ""); clearPatientErrors(); $("pt-hn").focus(); });
 
-  // Every patient field is required before sending for recheck or making a report.
+  // Every patient field is required before verifying or making a report.
   const REQUIRED = [["pt-hn", "HN"], ["pt-prefix", "คำนำหน้าชื่อ"], ["pt-first", "ชื่อ"], ["pt-last", "นามสกุล"], ["pt-doctor", "แพทย์ผู้รักษา"]];
   function clearPatientErrors() { REQUIRED.forEach(([id]) => $(id).removeAttribute("aria-invalid")); }
   /** Marks empty required fields, focuses the first one and returns false when anything is missing. */
@@ -1416,23 +1422,23 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   const snapPart = (snap) => ({ inputs: snap.inputs, results: snap.results, table: snap.table || null, notes: snap.notes || [],
     formulas: snap.formulas, charts: snap.charts || [], lq: snap.lq || null, comp: snap.comp || null });
 
-  // ---------- calculation records & physicist recheck ----------
+  // ---------- calculation records & verify by a second physicist ----------
   // A record: { id, at, status: "pending" | "approved" | "rejected" | "draft", type, title, tdf, ref, summary, sig, state,
   //   patient, doctor, snap: { inputs, results, table, notes, formulas, charts },
   //   calc: { username, name, role, at }, review: { username, name, role, at, note, recheckTdf } | null }
-  // The Apps Script build swaps in a server backend (a Google Sheet shared by the team, recheck enforced there).
-  // Without it, records stay in this browser as drafts and cannot be approved.
+  // The Apps Script build swaps in a server backend (a Google Sheet shared by the team; Code.gs checks the second
+  // physicist's Workspace sign-in when verifying). Without it, records stay in this browser as drafts.
   let user = null;
-  const RECHECK_TOLERANCE = 0.05;
-  const REVIEWER_ROLE = "MP";
-  const EDITOR_ROLE = "MP"; // only medical physicists enter values and send them for recheck; other roles view
+  const EDITOR_ROLE = "MP"; // only medical physicists enter values and verify; other roles view
   /** Whether this person may enter values. The offline draft page (no shared backend) is always editable. */
   const canEdit = () => !backend.shared || (!!user && user.role === EDITOR_ROLE);
   /** Locks every input area for viewers (fieldset[disabled] covers controls rendered later too) and shows why. */
   function applyAccess() {
     const ro = !canEdit();
     ["fs-case", "fs-frac", "fs-gap", "fs-br"].forEach((id) => { $(id).disabled = ro; });
-    $("ptClear").hidden = $("histSave").hidden = ro;
+    $("ptClear").hidden = $("verifyBtn").hidden = ro;
+    $("verifyBtn").textContent = backend.shared ? "Verify" : "บันทึกฉบับร่าง";
+    if (ro) closeVerify();
     $("viewOnlyNote").hidden = !ro;
     document.body.classList.toggle("view-only", ro);
   }
@@ -1455,20 +1461,19 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     withdraw(id) {
       return this.list().then((list) => { try { localStorage.setItem(localKey(), JSON.stringify(list.filter((r) => r.id !== id))); } catch (e) { /* ignore */ } });
     },
-    review() { return Promise.reject(new Error("การ recheck ต้องใช้งานผ่าน Apps Script ที่เข้าสู่ระบบแล้ว")); },
+    verify() { return Promise.reject(new Error("การ verify ต้องใช้งานผ่าน Apps Script ที่เข้าสู่ระบบแล้ว")); },
   };
   let backend = localBackend;
   let records = [];
   let filter = "all";
-  let reviewing = null;
 
   const STATUS = {
-    pending: ["รอ recheck", "near"], approved: ["อนุมัติแล้ว", "ok"], rejected: ["ไม่อนุมัติ", "over"], draft: ["ฉบับร่าง", "near"],
+    pending: ["รอ recheck (ระบบเดิม)", "near"], approved: ["Verify แล้ว", "ok"], rejected: ["ไม่อนุมัติ", "over"], draft: ["ฉบับร่าง", "near"],
   };
   const TYPE_LABEL = { frac: "Fractionated", gap: "Treatment gap", brachy: "Brachytherapy" };
   const fmtTime = (t) => new Date(t).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
-  const canReview = (r) => backend.shared && user && user.role === REVIEWER_ROLE && r.status === "pending" && r.calc.username !== user.username;
-  const mine = (r) => user && r.calc.username === user.username;
+  const calcMine = (r) => !!user && r.calc.username === user.username;
+  const mine = (r) => calcMine(r) || (!!user && !!r.review && r.review.username === user.username);
 
   function refreshRecords() {
     return backend.list().then((list) => {
@@ -1478,16 +1483,14 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   }
 
   function renderHistory() {
-    const waiting = records.filter(canReview).length;
-    $("histCount").textContent = waiting ? `รอ recheck ${waiting}` : records.length;
-    $("histCount").classList.toggle("alert", waiting > 0);
+    $("histCount").textContent = records.length;
     document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
     $("histFoot").textContent = backend.shared
-      ? "บันทึกใน Google Sheet ของกลุ่มงาน · ผู้ recheck ต้องเป็นนักฟิสิกส์ (MP) คนละคนกับผู้คำนวณ"
-      : "โหมดออฟไลน์: เก็บเป็นฉบับร่างในเบราว์เซอร์นี้ การ recheck ต้องใช้ผ่าน Apps Script";
+      ? "บันทึกใน Google Sheet ของกลุ่มงาน · ผู้ verify ต้องเป็นนักฟิสิกส์การแพทย์ (MP) คนละคนกับผู้คำนวณ"
+      : "โหมดออฟไลน์: เก็บเป็นฉบับร่างในเบราว์เซอร์นี้ การ verify ต้องใช้ผ่าน Apps Script";
     const q = $("histSearch").value.trim().toLowerCase();
     const shown = records.filter((r) =>
-      (filter === "all" || (filter === "pending" && r.status === "pending") || (filter === "mine" && mine(r)) || (filter === "review" && canReview(r))) &&
+      (filter === "all" || (filter === "mine" && mine(r))) &&
       (!q || [r.patient.hn, patientName(r.patient), r.doctor, r.summary, TYPE_LABEL[r.type], r.calc.name].join(" ").toLowerCase().includes(q)));
     $("histList").innerHTML = shown.length ? shown.map((r) => {
       const [label, tone] = STATUS[r.status] || [r.status, "near"];
@@ -1498,16 +1501,15 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
         <div class="hist-val">TDF ${fmt(r.tdf, 1)}</div>
         <div class="hist-sum">${esc(r.summary)}</div>
         ${r.status === "approved" ? `<div class="hist-sum">${r.pdf ? "✓ เก็บ PDF ใน Google Drive แล้ว" : backend.shared ? "ยังไม่ได้เก็บ PDF ใน Drive" : ""}</div>` : ""}
-        <div class="hist-sum">คำนวณ: ${esc(r.calc.name || "—")} · ${esc(fmtTime(r.calc.at || r.at))}${rv ? `<br>${r.status === "approved" ? "Recheck" : "ตรวจ"}: ${esc(rv.name)} · ${esc(fmtTime(rv.at))}${rv.note ? ` · “${esc(rv.note)}”` : ""}` : ""}</div>
+        <div class="hist-sum">คำนวณ: ${esc(r.calc.name || "—")} · ${esc(fmtTime(r.calc.at || r.at))}${rv ? `<br>${r.status === "approved" ? "Verify" : "ตรวจ"}: ${esc(rv.name)} · ${esc(fmtTime(rv.at))}${rv.note ? ` · “${esc(rv.note)}”` : ""}` : ""}</div>
         <div class="hist-actions">
           <button type="button" class="btn" data-act="open">เปิด</button>
-          ${canReview(r) ? `<button type="button" class="btn primary" data-act="review">Recheck</button>` : ""}
           ${r.status === "approved" || r.status === "draft" ? `<button type="button" class="btn" data-act="pdf">PDF${r.status === "draft" ? " ฉบับร่าง" : canArchive(r) ? " + เก็บลง Drive" : ""}</button>` : ""}
           ${r.pdf && /^https:[/]{2}/.test(r.pdf.url) ? `<a class="btn" href="${esc(r.pdf.url)}" target="_blank" rel="noopener">เปิดใน Drive</a>` : ""}
-          ${canEdit() && (mine(r) && r.status !== "approved" || r.status === "draft") ? `<button type="button" class="btn ghost" data-act="withdraw">${r.status === "draft" ? "ลบ" : "ถอนคำขอ"}</button>` : ""}
+          ${canEdit() && (calcMine(r) && r.status !== "approved" || r.status === "draft") ? `<button type="button" class="btn ghost" data-act="withdraw">${r.status === "draft" ? "ลบ" : "ถอนคำขอ"}</button>` : ""}
         </div>
       </article>`;
-    }).join("") : `<p class="hist-empty">${q || filter !== "all" ? "ไม่พบรายการ" : canEdit() ? "ยังไม่มีรายการ กด “ส่ง recheck” เพื่อบันทึกการคำนวณและส่งให้นักฟิสิกส์อีกท่านตรวจ" : "ยังไม่มีรายการคำนวณ"}</p>`;
+    }).join("") : `<p class="hist-empty">${q || filter !== "all" ? "ไม่พบรายการ" : canEdit() && backend.shared ? "ยังไม่มีรายการ กด “Verify” ให้นักฟิสิกส์การแพทย์คนที่ 2 ยืนยัน แล้วระบบจะบันทึกการคำนวณไว้ที่นี่" : "ยังไม่มีรายการคำนวณ"}</p>`;
   }
 
   function openHistory(open) {
@@ -1548,79 +1550,92 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     selectTab(e.type);
   }
 
-  /** Sends the calculation on screen for recheck (HN, patient name and physician are required). */
-  function submitForRecheck() {
-    if (!canEdit()) return toast("ส่ง recheck ได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง MP)", 4000);
+  /** The calculation on screen as a record (HN, patient name and physician are required), or null with a message shown. */
+  function recordFromScreen() {
     const snap = snapshot();
-    if (!snap) return toast(notReady(), 4000);
-    if (!checkPatient()) return;
-    const sig = sigOf(snap);
-    const dup = records.find((r) => sigOf(r) === sig && (r.status === "pending" || r.status === "approved"));
-    if (dup) return toast(`รายการนี้ส่งไปแล้ว (${STATUS[dup.status][0]})`, 4000);
-    const rec = { type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig, state: snap.state,
-      patient: snap.patient, doctor: snap.doctor,
-      snap: snapPart(snap) };
-    const btn = $("histSave");
-    btn.disabled = true;
-    backend.submit(rec).then((saved) => {
-      toast(backend.shared ? "ส่ง recheck แล้ว รอนักฟิสิกส์อีกท่านตรวจและอนุมัติ" : "บันทึกเป็นฉบับร่างในเบราว์เซอร์นี้แล้ว", 4000);
-      records = [saved].concat(records.filter((r) => r.id !== saved.id && sigOf(r) !== sigOf(saved)));
-      renderHistory();
-    }).catch((err) => toast(err.message || String(err), 5000)).finally(() => { btn.disabled = false; });
+    if (!snap) { toast(notReady(), 4000); return null; }
+    if (!checkPatient()) return null;
+    return { type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig: sigOf(snap), state: snap.state,
+      patient: snap.patient, doctor: snap.doctor, snap: snapPart(snap) };
   }
 
-  // ----- recheck by a second physicist -----
-  function startReview(r) {
-    reviewing = r;
-    restore(r);
-    $("reviewBar").hidden = false;
-    $("rvNote").value = "";
-    $("rvWho").textContent = `${r.calc.name} · ${fmtTime(r.calc.at || r.at)}`;
-    $("rvPatient").textContent = `HN ${r.patient.hn} · ${patientName(r.patient)} · แพทย์ ${r.doctor}`;
-    updateReview();
-    $("reviewBar").scrollIntoView({ block: "start", behavior: "smooth" });
-  }
-  /** Compares the reviewer's own recalculation with the submitted value; approval needs a match. */
-  function updateReview() {
-    if (!reviewing) return;
-    const snap = snapshot();
-    const same = snap && snap.type === reviewing.type && sigOf(snap) === sigOf(reviewing);
-    const match = snap && snap.type === reviewing.type && Math.abs(snap.tdf - reviewing.tdf) <= RECHECK_TOLERANCE;
-    $("rvSent").textContent = fmt(reviewing.tdf, 1);
-    $("rvMine").textContent = snap && snap.type === reviewing.type ? fmt(snap.tdf, 1) : "—";
-    const el = $("rvMatch");
-    // Approval needs the recalculated TDF to match (Code.gs checks it again). Edited inputs with a matching TDF only warn.
-    el.className = "chip " + (match ? (same ? "ok" : "near") : "over");
-    el.textContent = !snap || snap.type !== reviewing.type ? "อยู่คนละแท็บกับรายการที่ตรวจ"
-      : !match ? "ค่าไม่ตรงกัน อนุมัติไม่ได้" : same ? "ตรงกัน" : "TDF ตรงกัน (ข้อมูลบางช่องบนหน้าจอต่างจากที่ส่งมา)";
-    $("rvApprove").disabled = !match;
-  }
-  function endReview() { reviewing = null; $("reviewBar").hidden = true; }
-  function sendReview(decision) {
-    if (!reviewing) return;
-    const note = $("rvNote").value.trim();
-    if (decision === "rejected" && !note) { toast("ระบุเหตุผลที่ไม่อนุมัติ"); return $("rvNote").focus(); }
-    const snap = snapshot();
-    const recheckTdf = snap && snap.type === reviewing.type ? snap.tdf : NaN;
-    $("rvApprove").disabled = true; $("rvReject").disabled = true;
-    backend.review(reviewing.id, decision, note, recheckTdf).then((saved) => {
-      records = records.map((r) => (r.id === saved.id ? saved : r));
-      endReview();
+  /** Offline page: keeps the calculation as a draft in this browser. */
+  function saveDraft() {
+    const rec = recordFromScreen();
+    if (!rec) return;
+    backend.submit(rec).then((saved) => {
+      toast("บันทึกเป็นฉบับร่างในเบราว์เซอร์นี้แล้ว", 4000);
+      records = [saved].concat(records.filter((r) => r.id !== saved.id && sigOf(r) !== sigOf(saved)));
       renderHistory();
-      toast(decision === "approved" ? `อนุมัติแล้ว ระบบบันทึกผล recheck โดย ${saved.review.name} อัตโนมัติ · กำลังเก็บ PDF ลง Google Drive…` : "บันทึกว่าไม่อนุมัติแล้ว", 4500);
-      if (decision === "approved" && canArchive(saved)) {
-        renderPdf(saved).then((pdf) => archivePdf(saved, pdf)).catch((err) => {
-          console.error(err);
-          toast("อนุมัติแล้ว แต่เก็บ PDF ลง Drive ไม่สำเร็จ (" + (err.message || err) + ") กด PDF ในรายการคำนวณเพื่อลองใหม่", 7000);
-        });
-      }
-    }).catch((err) => { toast(err.message || String(err), 5000); updateReview(); }).finally(() => { $("rvReject").disabled = false; });
+    }).catch((err) => toast(err.message || String(err), 5000));
   }
-  $("rvApprove").addEventListener("click", () => sendReview("approved"));
-  $("rvReject").addEventListener("click", () => sendReview("rejected"));
-  $("rvCancel").addEventListener("click", endReview);
-  ["f-frac", "f-gap", "f-br", "pt-hn", "pt-prefix", "pt-first", "pt-last", "pt-doctor"].forEach((id) => $(id).addEventListener("input", () => setTimeout(updateReview)));
-  document.querySelector("nav.tabs").addEventListener("click", () => setTimeout(updateReview));
+
+  // ----- verify by a second physicist, on this screen, with their own Workspace sign-in -----
+  const verifyOpen = () => !$("verifyBar").hidden;
+  function vfMsg(text, kind) { $("vfMsg").textContent = text || ""; $("vfMsg").className = "vf-msg" + (kind ? " " + kind : ""); }
+  function openVerify() {
+    if (!backend.shared) return saveDraft();
+    if (!canEdit()) return toast("การ verify ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง MP)", 4000);
+    const rec = recordFromScreen();
+    if (!rec) return;
+    const done = records.find((r) => sigOf(r) === rec.sig && r.status === "approved");
+    if (done) return toast(`การคำนวณนี้ verify แล้วโดย ${done.review ? done.review.name : "—"} กด “สร้างรายงาน PDF” เพื่อดาวน์โหลดรายงาน`, 5000);
+    $("verifyBar").hidden = false;
+    $("vfUser").value = ""; $("vfPass").value = ""; $("vfConfirm").checked = false;
+    vfMsg("");
+    updateVerify();
+    $("verifyBar").scrollIntoView({ block: "start", behavior: "smooth" });
+    $("vfUser").focus({ preventScroll: true });
+  }
+  /** Keeps the panel in step with the screen: what the second physicist confirms is what gets saved. */
+  function updateVerify() {
+    if (!verifyOpen()) return;
+    const snap = snapshot();
+    $("vfCalc").textContent = user ? `${user.name}${user.role ? ` (${user.role})` : ""}` : "—";
+    const p = getPatient();
+    $("vfPatient").textContent = `HN ${p.hn || "—"} · ${patientName(p) || "—"} · แพทย์ ${$("pt-doctor").value || "—"}`;
+    $("vfType").textContent = snap ? TYPE_LABEL[snap.type] : "—";
+    $("vfTdf").textContent = snap ? fmt(snap.tdf, 1) : "—";
+    $("vfSum").textContent = snap ? snap.summary : notReady();
+    $("vfSubmit").disabled = !snap;
+  }
+  function closeVerify() {
+    $("verifyBar").hidden = true;
+    $("vfPass").value = "";
+  }
+  function submitVerify(e) {
+    e.preventDefault();
+    const username = $("vfUser").value.trim(), password = $("vfPass").value;
+    if (!username || !password) { vfMsg("กรอกชื่อผู้ใช้และรหัสผ่านของนักฟิสิกส์การแพทย์คนที่ 2"); return (username ? $("vfPass") : $("vfUser")).focus(); }
+    if (!$("vfConfirm").checked) { vfMsg("ติ๊กยืนยันว่าตรวจสอบค่าที่ใช้คำนวณและผลการคำนวณแล้ว"); return $("vfConfirm").focus(); }
+    if (user && username.toLowerCase() === user.username.toLowerCase()) { vfMsg("ผู้ verify ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (ผู้ที่เข้าสู่ระบบอยู่)"); return $("vfUser").focus(); }
+    const rec = recordFromScreen();
+    if (!rec) return;
+    $("vfSubmit").disabled = true; $("vfCancel").disabled = true;
+    vfMsg("กำลังตรวจสอบบัญชีผู้ verify…", "info");
+    backend.verify(rec, username, password).then((saved) => {
+      closeVerify();
+      records = [saved].concat(records.filter((r) => r.id !== saved.id));
+      renderHistory();
+      toast(`Verify แล้วโดย ${saved.review.name} · กำลังสร้างรายงาน PDF และเก็บลง Google Drive…`, 5000);
+      return renderPdf(saved).then((pdf) => {
+        pdf.save(fileName(saved));
+        if (canArchive(saved)) return archivePdf(saved, pdf);
+      }).catch((err) => {
+        console.error(err);
+        toast("Verify แล้ว แต่สร้างหรือเก็บ PDF ไม่สำเร็จ (" + (err.message || err) + ") กด PDF ในรายการคำนวณเพื่อลองใหม่", 7000);
+      });
+    }).catch((err) => {
+      $("vfPass").value = "";
+      vfMsg(err.message || String(err));
+      $("vfPass").focus();
+    }).finally(() => { $("vfSubmit").disabled = false; $("vfCancel").disabled = false; updateVerify(); });
+  }
+  $("vfForm").addEventListener("submit", submitVerify);
+  $("vfCancel").addEventListener("click", closeVerify);
+  ["f-frac", "f-gap", "f-br", "pt-hn", "pt-prefix", "pt-first", "pt-last", "pt-doctor"].forEach((id) => $(id).addEventListener("input", () => setTimeout(updateVerify)));
+  ["f-frac", "f-gap", "f-br"].forEach((id) => $(id).addEventListener("click", () => setTimeout(updateVerify)));
+  document.querySelector("nav.tabs").addEventListener("click", () => setTimeout(updateVerify));
 
   $("histOpen").addEventListener("click", () => openHistory(true));
   $("histClose").addEventListener("click", () => openHistory(false));
@@ -1628,7 +1643,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("histDrawer").hidden) openHistory(false); });
   $("histSearch").addEventListener("input", renderHistory);
   document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; renderHistory(); }));
-  $("histSave").addEventListener("click", submitForRecheck);
+  $("verifyBtn").addEventListener("click", openVerify);
   $("histList").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-act]");
     if (!btn) return;
@@ -1642,7 +1657,6 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       return;
     }
     openHistory(false);
-    if (act === "review") return startReview(r);
     restore(r);
     if (act === "pdf") makePdf(r);
     else toast("เปิดการคำนวณแล้ว");
@@ -1717,7 +1731,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
           <div class="rp-sub">${esc(rec.title)}</div></div></div>
         <div class="rp-meta">เลขที่ ${esc(rec.id)}<br>คำนวณ ${esc(fmtTime((rec.calc && rec.calc.at) || rec.at))}<br>พิมพ์ ${esc(fmtTime(Date.now()))}</div>
       </div>
-      ${approved ? "" : block("", `<div class="rp-draft">ฉบับร่าง · ยังไม่ผ่านการ recheck โดยนักฟิสิกส์การแพทย์ ห้ามใช้ประกอบการรักษา</div>`)}
+      ${approved ? "" : block("", `<div class="rp-draft">ฉบับร่าง · ยังไม่ผ่านการ verify โดยนักฟิสิกส์การแพทย์คนที่ 2 ห้ามใช้ประกอบการรักษา</div>`)}
       <div class="rp-block rp-top"><div class="rp-patient">
           <div><div class="rp-k">HN</div><div class="rp-v">${esc(p.hn || "—")}</div></div>
           <div><div class="rp-k">ผู้ป่วย</div><div class="rp-v">${esc(patientName(p) || "—")}</div></div>
@@ -1728,14 +1742,14 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       ${body}
       ${block("สูตรที่ใช้", s.formulas.map((f) => `<div class="rp-eq">${esc(f)}</div>`).join(""))}
       <div class="rp-block rp-signoff">
-      ${block("การคำนวณและการ recheck", kv([
+      ${block("การคำนวณและการ verify", kv([
         ["ผู้คำนวณ", `${rec.calc.name || "—"}${rec.calc.role ? ` (${rec.calc.role})` : ""} · ${fmtTime(rec.calc.at || rec.at)}`],
-        ["ผู้ recheck (นักฟิสิกส์การแพทย์)", approved ? `${rv.name} (${rv.role}) · ${fmtTime(rv.at)}` : "ยังไม่ได้ recheck"],
-        ...(approved ? [["ผล recheck", `คำนวณซ้ำได้ TDF ${fmt(rv.recheckTdf, 1)} ตรงกับค่าที่ส่ง ${fmt(rec.tdf, 1)} · อนุมัติ${rv.note ? ` · ${rv.note}` : ""}`]] : []),
+        ["ผู้ verify (นักฟิสิกส์การแพทย์คนที่ 2)", approved ? `${rv.name} (${rv.role}) · ${fmtTime(rv.at)}` : "ยังไม่ได้ verify"],
+        ...(approved ? [["ผล verify", `ตรวจสอบค่าที่ใช้คำนวณและผล TDF ${fmt(Number.isFinite(rv.recheckTdf) ? rv.recheckTdf : rec.tdf, 1)} แล้ว ถูกต้อง · ยืนยันด้วยบัญชี LPCH RO Workspace${rv.note ? ` · ${rv.note}` : ""}`]] : []),
       ]))}
       <div class="rp-block rp-sign three">
         <div><div class="line">ผู้คำนวณ<br>(${esc(rec.calc.name || "................................................")})</div></div>
-        <div><div class="line">ผู้ recheck<br>(${esc(approved ? rv.name : "................................................")})</div></div>
+        <div><div class="line">ผู้ verify<br>(${esc(approved ? rv.name : "................................................")})</div></div>
         <div><div class="line">แพทย์ผู้รักษา<br>(${esc(rec.doctor || "................................................")})</div></div>
       </div>
       <div class="rp-block rp-foot">Orton CG, Ellis F. Br J Radiol 1973;46:529–537 · Orton CG. Br J Radiol 1974;47:603–607 · Ellis F. Clin Radiol 1969;20:1–7.
@@ -1766,7 +1780,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     return r;
   }
 
-  /** "Decay Dose_<HN>_<yyyy-mm-dd>_<hhmm>.pdf", dated when the calculation was made (saved or sent for recheck). */
+  /** "Decay Dose_<HN>_<yyyy-mm-dd>_<hhmm>.pdf", dated when the calculation was made (saved or verified). */
   const fileName = (rec) => {
     const d = new Date((rec.calc && rec.calc.at) || rec.at), pad = (n) => String(n).padStart(2, "0");
     const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time = `${pad(d.getHours())}${pad(d.getMinutes())}`;
@@ -1774,7 +1788,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     return `Decay Dose_${hn}_${date}_${time}${rec.status === "approved" ? "" : "_DRAFT"}.pdf`;
   };
 
-  /** Downloads the A4 report of a record (falls back to the print dialog). Shared records need an approved recheck first. */
+  /** Downloads the A4 report of a record (falls back to the print dialog). Shared records need to be verified first. */
   async function makePdf(rec) {
     if (!rec) {
       const snap = snapshot();
@@ -1784,8 +1798,8 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       rec = records.find((r) => sigOf(r) === sig && r.status === "approved") || (backend.shared ? null : records.find((r) => sigOf(r) === sig));
       if (!rec && backend.shared) {
         const sent = records.find((r) => sigOf(r) === sig);
-        return toast(sent ? `รายการนี้ยัง${STATUS[sent.status][0]} สร้างรายงานได้เมื่อนักฟิสิกส์อีกท่าน recheck และอนุมัติแล้ว`
-          : "ต้องกด “ส่ง recheck” และได้รับการอนุมัติจากนักฟิสิกส์อีกท่านก่อน จึงสร้างรายงานได้", 5000);
+        return toast(sent ? `รายการนี้${STATUS[sent.status][0]} สร้างรายงานได้เมื่อ verify แล้ว กด “Verify” ให้นักฟิสิกส์การแพทย์คนที่ 2 ยืนยัน`
+          : "สร้างรายงานได้เมื่อ verify แล้ว กด “Verify” ให้นักฟิสิกส์การแพทย์คนที่ 2 ยืนยันก่อน", 5000);
       }
       if (!rec) {
         try { rec = await localBackend.submit({ type: snap.type, title: snap.title, tdf: snap.tdf, ref: snap.ref, summary: snap.summary, sig, state: snap.state,
@@ -1794,7 +1808,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
         refreshRecords();
       }
     }
-    if (backend.shared && rec.status !== "approved") return toast("สร้างรายงานได้เมื่อ recheck และอนุมัติแล้ว", 4000);
+    if (backend.shared && rec.status !== "approved") return toast("สร้างรายงานได้เมื่อ verify แล้ว", 4000);
     const btn = $("pdfBtn");
     btn.disabled = true; btn.textContent = "กำลังสร้าง PDF…";
     try {
@@ -1867,7 +1881,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   window.TDFApp = {
     setUser(u) {
       user = u && u.username ? { username: String(u.username), name: String(u.name || u.username), role: String(u.role || "") } : null;
-      if (!user) { openHistory(false); endReview(); setPatient({}, ""); records = []; }
+      if (!user) { openHistory(false); closeVerify(); setPatient({}, ""); records = []; }
       applyAccess();
       renderHistory();
       if (user) refreshRecords();
