@@ -475,7 +475,20 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .vis-tbl th+th,.vis-tbl td+td{text-align:center;width:84px;padding-right:0}
 .empty-state{padding:36px 16px;text-align:center;color:var(--muted);font-size:14px}
 .more{display:flex;justify-content:center;margin-top:10px}
-.box{margin-bottom:28px}   /* กล่องในแถบที่แอดมินเลื่อนลำดับได้ (ที่ไม่ใช่ .sec) */
+.box{margin-bottom:28px}
+/* บันทึก Brachytherapy หลายคน: คนละบรรทัด */
+.br-wrap{overflow-x:auto}
+.br-tbl{font-size:13.5px}
+.br-help{margin:-2px 0 2px;font-size:12.5px;color:var(--muted)}
+.br-tbl th{padding:0 8px 4px 0;border:0;background:none;color:var(--muted);font-size:12px;font-weight:500;text-align:left}
+.br-tbl td{padding:3px 8px 3px 0;border:0;text-align:left;vertical-align:middle}
+.br-tbl .br-n{width:18px;font:12px var(--mono);color:var(--faint);text-align:center}
+.br-tbl input[data-f="hn"]{width:100%;min-width:120px}
+.br-tbl select{min-width:76px}
+.br-tbl td.br-chk{text-align:center}
+.br-tbl th.br-chk{text-align:center}
+.br-add{justify-self:start}
+@media (max-width:480px){.br-tbl .br-n{display:none}.br-tbl td,.br-tbl th{padding-right:6px}.br-tbl input[data-f="hn"]{min-width:76px}.br-tbl select{min-width:68px}}   /* กล่องในแถบที่แอดมินเลื่อนลำดับได้ (ที่ไม่ใช่ .sec) */
 .box-sets{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px 20px}
 .box-set h3{margin:0 0 6px;font-size:13.5px;font-weight:600}
 .box-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px 12px;align-items:center;min-height:40px}
@@ -1078,7 +1091,13 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <p class="linked" id="l-linked" hidden></p>
       <div class="row2">
         <label class="field"><span class="lbl">Date</span><input type="date" id="l-date" required></label>
-        <div class="field"><span class="lbl"><span>MP</span><span class="hint" id="l-mp-hint"></span></span><div class="chips people" id="l-mp" role="radiogroup" aria-label="MP"></div></div>
+        <div class="field mp-field"><span class="lbl"><span>MP</span><span class="hint" id="l-mp-hint"></span></span><div class="chips people" id="l-mp" role="radiogroup" aria-label="MP"></div></div>
+      </div>
+      <div class="field brachy-only" id="l-brachy" hidden>
+        <span class="lbl">ผู้ป่วย</span>
+        <p class="br-help">คนละบรรทัด · ผู้วางแผนได้แต้ม Brachy 3D (ติ๊กเสียบเข็ม = Brachy เสียบเข็ม) · RC ได้แต้ม RC · ไม่มี RC เว้นว่างได้</p>
+        <div class="br-wrap"><table class="br-tbl"><thead><tr><th class="br-n">#</th><th>HN</th><th>ผู้วางแผน</th><th>RC</th><th class="br-chk" id="br-needle-h">เสียบเข็ม</th><th></th></tr></thead><tbody id="br-rows"></tbody></table></div>
+        <button type="button" class="btn ghost br-add" id="br-add">+ เพิ่มบรรทัด</button>
       </div>
       <div class="row2 rc-only">
         <label class="field"><span class="lbl">HN</span><input id="l-hn" inputmode="numeric" autocomplete="off"></label>
@@ -1375,6 +1394,13 @@ function logKinds() {
   ];
 }
 const kindOf = key => logKinds().find(k => k.key === key) || { key, label: key };
+// บันทึกใหม่: Brachy 3D และ Brachy เสียบเข็ม รวมเป็นปุ่มเดียว "Brachytherapy" กรอกได้หลายคน (แก้รายการเดิมยังเลือกแยกได้)
+const BRACHY = 'brachyset';
+function dialogKinds(isNew) {
+  const ks = logKinds();
+  if (!isNew || !state.config.acts.brachy) return ks;
+  return ks.filter(k => k.key !== 'brachyn').map(k => (k.key === 'brachy' ? { key: BRACHY, label: 'Brachytherapy' } : k));
+}
 // แถบในหน้า RC และกิจกรรม: กิจกรรมที่ตั้งแถบ (tab) เดียวกันรวมเป็นแถบเดียว เช่น Brachytherapy, Hyperthermia
 function logTabs() {
   const acts = state.config.acts, tabs = [];
@@ -1642,7 +1668,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-14.3';
+const PAGE_VERSION = '2026-10-14.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3116,7 +3142,7 @@ function renderLogs() {
     let main, pts;
     if (l.kind === 'rc') {
       const c = byId[l.caseId];
-      main = `<span class="hn">${esc(l.hn || '—')}</span> ${esc(l.name)}<small>${c ? `แผน ${esc(catOf(c.cat).label)} ของ ${esc(c.mp)}` : 'Quality Checklist'}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
+      main = `<span class="hn">${esc(l.hn || '—')}</span> ${esc(l.name)}<small>${c ? `แผน ${esc(catOf(c.cat).label)} ของ ${esc(c.mp)}` : l.title ? `แผน ${esc(l.title)}` : 'Quality Checklist'}${l.note ? ' · ' + esc(l.note) : ''}</small>`;
       pts = unitPts(cfg.acts.rc.min, cfg.acts.rc.w);
     } else if (isCountKind(l.kind)) {
       const a = cfg.acts[l.kind];
@@ -4344,6 +4370,22 @@ async function restoreCase(prev) {
 const logDlg = $('#log-dlg'), logForm = $('#log-form');
 function syncLogForm() {
   const kind = chipValue($('#l-kind')) || 'rc';
+  const br = kind === BRACHY;
+  $('#l-brachy').hidden = !br;
+  $('.mp-field', logForm).hidden = br;
+  if (br) {
+    $$('.rc-only, .work-only', logForm).forEach(el => { el.hidden = true; });
+    $('#l-linked').hidden = true;
+    $('#br-needle-h').hidden = !state.config.acts.brachyn;
+    $$('.br-chk', logForm).forEach(el => { el.hidden = !state.config.acts.brachyn; });
+    const acts = state.config.acts, rows = brRows.filter(r => str(r.hn) && r.plan);
+    const n3 = rows.filter(r => !(r.needle && acts.brachyn)).length, nn = rows.length - n3, nrc = rows.filter(r => r.rc).length;
+    const pts = n3 * unitPts(acts.brachy.min, acts.brachy.w) + (nn ? nn * unitPts(acts.brachyn.min, acts.brachyn.w) : 0) + nrc * unitPts(acts.rc.min, acts.rc.w);
+    $('#l-preview').innerHTML = rows.length
+      ? `${rows.length} คน · ${esc(acts.brachy.label)} ${n3}${acts.brachyn ? ` · ${esc(acts.brachyn.label)} ${nn}` : ''} · RC ${nrc} = <b>${num(pts, 3)}</b> แต้ม`
+      : 'กรอก HN และเลือกนักฟิสิกส์ผู้วางแผน';
+    return;
+  }
   $$('.rc-only', logForm).forEach(el => { el.hidden = !patientAct(kind); });
   $$('.work-only', logForm).forEach(el => { el.hidden = kind !== 'acad' && kind !== 'admin'; });
   const c = editingLog.caseId ? state.cases.find(x => x.id === editingLog.caseId) : null;
@@ -4371,8 +4413,11 @@ function openLog(id, preset = {}) {
   const c = preset.caseId ? state.cases.find(x => x.id === preset.caseId) : null;
   editingLog = l ? clone(l) : { id: '', kind: preset.kind || 'rc', date: today(), caseId: preset.caseId || '', hn: c ? c.hn : '', name: c ? c.name : '' };
   logMpTouched = false;
-  const kinds = logKinds();
+  const kinds = dialogKinds(!l);
+  if (!l && (editingLog.kind === 'brachy' || editingLog.kind === 'brachyn') && kinds.some(k => k.key === BRACHY)) editingLog.kind = BRACHY;
   if (!kinds.some(k => k.key === editingLog.kind)) kinds.push(kindOf(editingLog.kind));
+  brRows = [brRow(), brRow(), brRow()];
+  renderBrRows();
   chipGroup($('#l-kind'), 'kind', kinds.map(k => k.key), editingLog.kind);
   $$('#l-kind span').forEach((s, i) => { s.textContent = kinds[i].label; });
   mpChips($('#l-mp'), 'lmp', editingLog.mp);
@@ -4384,9 +4429,78 @@ function openLog(id, preset = {}) {
   syncLogForm();
   logDlg.showModal();
 }
+// แถวของ Brachytherapy: { hn, plan (ผู้วางแผน), rc, needle (เสียบเข็ม) }
+let brRows = [];
+const brRow = () => ({ hn: '', plan: '', rc: '', needle: false });
+function renderBrRows() {
+  const team = activeStaff().map(s => s.code);
+  const pick = (i, f, v) => `<select data-br="${i}" data-f="${f}" aria-label="${f === 'plan' ? 'นักฟิสิกส์ผู้วางแผน' : 'นักฟิสิกส์ RC'} บรรทัด ${i + 1}"><option value="">—</option>${[...team, ...(v && !team.includes(v) ? [v] : [])].map(c => opt(c, c, v)).join('')}</select>`;
+  $('#br-rows').innerHTML = brRows.map((r, i) => `<tr>
+    <td class="br-n">${i + 1}</td>
+    <td><input data-br="${i}" data-f="hn" value="${esc(r.hn)}" inputmode="numeric" autocomplete="off" aria-label="HN บรรทัด ${i + 1}"></td>
+    <td>${pick(i, 'plan', r.plan)}</td>
+    <td>${pick(i, 'rc', r.rc)}</td>
+    <td class="br-chk"><input type="checkbox" data-br="${i}" data-f="needle"${r.needle ? ' checked' : ''} aria-label="เสียบเข็ม บรรทัด ${i + 1}"></td>
+    <td><button type="button" class="icon-btn" data-brdel="${i}" aria-label="ลบบรรทัด ${i + 1}"${brRows.length > 1 ? '' : ' disabled'}>×</button></td>
+  </tr>`).join('');
+}
+// พิมพ์ในบรรทัดสุดท้าย → มีบรรทัดว่างให้กรอกต่อ
+function brEdit(el) {
+  const i = +el.dataset.br, r = brRows[i];
+  if (!r) return;
+  r[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value;
+  if (i === brRows.length - 1 && str(r.hn)) {
+    brRows.push(brRow());
+    const keep = document.activeElement === el;
+    renderBrRows();
+    if (keep) { const again = $(`[data-br="${i}"][data-f="${el.dataset.f}"]`); again.focus(); if (again.setSelectionRange && again.type !== 'checkbox') again.setSelectionRange(again.value.length, again.value.length); }
+  }
+}
+async function submitBrachy() {
+  const date = $('#l-date').value, acts = state.config.acts;
+  if (!date) { $('#l-date').focus(); return toast('ใส่วันที่', { err: true }); }
+  const rows = brRows.map((r, i) => ({ ...r, i })).filter(r => str(r.hn) || r.plan || r.rc);
+  const field = (r, f) => $(`[data-br="${r.i}"][data-f="${f}"]`);
+  if (!rows.length) { field({ i: 0 }, 'hn').focus(); return toast('กรอก HN และเลือกผู้วางแผนอย่างน้อย 1 คน', { err: true }); }
+  for (const r of rows) {
+    if (!str(r.hn)) { field(r, 'hn').focus(); return toast(`บรรทัด ${r.i + 1}: กรอก HN`, { err: true }); }
+    if (!r.plan) { field(r, 'plan').focus(); return toast(`บรรทัด ${r.i + 1}: เลือกนักฟิสิกส์ผู้วางแผน`, { err: true }); }
+    if (r.rc && r.rc === r.plan) { field(r, 'rc').focus(); return toast(`บรรทัด ${r.i + 1}: RC ต้องไม่ใช่คนเดียวกับผู้วางแผน`, { err: true }); }
+  }
+  const note = str($('#l-note').value), btn = $('#log-save');
+  btn.disabled = true;
+  const done = [];
+  try {
+    for (const r of rows) {
+      const kind = r.needle && acts.brachyn ? 'brachyn' : 'brachy';
+      const plan = normLog({ kind, mp: r.plan, date, hn: str(r.hn), note, updated: nowISO() });
+      await store.save('logs', plan);
+      state.logs.push(plan);
+      if (r.rc) {
+        // RC ของ Brachy: ไม่ผูกกับเคส บอกว่าเป็นแผนอะไรของใคร
+        const rc = normLog({ kind: 'rc', mp: r.rc, date, hn: str(r.hn), title: `${kindOf(kind).label} ของ ${r.plan}`, note, updated: nowISO() });
+        await store.save('logs', rc);
+        state.logs.push(rc);
+      }
+      done.push(r.i);
+    }
+    logDlg.close();
+    render();
+    toast(`บันทึก Brachytherapy ${rows.length} คน (RC ${rows.filter(r => r.rc).length}) แล้ว`);
+  } catch (err) {
+    // บรรทัดที่บันทึกแล้วเอาออก กดบันทึกซ้ำจะไม่ซ้ำ
+    brRows = brRows.filter((r, i) => !done.includes(i));
+    if (!brRows.length) brRows.push(brRow());
+    renderBrRows();
+    syncLogForm();
+    render();
+    toast(`บันทึกไม่สำเร็จ: ${errMsg(err)}${done.length ? ` · บันทึกไปแล้ว ${done.length} คน (เอาออกจากรายการแล้ว)` : ''}`, { err: true });
+  } finally { btn.disabled = false; }
+}
 async function submitLog(e) {
   e.preventDefault();
   const kind = chipValue($('#l-kind')) || 'rc';
+  if (kind === BRACHY) return submitBrachy();
   const mp = chipValue($('#l-mp'));
   if (!mp) { focusChips($('#l-mp')); return toast('เลือก MP ผู้ทำกิจกรรม', { err: true }); }
   if (!$('#l-date').value) { $('#l-date').focus(); return toast('ใส่วันที่', { err: true }); }
@@ -4396,7 +4510,7 @@ async function submitLog(e) {
     ...editingLog, kind, mp, date: $('#l-date').value, note: $('#l-note').value,
     hn: patientAct(kind) ? $('#l-hn').value : '', name: patientAct(kind) ? $('#l-name').value : '',
     caseId: kind === 'rc' ? editingLog.caseId : '',
-    title: work ? $('#l-title').value : '', min: work ? $('#l-min').value : '', k: work ? $('#l-k').value : '',
+    title: work ? $('#l-title').value : kind === 'rc' ? str(editingLog.title) : '', min: work ? $('#l-min').value : '', k: work ? $('#l-k').value : '',
     updated: nowISO(),
   });
   const isNew = !editingLog.id;
@@ -5023,6 +5137,8 @@ document.addEventListener('click', e => {
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp);
   if (ds.course) return openCourse(ds.id, ds.course);
+  if (t.id === 'br-add') { brRows.push(brRow()); renderBrRows(); $(`[data-br="${brRows.length - 1}"][data-f="hn"]`).focus(); return; }
+  if (ds.brdel) { brRows.splice(+ds.brdel, 1); renderBrRows(); syncLogForm(); return; }
   if (ds.stampsave) return openValsPin(ds.id, ds.stampsave);
   if (ds.rc) { const c = state.cases.find(x => x.id === ds.rc); return openLog(null, { kind: 'rc', caseId: c && c.id }); }
   if (ds.logedit) return openLog(ds.logedit);
@@ -5230,9 +5346,20 @@ $('#v-from').addEventListener('change', () => { if (!$('#v-to').value || $('#v-t
 logForm.addEventListener('submit', submitLog);
 logForm.addEventListener('change', e => {
   if (e.target.name === 'lmp') logMpTouched = true;
+  if (e.target.dataset.br !== undefined) brEdit(e.target);
   syncLogForm();
 });
-logForm.addEventListener('input', e => { if (e.target.id === 'l-min' || e.target.id === 'l-k') syncLogForm(); });
+logForm.addEventListener('input', e => {
+  if (e.target.dataset.br !== undefined) { brEdit(e.target); syncLogForm(); }
+  if (e.target.id === 'l-min' || e.target.id === 'l-k') syncLogForm();
+});
+// Enter ในช่อง HN ของ Brachytherapy: ไปบรรทัดถัดไป (ไม่ส่งฟอร์ม)
+logForm.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.dataset.f !== 'hn') return;
+  e.preventDefault();
+  const next = $(`[data-br="${+e.target.dataset.br + 1}"][data-f="hn"]`);
+  (next || $(`[data-br="${e.target.dataset.br}"][data-f="plan"]`)).focus();
+});
 
 const settingsEl = $('#view-settings');
 // แก้ค่าในหน้าตั้งค่า (ใช้ได้ทั้ง input และ change: เบราว์เซอร์บางตัว เช่น Safari รุ่นเก่า ไม่ส่ง input ตอนติ๊กช่อง)
