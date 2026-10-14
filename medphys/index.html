@@ -406,6 +406,34 @@ button.who{padding:0;border:0;background:none;font:inherit;cursor:pointer}
 button.who:hover .nm{text-decoration:underline}
 .pin-badge{flex:none;padding:1px 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:500}
 .row.fresh{background:var(--accent-soft);transition:background 1.2s}
+/* รายการเคสแบบบรรทัดเดียว (ตาราง) */
+.list>li.tbl-li{padding:0}
+.tbl-wrap{overflow-x:auto}
+.case-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.case-tbl th{padding:7px 10px;background:var(--sunken);color:var(--muted);font-size:12px;font-weight:500;text-align:left;white-space:nowrap}
+.case-tbl td{padding:6px 10px;border-top:1px solid var(--line);white-space:nowrap;vertical-align:middle;color:var(--fg)}
+.case-tbl tr[data-rowedit]{cursor:pointer}
+.case-tbl tbody tr:hover td{background:var(--hover)}
+.case-tbl tr.fresh td{background:var(--accent-soft)}
+.case-tbl .cut{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.case-tbl .sub{color:var(--muted)}
+.case-tbl .sim.ok{color:var(--ok)}.case-tbl .sim.warn{color:var(--warn)}.case-tbl .sim.late{color:var(--late)}
+.case-tbl .sim small{font-size:11.5px;opacity:.85}
+.case-tbl .c-who{gap:4px}
+.hn-btn{padding:0;border:0;background:none;color:var(--fg);cursor:pointer}
+.hn-btn:hover{color:var(--accent);text-decoration:underline}
+.lsteps{display:inline-flex;gap:4px}
+.lchk{padding:1px 7px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--muted);font-size:11.5px;line-height:1.5;white-space:nowrap}
+button.lchk{cursor:pointer}
+button.lchk:hover{border-color:var(--accent);color:var(--accent)}
+.lchk.done{border-color:transparent;background:var(--ok-soft);color:var(--ok)}
+.lchk.done.q-warn{background:var(--warn-soft);color:var(--warn)}
+.lchk.done.q-late{background:var(--late-soft);color:var(--late)}
+.lchk b{font-weight:600}
+.vis-tbl{width:100%;max-width:520px;border-collapse:collapse;font-size:13.5px;margin-top:12px}
+.vis-tbl th{padding:4px 14px 6px 0;color:var(--muted);font-size:12.5px;font-weight:500;text-align:left}
+.vis-tbl td{padding:4px 14px 4px 0;border-top:1px solid var(--line)}
+.vis-tbl th+th,.vis-tbl td+td{text-align:center;width:84px;padding-right:0}
 .empty-state{padding:36px 16px;text-align:center;color:var(--muted);font-size:14px}
 .more{display:flex;justify-content:center;margin-top:10px}
 @media (max-width:760px){
@@ -829,6 +857,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <select id="cat-filter" aria-label="กรองตามหมวด"></select>
       <input class="grow" id="q" type="search" placeholder="ค้นหา HN, ชื่อ, แพทย์, หมายเหตุ" autocomplete="off" aria-label="ค้นหา">
       <span id="person-filter"></span>
+      <div class="seg-mini case-mode" aria-label="มุมมองรายการเคส"></div>
     </div>
     <ul class="list" id="cases"></ul>
     <div class="more" id="more-wrap" hidden><button type="button" class="btn ghost" id="more">แสดงเพิ่ม</button></div>
@@ -872,6 +901,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <div class="toolbar">
       <span class="muted" id="pend-note" style="font-size:13px"></span>
       <span class="spacer"></span>
+      <div class="seg-mini case-mode" aria-label="มุมมองรายการเคส"></div>
       <div class="seg-mini" id="pend-rooms" aria-label="ห้องฉาย"></div>
     </div>
     <div class="cards pend-cards" id="pend-cards"></div>
@@ -1125,6 +1155,30 @@ const STEPS = [
   { key: 'mc', label: 'SRS MapCheck', value: true, hint: 'เช่น 98.5 (เป็น %)', ph: '98.5' },
   { key: 'pc', label: 'Plan complete' },
 ];
+// ค่าที่แสดงในรายการเคส (หน้างาน งานรอ) แยกตามมุมมอง: [key, ชื่อ, การ์ด, บรรทัดเดียว] เป็นค่าเริ่มต้น · null = ไม่มีในมุมมองนั้น
+// แอดมินเปลี่ยนได้ที่ ตั้งค่า → รายการเคส (config.caseView) · HN แสดงเสมอ · หัวข้อเพิ่มเติมแทรกก่อนหมายเหตุ (การ์ดแสดง บรรทัดเดียวไม่แสดง)
+const CASE_COLS = [
+  ['cat', 'เทคนิค', true, true], ['name', 'ชื่อผู้ป่วย', true, true], ['how', 'เลือกเอง / แจกพร้อมกัน', true, false],
+  ['dx', 'Diag (ICD-10)', true, true], ['area', 'บริเวณที่ฉาย', true, false], ['doc', 'Doc', true, false], ['type', 'Type', true, false],
+  ['tech', 'Technique', true, false], ['dose', 'Dose × Fx', true, true], ['aim', 'Aim', true, false], ['room', 'ห้องฉาย', true, false],
+  ['note', 'หมายเหตุ', true, false], ['mp', 'MP', true, true], ['rc', 'RC', true, true], ['ct', 'CT-Sim', false, false], ['in', 'In', true, false],
+  ['sim', 'Start RT', true, true], ['status', 'สถานะ (รอ Finish / เสร็จ)', true, false], ['steps', 'ปุ่มขั้นตอน (Finish … Plan complete)', true, true],
+  ['vals', 'ช่องกรอกค่าใต้ปุ่ม (Dose check, F0, Delta4)', true, null],
+];
+const LINE_HEAD = { cat: 'เทคนิค', name: 'ชื่อ', how: 'แจก', dx: 'Diag', area: 'บริเวณ', dose: 'Dose', room: 'ห้อง', status: 'สถานะ', steps: 'ขั้นตอน' };
+const LINE_SHORT = { fin: 'Fin', eval: 'Eva', mu: 'Dose', d0: 'F0', d4: 'D4', mc: 'MC', pc: 'PC' };
+const caseCols = fields => {
+  const i = CASE_COLS.findIndex(x => x[0] === 'note');
+  return [...CASE_COLS.slice(0, i), ...fields.filter(f => str(f.label)).map(f => ['x_' + f.id, f.label, true, false]), ...CASE_COLS.slice(i)];
+};
+function colOn(view, key, cfg = state.config) {
+  const v = ((cfg.caseView || {})[view] || {})[key];
+  if (typeof v === 'boolean') return v;
+  const d = CASE_COLS.find(x => x[0] === key);
+  return d ? !!d[view === 'card' ? 2 : 3] : view === 'card';
+}
+// มุมมองที่ใช้: ที่เลือกเองในเบราว์เซอร์นี้ ไม่เคยเลือก = ค่าเริ่มต้นของแอดมิน
+const caseMode = () => { const p = pref.get('caseView', ''); return p === 'card' || p === 'line' ? p : state.config.caseView.mode; };
 const CHECKS = ['mu', 'd0', 'd4', 'mc'];   // ปุ่มที่เลือกได้รายเทคนิค (Finish, Evaluate มีเสมอ)
 const stampDraft = {};   // ค่าที่พิมพ์ในช่องใต้ปุ่มแต่ยังไม่บันทึก { caseId: { mu: '1.2' } } (แถวถูกวาดใหม่ได้โดยค่าไม่หาย)
 // ค่าเริ่มต้นเป็น %: พิมพ์แค่ตัวเลขบันทึกเป็น "1.2%" · พิมพ์หน่วยหรือข้อความอื่นเองบันทึกตามที่พิมพ์
@@ -1175,6 +1229,7 @@ const LOGO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/]+=*$/;
 const logoOk = v => typeof v === 'string' && v.length <= LOGO_MAX && LOGO_RE.test(v);
 const DEFAULT_CONFIG = {
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
+  caseView: { mode: 'card', card: {}, line: {} },   // รายการเคส: มุมมองเริ่มต้น และค่าที่แสดงในแต่ละมุมมอง (ไม่ระบุ = ตาม CASE_COLS)
   rate: 0.143,          // คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที) กลุ่ม A5.1
   p4pGroup: 'A5.1 (นักรังสีการแพทย์ งานฟิสิกส์การแพทย์)',   // กลุ่มที่ ในหัวแบบจัดเก็บคะแนนภาระงาน (ไฟล์ Excel)
   guarantee: 1200,      // แต้มประกันตั้งต้นของตำแหน่งใหม่
@@ -1363,6 +1418,11 @@ function mergeConfig(c) {
   if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
   const out = { ...d };
   out.logo = logoOk(c.logo) ? c.logo : '';
+  const cv = c.caseView && typeof c.caseView === 'object' ? c.caseView : {};
+  out.caseView = { mode: cv.mode === 'line' ? 'line' : 'card', card: {}, line: {} };
+  for (const v of ['card', 'line']) {
+    for (const [k, x] of Object.entries(cv[v] && typeof cv[v] === 'object' ? cv[v] : {})) if (/^[\w-]{1,44}$/.test(k) && typeof x === 'boolean') out.caseView[v][k] = x;
+  }
   out.rate = +c.rate > 0 ? +c.rate : d.rate;
   out.p4pGroup = c.p4pGroup !== undefined ? str(c.p4pGroup) : d.p4pGroup;
   out.guarantee = c.guarantee !== '' && isFinite(+c.guarantee) && c.guarantee != null ? +c.guarantee : d.guarantee;
@@ -1497,7 +1557,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-13.1';
+const PAGE_VERSION = '2026-10-14.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2125,7 +2185,13 @@ const fillPct = r => (r.guarantee > 0 ? Math.min(100, Math.max(0, ((r.carry + r.
 const meterHtml = r => `<span class="meter" aria-hidden="true"><i style="width:${fillPct(r)}%"></i></span>`;
 const sumText = r => `${signed(-r.guarantee)}${r.carry ? ` ${signed(r.carry)}` : ''} ${signed(r.work)}`;
 
+// ปุ่มสลับมุมมองรายการเคส (หน้างานและงานรอใช้ร่วมกัน)
+function renderCaseMode() {
+  const m = caseMode();
+  $$('.case-mode').forEach(el => { el.innerHTML = [['card', 'การ์ด'], ['line', 'บรรทัดเดียว']].map(([v, l]) => `<button type="button" data-cview="${v}" aria-pressed="${m === v}">${l}</button>`).join(''); });
+}
 function renderWork() {
+  renderCaseMode();
   $('#intake-sec').hidden = !canEdit();
   $('#open-leaves').textContent = canEdit() ? 'จัดการวันลา' : 'ดูวันลา';
   renderIntake();
@@ -2188,7 +2254,7 @@ function renderWork() {
   if (!rows.length) {
     list.innerHTML = `<li class="empty-state">${state.tab === 'open' && !q && !state.cat && !state.person ? 'ไม่มีงานค้าง กดหมวดด้านบนเพื่อลงเคสใหม่' : 'ไม่พบเคสที่ตรงกับตัวกรอง'}</li>`;
   } else {
-    list.innerHTML = rows.slice(0, state.limit).map(c => caseRow(c, rcs[c.id] || [])).join('');
+    list.innerHTML = caseList(rows.slice(0, state.limit), rcs);
   }
   $('#more-wrap').hidden = rows.length <= state.limit;
 }
@@ -2648,82 +2714,148 @@ function fillDose(pre, c) {
 }
 
 let batchIndex = {};
-function caseRow(c, rcs) {
-  const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple';
-  const manualChip = c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>'
-    : c.how === 'follow' ? '<span class="chip" title="ให้คนเดียวกับเทคนิคแรกที่แจกพร้อมกัน คิวของเทคนิคนี้ไม่ขยับ และจะข้ามคนนี้ 1 ครั้งเมื่อวนมาถึง">ตามเทคนิคแรก</span>' : '';
-  const dose = doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
+function caseList(rows, rcs) {
+  return caseMode() === 'line' ? caseTable(rows, rcs) : rows.map(c => caseRow(c, rcs[c.id] || [])).join('');
+}
+// Start RT: สีตามวันทำการที่เหลือ (3 ขึ้นไป เขียว · 2 เหลือง · 1 หรือน้อยกว่า แดง) เหมือนหน้างานรอ
+function simInfo(c, st) {
+  if (c.sim === 'on call') return { cls: st === 'done' ? '' : 'warn', date: 'on call', rel: '' };
+  if (!c.sim) return null;
+  const dd = daysFrom(c.sim);
+  let rel = '', cls = '';
+  if (st !== 'done') {
+    const n = workdaysUntil(c.sim, Infinity);
+    rel = dd < 0 ? `เลย ${-dd} วัน` : dd === 0 ? 'วันนี้' : n ? `อีก ${n} วันทำการ` : `อีก ${dd} วัน`;
+    cls = n >= 3 ? 'ok' : n === 2 ? 'warn' : 'late';
+  }
+  return { cls, date: fmtDay(c.sim), rel };
+}
+function rcHtml(c, rcs) {
+  if (catOf(c.cat).kind === 'simple') return '';
+  if (!canEdit()) return rcs.length ? `<span class="rc done">RC ${esc(rcs.map(l => l.mp).join(', '))}</span>` : '';
+  return rcs.length
+    ? `<button type="button" class="rc done" data-logedit="${esc(rcs[rcs.length - 1].id)}" title="แก้ไข RC">RC ${esc(rcs.map(l => l.mp).join(', '))}</button>`
+    : `<button type="button" class="rc" data-rc="${esc(c.id)}" title="บันทึก RC เคสนี้">+ RC</button>`;
+}
+// สถานะ: ใช้ปุ่มบันทึกขั้นตอน (ใส่ PIN) ได้ = ข้อความ "รอ …" · Code.gs รุ่นเก่า = ปุ่ม Finish / Evaluate แบบเดิม
+function caseAct(c, k, st) {
+  const simple = k.kind === 'simple';
+  if (st !== 'done' && ((!simple && stampsOn()) || !canEdit())) return `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
+  if (st === 'plan') return `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Finish เป็นตอนนี้">Finish</button>`;
+  if (st === 'eval') return `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Evaluate เป็นตอนนี้${c.fin ? ` · Finish ${esc(fmtStamp(c.fin))}` : ''}">Evaluate</button>`;
+  return `<span class="done-mark"${simple ? '' : ` title="Finish ${esc(fmtStamp(c.fin) || '—')} · Evaluate ${esc(fmtStamp(c.eval))}"`}>✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtStamp(c.eval))}</span>`;
+}
+const howChips = c => {
   const sib = c.batch && batchIndex[c.batch] ? batchIndex[c.batch].filter(x => x.id !== c.id) : [];
-  const sibChip = sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : '';
-  const areaTxt = c.area && `<span>${esc(c.area)}</span>`;
-  const dxs = (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
-  const more = parseSites(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`);
-  const room = c.room && `<span title="ห้องฉาย">${esc(c.room)}</span>`;
-  const extras = extraList().filter(f => str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
-  const meta = simple ? [manualChip, sibChip, dxs, areaTxt, dose, ...more, ...extras, c.note && esc(c.note)] : [manualChip, sibChip, dxs, areaTxt, c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, typeChip(c.type), c.tech && `<span>${esc(c.tech)}</span>`, dose, ...more, c.aim && `<span>${esc(c.aim)}</span>`, room, ...extras, c.note && `<span>${esc(c.note)}</span>`];
-  let dates;
-  if (simple) {
-    dates = `<b>${esc(fmtDay(c.in) || '—')}</b>`;
-  } else {
-    let simTxt = '<span>Start RT —</span>';
-    if (c.sim === 'on call') simTxt = `<span class="${st === 'done' ? '' : 'warn'}">Start RT on call</span>`;
-    else if (c.sim) {
-      const dd = daysFrom(c.sim);
-      let rel = '', cls = '';
-      if (st !== 'done') {
-        // นับวันทำการ (ข้ามเสาร์–อาทิตย์และวันหยุด) เหมือนหน้างานรอ: 3 วันทำการขึ้นไป เขียว · 2 เหลือง · 1 หรือน้อยกว่า (วันนี้ เลยแล้ว) แดง
-        const n = workdaysUntil(c.sim, Infinity);
-        rel = dd < 0 ? `เลย ${-dd} วัน` : dd === 0 ? 'วันนี้' : n ? `อีก ${n} วันทำการ` : `อีก ${dd} วัน`;
-        cls = n >= 3 ? 'ok' : n === 2 ? 'warn' : 'late';
-      }
-      simTxt = `<span class="sim ${cls}">Start RT <b>${esc(fmtDay(c.sim))}</b>${rel ? ` · ${rel}` : ''}</span>`;
+  return [c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>'
+    : c.how === 'follow' ? '<span class="chip" title="ให้คนเดียวกับเทคนิคแรกที่แจกพร้อมกัน คิวของเทคนิคนี้ไม่ขยับ และจะข้ามคนนี้ 1 ครั้งเมื่อวนมาถึง">ตามเทคนิคแรก</span>' : '',
+  sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : ''].join('');
+};
+// มุมมองการ์ด (แบบเดิม): แสดงเฉพาะค่าที่แอดมินเลือกให้การ์ด
+function caseRow(c, rcs) {
+  const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple', on = key => colOn('card', key);
+  const dose = on('dose') && doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
+  const areaTxt = on('area') && c.area && `<span>${esc(c.area)}</span>`;
+  const dxs = on('dx') && (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
+  const more = on('area') ? parseSites(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`) : [];
+  const room = on('room') && c.room && `<span title="ห้องฉาย">${esc(c.room)}</span>`;
+  const extras = extraList().filter(f => on('x_' + f.id) && str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
+  const how = on('how') && howChips(c), note = on('note') && c.note && `<span>${esc(c.note)}</span>`;
+  const meta = simple ? [how, dxs, areaTxt, dose, ...more, ...extras, note]
+    : [how, dxs, areaTxt, on('doc') && c.doc && `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>`, on('type') && typeChip(c.type), on('tech') && c.tech && `<span>${esc(c.tech)}</span>`, dose, ...more, on('aim') && c.aim && `<span>${esc(c.aim)}</span>`, room, ...extras, note];
+  const dl = [];
+  if (!simple && on('ct') && c.ct) dl.push(`<span>CT-Sim ${esc(fmtDay(c.ct) || c.ct)}</span>`);
+  if (simple) { if (on('in')) dl.push(`<b>${esc(fmtDay(c.in) || '—')}</b>`); }
+  else {
+    if (on('in')) dl.push(`<span>In ${esc(fmtDay(c.in) || '—')}</span>`);
+    if (on('sim')) {
+      const si = simInfo(c, st);
+      dl.push(!si ? '<span>Start RT —</span>' : si.date === 'on call' ? `<span class="${si.cls}">Start RT on call</span>` : `<span class="sim ${si.cls}">Start RT <b>${esc(si.date)}</b>${si.rel ? ` · ${si.rel}` : ''}</span>`);
     }
-    dates = `<span>In ${esc(fmtDay(c.in) || '—')}</span><br>${simTxt}`;
   }
-  let rc = '';
-  if (!simple && !canEdit()) rc = rcs.length ? `<span class="rc done">RC ${esc(rcs.map(l => l.mp).join(', '))}</span>` : '';
-  else if (!simple) {
-    rc = rcs.length
-      ? `<button type="button" class="rc done" data-logedit="${esc(rcs[rcs.length - 1].id)}" title="แก้ไข RC">RC ${esc(rcs.map(l => l.mp).join(', '))}</button>`
-      : `<button type="button" class="rc" data-rc="${esc(c.id)}" title="บันทึก RC เคสนี้">+ RC</button>`;
-  }
-  let act;
-  const strip = !simple && stampsOn() ? stepStrip(c, k) : '';
-  if (strip && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
-  else if (!canEdit() && st !== 'done') act = `<span class="step-txt">${st === 'plan' ? 'รอ Finish' : 'รอ Evaluate'}</span>`;
-  else if (st === 'plan') act = `<button type="button" class="step" data-step="fin" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Finish เป็นตอนนี้">Finish</button>`;
-  else if (st === 'eval') act = `<button type="button" class="step" data-step="eval" data-id="${esc(c.id)}" title="บันทึกวันและเวลา Evaluate เป็นตอนนี้${c.fin ? ` · Finish ${esc(fmtStamp(c.fin))}` : ''}">Evaluate</button>`;
-  else act = `<span class="done-mark"${simple ? '' : ` title="Finish ${esc(fmtStamp(c.fin) || '—')} · Evaluate ${esc(fmtStamp(c.eval))}"`}>✓ ${simple ? 'บันทึกแล้ว' : 'เสร็จ ' + esc(fmtStamp(c.eval))}</span>`;
+  const strip = on('steps') && !simple && stampsOn() ? stepStrip(c, k, on('vals')) : '';
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
-      <span class="c-line"><span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span><span class="hn">${esc(c.hn || '—')}</span><span class="pname">${esc(c.name)}</span></span>
+      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
     </${canEdit() ? 'button' : 'div'}>
-    <div class="c-who">${av(c.mp)}${rc}</div>
-    <div class="c-dates">${dates}</div>
-    <div class="c-act">${act}</div>
+    <div class="c-who">${on('mp') ? av(c.mp) : ''}${on('rc') ? rcHtml(c, rcs) : ''}</div>
+    <div class="c-dates">${dl.join('<br>')}</div>
+    <div class="c-act">${on('status') ? caseAct(c, k, st) : ''}</div>
     ${strip}
   </li>`;
+}
+// มุมมองบรรทัดเดียว: ตาราง เคสละบรรทัด เฉพาะคอลัมน์ที่แอดมินเลือก · กดแถว (หรือ HN) เพื่อแก้ไขเคส
+function caseTable(rows, rcs) {
+  const cols = caseCols(extraList()).filter(([key, , , l]) => l !== null && colOn('line', key)).map(x => x[0]);
+  cols.splice(cols[0] === 'cat' ? 1 : 0, 0, 'hn');
+  const head = cols.map(key => `<th>${esc(key === 'hn' ? 'HN' : LINE_HEAD[key] || (caseCols(extraList()).find(x => x[0] === key) || [key, key])[1])}</th>`).join('');
+  return `<li class="tbl-li"><div class="tbl-wrap"><table class="case-tbl"><thead><tr>${head}</tr></thead><tbody>${rows.map(c => caseLine(c, rcs[c.id] || [], cols)).join('')}</tbody></table></div></li>`;
+}
+function caseLine(c, rcs, cols) {
+  const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple', edit = canEdit();
+  const cut = (v, title) => (str(v) ? `<span class="cut" title="${esc(title || v)}">${esc(v)}</span>` : '');
+  const cell = key => {
+    if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); return f ? cut(extraText(f, c[key])) : ''; }
+    switch (key) {
+      case 'cat': return `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>`;
+      case 'hn': return edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`;
+      case 'name': return cut(c.name);
+      case 'how': return howChips(c);
+      case 'dx': return c.icd || c.dx ? `<span class="cut" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b> ` : ''}${esc(dxShort(c))}</span>` : '';
+      case 'area': return cut([c.area, ...parseSites(c).map(siteText)].filter(Boolean).join(' + '));
+      case 'doc': return c.doc ? `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>` : '';
+      case 'type': return typeChip(c.type) || '';
+      case 'tech': return esc(c.tech || '');
+      case 'dose': return c.dpf || c.fx ? `<span class="mono" title="${esc(doseText(c))}">${esc(`${c.dpf || '?'} × ${c.fx || '?'}`)}</span>` : cut(c.freq);
+      case 'aim': return esc(c.aim || '');
+      case 'room': return esc(c.room || '');
+      case 'note': return cut(c.note);
+      case 'mp': return av(c.mp);
+      case 'rc': return rcHtml(c, rcs);
+      case 'ct': return simple ? '' : esc(fmtDay(c.ct) || '');
+      case 'in': return esc(fmtDay(c.in) || '');
+      case 'sim': {
+        if (simple) return '';
+        const si = simInfo(c, st);
+        return si ? `<span class="sim ${si.cls}"><b>${esc(si.date)}</b>${si.rel ? ` <small>${si.rel}</small>` : ''}</span>` : '<span class="sub">—</span>';
+      }
+      case 'status': return caseAct(c, k, st);
+      case 'steps': return !simple && stampsOn() ? `<span class="lsteps">${stepsOf(k).map(x => lineStep(c, x)).join('')}</span>` : st === 'done' ? caseAct(c, k, st) : '';
+      default: return '';
+    }
+  };
+  return `<tr${state.fresh.includes(c.id) ? ' class="fresh"' : ''}${edit ? ` data-rowedit="${esc(c.id)}"` : ''}>${cols.map(key => `<td>${cell(key)}</td>`).join('')}</tr>`;
+}
+// ปุ่มขั้นตอนแบบย่อ: ✓ + ค่า เมื่อบันทึกแล้ว (สีตามเกณฑ์) · กดเหมือนปุ่มในการ์ด (ใส่ค่าและรหัส PIN ในหน้าต่าง)
+function lineStep(c, x) {
+  const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '', note = x.value && at ? str(c[x.key + 'Note']) : '';
+  const cls = `lchk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;
+  const tip = at ? `${x.label}${val ? ' ' + val : ''} · ${[by, fmtStamp(at)].filter(Boolean).join(' · ')}${note ? ' · ' + note : ''}` : `${x.label} ยังไม่บันทึก`;
+  const text = `${at ? '✓ ' : ''}${esc(LINE_SHORT[x.key] || x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
+  return canEdit()
+    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(tip + (at ? ' · กดเพื่อแก้หรือล้าง' : ' · กดเพื่อบันทึก (ใส่รหัส PIN)'))}">${text}</button>`
+    : `<span class="${cls}" title="${esc(tip)}">${text}</span>`;
 }
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
 const stepsOf = k => STEPS.filter(x => (!x.value || (Array.isArray(k.checks) ? k.checks : catChecks({}, k)).includes(x.key)) && stepOn(x));
 const firstName = v => str(v).split(/\s+/)[0];
 // ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม (หน่วย % เป็นค่าเริ่มต้น) และปุ่ม ✓ บันทึกทีละค่า
 // กด ✓ หรือ Enter ในช่อง → ใส่รหัส PIN → บันทึกค่านั้น
-const stepStrip = (c, k) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x)).join('')}</div>`;
+const stepStrip = (c, k, vals = true) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x, vals)).join('')}</div>`;
 function valueBox(c, x) {
   const v = (stampDraft[c.id] || {})[x.key] || '';
   const q = v ? qaLevel(x.key, v) : '';
   return `<span class="chk-line${v && !PLAIN_NUM.test(str(v)) ? ' no-pct' : ''}${q ? ` q-${q}` : ''}"><span class="chk-field"><input class="chk-in" data-stampin="${x.key}" data-id="${esc(c.id)}" value="${esc(v)}" placeholder="${esc(x.ph || '')}" inputmode="decimal" aria-label="ค่า ${esc(x.label)} (%)" autocomplete="off"><span class="pct" aria-hidden="true">%</span></span>`
     + `<button type="button" class="chk-ok" data-stampsave="${x.key}" data-id="${esc(c.id)}"${str(v) ? '' : ' disabled'} aria-label="บันทึก ${esc(x.label)}" title="บันทึก ${esc(x.label)} (ใส่รหัส PIN)">${CHECK_SVG}</button></span>`;
 }
-function stepChip(c, x) {
+function stepChip(c, x, vals = true) {
   const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '', note = x.value && at ? str(c[x.key + 'Note']) : '';
   const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
   const cls = `chk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;   // สีตามเกณฑ์ของแอดมิน
   const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>${note ? `<small class="chk-note" title="${esc(note)}">${esc(note)}</small>` : ''}`
-    : x.value && canEdit() ? valueBox(c, x) : '';
+    : x.value && canEdit() && vals ? valueBox(c, x) : '';
   const btn = canEdit()
     ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="${cls}"${note ? ` title="${esc(note)}"` : ''}>${text}</span>`;
@@ -3336,6 +3468,12 @@ function renderSettings() {
         <label class="mini"><i class="qa-sw warn"></i>เหลือง <span data-qaop="${k}">${op}</span><input type="number" step="any" class="num" data-k="qa.${k}.warn" value="${esc(r.warn)}" aria-label="ค่าสีเหลือง"></label>
         <span class="qa-prev" data-qaprev="${k}">${esc(qaText(r))}</span>
       </div>`; }).join('')}</div></div>
+    <div class="sec"><div class="sec-head"><h2>รายการเคส</h2><p>ค่าที่แสดงในรายการเคสของหน้างานและงานรอ แยกตามมุมมอง · การ์ด = แบบเดิม เคสละหลายบรรทัดพร้อมช่องกรอกค่า · บรรทัดเดียว = ตาราง เคสละบรรทัด กดแถวเพื่อแก้ไขเคส · ทุกคนสลับมุมมองเองได้ที่ปุ่มเหนือรายการ (เบราว์เซอร์จำไว้) ยังไม่เคยเลือก = มุมมองเริ่มต้นนี้ · HN แสดงเสมอ</p></div>
+      <label class="field" style="max-width:240px"><span class="lbl">มุมมองเริ่มต้น</span><select data-k="caseView.mode">${opt('card', 'การ์ด', d.caseView.mode)}${opt('line', 'บรรทัดเดียว', d.caseView.mode)}</select></label>
+      <table class="vis-tbl"><thead><tr><th>ค่า</th><th>การ์ด</th><th>บรรทัดเดียว</th></tr></thead><tbody>
+        <tr><td>HN</td><td><input type="checkbox" checked disabled aria-label="HN แสดงเสมอ"></td><td><input type="checkbox" checked disabled aria-label="HN แสดงเสมอ"></td></tr>
+        ${caseCols(d.fields).map(([key, label, , l]) => `<tr><td>${esc(label)}</td><td><input type="checkbox" data-k="caseView.card.${esc(key)}" aria-label="${esc(label)} ในมุมมองการ์ด"${colOn('card', key, d) ? ' checked' : ''}></td><td>${l === null ? '<span class="muted">–</span>' : `<input type="checkbox" data-k="caseView.line.${esc(key)}" aria-label="${esc(label)} ในมุมมองบรรทัดเดียว"${colOn('line', key, d) ? ' checked' : ''}>`}</td></tr>`).join('')}
+      </tbody></table></div>
     <div class="sec"><div class="sec-head"><h2>โลโก้</h2><p>รูปมุมซ้ายบนของทุกหน้า ทุกคนเห็น · ระบบย่อรูปให้เล็กลงและตัดขอบตรงกลาง (ความกว้างไม่เกิน 2 เท่าของความสูง) แล้วเก็บในแท็บ Config ของชีต · กดบันทึกด้านล่างเพื่อใช้</p></div>
       <div class="logo-set">${d.logo ? `<img class="logo-prev" src="${esc(d.logo)}" alt="โลโก้ที่ตั้งไว้">` : `<span class="logo-prev" title="ไอคอนเดิม">${$('#brand-mark').outerHTML.replace(/ id="brand-mark"| style="[^"]*"/g, '')}</span>`}
         <button type="button" class="btn ghost" data-logopick>${d.logo ? 'เปลี่ยนรูป…' : 'เลือกรูป…'}</button>${d.logo ? '<button type="button" class="btn ghost" data-logoclear>ใช้ไอคอนเดิม</button>' : ''}
@@ -3710,6 +3848,7 @@ function pendingOf(key, room) {
 }
 // หน้างานรอ: การ์ดต่อขั้นตอน กดการ์ดเพื่อดูรายการพร้อมปุ่มบันทึก · กรองห้องได้ (จำไว้แยกจากแดชบอร์ด)
 function renderPend() {
+  renderCaseMode();
   const room = pref.get('pendRoom', ''), rooms = dashRooms();
   $('#pend-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-proom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   renderPending(rooms.includes(room) ? room : '');
@@ -3728,7 +3867,7 @@ function renderPending(room) {
   batchIndex = {};
   state.cases.forEach(c => { if (c.batch) (batchIndex[c.batch] = batchIndex[c.batch] || []).push(c); });
   box.hidden = false;
-  box.innerHTML = list.length ? list.slice(0, 100).map(c => caseRow(c, rcs[c.id] || [])).join('') : '<li class="empty-state">ไม่มีงานรอ</li>';
+  box.innerHTML = list.length ? caseList(list.slice(0, 100), rcs) : '<li class="empty-state">ไม่มีงานรอ</li>';
 }
 // ช่วงเวลาของสถิติ: ตามวัน In
 const DASH_PERIODS = [['month', 'เดือนที่เลือก'], ['3m', '3 เดือน'], ['12m', '12 เดือน'], ['all', 'ทั้งหมด'], ['custom', 'กำหนดเอง']];
@@ -4596,8 +4735,13 @@ function toast(message, opts = {}) {
 /* ---------- เหตุการณ์ ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('button, a');
-  if (!t) return;
+  if (!t) {   // รายการเคสแบบบรรทัดเดียว: กดที่แถว (นอกปุ่มและช่องกรอก) = แก้ไขเคส
+    const tr = e.target.closest('tr[data-rowedit]');
+    if (tr && canEdit() && !e.target.closest('input, select, textarea, label')) openCase(tr.dataset.rowedit);
+    return;
+  }
   const ds = t.dataset;
+  if (ds.cview) { pref.set('caseView', ds.cview); return render(); }
   if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
   if (t.id === 'logout') return logout();
   if (t.id === 'theme-btn') return toggleTheme();
