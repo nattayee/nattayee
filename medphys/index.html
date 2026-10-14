@@ -141,7 +141,11 @@ button{cursor:pointer}
 @media (min-width:760px){.wrap{padding-inline:32px;padding-block:28px 88px}}
 
 /* header */
-.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin-bottom:22px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin-bottom:22px;padding-bottom:8px}
+/* แถบด้านบนตรึงไว้: top ติดลบเท่าส่วนชื่อระบบ (ตั้งใน pinTop) ชื่อระบบเลื่อนพ้นไป แถบเมนูค้างอยู่ที่ขอบบน
+   พื้นหลังเต็มความกว้างจอ (เงาขยายข้าง ตัดด้วย clip-path ไม่ทำให้หน้าเลื่อนข้าง) · เส้นใต้ (เงาชั้นที่สอง) เมื่อเลื่อนลงมาแล้ว */
+.top{position:sticky;top:0;z-index:30;background:var(--bg);box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
+.top.stuck{box-shadow:0 0 0 100vmax var(--bg),0 1px 0 100vmax var(--line);clip-path:inset(0 -100vmax -1px)}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .mark{flex:none;width:34px;height:34px;color:var(--accent)}
 .logo{flex:none;display:block;height:48px;width:auto;max-width:96px;border-radius:10px;object-fit:cover;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
@@ -1668,7 +1672,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-14.4';
+const PAGE_VERSION = '2026-10-14.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2231,6 +2235,22 @@ function applyBoxes() {
     els.forEach(el => sec.appendChild(el));
   }
 }
+// ตรึงแถบด้านบน: เลื่อนหน้าแล้วส่วนชื่อระบบเลื่อนพ้นขอบบน เหลือแถวปุ่ม Home / ค้นหา / แถบเมนู / ผู้ใช้ ค้างไว้ (ขนาดไม่เปลี่ยน หน้าจึงไม่กระตุก)
+// มือถือ: ค้างตั้งแต่แถวแถบเมนูลงมา · scroll-padding กันช่องที่โฟกัสถูกแถบบังเมื่อเลื่อนหาเอง
+const topBar = $('header.top');
+let pinOffset = 0;
+function pinTop() {
+  const nav = $('.nav', topBar), row = nav && nav.offsetParent && !nav.hidden ? nav : $('.top-right', topBar);
+  const off = Math.max(0, Math.round(row.getBoundingClientRect().top - topBar.getBoundingClientRect().top) - 8);
+  if (off !== pinOffset) { pinOffset = off; topBar.style.top = `${-off}px`; }
+  document.documentElement.style.scrollPaddingTop = `${topBar.offsetHeight - off + 12}px`;
+  markStuck();
+}
+function markStuck() { topBar.classList.toggle('stuck', topBar.getBoundingClientRect().top <= -pinOffset + 0.5 && scrollY > 0); }
+let stuckRaf = 0;
+addEventListener('scroll', () => { if (!stuckRaf) stuckRaf = requestAnimationFrame(() => { stuckRaf = 0; markStuck(); }); }, { passive: true });
+if (window.ResizeObserver) new ResizeObserver(() => pinTop()).observe(topBar);
+addEventListener('resize', pinTop);
 // โลโก้มุมซ้ายบน: จำไว้ในเบราว์เซอร์ หน้าเข้าสู่ระบบหรือตอนโหลดไม่สำเร็จจึงยังแสดงโลโก้ที่ตั้งไว้ได้
 // ค้นหา: พิมพ์แล้วแสดงผลทันที · Enter เปิดเคสแรก · กด / ที่ไหนก็ได้ (นอกช่องกรอก) เพื่อเปิด
 $('#sq').addEventListener('input', renderSearch);
@@ -2293,6 +2313,7 @@ function render() {
   $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);   // ยังไม่ทราบผู้ใช้: ยังไม่บอกว่าดูอย่างเดียว
   if (ro) $('#ro-text').textContent = `บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP)${state.user.name ? ` · ${state.user.name}${state.user.role ? ` (${state.user.role})` : ''}` : ''}`;
   renderNav();
+  pinTop();
   applyBoxes();
   renderPendBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
