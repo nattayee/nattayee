@@ -225,6 +225,11 @@ button.cr-st:hover{box-shadow:inset 0 0 0 1px currentColor}
 .cd.today{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent);color:var(--accent)}
 .cd.today b{color:var(--accent)}
 .cd.stop{background:none;box-shadow:inset 0 0 0 1px var(--line);opacity:.6;text-decoration:line-through}
+.cd.boost{box-shadow:inset 0 -3px 0 var(--warn)}
+.cd.today.boost{box-shadow:inset 0 0 0 2px var(--accent),inset 0 -5px 0 var(--warn)}
+.cd.stop.boost{box-shadow:inset 0 0 0 1px var(--line),inset 0 -3px 0 var(--warn)}
+.cr-boost{display:inline-flex;align-items:center;gap:5px}
+.cr-boost::before{content:"";width:10px;height:3px;border-radius:2px;background:var(--warn)}
 .cr-none{margin-top:8px;font-size:12.5px;color:var(--muted)}
 .step-txt{font-size:12.5px;color:var(--muted);white-space:nowrap}
 div.c-main,div.lrow{cursor:default}
@@ -293,6 +298,8 @@ div.c-main,div.lrow{cursor:default}
 .site{display:grid;gap:12px;padding:12px;border:1px dashed var(--line);border-radius:12px}
 .site-head{display:flex;align-items:center;justify-content:space-between;min-height:24px;font-size:13px;color:var(--muted)}
 .site-head b{font-weight:600;color:var(--fg)}
+.boost-sum{margin:-2px 0 0;font-size:13px;color:var(--muted)}
+.boost-sum b{color:var(--fg);font-weight:600}
 .add-site-row{margin-top:-4px}
 .add-site-row .btn{min-height:32px;padding:4px 10px;font-size:13.5px}
 .extra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 12px}
@@ -1703,7 +1710,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-15.3';
+const PAGE_VERSION = '2026-10-15.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2401,7 +2408,7 @@ function renderCaseMode() {
   $$('.case-mode').forEach(el => { el.innerHTML = [['card', 'การ์ด'], ['line', 'บรรทัดเดียว']].map(([v, l]) => `<button type="button" data-cview="${v}" aria-pressed="${m === v}">${l}</button>`).join(''); });
 }
 // ข้อความของเคสที่ใช้ค้นหา (ช่องค้นหาในหน้างาน และแว่นขยายมุมขวาบน)
-const caseText = c => `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${parseSites(c).map(siteText).join(' ')} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase();
+const caseText = c => `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${sitesOf(c).map(siteText).join(' ')} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase();
 // สถานะสั้นของเคส [สี, ข้อความ]
 function caseStatus(c) {
   if (c.rt === 'complete') return ['ok', 'Complete course'];
@@ -2470,12 +2477,13 @@ function courseRow(c, sc, td) {
   const k = catOf(c.cat), days = sc ? [...sc.days] : [], edit = canEdit();
   const stateOf = d => (c.rt === 'complete' ? 'done' : c.rt === 'cancel' ? (d < c.rtDate ? 'done' : 'stop') : d < td ? 'done' : d === td ? 'today' : 'next');
   const cells = days.map((d, i) => {
-    const st = stateOf(d), dt = parseISO(d);
-    return `<span class="cd ${st}" title="วันที่ ${i + 1}/${days.length} · ${esc(LONG_DAY_FMT.format(dt))}${st === 'stop' ? ' · ยกเลิก' : st === 'done' ? ' · ฉายแล้ว' : st === 'today' ? ' · วันนี้' : ''}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small></span>`;
+    const st = stateOf(d), dt = parseISO(d), bst = sc.boost.has(d);
+    return `<span class="cd ${st}${bst ? ' boost' : ''}" title="วันที่ ${i + 1}/${days.length}${bst ? ' · Boost' : ''} · ${esc(LONG_DAY_FMT.format(dt))}${st === 'stop' ? ' · ยกเลิก' : st === 'done' ? ' · ฉายแล้ว' : st === 'today' ? ' · วันนี้' : ''}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small></span>`;
   }).join('');
+  const boosts = sitesOf(c).filter(x => x.start === 'boost').map(x => `<span class="cr-boost" title="Sequential boost: วันที่มีขีดสีส้มใต้แถบ">+ Boost <span class="mono">${esc([doseText(x), x.sum > 0 ? `รวม ${num(x.sum, 2)} Gy/${x.sumFx} fx` : ''].filter(Boolean).join(' · ') || '—')}</span></span>`);
   const nDone = days.filter(d => stateOf(d) === 'done').length;
   const hn = edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`;
-  const meta = [av(c.mp), c.room && `<span>${esc(c.room)}</span>`, doseText(c) && `<span class="mono">${esc(doseText(c))}</span>`,
+  const meta = [av(c.mp), c.room && `<span>${esc(c.room)}</span>`, doseText(c) && `<span class="mono">${esc(doseText(c))}</span>`, ...boosts,
     sc && `<span>Start RT <b>${esc(fmtDay(sc.start))}</b> → ครบ <b>${esc(fmtDay(sc.end))}</b></span>`].filter(Boolean).join('');
   let acts = '';
   if (c.rt) {
@@ -2933,14 +2941,29 @@ function parseSites(c) {
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
   return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx) })) : [];
 }
-// เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1
+// เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1 · Sequential boost
 const SITE_STARTS = [
   { key: 'concurrent', label: 'Concurrent', title: 'ฉายพร้อมกับบริเวณที่ 1' },
   { key: 'after', label: 'After', title: 'เริ่มหลังบริเวณที่ 1 ฉายครบ' },
   { key: 'afterfx', label: 'After Fx', title: 'เริ่มหลัง Fx ที่กำหนดของบริเวณที่ 1' },
+  { key: 'boost', label: 'Sequential boost', title: 'Boost ต่อจากบริเวณที่ 1 ฉายครบ (หรือต่อจาก boost ก่อนหน้า) · นับ Fx และ Prescription รวมต่อกัน' },
 ];
 const startText = x => (x.start === 'afterfx' ? `After Fx ${x.startFx || '?'}` : (SITE_STARTS.find(v => v.key === x.start) || {}).label || '');
-const siteText = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), doseText(x)].filter(Boolean).join(' · ');
+const siteText = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), doseText(x), x.sum > 0 ? `รวม ${num(x.sum, 2)} Gy/${x.sumFx} fx` : ''].filter(Boolean).join(' · ');
+const doseRx = x => (+x.rx > 0 ? +x.rx : (+x.dpf || 0) * (+x.fx || 0));
+const baseOf = pre => pre.replace(/s\d+$/, '');
+// Sequential boost เรียงต่อจากบริเวณที่ 1 และ boost ก่อนหน้า: Fx นับต่อกัน · sum = Prescription รวม (เมื่อรู้ Prescription ของบริเวณที่ 1)
+function sitesOf(c) {
+  const rx1 = doseRx(c);
+  let fx = Math.floor(+c.fx) || 0, rx = rx1;
+  return parseSites(c).map(x => {
+    if (x.start !== 'boost') return x;
+    const n = Math.floor(+x.fx) || 0, r = doseRx(x);
+    const out = { ...x, fxFrom: fx + 1, fxTo: fx + n, sum: rx1 > 0 && r > 0 ? rx + r : 0, sumFx: fx + n };
+    fx += n; rx += r;
+    return out;
+  });
+}
 let siteSeq = 0;
 // ใช้ฟังก์ชันเดียวกับบริเวณแรก (renderArea, fillDose, readDose ฯลฯ) ด้วย pre ของแต่ละบริเวณ เช่น is1, fs2
 function addSite(base, x = {}) {
@@ -2958,6 +2981,7 @@ function addSite(base, x = {}) {
       <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="${pre}-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
       <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="${pre}-freq" role="radiogroup" aria-label="ความถี่ (เพิ่มเติม)"></div><input id="${pre}-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
     </div>
+    <p class="boost-sum" id="${pre}-boostsum" aria-live="polite" hidden></p>
   </div>`);
   renderArea(pre, x.area || '');
   fillDose(pre, x);
@@ -2972,18 +2996,43 @@ function renderSites(base, list) {
 const sitePres = base => $$(`#${base}-sites .site`).map(el => el.dataset.site);
 function syncSites(base) {
   const on = roomSitesOn();
-  $$(`#${base}-sites .site-head b`).forEach((b, i) => { b.textContent = `บริเวณที่ ${i + 2}`; });
   $(`#${base}-sites`).hidden = !on;
   $(`#${base}-addsite`).parentElement.hidden = !on;
+  syncBoost(base);
+}
+// หัวบริเวณ + สรุป Sequential boost ในฟอร์ม: Fx ต่อจากบริเวณที่ 1 และ Prescription รวม
+function syncBoost(base) {
+  if (!$(`#${base}-sites`)) return;
+  const rx1 = doseRx(readDose(base));
+  let fx = Math.floor(+$(`#${base}-fx`).value) || 0, rx = rx1, prev = 0;
+  sitePres(base).forEach((pre, i) => {
+    const boost = chipValue($(`#${pre}-start`)) === 'boost', box = $(`#${pre}-boostsum`);
+    $(`[data-site="${pre}"] .site-head b`).textContent = `บริเวณที่ ${i + 2}${boost ? ' · Sequential boost' : ''}`;
+    box.hidden = !boost;
+    if (!boost) return;
+    const d = readDose(pre), n = Math.floor(+d.fx) || 0, r = doseRx(d);
+    box.innerHTML = [prev ? `เริ่มต่อจาก boost บริเวณที่ ${prev} ฉายครบ` : 'เริ่มต่อจากบริเวณที่ 1 ฉายครบ',
+      n && fx ? `Fx ${fx + 1}–${fx + n}` : '',
+      r > 0 && rx1 > 0 ? `Prescription รวม <b>${num(rx + r, 2)} Gy</b> (${num(rx, 2)} + ${num(r, 2)})` : r > 0 ? '' : 'กรอก Prescription และ Fx ของ boost'].filter(Boolean).join(' · ');
+    fx += n; rx += r; prev = i + 2;
+  });
 }
 function readStart(pre) {
   const start = chipValue($(`#${pre}-start`));
   return start ? { start, ...(start === 'afterfx' ? { startFx: str($(`#${pre}-startfx`).value) } : {}) } : {};
 }
 function syncStart(pre, focus) {
-  const on = chipValue($(`#${pre}-start`)) === 'afterfx';
+  const start = chipValue($(`#${pre}-start`)), on = start === 'afterfx';
   $(`#${pre}-startfx-box`).hidden = !on;
   if (on && focus) $(`#${pre}-startfx`).focus();
+  // Boost ส่วนใหญ่ฉายบริเวณเดิมด้วยความถี่เดิม: ช่องที่ยังว่างใช้ค่าของบริเวณที่ 1 (แก้ได้)
+  if (start === 'boost' && focus) {
+    const base = baseOf(pre);
+    if (!readArea(pre) && readArea(base)) renderArea(pre, readArea(base));
+    if (!readFreq(pre) && readFreq(base)) renderFreq(pre, readFreq(base));
+    $(`#${pre}-${$(`#${pre}-dpf`).value ? 'fx' : 'dpf'}`).focus();
+  }
+  syncBoost(baseOf(pre));
 }
 const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre), ...readStart(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq);
 function checkSites(base) {
@@ -2991,6 +3040,10 @@ function checkSites(base) {
   for (const pre of sitePres(base)) {
     const err = checkDose(pre) || checkArea(pre);
     if (err) return err;
+    if (chipValue($(`#${pre}-start`)) === 'boost' && !(Math.floor(+readDose(pre).fx) > 0 && doseRx(readDose(pre)) > 0)) {
+      ['dpf', 'fx', 'rx'].map(k => $(`#${pre}-${k}`)).find(el => !str(el.value)).focus();
+      return 'กรอกขนาดรังสีของ Sequential boost อย่างน้อย 2 ใน 3 ช่อง (Dose/fx, Fx, Prescription)';
+    }
     if (chipValue($(`#${pre}-start`)) !== 'afterfx') continue;
     const n = $(`#${pre}-startfx`).value;
     if (!(Number.isInteger(+n) && +n >= 1)) { $(`#${pre}-startfx`).focus(); return 'ใส่ว่าเริ่มหลัง Fx ที่เท่าไรของบริเวณที่ 1'; }
@@ -3182,7 +3235,7 @@ function caseRow(c, rcs) {
   const dose = on('dose') && doseText(c) && `<span class="mono" style="font-size:12px">${esc(doseText(c))}</span>`;
   const areaTxt = on('area') && c.area && `<span>${esc(c.area)}</span>`;
   const dxs = on('dx') && (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
-  const more = on('area') ? parseSites(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`) : [];
+  const more = on('area') ? sitesOf(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`) : [];
   const room = on('room') && c.room && `<span title="ห้องฉาย">${esc(c.room)}</span>`;
   const extras = extraList().filter(f => on('x_' + f.id) && str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
   const how = on('how') && howChips(c), note = on('note') && c.note && `<span>${esc(c.note)}</span>`;
@@ -3234,7 +3287,7 @@ function caseLine(c, rcs, cols) {
       case 'name': return cut(c.name);
       case 'how': return howChips(c);
       case 'dx': return c.icd || c.dx ? `<span class="cut" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b> ` : ''}${esc(dxShort(c))}</span>` : '';
-      case 'area': return cut([c.area, ...parseSites(c).map(siteText)].filter(Boolean).join(' + '));
+      case 'area': return cut([c.area, ...sitesOf(c).map(siteText)].filter(Boolean).join(' + '));
       case 'doc': return c.doc ? `<span${docName(c.doc) ? ` title="${esc(docName(c.doc))}"` : ''}>${esc(c.doc)}</span>` : '';
       case 'type': return typeChip(c.type) || '';
       case 'tech': return esc(c.tech || '');
@@ -4051,19 +4104,24 @@ function treatDays(start, fx, freq, hol) {
   return out;
 }
 // ตารางฉายของเคส: บริเวณที่ 1 เริ่มวัน Start RT · บริเวณถัดไปตาม Concurrent / After / After Fx
+// Sequential boost เริ่มวันทำการถัดจากบริเวณที่ 1 (หรือ boost ก่อนหน้า) ฉายครบ ความถี่ว่าง = ความถี่ของบริเวณที่ 1 · boost = วันที่ฉาย boost
 function caseSchedule(c, hol) {
   if (!isDay(c.sim)) return null;
   const first = treatDays(c.sim, c.fx, c.freq, hol);
   if (!first.length) return null;
-  const days = new Set(first.map(x => x.date));
+  const days = new Set(first.map(x => x.date)), boost = new Set();
+  let seqEnd = first[first.length - 1].date;
   for (const x of parseSites(c)) {
     let start = c.sim;
     if (x.start === 'after') start = nextDate(first[first.length - 1].date);
+    else if (x.start === 'boost') start = nextDate(seqEnd);
     else if (x.start === 'afterfx') { const hit = first.find(d => d.upto >= (+x.startFx || 0)) || first[first.length - 1]; start = nextDate(hit.date); }
-    treatDays(start, x.fx, x.freq, hol).forEach(d => days.add(d.date));
+    const list = treatDays(start, x.fx, x.freq || (x.start === 'boost' ? c.freq : ''), hol);
+    list.forEach(d => days.add(d.date));
+    if (x.start === 'boost' && list.length) { list.forEach(d => boost.add(d.date)); seqEnd = list[list.length - 1].date; }
   }
   const list = [...days].sort();
-  return { days: new Set(list), start: list[0], end: list[list.length - 1] };
+  return { days: new Set(list), start: list[0], end: list[list.length - 1], boost };
 }
 const DASH_METRICS = [
   { key: 'tx', label: 'กำลังฉาย (แยกห้อง)' }, { key: 'start', label: 'เริ่มฉาย (Start RT)' }, { key: 'end', label: 'ครบแสง' },
@@ -5502,11 +5560,11 @@ function siteChip(e) {
   const box = e.target.closest('.chips'), m = box && /^(.+)-(area|freq|start)$/.exec(box.id);
   if (!m) return false;
   if (m[2] === 'freq') onFreqChange(m[1], e.target);
-  else if (m[2] === 'start') syncStart(m[1], e.target.checked && e.target.value === 'afterfx');
+  else if (m[2] === 'start') syncStart(m[1], e.target.checked);
   else syncArea(m[1], e.target.value === OTHER);
   return true;
 }
-function doseInput(e) { const m = /^(.+)-(dpf|fx|rx)$/.exec(e.target.id || ''); if (m) { markManual(m[1], m[2]); syncDose(m[1]); } }
+function doseInput(e) { const m = /^(.+)-(dpf|fx|rx)$/.exec(e.target.id || ''); if (m) { markManual(m[1], m[2]); syncDose(m[1]); syncBoost(baseOf(m[1])); } }
 caseForm.addEventListener('submit', submitCase);
 caseForm.addEventListener('change', e => {
   if (siteChip(e)) return;
