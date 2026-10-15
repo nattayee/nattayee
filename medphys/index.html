@@ -454,7 +454,7 @@ button.who:hover .nm{text-decoration:underline}
 .tbl-wrap{overflow-x:auto}
 .case-tbl{width:100%;border-collapse:collapse;font-size:13px}
 .case-tbl th{padding:7px 10px;background:var(--sunken);color:var(--muted);font-size:12px;font-weight:500;text-align:left;white-space:nowrap}
-.case-tbl td{padding:6px 10px;border-top:1px solid var(--line);white-space:nowrap;vertical-align:middle;color:var(--fg)}
+.case-tbl td{padding:6px 10px;border-top:1px solid var(--line);white-space:nowrap;vertical-align:middle;color:var(--fg);text-align:left}
 .case-tbl tr[data-rowedit]{cursor:pointer}
 .case-tbl tbody tr:hover td{background:var(--hover)}
 .case-tbl tr.fresh td{background:var(--accent-soft)}
@@ -466,6 +466,30 @@ button.who:hover .nm{text-decoration:underline}
 .hn-btn{padding:0;border:0;background:none;color:var(--fg);cursor:pointer}
 .hn-btn:hover{color:var(--accent);text-decoration:underline}
 .lsteps{display:inline-flex;gap:4px}
+/* หัวตาราง: กดชื่อคอลัมน์เพื่อเรียง · ปุ่มกรวยเลือกค่าที่แสดง */
+.th-in{display:inline-flex;align-items:center;gap:2px}
+.th-sort{display:inline-flex;align-items:center;gap:3px;padding:2px 2px;border:0;background:none;color:inherit;font:inherit;cursor:pointer;white-space:nowrap}
+.th-sort:hover{color:var(--fg)}
+.case-tbl th.sorted .th-sort{color:var(--accent)}
+.th-arrow{font-size:10px}
+.th-filter{display:inline-grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:none;color:var(--faint);cursor:pointer}
+.th-filter svg{width:12px;height:12px}
+.th-filter:hover{background:var(--hover);color:var(--fg)}
+.th-filter.on{background:var(--accent);color:var(--accent-fg)}
+.tbl-filters{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.tbl-filters .chip{cursor:default}
+.tbl-empty td{padding:24px 10px;color:var(--muted);text-align:center;white-space:normal}
+.col-pop{position:fixed;z-index:50;width:min(280px,calc(100vw - 16px));max-height:min(420px,70vh);display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow)}
+.col-pop[hidden]{display:none}
+.cp-head{display:flex;align-items:center;gap:6px;padding:10px 12px 6px;font-size:13px;font-weight:600}
+.cp-sort{display:flex;gap:6px;padding:0 12px 8px}
+.cp-sort button,.cp-all{padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--fg);font-size:12.5px}
+.cp-sort button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.cp-list{flex:1;min-height:0;overflow-y:auto;padding:4px 6px;border-top:1px solid var(--line)}
+.cp-list label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+.cp-list label:hover{background:var(--hover)}
+.cp-list .n{margin-left:auto;color:var(--faint);font:11.5px var(--mono)}
+.cp-foot{display:flex;justify-content:space-between;gap:6px;padding:8px 12px;border-top:1px solid var(--line)}
 .lchk{padding:1px 7px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--muted);font-size:11.5px;line-height:1.5;white-space:nowrap}
 button.lchk{cursor:pointer}
 button.lchk:hover{border-color:var(--accent);color:var(--accent)}
@@ -1125,6 +1149,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 </dialog>
 
 <!-- วันลา -->
+<div class="col-pop" id="col-pop" role="dialog" aria-label="ตัวกรองคอลัมน์" hidden></div>
+
 <dialog id="search-dlg" class="search-dlg" aria-label="ค้นหาเคส">
   <div class="dlg">
     <header class="dlg-head"><span class="search-ico" id="search-ico" aria-hidden="true"></span><input id="sq" type="search" placeholder="ค้นหา HN, ชื่อ, แพทย์, Diag, บริเวณ, ห้อง, MP" autocomplete="off" aria-label="ค้นหาเคส" aria-controls="sres"><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
@@ -1677,7 +1703,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-15.1';
+const PAGE_VERSION = '2026-10-15.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2259,6 +2285,19 @@ addEventListener('resize', pinTop);
 // โลโก้มุมซ้ายบน: จำไว้ในเบราว์เซอร์ หน้าเข้าสู่ระบบหรือตอนโหลดไม่สำเร็จจึงยังแสดงโลโก้ที่ตั้งไว้ได้
 // ค้นหา: พิมพ์แล้วแสดงผลทันที · Enter เปิดเคสแรก · กด / ที่ไหนก็ได้ (นอกช่องกรอก) เพื่อเปิด
 $('#sq').addEventListener('input', renderSearch);
+// ช่องเลือกค่าของคอลัมน์: ติ๊ก/ไม่ติ๊ก → กรองทันที · ติ๊กครบทุกค่า = ไม่กรอง · Esc หรือกดข้างนอกเพื่อปิด
+$('#col-pop').addEventListener('change', e => {
+  const el = e.target;
+  if (!colPop || el.dataset.cpval === undefined) return;
+  const st = lineState(colPop.id), all = $$('[data-cpval]', $('#col-pop'));
+  const on = all.filter(x => x.checked).map(x => x.dataset.cpval);
+  if (on.length === all.length) delete st.filter[colPop.key]; else st.filter[colPop.key] = on;
+  render();
+  placeColPop();
+});
+$('#col-pop').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeColPop(); } });
+addEventListener('scroll', e => { if (colPop && !(e.target instanceof Element && e.target.closest('#col-pop'))) placeColPop(); }, true);
+addEventListener('resize', placeColPop);
 $('#sq').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); const b = $('#sres .sres'); if (b) b.click(); }
   if (e.key === 'Escape') { e.preventDefault(); searchDlg.close(); }   // ช่อง search ของเบราว์เซอร์ล้างข้อความแทนการปิด
@@ -2540,10 +2579,12 @@ function renderWork() {
   else rows.sort((a, b) => (b.eval || b.fin || b.in).localeCompare(a.eval || a.fin || a.in) || b.created.localeCompare(a.created));
   if (!rows.length) {
     list.innerHTML = `<li class="empty-state">${state.tab === 'open' && !q && !state.cat && !state.person ? 'ไม่มีงานค้าง กดหมวดด้านบนเพื่อลงเคสใหม่' : 'ไม่พบเคสที่ตรงกับตัวกรอง'}</li>`;
-  } else {
-    list.innerHTML = caseList(rows.slice(0, state.limit), rcs);
+    $('#more-wrap').hidden = true;
+    return;
   }
-  $('#more-wrap').hidden = rows.length <= state.limit;
+  const shown = lineArrange('cases', rows, rcs);   // ตาราง: ตัวกรองและการเรียงของคอลัมน์ (ก่อนตัดจำนวนแถว)
+  list.innerHTML = caseList(shown.slice(0, state.limit), rcs, 'cases', rows);
+  $('#more-wrap').hidden = shown.length <= state.limit;
 }
 
 
@@ -3003,9 +3044,104 @@ function fillDose(pre, c) {
 }
 
 let batchIndex = {};
-function caseList(rows, rcs) {
-  return caseMode() === 'line' ? caseTable(rows, rcs) : rows.map(c => caseRow(c, rcs[c.id] || [])).join('');
+function caseList(rows, rcs, listId = 'cases', base = rows) {
+  return caseMode() === 'line' ? caseTable(rows, rcs, listId, base) : rows.map(c => caseRow(c, rcs[c.id] || [])).join('');
 }
+/* ---------- ตาราง (มุมมองบรรทัดเดียว): เรียงและกรองตามคอลัมน์ แบบ Excel ---------- */
+// แยกตามรายการ (หน้างาน / งานรอ) · จำไว้จนกว่าจะโหลดหน้าใหม่
+const lineView = {};
+const lineState = id => (lineView[id] = lineView[id] || { sort: null, filter: {} });
+const NO_FILTER = ['hn', 'name', 'note'];   // ค่าไม่ซ้ำกันแทบทุกแถว: เรียงได้ กรองไม่ได้
+const BLANK = '(ว่าง)';
+const STATUS_ORDER = ['รอ Finish', 'รอ Evaluate', 'Evaluate แล้ว', 'Plan complete', 'Complete course', 'Cancel RT', 'บันทึกแล้ว'];
+const FUNNEL_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5h18l-7 8.2V20l-4-2v-4.8z"/></svg>';
+const lineLabel = key => (key === 'hn' ? 'HN' : LINE_HEAD[key] || (caseCols(extraList()).find(x => x[0] === key) || [key, key])[1]);
+// ค่าของคอลัมน์: [ค่าที่ใช้เรียง, ข้อความที่ใช้กรอง]
+function lineValue(c, key, rcs) {
+  const k = catOf(c.cat), simple = k.kind === 'simple';
+  if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); const v = f ? str(extraText(f, c[key])) : ''; return [v, v]; }
+  switch (key) {
+    case 'cat': return [k.label, k.label];
+    case 'how': { const v = c.how === 'manual' ? 'เลือกเอง' : c.how === 'follow' ? 'ตามเทคนิคแรก' : 'ตามคิว'; return [v, v]; }
+    case 'dx': return [c.icd || str(c.dx), [c.icd, dxShort(c)].filter(Boolean).join(' ')];
+    case 'dose': { const t = +c.rx > 0 ? +c.rx : (+c.dpf || 0) * (+c.fx || 0); return [t || '', c.dpf || c.fx ? `${c.dpf || '?'} × ${c.fx || '?'}` : '']; }
+    case 'rc': { const v = (rcs[c.id] || []).map(l => l.mp).join(', '); return [v, v]; }
+    case 'ct': case 'in': return [c[key] || '', fmtDay(c[key]) || ''];
+    case 'sim': return simple ? ['', ''] : [c.sim === 'on call' ? '0000' : c.sim || '', c.sim === 'on call' ? 'on call' : fmtDay(c.sim) || ''];
+    case 'status': { const l = caseStatus(c)[1]; return [STATUS_ORDER.indexOf(l), l]; }
+    case 'steps': {
+      if (simple || !stampsOn()) return ['', ''];
+      const xs = stepsOf(k), n = xs.find(x => !c[x.key]);
+      return [n ? xs.indexOf(n) : 99, n ? `รอ ${n.label}` : 'ครบทุกขั้นตอน'];
+    }
+    default: return [str(c[key]), str(c[key])];
+  }
+}
+// กรองแล้วเรียง · ค่าว่างอยู่ท้ายเสมอ · มุมมองการ์ดไม่ใช้
+function lineArrange(id, rows, rcs) {
+  if (caseMode() !== 'line') return rows;
+  const st = lineState(id), cols = new Set(lineCols());
+  let out = rows;
+  for (const [key, vals] of Object.entries(st.filter)) {
+    if (!cols.has(key)) continue;   // คอลัมน์ที่แอดมินซ่อนแล้ว ไม่กรอง
+    const set = new Set(vals);
+    out = out.filter(c => set.has(lineValue(c, key, rcs)[1] || BLANK));
+  }
+  if (st.sort && cols.has(st.sort.key)) {
+    const { key, dir } = st.sort, val = c => lineValue(c, key, rcs)[0];
+    out = out.map(c => [val(c), c]).sort(([a], [b]) => {
+      const ea = a === '' || a == null, eb = b === '' || b == null;
+      if (ea || eb) return ea - eb;
+      return (typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'th', { numeric: true })) * dir;
+    }).map(x => x[1]);
+  }
+  return out;
+}
+const lineCols = () => {
+  const cols = caseCols(extraList()).filter(([key, , , l]) => l !== null && colOn('line', key)).map(x => x[0]);
+  cols.splice(cols[0] === 'cat' ? 1 : 0, 0, 'hn');
+  return cols;
+};
+// ช่องเลือกค่าของคอลัมน์ (กดปุ่มกรวยที่หัวตาราง) · ค่ามาจากรายการก่อนกรองคอลัมน์ พร้อมจำนวน
+let colPop = null;
+const colPopBtn = () => colPop && $(`[data-lfilter="${colPop.key}"][data-list="${colPop.id}"]`);
+function openColPop(id, key) {
+  colPop = { id, key };
+  renderColPop();
+  $('#col-pop').hidden = false;
+  placeColPop();
+  const first = $('input, button', $('#col-pop'));
+  if (first) first.focus();
+}
+// วางใต้ปุ่มกรวยของคอลัมน์ · ตารางวาดใหม่หรือเลื่อนหน้าแล้วตามไป (ไม่ปิดเอง) · คอลัมน์หายไปแล้ว = ปิด
+function placeColPop() {
+  if (!colPop) return;
+  const btn = colPopBtn(), pop = $('#col-pop');
+  if (!btn || !btn.offsetParent) { closeColPop(); return; }
+  const r = btn.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
+  pop.style.top = `${Math.max(8, Math.min(r.bottom + 4, innerHeight - pop.offsetHeight - 8))}px`;
+}
+function closeColPop() {
+  if (!colPop) return;
+  const btn = colPopBtn(), inPop = !!(document.activeElement && document.activeElement.closest('#col-pop'));
+  colPop = null;
+  $('#col-pop').hidden = true;
+  if (btn && inPop) btn.focus();   // ปิดด้วย Esc / ปุ่มปิด: โฟกัสกลับที่ปุ่มกรวย · กดข้างนอก: ไม่ดึงโฟกัส
+}
+function renderColPop() {
+  const { id, key } = colPop, st = lineState(id), base = lineBase[id] || [], rcs = rcIndex();
+  const counts = new Map();
+  for (const c of base) { const v = lineValue(c, key, rcs)[1] || BLANK; counts.set(v, (counts.get(v) || 0) + 1); }
+  const vals = [...counts.keys()].sort((a, b) => (a === BLANK) - (b === BLANK) || (key === 'status' ? STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b) : a.localeCompare(b, 'th', { numeric: true })));
+  const sel = st.filter[key] ? new Set(st.filter[key]) : null, srt = st.sort && st.sort.key === key ? st.sort.dir : 0;
+  $('#col-pop').innerHTML = `<div class="cp-head">${esc(lineLabel(key))}</div>
+    <div class="cp-sort"><button type="button" data-cpsort="1" aria-pressed="${srt === 1}">เรียง น้อย→มาก</button><button type="button" data-cpsort="-1" aria-pressed="${srt === -1}">มาก→น้อย</button></div>
+    ${NO_FILTER.includes(key) ? '' : `<div class="cp-list">${vals.map(v => `<label><input type="checkbox" data-cpval="${esc(v)}"${!sel || sel.has(v) ? ' checked' : ''}><span>${esc(v)}</span><span class="n">${counts.get(v)}</span></label>`).join('')}</div>
+    <div class="cp-foot"><button type="button" class="cp-all" data-cpall>แสดงทั้งหมด</button><button type="button" class="cp-all" data-cpclose>ปิด</button></div>`}`;
+}
+const lineBase = {};   // แถวก่อนกรองคอลัมน์ของแต่ละรายการ (ใช้ทำรายการค่าในช่องเลือก)
+function lineChanged() { render(); if (colPop) { renderColPop(); placeColPop(); } }
 // Start RT: สีตามวันทำการที่เหลือ (3 ขึ้นไป เขียว · 2 เหลือง · 1 หรือน้อยกว่า แดง) เหมือนหน้างานรอ
 function simInfo(c, st) {
   if (c.sim === 'on call') return { cls: st === 'done' ? '' : 'warn', date: 'on call', rel: '' };
@@ -3075,11 +3211,17 @@ function caseRow(c, rcs) {
   </li>`;
 }
 // มุมมองบรรทัดเดียว: ตาราง เคสละบรรทัด เฉพาะคอลัมน์ที่แอดมินเลือก · กดแถว (หรือ HN) เพื่อแก้ไขเคส
-function caseTable(rows, rcs) {
-  const cols = caseCols(extraList()).filter(([key, , , l]) => l !== null && colOn('line', key)).map(x => x[0]);
-  cols.splice(cols[0] === 'cat' ? 1 : 0, 0, 'hn');
-  const head = cols.map(key => `<th>${esc(key === 'hn' ? 'HN' : LINE_HEAD[key] || (caseCols(extraList()).find(x => x[0] === key) || [key, key])[1])}</th>`).join('');
-  return `<li class="tbl-li"><div class="tbl-wrap"><table class="case-tbl"><thead><tr>${head}</tr></thead><tbody>${rows.map(c => caseLine(c, rcs[c.id] || [], cols)).join('')}</tbody></table></div></li>`;
+function caseTable(rows, rcs, listId = 'cases', base = rows) {
+  const cols = lineCols(), st = lineState(listId);
+  lineBase[listId] = base;
+  const head = cols.map(key => {
+    const label = lineLabel(key), srt = st.sort && st.sort.key === key ? st.sort.dir : 0, on = !!st.filter[key];
+    return `<th${srt ? ' class="sorted"' : ''} aria-sort="${srt === 1 ? 'ascending' : srt === -1 ? 'descending' : 'none'}"><span class="th-in"><button type="button" class="th-sort" data-lsort="${key}" data-list="${listId}" title="เรียงตาม ${esc(label)} (กดซ้ำเพื่อสลับ)">${esc(label)}<span class="th-arrow">${srt === 1 ? '▲' : srt === -1 ? '▼' : ''}</span></button>${NO_FILTER.includes(key) ? '' : `<button type="button" class="th-filter${on ? ' on' : ''}" data-lfilter="${key}" data-list="${listId}" aria-label="ตัวกรอง ${esc(label)}" title="เลือกค่าที่แสดง">${FUNNEL_SVG}</button>`}</span></th>`;
+  }).join('');
+  const active = Object.keys(st.filter).filter(k => cols.includes(k));
+  const bar = active.length || st.sort ? `<div class="tbl-filters">${active.length ? `กรอง: ${active.map(k => `<span class="chip">${esc(lineLabel(k))} (${st.filter[k].length})</span>`).join('')} · ` : ''}${st.sort ? `เรียงตาม ${esc(lineLabel(st.sort.key))} ${st.sort.dir === 1 ? '▲' : '▼'} · ` : ''}แสดง ${active.length ? `${lineArrange(listId, base, rcs).length}/${base.length}` : base.length} เคส <button type="button" class="linkish" data-lclear="${listId}">ล้างการกรองและการเรียง</button></div>` : '';
+  const body = rows.length ? rows.map(c => caseLine(c, rcs[c.id] || [], cols)).join('') : `<tr class="tbl-empty"><td colspan="${cols.length}">ไม่มีเคสที่ตรงกับตัวกรองของคอลัมน์</td></tr>`;
+  return `<li class="tbl-li">${bar}<div class="tbl-wrap"><table class="case-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></li>`;
 }
 function caseLine(c, rcs, cols) {
   const k = catOf(c.cat), st = caseStep(c), simple = k.kind === 'simple', edit = canEdit();
@@ -4161,7 +4303,7 @@ function renderPending(room) {
   batchIndex = {};
   state.cases.forEach(c => { if (c.batch) (batchIndex[c.batch] = batchIndex[c.batch] || []).push(c); });
   box.hidden = false;
-  box.innerHTML = list.length ? caseList(list.slice(0, 100), rcs) : '<li class="empty-state">ไม่มีงานรอ</li>';
+  box.innerHTML = list.length ? caseList(lineArrange('pend-list', list, rcs).slice(0, 100), rcs, 'pend-list', list) : '<li class="empty-state">ไม่มีงานรอ</li>';
 }
 // ช่วงเวลาของสถิติ: ตามวัน In
 const DASH_PERIODS = [['month', 'เดือนที่เลือก'], ['3m', '3 เดือน'], ['12m', '12 เดือน'], ['all', 'ทั้งหมด'], ['custom', 'กำหนดเอง']];
@@ -5159,6 +5301,7 @@ function toast(message, opts = {}) {
 /* ---------- เหตุการณ์ ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('button, a');
+  if (colPop && !e.target.closest('#col-pop, [data-lfilter]')) closeColPop();
   if (!t) {   // รายการเคสแบบบรรทัดเดียว: กดที่แถว (นอกปุ่มและช่องกรอก) = แก้ไขเคส
     const tr = e.target.closest('tr[data-rowedit]');
     if (tr && canEdit() && !e.target.closest('input, select, textarea, label')) openCase(tr.dataset.rowedit);
@@ -5166,6 +5309,16 @@ document.addEventListener('click', e => {
   }
   const ds = t.dataset;
   if (ds.cview) { pref.set('caseView', ds.cview); return render(); }
+  if (ds.lsort) {   // กดชื่อคอลัมน์: น้อย→มาก → มาก→น้อย → ไม่เรียง
+    const st = lineState(ds.list), cur = st.sort && st.sort.key === ds.lsort ? st.sort.dir : 0;
+    st.sort = cur === 1 ? { key: ds.lsort, dir: -1 } : cur === -1 ? null : { key: ds.lsort, dir: 1 };
+    return lineChanged();
+  }
+  if (ds.lfilter) { if (colPop && colPop.key === ds.lfilter && colPop.id === ds.list) return closeColPop(); return openColPop(ds.list, ds.lfilter); }
+  if (ds.lclear) { lineView[ds.lclear] = { sort: null, filter: {} }; closeColPop(); return render(); }
+  if (ds.cpsort) { const st = lineState(colPop.id), dir = +ds.cpsort; st.sort = st.sort && st.sort.key === colPop.key && st.sort.dir === dir ? null : { key: colPop.key, dir }; return lineChanged(); }
+  if (ds.cpall !== undefined) { delete lineState(colPop.id).filter[colPop.key]; return lineChanged(); }
+  if (ds.cpclose !== undefined) return closeColPop();
   if (t.id === 'search-btn') return openSearch();
   if (ds.sopen) return openSearchHit(ds.sopen);
   if (ds.ctab) { state.courseTab = ds.ctab; return renderCourse(); }
