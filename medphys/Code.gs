@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-14.1';
-const API_LEVEL = 19;
+const CODE_VERSION = '2026-10-15.1';
+const API_LEVEL = 20;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -648,7 +648,32 @@ function stampSteps(id, values, pin, token) {
   return stampSteps_(id, values, pin, token);
 }
 
-function stampSteps_(id, steps, pin, token) {
+// เลือกวันเวลาเองได้ (ลืมกดตอนทำจริง): at = 'yyyy-MM-dd HH:mm' ไม่เกินเวลาตอนนี้ · ว่าง = เวลาเซิร์ฟเวอร์ตอนนี้
+// ชื่อฟังก์ชันใหม่ ไม่เพิ่มพารามิเตอร์ให้ stampCase / stampSteps เดิม (หน้าเว็บรุ่นเก่าส่ง token เป็นตัวท้ายสุด)
+function stampCaseAt(id, step, value, pin, at, token) {
+  const steps = {};
+  steps[step] = value;
+  return stampSteps_(id, steps, pin, token, at);
+}
+
+function stampStepsAt(id, values, pin, at, token) {
+  const keys = Object.keys(values || {});
+  if (!keys.length) throw new Error('กรอกค่าก่อนบันทึก');
+  if (keys.some(k => values[k] === null)) throw new Error('ล้างการบันทึกทีละขั้นตอน');
+  return stampSteps_(id, values, pin, token, at);
+}
+
+function stampTime_(at, tz) {
+  const now = new Date();
+  if (at == null || String(at).trim() === '') return Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm');
+  const s = String(at).trim(), m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(s);
+  const d = m && new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  if (!m || d.getFullYear() !== +m[1] || d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3] || +m[4] > 23 || +m[5] > 59 || +m[1] < 2000) throw new Error('วันเวลาไม่ถูกต้อง');
+  if (s > Utilities.formatDate(new Date(now.getTime() + 5 * 60000), tz, 'yyyy-MM-dd HH:mm')) throw new Error('บันทึกวันเวลาที่ยังไม่ถึงไม่ได้');
+  return s;
+}
+
+function stampSteps_(id, steps, pin, token, at) {
   const u = requireEdit_(token);
   const keys = Object.keys(steps), vals = {}, notes = {};
   keys.forEach(step => {
@@ -667,7 +692,7 @@ function stampSteps_(id, steps, pin, token) {
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const now = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+    const now = stampTime_(at, ss.getSpreadsheetTimeZone());
     const name = String(u.name || u.username || u.me || '');
     const finCol = header.indexOf('Finish') + 1;
     const set = {};
