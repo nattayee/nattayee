@@ -26,8 +26,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-15.1';
-const API_LEVEL = 20;
+const CODE_VERSION = '2026-10-17.1';
+const API_LEVEL = 21;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -48,6 +48,8 @@ const TABLES = {
       ['pc', 'Plan complete'], ['pcBy', 'Plan complete โดย'],
       // จบการฉาย (แถบ Complete): complete = Complete course · cancel = Cancel RT (ต้องมีสาเหตุ) · เขียนผ่าน courseCase เท่านั้น
       ['rt', 'สถานะการฉาย'], ['rtDate', 'วันที่จบการฉาย'], ['rtAt', 'สถานะการฉาย เมื่อ'], ['rtBy', 'สถานะการฉาย โดย'], ['rtNote', 'สาเหตุ / หมายเหตุการฉาย'],
+      // สถานะรายวันของ fraction (Hold, HV, Re-CT, Off RT ฯลฯ) [{date, type, label, act, back, reason, note, by, at}] (JSON) · เขียนผ่าน fractionCase เท่านั้น
+      ['fxlog', 'สถานะ fraction'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -624,7 +626,7 @@ function moveActCases(token) {
 const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck', pc: 'Plan complete' };
 const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
 const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
-  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote'];
+  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog'];
 // ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
 const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
@@ -731,6 +733,52 @@ function courseCase(id, status, date, note, pin, token) {
     const set = status
       ? { rt: status, rtDate: date, rtAt: now, rtBy: String(u.name || u.username || u.me || ''), rtNote: note }
       : { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' };
+    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+  });
+}
+
+/**
+ * แถบ Complete: สถานะของ fraction รายวัน ยืนยันด้วยรหัส PIN · หนึ่งรายการต่อวันต่อเคส (บันทึกวันเดิมซ้ำ = แทนที่)
+ * ev = { type, label, act, back, reason, note } · act: skip = ไม่ได้ฉายตั้งแต่วันนั้นถึงก่อนวันกลับมาฉาย (back ว่าง = จนกว่าจะกลับมา) fraction เลื่อนออกไป
+ * treat = ฉายตามปกติ บันทึกไว้เฉย ๆ · off = Off RT หยุดฉายตั้งแต่วันนั้น (มีได้รายการเดียว) · ev = null ล้างรายการของวันนั้น · คืนเคสหลังบันทึก
+ */
+const FX_ACTS = ['skip', 'treat', 'off'];
+function fractionCase(id, date, ev, pin, token) {
+  const u = requireEdit_(token);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  date = cut(date, 10);
+  if (!isDate(date)) throw new Error('วันที่ไม่ถูกต้อง');
+  let rec = null;
+  if (ev) {
+    rec = { date: date, type: cut(ev.type, 40), label: cut(ev.label, 40), act: String(ev.act || ''), back: cut(ev.back, 10), reason: cut(ev.reason, 80), note: cut(ev.note, 200) };
+    if (!rec.type || !rec.label) throw new Error('เลือกสถานะ');
+    if (FX_ACTS.indexOf(rec.act) < 0) throw new Error('สถานะนี้ไม่ถูกต้อง');
+    if (rec.act !== 'skip') rec.back = '';
+    if (rec.back && (!isDate(rec.back) || rec.back <= date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
+  }
+  checkPin_(u, pin);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const col = header.indexOf('สถานะ fraction');
+    let list = [];
+    try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(x => x && x.date !== date);
+    if (rec) {
+      const inside = list.filter(x => x.act === 'skip' && x.date < date && (!x.back || date < x.back))[0];
+      if (inside) throw new Error('วันที่ ' + date + ' อยู่ในช่วง ' + inside.label + ' ตั้งแต่ ' + inside.date + ' แก้ที่รายการนั้นแทน');
+      if (rec.act === 'off') list = list.filter(x => x.act !== 'off');
+      rec.by = String(u.name || u.username || u.me || '');
+      rec.at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+      list.push(rec);
+    }
+    list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const set = { fxlog: list.length ? JSON.stringify(list) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
   });
