@@ -18,7 +18,8 @@
 const APP_TITLE = 'Treatment Planning Management';   // ชื่อเริ่มต้น · แอดมินเปลี่ยนได้ที่ ตั้งค่า (Config appName)
 // URL /exec ของ LPCH RO Workspace (เปลี่ยนได้ที่ Script property LPCH_URL · ใส่ - เพื่อปิดและใช้บัญชี Google อย่างเดียว)
 const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
-const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกข้อมูลได้ ตำแหน่งอื่นดูได้อย่างเดียว
+const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกได้ทุกแถบตั้งต้น (แอดมินปรับรายแถบได้ที่ ตั้งค่า → แถบเมนู)
+const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];   // ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้จากรายชื่อสมาชิก)
 const LPCH_CHECK_SECONDS = 300;
 // หน้าเว็บ (index.html) โหลดจาก GitHub อัตโนมัติ จึงได้หน้าเว็บรุ่นล่าสุดเสมอ ไม่ต้องวางไฟล์ index ใหม่ทุกครั้ง
 // เปลี่ยนได้ที่ Script property PAGE_URL · ใส่ - เพื่อใช้ไฟล์ index ในโปรเจกต์ · เปิด …/exec?refresh=1 เพื่อโหลดรุ่นล่าสุดทันที
@@ -26,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-18.2';
-const API_LEVEL = 22;
+const CODE_VERSION = '2026-10-18.3';
+const API_LEVEL = 23;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -234,16 +235,31 @@ const NAV_PREV = { queue: 'pend', course: 'queue' };
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'] };
 function guestNeeds_(user, config) {
   const out = {};
-  const nav = config && Array.isArray(config.nav) ? config.nav : [];
-  const off = nav.filter(x => x && (x.on === false || x.guest === false)).map(x => String(x.view));
-  // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ทำตามแถบก่อนหน้า (ตารางแจกเคส ตาม งานรอ) เหมือนหน้าเว็บ
-  Object.keys(NAV_PREV).forEach(v => { if (nav.length && !nav.some(x => x && x.view === v) && off.indexOf(NAV_PREV[v]) >= 0) off.push(v); });
-  Object.keys(GUEST_TABLES).forEach(t => { out[t] = user.canEdit || GUEST_TABLES[t].some(v => off.indexOf(v) < 0); });
+  const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
+  Object.keys(GUEST_TABLES).forEach(t => { out[t] = GUEST_TABLES[t].some(v => seen.indexOf(v) >= 0); });
   return out;
 }
 
+/**
+ * สิทธิ์ของตำแหน่ง (role ใน LPCH) ต่อแถบ: 'edit' = บันทึก/แก้ไขได้ · 'view' = ดูอย่างเดียว · '' = มองไม่เห็น
+ * ตั้งที่ ตั้งค่า → แถบเมนู (config.nav[i].access[role]) · ตำแหน่งที่ยังไม่ได้ตั้ง: MP บันทึกได้ทุกแถบที่ "แสดง"
+ * ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น" (แบบเดิม) · แถบใหม่ที่การตั้งค่าเดิมยังไม่มี ทำตามแถบก่อนหน้า (NAV_PREV) เหมือนหน้าเว็บ
+ */
+function navAccess_(config, view, role) {
+  const nav = config && Array.isArray(config.nav) ? config.nav : [];
+  const find = v => nav.filter(x => x && x.view === v)[0];
+  let x = find(view);
+  if (!x) { let p = null; for (let v = view; !p && NAV_PREV[v]; v = NAV_PREV[v]) p = find(NAV_PREV[v]); x = { on: true, guest: p ? p.guest !== false : true }; }
+  const acc = x.access && typeof x.access === 'object' ? x.access : null;
+  if (acc && Object.prototype.hasOwnProperty.call(acc, role)) return acc[role] === 'edit' || acc[role] === 'view' ? acc[role] : '';
+  if (x.on === false) return '';
+  return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
+}
+// แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'] };
+
 function saveRecord(table, rec, token) {
-  requireEdit_(token);
+  requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
   if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
   return withLock_(() => {
@@ -274,7 +290,7 @@ function saveRecord(table, rec, token) {
  * how = 'follow' ให้ MP คนเดียวกับเคสแรก (คิวไม่ขยับ หักคิวเมื่อวนมาถึง) · how = 'manual' ใช้ MP ที่เลือกมา
  */
 function addCases(recs, token) {
-  requireEdit_(token);
+  requireEdit_(token, ['work']);
   if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
   return withLock_(() => {
     const ss = ss_();
@@ -383,7 +399,7 @@ function pickNext_(o, trace) {
 }
 
 function deleteRecord(table, id, token) {
-  requireEdit_(token);
+  requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), table);
@@ -395,23 +411,23 @@ function deleteRecord(table, id, token) {
 
 // หน้าแก้ไขเคส: บันทึกหรือลบต้องยืนยันด้วยรหัส PIN ของคนที่เข้าสู่ระบบ (เหมือนปุ่มบันทึกขั้นตอน)
 function editCase(rec, pin, token) {
-  checkPin_(requireEdit_(token), pin);
+  checkPin_(requireEdit_(token, EDIT_VIEWS.cases), pin);
   return saveRecord('cases', rec, token);
 }
 
 function removeCase(id, pin, token) {
-  checkPin_(requireEdit_(token), pin);
+  checkPin_(requireEdit_(token, EDIT_VIEWS.cases), pin);
   return deleteRecord('cases', id, token);
 }
 
 // หน้าแก้ไขกิจกรรม (RC งานวิชาการ ฯลฯ): บันทึกการแก้ไขหรือลบต้องยืนยันด้วยรหัส PIN เหมือนหน้าแก้ไขเคส
 function editLog(rec, pin, token) {
-  checkPin_(requireEdit_(token), pin);
+  checkPin_(requireEdit_(token, EDIT_VIEWS.logs), pin);
   return saveRecord('logs', rec, token);
 }
 
 function removeLog(id, pin, token) {
-  checkPin_(requireEdit_(token), pin);
+  checkPin_(requireEdit_(token, EDIT_VIEWS.logs), pin);
   return deleteRecord('logs', id, token);
 }
 
@@ -693,7 +709,7 @@ function stampTime_(at, tz) {
 }
 
 function stampSteps_(id, steps, pin, token, at) {
-  const u = requireEdit_(token);
+  const u = requireEdit_(token, EDIT_VIEWS.cases);
   const keys = Object.keys(steps), vals = {}, notes = {};
   keys.forEach(step => {
     if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
@@ -733,7 +749,7 @@ function stampSteps_(id, steps, pin, token, at) {
  * date = วันที่ฉายครั้งสุดท้าย / วันที่หยุดฉาย (yyyy-MM-dd) · status = '' ล้างกลับเป็นกำลังฉาย · คืนเคสหลังบันทึก
  */
 function courseCase(id, status, date, note, pin, token) {
-  const u = requireEdit_(token);
+  const u = requireEdit_(token, EDIT_VIEWS.course);
   status = String(status || '');
   if (['', 'complete', 'cancel'].indexOf(status) < 0) throw new Error('สถานะการฉายไม่ถูกต้อง');
   date = String(date == null ? '' : date).trim();
@@ -763,7 +779,7 @@ function courseCase(id, status, date, note, pin, token) {
  */
 const FX_ACTS = ['skip', 'treat', 'off', 'given'];
 function fractionCase(id, date, ev, pin, token) {
-  const u = requireEdit_(token);
+  const u = requireEdit_(token, EDIT_VIEWS.course);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   date = cut(date, 10);
@@ -808,7 +824,7 @@ function fractionCase(id, date, ev, pin, token) {
  * tags = ข้อความคั่นด้วยจุลภาค (ว่าง = ล้าง) · เขียนเฉพาะช่องนี้ · คืนเคสหลังบันทึก
  */
 function tagCase(id, tags, pin, token) {
-  const u = requireEdit_(token);
+  const u = requireEdit_(token, EDIT_VIEWS.course);
   const seen = {};
   const list = String(tags == null ? '' : tags).split(',').map(x => x.trim().slice(0, 40)).filter(x => x && !seen[x.toLowerCase()] && (seen[x.toLowerCase()] = true));
   const text = list.join(', ');
@@ -967,8 +983,10 @@ function who_(token, ss, cfg) {
     if (!p.error) {
       const admins = adminList_(cfg);
       const listed = (!!p.email && admins.indexOf(p.email) >= 0) || admins.indexOf(p.username) >= 0;
+      // canEdit = บันทึกได้อย่างน้อยหนึ่งแถบ (ตั้งค่า → แถบเมนู) · แอดมินต้องเป็น MP (p.canEdit) และเป็นแอดมินของ LPCH หรืออยู่ในรายชื่อแอดมิน
+      const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => navAccess_(cfg, v, p.role) === 'edit');
       return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
-        canEdit: p.canEdit, isAdmin: p.canEdit && (p.lpchAdmin || listed), lpchAdmin: p.lpchAdmin };
+        canEdit: anyEdit, isAdmin: p.canEdit && (p.lpchAdmin || listed), lpchAdmin: p.lpchAdmin };
     }
     why = p.error;
   }
@@ -976,10 +994,28 @@ function who_(token, ss, cfg) {
   throw new Error('LOGIN|' + why);
 }
 
-function requireEdit_(token) {
-  const u = who_(token);
-  if (!u.canEdit) throw new Error('บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (' + LPCH_EDIT_ROLES.join(', ') + ') · บัญชี ' + u.username + ' (' + u.role + ') ดูได้อย่างเดียว');
+// บันทึกได้เมื่อตำแหน่งของผู้ใช้บันทึกได้อย่างน้อยหนึ่งแถบใน views (ไม่ระบุ = แถบไหนก็ได้) · บัญชี Google (เจ้าของไฟล์/แอดมิน) บันทึกได้ทุกแถบ
+function requireEdit_(token, views) {
+  const ss = ss_(), cfg = readConfig_(ss) || {};
+  const u = who_(token, ss, cfg);
+  if (u.via === 'google') return u;
+  const list = views || Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []);
+  if (!list.some(v => navAccess_(cfg, v, u.role) === 'edit')) {
+    throw new Error('ตำแหน่ง ' + (u.role || '-') + ' บันทึกในแถบนี้ไม่ได้ (บัญชี ' + u.username + ' ดูได้อย่างเดียว) · แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู');
+  }
   return u;
+}
+
+// แอดมิน: ดึงสมาชิกที่ใช้งานอยู่และตำแหน่งจาก LPCH RO Workspace (คำสั่ง directory) ใช้ตั้งสิทธิ์รายแถบ · ไม่เก็บรายชื่อไว้ที่นี่
+function lpchMembers(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('ดูรายชื่อสมาชิกได้เฉพาะแอดมิน');
+  if (u.via !== 'lpch') throw new Error('ดึงรายชื่อได้เมื่อเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
+  const out = lpchCall_({ action: 'directory', token: String(token) });
+  const users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || '') })).filter(x => x.username);
+  const roles = LPCH_ROLES.slice();
+  users.forEach(x => { if (x.role && roles.indexOf(x.role) < 0) roles.push(x.role); });
+  return { roles: roles, users: users };
 }
 
 function lpchUrl_() {

@@ -852,6 +852,20 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   .rule-table td .num{width:100%}
 }
 .nav-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto auto;gap:8px 12px;align-items:center;min-height:40px}
+.nav-acc td,.nav-acc th{padding:5px 8px;text-align:center;white-space:nowrap}
+.nav-acc .idx{font:12px var(--mono);color:var(--faint)}
+.nav-acc .nav-name{text-align:left;font-weight:500}
+.nav-acc .nav-label{width:150px}
+.acc-sel{min-height:32px;padding:3px 6px;font-size:13px}
+.acc-sel[data-v="edit"]{border-color:var(--ok);color:var(--ok);font-weight:600}
+.acc-sel[data-v="view"]{color:var(--fg)}
+.acc-sel[data-v=""]{color:var(--faint)}
+.acc-fixed{font-size:13px;color:var(--muted)}
+.mem-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px}
+.mem-list{display:grid;gap:6px;margin-top:10px}
+.mem-role{display:grid;grid-template-columns:90px 34px minmax(0,1fr);gap:8px;align-items:baseline;font-size:13px}
+.mem-role .n{color:var(--muted);font-variant-numeric:tabular-nums}
+.mem-names{display:flex;flex-wrap:wrap;gap:4px 10px}
 .nav-row .idx,.box-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
 .nav-row .btns,.box-row .btns{display:flex;gap:2px}
 .fld-def{display:grid;gap:5px;justify-items:start}
@@ -1483,6 +1497,11 @@ const hexOf = v => (HEX_RE.test(str(v)) ? str(v).toLowerCase() : '');
 // สีตัวอักษรบนพื้นสี: ขาวหรือดำตามความสว่าง · พื้นสีเข้ม (เช่นดำ) ในโหมดกลางคืนมีเส้นขอบให้เห็น (--paint-ring)
 const inkOn = hex => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150 ? '#14171a' : '#ffffff'; };
 const paintStyle = hex => (hexOf(hex) ? `--c:${inkOn(hexOf(hex))};--cs:${hexOf(hex)}` : '');
+// ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้ที่ ตั้งค่า → แถบเมนู) · สิทธิ์ต่อแถบ: '' = มองไม่เห็น · 'view' = ดูอย่างเดียว · 'edit' = บันทึก/แก้ไขได้
+const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
+const ACCESS_API = 23;   // Code.gs ที่ตรวจสิทธิ์รายแถบตามตำแหน่ง และดึงสมาชิกจาก LPCH ได้
+const ACCESS_OPTS = [['', 'ไม่เห็น'], ['view', 'ดูได้'], ['edit', 'บันทึกได้']];
+const ROLE_RE = /^[\w -]{1,20}$/;
 // สถานะ fraction (แถบ Complete): การทำงานที่แอดมินเลือกได้ให้แต่ละสถานะ
 const FX_API = 21;   // Code.gs ที่บันทึกสถานะ fraction ได้ (fractionCase)
 const fxStatusOn = () => serverHas(FX_API);
@@ -1563,6 +1582,7 @@ const DEFAULT_CONFIG = {
   ],
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
+  roles: LPCH_ROLES.slice(),   // ตำแหน่งที่ตั้งสิทธิ์รายแถบได้ (ตั้งค่า → แถบเมนู)
   // ชื่อระบบและบรรทัดรองมุมซ้ายบน (แอดมินแก้ได้ที่ ตั้งค่า → ชื่อระบบและโลโก้)
   appName: 'Treatment Planning Management',
   appSub: 'กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง',
@@ -1602,15 +1622,27 @@ const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const VIEWS = ['work', 'pend', 'queue', 'course', 'dash', 'logs', 'p4p', 'settings'];
 const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
-// แถบที่ผู้ใช้นี้เห็น: MP ตาม "แสดง" ("ตั้งค่า" แสดงเสมอ) · ตำแหน่งอื่น (ดูอย่างเดียว) เฉพาะแถบที่ติ๊กทั้ง "แสดง" และ "ตำแหน่งอื่น"
-// โหมดตัวอย่าง: "ตั้งค่า" แสดงเสมอ (ปุ่มเปลี่ยนมุมมองอยู่ในหน้านั้น)
-// ยังไม่รู้ผู้ใช้ (กำลังโหลด) ใช้แบบ MP ไปก่อน
-const navOn = view => {
-  if (!VIEWS.includes(view)) return false;
-  const x = (state.config.nav || []).find(v => v.view === view), mp = canEdit() || !!state.user.pending;
-  if (view === 'settings' && (mp || store.mode === 'local')) return true;
-  return mp ? !x || x.on : !!x && x.on && x.guest !== false;
-};
+// สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
+// ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
+// ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
+// Code.gs รุ่นเก่า (ก่อน API 23) บันทึกได้เฉพาะ MP: ตำแหน่งอื่นที่ตั้ง "บันทึกได้" ใช้เป็นดูได้
+function accessOf(view) {
+  const u = state.user;
+  if (!VIEWS.includes(view)) return '';
+  const full = u.via === 'google', role = full || u.pending ? 'MP' : u.role;
+  const x = (state.config.nav || []).find(n => n.view === view);
+  let a = x && x.access && x.access[role] !== undefined ? x.access[role] : !x ? (role === 'MP' ? 'edit' : '') : x.on === false ? '' : role === 'MP' ? 'edit' : x.guest !== false ? 'view' : '';
+  if (full && a && view !== 'settings') return 'edit';
+  if (u.pending) return a ? 'view' : '';
+  if (view === 'settings') return a || role === 'MP' || u.isAdmin || store.mode === 'local' ? 'view' : '';
+  if (a === 'edit' && role !== 'MP' && store.mode === 'sheet' && !serverHas(ACCESS_API)) a = 'view';
+  return a;
+}
+const navOn = view => accessOf(view) !== '';
+const anyEdit = () => VIEWS.some(v => accessOf(v) === 'edit');
+// แก้ไขเคส (หน้าแก้ไขเคส ปุ่มขั้นตอน) = บันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส (ตรงกับ EDIT_VIEWS.cases ใน Code.gs)
+const canEditCases = () => ['work', 'pend', 'queue'].some(v => accessOf(v) === 'edit');
+const navLabel = view => { const x = (state.config.nav || []).find(n => n.view === view); return (x && str(x.label)) || VIEW_LABEL[view] || view; };
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
@@ -1703,7 +1735,7 @@ function normLeave(o) {
 }
 function mergeConfig(c) {
   const d = clone(DEFAULT_CONFIG);
-  if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
+  if (!c || typeof c !== 'object') c = {};   // ยังไม่เคยบันทึก: ค่าเริ่มต้นทั้งหมด (ผ่านขั้นตอนเดียวกัน เช่นสิทธิ์รายแถบ)
   const out = { ...d };
   out.logo = logoOk(c.logo) ? c.logo : '';
   out.appName = str(c.appName).slice(0, 80) || d.appName;   // ว่าง = ชื่อเริ่มต้น
@@ -1769,6 +1801,8 @@ function mergeConfig(c) {
     }
   }
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
+  out.roles = Array.isArray(c.roles) ? c.roles.map(str).filter((r, i, a) => ROLE_RE.test(r) && a.indexOf(r) === i) : d.roles.slice();
+  if (!out.roles.includes('MP')) out.roles.unshift('MP');
   if (Array.isArray(c.fxTypes)) {
     const acts = FX_ACTS.map(x => x[0]), seen = new Set();
     out.fxTypes = c.fxTypes.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id)) && !seen.has(str(x.id)) && seen.add(str(x.id))).map(x => ({
@@ -1804,7 +1838,18 @@ function mergeConfig(c) {
     const before = prev ? nav.find(x => x.view === prev) : null;   // ตำแหน่งอื่นดูได้ตามแถบก่อนหน้า (เช่น ตารางแจกเคส ตาม งานรอ)
     nav.splice(prev ? nav.findIndex(x => x.view === prev) + 1 : 0, 0, { view: v, on: true, guest: !before || before.guest !== false });
   }
-  out.nav = nav.map(x => ({ view: x.view, on: x.view === 'settings' || x.on !== false, guest: x.guest !== false }));
+  // สิทธิ์รายตำแหน่ง (access): ยังไม่เคยตั้ง = แบบเดิม (MP บันทึกได้ทุกแถบที่แสดง · ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น")
+  // "ตั้งค่า": ทุกตำแหน่งดูได้อย่างมาก (แก้ได้เฉพาะแอดมิน) MP เห็นเสมอ · on / guest คำนวณจาก access ให้ Code.gs รุ่นเก่าใช้ต่อได้
+  out.nav = nav.map(x => {
+    const on = x.view === 'settings' || x.on !== false, guest = x.guest !== false, src = x.access && typeof x.access === 'object' ? x.access : {}, access = {};
+    for (const r of out.roles) {
+      const a = src[r];
+      access[r] = a === 'edit' || a === 'view' || a === '' ? a : !on ? '' : r === 'MP' ? 'edit' : guest ? 'view' : '';
+      if (x.view === 'settings') access[r] = r === 'MP' || access[r] ? 'view' : '';
+    }
+    const vals = Object.entries(access);
+    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && v), access };
+  });
   const qaNum = v => (v === '' || v == null || !isFinite(+v) ? '' : +v);
   out.qa = {};
   for (const k of CHECKS) {
@@ -1868,7 +1913,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.6';
+const PAGE_VERSION = '2026-10-18.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -1909,6 +1954,7 @@ const sheetStore = {
   course: (id, status, date, note, pin) => call('courseCase', id, status, date, note, pin),
   fraction: (id, date, ev, pin) => call('fractionCase', id, date, ev, pin),
   tags: (id, tags, pin) => call('tagCase', id, tags, pin),
+  members: () => call('lpchMembers'),
   removeLog: (id, pin) => call('removeLog', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
   holidays: year => call('thaiHolidays', year),
@@ -1999,6 +2045,9 @@ function localStore() {
       persist();
       return clone(c);
     },
+    // โหมดตัวอย่าง: สมาชิกสมมติ (ไม่ใช่ชื่อจริง)
+    members: async () => ({ roles: LPCH_ROLES.slice(), users: [['RO', 'แพทย์ ตัวอย่าง', 2], ['MP', 'นักฟิสิกส์ ตัวอย่าง', 4], ['RTT', 'นักรังสีเทคนิค ตัวอย่าง', 3], ['Nurse', 'พยาบาล ตัวอย่าง', 2]]
+      .flatMap(([role, name, n]) => Array.from({ length: n }, (_, i) => ({ username: `${role.toLowerCase()}${i + 1}`, name: `${name} ${i + 1}`, role }))) }),
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
@@ -2437,7 +2486,7 @@ function renderAcct() {
   const home = state.homeUrl ? `<a class="home-btn" href="${esc(state.homeUrl)}" target="${LINK_TARGET}" rel="noopener" title="กลับหน้าหลัก LPCH RO Workspace">${HOME_SVG}<span>Home</span></a>` : '';
   let who = '';
   let chip = (name, tag, title) => `<span class="who" title="${esc(title)}">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span></span>`;
-  const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : u.canEdit ? '' : ' · ดูอย่างเดียว'}`;
+  const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : anyEdit() ? '' : ' · ดูอย่างเดียว'}`;
   // กดชื่อผู้ใช้ = ตั้งหรือเปลี่ยนรหัส PIN ของตัวเอง (ใช้ยืนยันตอนกดปุ่มบันทึกขั้นตอน)
   if (stampsOn() && (state.loaded || store.mode === 'local')) chip = (name, tag, title) => `<button type="button" class="who" id="pin-btn" title="${esc(title)} · กดเพื่อ${u.hasPin ? 'เปลี่ยน' : 'ตั้ง'}รหัส PIN">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span>${u.hasPin || !u.canEdit ? '' : '<span class="pin-badge">ตั้ง PIN</span>'}</button>`;
   if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
@@ -2450,10 +2499,16 @@ function renderAcct() {
 }
 // แถบเมนูตามที่แอดมินตั้ง: ย้ายปุ่มเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
 function renderNav() {
-  const nav = $('.nav'), list = state.config.nav || [], sig = list.map(x => x.view + (navOn(x.view) ? '' : '-')).join(',');
+  const nav = $('.nav'), list = state.config.nav || [], sig = list.map(x => x.view + (navOn(x.view) ? '' : '-') + ':' + navLabel(x.view)).join(',');
   if (nav.dataset.sig === sig) return;
   nav.dataset.sig = sig;
-  for (const x of list) { const b = $(`[data-view="${x.view}"]`, nav); if (!b) continue; b.hidden = !navOn(x.view); nav.appendChild(b); }
+  for (const x of list) {
+    const b = $(`[data-view="${x.view}"]`, nav);
+    if (!b) continue;
+    b.hidden = !navOn(x.view);
+    if (b.firstChild && b.firstChild.nodeType === 3) b.firstChild.nodeValue = navLabel(x.view);   // ชื่อแถบที่แอดมินตั้ง (ป้ายจำนวนงานรอต่อท้ายคงเดิม)
+    nav.appendChild(b);
+  }
 }
 // เรียงกล่องในแต่ละแถบตามที่แอดมินตั้ง · ย้ายเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ช่องที่กำลังพิมพ์หลุดโฟกัส)
 function applyBoxes() {
@@ -2560,14 +2615,15 @@ function render() {
   const oldApi = oldServer();
   $('#api-notice').hidden = !oldApi;
   if (oldApi) $('#api-text').textContent = `หน้าเว็บนี้ต้องใช้ Code.gs รุ่น ${NEEDS_API} ขึ้นไป (ในโปรเจกต์เป็นรุ่น ${state.api || 'เก่ากว่า 4'}) บางอย่างอาจใช้ไม่ได้ · วาง Code.gs ใหม่จากหน้าคัดลอกโค้ด แล้ว Deploy เวอร์ชันใหม่`;
-  const ro = !canEdit();
-  $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);   // ยังไม่ทราบผู้ใช้: ยังไม่บอกว่าดูอย่างเดียว
-  if (ro) $('#ro-text').textContent = `บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP)${state.user.name ? ` · ${state.user.name}${state.user.role ? ` (${state.user.role})` : ''}` : ''}`;
   renderNav();
   pinTop();
   applyBoxes();
   renderPendBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
+  // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
+  const ro = !!state.view && state.view !== 'settings' && accessOf(state.view) === 'view';
+  $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);
+  if (ro) $('#ro-text').textContent = `แถบ "${navLabel(state.view)}" ตำแหน่ง ${state.user.role || '—'} ดูได้อย่างเดียว${state.user.name ? ` · ${state.user.name}` : ''} · แอดมินเปิดสิทธิ์บันทึกได้ที่ ตั้งค่า → แถบเมนู`;
   for (const v of VIEWS) $('#view-' + v).hidden = state.view !== v;
   // ตำแหน่งอื่นที่แอดมินยังไม่เปิดแถบใดให้ดู
   $('#noview-notice').hidden = !!state.view || (store.mode === 'sheet' && !state.loaded);
@@ -2643,7 +2699,7 @@ function openSearchHit(id) {
   const c = state.cases.find(x => x.id === id);
   searchDlg.close();
   if (!c) return;
-  if (canEdit()) return openCase(id);
+  if (canEditCases()) return openCase(id);
   if (!navOn('work')) return;
   Object.assign(state, { view: 'work', tab: 'all', cat: '', person: '', q: c.hn || c.name });
   render();
@@ -2755,7 +2811,7 @@ function fxGridRow(g, days, hol, td, edit) {
   const docs = [...new Set(cs.map(x => x.doc).filter(Boolean))];
   const info = [[...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
-  const hn = canEdit() ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="${esc(info + ' · กดเพื่อแก้ไขเคส')}">${esc(c.hn || '—')}</button>` : `<span class="hn" title="${esc(info)}">${esc(c.hn || '—')}</span>`;
+  const hn = canEditCases() ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="${esc(info + ' · กดเพื่อแก้ไขเคส')}">${esc(c.hn || '—')}</button>` : `<span class="hn" title="${esc(info)}">${esc(c.hn || '—')}</span>`;
   const tags = groupTags(cs), chips = tags.map(t => `<span class="ptag">${esc(t)}</span>`).join('');
   const ptags = canEdit() && fx2On()
     ? `<button type="button" class="ptags" data-ptags="${esc(c.id)}" title="${esc(tags.length ? `${tags.join(', ')} · กดเพื่อแก้` : 'บันทึกรายละเอียดผู้ป่วย เช่น NPO, BD protocol')}">${chips || '<span class="ptag add">+ บันทึก</span>'}</button>`
@@ -2790,7 +2846,7 @@ function fxGridRow(g, days, hol, td, edit) {
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
-  const k = catOf(c.cat), edit = canEdit(), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off');
+  const k = catOf(c.cat), edit = canEditCases(), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off');
   const evDays = evs.filter(e => !FX_MARKS.includes(e.act) || !(sc && sc.days.has(e.date))).map(e => e.date);
   const days = [...new Set([...(sc ? sc.days : []), ...evDays])].sort();
   const stateOf = d => (c.rt === 'complete' ? 'done' : c.rt === 'cancel' ? (d < c.rtDate ? 'done' : 'stop') : d < td ? 'done' : d === td ? 'today' : 'next');
@@ -2814,7 +2870,7 @@ function courseRow(c, sc, td) {
   if (c.rt) {
     const label = `${c.rt === 'complete' ? '✓ Complete course' : '✕ Cancel RT'} ${fmtDay(c.rtDate)}${c.rtNote ? ` · ${c.rtNote}` : ''}`;
     const tip = `${label} · บันทึกโดย ${c.rtBy || '—'} ${fmtStamp(c.rtAt) || ''}`;
-    acts = edit && courseOn() ? `<button type="button" class="cr-st ${c.rt}" data-course="${c.rt}" data-id="${esc(c.id)}" title="${esc(tip + ' · กดเพื่อแก้หรือล้าง')}">${esc(label)}</button>` : `<span class="cr-st ${c.rt}" title="${esc(tip)}">${esc(label)}</span>`;
+    acts = canEdit() && courseOn() ? `<button type="button" class="cr-st ${c.rt}" data-course="${c.rt}" data-id="${esc(c.id)}" title="${esc(tip + ' · กดเพื่อแก้หรือล้าง')}">${esc(label)}</button>` : `<span class="cr-st ${c.rt}" title="${esc(tip)}">${esc(label)}</span>`;
   } else if (off) {
     const label = `${off.label} ${fmtDay(off.date)}${off.reason ? ` · ${off.reason}` : ''}${off.note ? ` · ${off.note}` : ''}`;
     acts = fxCanEdit() ? `<button type="button" class="cr-st cancel" data-fxc="${esc(c.id)}" data-day="${off.date}" title="${esc(fxTip(off) + ' · กดเพื่อแก้ หรือล้างกลับเป็นกำลังฉาย')}">${esc(label)}</button>` : `<span class="cr-st cancel" title="${esc(fxTip(off))}">${esc(label)}</span>`;
@@ -4194,6 +4250,42 @@ function defField(f, d) {
   if (f.type === 'date') return defDate(path, v, false, label);
   return `<input${f.type === 'number' ? ' type="number" step="any" inputmode="decimal"' : ''} data-k="${path}" value="${esc(v)}" placeholder="ไม่มี" aria-label="ค่าเริ่มต้น ${esc(label)}">`;
 }
+// ช่องสิทธิ์ของแถบต่อตำแหน่ง: ไม่เห็น / ดูได้ / บันทึกได้ · "ตั้งค่า" มีแค่ ไม่เห็น / ดูได้ (MP เห็นเสมอ)
+function accSel(x, i, r) {
+  if (x.view === 'settings' && r === 'MP') return '<span class="acc-fixed" title="MP เห็นตั้งค่าเสมอ แก้ได้เฉพาะแอดมิน">ดูได้</span>';
+  const v = (x.access || {})[r] || '', opts = x.view === 'settings' ? ACCESS_OPTS.slice(0, 2) : ACCESS_OPTS;
+  return `<select class="acc-sel" data-navacc="${i}" data-accrole="${esc(r)}" data-v="${v}" aria-label="${esc(VIEW_LABEL[x.view] || x.view)} · ${esc(r)}">${opts.map(([k, l]) => opt(k, l, v)).join('')}</select>`;
+}
+// สมาชิกที่ใช้งานอยู่ใน LPCH RO Workspace (ดึงตอนกดปุ่ม ไม่เก็บไว้ในระบบนี้) จัดกลุ่มตามตำแหน่ง
+function membersHtml(d) {
+  const dir = state.lpchDir;
+  const why = store.mode === 'local' ? '' : !serverHas(ACCESS_API) ? 'ต้องใช้ Code.gs รุ่น 2026-10-18.3 ขึ้นไป' : state.user.via !== 'lpch' ? 'เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace เพื่อดึงรายชื่อ' : '';
+  const btn = `<button type="button" class="btn ghost" data-lpchdir${why ? ' disabled' : ''}>${dir ? 'ดึงรายชื่ออีกครั้ง' : 'ดึงสมาชิกและตำแหน่งจาก LPCH RO Workspace'}</button>${why ? `<span class="muted">${esc(why)}</span>` : ''}`;
+  if (!dir) return `<div class="mem-bar">${btn}<span class="muted">ตำแหน่งใหม่ใน LPCH จะเพิ่มเป็นคอลัมน์ในตารางด้านบน</span></div>`;
+  const roles = [...d.roles, ...dir.roles.filter(r => !d.roles.includes(r))];
+  const rest = dir.users.filter(u => !roles.includes(u.role));
+  const row = (r, us) => `<div class="mem-role"><b>${esc(r)}</b><span class="n">${us.length}</span><span class="mem-names">${us.map(u => `<span title="${esc(u.username)}">${esc(u.name)}</span>`).join('') || '<span class="muted">ไม่มีสมาชิก</span>'}</span></div>`;
+  return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน</span></div>
+    <div class="mem-list">${roles.map(r => row(r, dir.users.filter(u => u.role === r))).join('')}${rest.length ? row('ไม่ระบุตำแหน่ง', rest) : ''}</div>`;
+}
+async function fetchMembers(btn) {
+  btn.disabled = true;
+  try {
+    const dir = await store.members();
+    state.lpchDir = {
+      roles: (dir.roles || []).map(str).filter(r => ROLE_RE.test(r)),
+      users: (dir.users || []).map(u => ({ username: str(u.username), name: str(u.name) || str(u.username), role: str(u.role) })).filter(u => u.username),
+    };
+    // ตำแหน่งใหม่จาก LPCH: เพิ่มเป็นคอลัมน์ เริ่มต้นแบบตำแหน่งอื่น (ดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") แก้ได้ก่อนบันทึก
+    const add = state.lpchDir.roles.filter(r => !draft.roles.includes(r));
+    if (add.length) {
+      draft.roles = [...draft.roles, ...add];
+      draft.nav.forEach(x => { for (const r of add) x.access[r] = x.on && x.guest ? 'view' : ''; });
+    }
+    renderSettings();
+    toast(`ดึงสมาชิก ${state.lpchDir.users.length} คน${add.length ? ` · เพิ่มตำแหน่ง ${add.join(', ')} แล้วกด "บันทึกการตั้งค่า"` : ''}`);
+  } catch (e) { btn.disabled = false; toast('ดึงรายชื่อไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
 // สีในหน้าตั้งค่า: ช่องเลือกสี + ตัวอย่างป้าย + × (ไม่ใช้สี / กลับเป็นสีอัตโนมัติ)
 function colorPreview(path) {
   const m = /^(staff|doctors)\.(\d+)\.color$/.exec(path), x = m && draft[m[1]][+m[2]];
@@ -4323,7 +4415,7 @@ function renderSettings() {
     ? (() => {
       const r = pref.get('demoRole', 'admin');
       const b = (v, l) => `<button type="button" data-viewas="${v}" aria-pressed="${r === v}">${l}</button>`;
-      return `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini">${b('admin', 'MP · แอดมิน')}${b('user', 'MP')}${b('viewer', 'ตำแหน่งอื่น')}</span><span>${admin ? 'แก้ไขการตั้งค่าได้' : canEdit() ? 'บันทึกงานได้ การตั้งค่าแก้ได้เฉพาะแอดมิน' : 'ดูได้อย่างเดียว เฉพาะแถบที่แอดมินเลือก (RO, RTT, พยาบาล ฯลฯ)'}</span></div>`;
+      return `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini">${b('admin', 'MP · แอดมิน')}${b('user', 'MP')}${b('viewer', 'ตำแหน่งอื่น (RTT)')}</span><span>${admin ? 'แก้ไขการตั้งค่าได้' : state.user.role === 'MP' ? 'บันทึกงานได้ การตั้งค่าแก้ได้เฉพาะแอดมิน' : 'ดูหรือบันทึกได้ตามสิทธิ์ของตำแหน่ง RTT ใน ตั้งค่า → แถบเมนู'}</span></div>`;
     })()
     : admin
       ? `<p class="muted" style="margin:0 0 16px;font-size:13px">คุณเป็นแอดมิน · ${esc(state.user.via === 'lpch' ? `${state.user.name} (${state.user.username})` : state.user.me || '')}</p>`
@@ -4416,16 +4508,20 @@ function renderSettings() {
       <div class="logo-set">${d.logo ? `<img class="logo-prev" src="${esc(d.logo)}" alt="โลโก้ที่ตั้งไว้">` : `<span class="logo-prev" title="ไอคอนเดิม">${$('#brand-mark').outerHTML.replace(/ id="brand-mark"| style="[^"]*"/g, '')}</span>`}
         <button type="button" class="btn ghost" data-logopick>${d.logo ? 'เปลี่ยนรูป…' : 'เลือกรูป…'}</button>${d.logo ? '<button type="button" class="btn ghost" data-logoclear>ใช้ไอคอนเดิม</button>' : ''}
         <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
-    <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับและแถบที่แสดงด้านบน ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · "แสดง" = MP เห็น ("ตั้งค่า" แสดงเสมอ)
-      · "ตำแหน่งอื่น" = คนที่ไม่ใช่ MP (RO, RTT, พยาบาล ฯลฯ) ดูแถบนั้นได้ (ดูอย่างเดียว) ไม่ติ๊กเลยคือเข้าดูไม่ได้</p></div>
-      <div class="set-list nav-list">${d.nav.map((x, i) => `<div class="nav-row">
-        <span class="idx">${i + 1}</span><span class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</span>
-        <label class="check"><input type="checkbox" data-k="nav.${i}.on"${x.view === 'settings' ? ' checked disabled' : x.on ? ' checked' : ''}> แสดง</label>
-        <label class="check" title="ตำแหน่งอื่นที่ไม่ใช่ MP ดูแถบนี้ได้"><input type="checkbox" data-k="nav.${i}.guest"${x.guest ? ' checked' : ''}${x.on ? '' : ' disabled'}> ตำแหน่งอื่น</label>
-        <span class="btns"><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></span>
-      </div>`).join('')}</div></div>
+    <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับ ชื่อ และสิทธิ์ของแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · ชื่อที่แสดงว่าง = ชื่อเดิม
+      · สิทธิ์ตามตำแหน่งใน LPCH RO Workspace: <b>ไม่เห็น</b> / <b>ดูได้</b> (ดูอย่างเดียว) / <b>บันทึกได้</b> (บันทึก แก้ไข ลบในแถบนั้น ยืนยันด้วยรหัส PIN)
+      · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ</p></div>
+      ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป · ตอนนี้ตำแหน่งอื่นดูได้อย่างเดียว</span></p>' : ''}
+      <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
+        <td class="idx">${i + 1}</td><td class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</td>
+        <td><input class="nav-label" data-k="nav.${i}.label" value="${esc(x.label)}" maxlength="30" placeholder="${esc(VIEW_LABEL[x.view] || x.view)}" aria-label="ชื่อแถบ ${esc(VIEW_LABEL[x.view] || x.view)}"></td>
+        ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}
+        <td><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
+      </tr>`).join('')}</tbody></table></div>
+      <h3 class="sub-h">สมาชิกและตำแหน่งจาก LPCH RO Workspace</h3>
+      ${membersHtml(d)}</div>
     <div class="sec"><div class="sec-head"><h2>ลำดับกล่องในแถบ</h2><p>เรียงกล่องในแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น</p></div>
-      <div class="box-sets">${Object.entries(BOXES).map(([v, xs]) => `<div class="box-set"><h3>${esc(VIEW_LABEL[v])}</h3><div class="set-list">${d.boxes[v].map((k, i) => `<div class="box-row">
+      <div class="box-sets">${Object.entries(BOXES).map(([v, xs]) => `<div class="box-set"><h3>${esc((d.nav.find(n => n.view === v) || {}).label || VIEW_LABEL[v])}</h3><div class="set-list">${d.boxes[v].map((k, i) => `<div class="box-row">
         <span class="idx">${i + 1}</span><span class="box-name">${esc((xs.find(x => x[0] === k) || [k, k])[1])}</span>
         <span class="btns"><button type="button" class="icon-btn" data-boxup="${v}.${i}" aria-label="เลื่อน ${esc((xs.find(x => x[0] === k) || [k, k])[1])} ขึ้น"${i ? '' : ' disabled'}>↑</button></span>
       </div>`).join('')}</div></div>`).join('')}</div></div>
@@ -5012,6 +5108,7 @@ function syncCaseForm() {
 function openCase(id) {
   const c = state.cases.find(x => x.id === id);
   if (!c) return;
+  if (!canEditCases()) return toast(RO_MSG, { err: true });
   editingCase = clone(c);
   fillCaseSelects(editingCase);
   $('#case-title').textContent = `แก้ไขเคส ${c.hn || ''}`.trim();
@@ -5938,7 +6035,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-btn') return openPinSettings();
   if (t.id === 'pin-forgot') { pinCtx.forgot = true; syncPinForm(); return $('#pin-proof').focus(); }
   if (t.id === 'pin-clear') return submitPin(null, true);
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.edit || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -6011,6 +6108,7 @@ document.addEventListener('click', e => {
   if (ds.add === 'holiday') { draft.holidays.push({ date: '', name: '' }); renderSettings(); $$('[data-k^="holidays."][data-k$=".date"]').pop().focus(); return; }
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
+  if (ds.lpchdir !== undefined) return fetchMembers(t);
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
     case 'open-leaves': return openLeaves();
@@ -6280,6 +6378,13 @@ settingsEl.addEventListener('keydown', e => {
 });
 settingsEl.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.navacc !== undefined) {   // สิทธิ์ของแถบต่อตำแหน่ง
+    const x = draft.nav[+el.dataset.navacc];
+    x.access = { ...x.access, [el.dataset.accrole]: el.value };
+    el.dataset.v = el.value;
+    updateSaveBar();
+    return;
+  }
   if (el.id === 'logo-file') { pickLogo(el); return; }
   if (el.type === 'checkbox' || el.tagName === 'SELECT') settingsEdit(el);   // ซ้ำกับ input ก็ไม่เป็นไร (ตั้งค่าเดิมซ้ำ)
   if (el.type === 'color') { settingsEdit(el); renderSettings(); return; }   // ปิดช่องเลือกสีแล้ว: แสดงปุ่ม × ไม่ใช้สี
@@ -6329,12 +6434,13 @@ $('#p4p-table').addEventListener('change', e => {
 // โหมดตัวอย่าง: สลับมุมมองแอดมิน / MP / ตำแหน่งอื่น (ดูอย่างเดียว) ได้ที่หน้าตั้งค่า
 function demoUser() {
   const r = pref.get('demoRole', 'admin');
-  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true, hasPin: !!demoPin.get() };
+  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true, hasPin: !!demoPin.get() };   // canEdit ของจริงคิดรายแถบที่ accessOf
 }
-const canEdit = () => state.user.canEdit !== false;
+// บันทึกได้ในแถบที่เปิดอยู่ (ปุ่มและช่องกรอกของแต่ละแถบใช้ค่านี้)
+const canEdit = () => accessOf(state.view) === 'edit';
 // Code.gs บนเซิร์ฟเวอร์เก่ากว่าที่หน้าเว็บนี้ต้องการ (เช่นยังไม่ได้ Deploy เวอร์ชันใหม่)
 const oldServer = () => store.mode === 'sheet' && state.loaded && (state.api || 0) < NEEDS_API;
-const RO_MSG = 'บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) บัญชีนี้ดูได้อย่างเดียว';
+const RO_MSG = 'ตำแหน่งของคุณบันทึกในแถบนี้ไม่ได้ (แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู)';
 function showGate(why) {
   setToken('');
   state.gate = ssoError || why || '';
@@ -6364,7 +6470,7 @@ $('#gate-form').addEventListener('submit', async e => {
     $('#g-pass').value = '';
     state.gate = null;
     await refresh();
-    if (state.gate == null) toast(`เข้าสู่ระบบแล้ว · ${r.name}${r.canEdit ? '' : ' (ดูอย่างเดียว)'}`);
+    if (state.gate == null) toast(`เข้าสู่ระบบแล้ว · ${r.name}`);
   } catch (ex) { err.textContent = errMsg(ex); err.hidden = false; }
   finally { btn.disabled = false; }
 });
