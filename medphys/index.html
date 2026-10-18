@@ -269,6 +269,15 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-n{min-width:20px;margin-top:3px;padding:0 5px;border-radius:999px;background:var(--sunken);color:var(--fg);font-size:11px;font-weight:600;line-height:17px;text-align:center}
 .fxg-n.zero{color:var(--faint);font-weight:400}
 .fxg-d.today .fxg-n{background:var(--accent-fg);color:var(--accent)}
+.fxg-st{min-height:15px;margin-top:2px;padding:0 3px;border-radius:6px;color:var(--faint);font-size:10px;font-weight:600;line-height:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fxg-st:empty{visibility:hidden}
+.fxg-d.today .fxg-st{background:var(--surface)}
+.fxg-st i,.fxg-key i{font-style:normal}
+.fxg-st .z{color:var(--faint);font-weight:400}
+.fxg-st .g,.fxg-key .g{color:var(--ok)}
+.fxg-st .y,.fxg-key .y{color:var(--warn)}
+.fxg-st .r,.fxg-key .r{color:var(--late)}
+.fxg-key{line-height:1.5;text-align:right}
 .fxg-c0 .hn{flex:none}
 .fxg-c0 .av{flex:none}
 .doc-chip{flex:none;display:inline-block;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;color:var(--muted);font:600 11.5px/20px var(--mono)}
@@ -1854,7 +1863,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.3';
+const PAGE_VERSION = '2026-10-18.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2694,9 +2703,25 @@ function renderFxGrid(groups, hol, td) {
   const home = weekdayFrom(td), start = fxGrid.from || home, days = [];
   for (let d = start; days.length < n; d = nextDate(d)) if (isWeekday(d)) days.push(d);
   const edit = fxCanEdit();
+  // ใต้วันที่: บรรทัดบน = ผู้ป่วยทั้งหมดของวันนั้น (มี fraction หรืออยู่ในช่วง Hold ฯลฯ)
+  // บรรทัดล่าง = ฉายแล้ว (เขียว: ฉายแล้ว หรือสถานะแบบฉายตามปกติ) / Hold, HV, Re-CT ฯลฯ (เหลือง) / ค้างบันทึก (แดง: ถึงวันแล้วยังไม่บันทึก)
+  const dayStat = d => {
+    const st = { all: 0, g: 0, y: 0, r: 0 };
+    if (hol[d]) return st;
+    for (const g of groups) {
+      const sc = g.main.sc;
+      if (!sc) continue;
+      const e = fxEventAt(sc.evs, d);
+      if (sc.fx.has(d)) { st.all++; if (e && e.date === d && FX_MARKS.includes(e.act)) st.g++; else if (d <= td) st.r++; }
+      else if (e && e.act === 'skip') { st.all++; st.y++; }
+    }
+    return st;
+  };
+  const num0 = (v, c) => `<i class="${c}${v ? '' : ' z'}">${v}</i>`;
   const head = days.map((d, i) => {
-    const dt = parseISO(d), h = hol[d], k = groups.filter(g => g.main.sc && g.main.sc.fx.has(d)).length;
-    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" title="${esc(LONG_DAY_FMT.format(dt))}${h ? ' · ' + esc(h) : ''} · ฉาย ${k} คน"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small><span class="fxg-n${k ? '' : ' zero'}">${k}</span></div>`;
+    const dt = parseISO(d), h = hol[d], st = dayStat(d);
+    const tip = `${LONG_DAY_FMT.format(dt)}${h ? ' · ' + h : ''} · ทั้งหมด ${st.all} คน${st.all ? ` · ฉายแล้ว ${st.g} · Hold, HV ฯลฯ ${st.y} · ค้างบันทึก ${st.r}` : ''}`;
+    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" data-hd="${d}" title="${esc(tip)}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small><span class="fxg-n${st.all ? '' : ' zero'}">${st.all}</span><span class="fxg-st">${st.all ? `${num0(st.g, 'g')}/${num0(st.y, 'y')}/${num0(st.r, 'r')}` : ''}</span></div>`;
   }).join('');
   box.style.setProperty('--fx-c0', `${c0}px`);
   box.style.setProperty('--fx-cw', `${cw}px`);
@@ -2708,7 +2733,7 @@ function renderFxGrid(groups, hol, td) {
       <span class="fxg-legend">${legend}</span>
     </div>
     <div class="fxg" role="table" aria-label="ตารางวันฉาย">
-      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length} คน</span></span><small class="muted">ฉายวันละ (คน)</small></div>${head}</div>
+      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length} คน</span></span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
       ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : '<p class="empty-state">ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่</p>'}
     </div>`;
 }
