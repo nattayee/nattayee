@@ -23,8 +23,8 @@
 
 var REQUIRE_APPROVAL = true;   // ผู้สมัครใหม่ต้องรอ admin อนุมัติ
 var SESSION_DAYS = 7;
-var ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
-var CHAT_ROLES = ['RO', 'MP', 'RTT', 'Nurse'];
+var ROLES = ['RO', 'MP', 'RTT', 'RA', 'Nurse', 'NA', 'Other'];   // RA = Radiation Assistant, NA = Nurse Aids
+var CHAT_ROLES = ['RO', 'MP', 'RTT', 'RA', 'Nurse', 'NA'];
 var MAX_FAILED_LOGINS = 5;     // ต่อ 15 นาที
 var RESET_MINUTES = 15;        // อายุรหัสรีเซ็ตรหัสผ่านที่ส่งทางอีเมล
 var RESET_MAX_TRIES = 5;       // ใส่รหัสรีเซ็ตผิดได้กี่ครั้ง

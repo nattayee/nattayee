@@ -1,7 +1,7 @@
 /*
  * ประกาศ / ข่าวสาร แบบช่องแชท
  *  - แนบรูปได้ (ปุ่มแนบ, วาง Ctrl+V, ลากไฟล์มาวาง)
- *  - ส่งถึงทุกคน / ตามวิชาชีพ (RO / MP / RTT / Nurse) / รายบุคคล และส่งต่อได้
+ *  - ส่งถึงทุกคน / ตามวิชาชีพ (RO / MP / RTT / RA / Nurse / NA) / รายบุคคล และส่งต่อได้
  *  - ปุ่ม ✓ ถูก / ✗ ผิด และ ↩ ตอบกลับ ที่ข้อความ — บันทึกผู้กด วันที่ เวลา
  *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ ใครอ่านแล้ว และดาวน์โหลดบันทึกทั้งหมดเป็น CSV
  *
@@ -18,7 +18,7 @@
 
   var S = window.SITE;
   var C = S.chat || {};
-  var ROLES = C.roles || ["RO", "MP", "RTT", "Nurse"];
+  var ROLES = C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA"];
   var ROLE_GROUPS = ROLES.concat(["Other"]);
   var MAX_IMAGES = C.maxImages || 4;
   var useFirebase = !!(C.firebase && C.firebase.projectId);

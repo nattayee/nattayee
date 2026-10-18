@@ -89,7 +89,7 @@ window.SITE = {
    * (วิธีตั้งค่าและ Firestore rules ดูใน README.md)
    */
   chat: {
-    roles: ["RO", "MP", "RTT", "Nurse"],
+    roles: ["RO", "MP", "RTT", "RA", "Nurse", "NA"],
     maxImages: 4,
     pollSeconds: 15,    // หน้าแชท/ข้อความส่วนตัวดึงข้อความใหม่ทุกกี่วินาที
     notifySeconds: 20,  // pop up แจ้งเตือนข้อความใหม่ ตรวจทุกกี่วินาที (ทุกหน้า)

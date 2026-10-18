@@ -12,7 +12,7 @@
   var CFG = S.auth || {};
   var TOKEN_KEY = "lpch-ro-token";
   var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
-    ["Nurse", "พยาบาล (Nurse)"], ["Other", "อื่นๆ"]];
+    ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"], ["Other", "อื่นๆ"]];
   // Inside a Google Apps Script web app the page talks to Code.gs through google.script.run.
   var gas = !!(window.google && google.script && google.script.run);
   var remote = gas || !!CFG.apiUrl;

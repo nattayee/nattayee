@@ -13,7 +13,7 @@
   var MAX_IMAGES = C.maxImages || 4;
   var POLL_MS = (C.pollSeconds || 15) * 1000;
   var BADGE_MS = 30000;
-  var ROLE_GROUPS = (C.roles || ["RO", "MP", "RTT", "Nurse"]).concat(["Other"]);
+  var ROLE_GROUPS = (C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA"]).concat(["Other"]);
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
   var SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
   var GROUP_MS = 5 * 60000;
