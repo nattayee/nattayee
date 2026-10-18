@@ -1625,8 +1625,8 @@ const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', queue: 'ตา�
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
 // ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
-// Code.gs รุ่นเก่า (ก่อน API 23) บันทึกได้เฉพาะ MP: ตำแหน่งอื่นที่ตั้ง "บันทึกได้" ใช้เป็นดูได้
-function accessOf(view) {
+// Code.gs รุ่นเก่า (ก่อน API 23) บันทึกได้เฉพาะ MP: ตำแหน่งอื่นที่ตั้ง "บันทึกได้" ใช้เป็นดูได้ (asSet = ค่าที่แอดมินตั้งไว้ ก่อนลดสิทธิ์)
+function accessOf(view, asSet) {
   const u = state.user;
   if (!VIEWS.includes(view)) return '';
   const full = u.via === 'google', role = full || u.pending ? 'MP' : u.role;
@@ -1635,9 +1635,11 @@ function accessOf(view) {
   if (full && a && view !== 'settings') return 'edit';
   if (u.pending) return a ? 'view' : '';
   if (view === 'settings') return a || role === 'MP' || u.isAdmin || store.mode === 'local' ? 'view' : '';
-  if (a === 'edit' && role !== 'MP' && store.mode === 'sheet' && !serverHas(ACCESS_API)) a = 'view';
+  if (!asSet && a === 'edit' && role !== 'MP' && store.mode === 'sheet' && !serverHas(ACCESS_API)) a = 'view';
   return a;
 }
+// ตั้งให้บันทึกได้แล้ว แต่ Code.gs ที่ deploy อยู่ยังเก่ากว่า API 23 จึงดูได้อย่างเดียว
+const editAwaitsServer = view => accessOf(view) === 'view' && accessOf(view, true) === 'edit';
 const navOn = view => accessOf(view) !== '';
 const anyEdit = () => VIEWS.some(v => accessOf(v) === 'edit');
 // แก้ไขเคส (หน้าแก้ไขเคส ปุ่มขั้นตอน) = บันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส (ตรงกับ EDIT_VIEWS.cases ใน Code.gs)
@@ -1913,7 +1915,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.8';
+const PAGE_VERSION = '2026-10-18.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2623,7 +2625,9 @@ function render() {
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
   const ro = !!state.view && state.view !== 'settings' && accessOf(state.view) === 'view';
   $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);
-  if (ro) $('#ro-text').textContent = `แถบ "${navLabel(state.view)}" ตำแหน่ง ${state.user.role || '—'} ดูได้อย่างเดียว${state.user.name ? ` · ${state.user.name}` : ''} · แอดมินเปิดสิทธิ์บันทึกได้ที่ ตั้งค่า → แถบเมนู`;
+  if (ro) $('#ro-text').textContent = editAwaitsServer(state.view)
+    ? `แถบ "${navLabel(state.view)}" ตั้งให้ตำแหน่ง ${state.user.role || '—'} บันทึกได้แล้ว แต่ Code.gs ที่ใช้อยู่ (รุ่น ${state.codeVersion || 'เก่า'}) ยังไม่รองรับ จึงดูได้อย่างเดียว · แอดมินวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไปแล้ว Deploy เวอร์ชันใหม่`
+    : `แถบ "${navLabel(state.view)}" ตำแหน่ง ${state.user.role || '—'} ดูได้อย่างเดียว${state.user.name ? ` · ${state.user.name}` : ''} · แอดมินเปิดสิทธิ์บันทึกได้ที่ ตั้งค่า → แถบเมนู`;
   for (const v of VIEWS) $('#view-' + v).hidden = state.view !== v;
   // ตำแหน่งอื่นที่แอดมินยังไม่เปิดแถบใดให้ดู
   $('#noview-notice').hidden = !!state.view || (store.mode === 'sheet' && !state.loaded);
@@ -4511,7 +4515,7 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับ ชื่อ และสิทธิ์ของแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · ชื่อที่แสดงว่าง = ชื่อเดิม
       · สิทธิ์ตามตำแหน่งใน LPCH RO Workspace: <b>ไม่เห็น</b> / <b>ดูได้</b> (ดูอย่างเดียว) / <b>บันทึกได้</b> (บันทึก แก้ไข ลบในแถบนั้น ยืนยันด้วยรหัส PIN)
       · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ</p></div>
-      ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป · ตอนนี้ตำแหน่งอื่นดูได้อย่างเดียว</span></p>' : ''}
+      ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป (ที่ใช้อยู่: รุ่น ${esc(state.codeVersion || 'เก่า')}) แล้ว Deploy เวอร์ชันใหม่ · ระหว่างนี้ตำแหน่งอื่นที่ตั้ง "บันทึกได้" จะดูได้อย่างเดียว</span></p>` : ''}
       <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
         <td class="idx">${i + 1}</td><td class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</td>
         <td><input class="nav-label" data-k="nav.${i}.label" value="${esc(x.label)}" maxlength="30" placeholder="${esc(VIEW_LABEL[x.view] || x.view)}" aria-label="ชื่อแถบ ${esc(VIEW_LABEL[x.view] || x.view)}"></td>
