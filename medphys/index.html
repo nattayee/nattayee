@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ระบบกระจายงานฟิสิกส์การแพทย์</title>
+<title>Treatment Planning Management</title>
 <script>/* หน้าเว็บเริ่มทำงานไม่ได้ (สคริปต์ผิดพลาด หรือได้รับหน้าเว็บมาไม่ครบ): บอกสาเหตุบนจอแทนหน้าว่าง
    สคริปต์ที่ Google Apps Script ส่งมาเพี้ยน: เทียบกับต้นฉบับบน GitHub บอกจุดที่ต่าง แล้วใช้สคริปต์ต้นฉบับแทน (รุ่นเดียวกันเท่านั้น) */(function(){
 var SRC='https:\/\/raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
@@ -938,8 +938,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <img class="logo" id="brand-logo" alt="โลโก้" hidden>
       <svg class="mark" id="brand-mark" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="10.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 2.5v8M17 23.5v8M2.5 17h8M23.5 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="17" r="2.2" fill="currentColor"/></svg>
       <div>
-        <h1>ระบบกระจายงานฟิสิกส์การแพทย์</h1>
-        <p>กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง</p>
+        <h1 id="brand-name">Treatment Planning Management</h1>
+        <p id="brand-sub">กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง</p>
       </div>
     </div>
     <div class="top-right">
@@ -1563,6 +1563,9 @@ const DEFAULT_CONFIG = {
   ],
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
+  // ชื่อระบบและบรรทัดรองมุมซ้ายบน (แอดมินแก้ได้ที่ ตั้งค่า → ชื่อระบบและโลโก้)
+  appName: 'Treatment Planning Management',
+  appSub: 'กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง',
 };
 // ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
 function logKinds() {
@@ -1703,6 +1706,8 @@ function mergeConfig(c) {
   if (!c || typeof c !== 'object') { d.defaults = cleanDefaults(d.defaults, d); return d; }
   const out = { ...d };
   out.logo = logoOk(c.logo) ? c.logo : '';
+  out.appName = str(c.appName).slice(0, 80) || d.appName;   // ว่าง = ชื่อเริ่มต้น
+  out.appSub = c.appSub !== undefined ? str(c.appSub).slice(0, 120) : d.appSub;   // ว่างได้ (ไม่แสดงบรรทัดรอง)
   // ลำดับกล่อง: กล่องที่รู้จักตามที่ตั้ง (ซ้ำตัดทิ้ง) · กล่องใหม่ที่ยังไม่อยู่ในรายการ แทรกต่อจากกล่องก่อนหน้าในลำดับตั้งต้น
   out.boxes = {};
   for (const [v, xs] of Object.entries(BOXES)) {
@@ -1863,7 +1868,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.5';
+const PAGE_VERSION = '2026-10-18.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2510,6 +2515,14 @@ function renderLogo() {
   if ((img.getAttribute('src') || '') !== src) { if (src) img.src = src; else img.removeAttribute('src'); }
   img.hidden = !src;
   $('#brand-mark').style.display = src ? 'none' : '';
+  // ชื่อระบบ: จำไว้ในเบราว์เซอร์ หน้าเข้าสู่ระบบหรือก่อนโหลดเสร็จจึงแสดงชื่อที่ตั้งไว้ได้
+  let brand = { name: state.config.appName, sub: state.config.appSub };
+  if (state.loaded || store.mode !== 'sheet') pref.set('brand', brand);
+  else { const b = pref.get('brand', null); if (b && str(b.name)) brand = { name: str(b.name), sub: str(b.sub) }; }
+  if ($('#brand-name').textContent !== brand.name) $('#brand-name').textContent = brand.name;
+  if ($('#brand-sub').textContent !== brand.sub) $('#brand-sub').textContent = brand.sub;
+  $('#brand-sub').hidden = !brand.sub;
+  if (document.title !== brand.name) document.title = brand.name;
 }
 function render() {
   const gated = state.gate != null;
@@ -4086,7 +4099,7 @@ async function exportP4P(btn) {
   try {
     const ExcelJS = await loadExcel();
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'ระบบกระจายงานฟิสิกส์การแพทย์';
+    wb.creator = state.config.appName;
     wb.calcProperties.fullCalcOnLoad = true;
     for (const c of codes) p4pSheet(wb, c, ym, people[c], counts[c] || {}, notes);
     const [y, m] = ym.split('-').map(Number);
@@ -4398,7 +4411,8 @@ function renderSettings() {
         <tr><td>HN</td><td><input type="checkbox" checked disabled aria-label="HN แสดงเสมอ"></td><td><input type="checkbox" checked disabled aria-label="HN แสดงเสมอ"></td></tr>
         ${caseCols(d.fields).map(([key, label, , l]) => `<tr><td>${esc(label)}</td><td><input type="checkbox" data-k="caseView.card.${esc(key)}" aria-label="${esc(label)} ในมุมมองการ์ด"${colOn('card', key, d) ? ' checked' : ''}></td><td>${l === null ? '<span class="muted">–</span>' : `<input type="checkbox" data-k="caseView.line.${esc(key)}" aria-label="${esc(label)} ในมุมมองบรรทัดเดียว"${colOn('line', key, d) ? ' checked' : ''}>`}</td></tr>`).join('')}
       </tbody></table></div>
-    <div class="sec"><div class="sec-head"><h2>โลโก้</h2><p>รูปมุมซ้ายบนของทุกหน้า ทุกคนเห็น · ระบบย่อรูปให้เล็กลงและตัดขอบตรงกลาง (ความกว้างไม่เกิน 2 เท่าของความสูง) แล้วเก็บในแท็บ Config ของชีต · กดบันทึกด้านล่างเพื่อใช้</p></div>
+    <div class="sec"><div class="sec-head"><h2>ชื่อระบบและโลโก้</h2><p>ชื่อระบบและบรรทัดรองแสดงมุมซ้ายบนของทุกหน้า (ชื่อแท็บของเบราว์เซอร์เปลี่ยนตามเมื่อใช้ Code.gs รุ่น 2026-10-18.2 ขึ้นไป) · ชื่อว่าง = ${esc(DEFAULT_CONFIG.appName)} · รูปมุมซ้ายบนของทุกหน้า ทุกคนเห็น · ระบบย่อรูปให้เล็กลงและตัดขอบตรงกลาง (ความกว้างไม่เกิน 2 เท่าของความสูง) แล้วเก็บในแท็บ Config ของชีต · กดบันทึกด้านล่างเพื่อใช้</p></div>
+      <div class="form-grid" style="margin-bottom:14px"><label class="field"><span class="lbl">ชื่อระบบ</span><input data-k="appName" value="${esc(d.appName)}" maxlength="80" placeholder="${esc(DEFAULT_CONFIG.appName)}" aria-label="ชื่อระบบ"></label><label class="field"><span class="lbl">บรรทัดรอง <span class="sub-lbl">ไม่บังคับ</span></span><input data-k="appSub" value="${esc(d.appSub)}" maxlength="120" placeholder="เช่น กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง" aria-label="บรรทัดรองใต้ชื่อระบบ"></label></div>
       <div class="logo-set">${d.logo ? `<img class="logo-prev" src="${esc(d.logo)}" alt="โลโก้ที่ตั้งไว้">` : `<span class="logo-prev" title="ไอคอนเดิม">${$('#brand-mark').outerHTML.replace(/ id="brand-mark"| style="[^"]*"/g, '')}</span>`}
         <button type="button" class="btn ghost" data-logopick>${d.logo ? 'เปลี่ยนรูป…' : 'เลือกรูป…'}</button>${d.logo ? '<button type="button" class="btn ghost" data-logoclear>ใช้ไอคอนเดิม</button>' : ''}
         <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>

@@ -1,5 +1,5 @@
 /**
- * ระบบกระจายงานฟิสิกส์การแพทย์ — ส่วนหลังบ้าน (Google Apps Script)
+ * Treatment Planning Management (ระบบกระจายงานฟิสิกส์การแพทย์) — ส่วนหลังบ้าน (Google Apps Script)
  * กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง
  *
  * เก็บข้อมูลในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกสคริปต์นี้ไว้ (เปิดจากชีต → ส่วนขยาย → Apps Script)
@@ -15,7 +15,7 @@
  * เปิดจากเมนูในชีตด้วยบัญชี Google ของเจ้าของไฟล์หรือแอดมินได้เหมือนเดิม
  */
 
-const APP_TITLE = 'ระบบกระจายงานฟิสิกส์การแพทย์';
+const APP_TITLE = 'Treatment Planning Management';   // ชื่อเริ่มต้น · แอดมินเปลี่ยนได้ที่ ตั้งค่า (Config appName)
 // URL /exec ของ LPCH RO Workspace (เปลี่ยนได้ที่ Script property LPCH_URL · ใส่ - เพื่อปิดและใช้บัญชี Google อย่างเดียว)
 const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกข้อมูลได้ ตำแหน่งอื่นดูได้อย่างเดียว
@@ -26,7 +26,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-18.1';
+const CODE_VERSION = '2026-10-18.2';
 const API_LEVEL = 22;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -95,7 +95,7 @@ function doGet(e) {
     }
   }
   return HtmlService.createHtmlOutput(inject_(page.html, vars))
-    .setTitle(APP_TITLE)
+    .setTitle(appTitle_())
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -190,7 +190,21 @@ function onOpen() {
 function openApp() {
   const page = page_(false);
   const html = HtmlService.createHtmlOutput(inject_(page.html, { MEDPHYS_PAGE_SOURCE: page.source, MEDPHYS_SHEET_DIALOG: true })).setWidth(1200).setHeight(820);
-  SpreadsheetApp.getUi().showModalDialog(html, APP_TITLE);
+  SpreadsheetApp.getUi().showModalDialog(html, appTitle_());
+}
+
+// ชื่อแท็บของเบราว์เซอร์ = ชื่อระบบที่แอดมินตั้ง (Config appName) · เก็บในแคช 6 ชั่วโมง บันทึกการตั้งค่าแล้วล้างแคช
+// ยังไม่มีชีตข้อมูล: ใช้ชื่อเริ่มต้น (ไม่สร้างชีตตอนเปิดหน้าเว็บ)
+function appTitle_() {
+  try {
+    const cache = CacheService.getScriptCache(), hit = cache.get('appName');
+    if (hit) return hit;
+    if (!SpreadsheetApp.getActive() && !sheetIdProp_()) return APP_TITLE;
+    const cfg = readConfig_(ss_()) || {};
+    const name = String(cfg.appName || '').trim().slice(0, 80) || APP_TITLE;
+    cache.put('appName', name, 21600);
+    return name;
+  } catch (e) { return APP_TITLE; }
 }
 
 /* ---------- API ที่หน้าเว็บเรียกผ่าน google.script.run ---------- */
@@ -406,6 +420,7 @@ function saveConfig(config, token) {
   if (!u.isAdmin) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมิน)' : ''));
   return withLock_(() => {
     writeConfig_(ss_(), config || {});
+    try { CacheService.getScriptCache().remove('appName'); } catch (e) { /* แคชใช้ไม่ได้: ชื่อแท็บเปลี่ยนภายใน 6 ชั่วโมง */ }
     return true;
   });
 }
