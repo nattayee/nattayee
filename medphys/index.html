@@ -249,6 +249,7 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-legend .lg-boost{box-shadow:inset 0 -3px 0 var(--warn)}
 .fxg-legend .lg-skip{background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn)}
 .fxg-legend .lg-hol{background:repeating-linear-gradient(135deg,var(--line) 0 2px,transparent 2px 5px)}
+.fxg-legend .lg-rm{background:radial-gradient(circle at 4px 4px,var(--warn) 2.5px,var(--sunken) 3px)}
 .fxg{border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .fxg-head,.fxg-row{display:grid;grid-template-columns:var(--fx-c0,300px) repeat(var(--fx-n,10),var(--fx-cw,46px))}
 .fxg-head{position:sticky;top:var(--pin-h,0px);z-index:3;border-bottom:1px solid var(--line);border-radius:var(--r) var(--r) 0 0;background:var(--surface)}
@@ -331,6 +332,9 @@ button.ptags:hover{box-shadow:inset 0 0 0 1px var(--line-strong)}
 .fxc.empty.col-today{background:var(--accent-soft)}
 .fxl{max-width:100%;padding:0 2px;overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
 .fx-more{font-size:9px;font-style:normal}
+.fxc.rm{position:relative}
+.fxc.rm::before{content:'';position:absolute;top:3px;left:3px;width:5px;height:5px;border-radius:50%;background:var(--warn)}
+.fxc.oroom{opacity:.35}
 button.fxc{cursor:pointer}
 button.fxc:hover{box-shadow:inset 0 0 0 2px var(--line-strong)}
 button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -415,6 +419,7 @@ div.c-main,div.lrow{cursor:default}
 .site{display:grid;gap:12px;padding:12px;border:1px dashed var(--line);border-radius:12px}
 .site-head{display:flex;align-items:center;justify-content:space-between;min-height:24px;font-size:13px;color:var(--muted)}
 .site-head b{font-weight:600;color:var(--fg)}
+.site-room.moved .sub-lbl{color:var(--warn);font-weight:600}
 .boost-sum{margin:-2px 0 0;font-size:13px;color:var(--muted)}
 .boost-sum b{color:var(--fg);font-weight:600}
 .add-site-row{margin-top:-4px}
@@ -1940,7 +1945,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.12';
+const PAGE_VERSION = '2026-10-18.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2797,7 +2802,7 @@ function renderCourse() {
   syncTabQ('course');
   // ค้นหา: ตัวเลขบนแท็บนับเฉพาะเคสที่ตรง (เห็นว่าผู้ป่วยอยู่แท็บไหน) · ผู้ป่วยหลายเคสในตารางวันฉาย: ตรงเคสใดเคสหนึ่งก็แสดงทั้งแถว
   const hit = words.length ? new Set(all.filter(c => wordsIn(words, caseText(c))).map(c => str(c.hn) || 'id:' + c.id)) : null;
-  const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomOf(c) === room) && (!hit || hit.has(str(c.hn) || 'id:' + c.id)));
+  const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomsOf(c).includes(room)) && (!hit || hit.has(str(c.hn) || 'id:' + c.id)));
   $('#course-tabs').innerHTML = COURSE_TABS.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ctab="${k}" aria-selected="${tab === k}">${l}<span class="n">${of(k).length}</span></button>`).join('');
   $('#course-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-croom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : '';
@@ -2822,7 +2827,7 @@ function renderCourse() {
     for (const g of groups) g.main = g.items.reduce((a, b) => ((b.sc ? b.sc.planned : -1) > (a.sc ? a.sc.planned : -1) ? b : a));
     groups.sort((a, b) => (a.main.sc ? a.main.sc.start : '9999').localeCompare(b.main.sc ? b.main.sc.start : '9999') || a.main.c.in.localeCompare(b.main.c.in));
     lineBase.fxg = groups;   // ค่าในช่องเลือกของตัวกรองมาจากผู้ป่วยทั้งหมด (ก่อนกรอง)
-    renderFxGrid(fxgFilter(groups).slice(0, 200), hol, td, groups.length);
+    renderFxGrid(fxgFilter(groups).slice(0, 200), hol, td, groups.length, room);
     return pinTop();
   }
   const endOf = x => x.c.rtDate || (x.sc && x.sc.off ? x.sc.off.date : '');
@@ -2835,7 +2840,7 @@ function renderCourse() {
 }
 // ตารางวันฉาย: ผู้ป่วยละบรรทัด · จำนวนคอลัมน์พอดีความกว้างจอ (ไม่ต้องเลื่อนซ้ายขวา) ‹ › เลื่อนทีละสัปดาห์
 // หัวตาราง: วันที่ + จำนวนผู้ป่วยที่ฉายวันนั้น · ติดอยู่ใต้แถบเมนูตอนเลื่อนลง (จอที่สูงพอ: ใต้ช่วงวันที่ ดู pinTop) · ช่วงวันที่และคำอธิบายสีอยู่ใน #course-bar
-function renderFxGrid(groups, hol, td, total = groups.length) {
+function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const box = $('#course-grid');
   const w = box.getBoundingClientRect().width || Math.min(document.documentElement.clientWidth - 32, 1728);
   const c0 = w < 700 ? 150 : w < 1300 ? 360 : 400, cw = w < 700 ? 40 : 46;
@@ -2852,6 +2857,7 @@ function renderFxGrid(groups, hol, td, total = groups.length) {
       const sc = g.main.sc;
       if (!sc) continue;
       const e = fxEventAt(sc.evs, d);
+      if (sc.fx.has(d) && room && !fxRooms(sc.fx.get(d)).includes(room)) continue;   // เลือกห้องไว้: วันที่ผู้ป่วยไปฉายห้องอื่นไม่นับ
       if (sc.fx.has(d)) { st.all++; if (e && e.date === d && FX_MARKS.includes(e.act)) st.g++; else st.r++; }
       else if (e && e.act === 'skip') { st.all++; st.y++; }
     }
@@ -2866,7 +2872,8 @@ function renderFxGrid(groups, hol, td, total = groups.length) {
   box.style.setProperty('--fx-c0', `${c0}px`);
   box.style.setProperty('--fx-cw', `${cw}px`);
   box.style.setProperty('--fx-n', n);
-  const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
+  const moved = groups.some(g => g.items.some(x => roomsOf(x.c).length > 1));
+  const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ...(moved ? [['rm', 'ฉายห้องอื่น']] : []), ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
   $('#course-bar').innerHTML = `<div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
     <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
     <span class="fxg-legend">${legend}</span>`;
@@ -2875,10 +2882,10 @@ function renderFxGrid(groups, hol, td, total = groups.length) {
     + (Object.keys(f).length ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด">ล้าง</button>' : '');
   box.innerHTML = `<div class="fxg${c0 < 200 ? ' narrow' : ''}" role="table" aria-label="ตารางวันฉาย">
       <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length < total ? `${groups.length} จาก ${total}` : total} คน</span></span><span class="fxg-filt">${filt}</span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
-      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : `<p class="empty-state">${tabWords('course').length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้นในแท็บนี้' : 'ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่'}</p>`}
+      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit, room)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : `<p class="empty-state">${tabWords('course').length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้นในแท็บนี้' : 'ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่'}</p>`}
     </div>`;
 }
-function fxGridRow(g, days, hol, td, edit) {
+function fxGridRow(g, days, hol, td, edit, room = '') {
   const { c, sc } = g.main, cs = g.items.map(x => x.c), evs = sc ? sc.evs : parseFx(c), canCourse = canEdit() && courseOn();
   const docs = [...new Set(cs.map(x => x.doc).filter(Boolean))];
   const info = [[...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
@@ -2907,6 +2914,10 @@ function fxGridRow(g, days, hol, td, edit) {
       body = `<b>${esc(num)}</b>`;
       tip = `Fx ${num}${sc.planned ? '/' + sc.planned : ''}${sc.boost.has(d) ? ' · Boost' : ''} · ${dayTxt}`;
       if (list.length > 1) { body += `<i class="fx-more">+${list.length - 1}</i>`; tip += ' · ' + list.map(v => `บริเวณที่ ${v.site + 1} Fx ${v.to < v.from ? '?' : v.from === v.to ? v.to : v.from + '–' + v.to}`).join(', '); }
+      // ย้ายห้อง: วันที่ฉายห้องอื่นจากห้องของบริเวณที่ 1 มีจุดมุมซ้ายบน · เลือกห้องไว้แล้ววันนั้นฉายห้องอื่น = จาง
+      const rs = fxRooms(list);
+      if (rs.some(r => r !== roomOf(c))) { cls.push('rm'); tip += ` · ห้อง ${rs.map(roomLabel).join(', ')}`; }
+      if (room && !rs.includes(room)) cls.push('oroom');
       if (gv) { body += '<i class="fx-ok" aria-hidden="true">✓</i>'; tip += ' · ' + fxTip(e); }
       else if (e && e.date === d) { cls.push('noted'); body += `<span class="fxl">${esc(e.label)}</span>`; tip += ' · ' + fxTip(e); }
     } else cls.push(h ? 'hol' : 'empty');
@@ -3489,7 +3500,7 @@ const skipsOn = () => serverHas(SKIP_API);
 function parseSites(c) {
   let a = [];
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
-  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx) })) : [];
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room) })) : [];
 }
 // เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1 · Sequential boost
 const SITE_STARTS = [
@@ -3499,7 +3510,7 @@ const SITE_STARTS = [
   { key: 'boost', label: 'Sequential boost', title: 'Boost ต่อจากบริเวณที่ 1 ฉายครบ (หรือต่อจาก boost ก่อนหน้า) · นับ Fx และ Prescription รวมต่อกัน' },
 ];
 const startText = x => (x.start === 'afterfx' ? `After Fx ${x.startFx || '?'}` : (SITE_STARTS.find(v => v.key === x.start) || {}).label || '');
-const siteText = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), doseText(x), x.sum > 0 ? `รวม ${num(x.sum, 2)} Gy/${x.sumFx} fx` : ''].filter(Boolean).join(' · ');
+const siteText = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), doseText(x), x.sum > 0 ? `รวม ${num(x.sum, 2)} Gy/${x.sumFx} fx` : '', x.room ? `ห้อง ${x.room}` : ''].filter(Boolean).join(' · ');
 const doseRx = x => (+x.rx > 0 ? +x.rx : (+x.dpf || 0) * (+x.fx || 0));
 const baseOf = pre => pre.replace(/s\d+$/, '');
 // Sequential boost เรียงต่อจากบริเวณที่ 1 และ boost ก่อนหน้า: Fx นับต่อกัน · sum = Prescription รวม (เมื่อรู้ Prescription ของบริเวณที่ 1)
@@ -3524,6 +3535,7 @@ function addSite(base, x = {}) {
       <div class="chips" id="${pre}-start" role="radiogroup" aria-label="เริ่มฉายเทียบกับบริเวณที่ 1">${SITE_STARTS.map(v => `<label title="${v.title}"><input type="radio" name="${pre}start" value="${v.key}"${x.start === v.key ? ' checked' : ''}><span>${v.label}</span></label>`).join('')}</div>
       <label class="start-fx" id="${pre}-startfx-box"${x.start === 'afterfx' ? '' : ' hidden'}>ที่ <input type="number" id="${pre}-startfx" min="1" step="1" inputmode="numeric" value="${esc(x.startFx || '')}" aria-label="หลัง Fx ที่ของบริเวณที่ 1"> ของบริเวณที่ 1</label>
     </div></div>
+    <div class="field site-room" id="${pre}-room-field"><span class="lbl">ห้องฉาย <span class="sub-lbl" id="${pre}-room-note"></span></span><div class="chips" id="${pre}-room" role="radiogroup" aria-label="ห้องฉาย (บริเวณเพิ่มเติม)"></div></div>
     <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="${pre}-area" aria-label="บริเวณที่ฉาย (เพิ่มเติม)"></div><input id="${pre}-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
     <div class="dose-row">
       <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="${pre}-dpf" min="0" step="any" inputmode="decimal" placeholder="8"></label>
@@ -3535,9 +3547,33 @@ function addSite(base, x = {}) {
   </div>`);
   renderArea(pre, x.area || '');
   fillDose(pre, x);
+  renderSiteRoom(pre, x.room || '');
   syncSites(base);
   return pre;
 }
+// ห้องฉายของบริเวณเพิ่มเติม: ค่าเริ่มต้น = ห้องของบริเวณที่ 1 (ตามไปเมื่อเปลี่ยนห้องของบริเวณที่ 1) · เลือกห้องอื่นได้เมื่อย้ายไปฉายอีกห้อง
+// เก็บเฉพาะเมื่อต่างจากห้องของบริเวณที่ 1 (ว่าง = ห้องเดียวกัน)
+const mainRoom = base => chipValue($(`#${base}-room`));
+function renderSiteRoom(pre, room) {
+  const rooms = state.config.rooms, list = room && !rooms.includes(room) ? [...rooms, room] : rooms;
+  chipGroup($(`#${pre}-room`), pre + 'room', list, room || mainRoom(baseOf(pre)));
+  $(`[data-site="${pre}"]`).dataset.follow = room ? '' : '1';
+  $(`#${pre}-room-field`).hidden = !list.length;
+  syncSiteRoomNote(pre);
+}
+function syncSiteRoomNote(pre) {
+  const v = chipValue($(`#${pre}-room`)), main = mainRoom(baseOf(pre));
+  $(`#${pre}-room-note`).textContent = !v ? '' : v === main ? 'ห้องเดียวกับบริเวณที่ 1' : main ? `ย้ายจาก ${main}` : '';
+  $(`#${pre}-room-field`).classList.toggle('moved', !!v && !!main && v !== main);
+}
+function syncSiteRooms(base) {
+  const main = mainRoom(base);
+  for (const pre of sitePres(base)) {
+    if ($(`[data-site="${pre}"]`).dataset.follow === '1') setChip($(`#${pre}-room`), main);
+    syncSiteRoomNote(pre);
+  }
+}
+const readSiteRoom = pre => { const v = $(`#${pre}-room-field`).hidden ? '' : chipValue($(`#${pre}-room`)); return v && v !== mainRoom(baseOf(pre)) ? v : ''; };
 function renderSites(base, list) {
   $(`#${base}-sites`).innerHTML = '';
   list.forEach(x => addSite(base, x));
@@ -3584,7 +3620,7 @@ function syncStart(pre, focus) {
   }
   syncBoost(baseOf(pre));
 }
-const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre), ...readStart(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq);
+const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre), ...readStart(pre), room: readSiteRoom(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq).map(x => { if (!x.room) delete x.room; return x; });
 function checkSites(base) {
   const fx1 = +$(`#${base}-fx`).value || 0;
   for (const pre of sitePres(base)) {
@@ -4773,18 +4809,18 @@ function caseSchedule(c, hol) {
   const evs = parseFx(c), block = evs.length ? fxBlock(evs) : null;
   const fx = new Map(), boost = new Set();
   const tot = (n, freq) => (/single/i.test(freq) ? 1 : Math.floor(+n) || 0);
-  const add = (list, site, offset, isBoost) => {
+  const add = (list, site, offset, isBoost, room) => {
     let prev = 0;
     for (const x of list) {
       if (!fx.has(x.date)) fx.set(x.date, []);
-      fx.get(x.date).push({ site, from: offset + prev + 1, to: offset + x.upto, boost: isBoost });
+      fx.get(x.date).push({ site, from: offset + prev + 1, to: offset + x.upto, boost: isBoost, room });
       if (isBoost) boost.add(x.date);
       prev = x.upto;
     }
     return prev;
   };
   const t1 = tot(c.fx, c.freq), first = treatDays(c.sim, c.fx, c.freq, hol, block);
-  const got1 = add(first, 0, 0, false), done1 = first.length > 0 && got1 >= t1, last1 = done1 ? first[first.length - 1].date : '';
+  const got1 = add(first, 0, 0, false, c.room || ''), done1 = first.length > 0 && got1 >= t1, last1 = done1 ? first[first.length - 1].date : '';
   let planned = t1, given = Math.min(got1, t1), chain = t1, seqEnd = last1;
   parseSites(c).forEach((x, i) => {
     const freq = x.freq || (x.start === 'boost' ? c.freq : ''), t = tot(x.fx, freq);
@@ -4793,7 +4829,7 @@ function caseSchedule(c, hol) {
     else if (x.start === 'boost') start = seqEnd && nextDate(seqEnd);
     else if (x.start === 'afterfx') { const hit = first.find(d => d.upto >= (+x.startFx || 0)) || (done1 ? first[first.length - 1] : null); start = hit ? nextDate(hit.date) : ''; }
     const list = start ? treatDays(start, x.fx, freq, hol, block) : [];
-    const got = add(list, i + 1, x.start === 'boost' ? chain : 0, x.start === 'boost');
+    const got = add(list, i + 1, x.start === 'boost' ? chain : 0, x.start === 'boost', x.room || c.room || '');
     planned += t; given += Math.min(got, t);
     if (x.start === 'boost') { chain += t; seqEnd = list.length && got >= t ? list[list.length - 1].date : ''; }
   });
@@ -4815,6 +4851,9 @@ const DASH_METRICS = [
 ];
 const NO_ROOM = '__none';
 const roomOf = c => c.room || NO_ROOM;
+// ห้องทั้งหมดของเคส (บริเวณที่ 1 + บริเวณเพิ่มเติมที่ย้ายห้อง) · ห้องที่ฉายในวันหนึ่ง (จากรายการ fraction ของวันนั้นใน caseSchedule)
+const roomsOf = c => [...new Set([roomOf(c), ...parseSites(c).map(x => x.room).filter(Boolean)])];
+const fxRooms = list => [...new Set((list || []).map(e => e.room || NO_ROOM))];
 const roomLabel = r => (r === NO_ROOM ? 'ไม่ระบุห้อง' : r);
 const WD_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'short' });
 const LONG_DAY_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -4822,7 +4861,7 @@ const dash = { day: '', pend: '', at: '' };   // at = วันที่ปฏ�
 // ข้อมูลปฏิทินของช่วงวันที่: กำลังฉายรายห้อง (ผู้ป่วยไม่ซ้ำ) และเหตุการณ์แต่ละอย่างรายวัน
 function dashIndex(from, to, room) {
   const hol = holidayMap(), tx = {}, ev = {};
-  const inRoom = c => !room || roomOf(c) === room;
+  const inRoom = c => !room || roomsOf(c).includes(room);
   const put = (key, ds, c) => { if (ds < from || ds > to) return; const m = (ev[key] = ev[key] || {}); (m[ds] = m[ds] || []).push(c); };
   for (const c of state.cases) {
     const k = catOf(c.cat);
@@ -4838,8 +4877,8 @@ function dashIndex(from, to, room) {
     put('end', sc.end, c);
     for (const ds of sc.days) {
       if (ds < from || ds > to) continue;
-      const r = roomOf(c), m = (tx[ds] = tx[ds] || {});
-      (m[r] = m[r] || []).push(c);
+      const m = (tx[ds] = tx[ds] || {});
+      for (const r of fxRooms(sc.fx.get(ds))) if (!room || r === room) (m[r] = m[r] || []).push(c);   // นับในห้องที่ฉายวันนั้น
     }
   }
   return { tx, ev, hol };
@@ -5020,7 +5059,7 @@ function renderPendBadge() {
 function pendingOf(key, room) {
   return state.cases.filter(c => {
     const k = catOf(c.cat);
-    if (k.kind === 'simple' || (room && roomOf(c) !== room)) return false;
+    if (k.kind === 'simple' || (room && !roomsOf(c).includes(room))) return false;
     if (key === 'fin') return !c.fin;
     if (key === 'eval') return !!c.fin && !c.eval;
     return !c[key] && stepsOf(k).some(x => x.key === key) && recentCase(c);
@@ -5645,7 +5684,7 @@ function applyRules() {
     doseManual.i = ['fx', 'dpf'].filter(k => t[k]);   // ค่าจากกฎเก่าสุด: กรอก Prescription แล้ว Fx คำนวณใหม่
   }
   if (readFreq('i') === str(a.freq)) { setChip($('#i-freq'), t.freq); a.freq = t.freq; }
-  if (chipValue($('#i-room')) === str(a.room)) { setChip($('#i-room'), t.room); a.room = t.room; }
+  if (chipValue($('#i-room')) === str(a.room)) { setChip($('#i-room'), t.room); a.room = t.room; syncSiteRooms('i'); }
   if (chipValue($('#i-aim')) === str(a.aim)) { setChip($('#i-aim'), t.aim); a.aim = t.aim; }
   if (readArea('i') === str(a.area) && str(t.area) !== str(a.area)) {   // บริเวณที่ฉายที่ระบบใส่: กดเลือกครั้งแรกจะเปลี่ยนแทน
     renderArea('i', t.area);
@@ -6295,7 +6334,11 @@ for (const el of $$('[data-tq]')) {
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
 // ชิปบริเวณที่ฉาย / ความถี่ ของทุกบริเวณ (id เป็น <pre>-area, <pre>-freq) และช่อง Dose/fx, Fx (<pre>-dpf, <pre>-fx)
 function siteChip(e) {
-  const box = e.target.closest('.chips'), m = box && /^(.+)-(area|freq|start)$/.exec(box.id);
+  const box = e.target.closest('.chips');
+  if (box && (box.id === 'i-room' || box.id === 'f-room')) syncSiteRooms(box.id[0]);
+  const r = box && /^(.+s\d+)-room$/.exec(box.id);
+  if (r) { $(`[data-site="${r[1]}"]`).dataset.follow = e.target.value === mainRoom(baseOf(r[1])) ? '1' : ''; syncSiteRoomNote(r[1]); return true; }
+  const m = box && /^(.+)-(area|freq|start)$/.exec(box.id);
   if (!m) return false;
   if (m[2] === 'freq') onFreqChange(m[1], e.target);
   else if (m[2] === 'start') syncStart(m[1], e.target.checked);
