@@ -271,6 +271,7 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-d.today .fxg-n{background:var(--accent-fg);color:var(--accent)}
 .fxg-c0 .hn{flex:none}
 .fxg-c0 .av{flex:none}
+.doc-chip{flex:none;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;color:var(--muted);font:600 11.5px/20px var(--mono)}
 .ptags{display:flex;flex:1;align-items:center;gap:3px;min-width:0;min-height:26px;padding:2px 4px;overflow:hidden;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;white-space:nowrap}
 button.ptags{cursor:pointer}
 button.ptags:hover{box-shadow:inset 0 0 0 1px var(--line-strong)}
@@ -303,8 +304,7 @@ button.ptags:hover{box-shadow:inset 0 0 0 1px var(--line-strong)}
 button.fxc{cursor:pointer}
 button.fxc:hover{box-shadow:inset 0 0 0 2px var(--line-strong)}
 button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-@media (max-width:1299px){.fxg-row .fxg-c0 .av{display:none}}
-@media (max-width:700px){.fxg-c0{gap:4px;padding:4px 6px}.fxg-legend,.fx-prog{display:none}.fxc b{font-size:13px}}
+@media (max-width:700px){.fxg-c0{gap:4px;padding:4px 6px}.fxg-legend,.fx-prog,.fxg-row .fxg-c0 .av,.fxg-row .doc-chip{display:none}.fxc b{font-size:13px}}
 /* หน้าต่างบันทึกสถานะ fraction */
 .fx-box{display:grid;gap:12px}
 .fx-back{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
@@ -1840,7 +1840,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.1';
+const PAGE_VERSION = '2026-10-18.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2354,6 +2354,8 @@ const setChip = (el, v) => $$('input', el).forEach(i => { i.checked = i.value ==
 const focusChips = el => { const i = $('input:checked', el) || $('input', el); if (i) i.focus(); };
 const docCodes = () => state.config.doctors.map(x => x.code);
 const docName = code => (state.config.doctors.find(x => x.code === code) || {}).name || '';
+// รหัสแพทย์แบบป้ายเล็ก (ตารางวันฉาย แสดงก่อนนักฟิสิกส์) ชี้ค้างเห็นชื่อ-สกุล
+const docChip = code => `<span class="doc-chip" title="${esc(`แพทย์ ${code}${docName(code) ? ' · ' + docName(code) : ''}`)}">${esc(code)}</span>`;
 const chipValue = el => { const i = $('input:checked', el); return i ? i.value : ''; };
 function typeChip(t) {
   if (!t || t === 'New') return '';
@@ -2672,7 +2674,7 @@ function renderCourse() {
 function renderFxGrid(groups, hol, td) {
   const box = $('#course-grid');
   const w = box.getBoundingClientRect().width || Math.min(document.documentElement.clientWidth - 32, 1728);
-  const c0 = w < 700 ? 150 : w < 1300 ? 320 : 380, cw = w < 700 ? 40 : 46;
+  const c0 = w < 700 ? 150 : w < 1300 ? 360 : 400, cw = w < 700 ? 40 : 46;
   const n = Math.max(5, Math.min(80, Math.floor((w - c0 - 2) / cw)));
   const home = weekdayFrom(td), start = fxGrid.from || home, days = [];
   for (let d = start; days.length < n; d = nextDate(d)) if (isWeekday(d)) days.push(d);
@@ -2697,7 +2699,8 @@ function renderFxGrid(groups, hol, td) {
 }
 function fxGridRow(g, days, hol, td, edit) {
   const { c, sc } = g.main, cs = g.items.map(x => x.c), evs = sc ? sc.evs : parseFx(c), canCourse = canEdit() && courseOn();
-  const info = [[...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
+  const docs = [...new Set(cs.map(x => x.doc).filter(Boolean))];
+  const info = [[...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
   const hn = canEdit() ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="${esc(info + ' · กดเพื่อแก้ไขเคส')}">${esc(c.hn || '—')}</button>` : `<span class="hn" title="${esc(info)}">${esc(c.hn || '—')}</span>`;
   const tags = groupTags(cs), chips = tags.map(t => `<span class="ptag">${esc(t)}</span>`).join('');
@@ -2709,7 +2712,7 @@ function fxGridRow(g, days, hol, td, edit) {
     : sc.hold ? `<span class="fx-prog fx-warn" title="${esc(`${fxTip(sc.hold)} · เหลือ ${sc.pending} fx`)}">${esc(sc.hold.label)}</span>`
     : `<span class="fx-prog" title="${esc(`ผ่านมาแล้ว ${given} จาก ${sc.planned || '?'} fx${sc.end ? ` · ครบ ${fmtDay(sc.end)}` : ''}`)}">${given}/${sc.planned || '?'}</span>`;
   const acts = canCourse ? `<span class="fx-acts"><button type="button" class="cbtn ico" data-course="complete" data-id="${esc(c.id)}" title="Complete course: บันทึกว่าฉายครบแล้ว (ใส่รหัส PIN)" aria-label="Complete course ${esc(c.hn)}">✓</button><button type="button" class="cbtn ico cancel" data-course="cancel" data-id="${esc(c.id)}" title="Cancel RT: ยกเลิกการฉาย ต้องกรอกสาเหตุ (ใส่รหัส PIN)" aria-label="Cancel RT ${esc(c.hn)}">✕</button></span>` : '';
-  const mps = [...new Set(cs.map(x => x.mp).filter(Boolean))].map(m => av(m)).join('');
+  const mps = docs.map(docChip).join('') + [...new Set(cs.map(x => x.mp).filter(Boolean))].map(m => av(m)).join('');   // แพทย์ก่อนนักฟิสิกส์
   const cells = days.map(d => {
     const h = hol[d], e = fxEventAt(evs, d), list = sc && sc.fx.get(d), num = list ? fxNum(list) : '';
     const cls = ['fxc'], dayTxt = LONG_DAY_FMT.format(parseISO(d));
@@ -2752,7 +2755,7 @@ function courseRow(c, sc, td) {
   const nDone = days.filter(d => sc && sc.days.has(d) && stateOf(d) === 'done').length;
   const hn = edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`;
   const boosts = sitesOf(c).filter(x => x.start === 'boost').map(x => `<span class="cr-boost" title="Sequential boost: วันที่มีขีดสีส้มใต้แถบ">+ Boost <span class="mono">${esc([doseText(x), x.sum > 0 ? `รวม ${num(x.sum, 2)} Gy/${x.sumFx} fx` : ''].filter(Boolean).join(' · ') || '—')}</span></span>`);
-  const meta = [av(c.mp), ...splitList(c.ptags).map(t => `<span class="ptag">${esc(t)}</span>`), c.room && `<span>${esc(c.room)}</span>`, doseText(c) && `<span class="mono">${esc(doseText(c))}</span>`, ...boosts,
+  const meta = [c.doc && docChip(c.doc), av(c.mp), ...splitList(c.ptags).map(t => `<span class="ptag">${esc(t)}</span>`), c.room && `<span>${esc(c.room)}</span>`, doseText(c) && `<span class="mono">${esc(doseText(c))}</span>`, ...boosts,
     sc && `<span>Start RT <b>${esc(fmtDay(sc.start))}</b> → ครบ <b>${esc(sc.end ? fmtDay(sc.end) : '—')}</b></span>`].filter(Boolean).join('');
   let acts = '';
   if (c.rt) {
