@@ -272,6 +272,15 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-c0{display:flex;align-items:center;gap:6px;min-width:0;padding:4px 10px;border-right:1px solid var(--line);font-size:12.5px}
 .fxg-head .fxg-c0{flex-direction:column;align-items:stretch;justify-content:space-between;gap:2px;padding:8px 10px 6px}
 .fxg-head .fxg-c0 small{align-self:flex-end;font-size:11px;font-weight:400}
+.fxg-filt{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+.fxg-f{display:inline-flex;align-items:center;gap:3px;padding:1px 7px 1px 6px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--muted);font-size:11.5px;font-weight:400;line-height:1.5;white-space:nowrap;cursor:pointer}
+.fxg-f svg{width:9px;height:9px;opacity:.75}
+.fxg-f:hover{border-color:var(--accent);color:var(--accent)}
+.fxg-f.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.fxg-f b{min-width:15px;margin-left:2px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:10.5px;line-height:15px;text-align:center}
+.fxg-f.clr{border-style:dashed}
+.fxg.narrow .fxg-f{padding:1px 6px}
+.fxg.narrow .fxg-f svg{display:none}   /* จอแคบ (คอลัมน์ผู้ป่วย 150 px): ปุ่มสั้นลง ขึ้นบรรทัดใหม่น้อยลง */
 .fxg-n{min-width:20px;margin-top:3px;padding:0 5px;border-radius:999px;background:var(--sunken);color:var(--fg);font-size:11px;font-weight:600;line-height:17px;text-align:center}
 .fxg-n.zero{color:var(--faint);font-weight:400}
 .fxg-d.today .fxg-n{background:var(--accent-fg);color:var(--accent)}
@@ -1924,7 +1933,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.10';
+const PAGE_VERSION = '2026-10-18.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2741,6 +2750,23 @@ const fxGrid = { from: '' };   // คอลัมน์แรกของตา�
 // เคสของผู้ป่วยคนเดียวกัน (HN เดียวกัน) ในแถบเดียวกัน: ตารางวันฉายแสดงบรรทัดเดียว บันทึกสถานะและรายละเอียดให้ทุกเคส
 const hnGroup = c => (str(c.hn) ? state.cases.filter(x => x.hn === c.hn && inCourse(x) && courseTabOf(x) === courseTabOf(c)) : [c]);
 const groupTags = cs => uniqTags(cs.flatMap(x => splitList(x.ptags)));
+// ตัวกรองตารางวันฉาย (ปุ่มที่หัวคอลัมน์ผู้ป่วย ใช้ช่องเลือกค่าแบบเดียวกับตาราง) · จำไว้จนกว่าจะโหลดหน้าใหม่
+// ผู้ป่วยที่มีหลายเคสมีได้หลายค่า: แสดงเมื่อมีค่าใดค่าหนึ่งที่เลือก · หลายตัวกรอง = ต้องตรงทุกตัว · จำนวนใต้วันที่นับตามที่กรองแล้ว
+const FXG_FILTERS = { doc: 'แพทย์', mp: 'ฟิสิกส์', cat: 'เทคนิค', tag: 'รายละเอียด', st: 'สถานะ' };
+const FXG_ST = ['รอฉาย', 'กำลังฉาย', 'ไม่มีวันฉาย'];
+function fxgVals(g, key) {
+  const cs = g.items.map(x => x.c), sc = g.main.sc;
+  let v;
+  if (key === 'doc') v = cs.map(c => str(c.doc));
+  else if (key === 'mp') v = cs.map(c => str(c.mp));
+  else if (key === 'cat') v = cs.map(c => catOf(c.cat).label);
+  else if (key === 'tag') v = groupTags(cs);
+  else { const td = today(), e = sc && fxEventAt(sc.evs, td); v = [!sc ? 'ไม่มีวันฉาย' : sc.hold ? sc.hold.label : e && e.act === 'skip' ? e.label : sc.start > td ? 'รอฉาย' : 'กำลังฉาย']; }
+  v = [...new Set(v.filter(Boolean))];
+  return v.length ? v : [BLANK];
+}
+const fxgLabel = (key, v) => { const n = v === BLANK ? '' : key === 'doc' ? docName(v) : key === 'mp' ? (state.config.staff.find(x => x.code === v) || {}).name : ''; return n ? `${v} · ${n}` : v; };
+const fxgFilter = groups => { const f = lineState('fxg').filter; return groups.filter(g => Object.entries(f).every(([k, vals]) => fxgVals(g, k).some(v => vals.includes(v)))); };
 // fraction ที่ฉายแล้ว (ก่อนวันนี้) นับทุกบริเวณ
 const fxGiven = (sc, td) => { let n = 0; if (sc) for (const [d, l] of sc.fx) if (d < td) for (const v of l) n += Math.max(0, v.to - v.from + 1); return n; };
 function renderCourse() {
@@ -2772,7 +2798,8 @@ function renderCourse() {
     // แถวของผู้ป่วยใช้ตารางของเคสที่มี fraction มากที่สุด (หลายเทคนิคของคนเดียวกันมักฉายวันเดียวกัน)
     for (const g of groups) g.main = g.items.reduce((a, b) => ((b.sc ? b.sc.planned : -1) > (a.sc ? a.sc.planned : -1) ? b : a));
     groups.sort((a, b) => (a.main.sc ? a.main.sc.start : '9999').localeCompare(b.main.sc ? b.main.sc.start : '9999') || a.main.c.in.localeCompare(b.main.c.in));
-    renderFxGrid(groups.slice(0, 200), hol, td);
+    lineBase.fxg = groups;   // ค่าในช่องเลือกของตัวกรองมาจากผู้ป่วยทั้งหมด (ก่อนกรอง)
+    renderFxGrid(fxgFilter(groups).slice(0, 200), hol, td, groups.length);
     return pinTop();
   }
   const endOf = x => x.c.rtDate || (x.sc && x.sc.off ? x.sc.off.date : '');
@@ -2785,7 +2812,7 @@ function renderCourse() {
 }
 // ตารางวันฉาย: ผู้ป่วยละบรรทัด · จำนวนคอลัมน์พอดีความกว้างจอ (ไม่ต้องเลื่อนซ้ายขวา) ‹ › เลื่อนทีละสัปดาห์
 // หัวตาราง: วันที่ + จำนวนผู้ป่วยที่ฉายวันนั้น · ติดอยู่ใต้แถบเมนูตอนเลื่อนลง (จอที่สูงพอ: ใต้ช่วงวันที่ ดู pinTop) · ช่วงวันที่และคำอธิบายสีอยู่ใน #course-bar
-function renderFxGrid(groups, hol, td) {
+function renderFxGrid(groups, hol, td, total = groups.length) {
   const box = $('#course-grid');
   const w = box.getBoundingClientRect().width || Math.min(document.documentElement.clientWidth - 32, 1728);
   const c0 = w < 700 ? 150 : w < 1300 ? 360 : 400, cw = w < 700 ? 40 : 46;
@@ -2820,9 +2847,12 @@ function renderFxGrid(groups, hol, td) {
   $('#course-bar').innerHTML = `<div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
     <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
     <span class="fxg-legend">${legend}</span>`;
-  box.innerHTML = `<div class="fxg" role="table" aria-label="ตารางวันฉาย">
-      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length} คน</span></span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
-      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : '<p class="empty-state">ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่</p>'}
+  const f = lineState('fxg').filter;
+  const filt = Object.entries(FXG_FILTERS).map(([k, l]) => `<button type="button" class="fxg-f${f[k] ? ' on' : ''}" data-lfilter="${k}" data-list="fxg" title="${esc(f[k] ? `${l}: ${f[k].map(v => fxgLabel(k, v)).join(', ')}` : `เลือก${l}ที่แสดง`)}">${FUNNEL_SVG}${l}${f[k] ? `<b>${f[k].length}</b>` : ''}</button>`).join('')
+    + (Object.keys(f).length ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด">ล้าง</button>' : '');
+  box.innerHTML = `<div class="fxg${c0 < 200 ? ' narrow' : ''}" role="table" aria-label="ตารางวันฉาย">
+      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length < total ? `${groups.length} จาก ${total}` : total} คน</span></span><span class="fxg-filt">${filt}</span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
+      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : '<p class="empty-state">ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่</p>'}
     </div>`;
 }
 function fxGridRow(g, days, hol, td, edit) {
@@ -3681,14 +3711,17 @@ function closeColPop() {
   if (btn && inPop) btn.focus();   // ปิดด้วย Esc / ปุ่มปิด: โฟกัสกลับที่ปุ่มกรวย · กดข้างนอก: ไม่ดึงโฟกัส
 }
 function renderColPop() {
-  const { id, key } = colPop, st = lineState(id), base = lineBase[id] || [], rcs = rcIndex();
+  const { id, key } = colPop, st = lineState(id), base = lineBase[id] || [], rcs = rcIndex(), fx = id === 'fxg';
   const counts = new Map();
-  for (const c of base) { const v = lineValue(c, key, rcs)[1] || BLANK; counts.set(v, (counts.get(v) || 0) + 1); }
-  const vals = [...counts.keys()].sort((a, b) => (a === BLANK) - (b === BLANK) || (key === 'status' ? STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b) : a.localeCompare(b, 'th', { numeric: true })));
+  if (fx) for (const g of base) for (const v of fxgVals(g, key)) counts.set(v, (counts.get(v) || 0) + 1);   // นับเป็นจำนวนผู้ป่วย
+  else for (const c of base) { const v = lineValue(c, key, rcs)[1] || BLANK; counts.set(v, (counts.get(v) || 0) + 1); }
+  const order = fx ? (key === 'st' ? FXG_ST : []) : key === 'status' ? STATUS_ORDER : [], rank = v => (order.includes(v) ? order.indexOf(v) : order.length);
+  for (const v of st.filter[key] || []) if (fx && !counts.has(v)) counts.set(v, 0);   // ค่าที่เลือกไว้แต่ไม่มีแล้ว: ยังเอาออกได้
+  const vals = [...counts.keys()].sort((a, b) => (a === BLANK) - (b === BLANK) || rank(a) - rank(b) || a.localeCompare(b, 'th', { numeric: true }));
   const sel = st.filter[key] ? new Set(st.filter[key]) : null, srt = st.sort && st.sort.key === key ? st.sort.dir : 0;
-  $('#col-pop').innerHTML = `<div class="cp-head">${esc(lineLabel(key))}</div>
-    <div class="cp-sort"><button type="button" data-cpsort="1" aria-pressed="${srt === 1}">เรียง น้อย→มาก</button><button type="button" data-cpsort="-1" aria-pressed="${srt === -1}">มาก→น้อย</button></div>
-    ${NO_FILTER.includes(key) ? '' : `<div class="cp-list">${vals.map(v => `<label><input type="checkbox" data-cpval="${esc(v)}"${!sel || sel.has(v) ? ' checked' : ''}><span>${esc(v)}</span><span class="n">${counts.get(v)}</span></label>`).join('')}</div>
+  $('#col-pop').innerHTML = `<div class="cp-head">${esc(fx ? FXG_FILTERS[key] : lineLabel(key))}</div>
+    ${fx ? '' : `<div class="cp-sort"><button type="button" data-cpsort="1" aria-pressed="${srt === 1}">เรียง น้อย→มาก</button><button type="button" data-cpsort="-1" aria-pressed="${srt === -1}">มาก→น้อย</button></div>`}
+    ${!fx && NO_FILTER.includes(key) ? '' : `<div class="cp-list">${vals.map(v => `<label><input type="checkbox" data-cpval="${esc(v)}"${!sel || sel.has(v) ? ' checked' : ''}><span>${esc(fx ? fxgLabel(key, v) : v)}</span><span class="n">${counts.get(v)}</span></label>`).join('')}</div>
     <div class="cp-foot"><button type="button" class="cp-all" data-cpall>แสดงทั้งหมด</button><button type="button" class="cp-all" data-cpclose>ปิด</button></div>`}`;
 }
 const lineBase = {};   // แถวก่อนกรองคอลัมน์ของแต่ละรายการ (ใช้ทำรายการค่าในช่องเลือก)
@@ -6046,6 +6079,7 @@ document.addEventListener('click', e => {
   if (ds.sopen) return openSearchHit(ds.sopen);
   if (ds.ctab) { state.courseTab = ds.ctab; return renderCourse(); }
   if (ds.croom !== undefined) { pref.set('courseRoom', ds.croom); return renderCourse(); }
+  if (ds.fxclear !== undefined) { lineState('fxg').filter = {}; closeColPop(); return renderCourse(); }
   if (ds.fxnav !== undefined) { const home = weekdayFrom(today()); fxGrid.from = +ds.fxnav ? shiftWeekdays(fxGrid.from || home, 5 * +ds.fxnav) : ''; if (fxGrid.from === home) fxGrid.from = ''; return renderCourse(); }
   if (ds.fxback !== undefined) { $('#pin-fx-back').value = ds.fxback; return syncFx(); }
   if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
