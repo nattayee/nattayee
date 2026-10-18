@@ -310,8 +310,7 @@ button.ptags:hover{box-shadow:inset 0 0 0 1px var(--line-strong)}
 .ptag.add{border:1px dashed var(--line-strong);background:none;color:var(--faint);font-weight:400;line-height:17px}
 .fx-prog{flex:none;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .fx-warn{color:var(--warn);font-weight:600}
-.fx-acts{display:flex;flex:none;gap:4px}
-.cbtn.ico{display:inline-grid;place-items:center;width:24px;height:24px;padding:0;font-size:12px}
+button.fx-prog{padding:0;border:0;background:none;font-family:inherit;cursor:pointer;text-decoration:underline dotted}
 .fxc{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;min-height:36px;margin:4px 2px;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:12px;line-height:1.15}
 .fxc b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .fxc.fx{background:var(--sunken);color:var(--fg)}
@@ -1330,6 +1329,10 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="fx-box" id="pin-fx-box" hidden>
         <div class="field"><span class="lbl">สถานะของ fraction</span><div class="chips" id="pin-fx-type" role="radiogroup" aria-label="สถานะของ fraction"></div></div>
         <div class="field" id="pin-fx-reason-box" hidden><span class="lbl" id="pin-fx-reason-lbl">เหตุผล</span><div class="chips" id="pin-fx-reason" role="radiogroup" aria-label="เหตุผล"></div></div>
+        <div class="field" id="pin-fx-off-box" hidden><span class="lbl">หยุดฉายแบบ</span><div class="chips" id="pin-fx-off" role="radiogroup" aria-label="หยุดฉายแบบ">
+          <label title="หยุดฉายตั้งแต่วันนี้ เคสไปอยู่แถบ Off RT"><input type="radio" name="fxoff" value="off"><span>Off RT</span></label>
+          <label title="ฉายครบแล้ว วันนี้เป็นวันฉายครั้งสุดท้าย เคสไปอยู่แถบ Complete course"><input type="radio" name="fxoff" value="complete"><span>Complete course</span></label>
+          <label title="ยกเลิกการฉาย ไม่ได้ฉายตั้งแต่วันนี้ ต้องใส่สาเหตุ เคสไปอยู่แถบ Cancel RT"><input type="radio" name="fxoff" value="cancel"><span>Cancel RT</span></label></div></div>
         <div class="fx-box" id="pin-fx-move-box" hidden>
           <div class="field"><span class="lbl">ย้ายแบบ</span><div class="chips" id="pin-fx-scope" role="radiogroup" aria-label="ย้ายแบบ">
             <label title="ย้ายเฉพาะ fraction นี้ วันถัดไปกลับมาฉายห้องเดิม"><input type="radio" name="fxscope" value="once"><span>ย้าย (เฉพาะ fraction นี้)</span></label>
@@ -1956,7 +1959,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.14';
+const PAGE_VERSION = '2026-10-18.15';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2915,7 +2918,7 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
     </div>`;
 }
 function fxGridRow(g, days, hol, td, edit, room = '') {
-  const { c, sc } = g.main, cs = g.items.map(x => x.c), evs = sc ? sc.evs : parseFx(c), canCourse = canEdit() && courseOn();
+  const { c, sc } = g.main, cs = g.items.map(x => x.c), evs = sc ? sc.evs : parseFx(c);
   const docs = [...new Set(cs.map(x => x.doc).filter(Boolean))];
   const info = [[...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
@@ -2925,10 +2928,11 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     ? `<button type="button" class="ptags" data-ptags="${esc(c.id)}" title="${esc(tags.length ? `${tags.join(', ')} · กดเพื่อแก้` : 'บันทึกรายละเอียดผู้ป่วย เช่น NPO, BD protocol')}">${chips || '<span class="ptag add">+ บันทึก</span>'}</button>`
     : `<span class="ptags"${tags.length ? ` title="${esc(tags.join(', '))}"` : ''}>${chips}</span>`;
   const given = fxGiven(sc, td);
-  const prog = !sc ? '<span class="fx-prog fx-warn" title="ยังคำนวณวันฉายไม่ได้: ใส่ Start RT และ Fx ในหน้าแก้ไขเคส">ไม่มีวันฉาย</span>'
+  // ไม่มีวันฉาย (ไม่มีช่องให้กด): กดป้ายเพื่อบันทึก Off RT / Complete course / Cancel RT ของวันนี้
+  const prog = !sc ? (edit ? `<button type="button" class="fx-prog fx-warn" data-fxc="${esc(c.id)}" data-day="${td}" title="ยังคำนวณวันฉายไม่ได้: ใส่ Start RT และ Fx ในหน้าแก้ไขเคส · กดเพื่อบันทึก Off RT, Complete course หรือ Cancel RT">ไม่มีวันฉาย</button>`
+      : '<span class="fx-prog fx-warn" title="ยังคำนวณวันฉายไม่ได้: ใส่ Start RT และ Fx ในหน้าแก้ไขเคส">ไม่มีวันฉาย</span>')
     : sc.hold ? `<span class="fx-prog fx-warn" title="${esc(`${fxTip(sc.hold)} · เหลือ ${sc.pending} fx`)}">${esc(sc.hold.label)}</span>`
     : `<span class="fx-prog" title="${esc(`ผ่านมาแล้ว ${given} จาก ${sc.planned || '?'} fx${sc.end ? ` · ครบ ${fmtDay(sc.end)}` : ''}`)}">${given}/${sc.planned || '?'}</span>`;
-  const acts = canCourse ? `<span class="fx-acts"><button type="button" class="cbtn ico" data-course="complete" data-id="${esc(c.id)}" title="Complete course: บันทึกว่าฉายครบแล้ว (ใส่รหัส PIN)" aria-label="Complete course ${esc(c.hn)}">✓</button><button type="button" class="cbtn ico cancel" data-course="cancel" data-id="${esc(c.id)}" title="Cancel RT: ยกเลิกการฉาย ต้องกรอกสาเหตุ (ใส่รหัส PIN)" aria-label="Cancel RT ${esc(c.hn)}">✕</button></span>` : '';
   const mps = docs.map(docChip).join('') + [...new Set(cs.map(x => x.mp).filter(Boolean))].map(m => av(m)).join('');   // แพทย์ก่อนนักฟิสิกส์
   const cells = days.map(d => {
     const h = hol[d], e = fxEventAt(evs, d), list = sc && sc.fx.get(d), num = list ? fxNum(list) : '';
@@ -2963,7 +2967,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
     return `<span class="${cls.join(' ')}" role="cell"${tip ? ` title="${esc(tip)}"` : h ? ` title="${esc(h)}"` : ''}>${body}</span>`;
   }).join('');
-  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${hn}${mps}${ptags}${prog}${acts}</div>${cells}</div>`;
+  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${hn}${mps}${ptags}${prog}</div>${cells}</div>`;
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
@@ -3058,6 +3062,7 @@ function openFx(id, day, away) {
   // วันฉายที่ถึงแล้วและยังไม่ได้บันทึก: เลือก "ฉายแล้ว" ไว้ให้ ใส่ PIN ครบ 4 หลักแล้วบันทึกเลย · กดช่อง "ย้าย" = เลือกย้ายห้องไว้
   const pre = away && types.includes(MOVE_TYPE) ? MOVE_TYPE.id : cur ? cur.type : num && date <= today() ? (types.find(t => t.act === 'given') || {}).id : '';
   chipGroup($('#pin-fx-room'), 'fxroom', toRooms, mvDay ? mvDay.room : toRooms.length === 1 ? toRooms[0] : '');
+  setChip($('#pin-fx-off'), 'off');
   setChip($('#pin-fx-scope'), mvDay ? mvDay.scope : '');
   $('#pin-fx-type').innerHTML = types.length ? types.map(t => `<label title="${esc([t.title, (FX_ACTS.find(a => a[0] === t.act) || [])[1]].filter(Boolean).join(' · '))}"><input type="radio" name="fxtype" value="${esc(t.id)}"${pre === t.id ? ' checked' : ''}><span>${esc(t.label)}</span></label>`).join('')
     : '<span class="muted">แอดมินยังไม่ได้ตั้งสถานะ (ตั้งค่า → สถานะ fraction)</span>';
@@ -3077,6 +3082,8 @@ function openFx(id, day, away) {
 const fxSelType = () => { const v = chipValue($('#pin-fx-type')); return (pinCtx && pinCtx.types || []).find(t => t.id === v) || null; };
 const MOVE_TYPE = { id: '__move', label: 'ย้ายห้อง', title: 'ย้ายไปฉายอีกห้อง: เฉพาะ fraction นี้ หรือตั้งแต่ fraction นี้เป็นต้นไป', act: 'move', reasons: [], need: false };
 const fxMoving = () => !!pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'move';
+// Off RT: หยุดฉายแบบ Off RT (สถานะ fraction) · Complete course / Cancel RT (สถานะการฉายของเคส ใช้ courseCase)
+const fxOffMode = () => (pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'off' ? (courseOn() && chipValue($('#pin-fx-off'))) || 'off' : '');
 function fxDraft() {
   const t = fxSelType();
   return t && { type: t.id, label: t.label, act: t.act, back: t.act === 'skip' ? str($('#pin-fx-back').value) : '', reason: t.reasons.length ? chipValue($('#pin-fx-reason')) : '', note: str($('#pin-note').value) };
@@ -3092,11 +3099,14 @@ function syncFx() {
   }
   $('#pin-fx-reason-box').hidden = !box.children.length;
   $('#pin-fx-reason-lbl').innerHTML = `เหตุผล${t && t.need ? ' <b class="req">*</b>' : ' <span class="sub-lbl">ไม่บังคับ</span>'}`;
-  const skip = !!t && t.act === 'skip', moving = !!t && t.act === 'move';
+  const skip = !!t && t.act === 'skip', moving = !!t && t.act === 'move', off = fxOffMode();
   $('#pin-fx-back-box').hidden = !skip;
   $('#pin-fx-move-box').hidden = !moving;
-  $('#pin-clear').hidden = !(moving ? ctx.mvCur : ctx.cur);   // ล้างตามสิ่งที่เลือก: การย้ายห้อง หรือสถานะของวันนี้
+  $('#pin-fx-off-box').hidden = !off || !courseOn();
+  $('#pin-clear').hidden = !(moving ? ctx.mvCur : off === 'complete' || off === 'cancel' ? null : ctx.cur);   // ล้างตามสิ่งที่เลือก: การย้ายห้อง หรือสถานะของวันนี้
   $('#pin-clear').textContent = moving ? 'ล้างการย้ายห้อง' : 'ล้างสถานะ';
+  $('#pin-note-lbl').innerHTML = off === 'cancel' ? '<span>สาเหตุที่ Cancel RT<b class="req">*</b></span>' : 'หมายเหตุ (ไม่บังคับ)';
+  $('#pin-note').placeholder = off === 'cancel' ? 'เช่น ผู้ป่วยขอหยุดรักษา, อาการทรุดลง, ส่งต่อโรงพยาบาลอื่น' : off === 'complete' ? '' : 'เช่น ไข้ เม็ดเลือดขาวต่ำ รอพบแพทย์ · ย้ายห้อง: เครื่องเสีย';
   const hol = holidayMap(), nextDay = nextWorkday(nextDate(ctx.date), hol);
   $('#pin-fx-quick').innerHTML = [[nextDay, 'วันทำการถัดไป'], ...(ctx.day > ctx.date ? [[ctx.day, `กลับมา ${fmtDay(ctx.day)}`]] : []), ['', 'จนกว่าจะกลับมา']]
     .filter((x, i, a) => a.findIndex(y => y[0] === x[0]) === i).map(([v, l]) => `<button type="button" class="chip-btn" data-fxback="${v}" aria-pressed="${$('#pin-fx-back').value === v}">${esc(l)}</button>`).join('');
@@ -3119,6 +3129,13 @@ function syncFx() {
   evs.push({ date: ctx.date, ...ev });
   const sc = caseSchedule({ ...c, fxlog: JSON.stringify(evs) }, hol), td = today();
   const end = sc && sc.end ? ` · ครบ <b>${esc(fmtDay(sc.end))}</b>` : '';
+  if (off === 'complete' || off === 'cancel') {
+    const sc0 = caseSchedule(c, hol), n = fxGiven(sc0, off === 'complete' ? nextDate(ctx.date) : ctx.date);
+    prev.innerHTML = off === 'complete'
+      ? `บันทึก <b>Complete course</b> · ฉายครั้งสุดท้าย <b>${esc(fmtDay(ctx.date))}</b> · ฉายแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · เคสย้ายไปแถบ Complete course`
+      : `<b>Cancel RT</b> · ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · เคสย้ายไปแถบ Cancel RT${str($('#pin-note').value) ? '' : ' · กรอกสาเหตุในช่องด้านล่าง'}`;
+    return;
+  }
   if (t.act === 'off') { prev.innerHTML = `หยุดฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${fxGiven(sc, ctx.date)}/${sc ? sc.planned : '?'} fx · เคสย้ายไปแถบ Off RT`; return; }
   if (t.act === 'treat') { prev.innerHTML = `ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}`; return; }
   const n0 = ctx.n0, hit = n0 && sc ? [...sc.fx].find(([d, l]) => d >= ctx.date && l.some(v => (v.site === 0 || v.boost) && v.from <= n0 && n0 <= v.to)) : null;
@@ -5984,6 +6001,7 @@ async function submitPin(e, clear) {
     if (t.need && t.reasons.length && !chipValue($('#pin-fx-reason'))) { $('#pin-fx-reason input').focus(); return pinErr(`เลือกเหตุผลของ ${t.label}`); }
     if (t.act === 'skip' && back && !(isDay(back) && back > ctx.date)) { $('#pin-fx-back').focus(); return pinErr(`วันกลับมาฉายต้องหลัง ${fmtDay(ctx.date)}`); }
     if (t.act === 'given' && ctx.date > today()) return pinErr(`ยังไม่ถึง ${fmtDay(ctx.date)} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
+    if (fxOffMode() === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-scope'))) { $('#pin-fx-scope input').focus(); return pinErr('เลือก ย้าย (เฉพาะ fraction นี้) หรือ ย้ายตลอดไป'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-room'))) { const r = $('#pin-fx-room input'); if (r) r.focus(); return pinErr('เลือกห้องที่ย้ายไป'); }
   }
@@ -6035,6 +6053,21 @@ async function submitPin(e, clear) {
       if (status) state.courseTab = status;
       render();
       toast(`${rec.hn} · ${!status ? 'ล้างสถานะการฉายแล้ว (กลับเป็นกำลังฉาย)' : status === 'cancel' ? 'บันทึก Cancel RT แล้ว' : 'บันทึก Complete course แล้ว'}`);
+      return;
+    }
+    if (ctx.mode === 'fx' && !clear && ['complete', 'cancel'].includes(fxOffMode())) {   // Off RT → Complete course / Cancel RT ของทุกเคสของผู้ป่วยนี้ (แถบตารางวันฉายไม่สลับไปไหน)
+      const status = fxOffMode(), note = str($('#pin-note').value);
+      let rec = null;
+      try {
+        for (const id of ctx.ids || [ctx.id]) {
+          if (ctx.cur && ctx.cur.act === 'off') await store.fraction(id, ctx.cur.date, null, pin);   // เปลี่ยนจาก Off RT
+          rec = normCase(await store.course(id, status, ctx.date, note, pin));
+          const i = state.cases.findIndex(c => c.id === id);
+          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+        }
+      } finally { if (rec) render(); }
+      pinDlg.close();
+      toast(`${rec.hn} · ${status === 'cancel' ? 'บันทึก Cancel RT' : 'บันทึก Complete course'} ${fmtDay(ctx.date)} แล้ว · ย้ายไปแถบ ${status === 'cancel' ? 'Cancel RT' : 'Complete course'}`);
       return;
     }
     if (ctx.mode === 'fx' && fxMoving()) {   // ย้ายห้อง: ทุกเคสของผู้ป่วยคนนี้ · ล้าง = ลบรายการย้ายที่ครอบวันนี้ (วันที่ของรายการนั้น)
@@ -6125,6 +6158,7 @@ async function undoStamp(id, steps, pin) {
 pinForm.addEventListener('submit', e => submitPin(e));
 pinForm.addEventListener('change', e => { if (pinCtx && pinCtx.mode === 'fx' && e.target.closest('#pin-fx-box')) { pinErr(''); syncFx(); } });
 $('#pin-fx-back').addEventListener('input', () => { if (pinCtx && pinCtx.mode === 'fx') syncFx(); });
+$('#pin-note').addEventListener('input', () => { if (fxOffMode() === 'cancel') syncFx(); });   // Cancel RT: ข้อความ "กรอกสาเหตุ" หายเมื่อพิมพ์
 // ตารางวันฉาย: จำนวนคอลัมน์ตามความกว้างจอ วาดใหม่เมื่อขนาดเปลี่ยน
 let fxResize = 0;
 addEventListener('resize', () => { clearTimeout(fxResize); fxResize = setTimeout(() => { if (state.view === 'course' && !$('#course-grid').hidden) renderCourse(); }, 150); });
