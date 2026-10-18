@@ -577,6 +577,9 @@ button.chk.done.q-late:hover{background:var(--late-soft);box-shadow:inset 0 0 0 
 .qa-sw{display:inline-block;width:10px;height:10px;border-radius:50%}
 .qa-sw.ok{background:var(--ok)}
 .qa-sw.warn{background:var(--warn)}
+.qa-see{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.qa-see .lbl{margin:0;font-weight:600}
+.qa-see .muted{flex-basis:100%;font-size:12.5px}
 .qa-prev{font-size:12.5px;color:var(--muted)}
 @media (max-width:640px){.qa-row{grid-template-columns:1fr 1fr}.qa-row .qa-name,.qa-row .qa-prev{grid-column:1/-1}}
 .stamps{display:grid;gap:4px;margin:0;padding:10px 12px;border-radius:8px;background:var(--sunken);font-size:13px}
@@ -1628,6 +1631,8 @@ const DEFAULT_CONFIG = {
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
   qa: { mu: { dir: '', ok: '', warn: '' }, d0: { dir: '', ok: '', warn: '' }, d4: { dir: 'high', ok: 95, warn: 90 }, mc: { dir: 'high', ok: 95, warn: 90 } },
+  // ตำแหน่งที่เห็นค่า QA (ค่า สีตามเกณฑ์ และหมายเหตุของค่า) · ตำแหน่งอื่นเห็นเฉพาะว่าทำแล้ว · บัญชี Google เห็นเสมอ
+  qaSee: { MP: true },
   // สถานะของ fraction ในแถบ Complete (แอดมินเพิ่ม/แก้ได้): act skip = ไม่ได้ฉาย เลื่อน fraction · treat = ฉายตามปกติ บันทึกไว้ · off = Off RT
   // reasons = เหตุผลให้เลือก · need = ต้องเลือกเหตุผล · title = คำอธิบาย
   fxTypes: [
@@ -1698,6 +1703,8 @@ function accessOf(view, asSet) {
 // ตั้งให้บันทึกได้แล้ว แต่ Code.gs ที่ deploy อยู่ยังเก่ากว่า API 23 จึงดูได้อย่างเดียว
 const editAwaitsServer = view => accessOf(view) === 'view' && accessOf(view, true) === 'edit';
 const navOn = view => accessOf(view) !== '';
+// เห็นค่า QA (Dose check, F0, Delta4, SRS MapCheck) ตามตำแหน่ง (ตั้งค่า → ค่า QA) · บัญชี Google เห็นเสมอ
+const qaVisible = () => { const u = state.user; return u.via === 'google' || !!(state.config.qaSee || {})[u.pending ? 'MP' : u.role]; };
 const anyEdit = () => VIEWS.some(v => accessOf(v) === 'edit');
 // แก้ไขเคส (หน้าแก้ไขเคส ปุ่มขั้นตอน) = บันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส (ตรงกับ EDIT_VIEWS.cases ใน Code.gs)
 const canEditCases = () => ['work', 'pend', 'queue'].some(v => accessOf(v) === 'edit');
@@ -1909,6 +1916,8 @@ function mergeConfig(c) {
     const vals = Object.entries(access);
     return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && v), access };
   });
+  out.qaSee = c.qaSee && typeof c.qaSee === 'object' && !Array.isArray(c.qaSee)
+    ? Object.fromEntries(Object.entries(c.qaSee).filter(([r]) => ROLE_RE.test(r)).map(([r, v]) => [r, !!v])) : { ...d.qaSee };
   const qaNum = v => (v === '' || v == null || !isFinite(+v) ? '' : +v);
   out.qa = {};
   for (const k of CHECKS) {
@@ -1972,7 +1981,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.18';
+const PAGE_VERSION = '2026-10-18.19';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4011,7 +4020,7 @@ function caseLine(c, rcs, cols) {
 }
 // ปุ่มขั้นตอนแบบย่อ: ✓ + ค่า เมื่อบันทึกแล้ว (สีตามเกณฑ์) · กดเหมือนปุ่มในการ์ด (ใส่ค่าและรหัส PIN ในหน้าต่าง)
 function lineStep(c, x) {
-  const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '', note = x.value && at ? str(c[x.key + 'Note']) : '';
+  const see = qaVisible(), at = c[x.key], by = c[x.key + 'By'], val = x.value && see ? c[x.key + 'Val'] : '', note = x.value && at && see ? str(c[x.key + 'Note']) : '';
   const cls = `lchk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;
   const tip = at ? `${x.label}${val ? ' ' + val : ''} · ${[by, fmtStamp(at)].filter(Boolean).join(' · ')}${note ? ' · ' + note : ''}` : `${x.label} ยังไม่บันทึก`;
   const text = `${at ? '✓ ' : ''}${esc(LINE_SHORT[x.key] || x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
@@ -4031,13 +4040,14 @@ function valueBox(c, x) {
   return `<span class="chk-line${v && !PLAIN_NUM.test(str(v)) ? ' no-pct' : ''}${q ? ` q-${q}` : ''}"><span class="chk-field"><input class="chk-in" data-stampin="${x.key}" data-id="${esc(c.id)}" value="${esc(v)}" placeholder="${esc(x.ph || '')}" inputmode="decimal" aria-label="ค่า ${esc(x.label)} (%)" autocomplete="off"><span class="pct" aria-hidden="true">%</span></span>`
     + `<button type="button" class="chk-ok" data-stampsave="${x.key}" data-id="${esc(c.id)}"${str(v) ? '' : ' disabled'} aria-label="บันทึก ${esc(x.label)}" title="บันทึก ${esc(x.label)} (ใส่รหัส PIN)">${CHECK_SVG}</button></span>`;
 }
+// ตำแหน่งที่ไม่เห็นค่า QA: ✓ ชื่อขั้นตอนเท่านั้น (ไม่มีค่า สีตามเกณฑ์ หมายเหตุ และช่องกรอกค่า)
 function stepChip(c, x, vals = true) {
-  const at = c[x.key], by = c[x.key + 'By'], val = x.value ? c[x.key + 'Val'] : '', note = x.value && at ? str(c[x.key + 'Note']) : '';
+  const see = qaVisible(), at = c[x.key], by = c[x.key + 'By'], val = x.value && see ? c[x.key + 'Val'] : '', note = x.value && at && see ? str(c[x.key + 'Note']) : '';
   const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
   const cls = `chk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;   // สีตามเกณฑ์ของแอดมิน
   const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>${note ? `<small class="chk-note" title="${esc(note)}">${esc(note)}</small>` : ''}`
-    : x.value && canEdit() && vals ? valueBox(c, x) : '';
+    : x.value && canEdit() && vals && see ? valueBox(c, x) : '';
   const btn = canEdit()
     ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="${cls}"${note ? ` title="${esc(note)}"` : ''}>${text}</span>`;
@@ -4708,7 +4718,7 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="icd">+ เพิ่มรหัส ICD-10</button></div></div>
     <datalist id="dl-groups">${groups.map(g => `<option value="${esc(g)}"></option>`).join('')}</datalist>
     <datalist id="dl-tabs">${[...new Set(Object.values(d.acts).map(a => str(a.tab)).filter(Boolean))].map(t => `<option value="${esc(t)}"></option>`).join('')}</datalist>
-    <div class="sec"><div class="sec-head"><h2>สีของค่า QA</h2><p>สีของ Dose check, F0, Delta4, SRS MapCheck ในรายการเคส (ปุ่มที่บันทึกแล้ว และช่องกรอกระหว่างพิมพ์) · ใช้ตัวเลขในค่า (98.5% = 98.5)
+    <div class="sec"><div class="sec-head"><h2>ค่า QA: สีและตำแหน่งที่เห็นค่า</h2><p>สีของ Dose check, F0, Delta4, SRS MapCheck ในรายการเคส (ปุ่มที่บันทึกแล้ว และช่องกรอกระหว่างพิมพ์) · ใช้ตัวเลขในค่า (98.5% = 98.5)
       · "ยิ่งมากยิ่งดี" เช่น Delta4 ≥ 95 เขียว 90–95 เหลือง ต่ำกว่า 90 แดง · "ยิ่งใกล้ 0 ยิ่งดี" ใช้ค่าสัมบูรณ์ เช่น Dose check ±3 เขียว ±3–5 เหลือง เกิน ±5 แดง</p></div>
       <div class="set-list">${CHECKS.map(k => { const r = d.qa[k], op = r.dir === 'low' ? '±' : '≥'; return `<div class="qa-row">
         <span class="qa-name">${esc(STEPS.find(x => x.key === k).label)}</span>
@@ -4716,7 +4726,9 @@ function renderSettings() {
         <label class="mini"><i class="qa-sw ok"></i>เขียว <span data-qaop="${k}">${op}</span><input type="number" step="any" class="num" data-k="qa.${k}.ok" value="${esc(r.ok)}" aria-label="ค่าสีเขียว"></label>
         <label class="mini"><i class="qa-sw warn"></i>เหลือง <span data-qaop="${k}">${op}</span><input type="number" step="any" class="num" data-k="qa.${k}.warn" value="${esc(r.warn)}" aria-label="ค่าสีเหลือง"></label>
         <span class="qa-prev" data-qaprev="${k}">${esc(qaText(r))}</span>
-      </div>`; }).join('')}</div></div>
+      </div>`; }).join('')}</div>
+      <div class="qa-see"><span class="lbl">ตำแหน่งที่เห็นค่า</span>${d.roles.map(r => `<label class="check"><input type="checkbox" data-k="qaSee.${esc(r)}"${d.qaSee[r] ? ' checked' : ''}> ${esc(r)}</label>`).join('')}
+        <span class="muted">ตำแหน่งที่ไม่ได้ติ๊กเห็นเฉพาะว่าทำแล้ว (✓ Dose, ✓ F0) ไม่เห็นค่า สีตามเกณฑ์ และหมายเหตุของค่า · บัญชี Google เห็นเสมอ</span></div></div>
     <div class="sec"><div class="sec-head"><h2>รายการเคส</h2><p>ค่าที่แสดงในรายการเคสของหน้างานและงานรอ แยกตามมุมมอง · การ์ด = แบบเดิม เคสละหลายบรรทัดพร้อมช่องกรอกค่า · บรรทัดเดียว = ตาราง เคสละบรรทัด กดแถวเพื่อแก้ไขเคส · ทุกคนสลับมุมมองเองได้ที่ปุ่มเหนือรายการ (เบราว์เซอร์จำไว้) ยังไม่เคยเลือก = มุมมองเริ่มต้นนี้ · HN แสดงเสมอ</p></div>
       <label class="field" style="max-width:240px"><span class="lbl">มุมมองเริ่มต้น</span><select data-k="caseView.mode">${opt('card', 'การ์ด', d.caseView.mode)}${opt('line', 'บรรทัดเดียว', d.caseView.mode)}</select></label>
       <table class="vis-tbl"><thead><tr><th>ค่า</th><th>การ์ด</th><th>บรรทัดเดียว</th></tr></thead><tbody>
@@ -5325,9 +5337,10 @@ function syncCaseForm() {
   const stamped = stampsOn() && !simple;
   if (stampsOn()) $('#f-fin-field').hidden = $('#f-eval-field').hidden = true;
   $('#f-stamps').hidden = !stamped;
+  const see = qaVisible();
   if (stamped) $('#f-stamps').innerHTML = stepsOf(k).map(x => {
-    const at = editingCase[x.key], val = x.value ? editingCase[x.key + 'Val'] : '';
-    return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at), x.value && editingCase[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
+    const at = editingCase[x.key], val = x.value && see ? editingCase[x.key + 'Val'] : '';
+    return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at), x.value && see && editingCase[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
   }).join('') + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
   $('#f-n-field').hidden = !countsOn();
   syncSites('f');
