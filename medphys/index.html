@@ -1330,7 +1330,6 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <div class="field"><span class="lbl">สถานะของ fraction</span><div class="chips" id="pin-fx-type" role="radiogroup" aria-label="สถานะของ fraction"></div></div>
         <div class="field" id="pin-fx-reason-box" hidden><span class="lbl" id="pin-fx-reason-lbl">เหตุผล</span><div class="chips" id="pin-fx-reason" role="radiogroup" aria-label="เหตุผล"></div></div>
         <div class="field" id="pin-fx-off-box" hidden><span class="lbl">หยุดฉายแบบ</span><div class="chips" id="pin-fx-off" role="radiogroup" aria-label="หยุดฉายแบบ">
-          <label title="หยุดฉายตั้งแต่วันนี้ เคสไปอยู่แถบ Off RT"><input type="radio" name="fxoff" value="off"><span>Off RT</span></label>
           <label title="ฉายครบแล้ว วันนี้เป็นวันฉายครั้งสุดท้าย เคสไปอยู่แถบ Complete course"><input type="radio" name="fxoff" value="complete"><span>Complete course</span></label>
           <label title="ยกเลิกการฉาย ไม่ได้ฉายตั้งแต่วันนี้ ต้องใส่สาเหตุ เคสไปอยู่แถบ Cancel RT"><input type="radio" name="fxoff" value="cancel"><span>Cancel RT</span></label></div></div>
         <div class="fx-box" id="pin-fx-move-box" hidden>
@@ -1959,7 +1958,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.15';
+const PAGE_VERSION = '2026-10-18.16';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3062,7 +3061,7 @@ function openFx(id, day, away) {
   // วันฉายที่ถึงแล้วและยังไม่ได้บันทึก: เลือก "ฉายแล้ว" ไว้ให้ ใส่ PIN ครบ 4 หลักแล้วบันทึกเลย · กดช่อง "ย้าย" = เลือกย้ายห้องไว้
   const pre = away && types.includes(MOVE_TYPE) ? MOVE_TYPE.id : cur ? cur.type : num && date <= today() ? (types.find(t => t.act === 'given') || {}).id : '';
   chipGroup($('#pin-fx-room'), 'fxroom', toRooms, mvDay ? mvDay.room : toRooms.length === 1 ? toRooms[0] : '');
-  setChip($('#pin-fx-off'), 'off');
+  setChip($('#pin-fx-off'), '');
   setChip($('#pin-fx-scope'), mvDay ? mvDay.scope : '');
   $('#pin-fx-type').innerHTML = types.length ? types.map(t => `<label title="${esc([t.title, (FX_ACTS.find(a => a[0] === t.act) || [])[1]].filter(Boolean).join(' · '))}"><input type="radio" name="fxtype" value="${esc(t.id)}"${pre === t.id ? ' checked' : ''}><span>${esc(t.label)}</span></label>`).join('')
     : '<span class="muted">แอดมินยังไม่ได้ตั้งสถานะ (ตั้งค่า → สถานะ fraction)</span>';
@@ -3082,7 +3081,8 @@ function openFx(id, day, away) {
 const fxSelType = () => { const v = chipValue($('#pin-fx-type')); return (pinCtx && pinCtx.types || []).find(t => t.id === v) || null; };
 const MOVE_TYPE = { id: '__move', label: 'ย้ายห้อง', title: 'ย้ายไปฉายอีกห้อง: เฉพาะ fraction นี้ หรือตั้งแต่ fraction นี้เป็นต้นไป', act: 'move', reasons: [], need: false };
 const fxMoving = () => !!pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'move';
-// Off RT: หยุดฉายแบบ Off RT (สถานะ fraction) · Complete course / Cancel RT (สถานะการฉายของเคส ใช้ courseCase)
+// Off RT: ต้องเลือกหยุดฉายแบบ Complete course หรือ Cancel RT (สถานะการฉายของเคส ใช้ courseCase) · ยังไม่เลือก = 'off'
+// (Off RT แบบเดิมที่บันทึกไว้แล้ว: เปิดดู ล้าง หรือเปลี่ยนเป็นสองแบบนี้ได้ · Code.gs ก่อน API 19 ไม่มี courseCase จึงบันทึก Off RT แบบเดิม)
 const fxOffMode = () => (pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'off' ? (courseOn() && chipValue($('#pin-fx-off'))) || 'off' : '');
 function fxDraft() {
   const t = fxSelType();
@@ -3136,6 +3136,7 @@ function syncFx() {
       : `<b>Cancel RT</b> · ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · เคสย้ายไปแถบ Cancel RT${str($('#pin-note').value) ? '' : ' · กรอกสาเหตุในช่องด้านล่าง'}`;
     return;
   }
+  if (t.act === 'off' && courseOn()) { prev.textContent = 'เลือก Complete course หรือ Cancel RT'; return; }
   if (t.act === 'off') { prev.innerHTML = `หยุดฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${fxGiven(sc, ctx.date)}/${sc ? sc.planned : '?'} fx · เคสย้ายไปแถบ Off RT`; return; }
   if (t.act === 'treat') { prev.innerHTML = `ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}`; return; }
   const n0 = ctx.n0, hit = n0 && sc ? [...sc.fx].find(([d, l]) => d >= ctx.date && l.some(v => (v.site === 0 || v.boost) && v.from <= n0 && n0 <= v.to)) : null;
@@ -6001,6 +6002,7 @@ async function submitPin(e, clear) {
     if (t.need && t.reasons.length && !chipValue($('#pin-fx-reason'))) { $('#pin-fx-reason input').focus(); return pinErr(`เลือกเหตุผลของ ${t.label}`); }
     if (t.act === 'skip' && back && !(isDay(back) && back > ctx.date)) { $('#pin-fx-back').focus(); return pinErr(`วันกลับมาฉายต้องหลัง ${fmtDay(ctx.date)}`); }
     if (t.act === 'given' && ctx.date > today()) return pinErr(`ยังไม่ถึง ${fmtDay(ctx.date)} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
+    if (fxOffMode() === 'off' && courseOn()) { $('#pin-fx-off input').focus(); return pinErr('เลือก Complete course หรือ Cancel RT'); }
     if (fxOffMode() === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-scope'))) { $('#pin-fx-scope input').focus(); return pinErr('เลือก ย้าย (เฉพาะ fraction นี้) หรือ ย้ายตลอดไป'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-room'))) { const r = $('#pin-fx-room input'); if (r) r.focus(); return pinErr('เลือกห้องที่ย้ายไป'); }
