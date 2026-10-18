@@ -252,6 +252,12 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg{border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .fxg-head,.fxg-row{display:grid;grid-template-columns:var(--fx-c0,300px) repeat(var(--fx-n,10),var(--fx-cw,46px))}
 .fxg-head{position:sticky;top:var(--pin-h,0px);z-index:3;border-bottom:1px solid var(--line);border-radius:var(--r) var(--r) 0 0;background:var(--surface)}
+/* หน้าปฏิทิน (กำลังฉาย/รอฉาย) บนจอที่สูงพอ: แถบด้านบน แท็บและห้อง คำอธิบาย ช่วงวันที่ และหัวตาราง ค้างไว้ทั้งหมดตอนเลื่อนลง (ตั้งใน pinTop)
+   flow-root: ระยะใต้แถบช่วงวันที่อยู่ในกล่อง (ไม่ให้แถวที่เลื่อนผ่านโผล่ระหว่างกล่องกับหัวตาราง) */
+.course-pin{display:flow-root}
+.course-pinned .course-pin{position:sticky;top:var(--pin-h,0px);z-index:20;background:var(--bg);box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
+.course-pinned .fxg-head{top:calc(var(--pin-h,0px) + var(--cpin-h,0px))}
+.course-pinned .top.stuck{box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
 .fxg-head .fxg-c0{flex-direction:row;align-items:center;justify-content:flex-start;gap:8px;font-weight:600}
 .fxg-head .fxg-c0 .muted{font-weight:400;font-size:12px}
 .fxg-d{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;color:var(--muted);font-size:10.5px;line-height:1.2}
@@ -1123,13 +1129,16 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 
   <!-- ตารางแจกเคส: ช่องคิวของแต่ละเทคนิคตามลำดับทีม เหมือนแท็บเทคนิคในไฟล์ P4P เดิม -->
   <section id="view-course" hidden>
-    <div class="toolbar">
-      <div class="tabs" role="tablist" id="course-tabs"></div>
-      <span class="spacer"></span>
-      <div class="seg-mini" id="course-rooms" aria-label="ห้องฉาย"></div>
+    <div class="course-pin" id="course-pin">
+      <div class="toolbar">
+        <div class="tabs" role="tablist" id="course-tabs"></div>
+        <span class="spacer"></span>
+        <div class="seg-mini" id="course-rooms" aria-label="ห้องฉาย"></div>
+      </div>
+      <p class="muted" id="course-help" style="margin:-4px 0 10px;font-size:13px"></p>
+      <p class="notice" id="course-api" hidden><b>ยังบันทึกไม่ได้</b><span id="course-api-text"></span></p>
+      <div class="fxg-bar" id="course-bar" hidden></div>
     </div>
-    <p class="muted" id="course-help" style="margin:-4px 0 10px;font-size:13px"></p>
-    <p class="notice" id="course-api" hidden><b>ยังบันทึกไม่ได้</b><span id="course-api-text"></span></p>
     <div id="course-grid"></div>
     <ul class="list" id="course-list"></ul>
   </section>
@@ -1915,7 +1924,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.9';
+const PAGE_VERSION = '2026-10-18.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2523,20 +2532,26 @@ function applyBoxes() {
 }
 // ตรึงแถบด้านบน: เลื่อนหน้าแล้วส่วนชื่อระบบเลื่อนพ้นขอบบน เหลือแถวปุ่ม Home / ค้นหา / แถบเมนู / ผู้ใช้ ค้างไว้ (ขนาดไม่เปลี่ยน หน้าจึงไม่กระตุก)
 // มือถือ: ค้างตั้งแต่แถวแถบเมนูลงมา · scroll-padding กันช่องที่โฟกัสถูกแถบบังเมื่อเลื่อนหาเอง
-const topBar = $('header.top');
+// หน้าปฏิทินห้องฉาย: ค้างแถบด้านบนทั้งแถบ ต่อด้วยแท็บ คำอธิบาย ช่วงวันที่ และหัวตาราง เมื่อรวมกันไม่เกิน 60% ของความสูงจอ (จอเตี้ยหรือมือถือ: แบบเดิม)
+const topBar = $('header.top'), coursePin = $('#course-pin');
 let pinOffset = 0;
 function pinTop() {
+  const root = document.documentElement, head = state.view === 'course' && !$('#course-bar').hidden && $('#course-grid .fxg-head');
+  const lock = !!head && topBar.offsetHeight + coursePin.offsetHeight + head.offsetHeight <= innerHeight * 0.6;
+  root.classList.toggle('course-pinned', lock);
   const nav = $('.nav', topBar), row = nav && nav.offsetParent && !nav.hidden ? nav : $('.top-right', topBar);
-  const off = Math.max(0, Math.round(row.getBoundingClientRect().top - topBar.getBoundingClientRect().top) - 8);
+  const off = lock ? 0 : Math.max(0, Math.round(row.getBoundingClientRect().top - topBar.getBoundingClientRect().top) - 8);
   if (off !== pinOffset) { pinOffset = off; topBar.style.top = `${-off}px`; }
-  document.documentElement.style.scrollPaddingTop = `${topBar.offsetHeight - off + 12}px`;
-  document.documentElement.style.setProperty('--pin-h', `${topBar.offsetHeight - off}px`);   // หัวตารางวันฉายติดใต้แถบนี้
+  const below = lock ? coursePin.offsetHeight : 0;
+  root.style.scrollPaddingTop = `${topBar.offsetHeight - off + below + (lock ? head.offsetHeight : 0) + 12}px`;
+  root.style.setProperty('--pin-h', `${topBar.offsetHeight - off}px`);   // หัวตารางวันฉายติดใต้แถบนี้
+  root.style.setProperty('--cpin-h', `${below}px`);   // หน้าปฏิทินที่ค้างส่วนหัว: หัวตารางติดใต้ส่วนหัวของหน้า
   markStuck();
 }
 function markStuck() { topBar.classList.toggle('stuck', topBar.getBoundingClientRect().top <= -pinOffset + 0.5 && scrollY > 0); }
 let stuckRaf = 0;
 addEventListener('scroll', () => { if (!stuckRaf) stuckRaf = requestAnimationFrame(() => { stuckRaf = 0; markStuck(); }); }, { passive: true });
-if (window.ResizeObserver) new ResizeObserver(() => pinTop()).observe(topBar);
+if (window.ResizeObserver) { const ro = new ResizeObserver(() => pinTop()); ro.observe(topBar); ro.observe(coursePin); }
 addEventListener('resize', pinTop);
 // โลโก้มุมซ้ายบน: จำไว้ในเบราว์เซอร์ หน้าเข้าสู่ระบบหรือตอนโหลดไม่สำเร็จจึงยังแสดงโลโก้ที่ตั้งไว้ได้
 // ค้นหา: พิมพ์แล้วแสดงผลทันที · Enter เปิดเคสแรก · กด / ที่ไหนก็ได้ (นอกช่องกรอก) เพื่อเปิด
@@ -2745,6 +2760,7 @@ function renderCourse() {
   const hol = holidayMap(), td = today();
   const list = of(tab).map(c => ({ c, sc: caseSchedule(c, hol) }));
   $('#course-grid').hidden = tab !== 'on';
+  $('#course-bar').hidden = tab !== 'on';
   $('#course-list').hidden = tab === 'on';
   if (tab === 'on') {
     const groups = [], byHn = new Map();
@@ -2757,7 +2773,7 @@ function renderCourse() {
     for (const g of groups) g.main = g.items.reduce((a, b) => ((b.sc ? b.sc.planned : -1) > (a.sc ? a.sc.planned : -1) ? b : a));
     groups.sort((a, b) => (a.main.sc ? a.main.sc.start : '9999').localeCompare(b.main.sc ? b.main.sc.start : '9999') || a.main.c.in.localeCompare(b.main.c.in));
     renderFxGrid(groups.slice(0, 200), hol, td);
-    return;
+    return pinTop();
   }
   const endOf = x => x.c.rtDate || (x.sc && x.sc.off ? x.sc.off.date : '');
   list.sort((a, b) => endOf(b).localeCompare(endOf(a)));
@@ -2765,9 +2781,10 @@ function renderCourse() {
     : `<li class="empty-state">${tab === 'complete' ? 'ยังไม่มีเคสที่ Complete course' : tab === 'cancel' ? 'ยังไม่มีเคสที่ Cancel RT' : 'ยังไม่มีเคสที่ Off RT'}</li>`;
   // เลื่อนแถบวันฉายให้เห็นวันนี้ (หรือวันฉายถัดไป)
   $$('#course-list .cr-strip').forEach(sp => { const t = $('.cd.today', sp) || $('.cd.next', sp); if (t) sp.scrollLeft = Math.max(0, t.offsetLeft - 160); });
+  pinTop();
 }
 // ตารางวันฉาย: ผู้ป่วยละบรรทัด · จำนวนคอลัมน์พอดีความกว้างจอ (ไม่ต้องเลื่อนซ้ายขวา) ‹ › เลื่อนทีละสัปดาห์
-// หัวตาราง: วันที่ + จำนวนผู้ป่วยที่ฉายวันนั้น · ติดอยู่ใต้แถบเมนูตอนเลื่อนลง
+// หัวตาราง: วันที่ + จำนวนผู้ป่วยที่ฉายวันนั้น · ติดอยู่ใต้แถบเมนูตอนเลื่อนลง (จอที่สูงพอ: ใต้ช่วงวันที่ ดู pinTop) · ช่วงวันที่และคำอธิบายสีอยู่ใน #course-bar
 function renderFxGrid(groups, hol, td) {
   const box = $('#course-grid');
   const w = box.getBoundingClientRect().width || Math.min(document.documentElement.clientWidth - 32, 1728);
@@ -2800,12 +2817,10 @@ function renderFxGrid(groups, hol, td) {
   box.style.setProperty('--fx-cw', `${cw}px`);
   box.style.setProperty('--fx-n', n);
   const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
-  box.innerHTML = `<div class="fxg-bar">
-      <div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
-      <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
-      <span class="fxg-legend">${legend}</span>
-    </div>
-    <div class="fxg" role="table" aria-label="ตารางวันฉาย">
+  $('#course-bar').innerHTML = `<div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
+    <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
+    <span class="fxg-legend">${legend}</span>`;
+  box.innerHTML = `<div class="fxg" role="table" aria-label="ตารางวันฉาย">
       <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length} คน</span></span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
       ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : '<p class="empty-state">ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่</p>'}
     </div>`;
