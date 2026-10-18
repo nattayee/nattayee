@@ -1913,7 +1913,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.7';
+const PAGE_VERSION = '2026-10-18.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6319,6 +6319,10 @@ function settingsEdit(el) {
   updateSaveBar();
 }
 settingsEl.addEventListener('input', e => settingsEdit(e.target));
+// หน้าตั้งค่าที่เปิดค้าง: โหลดข้อมูลใหม่ (ทุกนาที / กลับมาที่แท็บนี้) ล้างร่างที่ยังไม่ได้แก้ไป
+// แก้ครั้งแรกหลังจากนั้นสร้างร่างใหม่จากค่าล่าสุดก่อน (ไม่อย่างนั้นแก้แล้วแถบบันทึกไม่ขึ้น)
+const ensureDraft = () => { if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); } };
+for (const ev of ['input', 'change', 'keydown', 'click']) settingsEl.addEventListener(ev, () => { if (state.view === 'settings') ensureDraft(); }, true);
 // รูปโลโก้: ย่อให้สูง 160 px (ชัดบนจอความละเอียดสูง) ตัดขอบตรงกลางให้กว้าง 1–2 เท่าของความสูง
 // PNG/WebP (มักเป็นโลโก้พื้นใส) ลอง PNG ก่อน ใหญ่ไปค่อยเป็น JPEG พื้นขาว · ลดขนาดและคุณภาพจนไม่เกิน LOGO_MAX
 async function logoFromFile(file) {
@@ -6503,7 +6507,8 @@ async function refresh(quiet) {
     if (quiet) return;
     state.error = errMsg(e);
   }
-  if (quiet && state.view === 'settings') return;
+  // หน้าตั้งค่า: ไม่วาดใหม่ระหว่างแก้ · ยังไม่ได้แก้และไม่ได้อยู่ในช่องกรอก = วาดใหม่ให้เห็นค่าล่าสุด
+  if (quiet && state.view === 'settings') { if (!draft && !settingsEl.contains(document.activeElement)) renderSettings(); return; }
   render();
 }
 if (!VIEWS.includes(state.view)) state.view = 'work';
