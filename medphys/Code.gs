@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-18.3';
-const API_LEVEL = 23;
+const CODE_VERSION = '2026-10-18.4';
+const API_LEVEL = 24;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -53,6 +53,8 @@ const TABLES = {
       ['fxlog', 'สถานะ fraction'],
       // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย เช่น "NPO, BD protocol" · เขียนผ่าน tagCase เท่านั้น
       ['ptags', 'รายละเอียดผู้ป่วย'],
+      // ย้ายห้องฉาย [{date, room, from, scope, note, by, at}] (JSON) · scope: once = เฉพาะ fraction วันนั้น · on = ตั้งแต่วันนั้นเป็นต้นไป · เขียนผ่าน moveCase เท่านั้น
+      ['rmove', 'ย้ายห้อง'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -659,7 +661,7 @@ function moveActCases(token) {
 const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck', pc: 'Plan complete' };
 const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
 const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
-  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags'];
+  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove'];
 // ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
 const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
@@ -814,6 +816,44 @@ function fractionCase(id, date, ev, pin, token) {
     }
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const set = { fxlog: list.length ? JSON.stringify(list) : '' };
+    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+  });
+}
+
+/**
+ * ย้ายห้องฉาย: fraction วันนั้น (scope once) หรือตั้งแต่วันนั้นเป็นต้นไป (scope on) ไปฉายอีกห้อง ยืนยันด้วยรหัส PIN
+ * หนึ่งรายการต่อวัน (บันทึกวันเดิมซ้ำ = แก้) · mv = null ล้างรายการของวันนั้น · เก็บแยกจากสถานะ fraction (ห้องใหม่บันทึกฉายแล้ววันเดียวกันได้)
+ */
+function moveCase(id, date, mv, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  date = cut(date, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
+  let rec = null;
+  if (mv) {
+    rec = { date: date, room: cut(mv.room, 40), from: cut(mv.from, 40), scope: mv.scope === 'on' ? 'on' : 'once', note: cut(mv.note, 200) };
+    if (!rec.room) throw new Error('เลือกห้องที่ย้ายไป');
+    if (rec.room === rec.from) throw new Error('ห้องที่ย้ายไปต้องไม่ใช่ห้องเดิม');
+  }
+  checkPin_(u, pin);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const col = header.indexOf('ย้ายห้อง');
+    let list = [];
+    try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(x => x && x.date !== date);
+    if (rec) {
+      rec.by = String(u.name || u.username || u.me || '');
+      rec.at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+      list.push(rec);
+    }
+    list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const set = { rmove: list.length ? JSON.stringify(list) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
   });
