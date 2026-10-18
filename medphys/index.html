@@ -458,6 +458,9 @@ div.c-main,div.lrow{cursor:default}
 .tab[aria-selected="true"]{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
 .tab .n{margin-left:6px;font:12px var(--mono);color:var(--faint)}
 .grow{flex:1 1 180px;min-width:0}
+.tab-q{flex:0 1 230px;min-width:150px}
+.tab-q.on{border-color:var(--accent);background:var(--accent-soft)}
+@media (max-width:600px){.tab-q{flex:1 1 100%}}
 .spacer{flex:1}
 input,select,textarea{width:100%;min-height:36px;padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -1095,6 +1098,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <section id="view-logs" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
+      <input type="search" class="tab-q" data-tq="logs" placeholder="ค้นหา HN, ชื่อ, MP, หมายเหตุ" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
       <button type="button" class="btn" id="add-other">+ กิจกรรมอื่น</button>
       <button type="button" class="btn primary" id="add-rc">+ บันทึก RC</button>
@@ -1127,6 +1131,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <!-- งานรอ -->
   <section id="view-pend" hidden>
     <div class="toolbar">
+      <input type="search" class="tab-q" data-tq="pend" placeholder="ค้นหา HN, ชื่อ, แพทย์, MP" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="muted" id="pend-note" style="font-size:13px"></span>
       <span class="spacer"></span>
       <div class="seg-mini case-mode" aria-label="มุมมองรายการเคส"></div>
@@ -1141,6 +1146,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <div class="course-pin" id="course-pin">
       <div class="toolbar">
         <div class="tabs" role="tablist" id="course-tabs"></div>
+        <input type="search" class="tab-q" data-tq="course" placeholder="ค้นหา HN, ชื่อ, แพทย์, รายละเอียด" autocomplete="off" aria-label="ค้นหาในแถบนี้">
         <span class="spacer"></span>
         <div class="seg-mini" id="course-rooms" aria-label="ห้องฉาย"></div>
       </div>
@@ -1155,6 +1161,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <section id="view-queue" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
+      <input type="search" class="tab-q" data-tq="queue" placeholder="ค้นหา HN, ชื่อ, แพทย์, MP" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
       <span class="muted" id="queue-note" style="font-size:13px"></span>
     </div>
@@ -1933,7 +1940,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-18.11';
+const PAGE_VERSION = '2026-10-18.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2316,7 +2323,11 @@ function renderQueue() {
   const cats = state.config.cats.filter(k => k.on || used.has(k.id));
   let cat = pref.get('queueCat', '');
   if (!cats.some(k => k.id === cat)) cat = (cats[0] || {}).id || '';
-  $('#queue-tabs').innerHTML = cats.map(k => `<button type="button" class="tab" role="tab" data-qcat="${esc(k.id)}" aria-selected="${k.id === cat}">${esc(k.label)}</button>`).join('');
+  const words = tabWords('queue'), hitCase = c => !!c && wordsIn(words, caseText(c));
+  syncTabQ('queue');
+  // ค้นหา: แสดงเฉพาะแถวเคสที่ตรงในเทคนิคและเดือนนี้ · แท็บเทคนิคบอกจำนวนเคสที่ตรงในเดือนนี้ (ไม่สลับแท็บเอง)
+  const hits = words.length ? state.cases.filter(c => isDay(c.in) && c.in.slice(0, 7) === state.month && hitCase(c)) : [];
+  $('#queue-tabs').innerHTML = cats.map(k => { const n = hits.filter(c => c.cat === k.id).length; return `<button type="button" class="tab" role="tab" data-qcat="${esc(k.id)}" aria-selected="${k.id === cat}">${esc(k.label)}${words.length ? `<span class="n">${n}</span>` : ''}</button>`; }).join('');
   const box = $('#queue-table');
   if (!cat) { box.innerHTML = '<p class="empty-state">ยังไม่มีเทคนิค</p>'; $('#queue-sum').innerHTML = ''; return; }
   const { rows, next, pending } = queueSlots(cat), ym = state.month, isNow = ym === thisMonth();
@@ -2353,9 +2364,10 @@ function renderQueue() {
     if (r.type === 'credit') return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`;
     return `<tr class="q-later q-skip">${mp}${blank}<td class="q-how">จะข้าม · ${r.why === 'off' ? 'ปิดปฏิบัติงาน' : 'ลาวันนี้'}</td></tr>`;
   }).join('') : '';
-  const body = inMonth.map(row).join('') + upcoming;
+  const shown = words.length ? inMonth.filter(r => hitCase(r.type === 'case' ? r.c : r.type === 'credit' ? r.token.c : null)) : inMonth;
+  const body = shown.map(row).join('') + (words.length ? '' : upcoming);
   box.innerHTML = `<table><thead><tr><th>#</th><th>MP</th><th>CT-Sim</th><th>In</th><th>Start RT</th><th>Finish</th><th>Evaluate</th><th>Type</th><th>HN</th><th>Name</th><th>Doc</th><th>Aim</th><th>Note</th><th>คิว</th></tr></thead>
-    <tbody>${body || `<tr><td colspan="14" class="empty-state">ไม่มีเคสของ${esc(k.label)}ใน${esc(fmtMonth(ym))}</td></tr>`}</tbody></table>`;
+    <tbody>${body || `<tr><td colspan="14" class="empty-state">${words.length ? `ไม่พบเคสที่ตรงกับคำค้นใน${esc(k.label)} ${esc(fmtMonth(ym))}` : `ไม่มีเคสของ${esc(k.label)}ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody></table>`;
 }
 function setNext(catId, code) {
   state.config.queue = { ...state.config.queue, [catId]: { code, at: nowISO() } };
@@ -2693,6 +2705,13 @@ function renderCaseMode() {
 }
 // ข้อความของเคสที่ใช้ค้นหา (ช่องค้นหาในหน้างาน และแว่นขยายมุมขวาบน)
 const caseText = c => `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${sitesOf(c).map(siteText).join(' ')} ${c.ptags} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase();
+// ช่องค้นหาของแต่ละแถบ (งานรอ ตารางแจกเคส ห้องฉาย RC และกิจกรรม · หน้างานใช้ช่องค้นหาเดิม): กรองเฉพาะรายการในแถบนั้นทันที ไม่ไปแถบอื่น
+// ทุกคำที่พิมพ์ต้องตรง (เหมือนแว่นขยาย) · Esc ล้าง · จำไว้จนกว่าจะโหลดหน้าใหม่
+const tabQ = {};
+const tabWords = view => str(tabQ[view]).toLowerCase().split(/\s+/).filter(Boolean);
+const wordsIn = (words, text) => words.every(w => text.includes(w));
+const syncTabQ = view => { const el = $(`[data-tq="${view}"]`); if (!el) return; if (document.activeElement !== el && el.value !== (tabQ[view] || '')) el.value = tabQ[view] || ''; el.classList.toggle('on', tabWords(view).length > 0); };
+const logText = l => { const c = l.caseId && state.cases.find(x => x.id === l.caseId), a = state.config.acts[l.kind]; return `${l.hn} ${l.name} ${l.mp} ${l.title} ${l.note} ${kindOf(l.kind).label} ${a ? a.label : ''} ${c ? catOf(c.cat).label + ' ' + c.mp : ''}`.toLowerCase(); };
 // สถานะสั้นของเคส [สี, ข้อความ]
 function caseStatus(c) {
   if (c.rt === 'complete') return ['ok', 'Complete course'];
@@ -2774,7 +2793,11 @@ function renderCourse() {
   let room = pref.get('courseRoom', '');
   if (!rooms.includes(room)) room = '';
   const tab = COURSE_TABS.some(t => t[0] === state.courseTab) ? state.courseTab : 'on';
-  const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomOf(c) === room));
+  const words = tabWords('course');
+  syncTabQ('course');
+  // ค้นหา: ตัวเลขบนแท็บนับเฉพาะเคสที่ตรง (เห็นว่าผู้ป่วยอยู่แท็บไหน) · ผู้ป่วยหลายเคสในตารางวันฉาย: ตรงเคสใดเคสหนึ่งก็แสดงทั้งแถว
+  const hit = words.length ? new Set(all.filter(c => wordsIn(words, caseText(c))).map(c => str(c.hn) || 'id:' + c.id)) : null;
+  const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomOf(c) === room) && (!hit || hit.has(str(c.hn) || 'id:' + c.id)));
   $('#course-tabs').innerHTML = COURSE_TABS.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ctab="${k}" aria-selected="${tab === k}">${l}<span class="n">${of(k).length}</span></button>`).join('');
   $('#course-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-croom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : '';
@@ -2805,7 +2828,7 @@ function renderCourse() {
   const endOf = x => x.c.rtDate || (x.sc && x.sc.off ? x.sc.off.date : '');
   list.sort((a, b) => endOf(b).localeCompare(endOf(a)));
   $('#course-list').innerHTML = list.length ? list.slice(0, 150).map(x => courseRow(x.c, x.sc, td)).join('')
-    : `<li class="empty-state">${tab === 'complete' ? 'ยังไม่มีเคสที่ Complete course' : tab === 'cancel' ? 'ยังไม่มีเคสที่ Cancel RT' : 'ยังไม่มีเคสที่ Off RT'}</li>`;
+    : `<li class="empty-state">${words.length ? 'ไม่พบเคสที่ตรงกับคำค้นในแท็บนี้' : tab === 'complete' ? 'ยังไม่มีเคสที่ Complete course' : tab === 'cancel' ? 'ยังไม่มีเคสที่ Cancel RT' : 'ยังไม่มีเคสที่ Off RT'}</li>`;
   // เลื่อนแถบวันฉายให้เห็นวันนี้ (หรือวันฉายถัดไป)
   $$('#course-list .cr-strip').forEach(sp => { const t = $('.cd.today', sp) || $('.cd.next', sp); if (t) sp.scrollLeft = Math.max(0, t.offsetLeft - 160); });
   pinTop();
@@ -2852,7 +2875,7 @@ function renderFxGrid(groups, hol, td, total = groups.length) {
     + (Object.keys(f).length ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด">ล้าง</button>' : '');
   box.innerHTML = `<div class="fxg${c0 < 200 ? ' narrow' : ''}" role="table" aria-label="ตารางวันฉาย">
       <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length < total ? `${groups.length} จาก ${total}` : total} คน</span></span><span class="fxg-filt">${filt}</span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i></small></div>${head}</div>
-      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : '<p class="empty-state">ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่</p>'}
+      ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : `<p class="empty-state">${tabWords('course').length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้นในแท็บนี้' : 'ไม่มีเคสที่ Plan complete แล้วและยังฉายอยู่'}</p>`}
     </div>`;
 }
 function fxGridRow(g, days, hol, td, edit) {
@@ -3879,8 +3902,9 @@ function stepChip(c, x, vals = true) {
 
 function renderLogs() {
   $('#add-other').hidden = $('#add-rc').hidden = !canEdit();
-  const ym = state.month;
-  const inMonth = state.logs.filter(l => l.date.startsWith(ym));
+  const ym = state.month, words = tabWords('logs');
+  syncTabQ('logs');
+  const inMonth = state.logs.filter(l => l.date.startsWith(ym) && (!words.length || wordsIn(words, logText(l))));   // ค้นหา: เฉพาะเดือนที่เลือก ตัวเลขบนแท็บนับตามคำค้น
   const tabs = logTabs();
   if (state.logKind && !tabs.some(t => t.key === state.logKind)) state.logKind = '';
   const cur = tabs.find(t => t.key === state.logKind);
@@ -3913,7 +3937,7 @@ function renderLogs() {
       <span class="l-main">${main}</span>
       <span class="l-pts">${num(pts, 3)}</span>
     </${canEdit() ? 'button' : 'div'}></li>`;
-  }).join('') : `<li class="empty-state">ยังไม่มีบันทึกใน${esc(fmtMonth(ym))}</li>`;
+  }).join('') : `<li class="empty-state">${words.length ? `ไม่พบบันทึกที่ตรงกับคำค้นใน${esc(fmtMonth(ym))}` : `ยังไม่มีบันทึกใน${esc(fmtMonth(ym))}`}</li>`;
 }
 
 function renderP4P() {
@@ -5010,20 +5034,23 @@ function renderPend() {
   renderPending(rooms.includes(room) ? room : '');
 }
 function renderPending(room) {
-  const steps = PEND_STEPS();
+  const steps = PEND_STEPS(), words = tabWords('pend');
+  syncTabQ('pend');
+  const pendOf = (key, r) => { const l = pendingOf(key, r); return words.length ? l.filter(c => wordsIn(words, caseText(c))) : l; };
   if (dash.pend && !steps.some(x => x.key === dash.pend)) dash.pend = '';
   $('#pend-note').textContent = 'กดการ์ดเพื่อดูรายชื่อ · Dose check / F0 / Delta4 / SRS MapCheck / Plan complete นับเฉพาะเคสที่ยังไม่ Evaluate หรือ Start RT ไม่เกิน 7 วันที่แล้ว';
   $('#pend-cards').innerHTML = steps.map(x => {
-    const list = pendingOf(x.key, room), soon = list.find(c => isDay(c.sim) && daysFrom(c.sim) >= -7) || list.find(c => isDay(c.sim)), u = soon ? urgency(soon.sim) : '';
+    const list = pendOf(x.key, room), soon = list.find(c => isDay(c.sim) && daysFrom(c.sim) >= -7) || list.find(c => isDay(c.sim)), u = soon ? urgency(soon.sim) : '';
     return `<button type="button" class="card" data-dpend="${x.key}" aria-pressed="${dash.pend === x.key}"><div class="card-top"><span>รอ ${esc(x.label)}</span></div><span class="big">${list.length}</span><small class="${u}">${soon ? `${u ? '<i class="pend-dot"></i>' : ''}Start RT เร็วสุด ${esc(fmtDay(soon.sim))}` : '&nbsp;'}</small></button>`;
   }).join('');
   const box = $('#pend-list');
-  if (!dash.pend) { box.hidden = true; box.innerHTML = ''; return; }
-  const list = pendingOf(dash.pend, room), rcs = rcIndex();
+  if (!dash.pend && !words.length) { box.hidden = true; box.innerHTML = ''; return; }
+  // ค้นหาโดยยังไม่ได้เลือกการ์ด: แสดงเคสที่ตรงจากทุกขั้นตอน
+  const list = dash.pend ? pendOf(dash.pend, room) : [...new Set(steps.flatMap(x => pendOf(x.key, room)))].sort((a, b) => (isDay(a.sim) ? a.sim : '9').localeCompare(isDay(b.sim) ? b.sim : '9') || a.in.localeCompare(b.in)), rcs = rcIndex();
   batchIndex = {};
   state.cases.forEach(c => { if (c.batch) (batchIndex[c.batch] = batchIndex[c.batch] || []).push(c); });
   box.hidden = false;
-  box.innerHTML = list.length ? caseList(lineArrange('pend-list', list, rcs).slice(0, 100), rcs, 'pend-list', list) : '<li class="empty-state">ไม่มีงานรอ</li>';
+  box.innerHTML = list.length ? caseList(lineArrange('pend-list', list, rcs).slice(0, 100), rcs, 'pend-list', list) : `<li class="empty-state">${words.length ? 'ไม่พบเคสที่ตรงกับคำค้นในงานรอ' : 'ไม่มีงานรอ'}</li>`;
 }
 // ช่วงเวลาของสถิติ: ตามวัน In
 const DASH_PERIODS = [['month', 'เดือนที่เลือก'], ['3m', '3 เดือน'], ['12m', '12 เดือน'], ['all', 'ทั้งหมด'], ['custom', 'กำหนดเอง']];
@@ -6260,6 +6287,11 @@ document.addEventListener('click', e => {
 });
 
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
+const TAB_RENDER = { pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs() };
+for (const el of $$('[data-tq]')) {
+  el.addEventListener('input', () => { tabQ[el.dataset.tq] = el.value; TAB_RENDER[el.dataset.tq](); });
+  el.addEventListener('keydown', e => { if (e.key === 'Escape' && el.value) { e.preventDefault(); el.value = ''; tabQ[el.dataset.tq] = ''; TAB_RENDER[el.dataset.tq](); } });
+}
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
 // ชิปบริเวณที่ฉาย / ความถี่ ของทุกบริเวณ (id เป็น <pre>-area, <pre>-freq) และช่อง Dose/fx, Fx (<pre>-dpf, <pre>-fx)
 function siteChip(e) {
