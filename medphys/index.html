@@ -607,6 +607,10 @@ button.who:hover .nm{text-decoration:underline}
 .case-tbl th{padding:7px 10px;background:var(--sunken);color:var(--muted);font-size:12px;font-weight:500;text-align:left;white-space:nowrap}
 .case-tbl td{padding:6px 10px;border-top:1px solid var(--line);white-space:nowrap;vertical-align:middle;color:var(--fg);text-align:left}
 .case-tbl tr[data-rowedit]{cursor:pointer}
+.case-tbl tr.boost-row td{padding-top:0;border-top:0}
+.boost-tag{display:inline-block;margin-right:4px;padding:1px 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;white-space:nowrap}
+.checks.boost-checks{margin-top:4px}
+.checks.boost-checks>.boost-tag{align-self:flex-start;margin-top:5px}
 .case-tbl tbody tr:hover td{background:var(--hover)}
 .case-tbl tr.fresh td{background:var(--accent-soft)}
 .case-tbl .cut{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
@@ -1635,7 +1639,9 @@ const FX_MARKS = ['given', 'treat'];   // บันทึกบนวันฉ�
 const FX2_API = 22;   // Code.gs ที่บันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN ได้ (tagCase)
 const fx2On = () => serverHas(FX2_API);
 const MOVE_API = 24;   // Code.gs ที่บันทึกการย้ายห้องฉายได้ (moveCase)
+const BOOST_API = 25;   // Code.gs ที่บันทึกขั้นตอนของแผน Sequential boost แยกได้ (stampBoost)
 const moveOn = () => serverHas(MOVE_API);
+const boostStepsOn = () => serverHas(BOOST_API) && stampsOn();
 const DEFAULT_CONFIG = {
   boxes: Object.fromEntries(Object.entries(BOXES).map(([v, xs]) => [v, xs.map(x => x[0])])),   // ลำดับกล่องของแต่ละแถบ
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
@@ -1779,7 +1785,7 @@ const navLabel = view => { const x = (state.config.nav || []).find(n => n.view =
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -2048,7 +2054,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-19.1';
+const PAGE_VERSION = '2026-10-19.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2083,6 +2089,7 @@ const sheetStore = {
   moveActCases: () => call('moveActCases'),
   stamp: (id, step, value, pin, at) => (at ? call('stampCaseAt', id, step, value, pin, at) : call('stampCase', id, step, value, pin)),
   stampMany: (id, values, pin, at) => (at ? call('stampStepsAt', id, values, pin, at) : call('stampSteps', id, values, pin)),
+  stampBoost: (id, sid, values, pin, at) => call('stampBoost', id, sid, values, pin, at || ''),
   editCase: (rec, pin) => call('editCase', rec, pin),
   removeCase: (id, pin) => call('removeCase', id, pin),
   editLog: (rec, pin) => call('editLog', rec, pin),
@@ -2149,6 +2156,27 @@ function localStore() {
     // โหมดตัวอย่าง: รหัส PIN เก็บแบบแฮชในเบราว์เซอร์นี้ แยกตามมุมมอง
     stamp: async (id, step, value, pin, at) => stampLocal(id, { [step]: value }, pin, at),
     stampMany: async (id, values, pin, at) => stampLocal(id, values, pin, at),
+    // ขั้นตอนของแผน boost: กติกาเดียวกับ stampBoost ใน Code.gs
+    stampBoost: async (id, sid, steps, pin, when) => {
+      demoCheckPin(pin);
+      const c = db.cases.find(x => x.id === id);
+      if (!c) throw new Error('ไม่พบเคสนี้');
+      const all = boostStamps(c), cur = all[sid] || {};
+      for (const [step, v] of Object.entries(steps)) {
+        const value = v && typeof v === 'object' ? v.value : v, note = v && typeof v === 'object' ? v.note : undefined;
+        if (value !== null && CHECKS.includes(step) && !str(value)) throw new Error(`กรอกค่า ${STEPS.find(x => x.key === step).label} ก่อนบันทึก`);
+        const clear = value === null, at = clear ? '' : when || nowStamp(), by = clear ? '' : state.user.name;
+        cur[step] = at; cur[step + 'By'] = by;
+        if (CHECKS.includes(step)) cur[step + 'Val'] = clear ? '' : str(value);
+        if (CHECKS.includes(step) && (clear || note !== undefined)) cur[step + 'Note'] = clear ? '' : str(note);
+        if (step === 'eval' && !clear && !cur.fin) { cur.fin = at; cur.finBy = by; }
+      }
+      for (const k of Object.keys(cur)) if (cur[k] === '') delete cur[k];
+      if (Object.keys(cur).length) all[sid] = cur; else delete all[sid];
+      c.bsteps = Object.keys(all).length ? JSON.stringify(all) : '';
+      persist();
+      return clone(c);
+    },
     editCase: async (rec, pin) => { demoCheckPin(pin); upsert(db.cases, clone(rec)); persist(); return rec; },
     removeCase: async (id, pin) => { demoCheckPin(pin); db.cases = db.cases.filter(x => x.id !== id); persist(); return true; },
     editLog: async (rec, pin) => { demoCheckPin(pin); upsert(db.logs, clone(rec)); persist(); return rec; },
@@ -3684,7 +3712,9 @@ const skipsOn = () => serverHas(SKIP_API);
 function parseSites(c) {
   let a = [];
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
-  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(x => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room) })) : [];
+  // sid = รหัสของบริเวณ Sequential boost (ผูกกับขั้นตอนของแผน boost) · boost เดิมที่ยังไม่มีรหัสใช้ i<ลำดับ>
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map((x, i) => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room),
+    sid: str(x.sid) || (str(x.start) === 'boost' ? 'i' + (i + 1) : '') })) : [];
 }
 // เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1 · Sequential boost
 const SITE_STARTS = [
@@ -3713,7 +3743,7 @@ let siteSeq = 0;
 // ใช้ฟังก์ชันเดียวกับบริเวณแรก (renderArea, fillDose, readDose ฯลฯ) ด้วย pre ของแต่ละบริเวณ เช่น is1, fs2
 function addSite(base, x = {}) {
   const pre = `${base}s${++siteSeq}`;
-  $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}">
+  $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}" data-sid="${esc(x.sid || 'b' + Math.random().toString(36).slice(2, 9))}">
     <div class="site-head"><b></b><button type="button" class="icon-btn" data-rmsite="${pre}" aria-label="ลบบริเวณนี้">×</button></div>
     <div class="field"><span class="lbl">เริ่มฉายเทียบกับบริเวณที่ 1</span><div class="start-row">
       <div class="chips" id="${pre}-start" role="radiogroup" aria-label="เริ่มฉายเทียบกับบริเวณที่ 1">${SITE_STARTS.map(v => `<label title="${v.title}"><input type="radio" name="${pre}start" value="${v.key}"${x.start === v.key ? ' checked' : ''}><span>${v.label}</span></label>`).join('')}</div>
@@ -3804,7 +3834,12 @@ function syncStart(pre, focus) {
   }
   syncBoost(baseOf(pre));
 }
-const readSites = base => sitePres(base).map(pre => ({ area: readArea(pre), ...readDose(pre), ...readStart(pre), room: readSiteRoom(pre) })).filter(x => x.area || x.dpf || x.fx || x.rx || x.freq).map(x => { if (!x.room) delete x.room; return x; });
+const readSites = base => sitePres(base).map(pre => { const st = readStart(pre); return { area: readArea(pre), ...readDose(pre), ...st, room: readSiteRoom(pre), ...(st.start === 'boost' ? { sid: $(`[data-site="${pre}"]`).dataset.sid } : {}) }; })
+  .filter(x => x.area || x.dpf || x.fx || x.rx || x.freq).map(x => { if (!x.room) delete x.room; return x; });
+// แผน Sequential boost ของเคส (เรียงตามบริเวณ) และขั้นตอนที่บันทึกของแต่ละแผน { sid: { fin, finBy, mu, muVal, ... } }
+const boostList = c => sitesOf(c).filter(x => x.start === 'boost' && x.sid).map((x, i) => ({ ...x, n: i + 1 }));
+const boostStamps = c => { try { const o = JSON.parse(c.bsteps || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
+const boostName = (c, b) => `Boost${boostList(c).length > 1 ? ' ' + b.n : ''}${b.area ? ' · ' + b.area : ''}`;
 function checkSites(base) {
   const fx1 = +$(`#${base}-fx`).value || 0;
   for (const pre of sitePres(base)) {
@@ -4047,7 +4082,7 @@ function caseTable(rows, rcs, listId = 'cases', base = rows) {
   }).join('');
   const active = Object.keys(st.filter).filter(k => cols.includes(k));
   const bar = active.length || st.sort ? `<div class="tbl-filters">${active.length ? `กรอง: ${active.map(k => `<span class="chip">${esc(lineLabel(k))} (${st.filter[k].length})</span>`).join('')} · ` : ''}${st.sort ? `เรียงตาม ${esc(lineLabel(st.sort.key))} ${st.sort.dir === 1 ? '▲' : '▼'} · ` : ''}แสดง ${active.length ? `${lineArrange(listId, base, rcs).length}/${base.length}` : base.length} เคส <button type="button" class="linkish" data-lclear="${listId}">ล้างการกรองและการเรียง</button></div>` : '';
-  const body = rows.length ? rows.map(c => caseLine(c, rcs[c.id] || [], cols)).join('') : `<tr class="tbl-empty"><td colspan="${cols.length}">ไม่มีเคสที่ตรงกับตัวกรองของคอลัมน์</td></tr>`;
+  const body = rows.length ? rows.map(c => caseLine(c, rcs[c.id] || [], cols) + boostLines(c, cols)).join('') : `<tr class="tbl-empty"><td colspan="${cols.length}">ไม่มีเคสที่ตรงกับตัวกรองของคอลัมน์</td></tr>`;
   return `<li class="tbl-li">${bar}<div class="tbl-wrap"><table class="case-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></li>`;
 }
 function caseLine(c, rcs, cols) {
@@ -4086,13 +4121,14 @@ function caseLine(c, rcs, cols) {
   return `<tr${state.fresh.includes(c.id) ? ' class="fresh"' : ''}${edit ? ` data-rowedit="${esc(c.id)}"` : ''}>${cols.map(key => `<td>${cell(key)}</td>`).join('')}</tr>`;
 }
 // ปุ่มขั้นตอนแบบย่อ: ✓ + ค่า เมื่อบันทึกแล้ว (สีตามเกณฑ์) · กดเหมือนปุ่มในการ์ด (ใส่ค่าและรหัส PIN ในหน้าต่าง)
-function lineStep(c, x) {
-  const see = qaVisible(), at = c[x.key], by = c[x.key + 'By'], val = x.value && see ? c[x.key + 'Val'] : '', note = x.value && at && see ? str(c[x.key + 'Note']) : '';
+function lineStep(c, x, sid) {
+  const r = sid ? boostStamps(c)[sid] || {} : c;   // แผน boost: ขั้นตอนเก็บแยก
+  const see = qaVisible(), at = r[x.key], by = r[x.key + 'By'], val = x.value && see ? r[x.key + 'Val'] : '', note = x.value && at && see ? str(r[x.key + 'Note']) : '';
   const cls = `lchk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;
   const tip = at ? `${x.label}${val ? ' ' + val : ''} · ${[by, fmtStamp(at)].filter(Boolean).join(' · ')}${note ? ' · ' + note : ''}` : `${x.label} ยังไม่บันทึก`;
   const text = `${at ? '✓ ' : ''}${esc(LINE_SHORT[x.key] || x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   return canEdit()
-    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(tip + (at ? ' · กดเพื่อแก้หรือล้าง' : ' · กดเพื่อบันทึก (ใส่รหัส PIN)'))}">${text}</button>`
+    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(tip + (at ? ' · กดเพื่อแก้หรือล้าง' : ' · กดเพื่อบันทึก (ใส่รหัส PIN)'))}">${text}</button>`
     : `<span class="${cls}" title="${esc(tip)}">${text}</span>`;
 }
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
@@ -4100,7 +4136,11 @@ const stepsOf = k => STEPS.filter(x => (!x.value || (Array.isArray(k.checks) ? k
 const firstName = v => str(v).split(/\s+/)[0];
 // ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม (หน่วย % เป็นค่าเริ่มต้น) และปุ่ม ✓ บันทึกทีละค่า
 // กด ✓ หรือ Enter ในช่อง → ใส่รหัส PIN → บันทึกค่านั้น
-const stepStrip = (c, k, vals = true) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x, vals)).join('')}</div>`;
+const stepStrip = (c, k, vals = true) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x, vals)).join('')}</div>`
+  + (boostStepsOn() ? boostList(c).map(b => `<div class="checks boost-checks"><span class="boost-tag" title="${esc(siteText(b))}">↳ ${esc(boostName(c, b))}</span>${stepsOf(k).map(x => stepChip(c, x, false, b.sid)).join('')}</div>`).join('') : '');
+// มุมมองบรรทัดเดียว: แผน Sequential boost เป็นแถวย่อยใต้ HN มีเฉพาะช่องขั้นตอน
+const boostLines = (c, cols) => (!boostStepsOn() || !cols.includes('steps') || catOf(c.cat).kind === 'simple' ? '' : boostList(c).map(b => `<tr class="boost-row">${cols.map(key => `<td>${key === 'steps'
+  ? `<span class="lsteps"><span class="boost-tag" title="${esc(siteText(b))}">↳ ${esc(boostName(c, b))}</span>${stepsOf(catOf(c.cat)).map(x => lineStep(c, x, b.sid)).join('')}</span>` : ''}</td>`).join('')}</tr>`).join(''));
 function valueBox(c, x) {
   const v = (stampDraft[c.id] || {})[x.key] || '';
   const q = v ? qaLevel(x.key, v) : '';
@@ -4108,15 +4148,16 @@ function valueBox(c, x) {
     + `<button type="button" class="chk-ok" data-stampsave="${x.key}" data-id="${esc(c.id)}"${str(v) ? '' : ' disabled'} aria-label="บันทึก ${esc(x.label)}" title="บันทึก ${esc(x.label)} (ใส่รหัส PIN)">${CHECK_SVG}</button></span>`;
 }
 // ตำแหน่งที่ไม่เห็นค่า QA: ✓ ชื่อขั้นตอนเท่านั้น (ไม่มีค่า สีตามเกณฑ์ หมายเหตุ และช่องกรอกค่า)
-function stepChip(c, x, vals = true) {
-  const see = qaVisible(), at = c[x.key], by = c[x.key + 'By'], val = x.value && see ? c[x.key + 'Val'] : '', note = x.value && at && see ? str(c[x.key + 'Note']) : '';
+function stepChip(c, x, vals = true, sid = '') {
+  const r = sid ? boostStamps(c)[sid] || {} : c;
+  const see = qaVisible(), at = r[x.key], by = r[x.key + 'By'], val = x.value && see ? r[x.key + 'Val'] : '', note = x.value && at && see ? str(r[x.key + 'Note']) : '';
   const text = `${at ? '✓ ' : ''}${esc(x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
   const full = [by, fmtStamp(at)].filter(Boolean).join(' · ');
   const cls = `chk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;   // สีตามเกณฑ์ของแอดมิน
   const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>${note ? `<small class="chk-note" title="${esc(note)}">${esc(note)}</small>` : ''}`
-    : x.value && canEdit() && vals && see ? valueBox(c, x) : '';
+    : x.value && canEdit() && vals && see && !sid ? valueBox(c, x) : '';
   const btn = canEdit()
-    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}" title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
+    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="${cls}"${note ? ` title="${esc(note)}"` : ''}>${text}</span>`;
   return `<span class="chk-wrap${x.key === 'pc' ? ' end' : ''}">${btn}${cap}</span>`;
 }
@@ -5523,7 +5564,8 @@ function syncCaseForm() {
   if (stamped) $('#f-stamps').innerHTML = stepsOf(k).map(x => {
     const at = editingCase[x.key], val = x.value && see ? editingCase[x.key + 'Val'] : '';
     return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at), x.value && see && editingCase[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
-  }).join('') + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
+  }).join('') + (boostStepsOn() ? boostList(editingCase).map(b => { const r = boostStamps(editingCase)[b.sid] || {}; return `<div><b>${esc(boostName(editingCase, b))}</b><span>${esc(stepsOf(k).map(x => `${r[x.key] ? '✓ ' : ''}${LINE_SHORT[x.key] || x.label}${r[x.key] && x.value && see && r[x.key + 'Val'] ? ' ' + r[x.key + 'Val'] : ''}`).join(' · '))}</span></div>`; }).join('') : '')
+    + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
   $('#f-n-field').hidden = !countsOn();
   syncSites('f');
   $('#tech-field').hidden = simple || !k.tech;
@@ -6139,22 +6181,23 @@ function showStampAt() {
   pinCtx.atDef = `${today()} ${hm}`;
   return on;
 }
-function openStamp(id, key) {
-  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key);
-  if (!c || !x) return;
-  const at = c[key], val = x.value ? c[key + 'Val'] : '';
-  pinCtx = { mode: 'stamp', id, step: key, forgot: false, auto: !at };   // บันทึกแล้ว: ต้องเลือกเองว่าบันทึกใหม่หรือล้าง
+// sid = ขั้นตอนของแผน Sequential boost (เก็บแยกจากของเคส)
+function openStamp(id, key, sid = '') {
+  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key), b = sid && boostList(c || {}).find(v => v.sid === sid);
+  if (!c || !x || (sid && !b)) return;
+  const r = sid ? boostStamps(c)[sid] || {} : c, at = r[key], val = x.value ? r[key + 'Val'] : '';
+  pinCtx = { mode: 'stamp', id, sid, step: key, forgot: false, auto: !at };   // บันทึกแล้ว: ต้องเลือกเองว่าบันทึกใหม่หรือล้าง
   const pick = showStampAt();
-  $('#pin-title').textContent = `${x.label} · ${c.hn || ''}`;
+  $('#pin-title').textContent = `${x.label}${b ? ` · ${boostName(c, b)}` : ''} · ${c.hn || ''}`;
   $('#pin-what').innerHTML = at
-    ? `บันทึกแล้วโดย <b>${esc(c[key + 'By'] || '—')}</b> ${esc(fmtStamp(at))}${val ? ` · ค่า <b>${esc(val)}</b>` : ''}<br>บันทึกใหม่จะแทนที่ของเดิมด้วยชื่อของคุณและ${pick ? 'วันเวลาด้านล่าง' : 'เวลาตอนนี้'} หรือกด "ล้างการบันทึก"`
+    ? `บันทึกแล้วโดย <b>${esc(r[key + 'By'] || '—')}</b> ${esc(fmtStamp(at))}${val ? ` · ค่า <b>${esc(val)}</b>` : ''}<br>บันทึกใหม่จะแทนที่ของเดิมด้วยชื่อของคุณและ${pick ? 'วันเวลาด้านล่าง' : 'เวลาตอนนี้'} หรือกด "ล้างการบันทึก"`
     : `${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''} · บันทึก${pick ? 'ในชื่อ' : 'วันเวลาตอนนี้ในชื่อ'} <b>${esc(state.user.name || state.user.me || '')}</b>${pick ? ' · เปลี่ยนวันเวลาได้ก่อนใส่ PIN' : ''}`;
   $('#pin-val-field').hidden = !x.value;
   $('#pin-val-lbl').textContent = `ค่า ${x.label}`;
   $('#pin-val').placeholder = x.hint || '';
-  $('#pin-val').value = val || (stampDraft[id] || {})[key] || '';   // ค่าที่พิมพ์ไว้ในช่องใต้ปุ่ม
+  $('#pin-val').value = val || (sid ? '' : (stampDraft[id] || {})[key] || '');   // ค่าที่พิมพ์ไว้ในช่องใต้ปุ่ม
   $('#pin-note-field').hidden = !(x.value && noteOn());
-  $('#pin-note').value = x.value ? str(c[key + 'Note']) : '';
+  $('#pin-note').value = x.value ? str(r[key + 'Note']) : '';
   $('#pin-clear').hidden = !at;
   syncPinForm();
   pinDlg.showModal();
@@ -6344,6 +6387,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'logdel') { await store.removeLog(ctx.id, pin); logDeleted(ctx.id); pinDlg.close(); return; }
     const note = $('#pin-note-field').hidden ? undefined : str($('#pin-note').value);
     if (ctx.mode === 'vals') { await doStamps(ctx.id, { [ctx.key]: note === undefined ? ctx.value : { value: ctx.value, note } }, pin, at); pinDlg.close(); return; }
+    if (ctx.sid) { await doBoostStamp(ctx.id, ctx.sid, ctx.step, value, pin, note, at); pinDlg.close(); return; }
     await doStamp(ctx.id, ctx.step, value, pin, note, at);
     pinDlg.close();
   } catch (err) {
@@ -6367,6 +6411,22 @@ async function doStamp(id, step, value, pin, note, at) {
   const fresh = !prev[step], steps = step === 'eval' && !prev.fin && rec.fin ? ['eval', 'fin'] : [step];
   const val = x.value ? rec[step + 'Val'] : '';
   toast(`${rec.hn} · ${x.label}${val ? ' ' + val : ''} · ${firstName(rec[step + 'By'])} ${fmtStamp(rec[step])}`, fresh ? { undo: () => undoStamp(id, steps, pin) } : {});
+}
+// ขั้นตอนของแผน Sequential boost · เลิกทำได้เฉพาะการบันทึกครั้งแรก (เหมือนของเคส)
+async function doBoostStamp(id, sid, step, value, pin, note, at) {
+  const prev = boostStamps(state.cases.find(c => c.id === id) || {})[sid] || {};
+  const rec = normCase(await store.stampBoost(id, sid, { [step]: value !== null && note !== undefined ? { value, note } : value }, pin, at));
+  const i = state.cases.findIndex(c => c.id === id);
+  if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+  render();
+  const x = STEPS.find(v => v.key === step), r = boostStamps(rec)[sid] || {}, b = boostList(rec).find(v => v.sid === sid), name = b ? boostName(rec, b) : 'Boost';
+  if (value === null) { toast(`${rec.hn} · ${name} · ล้าง ${x.label} แล้ว`); return; }
+  const steps = step === 'eval' && !prev.fin && r.fin ? ['eval', 'fin'] : [step];
+  const undo = async () => {
+    try { let u = null; for (const k of steps) u = normCase(await store.stampBoost(id, sid, { [k]: null }, pin)); const j = state.cases.findIndex(c => c.id === id); if (j >= 0 && u) state.cases[j] = u; render(); toast('เลิกทำแล้ว'); }
+    catch (e) { toast('เลิกทำไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  };
+  toast(`${rec.hn} · ${name} · ${x.label}${x.value && r[step + 'Val'] ? ' ' + r[step + 'Val'] : ''} · ${firstName(r[step + 'By'])} ${fmtStamp(r[step])}`, prev[step] ? {} : { undo });
 }
 // บันทึกหลายค่าพร้อมกัน · Code.gs รุ่นเก่า (ไม่มี stampSteps) บันทึกทีละค่าด้วย PIN เดียวกัน
 async function doStamps(id, vals, pin, at) {
@@ -6525,7 +6585,7 @@ document.addEventListener('click', e => {
   if (ds.openLeaves !== undefined) return openLeaves();
   if (ds.edit) return openCase(ds.edit);
   if (ds.step) return stepCase(ds.id, ds.step);
-  if (ds.stamp) return openStamp(ds.id, ds.stamp);
+  if (ds.stamp) return openStamp(ds.id, ds.stamp, ds.sid || '');
   if (ds.course) return openCourse(ds.id, ds.course);
   if (ds.fxc) return fxStatusOn() ? openFx(ds.fxc, ds.day, ds.fxmv === '1') : toast('การบันทึกสถานะ fraction ต้องใช้ Code.gs รุ่น 2026-10-17.1 ขึ้นไป', { err: true });
   if (ds.ptags) return fx2On() ? openTags(ds.ptags) : toast('รายละเอียดผู้ป่วยต้องใช้ Code.gs รุ่น 2026-10-18.1 ขึ้นไป', { err: true });

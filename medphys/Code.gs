@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-18.4';
-const API_LEVEL = 24;
+const CODE_VERSION = '2026-10-19.1';
+const API_LEVEL = 25;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -55,6 +55,8 @@ const TABLES = {
       ['ptags', 'รายละเอียดผู้ป่วย'],
       // ย้ายห้องฉาย [{date, room, from, scope, note, by, at}] (JSON) · scope: once = เฉพาะ fraction วันนั้น · on = ตั้งแต่วันนั้นเป็นต้นไป · เขียนผ่าน moveCase เท่านั้น
       ['rmove', 'ย้ายห้อง'],
+      // ปุ่มขั้นตอนของแผน Sequential boost แต่ละบริเวณ { sid: { fin, finBy, eval, ..., muVal, muNote } } (JSON) · เขียนผ่าน stampBoost เท่านั้น
+      ['bsteps', 'ขั้นตอนของ boost'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -661,7 +663,7 @@ function moveActCases(token) {
 const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck', pc: 'Plan complete' };
 const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
 const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
-  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove'];
+  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps'];
 // ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
 const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
@@ -710,9 +712,9 @@ function stampTime_(at, tz) {
   return s;
 }
 
-function stampSteps_(id, steps, pin, token, at) {
-  const u = requireEdit_(token, EDIT_VIEWS.cases);
-  const keys = Object.keys(steps), vals = {}, notes = {};
+// ตรวจค่าของขั้นตอนที่จะบันทึก { keys, vals (null = ล้าง), notes } · ใช้กับเคสและแผน boost
+function stampVals_(steps) {
+  const keys = Object.keys(steps || {}), vals = {}, notes = {};
   keys.forEach(step => {
     if (!STEP_NAMES[step]) throw new Error('ไม่รู้จักขั้นตอน ' + step);
     let value = steps[step];
@@ -723,6 +725,12 @@ function stampSteps_(id, steps, pin, token, at) {
     vals[step] = value === null ? null : String(value == null ? '' : value).trim().slice(0, 60);
     if (value !== null && STEP_VALUES.indexOf(step) >= 0 && !vals[step]) throw new Error('กรอกค่า ' + STEP_NAMES[step] + ' ก่อนบันทึก');
   });
+  return { keys: keys, vals: vals, notes: notes };
+}
+
+function stampSteps_(id, steps, pin, token, at) {
+  const u = requireEdit_(token, EDIT_VIEWS.cases);
+  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
   checkPin_(u, pin);
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
@@ -741,6 +749,44 @@ function stampSteps_(id, steps, pin, token, at) {
       if (STEP_VALUES.indexOf(step) >= 0 && (clear || step in notes)) set[step + 'Note'] = clear ? '' : notes[step];
       if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
     });
+    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+  });
+}
+
+/**
+ * ปุ่มขั้นตอนของแผน Sequential boost (แถวย่อยใต้ HN): เหมือน stampSteps แต่เก็บแยกของแต่ละ boost (sid ของบริเวณนั้น)
+ * steps = { fin: '', mu: '1.2%', d4: { value, note }, eval: null (ล้าง) } · at = วันเวลาที่เลือกเอง (ว่าง = ตอนนี้) · คืนเคสหลังบันทึก
+ */
+function stampBoost(id, sid, steps, pin, at, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.cases);
+  sid = String(sid == null ? '' : sid).trim();
+  if (!/^[\w-]{1,40}$/.test(sid)) throw new Error('ไม่พบแผน boost นี้');
+  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
+  if (!keys.length) throw new Error('เลือกขั้นตอนที่จะบันทึก');
+  checkPin_(u, pin);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const col = header.indexOf('ขั้นตอนของ boost');
+    let all = {};
+    try { all = col < 0 ? {} : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '{}')); } catch (e) { all = {}; }
+    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
+    const cur = all[sid] && typeof all[sid] === 'object' ? all[sid] : {};
+    const now = stampTime_(at, ss.getSpreadsheetTimeZone()), name = String(u.name || u.username || u.me || '');
+    keys.forEach(step => {
+      const clear = vals[step] === null, when = clear ? '' : now, by = clear ? '' : name;
+      cur[step] = when;
+      cur[step + 'By'] = by;
+      if (STEP_VALUES.indexOf(step) >= 0) cur[step + 'Val'] = clear ? '' : vals[step];
+      if (STEP_VALUES.indexOf(step) >= 0 && (clear || step in notes)) cur[step + 'Note'] = clear ? '' : notes[step];
+      if (step === 'eval' && !clear && !cur.fin) { cur.fin = when; cur.finBy = by; }
+    });
+    Object.keys(cur).forEach(k => { if (cur[k] === '') delete cur[k]; });
+    if (Object.keys(cur).length) all[sid] = cur; else delete all[sid];
+    const set = { bsteps: Object.keys(all).length ? JSON.stringify(all) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
   });
