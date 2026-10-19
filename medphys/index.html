@@ -1283,7 +1283,9 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     </div>
     <div class="sec" data-box="charts">
       <div class="sec-head"><h2>แผนภูมิสถิติ</h2><p id="dash-chart-note"></p></div>
-      <div class="toolbar"><div class="seg-mini" id="chart-period" aria-label="ช่วงเวลา"></div><span class="spacer"></span><span class="muted" style="font-size:13px">นับเป็น</span><div class="seg-mini" id="chart-count" aria-label="นับเป็น"></div></div>
+      <div class="toolbar"><div class="seg-mini" id="chart-period" aria-label="ช่วงเวลา"></div>
+        <span class="dash-range" id="chart-range" hidden><label>ตั้งแต่ <input type="date" id="chart-from"></label><label>ถึง <input type="date" id="chart-to"></label>
+          <button type="button" class="linkish" id="chart-range-cal">ใช้ช่วงของปฏิทินด้านบน</button></span><span class="spacer"></span><span class="muted" style="font-size:13px">นับเป็น</span><div class="seg-mini" id="chart-count" aria-label="นับเป็น"></div></div>
       <div class="viz-grid" id="dash-charts"></div>
     </div>
     <div class="sec" data-box="wait">
@@ -2054,7 +2056,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-19.2';
+const PAGE_VERSION = '2026-10-19.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5357,16 +5359,19 @@ function periodCases() {
   const b = periodBounds();
   return { list: state.cases.filter(c => inBounds(c.in, b)), label: b.label, p: b.p };
 }
+// ช่องวันที่ของ "กำหนดเอง" (สถิติแต่ละเทคนิค = dash · แผนภูมิสถิติ = chart) · ใช้ช่วงเดียวกัน · ไม่ทับช่องที่กำลังพิมพ์
+function rangeBoxes(pre, p) {
+  $(`#${pre}-range`).hidden = p !== 'custom';
+  if (p !== 'custom') return;
+  const { a, b } = customRange();
+  if (document.activeElement !== $(`#${pre}-from`)) $(`#${pre}-from`).value = a;
+  if (document.activeElement !== $(`#${pre}-to`)) $(`#${pre}-to`).value = b;
+}
 function renderDashStats() {
   renderDashCharts();
   const { list, label, p } = periodCases();
   $('#dash-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${p === v}">${l}</button>`).join('');
-  $('#dash-range').hidden = p !== 'custom';
-  if (p === 'custom') {   // ไม่ทับช่องที่กำลังพิมพ์
-    const { a, b } = customRange();
-    if (document.activeElement !== $('#dash-from')) $('#dash-from').value = a;
-    if (document.activeElement !== $('#dash-to')) $('#dash-to').value = b;
-  }
+  rangeBoxes('dash', p);
   $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้`;
   const hol = holidayMap(), td = today(), rooms = dashRooms();
   const onToday = state.cases.filter(c => { const sc = catOf(c.cat).kind !== 'simple' && caseSchedule(c, hol); return sc && sc.days.has(td); });
@@ -5470,8 +5475,9 @@ function renderDashCharts() {
   if (!box) return;
   const b = periodBounds(), by = pref.get('vizCount', 'case') === 'pt' ? 'pt' : 'case';
   $('#chart-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${b.p === v}">${l}</button>`).join('');
+  rangeBoxes('chart', b.p);
   $('#chart-count').innerHTML = [['case', 'เคส'], ['pt', 'ผู้ป่วย']].map(([v, l]) => `<button type="button" data-vcount="${v}" aria-pressed="${by === v}">${l}</button>`).join('');
-  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In${b.p === 'custom' ? ' (แก้ช่วงวันที่ได้ที่ สถิติแต่ละเทคนิค)' : ''} · Brachytherapy ตามวันที่บันทึกกิจกรรม`;
+  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · Brachytherapy ตามวันที่บันทึกกิจกรรม`;
   const cases = state.cases.filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
   const count = cs => (by === 'pt' ? uniq(cs).length : cs.length), unit = by === 'pt' ? 'คน' : 'เคส', series = [{ name: by === 'pt' ? 'ผู้ป่วย' : 'เคส', unit }];
   // ห้องฉาย (ห้องของบริเวณที่ 1) · แพทย์ (ลำดับตามตั้งค่า) · ไม่ระบุไว้ท้าย
@@ -6616,7 +6622,7 @@ document.addEventListener('click', e => {
   if (ds.skipmonth) { skipYm = shiftMonth(skipMonth(), +ds.skipmonth); return renderSettings(); }
   if (ds.calview) { pref.set('calView', ds.calview); dash.day = ''; return renderDash(); }
   if (ds.calnav !== undefined) return calMove(+ds.calnav);
-  if (t.id === 'dash-range-cal') { const r = calRange(); pref.set('dashFrom', r.from); pref.set('dashTo', r.to); renderDashStats(); renderWait(); return; }
+  if (t.id === 'dash-range-cal' || t.id === 'chart-range-cal') { const r = calRange(); pref.set('dashFrom', r.from); pref.set('dashTo', r.to); renderDashStats(); renderWait(); return; }
   if (ds.wunit) { pref.set('waitUnit', ds.wunit); return renderDash(); }
   if (ds.close !== undefined) { t.closest('dialog').close(); return; }
   if (ds.cntstep) { const id = ds.cntcat; catCount[id] = clampN(countOf(id) + +ds.cntstep); return syncIntake(); }
@@ -6975,8 +6981,8 @@ settingsEl.addEventListener('change', e => {
 });
 $('#p4p-all').addEventListener('change', e => { state.allRows = e.target.checked; renderP4P(); });
 for (const [id, key] of [['#wait-cat', 'waitCat'], ['#wait-from', 'waitFrom'], ['#wait-to', 'waitTo']]) $(id).addEventListener('change', e => { pref.set(key, e.target.value); renderWait(); });
-// ช่วงวันที่กำหนดเองของสถิติและระยะเวลารอคอย
-for (const [id, key] of [['#dash-from', 'dashFrom'], ['#dash-to', 'dashTo']]) $(id).addEventListener('change', e => { pref.set(key, e.target.value); renderDashStats(); renderWait(); });
+// ช่วงวันที่กำหนดเองของสถิติ แผนภูมิ และระยะเวลารอคอย
+for (const [id, key] of [['#dash-from', 'dashFrom'], ['#dash-to', 'dashTo'], ['#chart-from', 'dashFrom'], ['#chart-to', 'dashTo']]) $(id).addEventListener('change', e => { pref.set(key, e.target.value); renderDashStats(); renderWait(); });
 $('#p4p-table').addEventListener('change', e => {
   const code = e.target.dataset.carry;
   if (!code) return;
