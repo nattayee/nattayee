@@ -287,6 +287,7 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-f.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
 .fxg-f b{min-width:15px;margin-left:2px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:10.5px;line-height:15px;text-align:center}
 .fxg-f.clr{border-style:dashed}
+.fxg-f i{font-size:9px;font-style:normal}
 .fxg.narrow .fxg-f{padding:1px 6px}
 .fxg.narrow .fxg-f svg{display:none}   /* จอแคบ (คอลัมน์ผู้ป่วย 150 px): ปุ่มสั้นลง ขึ้นบรรทัดใหม่น้อยลง */
 .fxg-n{min-width:20px;margin-top:3px;padding:0 5px;border-radius:999px;background:var(--sunken);color:var(--fg);font-size:11px;font-weight:600;line-height:17px;text-align:center}
@@ -2064,7 +2065,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-19.4';
+const PAGE_VERSION = '2026-10-20.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2970,7 +2971,8 @@ const mqDraft = {};   // Mosaiq Time ที่พิมพ์แต่ยัง�
 let mqRedraw = false;   // กำลังวาดตารางวันฉายใหม่: Chrome ส่ง change ของช่องที่กำลังพิมพ์ตอนเอาช่องเดิมออก ไม่ใช่การกดบันทึก
 // ตัวกรองตารางวันฉาย (ปุ่มที่หัวคอลัมน์ผู้ป่วย ใช้ช่องเลือกค่าแบบเดียวกับตาราง) · จำไว้จนกว่าจะโหลดหน้าใหม่
 // ผู้ป่วยที่มีหลายเคสมีได้หลายค่า: แสดงเมื่อมีค่าใดค่าหนึ่งที่เลือก · หลายตัวกรอง = ต้องตรงทุกตัว · จำนวนใต้วันที่นับตามที่กรองแล้ว
-const FXG_FILTERS = { doc: 'แพทย์', mp: 'ฟิสิกส์', cat: 'เทคนิค', tag: 'รายละเอียด', st: 'สถานะ' };
+// Mosaiq Time: ช่องเลือกมีปุ่มเรียงตามเวลาด้วย (ยังไม่กรอกอยู่ท้ายเสมอ)
+const FXG_FILTERS = { mqt: 'Mosaiq Time', doc: 'แพทย์', mp: 'ฟิสิกส์', cat: 'เทคนิค', tag: 'รายละเอียด', st: 'สถานะ' };
 const FXG_ST = ['รอฉาย', 'กำลังฉาย', 'ไม่มีวันฉาย'];
 function fxgVals(g, key) {
   const cs = g.items.map(x => x.c), sc = g.main.sc;
@@ -2979,11 +2981,12 @@ function fxgVals(g, key) {
   else if (key === 'mp') v = cs.map(c => str(c.mp));
   else if (key === 'cat') v = cs.map(c => catOf(c.cat).label);
   else if (key === 'tag') v = groupTags(cs);
+  else if (key === 'mqt') v = [groupMq(cs)];
   else { const td = today(), e = sc && fxEventAt(sc.evs, td); v = [!sc ? 'ไม่มีวันฉาย' : sc.hold ? sc.hold.label : e && e.act === 'skip' ? e.label : sc.start > td ? 'รอฉาย' : 'กำลังฉาย']; }
   v = [...new Set(v.filter(Boolean))];
   return v.length ? v : [BLANK];
 }
-const fxgLabel = (key, v) => { const n = v === BLANK ? '' : key === 'doc' ? docName(v) : key === 'mp' ? (state.config.staff.find(x => x.code === v) || {}).name : ''; return n ? `${v} · ${n}` : v; };
+const fxgLabel = (key, v) => { if (key === 'mqt' && v === BLANK) return '(ยังไม่กรอก)'; const n = v === BLANK ? '' : key === 'doc' ? docName(v) : key === 'mp' ? (state.config.staff.find(x => x.code === v) || {}).name : ''; return n ? `${v} · ${n}` : v; };
 const fxgFilter = groups => { const f = lineState('fxg').filter; return groups.filter(g => Object.entries(f).every(([k, vals]) => fxgVals(g, k).some(v => vals.includes(v)))); };
 // fraction ที่ฉายแล้ว (ก่อนวันนี้) นับทุกบริเวณ
 const fxGiven = (sc, td) => { let n = 0; if (sc) for (const [d, l] of sc.fx) if (d < td) for (const v of l) n += Math.max(0, v.to - v.from + 1); return n; };
@@ -3020,6 +3023,12 @@ function renderCourse() {
     // แถวของผู้ป่วยใช้ตารางของเคสที่มี fraction มากที่สุด (หลายเทคนิคของคนเดียวกันมักฉายวันเดียวกัน)
     for (const g of groups) g.main = g.items.reduce((a, b) => ((b.sc ? b.sc.planned : -1) > (a.sc ? a.sc.planned : -1) ? b : a));
     groups.sort((a, b) => (a.main.sc ? a.main.sc.start : '9999').localeCompare(b.main.sc ? b.main.sc.start : '9999') || a.main.c.in.localeCompare(b.main.c.in));
+    // เรียงตาม Mosaiq Time (ปุ่มในช่องเลือก) · เวลาเท่ากันคงลำดับเดิม · ยังไม่กรอกอยู่ท้ายเสมอ
+    const srt = lineState('fxg').sort;
+    if (srt && srt.key === 'mqt') {
+      const t = new Map(groups.map(g => [g, groupMq(g.items.map(x => x.c))]));
+      groups.sort((a, b) => !t.get(a) - !t.get(b) || srt.dir * t.get(a).localeCompare(t.get(b)));
+    }
     lineBase.fxg = groups;   // ค่าในช่องเลือกของตัวกรองมาจากผู้ป่วยทั้งหมด (ก่อนกรอง)
     renderFxGrid(fxgFilter(groups).slice(0, 200), hol, td, groups.length, room);
     return pinTop();
@@ -3073,9 +3082,12 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   $('#course-bar').innerHTML = `<div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
     <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
     <span class="fxg-legend">${legend}</span>`;
-  const f = lineState('fxg').filter;
-  const filt = Object.entries(FXG_FILTERS).map(([k, l]) => `<button type="button" class="fxg-f${f[k] ? ' on' : ''}" data-lfilter="${k}" data-list="fxg" title="${esc(f[k] ? `${l}: ${f[k].map(v => fxgLabel(k, v)).join(', ')}` : `เลือก${l}ที่แสดง`)}">${FUNNEL_SVG}${l}${f[k] ? `<b>${f[k].length}</b>` : ''}</button>`).join('')
-    + (Object.keys(f).length ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด">ล้าง</button>' : '');
+  const { filter: f, sort: fs } = lineState('fxg'), sk = fs && fs.key;
+  const filt = Object.entries(FXG_FILTERS).map(([k, l]) => {
+    const tip = [f[k] && `${l}: ${f[k].map(v => fxgLabel(k, v)).join(', ')}`, sk === k && `เรียง ${fs.dir > 0 ? 'เช้า→เย็น' : 'เย็น→เช้า'}`].filter(Boolean).join(' · ') || (k === 'mqt' ? 'เรียงหรือเลือกเวลาที่แสดง' : `เลือก${l}ที่แสดง`);
+    return `<button type="button" class="fxg-f${f[k] || sk === k ? ' on' : ''}" data-lfilter="${k}" data-list="fxg" title="${esc(tip)}">${FUNNEL_SVG}${l}${sk === k ? `<i aria-hidden="true">${fs.dir > 0 ? '▲' : '▼'}</i>` : ''}${f[k] ? `<b>${f[k].length}</b>` : ''}</button>`;
+  }).join('')
+    + (Object.keys(f).length || sk ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด เรียงตาม Start RT">ล้าง</button>' : '');
   const typing = (document.activeElement || {}).dataset || {};   // กำลังพิมพ์ Mosaiq Time: วาดใหม่แล้วกลับไปที่ช่องเดิม
   mqRedraw = true;
   box.innerHTML = `<div class="fxg${c0 < 200 ? ' narrow' : ''}" role="table" aria-label="ตารางวันฉาย">
@@ -3325,15 +3337,17 @@ function saveMq(el, enter) {
   if (!c || mqRedraw || (pinDlg.open && pinCtx.mode === 'mqt')) return;
   const group = hnGroup(c), cur = groupMq(group), v = mqParse(el.value);
   if (v === null) { toast('Mosaiq Time ต้องเป็นเวลา เช่น 0830 หรือ 08:30', { err: true }); el.focus(); el.select(); return; }
+  // แถวถัดไปตอนนี้ (เรียงตามเวลาอยู่: แถวที่บันทึกย้ายที่ได้ แต่ Enter ยังไปแถวที่อยู่ถัดลงมาก่อนบันทึก)
+  const all = $$('#course-grid [data-mqt]'), next = (all[all.indexOf(el) + 1] || { dataset: {} }).dataset.mqt || '';
   if (v === cur || !canEdit() || !mqOn()) {
     delete mqDraft[id];
     el.value = cur;
     if (v !== cur) return toast(!canEdit() ? RO_MSG : 'Mosaiq Time ต้องใช้ Code.gs รุ่น 2026-10-19.2 ขึ้นไป', { err: true });
-    if (enter) mqNext(id);
+    if (enter) mqFocus(next);
     return;
   }
   el.value = v;
-  pinCtx = { mode: 'mqt', id, ids: group.map(x => x.id), value: v, enter, forgot: false, auto: true };
+  pinCtx = { mode: 'mqt', id, ids: group.map(x => x.id), value: v, enter, next, forgot: false, auto: true };
   $('#pin-title').textContent = `Mosaiq Time · ${c.hn || ''}`;
   $('#pin-what').innerHTML = (v ? `เวลานัด <b class="mono">${esc(v)}</b>${cur ? ` (เดิม ${esc(cur)})` : ''}` : `ล้าง Mosaiq Time (เดิม ${esc(cur)})`)
     + (group.length > 1 ? ` · บันทึกให้ทุกเทคนิคของผู้ป่วยนี้ (${group.length} เคส)` : '');
@@ -3344,10 +3358,10 @@ function saveMq(el, enter) {
   pinDlg.showModal();
   firstPinInput().focus();
 }
-// ไปที่ช่อง Mosaiq Time ของแถวถัดไป (กรอกต่อกันได้ด้วย Enter)
-function mqNext(id) {
-  const all = $$('#course-grid [data-mqt]'), i = all.findIndex(x => x.dataset.mqt === id), next = all[i + 1];
-  if (i >= 0 && next) { next.focus(); next.select(); }
+// ไปที่ช่อง Mosaiq Time ของผู้ป่วย (กรอกต่อกันได้ด้วย Enter)
+function mqFocus(id) {
+  const el = id && $$('#course-grid [data-mqt]').find(x => x.dataset.mqt === id);
+  if (el) { el.focus(); el.select(); }
 }
 // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (NPO, BD protocol, Empty BD ฯลฯ แอดมินตั้งรายการได้ + พิมพ์เอง) ยืนยันด้วยรหัส PIN
 function openTags(id) {
@@ -4068,7 +4082,7 @@ function renderColPop() {
   const vals = [...counts.keys()].sort((a, b) => (a === BLANK) - (b === BLANK) || rank(a) - rank(b) || a.localeCompare(b, 'th', { numeric: true }));
   const sel = st.filter[key] ? new Set(st.filter[key]) : null, srt = st.sort && st.sort.key === key ? st.sort.dir : 0;
   $('#col-pop').innerHTML = `<div class="cp-head">${esc(fx ? FXG_FILTERS[key] : lineLabel(key))}</div>
-    ${fx ? '' : `<div class="cp-sort"><button type="button" data-cpsort="1" aria-pressed="${srt === 1}">เรียง น้อย→มาก</button><button type="button" data-cpsort="-1" aria-pressed="${srt === -1}">มาก→น้อย</button></div>`}
+    ${fx && key !== 'mqt' ? '' : `<div class="cp-sort"><button type="button" data-cpsort="1" aria-pressed="${srt === 1}">${fx ? 'เรียง เช้า→เย็น' : 'เรียง น้อย→มาก'}</button><button type="button" data-cpsort="-1" aria-pressed="${srt === -1}">${fx ? 'เย็น→เช้า' : 'มาก→น้อย'}</button></div>`}
     ${!fx && NO_FILTER.includes(key) ? '' : `<div class="cp-list">${vals.map(v => `<label><input type="checkbox" data-cpval="${esc(v)}"${!sel || sel.has(v) ? ' checked' : ''}><span>${esc(fx ? fxgLabel(key, v) : v)}</span><span class="n">${counts.get(v)}</span></label>`).join('')}</div>
     <div class="cp-foot"><button type="button" class="cp-all" data-cpall>แสดงทั้งหมด</button><button type="button" class="cp-all" data-cpclose>ปิด</button></div>`}`;
 }
@@ -6582,10 +6596,7 @@ pinDlg.addEventListener('close', () => {
   if (ctx.mode !== 'mqt' || ctx.closed) return;
   ctx.closed = true;
   if (!ctx.saved) { delete mqDraft[ctx.id]; render(); }
-  if (!ctx.enter) return;
-  if (ctx.saved) return mqNext(ctx.id);
-  const el = $$('#course-grid [data-mqt]').find(x => x.dataset.mqt === ctx.id);
-  if (el) el.focus();
+  if (ctx.enter) mqFocus(ctx.saved ? ctx.next : ctx.id);
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || !e.target.dataset || !e.target.dataset.stampin) return;
@@ -6675,7 +6686,7 @@ document.addEventListener('click', e => {
   if (ds.sopen) return openSearchHit(ds.sopen);
   if (ds.ctab) { state.courseTab = ds.ctab; return renderCourse(); }
   if (ds.croom !== undefined) { pref.set('courseRoom', ds.croom); return renderCourse(); }
-  if (ds.fxclear !== undefined) { lineState('fxg').filter = {}; closeColPop(); return renderCourse(); }
+  if (ds.fxclear !== undefined) { const st = lineState('fxg'); st.filter = {}; st.sort = null; closeColPop(); return renderCourse(); }
   if (ds.fxnav !== undefined) { const home = weekdayFrom(today()); fxGrid.from = +ds.fxnav ? shiftWeekdays(fxGrid.from || home, 5 * +ds.fxnav) : ''; if (fxGrid.from === home) fxGrid.from = ''; return renderCourse(); }
   if (ds.fxback !== undefined) { $('#pin-fx-back').value = ds.fxback; return syncFx(); }
   if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
