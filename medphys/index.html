@@ -381,6 +381,7 @@ button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .fx-prev{margin:0;padding:8px 10px;border-radius:8px;background:var(--sunken);font-size:13px;color:var(--muted)}
 .fx-prev b{color:var(--fg);font-weight:600}
 .fx-prev:empty{display:none}
+.fx-prev.fx-rp{background:var(--late-soft);color:var(--fg)}
 .cr-boost{display:inline-flex;align-items:center;gap:5px}
 .cr-boost::before{content:"";width:10px;height:3px;border-radius:2px;background:var(--warn)}
 .cr-none{margin-top:8px;font-size:12.5px;color:var(--muted)}
@@ -635,6 +636,7 @@ button.who:hover .nm{text-decoration:underline}
 .checks.boost-checks{margin-top:4px}
 .checks.boost-checks>.boost-tag{align-self:flex-start;margin-top:5px}
 .boost-tag.plan{background:var(--sunken);color:var(--muted)}
+.rp-tag{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;background:var(--late-soft);color:var(--late);font-size:11.5px;font-weight:600;line-height:19px;white-space:nowrap;vertical-align:1px}
 .case-tbl tbody tr:hover td{background:var(--hover)}
 .case-tbl tr.fresh td{background:var(--accent-soft)}
 .case-tbl .cut{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
@@ -1457,6 +1459,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <div class="field" id="pin-fx-back-box" hidden><span class="lbl">กลับมาฉายวันที่ <span class="sub-lbl">เว้นว่าง = จนกว่าจะกลับมา</span></span>
           <div class="fx-back"><input type="date" id="pin-fx-back" aria-label="กลับมาฉายวันที่"><span id="pin-fx-quick"></span></div></div>
         <p class="fx-prev" id="pin-fx-prev" aria-live="polite"></p>
+        <p class="fx-prev fx-rp" id="pin-fx-rp" hidden></p>
       </div>
       <div class="tags-box" id="pin-tags-box" hidden>
         <div class="field"><span class="lbl">คิว <span class="sub-lbl">สีพื้นหลัง HN ในตารางวันฉาย</span></span>
@@ -1680,6 +1683,8 @@ const MQ_API = 26;   // Code.gs ที่บันทึก Mosaiq Time หน�
 const mqOn = () => serverHas(MQ_API);
 const ADD_API = 27;   // Code.gs ที่บันทึกเพิ่ม fraction ต่อท้ายคอร์สได้ (addFxCase)
 const addFxOn = () => serverHas(ADD_API);
+const REPLAN_API = 28;   // Code.gs ที่สร้างงานวางแผนใหม่ให้ MP คนเดิมได้ (replanCase)
+const replanOn = () => serverHas(REPLAN_API);
 const DEFAULT_CONFIG = {
   boxes: Object.fromEntries(Object.entries(BOXES).map(([v, xs]) => [v, xs.map(x => x[0])])),   // ลำดับกล่องของแต่ละแถบ
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
@@ -1747,12 +1752,14 @@ const DEFAULT_CONFIG = {
   // สถานะของ fraction ในแถบ Complete (แอดมินเพิ่ม/แก้ได้): act skip = ไม่ได้ฉาย เลื่อน fraction · treat = ฉายตามปกติ บันทึกไว้ · off = Off RT
   // reasons = เหตุผลให้เลือก · need = ต้องเลือกเหตุผล · title = คำอธิบาย
   fxTypes: [
-    { id: 'given', label: 'ฉายแล้ว', title: 'บันทึกว่า fraction นี้ฉายแล้ว', act: 'given', reasons: [], need: false },
-    { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false },
-    { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false },
-    { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true },
-    { id: 'off', label: 'Off RT', title: 'หยุดฉาย เคสออกจากตาราง', act: 'off', reasons: [], need: false },
+    { id: 'given', label: 'ฉายแล้ว', title: 'บันทึกว่า fraction นี้ฉายแล้ว', act: 'given', reasons: [], need: false, replan: false },
+    { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false },
+    { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false },
+    { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true, replan: true },
+    { id: 'off', label: 'Off RT', title: 'หยุดฉาย เคสออกจากตาราง', act: 'off', reasons: [], need: false, replan: false },
   ],
+  // replan (ต่อสถานะ) / moveReplan (ย้ายห้อง): บันทึกแล้วส่งงานวางแผนใหม่ให้ MP คนเดิม (prescription = fraction ที่เหลือ) แสดงในงานรอ
+  moveReplan: true,
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
   roles: LPCH_ROLES.slice(),   // ตำแหน่งที่ตั้งสิทธิ์รายแถบได้ (ตั้งค่า → แถบเมนู)
@@ -1823,7 +1830,7 @@ const navLabel = view => { const x = (state.config.nav || []).find(n => n.view =
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd', 'replan', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated'];
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated'];
 
@@ -1884,7 +1891,7 @@ function normCase(o) {
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
-  c.how = c.how === 'manual' || c.how === 'follow' ? c.how : c.how ? 'auto' : '';
+  c.how = c.how === 'manual' || c.how === 'follow' || c.how === 'replan' ? c.how : c.how ? 'auto' : '';
   c.n = unitsOf(c) > 1 ? String(unitsOf(c)) : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
@@ -1985,12 +1992,14 @@ function mergeConfig(c) {
     out.fxTypes = c.fxTypes.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id)) && !seen.has(str(x.id)) && seen.add(str(x.id))).map(x => ({
       id: str(x.id), label: str(x.label), title: str(x.title), act: acts.includes(x.act) ? x.act : 'skip',
       reasons: Array.isArray(x.reasons) ? x.reasons.map(str).filter(Boolean) : [], need: !!x.need,
+      replan: x.replan !== undefined ? !!x.replan : str(x.id) === 'rect',   // ตั้งค่าที่บันทึกก่อนมีตัวเลือกนี้: Re-CT เปิดไว้
     }));
     // สถานะใหม่ของระบบ (เช่น ฉายแล้ว) ที่แอดมินยังไม่เคยเห็นในตั้งค่า เพิ่มให้ตามลำดับเดิม · ลบทิ้งแล้วไม่กลับมา
     const known = Array.isArray(c.fxSeen) ? c.fxSeen.map(str) : ['hold', 'hv', 'rect', 'off'];
     d.fxTypes.forEach((t, i) => { if (!known.includes(t.id) && !out.fxTypes.some(x => x.id === t.id)) out.fxTypes.splice(Math.min(i, out.fxTypes.length), 0, clone(t)); });
   }
   out.fxSeen = d.fxTypes.map(t => t.id);
+  out.moveReplan = c.moveReplan !== undefined ? !!c.moveReplan : d.moveReplan;
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
   // หัวข้อเพิ่มเติมที่ใช้คอลัมน์เดียวกับช่องของระบบ (เช่นเคยตั้ง "ห้องฉาย" เอง) ให้ช่องของระบบอ่านคอลัมน์นั้นแทน
@@ -2092,7 +2101,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-21.2';
+const PAGE_VERSION = '2026-10-21.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2137,6 +2146,7 @@ const sheetStore = {
   tags: (id, tags, pin) => call('tagCase', id, tags, pin),
   mqTime: (id, time, pin) => call('timeCase', id, time, pin),
   addFx: (id, date, add, pin) => call('addFxCase', id, date, add, pin),
+  replan: (id, date, rp, pin) => call('replanCase', id, date, rp, pin),
   members: () => call('lpchMembers'),
   removeLog: (id, pin) => call('removeLog', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
@@ -2300,6 +2310,31 @@ function localStore() {
       persist();
       return clone(c);
     },
+    // เหมือน replanCase ใน Code.gs
+    replan: async (id, date, rp, pin) => {
+      demoCheckPin(pin);
+      const p = db.cases.find(x => x.id === id);
+      if (!p) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      const old = db.cases.find(x => { const m = rpOf(x); return m && m.of === id && m.date === date; });
+      if (!rp) {
+        if (!old) return { id: '', removed: false };
+        if (['fin', 'eval', 'mu', 'd0', 'd4', 'mc', 'pc'].some(k => old[k])) return { id: old.id, removed: false, started: true };
+        db.cases = db.cases.filter(x => x !== old);
+        persist();
+        return { id: old.id, removed: true };
+      }
+      const meta = JSON.stringify({ of: id, date, kind: rp.kind, label: rp.label, reason: rp.reason || '' });
+      if (old) { Object.assign(old, { replan: meta, sim: rp.sim || '', room: rp.room || old.room }); persist(); return clone(old); }
+      const c = { ...p };
+      for (const k of ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
+        'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd']) c[k] = '';
+      Object.assign(c, { id: uid(), how: 'replan', batch: '', note: '', replan: meta, in: today(), created: new Date().toISOString(), updated: '',
+        sim: rp.sim || '', ct: rp.ct || p.ct, room: rp.room || p.room, dpf: rp.dpf || p.dpf, fx: rp.fx || '', rx: '', area: rp.area || p.area,
+        sites: rp.sites && rp.sites.length ? JSON.stringify(rp.sites) : '' });
+      db.cases.push(c);
+      persist();
+      return clone(c);
+    },
     removeLog: async (id, pin) => { demoCheckPin(pin); db.logs = db.logs.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
       if (!/^\d{4}$/.test(pin)) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4 หลัก');
@@ -2437,6 +2472,7 @@ function pickNext(o, trace) {
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
+    if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
     const trial = Object.assign({}, credit);
     if (select(p, c.in, trial) === j) Object.assign(credit, trial);
     p = (j + 1) % n;
@@ -2508,6 +2544,7 @@ function queueSlots(catId) {
     if (j < 0) return;
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
     if (c.how === 'manual' || c.how === 'follow') { give(c.mp, k, { kind: c.how, c }); return; }
+    if (c.how === 'replan') return;   // งานวางแผนใหม่: ไม่อยู่ในตารางแจกเคส
     if (o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp) rows.push({ type: 'case', code: c.mp, date: c.in, c, same: true });   // วันเดียวกันคนเดิม (รอบคิวรายวัน)
     else {
       const trial = Object.assign({}, credit), tt = cloneTok(tok), rec = [];
@@ -2991,7 +3028,39 @@ function openSearchHit(id) {
 // แถบอื่น: แถบวันฉายของแต่ละเคส (วันที่ + เลข fraction) ฉายแล้ว · ยกเลิก (ตั้งแต่วันที่หยุดฉาย)
 const COURSE_TABS = [['on', 'กำลังฉาย / รอฉาย'], ['complete', 'Complete course'], ['cancel', 'Cancel RT'], ['off', 'Off RT']];
 const MON_FMT = new Intl.DateTimeFormat('th-TH', { month: 'short' });
-const inCourse = c => catOf(c.cat).kind !== 'simple' && (!!c.pc || !!c.rt);
+// งานวางแผนใหม่ (replanCase) ไม่อยู่ในตารางวันฉาย: แถวของผู้ป่วยยังใช้เคสเดิม
+const inCourse = c => catOf(c.cat).kind !== 'simple' && (!!c.pc || !!c.rt) && !c.replan;
+// งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
+const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
+const rpTag = c => { const m = rpOf(c); return m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
+// prescription ของงานวางแผนใหม่ = fraction ที่ยังไม่ได้ฉายตั้งแต่วันนั้น แยกตามบริเวณ (นับจากตารางที่ไม่มีสถานะ/การย้ายของวันนั้น)
+function replanRx(c, date) {
+  const sc = caseSchedule({ ...c, fxlog: JSON.stringify(parseFx(c).filter(e => e.date !== date)), rmove: JSON.stringify(parseMoves(c).filter(m => m.date !== date)) }, holidayMap());
+  const left = {};
+  if (sc) for (const [d, l] of sc.fx) if (d >= date) for (const v of l) if (v.to >= v.from) left[v.site] = (left[v.site] || 0) + v.to - v.from + 1;
+  const sites = parseSites(c).map((x, i) => ({ ...x, fx: String(left[i + 1] || ''), rx: '' })).filter(x => +x.fx > 0);
+  if (left[0] || !sites.length) return { dpf: c.dpf, fx: left[0] ? String(left[0]) : '', area: c.area, sites };
+  const [first, ...rest] = sites;   // บริเวณที่ 1 ฉายครบแล้ว (เช่นอยู่ช่วง boost): บริเวณแรกที่ยังเหลือเป็นแผนหลัก
+  return { dpf: first.dpf || c.dpf, fx: first.fx, area: first.area || c.area, sites: rest };
+}
+// หลังบันทึกสถานะหรือย้ายห้อง: สร้าง/แก้ (meta) หรือลบ (meta = null · เฉพาะที่ยังไม่เริ่ม) งานวางแผนใหม่ของเคสเหล่านั้นในวันนั้น
+async function syncReplans(ids, date, meta, rx, pin) {
+  const out = { made: [], removed: 0, kept: 0 };
+  if (!replanOn()) return out;
+  for (const id of ids) {
+    const has = state.cases.some(c => { const m = rpOf(c); return m && m.of === id && m.date === date; });
+    if (!meta && !has) continue;
+    const r = await store.replan(id, date, meta && { ...meta, ...rx[id] }, pin);
+    if (meta) {
+      const rec = normCase(r), i = state.cases.findIndex(c => c.id === rec.id);
+      if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+      if (!has) out.made.push(rec);
+    } else if (r && r.removed) { state.cases = state.cases.filter(c => c.id !== r.id); out.removed++; } else if (r && r.started) out.kept++;
+  }
+  return out;
+}
+const replanNote = o => (o.made.length ? ` · ส่งงานวางแผนใหม่ให้ ${[...new Set(o.made.map(c => c.mp))].join(', ')} (งานรอ)` : '')
+  + (o.removed ? ' · ลบงานวางแผนใหม่ที่ยังไม่เริ่มแล้ว' : '') + (o.kept ? ' · งานวางแผนใหม่ที่เริ่มแล้วยังอยู่ (ลบเองได้ที่หน้าแก้ไขเคส)' : '');
 const courseTabOf = c => c.rt || (parseFx(c).some(e => e.act === 'off') ? 'off' : 'on');
 const fxCanEdit = () => canEdit() && fxStatusOn();
 const fxTip = e => [e.label, e.reason, e.act === 'skip' ? (e.back ? `กลับมาฉาย ${fmtDay(e.back)}` : 'จนกว่าจะกลับมา') : '', e.note, e.by && `บันทึกโดย ${e.by} ${fmtStamp(e.at) || ''}`.trim()].filter(Boolean).join(' · ');
@@ -3075,9 +3144,9 @@ function renderCourse() {
   const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomsOf(c).includes(room)) && (!hit || hit.has(str(c.hn) || 'id:' + c.id)));
   $('#course-tabs').innerHTML = COURSE_TABS.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ctab="${k}" aria-selected="${tab === k}">${l}<span class="n">${of(k).length}</span></button>`).join('');
   $('#course-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-croom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
-  const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : !moveOn() && state.config.rooms.length > 1 ? 'การย้ายห้องฉาย' : !mqOn() ? 'การบันทึก Mosaiq Time' : !addFxOn() ? 'การเพิ่ม fraction' : '';
+  const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : !moveOn() && state.config.rooms.length > 1 ? 'การย้ายห้องฉาย' : !mqOn() ? 'การบันทึก Mosaiq Time' : !addFxOn() ? 'การเพิ่ม fraction' : !replanOn() ? 'การส่งงานวางแผนใหม่ให้ MP คนเดิม (Re-CT, ย้ายห้อง)' : '';
   $('#course-api').hidden = !oldApi || !canEdit();
-  const oldVer = !fx2On() ? '2026-10-18.1' : !moveOn() && state.config.rooms.length > 1 ? '2026-10-18.4' : !mqOn() ? '2026-10-19.2' : '2026-10-21.1';
+  const oldVer = !fx2On() ? '2026-10-18.1' : !moveOn() && state.config.rooms.length > 1 ? '2026-10-18.4' : !mqOn() ? '2026-10-19.2' : !addFxOn() ? '2026-10-21.1' : '2026-10-21.2';
   $('#course-api-text').textContent = `${oldApi} ต้องใช้ Code.gs รุ่น ${oldVer} ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่`;
   $('#course-help').textContent = tab === 'on'
     ? `เคสที่ Plan complete แล้ว ผู้ป่วยละบรรทัด · หัวตารางคือวันที่ (เริ่มที่วันนี้ ข้ามเสาร์–อาทิตย์) และจำนวนผู้ป่วยที่ฉายวันนั้น · ช่องคือเลข fraction · เขียวเข้ม ✓ = บันทึกฉายแล้ว · เขียวอ่อน = ผ่านมาแล้ว · กรอบ = วันนี้${fxCanEdit() ? ' · กดช่องเพื่อบันทึก ฉายแล้ว, Hold, HV, Re-CT, Off RT ฯลฯ' : ''}`
@@ -3395,6 +3464,13 @@ function syncFx() {
   $('#pin-fx-quick').innerHTML = [[nextDay, 'วันทำการถัดไป'], ...(ctx.day > ctx.date ? [[ctx.day, `กลับมา ${fmtDay(ctx.day)}`]] : []), ['', 'จนกว่าจะกลับมา']]
     .filter((x, i, a) => a.findIndex(y => y[0] === x[0]) === i).map(([v, l]) => `<button type="button" class="chip-btn" data-fxback="${v}" aria-pressed="${$('#pin-fx-back').value === v}">${esc(l)}</button>`).join('');
   ctx.auto = !ctx.cur && !!t && t.act === 'given' && ctx.date <= today() && !(t.need && t.reasons.length && !chipValue(box));
+  // งานวางแผนใหม่ที่จะส่งให้ MP คนเดิม (สถานะที่ตั้งไว้ · ย้ายห้อง)
+  const rpWill = replanOn() && !!t && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && !adding);
+  $('#pin-fx-rp').hidden = !rpWill;
+  if (rpWill) {
+    const cs = (ctx.ids || [ctx.id]).map(id => state.cases.find(x => x.id === id)).filter(Boolean), rx = cs.length ? replanRx(cs[0], moving ? ctx.day : ctx.date) : {};
+    $('#pin-fx-rp').innerHTML = `↻ ส่ง<b>งานวางแผนใหม่</b>ให้ <b>${esc([...new Set(cs.map(x => x.mp))].join(', '))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf || '?')} Gy × ${esc(rx.fx)} fx ที่เหลือ` : ''} · ขึ้นในงานรอ ไม่เพิ่มแถวในตารางวันฉาย`;
+  }
   const c = state.cases.find(x => x.id === ctx.id), prev = $('#pin-fx-prev');
   if (!c || !t) { prev.textContent = t ? '' : 'เลือกสถานะของ fraction นี้'; return; }
   if (adding) {
@@ -4131,7 +4207,7 @@ function lineValue(c, key, rcs) {
   if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); const v = f ? str(extraText(f, c[key])) : ''; return [v, v]; }
   switch (key) {
     case 'cat': return [k.label, k.label];
-    case 'how': { const v = c.how === 'manual' ? 'เลือกเอง' : c.how === 'follow' ? 'ตามเทคนิคแรก' : 'ตามคิว'; return [v, v]; }
+    case 'how': { const v = c.how === 'manual' ? 'เลือกเอง' : c.how === 'follow' ? 'ตามเทคนิคแรก' : c.how === 'replan' ? 'วางแผนใหม่' : 'ตามคิว'; return [v, v]; }
     case 'dx': return [c.icd || str(c.dx), [c.icd, dxShort(c)].filter(Boolean).join(' ')];
     case 'dose': { const t = +c.rx > 0 ? +c.rx : (+c.dpf || 0) * (+c.fx || 0); return [t || '', c.dpf || c.fx ? `${c.dpf || '?'} × ${c.fx || '?'}` : '']; }
     case 'rc': { const v = (rcs[c.id] || []).map(l => l.mp).join(', '); return [v, v]; }
@@ -4273,7 +4349,7 @@ function caseRow(c, rcs) {
   const strip = on('steps') && !simple && stampsOn() ? stepStrip(c, k, on('vals')) : '';
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
-      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
+      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${rpTag(c)}${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
     </${canEdit() ? 'button' : 'div'}>
     <div class="c-who">${on('mp') ? av(c.mp) : ''}${on('rc') ? rcHtml(c, rcs) : ''}</div>
@@ -4302,7 +4378,7 @@ function caseLine(c, rcs, cols) {
     if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); return f ? cut(extraText(f, c[key])) : ''; }
     switch (key) {
       case 'cat': return `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>`;
-      case 'hn': return edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`;
+      case 'hn': return (edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`) + rpTag(c);
       case 'name': return cut(c.name);
       case 'how': return howChips(c);
       case 'dx': return c.icd || c.dx ? `<span class="cut" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b> ` : ''}${esc(dxShort(c))}</span>` : '';
@@ -4949,6 +5025,7 @@ function renderSettings() {
         <label class="field"><span class="lbl">คำอธิบาย</span><input data-k="fxTypes.${i}.title" value="${esc(t.title)}" placeholder="ไม่บังคับ"></label>
         <label class="field"><span class="lbl">การทำงาน</span><select data-k="fxTypes.${i}.act">${FX_ACTS.map(([v, l]) => opt(v, l, t.act)).join('')}</select></label>
         <label class="check"><input type="checkbox" data-k="fxTypes.${i}.need"${t.need ? ' checked' : ''}> ต้องเลือกเหตุผล</label>
+        <label class="check" title="บันทึกสถานะนี้แล้วส่งงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ให้ MP คนเดิม แสดงในงานรอ"><input type="checkbox" data-k="fxTypes.${i}.replan"${t.replan ? ' checked' : ''}> ส่งงานวางแผนใหม่ให้ MP คนเดิม</label>
         <span class="btns"><button type="button" class="icon-btn" data-up="fxTypes.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fxTypes.${i}" aria-label="ลบสถานะ ${esc(t.label)}">×</button></span>
       </div>
       <div class="opt-edit">${t.reasons.map((v, j) => `<span class="opt-chip">${esc(v)}<button type="button" data-rmopt="fxTypes.${i}.reasons.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fxTypes.${i}.reasons" placeholder="+ เพิ่มเหตุผลให้เลือก" aria-label="เพิ่มเหตุผลของ ${esc(t.label)}"></div>
@@ -5016,7 +5093,9 @@ function renderSettings() {
       ${fx2On() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การบันทึกสถานะ fraction ("ฉายแล้ว") และรายละเอียดผู้ป่วยต้องใช้ Code.gs รุ่น 2026-10-18.1 ขึ้นไป</span></p>'}
       <div class="form-grid" style="margin-bottom:12px">${optEditor('ptags', 'รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง มีช่องพิมพ์เองเสมอ)')}</div>
       ${fxCards ? `<div class="cat-list">${fxCards}</div>` : ''}
-      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div></div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div>
+      <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): ส่งงานวางแผนใหม่ให้ MP คนเดิม</span></label>
+      <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
     <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
       <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
       <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p>
@@ -5347,6 +5426,7 @@ function dashIndex(from, to, room) {
     if (k.kind === 'simple') continue;
     if (isDay(c.fin)) put('fin', c.fin.slice(0, 10), c);
     if (isDay(c.eval)) put('eval', c.eval.slice(0, 10), c);
+    if (c.replan) continue;   // งานวางแผนใหม่: วันฉายนับที่เคสเดิม
     const sc = caseSchedule(c, hol);
     if (!sc) continue;
     put('start', sc.start, c);
@@ -5608,7 +5688,7 @@ function renderDashStats() {
   rangeBoxes('dash', p);
   $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้`;
   const hol = holidayMap(), td = today(), rooms = dashRooms();
-  const onToday = state.cases.filter(c => { const sc = catOf(c.cat).kind !== 'simple' && caseSchedule(c, hol); return sc && sc.days.has(td); });
+  const onToday = state.cases.filter(c => { const sc = catOf(c.cat).kind !== 'simple' && !c.replan && caseSchedule(c, hol); return sc && sc.days.has(td); });
   const cats = state.config.cats.filter(k => k.on || list.some(c => c.cat === k.id));
   const row = (name, cs, catId) => {
     const units = cs.reduce((t, c) => t + unitsOf(c), 0);
@@ -6611,17 +6691,21 @@ async function submitPin(e, clear) {
     }
     if (ctx.mode === 'fx' && fxMoving()) {   // ย้ายห้อง: ทุกเคสของผู้ป่วยคนนี้ · ล้าง = ลบรายการย้ายที่ครอบวันนี้ (วันที่ของรายการนั้น)
       const mv = clear ? null : { room: chipValue($('#pin-fx-room')), from: ctx.fromRoom, scope: chipValue($('#pin-fx-scope')), note: str($('#pin-note').value) };
-      const day = clear ? ctx.mvCur.date : ctx.day;
-      let rec = null;
+      const day = clear ? ctx.mvCur.date : ctx.day, ids = ctx.ids || [ctx.id];
+      // งานวางแผนใหม่ให้ MP คนเดิม (prescription นับจากเคสก่อนบันทึก)
+      const rpMeta = mv && state.config.moveReplan ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '' } : null;
+      const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), day)])) : {};
+      let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
-        for (const id of ctx.ids || [ctx.id]) {
+        for (const id of ids) {
           rec = normCase(await store.move(id, day, mv, pin));
           const i = state.cases.findIndex(c => c.id === id);
           if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
         }
+        rp = await syncReplans(ids, day, rpMeta, rx, pin);
       } finally { if (rec) render(); }
       pinDlg.close();
-      toast(`${rec.hn} · ${clear ? `ล้างการย้ายไปห้อง ${ctx.mvCur.room}` : `ย้ายไปฉายห้อง ${mv.room} ${mv.scope === 'on' ? 'ตั้งแต่' : 'เฉพาะ'} ${fmtDay(day)}`}`);
+      toast(`${rec.hn} · ${clear ? `ล้างการย้ายไปห้อง ${ctx.mvCur.room}` : `ย้ายไปฉายห้อง ${mv.room} ${mv.scope === 'on' ? 'ตั้งแต่' : 'เฉพาะ'} ${fmtDay(day)}`}${replanNote(rp)}`);
       return;
     }
     if (ctx.mode === 'mqt') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
@@ -6638,18 +6722,23 @@ async function submitPin(e, clear) {
       return;
     }
     if (ctx.mode === 'fx' || ctx.mode === 'ptags') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
-      const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '';
-      let rec = null;
+      const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '', ids = ctx.ids || [ctx.id];
+      // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
+      const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
+      const rpMeta = t && t.replan && t.act !== 'off' ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date } : null;
+      const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
+      let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
-        for (const id of ctx.ids || [ctx.id]) {
+        for (const id of ids) {
           rec = normCase(ctx.mode === 'ptags' ? await store.tags(id, tags, pin) : await store.fraction(id, ctx.date, ev, pin));
           const i = state.cases.findIndex(c => c.id === id);
           if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
         }
+        if (ctx.mode === 'fx') rp = await syncReplans(ids, ctx.date, rpMeta, rx, pin);
       } finally { if (rec) render(); }
       pinDlg.close();
       if (ctx.mode === 'ptags') { toast(`${rec.hn} · ${rec.ptags ? `รายละเอียดผู้ป่วย: ${rec.ptags}` : 'ล้างรายละเอียดผู้ป่วยแล้ว'}`); return; }
-      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}`);
+      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}${replanNote(rp)}`);
       return;
     }
     if (ctx.mode === 'logedit' || ctx.mode === 'logadd') { await store.editLog(ctx.rec, pin); logSaved(ctx.rec, ctx.mode === 'logadd'); pinDlg.close(); return; }   // editLog บันทึกรายการใหม่ได้ด้วย
@@ -6929,7 +7018,7 @@ document.addEventListener('click', e => {
   }
   if (ds.delact) { const acts = { ...draft.acts }; delete acts[ds.delact]; draft.acts = acts; return renderSettings(); }
   if (ds.rmopt) { const j = ds.rmopt.lastIndexOf('.'); getPath(draft, ds.rmopt.slice(0, j)).splice(+ds.rmopt.slice(j + 1), 1); return renderSettings(); }
-  if (ds.add === 'fxtype') { draft.fxTypes.push({ id: 'fx' + uid(), label: '', title: '', act: 'skip', reasons: [], need: false }); renderSettings(); $$('[data-k^="fxTypes."][data-k$=".label"]').pop().focus(); return; }
+  if (ds.add === 'fxtype') { draft.fxTypes.push({ id: 'fx' + uid(), label: '', title: '', act: 'skip', reasons: [], need: false, replan: false }); renderSettings(); $$('[data-k^="fxTypes."][data-k$=".label"]').pop().focus(); return; }
   if (ds.add === 'field') { draft.fields.push({ id: 'f' + uid(), label: '', type: 'text', options: [], req: false, col: '' }); renderSettings(); $$('[data-k^="fields."][data-k$=".label"]').pop().focus(); return; }
   if (ds.add === 'position') { draft.positions.push({ id: 'pos-' + uid(), label: 'ตำแหน่งใหม่', base: 0, guarantee: draft.guarantee }); renderSettings(); $$('[data-k^="positions."][data-k$=".label"]').pop().select(); return; }
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }

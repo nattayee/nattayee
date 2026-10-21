@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-21.1';
-const API_LEVEL = 27;
+const CODE_VERSION = '2026-10-21.2';
+const API_LEVEL = 28;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -61,6 +61,8 @@ const TABLES = {
       ['mqt', 'Mosaiq Time'],
       // เพิ่ม fraction (บันทึกที่ fraction สุดท้ายของคอร์ส) [{date, n, reason, by, at}] (JSON) · ฉายต่อจากวันสุดท้าย · เขียนผ่าน addFxCase เท่านั้น
       ['fxadd', 'เพิ่ม fraction'],
+      // งานวางแผนใหม่ที่ระบบสร้างให้ MP คนเดิม (Re-CT, ย้ายห้อง ฯลฯ) { of: id ของเคสเดิม, date, kind, label, reason } (JSON) · เขียนผ่าน replanCase เท่านั้น
+      ['replan', 'งานวางแผนใหม่ (จาก)'],
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -393,6 +395,7 @@ function pickNext_(o, trace) {
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
+    if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
     const trial = Object.assign({}, credit);
     if (select(p, c.in, trial) === j) Object.assign(credit, trial);
     p = (j + 1) % n;
@@ -667,7 +670,7 @@ function moveActCases(token) {
 const STEP_NAMES = { fin: 'Finish', eval: 'Evaluate', mu: 'Dose check', d0: 'F0', d4: 'Delta4', mc: 'SRS MapCheck', pc: 'Plan complete' };
 const STEP_VALUES = ['mu', 'd0', 'd4', 'mc'];   // ต้องกรอกค่า
 const STAMP_FIELDS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
-  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd'];
+  'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd', 'replan'];
 // ชื่อคอลัมน์เดิมในแท็บ Cases → ชื่อใหม่ (เปลี่ยนชื่อในชีตตอนเขียนครั้งถัดไป ระหว่างนั้นอ่านจากชื่อเดิมได้)
 const RENAMED_COLS = { 'MU Check': 'Dose check', 'MU Check โดย': 'Dose check โดย', 'MU Check ค่า': 'Dose check ค่า', 'D0': 'F0', 'D0 โดย': 'F0 โดย', 'D0 ค่า': 'F0 ค่า' };
 
@@ -928,6 +931,66 @@ function tagCase(id, tags, pin, token) {
     const set = { ptags: text };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
     return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+  });
+}
+
+/**
+ * งานวางแผนใหม่ให้ MP คนเดิม (บันทึก Re-CT, ย้ายห้อง ฯลฯ ในตารางวันฉาย) ยืนยันด้วยรหัส PIN
+ * เคสใหม่คัดลอกข้อมูลผู้ป่วยและเทคนิคจากเคสเดิม · prescription = fraction ที่เหลือ (หน้าเว็บคำนวณ) · In = วันนี้ · ขั้นตอนเริ่มใหม่ทั้งหมด
+ * หนึ่งงานต่อเคสเดิมต่อวัน (บันทึกซ้ำ = แก้สาเหตุ วันเริ่มฉาย ห้อง) · rp = null: ลบงานของวันนั้นถ้ายังไม่เริ่ม (ยังไม่มีขั้นตอนที่บันทึก)
+ * rp = { kind, label, reason, room, sim, ct, dpf, fx, area, sites: [...] }
+ */
+function replanCase(id, date, rp, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  date = cut(date, 10);
+  if (!isDate(date)) throw new Error('วันที่ไม่ถูกต้อง');
+  let rec = null;
+  if (rp) {
+    rec = { kind: cut(rp.kind, 40), label: cut(rp.label, 40), reason: cut(rp.reason, 80), room: cut(rp.room, 40), sim: cut(rp.sim, 10), ct: cut(rp.ct, 10),
+      dpf: cut(rp.dpf, 20), fx: cut(rp.fx, 4), area: cut(rp.area, 200) };
+    if (!rec.kind || !rec.label) throw new Error('ไม่ทราบสาเหตุของงานวางแผนใหม่');
+    if ((rec.sim && !isDate(rec.sim)) || (rec.ct && !isDate(rec.ct))) throw new Error('วันที่ของงานวางแผนใหม่ไม่ถูกต้อง');
+    if (rec.fx && !/^\d{1,3}$/.test(rec.fx)) throw new Error('จำนวน fraction ไม่ถูกต้อง');
+    const sites = Array.isArray(rp.sites) ? rp.sites.slice(0, 10).filter(x => x && typeof x === 'object').map(x => {
+      const o = {};
+      ['area', 'dpf', 'fx', 'rx', 'freq', 'start', 'startFx', 'sid', 'room'].forEach(k => { if (x[k] != null && x[k] !== '') o[k] = cut(x[k], 120); });
+      return o;
+    }) : [];
+    rec.sites = sites.length ? JSON.stringify(sites) : '';
+  }
+  checkPin_(u, pin);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
+    const rows = readTable_(ss, 'cases', cfg), parent = rows.filter(c => c.id === id)[0];
+    if (!parent) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const metaOf = c => { try { const m = JSON.parse(c.replan || 'null'); return m && typeof m === 'object' ? m : null; } catch (e) { return null; } };
+    const old = rows.filter(c => { const m = metaOf(c); return m && m.of === id && m.date === date; })[0];
+    if (!rec) {
+      if (!old) return { id: '', removed: false };
+      if (['fin', 'eval', 'mu', 'd0', 'd4', 'mc', 'pc'].some(k => String(old[k] || ''))) return { id: old.id, removed: false, started: true };
+      const row = findRow_(sh, header.indexOf('id') + 1, old.id);
+      if (row) sh.deleteRow(row);
+      return { id: old.id, removed: true };
+    }
+    const meta = JSON.stringify({ of: id, date: date, kind: rec.kind, label: rec.label, reason: rec.reason });
+    if (old) {   // แก้: สาเหตุ วันเริ่มฉาย ห้อง (prescription และขั้นตอนที่ MP ทำไปแล้วคงไว้)
+      const set = { replan: meta, sim: rec.sim, room: rec.room || old.room };
+      writeFields_(sh, findRow_(sh, header.indexOf('id') + 1, old.id), header, fields.filter(f => f[0] in set), set);
+      return readTable_(ss, 'cases', cfg).filter(c => c.id === old.id)[0];
+    }
+    const out = {};
+    fields.forEach(f => { out[f[0]] = parent[f[0]]; });
+    STAMP_FIELDS.forEach(k => { out[k] = ''; });
+    Object.assign(out, {
+      id: Utilities.getUuid(), how: 'replan', batch: '', note: '', replan: meta,
+      in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: new Date().toISOString(), updated: '',
+      sim: rec.sim, ct: rec.ct || parent.ct, room: rec.room || parent.room, dpf: rec.dpf || parent.dpf, fx: rec.fx, rx: '', area: rec.area || parent.area, sites: rec.sites,
+    });
+    writeFields_(sh, sh.getLastRow() + 1, header, fields, out);
+    return out;
   });
 }
 
