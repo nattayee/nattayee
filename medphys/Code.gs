@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-21.2';
-const API_LEVEL = 28;
+const CODE_VERSION = '2026-10-21.3';
+const API_LEVEL = 29;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -938,7 +938,7 @@ function tagCase(id, tags, pin, token) {
  * งานวางแผนใหม่ให้ MP คนเดิม (บันทึก Re-CT, ย้ายห้อง ฯลฯ ในตารางวันฉาย) ยืนยันด้วยรหัส PIN
  * เคสใหม่คัดลอกข้อมูลผู้ป่วยและเทคนิคจากเคสเดิม · prescription = fraction ที่เหลือ (หน้าเว็บคำนวณ) · In = วันนี้ · ขั้นตอนเริ่มใหม่ทั้งหมด
  * หนึ่งงานต่อเคสเดิมต่อวัน (บันทึกซ้ำ = แก้สาเหตุ วันเริ่มฉาย ห้อง) · rp = null: ลบงานของวันนั้นถ้ายังไม่เริ่ม (ยังไม่มีขั้นตอนที่บันทึก)
- * rp = { kind, label, reason, room, sim, ct, dpf, fx, area, sites: [...] }
+ * rp = { kind, label, reason, room, sim, ct, dpf, fx, area, sites: [...], mp } · mp ว่าง = MP ของเคสเดิม (บันทึกซ้ำ = คนที่รับงานอยู่) · ระบุ = ส่งให้คนนั้น
  */
 function replanCase(id, date, rp, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.course);
@@ -949,7 +949,7 @@ function replanCase(id, date, rp, pin, token) {
   let rec = null;
   if (rp) {
     rec = { kind: cut(rp.kind, 40), label: cut(rp.label, 40), reason: cut(rp.reason, 80), room: cut(rp.room, 40), sim: cut(rp.sim, 10), ct: cut(rp.ct, 10),
-      dpf: cut(rp.dpf, 20), fx: cut(rp.fx, 4), area: cut(rp.area, 200) };
+      dpf: cut(rp.dpf, 20), fx: cut(rp.fx, 4), area: cut(rp.area, 200), mp: cut(rp.mp, 20).toUpperCase() };
     if (!rec.kind || !rec.label) throw new Error('ไม่ทราบสาเหตุของงานวางแผนใหม่');
     if ((rec.sim && !isDate(rec.sim)) || (rec.ct && !isDate(rec.ct))) throw new Error('วันที่ของงานวางแผนใหม่ไม่ถูกต้อง');
     if (rec.fx && !/^\d{1,3}$/.test(rec.fx)) throw new Error('จำนวน fraction ไม่ถูกต้อง');
@@ -966,6 +966,10 @@ function replanCase(id, date, rp, pin, token) {
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
     const rows = readTable_(ss, 'cases', cfg), parent = rows.filter(c => c.id === id)[0];
     if (!parent) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    if (rec && rec.mp) {
+      const staff = Array.isArray(cfg && cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code }));
+      if (!staff.some(x => String(x.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
+    }
     const metaOf = c => { try { const m = JSON.parse(c.replan || 'null'); return m && typeof m === 'object' ? m : null; } catch (e) { return null; } };
     const old = rows.filter(c => { const m = metaOf(c); return m && m.of === id && m.date === date; })[0];
     if (!rec) {
@@ -978,6 +982,7 @@ function replanCase(id, date, rp, pin, token) {
     const meta = JSON.stringify({ of: id, date: date, kind: rec.kind, label: rec.label, reason: rec.reason });
     if (old) {   // แก้: สาเหตุ วันเริ่มฉาย ห้อง (prescription และขั้นตอนที่ MP ทำไปแล้วคงไว้)
       const set = { replan: meta, sim: rec.sim, room: rec.room || old.room };
+      if (rec.mp) set.mp = rec.mp;
       writeFields_(sh, findRow_(sh, header.indexOf('id') + 1, old.id), header, fields.filter(f => f[0] in set), set);
       return readTable_(ss, 'cases', cfg).filter(c => c.id === old.id)[0];
     }
@@ -985,7 +990,7 @@ function replanCase(id, date, rp, pin, token) {
     fields.forEach(f => { out[f[0]] = parent[f[0]]; });
     STAMP_FIELDS.forEach(k => { out[k] = ''; });
     Object.assign(out, {
-      id: Utilities.getUuid(), how: 'replan', batch: '', note: '', replan: meta,
+      id: Utilities.getUuid(), how: 'replan', batch: '', note: '', replan: meta, mp: rec.mp || parent.mp,
       in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: new Date().toISOString(), updated: '',
       sim: rec.sim, ct: rec.ct || parent.ct, room: rec.room || parent.room, dpf: rec.dpf || parent.dpf, fx: rec.fx, rx: '', area: rec.area || parent.area, sites: rec.sites,
     });

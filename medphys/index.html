@@ -349,6 +349,8 @@ button.fx-prog{padding:0;border:0;background:none;font-family:inherit;cursor:poi
 .fxc.boost{box-shadow:inset 0 -3px 0 var(--warn)}
 .fxc.fx.today.boost{box-shadow:inset 0 0 0 2px var(--accent),inset 0 -5px 0 var(--warn)}
 .fxc.noted .fxl{color:var(--accent)}
+.fxc .fxl.rct{color:var(--late);font-weight:700}
+.fxc.given .fxl.rct{color:var(--surface)}
 .fxc.ev.skip{background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn);color:var(--warn);font-weight:600}
 .fxc.ev.off{background:var(--late-soft);color:var(--late);font-weight:600}
 .fxc.ev.treat{box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent)}
@@ -382,6 +384,7 @@ button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .fx-prev b{color:var(--fg);font-weight:600}
 .fx-prev:empty{display:none}
 .fx-prev.fx-rp{background:var(--late-soft);color:var(--fg)}
+.sub-lbl.warn{color:var(--warn);font-weight:600}
 .cr-boost{display:inline-flex;align-items:center;gap:5px}
 .cr-boost::before{content:"";width:10px;height:3px;border-radius:2px;background:var(--warn)}
 .cr-none{margin-top:8px;font-size:12.5px;color:var(--muted)}
@@ -1460,6 +1463,8 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
           <div class="fx-back"><input type="date" id="pin-fx-back" aria-label="กลับมาฉายวันที่"><span id="pin-fx-quick"></span></div></div>
         <p class="fx-prev" id="pin-fx-prev" aria-live="polite"></p>
         <p class="fx-prev fx-rp" id="pin-fx-rp" hidden></p>
+        <div class="field" id="pin-rp-box" hidden><span class="lbl">ส่งงานวางแผนใหม่ให้ <span class="sub-lbl" id="pin-rp-hint"></span></span>
+          <div class="chips people" id="pin-rp-mp" role="radiogroup" aria-label="ส่งงานวางแผนใหม่ให้"></div></div>
       </div>
       <div class="tags-box" id="pin-tags-box" hidden>
         <div class="field"><span class="lbl">คิว <span class="sub-lbl">สีพื้นหลัง HN ในตารางวันฉาย</span></span>
@@ -1685,6 +1690,7 @@ const ADD_API = 27;   // Code.gs ที่บันทึกเพิ่ม frac
 const addFxOn = () => serverHas(ADD_API);
 const REPLAN_API = 28;   // Code.gs ที่สร้างงานวางแผนใหม่ให้ MP คนเดิมได้ (replanCase)
 const replanOn = () => serverHas(REPLAN_API);
+const replanMpOn = () => serverHas(29);   // Code.gs ที่เลือกส่งงานวางแผนใหม่ให้ MP คนอื่นได้
 const DEFAULT_CONFIG = {
   boxes: Object.fromEntries(Object.entries(BOXES).map(([v, xs]) => [v, xs.map(x => x[0])])),   // ลำดับกล่องของแต่ละแถบ
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
@@ -2101,7 +2107,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-21.3';
+const PAGE_VERSION = '2026-10-21.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2324,11 +2330,11 @@ function localStore() {
         return { id: old.id, removed: true };
       }
       const meta = JSON.stringify({ of: id, date, kind: rp.kind, label: rp.label, reason: rp.reason || '' });
-      if (old) { Object.assign(old, { replan: meta, sim: rp.sim || '', room: rp.room || old.room }); persist(); return clone(old); }
+      if (old) { Object.assign(old, { replan: meta, sim: rp.sim || '', room: rp.room || old.room }, rp.mp ? { mp: rp.mp } : {}); persist(); return clone(old); }
       const c = { ...p };
       for (const k of ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote',
         'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd']) c[k] = '';
-      Object.assign(c, { id: uid(), how: 'replan', batch: '', note: '', replan: meta, in: today(), created: new Date().toISOString(), updated: '',
+      Object.assign(c, { id: uid(), how: 'replan', mp: rp.mp || p.mp, batch: '', note: '', replan: meta, in: today(), created: new Date().toISOString(), updated: '',
         sim: rp.sim || '', ct: rp.ct || p.ct, room: rp.room || p.room, dpf: rp.dpf || p.dpf, fx: rp.fx || '', rx: '', area: rp.area || p.area,
         sites: rp.sites && rp.sites.length ? JSON.stringify(rp.sites) : '' });
       db.cases.push(c);
@@ -3063,6 +3069,13 @@ const replanNote = o => (o.made.length ? ` · ส่งงานวางแผ�
   + (o.removed ? ' · ลบงานวางแผนใหม่ที่ยังไม่เริ่มแล้ว' : '') + (o.kept ? ' · งานวางแผนใหม่ที่เริ่มแล้วยังอยู่ (ลบเองได้ที่หน้าแก้ไขเคส)' : '');
 const courseTabOf = c => c.rt || (parseFx(c).some(e => e.act === 'off') ? 'off' : 'on');
 const fxCanEdit = () => canEdit() && fxStatusOn();
+// Re-CT (และสถานะแบบไม่ได้ฉายที่ตั้งให้ส่งงานวางแผนใหม่): ครั้งที่ n ของสถานะนั้น เรียงตามวันที่ [{ date, label, n }]
+const isReType = id => id === 'rect' || !!((state.config.fxTypes || []).find(t => t.id === id) || {}).replan;
+function reRounds(evs) {
+  const n = {};
+  return evs.filter(e => e.act === 'skip' && isReType(e.type)).sort((a, b) => a.date.localeCompare(b.date)).map(e => ({ date: e.date, label: e.label, n: (n[e.type] = (n[e.type] || 0) + 1) }));
+}
+const roundName = r => `${r.label} ${r.n}`;   // "Re-CT 2"
 const fxTip = e => [e.label, e.reason, e.act === 'skip' ? (e.back ? `กลับมาฉาย ${fmtDay(e.back)}` : 'จนกว่าจะกลับมา') : '', e.note, e.by && `บันทึกโดย ${e.by} ${fmtStamp(e.at) || ''}`.trim()].filter(Boolean).join(' · ');
 const isWeekday = ds => { const w = parseISO(ds).getDay(); return w !== 0 && w !== 6; };
 const weekdayFrom = ds => { let d = ds; while (!isWeekday(d)) d = nextDate(d); return d; };
@@ -3244,6 +3257,9 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
 }
 function fxGridRow(g, days, hol, td, edit, room = '') {
   const { c, sc } = g.main, cs = g.items.map(x => x.c), evs = sc ? sc.evs : parseFx(c), adds = parseAdds(c);
+  // Re-CT ครั้งที่ n: ช่องของสถานะ และ fraction แรกที่กลับมาฉาย ("Re-CT 1") · fraction ต่อจากนั้นชี้ค้างเห็นว่าอยู่หลัง Re-CT ครั้งไหน
+  const rounds = reRounds(evs), fxDays = sc ? [...sc.fx.keys()].sort() : [], backAt = new Map();
+  for (const r of rounds) { const d = fxDays.find(x => x > r.date); if (d && !backAt.has(d)) backAt.set(d, r); }
   const docs = [...new Set(cs.map(x => x.doc).filter(Boolean))];
   const tags = groupTags(cs), ti = tagInfo(tags), qc = ti.q ? ' ' + ti.q.id : '';
   const info = [ti.q && `คิว ${ti.q.label}`, ti.bd && ti.bd.time && `${ti.bd.name} ${ti.bd.time}`, [...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
@@ -3270,7 +3286,10 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     const h = hol[d], e = fxEventAt(evs, d), list = sc && sc.fx.get(d), num = list ? fxNum(list) : '';
     const cls = ['fxc'], dayTxt = LONG_DAY_FMT.format(parseISO(d));
     let body = '', tip = '', away = false;
-    if (e && e.date === d && (!FX_MARKS.includes(e.act) || !num)) { cls.push('ev', e.act); body = `<span class="fxl">${esc(e.label)}</span>`; tip = `${dayTxt} · ${fxTip(e)}`; }
+    if (e && e.date === d && (!FX_MARKS.includes(e.act) || !num)) {
+      const rn = rounds.find(r => r.date === e.date);
+      cls.push('ev', e.act); body = `<span class="fxl">${esc(rn ? roundName(rn) : e.label)}</span>`; tip = `${dayTxt} · ${fxTip(e)}${rn ? ` · ครั้งที่ ${rn.n}` : ''}`;
+    }
     else if (e && e.act === 'skip') { cls.push('band'); tip = `${dayTxt} · ${e.label} ตั้งแต่ ${fmtDay(e.date)}${e.back ? ` ถึงก่อน ${fmtDay(e.back)}` : ' จนกว่าจะกลับมา'}`; }
     else if (num && room && list.some(v => v.mv) && !fxRooms(list).includes(room) && fxBase(list).includes(room)) {
       // ห้องเดิมของ fraction ที่ย้ายไปฉายห้องอื่น: แสดงสถานะ "ย้าย"
@@ -3298,6 +3317,9 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
       if (room && !rs.includes(room)) cls.push('oroom');
       if (gv) { body += '<i class="fx-ok" aria-hidden="true">✓</i>'; tip += ' · ' + fxTip(e); }
       else if (e && e.date === d) { cls.push('noted'); body += `<span class="fxl">${esc(e.label)}</span>`; tip += ' · ' + fxTip(e); }
+      const rb = backAt.get(d), rl = rounds.filter(r => r.date < d).pop();
+      if (rb) { cls.push('reback'); body += `<span class="fxl rct">${esc(roundName(rb))}</span>`; tip += ` · กลับมาฉายหลัง ${rb.label} ครั้งที่ ${rb.n} (แผนใหม่)`; }
+      else if (rl) tip += ` · หลัง ${rl.label} ครั้งที่ ${rl.n}`;
     } else cls.push(h ? 'hol' : 'empty');
     if (d === td) cls.push('col-today');
     if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
@@ -3307,7 +3329,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
-  const k = catOf(c.cat), edit = canEditCases(), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off');
+  const k = catOf(c.cat), edit = canEditCases(), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off'), rounds = reRounds(evs);
   const evDays = evs.filter(e => !FX_MARKS.includes(e.act) || !(sc && sc.days.has(e.date))).map(e => e.date);
   const days = [...new Set([...(sc ? sc.days : []), ...evDays])].sort();
   const stateOf = d => (c.rt === 'complete' ? 'done' : c.rt === 'cancel' ? (d < c.rtDate ? 'done' : 'stop') : d < td ? 'done' : d === td ? 'today' : 'next');
@@ -3316,8 +3338,8 @@ function courseRow(c, sc, td) {
     const dt = parseISO(d), list = sc && sc.fx.get(d), e = evs.find(x => x.date === d);
     const when = `<small>${dt.getDate()} ${esc(MON_FMT.format(dt))}</small>`;
     if (e && (!FX_MARKS.includes(e.act) || !list)) {
-      const tip = `${LONG_DAY_FMT.format(dt)} · ${fxTip(e)}`;
-      return fxCanEdit() ? `<button type="button" class="cd ev ${e.act}" data-fxc="${esc(c.id)}" data-day="${d}" title="${esc(tip + ' · กดเพื่อแก้หรือล้าง')}">${when}<b>${esc(e.label)}</b></button>` : `<span class="cd ev ${e.act}" title="${esc(tip)}">${when}<b>${esc(e.label)}</b></span>`;
+      const rn = rounds.find(r => r.date === e.date), lbl = rn ? roundName(rn) : e.label, tip = `${LONG_DAY_FMT.format(dt)} · ${fxTip(e)}${rn ? ` · ครั้งที่ ${rn.n}` : ''}`;
+      return fxCanEdit() ? `<button type="button" class="cd ev ${e.act}" data-fxc="${esc(c.id)}" data-day="${d}" title="${esc(tip + ' · กดเพื่อแก้หรือล้าง')}">${when}<b>${esc(lbl)}</b></button>` : `<span class="cd ev ${e.act}" title="${esc(tip)}">${when}<b>${esc(lbl)}</b></span>`;
     }
     const st = stateOf(d), num = fxNum(list), bst = sc.boost.has(d), gv = !!e && e.act === 'given';
     return `<span class="cd ${st}${gv ? ' given' : ''}${bst ? ' boost' : ''}${e && !gv ? ' noted' : ''}" title="Fx ${esc(num)}${nFx ? '/' + nFx : ''}${bst ? ' · Boost' : ''} · ${esc(LONG_DAY_FMT.format(dt))}${st === 'stop' ? ' · ยกเลิก' : st === 'done' ? ' · ฉายแล้ว' : st === 'today' ? ' · วันนี้' : ''}${e ? ' · ' + esc(fxTip(e)) : ''}">${when}<b>${esc(num)}</b></span>`;
@@ -3410,6 +3432,12 @@ function openFx(id, day, away) {
   const ns = Array.from({ length: 10 }, (_, i) => String(i + 1));
   if (addCur && !ns.includes(String(addCur.n))) ns.push(String(addCur.n));
   chipGroup($('#pin-fx-addn'), 'fxaddn', ns, addCur ? String(addCur.n) : '');
+  // งานวางแผนใหม่: ส่งให้คนเดิม (ค่าเริ่มต้น · งานที่มีอยู่แล้ว = คนที่รับอยู่) หรือเลือก MP คนอื่น (เช่นคนเดิมลา)
+  const jobsOf = d => state.cases.filter(x => { const m = rpOf(x); return m && pinCtx.ids.includes(m.of) && m.date === d; });
+  const mpsAt = d => { const j = jobsOf(d); return [...new Set((j.length ? j : hnGroup(c)).map(x => x.mp).filter(Boolean))]; };
+  pinCtx.rpMps = mpsAt;
+  mpChips($('#pin-rp-mp'), 'rpmp', '', today());
+  $('#pin-rp-mp').insertAdjacentHTML('afterbegin', '<label><input type="radio" name="rpmp" value="" checked><span id="pin-rp-same"></span></label>');
   $('#pin-fx-type').innerHTML = types.length ? types.map(t => `<label title="${esc([t.title, (FX_ACTS.find(a => a[0] === t.act) || [])[1]].filter(Boolean).join(' · '))}"><input type="radio" name="fxtype" value="${esc(t.id)}"${pre === t.id ? ' checked' : ''}><span>${esc(t.label)}</span></label>`).join('')
     : '<span class="muted">แอดมินยังไม่ได้ตั้งสถานะ (ตั้งค่า → สถานะ fraction)</span>';
   $('#pin-fx-back').value = cur ? cur.back : '';
@@ -3467,9 +3495,14 @@ function syncFx() {
   // งานวางแผนใหม่ที่จะส่งให้ MP คนเดิม (สถานะที่ตั้งไว้ · ย้ายห้อง)
   const rpWill = replanOn() && !!t && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && !adding);
   $('#pin-fx-rp').hidden = !rpWill;
+  $('#pin-rp-box').hidden = !rpWill || !replanMpOn();
   if (rpWill) {
-    const cs = (ctx.ids || [ctx.id]).map(id => state.cases.find(x => x.id === id)).filter(Boolean), rx = cs.length ? replanRx(cs[0], moving ? ctx.day : ctx.date) : {};
-    $('#pin-fx-rp').innerHTML = `↻ ส่ง<b>งานวางแผนใหม่</b>ให้ <b>${esc([...new Set(cs.map(x => x.mp))].join(', '))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf || '?')} Gy × ${esc(rx.fx)} fx ที่เหลือ` : ''} · ขึ้นในงานรอ ไม่เพิ่มแถวในตารางวันฉาย`;
+    const cs = (ctx.ids || [ctx.id]).map(id => state.cases.find(x => x.id === id)).filter(Boolean), rd = moving ? ctx.day : ctx.date, rx = cs.length ? replanRx(cs[0], rd) : {};
+    const same = ctx.rpMps(rd), pick = replanMpOn() ? chipValue($('#pin-rp-mp')) : '', away = same.filter(m => onLeave(m, today()));
+    $('#pin-rp-same').textContent = `ตามเดิม (${same.join(', ') || '—'})`;
+    $('#pin-rp-hint').textContent = away.length ? `${away.join(', ')} ลาวันนี้` : '';
+    $('#pin-rp-hint').className = away.length ? 'sub-lbl warn' : 'sub-lbl';
+    $('#pin-fx-rp').innerHTML = `↻ ส่ง<b>งานวางแผนใหม่</b>ให้ <b>${esc(pick || same.join(', '))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf || '?')} Gy × ${esc(rx.fx)} fx ที่เหลือ` : ''} · ขึ้นในงานรอ ไม่เพิ่มแถวในตารางวันฉาย`;
   }
   const c = state.cases.find(x => x.id === ctx.id), prev = $('#pin-fx-prev');
   if (!c || !t) { prev.textContent = t ? '' : 'เลือกสถานะของ fraction นี้'; return; }
@@ -5894,7 +5927,8 @@ function syncCaseForm() {
   const mp = chipValue($('#f-mp')), day = $('#f-in').value || today();
   const hint = $('#f-mp-hint');
   const changed = mp && editingCase.mp && mp !== editingCase.mp;
-  hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
+  const rp = rpOf(editingCase);
+  hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : rp ? `งานวางแผนใหม่จาก ${rp.label} · เปลี่ยนผู้รับได้ ไม่กระทบคิว` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
   hint.className = mp && onLeave(mp, day) ? 'hint warn' : 'hint';
   const times = countsOn() ? clampN($('#f-n').value) : 1, x = times > 1 ? ` × ${times} ครั้ง` : '';
   const extra = k.mu ? ` + New MU ${num(unitPts(state.config.acts.mu.min, state.config.acts.mu.w), 3)}${x}` : '';
@@ -5947,7 +5981,7 @@ async function submitCase(e) {
     ...(countsOn() ? { n: clampN(nv) } : {}),
   });
   if (rec.eval && !rec.fin) rec.fin = rec.eval;
-  if (rec.mp !== editingCase.mp) rec.how = 'manual';
+  if (rec.mp !== editingCase.mp && editingCase.how !== 'replan') rec.how = 'manual';   // งานวางแผนใหม่: เปลี่ยนผู้รับได้ ไม่เกี่ยวกับคิว
   if (editPinOn()) return openCasePin('edit', rec);   // ยืนยันด้วยรหัส PIN ก่อนบันทึก
   const btn = $('#case-save');
   btn.disabled = true;
@@ -6693,7 +6727,7 @@ async function submitPin(e, clear) {
       const mv = clear ? null : { room: chipValue($('#pin-fx-room')), from: ctx.fromRoom, scope: chipValue($('#pin-fx-scope')), note: str($('#pin-note').value) };
       const day = clear ? ctx.mvCur.date : ctx.day, ids = ctx.ids || [ctx.id];
       // งานวางแผนใหม่ให้ MP คนเดิม (prescription นับจากเคสก่อนบันทึก)
-      const rpMeta = mv && state.config.moveReplan ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '' } : null;
+      const rpMeta = mv && state.config.moveReplan ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '', mp: replanMpOn() ? chipValue($('#pin-rp-mp')) : '' } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), day)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
@@ -6725,7 +6759,7 @@ async function submitPin(e, clear) {
       const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '', ids = ctx.ids || [ctx.id];
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
-      const rpMeta = t && t.replan && t.act !== 'off' ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date } : null;
+      const rpMeta = t && t.replan && t.act !== 'off' ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date, mp: replanMpOn() ? chipValue($('#pin-rp-mp')) : '' } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
