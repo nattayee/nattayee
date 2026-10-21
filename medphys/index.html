@@ -618,6 +618,7 @@ button.who:hover .nm{text-decoration:underline}
 .boost-tag{display:inline-block;margin-right:4px;padding:1px 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;white-space:nowrap}
 .checks.boost-checks{margin-top:4px}
 .checks.boost-checks>.boost-tag{align-self:flex-start;margin-top:5px}
+.boost-tag.plan{background:var(--sunken);color:var(--muted)}
 .case-tbl tbody tr:hover td{background:var(--hover)}
 .case-tbl tr.fresh td{background:var(--accent-soft)}
 .case-tbl .cut{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
@@ -2065,7 +2066,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-20.1';
+const PAGE_VERSION = '2026-10-21.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3924,6 +3925,12 @@ const readSites = base => sitePres(base).map(pre => { const st = readStart(pre);
 const boostList = c => sitesOf(c).filter(x => x.start === 'boost' && x.sid).map((x, i) => ({ ...x, n: i + 1 }));
 const boostStamps = c => { try { const o = JSON.parse(c.bsteps || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
 const boostName = (c, b) => `Boost${boostList(c).length > 1 ? ' ' + b.n : ''}${b.area ? ' · ' + b.area : ''}`;
+// แผนที่มีปุ่มขั้นตอนของตัวเอง นอกจากแผนแรก (เก็บแยกในคอลัมน์ ขั้นตอนของ boost ด้วย stampBoost)
+// จำนวนครั้ง ×n = Plan 2…n (รหัส p2…pn) แล้วตามด้วย Sequential boost แต่ละบริเวณ
+const subPlans = c => [
+  ...Array.from({ length: unitsOf(c) - 1 }, (_, i) => ({ sid: 'p' + (i + 2), name: `Plan ${i + 2}`, tip: `แผนที่ ${i + 2} จาก ${unitsOf(c)} (${catOf(c.cat).label} ×${unitsOf(c)})`, plan: true })),
+  ...boostList(c).map(b => ({ sid: b.sid, name: boostName(c, b), tip: siteText(b), plan: false }))];
+const subTag = p => `<span class="boost-tag${p.plan ? ' plan' : ''}" title="${esc(p.tip)}">↳ ${esc(p.name)}</span>`;
 function checkSites(base) {
   const fx1 = +$(`#${base}-fx`).value || 0;
   for (const pre of sitePres(base)) {
@@ -4221,10 +4228,10 @@ const firstName = v => str(v).split(/\s+/)[0];
 // ค่าที่ยังไม่บันทึก (Dose check, F0, Delta4, SRS MapCheck) มีช่องกรอกเล็กใต้ปุ่ม (หน่วย % เป็นค่าเริ่มต้น) และปุ่ม ✓ บันทึกทีละค่า
 // กด ✓ หรือ Enter ในช่อง → ใส่รหัส PIN → บันทึกค่านั้น
 const stepStrip = (c, k, vals = true) => `<div class="checks">${stepsOf(k).map(x => stepChip(c, x, vals)).join('')}</div>`
-  + (boostStepsOn() ? boostList(c).map(b => `<div class="checks boost-checks"><span class="boost-tag" title="${esc(siteText(b))}">↳ ${esc(boostName(c, b))}</span>${stepsOf(k).map(x => stepChip(c, x, false, b.sid)).join('')}</div>`).join('') : '');
-// มุมมองบรรทัดเดียว: แผน Sequential boost เป็นแถวย่อยใต้ HN มีเฉพาะช่องขั้นตอน
-const boostLines = (c, cols) => (!boostStepsOn() || !cols.includes('steps') || catOf(c.cat).kind === 'simple' ? '' : boostList(c).map(b => `<tr class="boost-row">${cols.map(key => `<td>${key === 'steps'
-  ? `<span class="lsteps"><span class="boost-tag" title="${esc(siteText(b))}">↳ ${esc(boostName(c, b))}</span>${stepsOf(catOf(c.cat)).map(x => lineStep(c, x, b.sid)).join('')}</span>` : ''}</td>`).join('')}</tr>`).join(''));
+  + (boostStepsOn() ? subPlans(c).map(p => `<div class="checks boost-checks">${subTag(p)}${stepsOf(k).map(x => stepChip(c, x, false, p.sid)).join('')}</div>`).join('') : '');
+// มุมมองบรรทัดเดียว: Plan 2…n และแผน Sequential boost เป็นแถวย่อยใต้ HN มีเฉพาะช่องขั้นตอน
+const boostLines = (c, cols) => (!boostStepsOn() || !cols.includes('steps') || catOf(c.cat).kind === 'simple' ? '' : subPlans(c).map(p => `<tr class="boost-row">${cols.map(key => `<td>${key === 'steps'
+  ? `<span class="lsteps">${subTag(p)}${stepsOf(catOf(c.cat)).map(x => lineStep(c, x, p.sid)).join('')}</span>` : ''}</td>`).join('')}</tr>`).join(''));
 function valueBox(c, x) {
   const v = (stampDraft[c.id] || {})[x.key] || '';
   const q = v ? qaLevel(x.key, v) : '';
@@ -5652,7 +5659,7 @@ function syncCaseForm() {
   if (stamped) $('#f-stamps').innerHTML = stepsOf(k).map(x => {
     const at = editingCase[x.key], val = x.value && see ? editingCase[x.key + 'Val'] : '';
     return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at), x.value && see && editingCase[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
-  }).join('') + (boostStepsOn() ? boostList(editingCase).map(b => { const r = boostStamps(editingCase)[b.sid] || {}; return `<div><b>${esc(boostName(editingCase, b))}</b><span>${esc(stepsOf(k).map(x => `${r[x.key] ? '✓ ' : ''}${LINE_SHORT[x.key] || x.label}${r[x.key] && x.value && see && r[x.key + 'Val'] ? ' ' + r[x.key + 'Val'] : ''}`).join(' · '))}</span></div>`; }).join('') : '')
+  }).join('') + (boostStepsOn() ? subPlans(editingCase).map(b => { const r = boostStamps(editingCase)[b.sid] || {}; return `<div><b>${esc(b.name)}</b><span>${esc(stepsOf(k).map(x => `${r[x.key] ? '✓ ' : ''}${LINE_SHORT[x.key] || x.label}${r[x.key] && x.value && see && r[x.key + 'Val'] ? ' ' + r[x.key + 'Val'] : ''}`).join(' · '))}</span></div>`; }).join('') : '')
     + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
   $('#f-n-field').hidden = !countsOn();
   syncSites('f');
@@ -6269,14 +6276,14 @@ function showStampAt() {
   pinCtx.atDef = `${today()} ${hm}`;
   return on;
 }
-// sid = ขั้นตอนของแผน Sequential boost (เก็บแยกจากของเคส)
+// sid = ขั้นตอนของ Plan 2…n หรือแผน Sequential boost (เก็บแยกจากของเคส)
 function openStamp(id, key, sid = '') {
-  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key), b = sid && boostList(c || {}).find(v => v.sid === sid);
+  const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key), b = sid && c && subPlans(c).find(v => v.sid === sid);
   if (!c || !x || (sid && !b)) return;
   const r = sid ? boostStamps(c)[sid] || {} : c, at = r[key], val = x.value ? r[key + 'Val'] : '';
   pinCtx = { mode: 'stamp', id, sid, step: key, forgot: false, auto: !at };   // บันทึกแล้ว: ต้องเลือกเองว่าบันทึกใหม่หรือล้าง
   const pick = showStampAt();
-  $('#pin-title').textContent = `${x.label}${b ? ` · ${boostName(c, b)}` : ''} · ${c.hn || ''}`;
+  $('#pin-title').textContent = `${x.label}${b ? ` · ${b.name}` : ''} · ${c.hn || ''}`;
   $('#pin-what').innerHTML = at
     ? `บันทึกแล้วโดย <b>${esc(r[key + 'By'] || '—')}</b> ${esc(fmtStamp(at))}${val ? ` · ค่า <b>${esc(val)}</b>` : ''}<br>บันทึกใหม่จะแทนที่ของเดิมด้วยชื่อของคุณและ${pick ? 'วันเวลาด้านล่าง' : 'เวลาตอนนี้'} หรือกด "ล้างการบันทึก"`
     : `${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''} · บันทึก${pick ? 'ในชื่อ' : 'วันเวลาตอนนี้ในชื่อ'} <b>${esc(state.user.name || state.user.me || '')}</b>${pick ? ' · เปลี่ยนวันเวลาได้ก่อนใส่ PIN' : ''}`;
@@ -6513,14 +6520,14 @@ async function doStamp(id, step, value, pin, note, at) {
   const val = x.value ? rec[step + 'Val'] : '';
   toast(`${rec.hn} · ${x.label}${val ? ' ' + val : ''} · ${firstName(rec[step + 'By'])} ${fmtStamp(rec[step])}`, fresh ? { undo: () => undoStamp(id, steps, pin) } : {});
 }
-// ขั้นตอนของแผน Sequential boost · เลิกทำได้เฉพาะการบันทึกครั้งแรก (เหมือนของเคส)
+// ขั้นตอนของ Plan 2…n หรือแผน Sequential boost · เลิกทำได้เฉพาะการบันทึกครั้งแรก (เหมือนของเคส)
 async function doBoostStamp(id, sid, step, value, pin, note, at) {
   const prev = boostStamps(state.cases.find(c => c.id === id) || {})[sid] || {};
   const rec = normCase(await store.stampBoost(id, sid, { [step]: value !== null && note !== undefined ? { value, note } : value }, pin, at));
   const i = state.cases.findIndex(c => c.id === id);
   if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
   render();
-  const x = STEPS.find(v => v.key === step), r = boostStamps(rec)[sid] || {}, b = boostList(rec).find(v => v.sid === sid), name = b ? boostName(rec, b) : 'Boost';
+  const x = STEPS.find(v => v.key === step), r = boostStamps(rec)[sid] || {}, b = subPlans(rec).find(v => v.sid === sid), name = b ? b.name : 'Boost';
   if (value === null) { toast(`${rec.hn} · ${name} · ล้าง ${x.label} แล้ว`); return; }
   const steps = step === 'eval' && !prev.fin && r.fin ? ['eval', 'fin'] : [step];
   const undo = async () => {
