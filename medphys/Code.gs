@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-22.1';
-const API_LEVEL = 30;
+const CODE_VERSION = '2026-10-22.2';
+const API_LEVEL = 31;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -63,6 +63,7 @@ const TABLES = {
       ['fxadd', 'เพิ่ม fraction'],
       // งานวางแผนใหม่ที่ระบบสร้างให้ MP คนเดิม (Re-CT, ย้ายห้อง ฯลฯ) { of: id ของเคสเดิม, date, kind, label, reason } (JSON) · เขียนผ่าน replanCase เท่านั้น
       ['replan', 'งานวางแผนใหม่ (จาก)'],
+      // วิธีแจก (how): auto · manual · follow · replan (งานวางแผนใหม่) · direct = ผู้ป่วยที่เพิ่มในแถบห้องฉาย ไม่แจกงานให้ MP (courseAdd)
       ['type', 'Type'], ['hn', 'HN'], ['name', 'Name'],
       ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['doc', 'Doc'], ['aim', 'Aim'], ['tech', 'Technique'], ['room', 'ห้องฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['area', 'บริเวณที่ฉาย'],
@@ -82,6 +83,11 @@ const TABLES = {
   leaves: {
     sheet: 'Leaves',
     fields: [['id', 'id'], ['mp', 'MP'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['created', 'Created'], ['updated', 'Updated']],
+  },
+  // ผู้ปฏิบัติงานประจำวันในตารางวันฉาย: id = วันที่|ห้อง · RTT / RA = ชื่อคั่นด้วยจุลภาค · เขียนผ่าน dutyDay เท่านั้น
+  duty: {
+    sheet: 'Duty',
+    fields: [['id', 'id'], ['date', 'วันที่'], ['room', 'ห้องฉาย'], ['rtt', 'RTT'], ['ra', 'RA'], ['by', 'บันทึกโดย'], ['at', 'บันทึกเมื่อ']],
   },
 };
 // ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
@@ -234,6 +240,7 @@ function getData(token) {
     cases: need.cases ? readTable_(ss, 'cases', config) : [],
     logs: need.logs ? readTable_(ss, 'logs') : [],
     leaves: need.leaves ? readTable_(ss, 'leaves') : [],
+    duty: need.duty ? recentDuty_(ss) : [],
     config: config,
     sheetUrl: ss.getUrl(),
   };
@@ -242,7 +249,7 @@ function getData(token) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue' };
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'] };
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -1062,6 +1069,134 @@ function timeCase(id, time, pin, token) {
   });
 }
 
+/**
+ * แถบห้องฉาย: เพิ่มหรือแก้ผู้ป่วยที่บันทึกเข้าตารางวันฉายโดยตรง (RTT, RA, MP ที่บันทึกในแถบห้องฉายได้) ยืนยันด้วยรหัส PIN
+ * ไม่แจกงานให้ MP: how = 'direct' · mp ว่าง · ไม่อยู่ในงาน งานรอ ตารางแจกเคส และสถิติการวางแผน · แก้ได้เฉพาะเคสที่เพิ่มทางนี้
+ * rec = ช่องใน DIRECT_FIELDS และหัวข้อเพิ่มเติม (x_…) · id ที่ยังไม่มี = เพิ่มใหม่ · สถานะ fraction ฯลฯ บันทึกผ่านฟังก์ชันของช่องนั้น · คืนเคสหลังบันทึก
+ */
+const DIRECT_FIELDS = ['cat', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'ct', 'sim', 'note'];
+function courseAdd(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
+  if (!cut(rec.cat, 40)) throw new Error('เลือกเทคนิค');
+  if (cut(rec.ct, 10) && !isDate(cut(rec.ct, 10))) throw new Error('วันที่ CT-Sim ไม่ถูกต้อง');
+  const sim = cut(rec.sim, 10);
+  if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
+  checkPin_(u, pin, 'ptadd');
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
+    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    if (row && String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct') {
+      throw new Error('แก้ได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย · เคสที่แจกงานแก้ที่หน้าแก้ไขเคส');
+    }
+    const set = {};
+    DIRECT_FIELDS.concat(fields.map(f => f[0]).filter(k => /^x_/.test(k))).forEach(k => { set[k] = cut(rec[k], k === 'sites' ? 5000 : k === 'dx' || k === 'note' ? 2000 : 200); });
+    set.sim = sim;
+    const now = new Date().toISOString();
+    if (row) set.updated = now;
+    else Object.assign(set, { id: id || Utilities.getUuid(), how: 'direct', mp: '', in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: now, updated: '' });
+    writeFields_(sh, row || sh.getLastRow() + 1, header, fields.filter(f => f[0] in set), set);
+    const want = row ? id : set.id;
+    return readTable_(ss, 'cases', cfg).filter(c => c.id === want)[0];
+  });
+}
+
+// ลบผู้ป่วยที่เพิ่มในแถบห้องฉาย (เฉพาะ how = 'direct') ยืนยันด้วยรหัส PIN · คืน true เมื่อลบแล้ว
+function courseRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  checkPin_(u, pin, 'ptadd');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'cases', readConfig_(ss)), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) return false;
+    if (String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct') throw new Error('ลบได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย');
+    sh.deleteRow(row);
+    return true;
+  });
+}
+
+/**
+ * ตารางวันฉาย: นักรังสีการแพทย์ (RTT) และผู้ช่วย (RA) ที่ปฏิบัติงานในวันนั้น แยกตามห้องฉาย ยืนยันด้วยรหัส PIN
+ * list = [{ room, rtt: [ชื่อ], ra: [ชื่อ] }] (room ว่าง = ไม่แยกห้อง) · ห้องที่ไม่มีชื่อเลย = ลบรายการของห้องนั้น · คืนรายการของวันนั้น
+ */
+function dutyDay(date, list, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  date = cut(date, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
+  if (!Array.isArray(list)) throw new Error('ไม่มีรายชื่อผู้ปฏิบัติงาน');
+  const names = v => {
+    const seen = {};
+    return (Array.isArray(v) ? v : []).map(x => cut(x, 60).replace(/,/g, ' ').replace(/\s+/g, ' ')).filter(x => x && !seen[x] && (seen[x] = true)).slice(0, 30);
+  };
+  const recs = list.slice(0, 30).filter(x => x && typeof x === 'object').map(x => ({ room: cut(x.room, 40), rtt: names(x.rtt), ra: names(x.ra) }));
+  checkPin_(u, pin, 'duty');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'duty'), header = headerOf_(sh), idCol = header.indexOf('id') + 1;
+    const at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
+    recs.forEach(r => {
+      const id = date + '|' + r.room, row = findRow_(sh, idCol, id);
+      if (!r.rtt.length && !r.ra.length) { if (row) sh.deleteRow(row); return; }
+      writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.duty.fields, { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), by: by, at: at });
+    });
+    return readTable_(ss, 'duty').filter(x => x.date === date);
+  });
+}
+
+// ผู้ปฏิบัติงานที่ส่งให้หน้าเว็บ: ตั้งแต่ 1 ปีก่อน (ตารางย้อนหลังเกินนั้นไม่ค่อยได้ดู)
+function recentDuty_(ss) {
+  const from = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  return readTable_(ss, 'duty').filter(x => String(x.date) >= from);
+}
+
+// ตำแหน่งใน LPCH ที่เป็น RTT / RA (ตั้งค่า → ตารางวันฉาย · config.dutyRoles)
+function dutyRoles_(cfg) {
+  const r = cfg && cfg.dutyRoles && typeof cfg.dutyRoles === 'object' ? cfg.dutyRoles : {};
+  const list = (v, d) => (Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : d);
+  return { rtt: list(r.rtt, ['RTT']), ra: list(r.ra, ['RA']) };
+}
+
+// เก็บรายชื่อ RTT / RA ล่าสุดที่ดึงจาก LPCH ได้ (Script property DUTY_MEMBERS) ไว้ใช้ตอนที่ LPCH ไม่ให้ดึงด้วยบัญชีนั้น
+function keepDutyMembers_(users) {
+  try {
+    const roles = dutyRoles_(readConfig_(ss_()) || {}), want = roles.rtt.concat(roles.ra);
+    let keep = users.filter(x => want.indexOf(x.role) >= 0).map(x => ({ username: x.username, name: x.name, role: x.role }));
+    let text = JSON.stringify({ at: new Date().toISOString(), users: keep });
+    while (text.length > 8500 && keep.length) { keep = keep.slice(0, Math.floor(keep.length * 0.8)); text = JSON.stringify({ at: new Date().toISOString(), users: keep }); }
+    PropertiesService.getScriptProperties().setProperty('DUTY_MEMBERS', text);
+  } catch (e) { /* เก็บไม่ได้: ครั้งหน้าดึงใหม่ */ }
+}
+
+/**
+ * รายชื่อให้เลือกผู้ปฏิบัติงานประจำวัน: สมาชิก LPCH RO Workspace ที่ตำแหน่งตรงกับ RTT / RA ใน ตั้งค่า (ไม่ส่งตำแหน่งอื่น)
+ * ดึงจาก LPCH ด้วยบัญชีที่เข้าระบบ · ดึงไม่ได้ (LPCH ไม่ให้ หรือเปิดจากเมนูในชีต) ใช้รายชื่อล่าสุดที่เคยดึงได้ · { rtt, ra, at, live, why }
+ */
+function dutyMembers(token) {
+  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const roles = dutyRoles_(readConfig_(ss_()) || {});
+  let users = null, why = '';
+  if (u.via === 'lpch') {
+    try {
+      const out = lpchCall_({ action: 'directory', token: String(token) });
+      users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || '') })).filter(x => x.username);
+      keepDutyMembers_(users);
+    } catch (e) { why = e.message; }
+  } else why = 'บัญชี Google ดึงรายชื่อจาก LPCH ไม่ได้';
+  let at = new Date().toISOString();
+  if (!users) {
+    let kept = null;
+    try { kept = JSON.parse(PropertiesService.getScriptProperties().getProperty('DUTY_MEMBERS') || 'null'); } catch (e) { kept = null; }
+    users = kept && Array.isArray(kept.users) ? kept.users : [];
+    at = kept ? String(kept.at || '') : '';
+  }
+  const pick = list => users.filter(x => list.indexOf(x.role) >= 0).map(x => ({ username: x.username, name: x.name, role: x.role }));
+  return { rtt: pick(roles.rtt), ra: pick(roles.ra), at: at, live: !why, why: why };
+}
+
 /* ---------- วันหยุดราชการไทย (ปฏิทินวันหยุดสาธารณะของ Google) ---------- */
 
 const TH_HOLIDAY_CAL = 'th.th#holiday@group.v.calendar.google.com';   // ชื่อภาษาไทย
@@ -1142,7 +1277,7 @@ function pinRecord_(u) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
-// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
+// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
 // (ยังรู้ว่าใครทำจากบัญชีที่เข้าระบบ) · ไม่ระบุ act = ตรวจเสมอ
 function checkPin_(u, pin, act) {
   if (act) { const cfg = readConfig_(ss_()) || {}; if (cfg.pin && cfg.pin[act] === false) return; }
@@ -1239,6 +1374,7 @@ function lpchMembers(token) {
   const users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || '') })).filter(x => x.username);
   const roles = LPCH_ROLES.slice();
   users.forEach(x => { if (x.role && roles.indexOf(x.role) < 0) roles.push(x.role); });
+  keepDutyMembers_(users);
   return { roles: roles, users: users };
 }
 

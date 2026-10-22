@@ -305,6 +305,41 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .fxg-st .g,.fxg-key .g{color:var(--ok)}
 .fxg-st .y,.fxg-key .y{color:var(--warn)}
 .fxg-st .r,.fxg-key .r{color:var(--late)}
+.fxg-n.over,.fxg-d.today .fxg-n.over{background:var(--late);color:var(--surface)}   /* เกินจำนวนที่ตั้งไว้ (ตั้งค่า → ตารางวันฉาย) */
+.fxg-duty{display:flex;flex-direction:column;align-items:center;margin-top:3px;padding:1px 3px;border:0;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:9.5px;font-weight:600;line-height:1.3}
+.fxg-duty i{font-style:normal;white-space:nowrap}
+.fxg-duty .t{color:var(--accent)}
+.fxg-duty.none{color:var(--faint);font-weight:400;white-space:nowrap}
+button.fxg-duty{cursor:pointer}
+button.fxg-duty:hover{background:var(--sunken);color:var(--fg)}
+.fxg-d.today .fxg-duty,.fxg-d.today .fxg-duty .t{color:var(--accent-fg)}
+.fxg-d.today button.fxg-duty:hover{background:var(--surface);color:var(--accent)}
+.duty-line{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline;width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:12.5px;text-align:left}
+button.duty-line{cursor:pointer}
+button.duty-line:hover{border-color:var(--accent)}
+.duty-line b{color:var(--accent)}
+.duty-line em{font-style:normal;font-weight:600;color:var(--muted)}
+.fxg-c0 .hn.direct{outline:1px dashed var(--muted);outline-offset:-1px}   /* เพิ่มในแถบห้องฉาย ไม่ได้แจกงานให้ MP */
+.duty-box,#pin-duty-rooms{display:grid;gap:10px}
+.duty-room{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.duty-room h4{margin:0;font-size:13.5px}
+.duty-pick{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.duty-pick .chips{display:contents}   /* ชื่อและช่องพิมพ์ชื่อเรียงต่อกัน */
+.duty-pick .duty-other{width:190px;min-height:32px;padding:4px 10px}
+.duty-src{margin:0;color:var(--muted);font-size:12.5px}
+.day-max{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px}
+.day-max .num{width:84px}
+.duty-roles{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:6px}
+.duty-roles b{min-width:180px;font-size:13px;font-weight:600}
+.pt-table{max-width:560px}
+.pt-table select{width:auto}
+[data-sec="grid"]>.field{margin-bottom:14px}
+/* ฟอร์มเพิ่มผู้ป่วยของแถบห้องฉาย (หน้าแก้ไขเคส + .pt): ซ่อน MP ขั้นตอน และช่องที่ตั้ง "ไม่แสดง" · * = บังคับกรอก */
+#case-form:not(.pt) .pt-note{display:none}
+.pt .pt-hide,.pt .pt-off{display:none!important}
+.pt .pt-must>.lbl,.pt .pt-req>.lbl{justify-content:flex-start;gap:6px}
+.pt .pt-must>.lbl::after,.pt .pt-req>.lbl::after{content:'*';color:var(--late)}
+.pt-note{margin:0;color:var(--muted);font-size:12.5px}
 .fxg-key{line-height:1.5;text-align:right}
 .fxg-c0 .hn{flex:none;padding:1px 5px;border-radius:5px}
 .hn.q1,.ptag.q1{background:var(--q1);color:var(--q1-fg,var(--fg))}
@@ -1282,6 +1317,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <div class="toolbar">
         <div class="tabs" role="tablist" id="course-tabs"></div>
         <input type="search" class="tab-q" data-tq="course" placeholder="ค้นหา HN, ชื่อ, แพทย์, รายละเอียด" autocomplete="off" aria-label="ค้นหาในแถบนี้">
+        <button type="button" class="btn primary sm" id="course-add" hidden title="เพิ่มผู้ป่วยในตารางวันฉาย โดยไม่แจกงานให้ MP">+ เพิ่มผู้ป่วย</button>
         <span class="spacer"></span>
         <div class="seg-mini" id="course-rooms" aria-label="ห้องฉาย"></div>
       </div>
@@ -1358,42 +1394,43 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <header class="dlg-head"><h2 id="case-title">เคสใหม่</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <div class="row2">
-        <label class="field"><span class="lbl">หมวด</span><select id="f-cat"></select></label>
-        <div class="field"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><div class="chips people" id="f-mp" role="radiogroup" aria-label="MP"></div></div>
+        <label class="field pt-must"><span class="lbl" id="f-cat-lbl">หมวด</span><select id="f-cat"></select></label>
+        <div class="field pt-hide"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><div class="chips people" id="f-mp" role="radiogroup" aria-label="MP"></div></div>
       </div>
-      <label class="field n-field" id="f-n-field"><span class="lbl">จำนวนครั้ง</span><input type="number" id="f-n" min="1" max="20" step="1" inputmode="numeric"></label>
+      <label class="field n-field pt-hide" id="f-n-field"><span class="lbl">จำนวนครั้ง</span><input type="number" id="f-n" min="1" max="20" step="1" inputmode="numeric"></label>
       <div class="row2">
-        <label class="field"><span class="lbl">HN</span><input id="f-hn" inputmode="numeric" autocomplete="off" required></label>
-        <label class="field"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
+        <label class="field pt-must"><span class="lbl">HN</span><input id="f-hn" inputmode="numeric" autocomplete="off" required></label>
+        <label class="field" data-ptf="name"><span class="lbl">Name</span><input id="f-name" autocomplete="off"></label>
       </div>
-      <div class="field dx-field"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="f-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="f-dx-list" role="listbox" hidden></ul></div></div>
-      <div class="field plan-only"><span class="lbl">Doc</span><div class="chips" id="f-doc" role="radiogroup" aria-label="Doc"></div></div>
-      <div class="field plan-only"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
-      <div class="field plan-only"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
-      <div class="field plan-only" id="f-room-field"><span class="lbl">ห้องฉาย</span><div class="chips" id="f-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
-      <div class="field plan-only" id="tech-field"><span class="lbl">Technique</span><div class="chips" id="f-tech" role="radiogroup" aria-label="Technique"></div></div>
+      <div class="field dx-field" data-ptf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="f-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="f-dx-list" role="listbox" hidden></ul></div></div>
+      <div class="field plan-only" data-ptf="doc"><span class="lbl">Doc</span><div class="chips" id="f-doc" role="radiogroup" aria-label="Doc"></div></div>
+      <div class="field plan-only" data-ptf="type"><span class="lbl">Type</span><div class="chips" id="f-type" role="radiogroup" aria-label="Type"></div></div>
+      <div class="field plan-only" data-ptf="aim"><span class="lbl">Aim</span><div class="chips" id="f-aim" role="radiogroup" aria-label="Aim"></div></div>
+      <div class="field plan-only" id="f-room-field" data-ptf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="f-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
+      <div class="field plan-only" id="tech-field" data-ptf="tech"><span class="lbl">Technique</span><div class="chips" id="f-tech" role="radiogroup" aria-label="Technique"></div></div>
       <div class="site-block">
-        <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="f-area" aria-label="บริเวณที่ฉาย"></div><input id="f-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
-        <div class="dose-row">
+        <div class="field with-other" data-ptf="area"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="f-area" aria-label="บริเวณที่ฉาย"></div><input id="f-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+        <div class="dose-row" data-ptf="dose">
             <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="f-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
             <label class="field"><span class="lbl">Fx</span><input type="number" id="f-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
             <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="f-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
             <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="f-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="f-freq-other" autocomplete="off" placeholder="กรอกเอง เช่น Weekly, 3 ครั้ง/สัปดาห์" aria-label="ความถี่ (กรอกเอง)" hidden></div>
           </div>
-        <div class="sites" id="f-sites"></div>
-        <div class="add-site-row"><button type="button" class="btn ghost" id="f-addsite" data-addsite="f">+ เพิ่มบริเวณที่ฉาย</button></div>
+        <div class="sites" id="f-sites" data-ptf="sites"></div>
+        <div class="add-site-row" data-ptf="sites"><button type="button" class="btn ghost" id="f-addsite" data-addsite="f">+ เพิ่มบริเวณที่ฉาย</button></div>
       </div>
       <div class="dates">
-        <label class="field plan-only"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
-        <label class="field"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
-        <div class="field plan-only"><span class="lbl"><label for="f-sim">Start RT</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
-        <div class="field plan-only" id="f-fin-field"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
-        <div class="field plan-only" id="f-eval-field"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
+        <label class="field plan-only" data-ptf="ct"><span class="lbl">CT-Sim</span><input type="date" id="f-ct"></label>
+        <label class="field pt-hide"><span class="lbl" id="f-in-lbl">In</span><input type="date" id="f-in"></label>
+        <div class="field plan-only" data-ptf="sim"><span class="lbl"><label for="f-sim">Start RT</label><label class="oncall"><input type="checkbox" id="f-oncall"> on call</label></span><input type="date" id="f-sim"></div>
+        <div class="field plan-only pt-hide" id="f-fin-field"><span class="lbl"><label for="f-fin">Finish</label></span><div class="dt"><input type="date" id="f-fin"><input type="time" id="f-fin-time" aria-label="เวลา Finish"></div></div>
+        <div class="field plan-only pt-hide" id="f-eval-field"><span class="lbl"><label for="f-eval">Evaluate</label></span><div class="dt"><input type="date" id="f-eval"><input type="time" id="f-eval-time" aria-label="เวลา Evaluate"></div></div>
       </div>
-      <div class="stamps" id="f-stamps" hidden></div>
-      <div class="extra-grid" id="f-extra" hidden></div>
-      <label class="field"><span class="lbl">Note</span><input id="f-note" autocomplete="off"></label>
-      <p class="preview" id="f-preview"></p>
+      <div class="stamps pt-hide" id="f-stamps" hidden></div>
+      <div class="extra-grid" id="f-extra" data-ptf="extra" hidden></div>
+      <label class="field" data-ptf="note"><span class="lbl">Note</span><input id="f-note" autocomplete="off"></label>
+      <p class="preview pt-hide" id="f-preview"></p>
+      <p class="pt-note" id="f-pt-note">ผู้ป่วยนี้อยู่ในตารางวันฉายอย่างเดียว ไม่แจกงานให้ MP (ไม่อยู่ในงาน งานรอ คิว และ P4P) · เลือกช่องในฟอร์มได้ที่ ตั้งค่า → ตารางวันฉาย</p>
     </div>
     <footer class="dlg-foot">
       <button type="button" class="btn ghost danger" id="case-del">ลบ</button>
@@ -1484,6 +1521,11 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <p class="fx-prev fx-rp" id="pin-fx-rp" hidden></p>
         <div class="field" id="pin-rp-box" hidden><span class="lbl">ส่งงานวางแผนใหม่ให้ <span class="sub-lbl" id="pin-rp-hint"></span></span>
           <div class="chips people" id="pin-rp-mp" role="radiogroup" aria-label="ส่งงานวางแผนใหม่ให้"></div></div>
+      </div>
+      <div class="duty-box" id="pin-duty-box" hidden>
+        <div id="pin-duty-rooms"></div>
+        <p class="duty-src" id="pin-duty-src" aria-live="polite"></p>
+        <div><button type="button" class="btn ghost sm" id="pin-duty-copy">คัดลอกจากวันทำการก่อนหน้า</button></div>
       </div>
       <div class="tags-box" id="pin-tags-box" hidden>
         <div class="field"><span class="lbl">คิว <span class="sub-lbl">สีพื้นหลัง HN ในตารางวันฉาย</span></span>
@@ -1729,14 +1771,27 @@ const PIN_GROUPS = [
   ['course', 'Complete course / Cancel RT', 'ปุ่มจบการฉายของเคส'],
   ['ptags', 'รายละเอียดผู้ป่วย', 'NPO, BD protocol, คิว'],
   ['mqt', 'Mosaiq Time', 'ช่องเวลาหน้า HN'],
+  ['ptadd', 'เพิ่มผู้ป่วย (ตารางวันฉาย)', 'เพิ่ม แก้ ลบผู้ป่วยที่บันทึกในแถบห้องฉาย (ไม่แจกงานให้ MP)'],
+  ['duty', 'ผู้ปฏิบัติงานประจำวัน', 'RTT และ RA ใต้วันที่ในตารางวันฉาย'],
 ];
 const PIN_CFG_API = 30;
 const pinCfgOn = () => serverHas(PIN_CFG_API);
-const PIN_OF_MODE = { stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt' };
+// Code.gs ที่เพิ่มผู้ป่วยในแถบห้องฉาย (courseAdd) และบันทึกผู้ปฏิบัติงานประจำวัน (dutyDay) ได้
+const DIRECT_API = 31;
+const directOn = () => serverHas(DIRECT_API);
+const PIN_OF_MODE = { stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty' };
 // ต้องใส่ PIN ไหม (Code.gs รุ่นเก่า = ต้องใส่ทุกงาน) · ตั้ง/เปลี่ยน PIN ของตัวเองต้องใส่เสมอ
 const pinNeed = mode => { const g = PIN_OF_MODE[mode]; return !g || !pinCfgOn() || (state.config.pin || {})[g] !== false; };
 // งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
-const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt'].includes(mode);
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd'].includes(mode);
+// ฟอร์มเพิ่มผู้ป่วยในแถบห้องฉาย (ตั้งค่า → ตารางวันฉาย): off = ไม่แสดง · show = แสดง · req = บังคับกรอก · HN และเทคนิคบังคับเสมอ
+const PT_FIELDS = [
+  ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'Doc', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
+  ['room', 'ห้องฉาย', 'req'], ['tech', 'Technique', 'show'], ['area', 'บริเวณที่ฉาย', 'show'], ['dose', 'Dose/fx, Fx, Prescription, ความถี่', 'req'],
+  ['sites', 'บริเวณที่ฉายเพิ่มเติม (หลายที่ / boost)', 'show'], ['ct', 'CT-Sim', 'off'], ['sim', 'Start RT', 'req'], ['extra', 'หัวข้อเพิ่มเติม', 'off'], ['note', 'Note', 'show'],
+];
+const PT_OPTS = [['off', 'ไม่แสดง'], ['show', 'แสดง'], ['req', 'บังคับกรอก']];
+const DIRECT_KEYS = ['cat', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'ct', 'sim', 'note'];   // ช่องที่ courseAdd ใน Code.gs เขียน
 const DEFAULT_CONFIG = {
   boxes: Object.fromEntries(Object.entries(BOXES).map(([v, xs]) => [v, xs.map(x => x[0])])),   // ลำดับกล่องของแต่ละแถบ
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
@@ -1814,6 +1869,10 @@ const DEFAULT_CONFIG = {
   moveReplan: true,
   pin: Object.fromEntries(PIN_GROUPS.map(([k]) => [k, true])),   // กลุ่มงานที่ต้องใส่รหัส PIN
   qColors: { q1: '', q2: '', q3: '', q4: '' },   // สีคิว (ว่าง = สีเริ่มต้น)
+  // ตารางวันฉาย: จำนวนผู้ป่วยใต้วันที่เกินเท่านี้เป็นสีแดง (all = ทุกห้อง · rooms = รายห้อง ว่าง = ใช้ค่าทุกห้อง · ว่างทั้งหมด = ไม่ใช้สี)
+  dayMax: { all: 40, rooms: {} },
+  ptForm: Object.fromEntries(PT_FIELDS.map(([k, , v]) => [k, v])),   // ช่องในฟอร์มเพิ่มผู้ป่วยของแถบห้องฉาย
+  dutyRoles: { rtt: ['RTT'], ra: ['RA'] },   // ตำแหน่งใน LPCH ที่เลือกเป็น RTT / RA ประจำวันได้
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
   roles: LPCH_ROLES.slice(),   // ตำแหน่งที่ตั้งสิทธิ์รายแถบได้ (ตั้งค่า → แถบเมนู)
@@ -1945,7 +2004,7 @@ function normCase(o) {
   c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
   c.mp = c.mp.toUpperCase();
   c.icd = c.icd.toUpperCase();
-  c.how = c.how === 'manual' || c.how === 'follow' || c.how === 'replan' ? c.how : c.how ? 'auto' : '';
+  c.how = c.how === 'manual' || c.how === 'follow' || c.how === 'replan' || c.how === 'direct' ? c.how : c.how ? 'auto' : '';
   c.n = unitsOf(c) > 1 ? String(unitsOf(c)) : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
@@ -1961,6 +2020,9 @@ function normLog(o) {
   l.created = l.created || nowISO();
   return l;
 }
+// ผู้ปฏิบัติงานประจำวัน { id: 'วันที่|ห้อง', date, room, rtt: [ชื่อ], ra: [ชื่อ], by, at }
+const dutyNames = v => (Array.isArray(v) ? v : str(v).split(',')).map(str).filter(Boolean);
+const normDuty = o => ({ id: str(o.id), date: dateStr(o.date), room: str(o.room), rtt: dutyNames(o.rtt), ra: dutyNames(o.ra), by: str(o.by), at: str(o.at) });
 function normLeave(o) {
   const v = {};
   for (const f of LEAVE_FIELDS) v[f] = str(o[f]);
@@ -2056,6 +2118,12 @@ function mergeConfig(c) {
   out.moveReplan = c.moveReplan !== undefined ? !!c.moveReplan : d.moveReplan;
   out.pin = Object.fromEntries(PIN_GROUPS.map(([k]) => [k, !(c.pin && c.pin[k] === false)]));
   out.qColors = Object.fromEntries(Q_IDS.map(id => [id, hexOf(c.qColors && c.qColors[id])]));
+  const maxN = v => (v === '' || v == null || !(+v >= 1) ? '' : Math.min(9999, Math.floor(+v)));
+  const dm = c.dayMax && typeof c.dayMax === 'object' ? c.dayMax : d.dayMax, dmRooms = dm.rooms && typeof dm.rooms === 'object' ? dm.rooms : {};
+  out.dayMax = { all: maxN(dm.all), rooms: Object.fromEntries(out.rooms.filter(r => maxN(dmRooms[r]) !== '').map(r => [r, maxN(dmRooms[r])])) };
+  out.ptForm = Object.fromEntries(PT_FIELDS.map(([k, , v]) => { const x = c.ptForm && c.ptForm[k]; return [k, PT_OPTS.some(o => o[0] === x) ? x : v]; }));
+  const roleList = (v, def) => (Array.isArray(v) ? v.map(str).filter((r, i, a) => ROLE_RE.test(r) && a.indexOf(r) === i) : def.slice());
+  out.dutyRoles = { rtt: roleList(c.dutyRoles && c.dutyRoles.rtt, d.dutyRoles.rtt), ra: roleList(c.dutyRoles && c.dutyRoles.ra, d.dutyRoles.ra) };
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
   // หัวข้อเพิ่มเติมที่ใช้คอลัมน์เดียวกับช่องของระบบ (เช่นเคยตั้ง "ห้องฉาย" เอง) ให้ช่องของระบบอ่านคอลัมน์นั้นแทน
@@ -2157,7 +2225,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-22.4';
+const PAGE_VERSION = '2026-10-22.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2203,6 +2271,10 @@ const sheetStore = {
   mqTime: (id, time, pin) => call('timeCase', id, time, pin),
   addFx: (id, date, add, pin) => call('addFxCase', id, date, add, pin),
   replan: (id, date, rp, pin) => call('replanCase', id, date, rp, pin),
+  courseAdd: (rec, pin) => call('courseAdd', rec, pin),
+  courseRemove: (id, pin) => call('courseRemove', id, pin),
+  duty: (date, list, pin) => call('dutyDay', date, list, pin),
+  dutyMembers: () => call('dutyMembers'),
   members: () => call('lpchMembers'),
   removeLog: (id, pin) => call('removeLog', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
@@ -2214,6 +2286,7 @@ function localStore() {
   try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) { db = null; }
   if (!db || !Array.isArray(db.cases) || !Array.isArray(db.logs)) db = demoDb();
   if (!Array.isArray(db.leaves)) db.leaves = [];
+  if (!Array.isArray(db.duty)) db.duty = [];
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* โหมดส่วนตัว: เก็บในหน่วยความจำ */ } };
   const old = db.cases.filter(c => c && MOVED_CATS.includes(c.cat));
   if (old.length) {
@@ -2242,6 +2315,12 @@ function localStore() {
     }
     persist();
     return clone(c);
+  };
+  // โหมดตัวอย่าง: สมาชิกสมมติ (ไม่ใช่ชื่อจริง)
+  const demoMembers = () => {   // ตำแหน่ง = ของ LPCH + ตำแหน่งของสมาชิก (เหมือน lpchMembers ใน Code.gs)
+    const users = [['RO', 'แพทย์ ตัวอย่าง', 2], ['MP', 'นักฟิสิกส์ ตัวอย่าง', 4], ['RTT', 'นักรังสีเทคนิค ตัวอย่าง', 3], ['RA', 'ผู้ช่วย ตัวอย่าง', 2], ['Nurse', 'พยาบาล ตัวอย่าง', 2]]
+      .flatMap(([role, name, n]) => Array.from({ length: n }, (_, i) => ({ username: `${role.toLowerCase()}${i + 1}`, name: `${name} ${i + 1}`, role })));
+    return { roles: [...new Set([...LPCH_ROLES, ...users.map(u => u.role)])], users };
   };
   return {
     mode: 'local',
@@ -2331,9 +2410,7 @@ function localStore() {
       persist();
       return clone(c);
     },
-    // โหมดตัวอย่าง: สมาชิกสมมติ (ไม่ใช่ชื่อจริง)
-    members: async () => ({ roles: LPCH_ROLES.slice(), users: [['RO', 'แพทย์ ตัวอย่าง', 2], ['MP', 'นักฟิสิกส์ ตัวอย่าง', 4], ['RTT', 'นักรังสีเทคนิค ตัวอย่าง', 3], ['Nurse', 'พยาบาล ตัวอย่าง', 2]]
-      .flatMap(([role, name, n]) => Array.from({ length: n }, (_, i) => ({ username: `${role.toLowerCase()}${i + 1}`, name: `${name} ${i + 1}`, role }))) }),
+    members: async () => demoMembers(),
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
@@ -2391,6 +2468,48 @@ function localStore() {
       db.cases.push(c);
       persist();
       return clone(c);
+    },
+    // เพิ่ม/แก้/ลบผู้ป่วยในแถบห้องฉาย: กติกาเดียวกับ courseAdd / courseRemove ใน Code.gs
+    courseAdd: async (rec, pin) => {
+      if (!str(rec.hn)) throw new Error('กรอก HN');
+      if (!str(rec.cat)) throw new Error('เลือกเทคนิค');
+      demoCheckPin(pin);
+      const old = rec.id && db.cases.find(x => x.id === rec.id);
+      if (old && old.how !== 'direct') throw new Error('แก้ได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย · เคสที่แจกงานแก้ที่หน้าแก้ไขเคส');
+      const set = {};
+      for (const k of DIRECT_KEYS) set[k] = str(rec[k]);
+      for (const k of Object.keys(rec)) if (/^x_[\w-]+$/.test(k)) set[k] = str(rec[k]);
+      if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return clone(old); }
+      const c = { ...set, id: rec.id || uid(), how: 'direct', mp: '', in: today(), created: nowISO(), updated: '' };
+      db.cases.push(c);
+      persist();
+      return clone(c);
+    },
+    courseRemove: async (id, pin) => {
+      demoCheckPin(pin);
+      const c = db.cases.find(x => x.id === id);
+      if (!c) return false;
+      if (c.how !== 'direct') throw new Error('ลบได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย');
+      db.cases = db.cases.filter(x => x !== c);
+      persist();
+      return true;
+    },
+    // ผู้ปฏิบัติงานประจำวัน: กติกาเดียวกับ dutyDay ใน Code.gs (ห้องที่ไม่มีชื่อ = ลบ)
+    duty: async (date, list, pin) => {
+      if (!isDay(date)) throw new Error('วันที่ไม่ถูกต้อง');
+      demoCheckPin(pin);
+      for (const r of list) {
+        const id = `${date}|${str(r.room)}`, rtt = dutyNames(r.rtt), ra = dutyNames(r.ra);
+        db.duty = db.duty.filter(x => x.id !== id);
+        if (rtt.length || ra.length) db.duty.push({ id, date, room: str(r.room), rtt: rtt.join(', '), ra: ra.join(', '), by: state.user.name || 'ผู้ใช้ตัวอย่าง', at: nowStamp() });
+      }
+      persist();
+      return clone(db.duty.filter(x => x.date === date));
+    },
+    dutyMembers: async () => {
+      const dir = demoMembers(), roles = state.config.dutyRoles;
+      const pick = rs => dir.users.filter(u => rs.includes(u.role));
+      return { rtt: pick(roles.rtt), ra: pick(roles.ra), at: nowISO(), live: true, why: '' };
     },
     removeLog: async (id, pin) => { demoCheckPin(pin); db.logs = db.logs.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
@@ -2454,7 +2573,7 @@ function demoDb() {
 
 /* ---------- สถานะ ---------- */
 const state = {
-  config: mergeConfig(null), cases: [], logs: [], leaves: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
+  config: mergeConfig(null), cases: [], logs: [], leaves: [], duty: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
@@ -2471,6 +2590,9 @@ const catOf = id => state.config.cats.find(c => c.id === id) || (MOVED_CATS.incl
   ? { id, label: state.config.acts[id].label, p4p: id, group: 'อื่น ๆ', min: 0, w: 0, kind: 'simple', mu: false, rotate: 'case', on: false } // เคสเก่าที่ยังไม่ได้ย้ายเป็นกิจกรรม
   : { id, label: id || '—', p4p: id, group: 'อื่น ๆ', min: 0, w: 0, kind: 'plan', mu: false, rotate: 'case', on: false });
 const isSimple = c => catOf(c.cat).kind === 'simple';
+// ผู้ป่วยที่เพิ่มในแถบห้องฉาย (how = 'direct'): อยู่ในตารางวันฉายอย่างเดียว ไม่ใช่งานของ MP (ไม่อยู่ในงาน งานรอ ตารางแจกเคส P4P และสถิติการวางแผน)
+const isDirect = c => c.how === 'direct';
+const planCases = () => state.cases.filter(c => !isDirect(c));
 const unitPts = (min, w) => (+min || 0) * (+w || 0) * state.config.rate;
 const staffIdx = code => state.config.staff.findIndex(s => s.code === code);
 const activeStaff = () => state.config.staff.filter(s => s.active);
@@ -2546,7 +2668,7 @@ const onLeave = (code, date) => state.leaves.some(l => l.mp === code && l.from <
 function queueInput(catId, date, ignoreLeave) {
   return {
     staff: state.config.staff, leaves: ignoreLeave ? [] : state.leaves,
-    cases: state.cases.filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId),
+    cases: planCases().filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId),
     byDay: catOf(catId).rotate === 'day', date: date || today(),
   };
 }
@@ -2571,7 +2693,7 @@ function queueInfo(catId, date) {
  */
 function queueSlots(catId) {
   // หักคิวรายเดือนนับถึงเดือนของเคสล่าสุด (เคสที่ In ล่วงหน้า) หรือเดือนนี้
-  const last = state.cases.filter(c => c.cat === catId && isDay(c.in)).reduce((m, c) => (c.in > m ? c.in : m), today());
+  const last = planCases().filter(c => c.cat === catId && isDay(c.in)).reduce((m, c) => (c.in > m ? c.in : m), today());
   const o = queueInput(catId, last), staff = o.staff, n = staff.length, rows = [];
   if (!n) return { rows, next: [], pending: {} };
   const idx = code => staff.findIndex(x => x.code === code);
@@ -2630,14 +2752,14 @@ function queueSlots(catId) {
 }
 const TOKEN_LABEL = { manual: 'เลือกเอง', follow: 'ตามเทคนิคแรก', extra: 'จำนวนครั้ง', skip: 'หักคิวรายเดือน' };
 function renderQueue() {
-  const used = new Set(state.cases.map(c => c.cat));
+  const used = new Set(planCases().map(c => c.cat));
   const cats = state.config.cats.filter(k => k.on || used.has(k.id));
   let cat = pref.get('queueCat', '');
   if (!cats.some(k => k.id === cat)) cat = (cats[0] || {}).id || '';
   const words = tabWords('queue'), hitCase = c => !!c && wordsIn(words, caseText(c));
   syncTabQ('queue');
   // ค้นหา: แสดงเฉพาะแถวเคสที่ตรงในเทคนิคและเดือนนี้ · แท็บเทคนิคบอกจำนวนเคสที่ตรงในเดือนนี้ (ไม่สลับแท็บเอง)
-  const hits = words.length ? state.cases.filter(c => isDay(c.in) && c.in.slice(0, 7) === state.month && hitCase(c)) : [];
+  const hits = words.length ? planCases().filter(c => isDay(c.in) && c.in.slice(0, 7) === state.month && hitCase(c)) : [];
   $('#queue-tabs').innerHTML = cats.map(k => { const n = hits.filter(c => c.cat === k.id).length; return `<button type="button" class="tab" role="tab" data-qcat="${esc(k.id)}" aria-selected="${k.id === cat}">${esc(k.label)}${words.length ? `<span class="n">${n}</span>` : ''}</button>`; }).join('');
   const box = $('#queue-table');
   if (!cat) { box.innerHTML = '<p class="empty-state">ยังไม่มีเทคนิค</p>'; $('#queue-sum').innerHTML = ''; return; }
@@ -3046,6 +3168,7 @@ function caseStatus(c) {
   if (c.rt === 'complete') return ['ok', 'Complete course'];
   if (c.rt === 'cancel') return ['late', 'Cancel RT'];
   if (catOf(c.cat).kind === 'simple') return ['', 'บันทึกแล้ว'];
+  if (isDirect(c)) return ['', 'เพิ่มในตารางวันฉาย'];
   const st = caseStep(c);
   return st === 'plan' ? ['warn', 'รอ Finish'] : st === 'eval' ? ['warn', 'รอ Evaluate'] : c.pc ? ['ok', 'Plan complete'] : ['', 'Evaluate แล้ว'];
 }
@@ -3075,6 +3198,13 @@ function openSearchHit(id) {
   const c = state.cases.find(x => x.id === id);
   searchDlg.close();
   if (!c) return;
+  if (isDirect(c)) {   // ผู้ป่วยที่เพิ่มในแถบห้องฉาย: แก้ที่ฟอร์มของแถบห้องฉาย · ดูได้อย่างเดียว = ไปที่ตารางวันฉาย ค้นหา HN นั้น
+    if (accessOf('course') === 'edit' && directOn()) return openPatient(id);
+    if (!navOn('course')) return;
+    tabQ.course = c.hn || c.name;
+    Object.assign(state, { view: 'course', courseTab: courseTabOf(c) });
+    return render();
+  }
   if (canEditCases()) return openCase(id);
   if (!navOn('work')) return;
   Object.assign(state, { view: 'work', tab: 'all', cat: '', person: '', q: c.hn || c.name });
@@ -3088,7 +3218,8 @@ function openSearchHit(id) {
 const COURSE_TABS = [['on', 'กำลังฉาย / รอฉาย'], ['complete', 'Complete course'], ['cancel', 'Cancel RT'], ['off', 'Off RT']];
 const MON_FMT = new Intl.DateTimeFormat('th-TH', { month: 'short' });
 // งานวางแผนใหม่ (replanCase) ไม่อยู่ในตารางวันฉาย: แถวของผู้ป่วยยังใช้เคสเดิม
-const inCourse = c => catOf(c.cat).kind !== 'simple' && (!!c.pc || !!c.rt) && !c.replan;
+// ผู้ป่วยที่เพิ่มในแถบห้องฉาย (isDirect) อยู่ในตารางตั้งแต่บันทึก ไม่ต้อง Plan complete
+const inCourse = c => catOf(c.cat).kind !== 'simple' && (!!c.pc || !!c.rt || isDirect(c)) && !c.replan;
 // งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
 const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
 const rpTag = c => { const m = rpOf(c); return m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
@@ -3118,6 +3249,8 @@ async function syncReplans(ids, date, meta, rx, pin) {
   }
   return out;
 }
+// ส่งงานวางแผนใหม่ให้ใคร: MP ที่เลือก · '' = คนเดิม · null = ไม่ส่ง (ผู้ป่วยที่เพิ่มในแถบห้องฉายไม่มี MP และไม่ได้เลือกใคร)
+const rpTarget = (ctx, day) => { const pick = replanMpOn() ? chipValue($('#pin-rp-mp')) : ''; return pick || (ctx.rpMps(day).length ? '' : null); };
 const replanNote = o => (o.made.length ? ` · ส่งงานวางแผนใหม่ให้ ${[...new Set(o.made.map(c => c.mp))].join(', ')} (งานรอ)` : '')
   + (o.removed ? ' · ลบงานวางแผนใหม่ที่ยังไม่เริ่มแล้ว' : '') + (o.kept ? ' · งานวางแผนใหม่ที่เริ่มแล้วยังอยู่ (ลบเองได้ที่หน้าแก้ไขเคส)' : '');
 const courseTabOf = c => c.rt || (parseFx(c).some(e => e.act === 'off') ? 'off' : 'on');
@@ -3196,6 +3329,18 @@ function fxgVals(g, key) {
 const FXG_BLANK = { mqt: '(ยังไม่กรอก)', q: '(ไม่ระบุคิว)', bd: '(ไม่มี BD protocol)' };
 const fxgLabel = (key, v) => { if (v === BLANK && FXG_BLANK[key]) return FXG_BLANK[key]; const n = v === BLANK ? '' : key === 'doc' ? docName(v) : key === 'mp' ? (state.config.staff.find(x => x.code === v) || {}).name : ''; return n ? `${v} · ${n}` : v; };
 const fxgFilter = groups => { const f = lineState('fxg').filter; return groups.filter(g => Object.entries(f).every(([k, vals]) => fxgVals(g, k).some(v => vals.includes(v)))); };
+// จำนวนผู้ป่วยต่อวันที่ให้เป็นสีแดงเมื่อเกิน: ห้องที่เลือก (ว่าง = ใช้ค่าทุกห้อง) · 0 = ไม่ใช้สี
+const dayLimit = room => { const m = state.config.dayMax || {}; return +((room && m.rooms && m.rooms[room]) || m.all) || 0; };
+// ผู้ปฏิบัติงานของวันนั้น: เลือกห้องไว้ = ห้องนั้นและรายการที่ไม่แยกห้อง · ทุกห้อง = ทุกห้องรวมกัน (ชื่อไม่ซ้ำ)
+function dutyOf(d, room) {
+  const xs = state.duty.filter(x => x.date === d && (!room || x.room === room || !x.room));
+  return { rtt: [...new Set(xs.flatMap(x => x.rtt))], ra: [...new Set(xs.flatMap(x => x.ra))] };
+}
+const dutyText = du => [du.rtt.length && `RTT ${du.rtt.join(', ')}`, du.ra.length && `RA ${du.ra.join(', ')}`].filter(Boolean).join(' · ');
+// ห้องที่เลือกผู้ปฏิบัติงานแยกกัน: ห้องที่เลือกอยู่ หรือทุกห้องในตั้งค่า (ไม่มีห้อง = ไม่แยกห้อง)
+const dutyRooms = room => (room && room !== NO_ROOM ? [room] : state.config.rooms.length ? state.config.rooms.slice() : ['']);
+// แก้ไขจาก HN: เคสที่แจกงาน = สิทธิ์แก้ไขเคส · ผู้ป่วยที่เพิ่มในแถบห้องฉาย = บันทึกในแถบห้องฉายได้
+const hnCanEdit = c => (isDirect(c) ? accessOf('course') === 'edit' && directOn() : canEditCases());
 // fraction ที่ฉายแล้ว (ก่อนวันนี้) นับทุกบริเวณ
 const fxGiven = (sc, td) => { let n = 0; if (sc) for (const [d, l] of sc.fx) if (d < td) for (const v of l) n += Math.max(0, v.to - v.from + 1); return n; };
 function renderCourse() {
@@ -3210,9 +3355,10 @@ function renderCourse() {
   const of = t => all.filter(c => courseTabOf(c) === t && (!room || roomsOf(c).includes(room)) && (!hit || hit.has(str(c.hn) || 'id:' + c.id)));
   $('#course-tabs').innerHTML = COURSE_TABS.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ctab="${k}" aria-selected="${tab === k}">${l}<span class="n">${of(k).length}</span></button>`).join('');
   $('#course-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-croom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
-  const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : !moveOn() && state.config.rooms.length > 1 ? 'การย้ายห้องฉาย' : !mqOn() ? 'การบันทึก Mosaiq Time' : !addFxOn() ? 'การเพิ่ม fraction' : !replanOn() ? 'การส่งงานวางแผนใหม่ให้ MP คนเดิม (Re-CT, ย้ายห้อง)' : '';
+  const oldApi = !courseOn() ? 'ปุ่ม Complete course, Cancel RT, สถานะ fraction และรายละเอียดผู้ป่วย' : !fxStatusOn() ? 'การบันทึกสถานะ fraction และรายละเอียดผู้ป่วย' : !fx2On() ? 'การบันทึก "ฉายแล้ว" และรายละเอียดผู้ป่วยหลัง HN' : !moveOn() && state.config.rooms.length > 1 ? 'การย้ายห้องฉาย' : !mqOn() ? 'การบันทึก Mosaiq Time' : !addFxOn() ? 'การเพิ่ม fraction' : !replanOn() ? 'การส่งงานวางแผนใหม่ให้ MP คนเดิม (Re-CT, ย้ายห้อง)' : !directOn() ? 'ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวัน' : '';
   $('#course-api').hidden = !oldApi || !canEdit();
-  const oldVer = !fx2On() ? '2026-10-18.1' : !moveOn() && state.config.rooms.length > 1 ? '2026-10-18.4' : !mqOn() ? '2026-10-19.2' : !addFxOn() ? '2026-10-21.1' : '2026-10-21.2';
+  const oldVer = !fx2On() ? '2026-10-18.1' : !moveOn() && state.config.rooms.length > 1 ? '2026-10-18.4' : !mqOn() ? '2026-10-19.2' : !addFxOn() ? '2026-10-21.1' : !replanOn() ? '2026-10-21.2' : '2026-10-22.2';
+  $('#course-add').hidden = !canEdit() || !directOn();
   $('#course-api-text').textContent = `${oldApi} ต้องใช้ Code.gs รุ่น ${oldVer} ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่`;
   $('#course-help').textContent = tab === 'on'
     ? `เคสที่ Plan complete แล้ว ผู้ป่วยละบรรทัด · หัวตารางคือวันที่ (เริ่มที่วันนี้ ข้ามเสาร์–อาทิตย์) และจำนวนผู้ป่วยที่ฉายวันนั้น · ช่องคือเลข fraction · เขียวเข้ม ✓ = บันทึกฉายแล้ว · เขียวอ่อน = ผ่านมาแล้ว · กรอบ = วันนี้${fxCanEdit() ? ' · กดช่องเพื่อบันทึก ฉายแล้ว, Hold, HV, Re-CT, Off RT ฯลฯ' : ''}`
@@ -3277,10 +3423,16 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
     return st;
   };
   const num0 = (v, c) => `<i class="${c}${v ? '' : ' z'}">${v}</i>`;
+  // จำนวนผู้ป่วยเกินที่ตั้งไว้ (ตั้งค่า → ตารางวันฉาย) = สีแดง · ใต้จำนวน: RTT / RA ที่ปฏิบัติงานวันนั้น (กดเพื่อเลือก)
+  const lim = dayLimit(room), dutyEdit = canEdit() && directOn();
   const head = days.map((d, i) => {
-    const dt = parseISO(d), h = hol[d], st = dayStat(d);
-    const tip = `${LONG_DAY_FMT.format(dt)}${h ? ' · ' + h : ''} · ทั้งหมด ${st.all} คน${st.all ? ` · ฉายแล้ว ${st.g} · Hold, HV ฯลฯ ${st.y} · ค้างบันทึก ${st.r}` : ''}`;
-    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" data-hd="${d}" title="${esc(tip)}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small><span class="fxg-n${st.all ? '' : ' zero'}">${st.all}</span><span class="fxg-st">${st.all ? `${num0(st.g, 'g')}/${num0(st.y, 'y')}/${num0(st.r, 'r')}` : ''}</span></div>`;
+    const dt = parseISO(d), h = hol[d], st = dayStat(d), over = !!lim && st.all > lim, du = dutyOf(d, room);
+    const tip = `${LONG_DAY_FMT.format(dt)}${h ? ' · ' + h : ''} · ทั้งหมด ${st.all} คน${over ? ` (เกิน ${lim} คน)` : ''}${st.all ? ` · ฉายแล้ว ${st.g} · Hold, HV ฯลฯ ${st.y} · ค้างบันทึก ${st.r}` : ''}`;
+    const has = du.rtt.length || du.ra.length, dTip = has ? dutyText(du) : 'ยังไม่ได้เลือก RTT และ RA ที่ปฏิบัติงาน';
+    const dBody = has ? `<i class="t">RTT ${du.rtt.length}</i><i class="a">RA ${du.ra.length}</i>` : d === td ? '+ RTT/RA' : '+';
+    const duty = h ? '' : dutyEdit ? `<button type="button" class="fxg-duty${has ? '' : ' none'}" data-duty="${d}" title="${esc(`${dTip} · กดเพื่อเลือกผู้ปฏิบัติงาน`)}">${dBody}</button>`
+      : has ? `<span class="fxg-duty" title="${esc(dTip)}">${dBody}</span>` : '';
+    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" data-hd="${d}" title="${esc(tip)}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small><span class="fxg-n${st.all ? '' : ' zero'}${over ? ' over' : ''}">${st.all}</span><span class="fxg-st">${st.all ? `${num0(st.g, 'g')}/${num0(st.y, 'y')}/${num0(st.r, 'r')}` : ''}</span>${duty}</div>`;
   }).join('');
   box.style.setProperty('--fx-c0', `${c0}px`);
   box.style.setProperty('--fx-cw', `${cw}px`);
@@ -3289,9 +3441,13 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const awayHere = !!room && groups.some(g => g.items.some(x => parseMoves(x.c).length));
   const added = groups.some(g => parseAdds(g.main.c).length);
   const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ...(moved ? [['rm', 'ฉายห้องอื่น']] : []), ...(awayHere ? [['moved', 'ย้ายไปห้องอื่น']] : []), ...(added ? [['added', 'เพิ่ม fraction']] : []), ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
+  // ผู้ปฏิบัติงานของวันนี้ (หรือวันแรกที่แสดง) แยกตามห้อง
+  const dd = days.includes(td) ? td : days[0], rows = dutyRooms(room).map(r => ({ r, du: dutyOf(dd, r || '') })).filter(x => x.du.rtt.length || x.du.ra.length);
+  const dutyIn = rows.length ? `<b>${dd === td ? 'วันนี้' : esc(fmtDay(dd))}</b>${rows.map(x => `<span>${!room && x.r ? `<em>${esc(roomLabel(x.r))}</em> ` : ''}${esc(dutyText(x.du))}</span>`).join('')}` : '';
+  const dutyLine = !dutyIn ? '' : dutyEdit ? `<button type="button" class="duty-line" data-duty="${dd}" title="ผู้ปฏิบัติงาน · กดเพื่อแก้">${dutyIn}</button>` : `<span class="duty-line" title="ผู้ปฏิบัติงาน">${dutyIn}</span>`;
   $('#course-bar').innerHTML = `<div class="month-nav"><button type="button" data-fxnav="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-fxnav="1" aria-label="สัปดาห์ถัดไป">›</button></div>
     <button type="button" class="btn ghost sm" data-fxnav="0"${start === home ? ' disabled' : ''}>วันนี้</button>
-    <span class="fxg-legend">${legend}</span>`;
+    <span class="fxg-legend">${legend}</span>${dutyLine}`;
   const { filter: f, sort: fs } = lineState('fxg'), sk = fs && fs.key;
   const filt = Object.entries(FXG_FILTERS).map(([k, l]) => {
     const tip = [f[k] && `${l}: ${f[k].map(v => fxgLabel(k, v)).join(', ')}`, sk === k && `เรียง ${fs.dir > 0 ? 'เช้า→เย็น' : 'เย็น→เช้า'}`].filter(Boolean).join(' · ') || (k in FXG_SORT ? `เรียงหรือเลือก${FXG_HEAD[k] || l}ที่แสดง` : `เลือก${l}ที่แสดง`);
@@ -3317,7 +3473,8 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
   const tags = groupTags(cs), ti = tagInfo(tags), qc = ti.q ? ' ' + ti.q.id : '';
   const info = [ti.q && `คิว ${ti.q.label}`, ti.bd && ti.bd.time && `${ti.bd.name} ${ti.bd.time}`, [...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
-  const hn = canEditCases() ? `<button type="button" class="hn hn-btn${qc}" data-edit="${esc(c.id)}" title="${esc(info + ' · กดเพื่อแก้ไขเคส')}">${esc(c.hn || '—')}</button>` : `<span class="hn${qc}" title="${esc(info)}">${esc(c.hn || '—')}</span>`;
+  const dr = isDirect(c) ? ' direct' : '', drTip = dr ? ' · เพิ่มในแถบห้องฉาย (ไม่ได้แจกงานให้ MP)' : '';
+  const hn = hnCanEdit(c) ? `<button type="button" class="hn hn-btn${qc}${dr}" data-edit="${esc(c.id)}" title="${esc(info + drTip + ' · กดเพื่อแก้ไข')}">${esc(c.hn || '—')}</button>` : `<span class="hn${qc}${dr}" title="${esc(info + drTip)}">${esc(c.hn || '—')}</span>`;
   const chips = ti.plain.map(t => `<span class="ptag">${esc(t)}</span>`).join('');
   // คิว = สีพื้นหลัง HN · เวลา BD protocol ต่อจากรหัสแพทย์และ MP
   const bdChip = ti.bd && ti.bd.time ? `<span class="bd-time" title="${esc(`${ti.bd.name} ${ti.bd.time}`)}">BD ${esc(ti.bd.time)}</span>` : '';
@@ -3382,7 +3539,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
-  const k = catOf(c.cat), edit = canEditCases(), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off'), rounds = reRounds(evs);
+  const k = catOf(c.cat), edit = hnCanEdit(c), evs = sc ? sc.evs : parseFx(c), off = evs.find(e => e.act === 'off'), rounds = reRounds(evs);
   const evDays = evs.filter(e => !FX_MARKS.includes(e.act) || !(sc && sc.days.has(e.date))).map(e => e.date);
   const days = [...new Set([...(sc ? sc.days : []), ...evDays])].sort();
   const stateOf = d => (c.rt === 'complete' ? 'done' : c.rt === 'cancel' ? (d < c.rtDate ? 'done' : 'stop') : d < td ? 'done' : d === td ? 'today' : 'next');
@@ -3552,10 +3709,11 @@ function syncFx() {
   if (rpWill) {
     const cs = (ctx.ids || [ctx.id]).map(id => state.cases.find(x => x.id === id)).filter(Boolean), rd = moving ? ctx.day : ctx.date, rx = cs.length ? replanRx(cs[0], rd) : {};
     const same = ctx.rpMps(rd), pick = replanMpOn() ? chipValue($('#pin-rp-mp')) : '', away = same.filter(m => onLeave(m, today()));
-    $('#pin-rp-same').textContent = `ตามเดิม (${same.join(', ') || '—'})`;
+    $('#pin-rp-same').textContent = same.length ? `ตามเดิม (${same.join(', ')})` : 'ไม่ส่งงาน';
     $('#pin-rp-hint').textContent = away.length ? `${away.join(', ')} ลาวันนี้` : '';
     $('#pin-rp-hint').className = away.length ? 'sub-lbl warn' : 'sub-lbl';
-    $('#pin-fx-rp').innerHTML = `↻ ส่ง<b>งานวางแผนใหม่</b>ให้ <b>${esc(pick || same.join(', '))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf || '?')} Gy × ${esc(rx.fx)} fx ที่เหลือ` : ''} · ขึ้นในงานรอ ไม่เพิ่มแถวในตารางวันฉาย`;
+    $('#pin-fx-rp').innerHTML = !pick && !same.length ? `↻ ผู้ป่วยนี้ไม่มี MP (เพิ่มในแถบห้องฉาย) ไม่ส่งงานวางแผนใหม่${replanMpOn() ? ' · เลือก MP ด้านล่างถ้าต้องการส่งงาน' : ''}`
+      : `↻ ส่ง<b>งานวางแผนใหม่</b>ให้ <b>${esc(pick || same.join(', '))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf || '?')} Gy × ${esc(rx.fx)} fx ที่เหลือ` : ''} · ขึ้นในงานรอ ไม่เพิ่มแถวในตารางวันฉาย`;
   }
   const c = state.cases.find(x => x.id === ctx.id), prev = $('#pin-fx-prev');
   if (!c || !t) { prev.textContent = t ? '' : 'เลือกสถานะของ fraction นี้'; return; }
@@ -3657,6 +3815,93 @@ function openTags(id) {
   pinDlg.showModal();
   ($('#pin-tags input') || $('#pin-tags-other')).focus();
 }
+/* ---------- ผู้ปฏิบัติงานประจำวัน (RTT / RA ใต้วันที่ในตารางวันฉาย) ---------- */
+// รายชื่อให้เลือก: สมาชิก LPCH RO Workspace ตามตำแหน่งใน ตั้งค่า → ตารางวันฉาย (ดึงครั้งแรกที่เปิด) + ชื่อที่เคยเลือกใน 60 วัน + พิมพ์เอง
+const dutyDir = { rtt: [], ra: [], why: '', at: '', loaded: false, loading: null };
+function loadDutyDir() {
+  if (dutyDir.loaded || dutyDir.loading) return dutyDir.loading;
+  dutyDir.loading = store.dutyMembers().then(r => {
+    Object.assign(dutyDir, { rtt: (r.rtt || []).map(x => str(x.name)).filter(Boolean), ra: (r.ra || []).map(x => str(x.name)).filter(Boolean), why: r.live ? '' : str(r.why), at: str(r.at), loaded: true });
+  }).catch(e => { Object.assign(dutyDir, { why: errMsg(e), loaded: true }); }).finally(() => { dutyDir.loading = null; });
+  return dutyDir.loading;
+}
+const DUTY_GROUPS = [['rtt', 'นักรังสีการแพทย์ (RTT)'], ['ra', 'ผู้ช่วย (RA)']];
+const isoStamp = v => { const d = new Date(v || ''); return isNaN(d) ? '' : `${iso(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };   // เวลา ISO → "2026-10-01 10:00" (เวลาเครื่อง)
+function openDuty(date) {
+  if (!isDay(date)) return;
+  if (!directOn()) return toast('การเลือกผู้ปฏิบัติงานต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป', { err: true });
+  const room = pref.get('courseRoom', ''), rooms = dutyRooms(state.config.rooms.includes(room) ? room : '');
+  pinCtx = { mode: 'duty', date, rooms, forgot: false, auto: false };
+  $('#pin-title').textContent = `ผู้ปฏิบัติงาน · ${LONG_DAY_FMT.format(parseISO(date))}`;
+  $('#pin-what').innerHTML = `เลือกนักรังสีการแพทย์ (RTT) และผู้ช่วย (RA) ที่ปฏิบัติงานวันนี้${rooms.length > 1 ? ' แยกตามห้องฉาย' : rooms[0] ? ` ห้อง ${esc(roomLabel(rooms[0]))}` : ''} · แสดงใต้วันที่ในตารางวันฉาย · เอาติ๊กออกหมด = ล้าง`;
+  renderDutyBox(Object.fromEntries(rooms.map(r => [r, dutyOfRoom(date, r)])));
+  $('#pin-val-field').hidden = true;
+  $('#pin-note-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  pinDlg.showModal();
+  const first = $('#pin-duty-rooms input');
+  if (first) first.focus();
+  if (!dutyDir.loaded) {
+    const p = loadDutyDir();
+    if (p) p.then(() => { if (pinDlg.open && pinCtx && pinCtx.mode === 'duty' && pinCtx.date === date) renderDutyBox(readDutyBox()); });
+  }
+}
+const dutyOfRoom = (d, r) => { const x = state.duty.find(v => v.date === d && v.room === r); return { rtt: x ? x.rtt.slice() : [], ra: x ? x.ra.slice() : [] }; };
+// ชื่อที่เคยเลือกใน 60 วัน (ใช้ได้แม้ดึงรายชื่อจาก LPCH ไม่ได้)
+const dutyRecent = g => { const from = plusDays(today(), -60); return state.duty.filter(x => x.date >= from).flatMap(x => x[g]); };
+// sel = { ห้อง: { rtt: [ชื่อ], ra: [ชื่อ] } }
+function renderDutyBox(sel) {
+  const rooms = pinCtx.rooms;
+  $('#pin-duty-rooms').innerHTML = rooms.map(r => `<div class="duty-room" data-droom="${esc(r)}">${rooms.length > 1 || r ? `<h4>${esc(roomLabel(r) || 'ทุกห้อง')}</h4>` : ''}${DUTY_GROUPS.map(([g, l]) => {
+    const cur = (sel[r] || {})[g] || [], names = [...new Set([...dutyDir[g], ...dutyRecent(g), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
+    return `<div class="field"><span class="lbl">${esc(l)}</span><div class="duty-pick"><div class="chips" data-dgrp="${g}">${names.map(n => `<label><input type="checkbox" value="${esc(n)}"${cur.includes(n) ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>
+      <input class="duty-other" data-dother="${g}" maxlength="60" autocomplete="off" placeholder="+ พิมพ์ชื่อแล้วกด Enter" aria-label="เพิ่มชื่อ ${esc(l)}${r ? ` ห้อง ${esc(r)}` : ''}"></div></div>`;
+  }).join('')}</div>`).join('');
+  const n = dutyDir.rtt.length + dutyDir.ra.length;
+  $('#pin-duty-src').textContent = !dutyDir.loaded ? 'กำลังดึงรายชื่อจาก LPCH RO Workspace…'
+    : dutyDir.why ? `ดึงรายชื่อจาก LPCH ไม่ได้ (${dutyDir.why})${n ? ` · ใช้รายชื่อล่าสุดที่เคยดึงได้${isoStamp(dutyDir.at) ? ` เมื่อ ${fmtStamp(isoStamp(dutyDir.at))}` : ''}` : ''} · พิมพ์ชื่อเองได้`
+    : n ? `รายชื่อจาก LPCH RO Workspace: ตำแหน่ง ${state.config.dutyRoles.rtt.join(', ') || '—'} (RTT) · ${state.config.dutyRoles.ra.join(', ') || '—'} (RA) · ตั้งตำแหน่งได้ที่ ตั้งค่า → ตารางวันฉาย`
+    : `ไม่มีสมาชิกตำแหน่ง ${[...state.config.dutyRoles.rtt, ...state.config.dutyRoles.ra].join(', ') || '—'} ใน LPCH · พิมพ์ชื่อเองได้ หรือตั้งตำแหน่งที่ ตั้งค่า → ตารางวันฉาย`;
+}
+function readDutyBox() {
+  const out = {};
+  for (const box of $$('#pin-duty-rooms .duty-room')) {
+    out[box.dataset.droom] = Object.fromEntries(DUTY_GROUPS.map(([g]) => [g, uniqTags([...chipValues($(`[data-dgrp="${g}"]`, box)), ...splitList($(`[data-dother="${g}"]`, box).value)])]));
+  }
+  return out;
+}
+async function saveDuty(ctx, pin) {
+  const sel = readDutyBox(), list = ctx.rooms.map(r => ({ room: r, rtt: (sel[r] || {}).rtt || [], ra: (sel[r] || {}).ra || [] }));
+  const out = await store.duty(ctx.date, list, pin);
+  state.duty = state.duty.filter(x => x.date !== ctx.date).concat((out || []).map(normDuty));
+  renderCourse();
+  const du = dutyOf(ctx.date, ctx.rooms.length === 1 ? ctx.rooms[0] : '');
+  toast(`${fmtDay(ctx.date)} · ${du.rtt.length || du.ra.length ? dutyText(du) : 'ล้างผู้ปฏิบัติงานแล้ว'}`);
+}
+// พิมพ์ชื่อแล้วกด Enter = เพิ่มเป็นตัวเลือกที่ติ๊กไว้ (ไม่บันทึกหน้าต่าง)
+$('#pin-duty-rooms').addEventListener('keydown', e => {
+  const inp = e.target.closest && e.target.closest('.duty-other');
+  if (!inp || e.key !== 'Enter') return;
+  e.preventDefault();
+  const sel = readDutyBox();
+  inp.value = '';
+  renderDutyBox(sel);
+  const box = $$('#pin-duty-rooms .duty-room').find(b => b.dataset.droom === inp.closest('.duty-room').dataset.droom), again = box && $(`[data-dother="${inp.dataset.dother}"]`, box);
+  if (again) again.focus();
+});
+$('#pin-duty-copy').addEventListener('click', () => {
+  const ctx = pinCtx;
+  if (!ctx || ctx.mode !== 'duty') return;
+  let d = ctx.date;
+  for (let k = 0; k < 20; k++) {
+    d = plusDays(d, -1);
+    if (!state.duty.some(x => x.date === d && ctx.rooms.includes(x.room))) continue;
+    renderDutyBox(Object.fromEntries(ctx.rooms.map(r => [r, dutyOfRoom(d, r)])));
+    return toast(`คัดลอกผู้ปฏิบัติงานจาก ${fmtDay(d)} แล้ว · กดบันทึกเพื่อใช้`);
+  }
+  toast('ไม่พบผู้ปฏิบัติงานใน 20 วันก่อนหน้า', { err: true });
+});
 // รายละเอียดที่ติ๊ก + พิมพ์เอง · BD protocol ที่เลือกเวลา = "BD protocol 08:30" · คิว = "คิว เช้า 1"
 function readTags() {
   const time = $('#pin-bd-time').value, q = chipValue($('#pin-q'));
@@ -3704,8 +3949,8 @@ function renderWork() {
   }).join('');
 
   const counts = { open: 0, done: 0 };
-  for (const c of state.cases) caseStep(c) === 'done' ? counts.done++ : counts.open++;
-  $('#case-tabs').innerHTML = [['open', 'ค้าง', counts.open], ['done', 'เสร็จแล้ว', counts.done], ['all', 'ทั้งหมด', state.cases.length]]
+  for (const c of planCases()) caseStep(c) === 'done' ? counts.done++ : counts.open++;
+  $('#case-tabs').innerHTML = [['open', 'ค้าง', counts.open], ['done', 'เสร็จแล้ว', counts.done], ['all', 'ทั้งหมด', counts.open + counts.done]]
     .map(([k, l, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${l}<span class="n">${n}</span></button>`).join('');
   $('#cat-filter').innerHTML = opt('', 'ทุกหมวด', state.cat) + state.config.cats.map(k => opt(k.id, k.label, state.cat)).join('');
   $('#person-filter').innerHTML = state.person ? `<span class="filter-chip">MP / RC: ${esc(state.person)}<button type="button" id="clear-person" aria-label="ล้างตัวกรอง">×</button></span>` : '';
@@ -3717,7 +3962,7 @@ function renderWork() {
   if (!state.loaded) { list.innerHTML = `<li class="empty-state">${state.error ? `โหลดข้อมูลไม่สำเร็จ: ${esc(state.error)} <button type="button" class="btn" id="retry">ลองใหม่</button>` : 'กำลังโหลดข้อมูล…'}</li>`; $('#more-wrap').hidden = true; return; }
   const rcs = rcIndex();
   const q = state.q.trim().toLowerCase();
-  const rows = state.cases.filter(c => {
+  const rows = planCases().filter(c => {
     const st = caseStep(c);
     if (state.tab === 'open' && st === 'done') return false;
     if (state.tab === 'done' && st !== 'done') return false;
@@ -4633,7 +4878,7 @@ function renderP4P() {
     $('#p4p-table').innerHTML = `<table>${head}<tbody>${body}</tbody>${foot}</table>`;
   }
 
-  const cases = state.cases.filter(c => c.in.startsWith(ym));
+  const cases = planCases().filter(c => c.in.startsWith(ym));
   const cols = [...cfg.aims, ...cfg.types];
   const statRow = (label, list) => `<tr><td>${esc(label)}</td><td>${list.length || '<span class="unit">–</span>'}</td>${cols.map((v, i) => cell(list.filter(c => (i < cfg.aims.length ? c.aim : c.type) === v).length)).join('')}</tr>`;
   const planCats = cfg.cats.filter(k => cases.some(c => c.cat === k.id) || (k.on && k.kind === 'plan'));
@@ -5195,6 +5440,15 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div>
       <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): ส่งงานวางแผนใหม่ให้ MP คนเดิม</span></label>
       <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
+    <div class="sec" data-sec="grid"><div class="sec-head"><h2>ตารางวันฉาย (แถบ ${esc(navLabel('course'))})</h2><p>จำนวนผู้ป่วยใต้วันที่ที่เกินกำหนดเป็นสีแดง · ผู้ปฏิบัติงานประจำวัน (RTT / RA) เลือกจากสมาชิก LPCH RO Workspace ตามตำแหน่งที่ติ๊ก · ฟอร์ม "+ เพิ่มผู้ป่วย" บันทึกผู้ป่วยเข้าตารางวันฉายโดยไม่แจกงานให้ MP (ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู)</p></div>
+      ${directOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวันต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป (สีแดงเมื่อเกินจำนวนใช้ได้เลย)</span></p>'}
+      <div class="field"><span class="lbl">เกินกี่คนต่อวันให้เป็นสีแดง <span class="sub-lbl">ว่าง = ไม่ใช้สี · ห้องที่ว่างใช้ค่าทุกห้อง</span></span>
+        <div class="day-max"><label class="mini">ทุกห้อง <input type="number" class="num" min="1" step="1" data-k="dayMax.all" value="${esc(d.dayMax.all)}" aria-label="เกินกี่คนต่อวัน ทุกห้อง"></label>${d.rooms.map((r, i) => `<label class="mini">${esc(r)} <input type="number" class="num" min="1" step="1" data-dmroom="${i}" value="${esc(d.dayMax.rooms[r] || '')}" placeholder="${esc(d.dayMax.all)}" aria-label="เกินกี่คนต่อวัน ห้อง ${esc(r)}"></label>`).join('')}</div></div>
+      <div class="field"><span class="lbl">ตำแหน่งใน LPCH ที่เป็นผู้ปฏิบัติงานประจำวัน</span>
+        ${DUTY_GROUPS.map(([g, l]) => `<div class="duty-roles"><b>${esc(l)}</b>${[...new Set([...d.roles, ...d.dutyRoles.rtt, ...d.dutyRoles.ra, 'RA'])].filter(r => r !== 'MP').map(r => `<label class="check"><input type="checkbox" data-droles="${g}" value="${esc(r)}"${d.dutyRoles[g].includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>`).join('')}</div>
+      <h3 class="sub-h">ฟอร์มเพิ่มผู้ป่วย</h3>
+      <p class="muted def-note" style="margin:0 0 10px">HN และเทคนิคบังคับกรอกเสมอ · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ไข · ต้องมี Start RT และ Fx จึงคำนวณวันฉายได้</p>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${PT_FIELDS.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ptForm.${k}" aria-label="${esc(l)} ในฟอร์มเพิ่มผู้ป่วย">${PT_OPTS.map(([v, t]) => opt(v, t, d.ptForm[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>ติ๊ก = ต้องใส่รหัส PIN 4 หลักของตัวเองก่อนบันทึก · ไม่ติ๊ก = บันทึกได้เลย (ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบ · การลบยังถามยืนยัน)</p></div>
       ${pinCfgOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ตั้งงานที่ไม่ต้องใส่ PIN ได้เมื่อใช้ Code.gs รุ่น 2026-10-22.1 ขึ้นไป · ตอนนี้ทุกงานยังต้องใส่ PIN</span></p>'}
       <div class="pin-groups">${PIN_GROUPS.map(([k, l, note]) => `<label class="check"><input type="checkbox" data-k="pin.${k}"${d.pin[k] ? ' checked' : ''}> <span><b>${esc(l)}</b><small class="muted"> ${esc(note)}</small></span></label>`).join('')}</div></div>
@@ -5523,8 +5777,8 @@ function dashIndex(from, to, room) {
   for (const c of state.cases) {
     const k = catOf(c.cat);
     if (!inRoom(c)) continue;
-    if (isDay(c.ct)) put('ct', c.ct, c);
-    if (isDay(c.in)) put('in', c.in, c);
+    if (isDay(c.ct) && !isDirect(c)) put('ct', c.ct, c);   // ผู้ป่วยที่เพิ่มในแถบห้องฉาย: นับเฉพาะวันฉาย
+    if (isDay(c.in) && !isDirect(c)) put('in', c.in, c);
     if (k.kind === 'simple') continue;
     if (isDay(c.fin)) put('fin', c.fin.slice(0, 10), c);
     if (isDay(c.eval)) put('eval', c.eval.slice(0, 10), c);
@@ -5715,7 +5969,7 @@ function renderPendBadge() {
   b.title = [u.late && `Start RT ภายใน 1 วันทำการ ${u.late} เคส`, u.warn && `ภายใน 2 วันทำการ ${u.warn} เคส`].filter(Boolean).join(' · ');
 }
 function pendingOf(key, room) {
-  return state.cases.filter(c => {
+  return planCases().filter(c => {
     const k = catOf(c.cat);
     if (k.kind === 'simple' || (room && !roomsOf(c).includes(room))) return false;
     if (key === 'fin') return !c.fin;
@@ -5773,7 +6027,7 @@ function periodBounds() {
 const inBounds = (ds, b) => isDay(ds) && (!b.from || ds >= b.from) && (!b.to || ds <= b.to);
 function periodCases() {
   const b = periodBounds();
-  return { list: state.cases.filter(c => inBounds(c.in, b)), label: b.label, p: b.p };
+  return { list: planCases().filter(c => inBounds(c.in, b)), label: b.label, p: b.p };
 }
 // ช่องวันที่ของ "กำหนดเอง" (สถิติแต่ละเทคนิค = dash · แผนภูมิสถิติ = chart) · ใช้ช่วงเดียวกัน · ไม่ทับช่องที่กำลังพิมพ์
 function rangeBoxes(pre, p) {
@@ -5795,7 +6049,7 @@ function renderDashStats() {
   const row = (name, cs, catId) => {
     const units = cs.reduce((t, c) => t + unitsOf(c), 0);
     const tx = uniq(onToday.filter(c => !catId || c.cat === catId)).length;
-    const wait = state.cases.filter(c => (!catId || c.cat === catId) && catOf(c.cat).kind !== 'simple' && !c.fin).length;
+    const wait = planCases().filter(c => (!catId || c.cat === catId) && catOf(c.cat).kind !== 'simple' && !c.fin).length;
     const cell = n => (n ? `<td>${n}</td>` : '<td class="zero">–</td>');
     return `<tr><td>${esc(name)}</td>${cell(cs.length)}${cell(units)}${rooms.map(r => cell(cs.filter(c => roomOf(c) === r).length)).join('')}${cell(cs.filter(c => c.aim === 'Curative').length)}${cell(cs.filter(c => c.aim === 'Palliative').length)}${cell(tx)}${cell(wait)}</tr>`;
   };
@@ -5894,7 +6148,7 @@ function renderDashCharts() {
   rangeBoxes('chart', b.p);
   $('#chart-count').innerHTML = [['case', 'เคส'], ['pt', 'ผู้ป่วย']].map(([v, l]) => `<button type="button" data-vcount="${v}" aria-pressed="${by === v}">${l}</button>`).join('');
   $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · Brachytherapy ตามวันที่บันทึกกิจกรรม`;
-  const cases = state.cases.filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
+  const cases = planCases().filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
   const count = cs => (by === 'pt' ? uniq(cs).length : cs.length), unit = by === 'pt' ? 'คน' : 'เคส', series = [{ name: by === 'pt' ? 'ผู้ป่วย' : 'เคส', unit }];
   // ห้องฉาย (ห้องของบริเวณที่ 1) · แพทย์ (ลำดับตามตั้งค่า) · ไม่ระบุไว้ท้าย
   const rooms = dashRooms(), extraRooms = [...new Set(cases.map(roomOf))].filter(r => !rooms.includes(r));
@@ -6001,7 +6255,7 @@ function syncCaseForm() {
   $$('.plan-only', caseForm).forEach(el => { el.hidden = simple; });
   if (!roomSitesOn()) $('#f-room-field').hidden = true;
   // ปุ่มบันทึกขั้นตอนใช้รหัส PIN: ช่องวันเวลา Finish / Evaluate ซ่อน · แก้ทีละขั้นตอนจากปุ่มในสรุป (renderCaseStamps)
-  const stamped = stampsOn() && !simple;
+  const stamped = stampsOn() && !simple && !ptMode;
   if (stampsOn()) $('#f-fin-field').hidden = $('#f-eval-field').hidden = true;
   $('#f-stamps').hidden = !stamped;
   if (stamped) renderCaseStamps(k);
@@ -6019,11 +6273,16 @@ function syncCaseForm() {
   const times = countsOn() ? clampN($('#f-n').value) : 1, x = times > 1 ? ` × ${times} ครั้ง` : '';
   const extra = k.mu ? ` + New MU ${num(unitPts(state.config.acts.mu.min, state.config.acts.mu.w), 3)}${x}` : '';
   $('#f-preview').innerHTML = `${esc(k.p4p)} = <b>${num(unitPts(k.min, k.w), 3)}</b> แต้ม${x}${extra} ให้ MP ตามวัน ${simple ? 'Date' : 'In'}`;
+  ptSync();
 }
 function openCase(id) {
   const c = state.cases.find(x => x.id === id);
   if (!c) return;
+  if (isDirect(c)) return openPatient(id);
   if (!canEditCases()) return toast(RO_MSG, { err: true });
+  ptMode = false;
+  $('#case-del').hidden = false;
+  $('#f-cat-lbl').textContent = 'หมวด';
   editingCase = clone(c);
   fillCaseSelects(editingCase);
   $('#case-title').textContent = `แก้ไขเคส ${c.hn || ''}`.trim();
@@ -6044,6 +6303,7 @@ function openCase(id) {
 }
 async function submitCase(e) {
   e.preventDefault();
+  if (ptMode) return submitPatient();
   const hn = str($('#f-hn').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
   if (!chipValue($('#f-mp'))) { focusChips($('#f-mp')); return toast('เลือก MP ผู้รับเคส', { err: true }); }
@@ -6085,6 +6345,7 @@ function caseSaved(rec) {
   toast('บันทึกการแก้ไขแล้ว');
 }
 async function deleteCase(btn) {
+  if (ptMode) return openPtPin('ptdel', editingCase);
   if (editPinOn()) return openCasePin('del', editingCase);   // รหัส PIN เป็นการยืนยันการลบ
   if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { delete btn.dataset.armed; btn.textContent = 'ลบ'; }, 3500); return; }
   const id = editingCase.id;
@@ -6093,11 +6354,108 @@ async function deleteCase(btn) {
     caseDeleted(id);
   } catch (e) { toast('ลบไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-function caseDeleted(id) {
+/* ---------- เพิ่มผู้ป่วยในแถบห้องฉาย (ไม่แจกงานให้ MP) ---------- */
+// ใช้หน้าแก้ไขเคสเป็นฟอร์ม: ซ่อน MP จำนวนครั้ง ขั้นตอน In และช่องที่แอดมินตั้ง "ไม่แสดง" (ตั้งค่า → ตารางวันฉาย · data-ptf)
+let ptMode = false;
+function ptSync() {
+  caseForm.classList.toggle('pt', ptMode);
+  const f = state.config.ptForm;
+  for (const el of $$('[data-ptf]', caseForm)) {
+    const v = ptMode ? f[el.dataset.ptf] : 'show';
+    el.classList.toggle('pt-off', v === 'off');
+    if (el.classList.contains('field')) el.classList.toggle('pt-req', v === 'req');
+  }
+  for (const id of ['#f-dpf', '#f-fx']) $(id).closest('.field').classList.toggle('pt-req', ptMode && f.dose === 'req');
+}
+function openPatient(id) {
+  const c = id ? state.cases.find(x => x.id === id) : null;
+  if (id && !c) return;
+  if (accessOf('course') !== 'edit') return toast(RO_MSG, { err: true });
+  if (!directOn()) return toast('การเพิ่มผู้ป่วยในแถบห้องฉายต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
+  ptMode = true;
+  $('#f-cat-lbl').textContent = 'เทคนิค';
+  const room = pref.get('courseRoom', '');
+  editingCase = c ? clone(c) : normCase({ id: uid(), how: 'direct', in: today(), room: state.config.rooms.includes(room) ? room : '' });
+  fillCaseSelects(editingCase);
+  const cats = state.config.cats.filter(k => k.kind !== 'simple' && (k.on || k.id === editingCase.cat));
+  $('#f-cat').innerHTML = (c ? '' : opt('', 'เลือกเทคนิค', '')) + cats.map(k => opt(k.id, k.label, editingCase.cat)).join('');
+  $('#case-title').textContent = c ? `แก้ไขผู้ป่วย ${c.hn || ''}`.trim() : 'เพิ่มผู้ป่วยในตารางวันฉาย';
+  for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#f-' + f).value = editingCase[f] || '';
+  $('#f-n').value = 1;
+  $('#f-oncall').checked = editingCase.sim === 'on call';
+  $('#f-sim').value = editingCase.sim === 'on call' ? '' : editingCase.sim || '';
+  fillDose('f', editingCase);
+  $('#f-dx').value = dxValue(editingCase);
+  renderArea('f', editingCase.area);
+  renderExtra('f', editingCase);
+  renderSites('f', parseSites(editingCase));
+  const del = $('#case-del');
+  del.hidden = !c;
+  delete del.dataset.armed; del.textContent = 'ลบ';
+  syncCaseForm();
+  caseDlg.showModal();
+  if (!c) $('#f-hn').focus();
+}
+// ช่องที่กรอกแล้ว (ใช้ตรวจช่องที่ตั้งเป็นบังคับกรอก)
+const PT_FILLED = {
+  name: () => str($('#f-name').value), dx: () => str($('#f-dx').value), doc: () => chipValue($('#f-doc')), type: () => chipValue($('#f-type')), aim: () => chipValue($('#f-aim')),
+  room: () => !roomSitesOn() || chipValue($('#f-room')), tech: () => !catOf($('#f-cat').value).tech || chipValue($('#f-tech')), area: () => readArea('f'),
+  dose: () => str($('#f-dpf').value) && str($('#f-fx').value), sites: () => true, ct: () => $('#f-ct').value, sim: () => $('#f-oncall').checked || $('#f-sim').value,
+  extra: () => true, note: () => str($('#f-note').value),
+};
+function submitPatient() {
+  const hn = str($('#f-hn').value), k = catOf($('#f-cat').value);
+  if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
+  if (!$('#f-cat').value) { $('#f-cat').focus(); return toast('เลือกเทคนิค', { err: true }); }
+  const inputErr = checkDose('f') || checkArea('f') || checkSites('f');
+  if (inputErr) return toast(inputErr, { err: true });
+  const f = state.config.ptForm, miss = PT_FIELDS.find(([key]) => f[key] === 'req' && !PT_FILLED[key]());
+  if (miss) {
+    const box = miss[0] === 'dose' ? $(str($('#f-dpf').value) ? '#f-fx' : '#f-dpf').closest('.field') : $(`[data-ptf="${miss[0]}"]`, caseForm);
+    if (box.classList.contains('field')) box.classList.add('missing');
+    const el = $('input, select', box);
+    if (el) el.focus();
+    return toast(`${['doc', 'type', 'aim', 'room', 'tech', 'area'].includes(miss[0]) ? 'เลือก' : 'กรอก'} ${miss[0] === 'dose' ? 'Dose/fx และ Fx' : miss[1]} ก่อนบันทึก (ช่องบังคับ)`, { err: true });
+  }
+  const rec = normCase({
+    ...editingCase, cat: k.id, how: 'direct', mp: '', hn, name: $('#f-name').value, note: $('#f-note').value, ct: $('#f-ct').value,
+    sim: $('#f-oncall').checked ? 'on call' : $('#f-sim').value,
+    doc: chipValue($('#f-doc')), type: chipValue($('#f-type')), aim: chipValue($('#f-aim')), tech: k.tech ? chipValue($('#f-tech')) : '',
+    ...readDose('f'), ...readDx('f'), area: readArea('f'), ...readExtra('f'), updated: nowISO(),
+    ...(roomSitesOn() ? { room: chipValue($('#f-room')), sites: readSites('f') } : {}),
+  });
+  openPtPin('ptadd', rec);
+}
+// ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: เพิ่มผู้ป่วย) · ptadd = เพิ่ม/แก้ · ptdel = ลบ
+function openPtPin(mode, rec) {
+  const isNew = !state.cases.some(c => c.id === rec.id);
+  pinCtx = { mode, rec, id: rec.id, isNew, forgot: false, auto: mode === 'ptadd' };
+  const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`, what = `${esc(catOf(rec.cat).label)}${rec.name ? ` · ${esc(rec.name)}` : ''}`;
+  $('#pin-title').textContent = `${mode === 'ptdel' ? 'ลบผู้ป่วย' : isNew ? 'เพิ่มผู้ป่วย' : 'บันทึกการแก้ไข'} · ${rec.hn || ''}`;
+  $('#pin-what').innerHTML = mode === 'ptdel'
+    ? `ลบผู้ป่วยนี้ (${what}) ออกจากตารางวันฉาย ย้อนกลับไม่ได้ · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
+    : `${what} · ${isNew ? 'เพิ่มในตารางวันฉาย ไม่แจกงานให้ MP' : 'บันทึกการแก้ไข'} · ยืนยันด้วยรหัส PIN ของ ${who}`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-note-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  if (pinSkipDialog(mode)) return submitPin(null);
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
+function patientSaved(rec, isNew) {
+  const i = state.cases.findIndex(x => x.id === rec.id);
+  if (i < 0) state.cases.push(rec); else state.cases[i] = rec;
+  caseDlg.close();
+  if (isNew && state.view === 'course') state.courseTab = courseTabOf(rec);
+  render();
+  toast(isNew ? `เพิ่ม ${rec.hn} ในตารางวันฉายแล้ว${rec.sim && isDay(rec.sim) ? '' : ' · ใส่ Start RT เพื่อคำนวณวันฉาย'}` : 'บันทึกการแก้ไขแล้ว');
+}
+function caseDeleted(id, msg = 'ลบเคสแล้ว') {
   state.cases = state.cases.filter(c => c.id !== id);
   caseDlg.close();
   render();
-  toast('ลบเคสแล้ว');
+  toast(msg);
 }
 async function stepCase(id, field) {
   const c = state.cases.find(x => x.id === id);
@@ -6585,10 +6943,11 @@ function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidd
 const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]')) || $('#pin-save');   // ไม่ต้องใส่ PIN = ปุ่มบันทึก
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
-  const del = pinCtx.mode === 'del' || pinCtx.mode === 'logdel', danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
+  const del = pinCtx.mode === 'del' || pinCtx.mode === 'logdel' || pinCtx.mode === 'ptdel', danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
   if (pinCtx.mode !== 'stamp' && pinCtx.mode !== 'vals') $('#pin-at-field').hidden = true;
   $('#pin-fx-box').hidden = pinCtx.mode !== 'fx';
   $('#pin-tags-box').hidden = pinCtx.mode !== 'ptags';
+  $('#pin-duty-box').hidden = pinCtx.mode !== 'duty';
   $('#pin-clear').textContent = pinCtx.mode === 'fx' ? (fxAdding() ? 'ล้างการเพิ่ม fraction' : fxMoving() ? 'ล้างการย้ายห้อง' : 'ล้างสถานะ') : 'ล้างการบันทึก';
   if (pinCtx.mode !== 'course') {   // ช่องวันที่และสาเหตุใช้เฉพาะ Complete course / Cancel RT
     $('#pin-date-field').hidden = true;
@@ -6608,7 +6967,7 @@ function syncPinForm() {
   $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
   $('#pin-field').hidden = !need || set || !has;
   if (!need) $('#pin-forgot').hidden = $('#pin-proof-box').hidden = true;
-  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'logdel' ? 'ลบรายการ' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
+  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'ptdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'logdel' ? 'ลบรายการ' : pinCtx.mode === 'ptadd' && pinCtx.isNew ? 'เพิ่มผู้ป่วย' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
   $('#pin-save').classList.toggle('danger', danger);
   for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
   pinErr('');
@@ -6768,6 +7127,9 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
     if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); return; }
     if (ctx.mode === 'del') { await store.removeCase(ctx.id, pin); caseDeleted(ctx.id); pinDlg.close(); return; }
+    if (ctx.mode === 'ptadd') { const rec = normCase(await store.courseAdd(ctx.rec, pin)); patientSaved(rec, ctx.isNew); pinDlg.close(); return; }
+    if (ctx.mode === 'ptdel') { await store.courseRemove(ctx.id, pin); caseDeleted(ctx.id, `ลบ ${ctx.rec.hn || 'ผู้ป่วย'} ออกจากตารางวันฉายแล้ว`); pinDlg.close(); return; }
+    if (ctx.mode === 'duty') { await saveDuty(ctx, pin); pinDlg.close(); return; }
     if (ctx.mode === 'course') {
       const status = clear ? '' : ctx.status;
       let rec = null;
@@ -6818,7 +7180,8 @@ async function submitPin(e, clear) {
       const mv = clear ? null : { room: chipValue($('#pin-fx-room')), from: ctx.fromRoom, scope: chipValue($('#pin-fx-scope')), note: str($('#pin-note').value) };
       const day = clear ? ctx.mvCur.date : ctx.day, ids = ctx.ids || [ctx.id];
       // งานวางแผนใหม่ให้ MP คนเดิม (prescription นับจากเคสก่อนบันทึก)
-      const rpMeta = mv && state.config.moveReplan ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '', mp: replanMpOn() ? chipValue($('#pin-rp-mp')) : '' } : null;
+      const rpTo = mv && state.config.moveReplan ? rpTarget(ctx, day) : null;
+      const rpMeta = rpTo !== null ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '', mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), day)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
@@ -6850,7 +7213,8 @@ async function submitPin(e, clear) {
       const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '', ids = ctx.ids || [ctx.id];
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
-      const rpMeta = t && t.replan && t.act !== 'off' ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date, mp: replanMpOn() ? chipValue($('#pin-rp-mp')) : '' } : null;
+      const rpTo = t && t.replan && t.act !== 'off' ? rpTarget(ctx, ctx.date) : null;
+      const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date, mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
@@ -7081,13 +7445,14 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-clear') return submitPin(null, true);
   const inCaseDlg = !!t.closest('#case-dlg');   // ปุ่มขั้นตอนในหน้าแก้ไขเคส: ใช้สิทธิ์แก้ไขเคส
   if (inCaseDlg && ds.stamp) return canEditCases() ? openStamp(ds.id, ds.stamp, ds.sid || '') : toast(RO_MSG, { err: true });
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ['add-rc', 'add-other', 'log-del', 'course-add'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
   if (ds.unleave) return removeLeave(ds.unleave);
   if (ds.openLeaves !== undefined) return openLeaves();
   if (ds.edit) return openCase(ds.edit);
+  if (ds.duty) return openDuty(ds.duty);
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp, ds.sid || '');
   if (ds.course) return openCourse(ds.id, ds.course);
@@ -7170,6 +7535,7 @@ document.addEventListener('click', e => {
     case 'retry': case 'retry-top': state.error = ''; render(); return refresh();
     case 'setup-skip': state.setupSkipped = true; return render();
     case 'case-del': return deleteCase(t);
+    case 'course-add': return openPatient('');
     case 'log-del': return deleteLog(t);
     case 'save-settings': return saveSettings();
     case 'cancel-settings': draft = null; return renderSettings();
@@ -7402,6 +7768,11 @@ function settingsEdit(el) {
       if (!Object.keys(sk[ym][cat]).length) delete sk[ym][cat];
       if (!Object.keys(sk[ym]).length) delete sk[ym];
     }
+  } else if (el.dataset.dmroom !== undefined) {   // เกินกี่คนต่อวัน รายห้อง (ว่าง = ใช้ค่าทุกห้อง)
+    const r = draft.rooms[+el.dataset.dmroom], v = Math.floor(+el.value);
+    if (r && v >= 1) draft.dayMax.rooms[r] = v; else if (r) delete draft.dayMax.rooms[r];
+  } else if (el.dataset.droles) {
+    draft.dutyRoles[el.dataset.droles] = $$(`[data-droles="${el.dataset.droles}"]:checked`, settingsEl).map(x => x.value);
   } else if (el.dataset.defmulti) {
     draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.list) {
@@ -7545,7 +7916,7 @@ function showGate(why) {
   state.gate = ssoError || why || '';
   ssoError = '';
   state.loaded = false;
-  state.cases = []; state.logs = []; state.leaves = [];
+  state.cases = []; state.logs = []; state.leaves = []; state.duty = [];
   render();
   const u = $('#g-user');
   if (u && !document.activeElement.closest('#gate-form')) u.focus();
@@ -7584,6 +7955,7 @@ async function refresh(quiet) {
     state.cases = (d.cases || []).map(normCase);
     state.logs = (d.logs || []).map(normLog);
     state.leaves = (d.leaves || []).map(normLeave);
+    state.duty = (d.duty || []).map(normDuty).filter(x => isDay(x.date));
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;
