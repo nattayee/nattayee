@@ -53,7 +53,7 @@
   function me() { var u = window.Auth && window.Auth.user; return u ? { username: u.username, name: u.fullName, role: u.role } : null; }
   function key(p) { return "u_" + String(p.username).replace(/\W/g, "_"); }
   // Only admins may delete messages (in conversations they are part of — they cannot see others').
-  function isAdmin() { return !!(window.Auth && window.Auth.user && window.Auth.user.isAdmin); }
+  function isAdmin() { return !!(window.Auth && window.Auth.can("delete")); }   // admin หลัก, or admin รอง with "ลบข้อความ"
 
   function compress(file, maxSide, quality) {
     return new Promise(function (resolve, reject) {

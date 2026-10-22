@@ -108,7 +108,7 @@
   }
 
   // Only admins may delete messages.
-  function isAdmin() { return !!(window.Auth && window.Auth.user && window.Auth.user.isAdmin); }
+  function isAdmin() { return !!(window.Auth && window.Auth.can("delete")); }   // admin หลัก, or admin รอง with "ลบข้อความ"
 
   // ✓/✗ may be pressed only by someone the message was sent to, never by its sender.
   function mayReact(m, p) { return !!p && isForMe(m, p) && !samePerson(m.author, p); }

@@ -34,7 +34,7 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function isAdmin() { return !!(window.Auth && window.Auth.user && window.Auth.user.isAdmin); }
+  function isAdmin() { return !!(window.Auth && window.Auth.can("menus")); }   // admin หลัก, or admin รอง with "จัดการเมนู"
 
   // Rows from the server (or demo storage) by kind. Old rows had no "kind".
   function kindOf(m) { return m.kind || (String(m.id).indexOf("order:") === 0 ? "order" : m.builtin ? "builtin" : "custom"); }

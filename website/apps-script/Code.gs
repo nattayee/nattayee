@@ -13,7 +13,7 @@
  *        Execute as: Me   |   Who has access: Anyone
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
- * ข้อมูลเก็บใน Google Sheet นี้: Users, Sessions (การเข้าสู่ระบบแต่ละเครื่อง), Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
+ * ข้อมูลเก็บใน Google Sheet นี้: Users (รวมระดับ admin หลัก/รอง), Sessions (การเข้าสู่ระบบแต่ละเครื่อง), Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
  *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
@@ -43,7 +43,16 @@ var DM_LIMIT = 300;            // จำนวนข้อความล่า�
 var PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/lpch-ro-workspace-website-96j4r6/website/apps-script/Index.html';
 var PAGE_CACHE_SECONDS = 600;
 
-var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin'];
+var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'hash', 'status', 'isAdmin', 'createdAt', 'lastLogin', 'adminPerms'];
+/*
+ * ผู้ดูแลระบบ 2 ระดับ
+ *  - admin หลัก (isAdmin = TRUE): ทำได้ทุกอย่าง และเป็นคนเดียวที่ตั้ง/เปลี่ยน/ยกเลิก admin ได้
+ *  - admin รอง (adminPerms = รายการสิทธิ์ที่ admin หลักเลือก): ทำได้เฉพาะสิทธิ์นั้น
+ *    "users" จัดการได้เฉพาะสมาชิกทั่วไป ไม่แตะบัญชี admin
+ * แอปที่เชื่อม (TRS-398, Linac QA, ระบบกระจายงาน) เห็น isAdmin = admin หลักเท่านั้น
+ */
+var ADMIN_PERMS = ['users', 'delete', 'menus', 'status'];
+var PERM_LABEL = { users: 'จัดการสมาชิก', 'delete': 'ลบข้อความ', menus: 'จัดการเมนู', status: 'ตั้งค่าสถานะ' };
 var SESSION_HEADERS = ['token', 'username', 'expiresAt', 'createdAt', 'device'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
@@ -383,23 +392,28 @@ ACTIONS.directory = function (req) {
 };
 
 ACTIONS.listUsers = function (req) {
-  requireAdmin_(req.token);
+  requirePerm_(req.token, 'users');
   return { users: allUsers_().map(publicUser_) };
 };
 
 ACTIONS.updateUser = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'users');
   var u = findUser_(String(req.username || '').toLowerCase());
   if (!u) throw new Error('ไม่พบผู้ใช้');
   if (u.username === admin.username && (req.isAdmin === false || (req.status && req.status !== 'active'))) {
     throw new Error('ไม่สามารถยกเลิกสิทธิ์หรือระงับบัญชีของตัวเองได้');
   }
+  guardMember_(admin, u);
+  if (typeof req.isAdmin === 'boolean' && !admin.isAdmin) throw new Error('ตั้งหรือยกเลิก admin ได้เฉพาะ admin หลัก');
   if (req.status) {
     if (['active', 'pending', 'disabled'].indexOf(req.status) === -1) throw new Error('สถานะไม่ถูกต้อง');
     setUserField_(u, 'status', req.status);
     if (req.status !== 'active') dropSessionsOf_(u.username);
   }
-  if (typeof req.isAdmin === 'boolean') setUserField_(u, 'isAdmin', req.isAdmin);
+  if (typeof req.isAdmin === 'boolean') {   // page from before admin รอง: on = admin หลัก, off = no admin rights at all
+    setUserField_(u, 'isAdmin', req.isAdmin);
+    setUserField_(u, 'adminPerms', '');
+  }
   if (req.role) {
     if (ROLES.indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
     setUserField_(u, 'role', req.role);
@@ -408,13 +422,37 @@ ACTIONS.updateUser = function (req) {
 };
 
 ACTIONS.deleteUser = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'users');
   var u = findUser_(String(req.username || '').toLowerCase());
   if (!u) throw new Error('ไม่พบผู้ใช้');
   if (u.username === admin.username) throw new Error('ไม่สามารถลบบัญชีของตัวเองได้');
+  guardMember_(admin, u);
   sheet_('Users', USER_HEADERS).deleteRow(u._row);
   dropSessionsOf_(u.username);
   return {};
+};
+
+/**
+ * admin หลักเท่านั้น: level 'main' (ทำได้ทุกอย่าง) | 'sub' + perms (เลือกจาก ADMIN_PERMS อย่างน้อย 1) | 'none'
+ * เปลี่ยนระดับของตัวเองไม่ได้ (กันไม่ให้ไม่เหลือ admin หลัก)
+ */
+ACTIONS.setAdmin = function (req) {
+  var admin = requireAdmin_(req.token);
+  var u = findUser_(String(req.username || '').toLowerCase());
+  if (!u) throw new Error('ไม่พบผู้ใช้');
+  if (u.username === admin.username) throw new Error('ไม่สามารถเปลี่ยนสิทธิ์ admin ของตัวเองได้');
+  var level = String(req.level || '');
+  if (['main', 'sub', 'none'].indexOf(level) === -1) throw new Error('ระดับ admin ไม่ถูกต้อง');
+  var perms = (Array.isArray(req.perms) ? req.perms : []).map(String).filter(function (k, i, a) {
+    return ADMIN_PERMS.indexOf(k) !== -1 && a.indexOf(k) === i;
+  });
+  if (level === 'sub' && !perms.length) throw new Error('เลือกสิทธิ์ของ admin รองอย่างน้อย 1 อย่าง');
+  if (level !== 'none' && u.status !== 'active') throw new Error('ตั้งเป็น admin ได้เฉพาะบัญชีที่ใช้งานอยู่');
+  setUserField_(u, 'isAdmin', level === 'main');
+  setUserField_(u, 'adminPerms', level === 'sub' ? JSON.stringify(perms) : '');
+  var out = publicUser_(findUser_(u.username));
+  return { user: out, message: u.fullName + ': ' + (level === 'main' ? 'admin หลัก' : level === 'sub' ? 'admin รอง (' +
+    perms.map(function (k) { return PERM_LABEL[k]; }).join(', ') + ')' : 'ไม่ใช่ admin') };
 };
 
 /* ----- announcement chat (identity always comes from the session, never from the page) ----- */
@@ -511,7 +549,7 @@ ACTIONS.chatDelete = function (req) {
   var u = requireUser_(req.token);
   var found = findMessage_(String(req.id || ''));
   if (!found) return {};
-  if (!u.isAdmin) throw new Error('ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)');
+  if (!can_(u, 'delete')) throw new Error('ลบข้อความได้เฉพาะ admin ที่มีสิทธิ์ลบข้อความ');
   found.msg.images.forEach(function (ref) {
     try { DriveApp.getFileById(String(ref).replace(/^drive:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
   });
@@ -574,7 +612,7 @@ ACTIONS.menuList = function (req) {
 };
 
 ACTIONS.menuSave = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'menus');
   var m = cleanMenu_(req.item || {});
   var sh = sheet_('Menus', MENU_HEADERS), rows = menuRows_();
   var custom = rows.filter(function (r) { return r.item.kind === 'custom'; });
@@ -592,7 +630,7 @@ ACTIONS.menuSave = function (req) {
 };
 
 ACTIONS.menuDelete = function (req) {
-  requireAdmin_(req.token);
+  requirePerm_(req.token, 'menus');
   var r = menuRows_().filter(function (x) { return (x.item.kind === 'custom' || x.item.kind === 'tile') && x.item.id === String(req.id); })[0];
   if (!r) throw new Error('ไม่พบเมนูนี้ (อาจถูกลบไปแล้ว)');
   sheet_('Menus', MENU_HEADERS).deleteRow(r.row);
@@ -601,7 +639,7 @@ ACTIONS.menuDelete = function (req) {
 
 /** Rename (title; '' = original name) or hide one of the site's own menus, e.g. "mp" or "mp/psqa". */
 ACTIONS.menuBuiltin = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'menus');
   var id = String(req.id || ''), tile = TILE_RE.test(id) && !/^tile:t[0-9a-f]{8}$/.test(id);
   if (!tile && (!MENU_PAGE_RE.test(id) || id === 'home' || id === 'chat' || /\/m[0-9a-f]{8}$/.test(id))) throw new Error('เมนูไม่ถูกต้อง');
   var clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
@@ -622,7 +660,7 @@ ACTIONS.menuBuiltin = function (req) {
 
 /** A Workspace button on the Home page added by an admin: {id?, label, desc, icon, url ("#/page" or https), sso}. */
 ACTIONS.tileSave = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'menus');
   var t = req.tile || {}, clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
   var label = clean(t.label, 60), url = String(t.url || '').trim();
   if (!label) throw new Error('กรุณาใส่ชื่อปุ่ม');
@@ -645,7 +683,7 @@ ACTIONS.tileSave = function (req) {
 
 /** The order of the menus under one heading (parent), or of the main headings (parent "_top"). */
 ACTIONS.menuOrder = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'menus');
   var parent = String(req.parent || '');
   if (parent !== '_top' && parent !== '_home' && (!MENU_KEY_RE.test(parent) || parent === 'home' || parent === 'chat')) throw new Error('หัวข้อไม่ถูกต้อง');
   var order = Array.isArray(req.order) ? req.order.map(String) : [];
@@ -778,7 +816,7 @@ ACTIONS.statusSet = function (req) {
 
 /** Admins: the status choices and the locations (machines, rooms). Ids of kept entries stay the same. */
 ACTIONS.statusConfigSave = function (req) {
-  var admin = requireAdmin_(req.token);
+  var admin = requirePerm_(req.token, 'status');
   var clean = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); };
   var ids = {};
   var id = function (x, prefix) {
@@ -964,8 +1002,8 @@ ACTIONS.dmDelete = function (req) {
   var u = requireUser_(req.token);
   var found = findDm_(String(req.id || ''));
   if (!found) return {};
-  // Admins only, and only in conversations they are part of (private messages stay private).
-  if (!u.isAdmin) throw new Error('ลบข้อความได้เฉพาะผู้ดูแลระบบ (admin)');
+  // Admins with the 'delete' right only, and only in conversations they are part of (private messages stay private).
+  if (!can_(u, 'delete')) throw new Error('ลบข้อความได้เฉพาะ admin ที่มีสิทธิ์ลบข้อความ');
   if (!isDmParty_(found.msg, u.username)) throw new Error('ไม่พบข้อความ');
   found.msg.images.forEach(function (ref) {
     try { DriveApp.getFileById(String(ref).replace(/^dm:/, '')).setTrashed(true); } catch (e) { /* already gone */ }
@@ -1267,7 +1305,30 @@ function findUser_(username) {
 }
 
 function setUserField_(u, field, value) {
-  sheet_('Users', USER_HEADERS).getRange(u._row, USER_HEADERS.indexOf(field) + 1).setValue(value);
+  var sheet = sheet_('Users', USER_HEADERS), col = USER_HEADERS.indexOf(field) + 1;
+  if (!sheet.getRange(1, col).getValue()) sheet.getRange(1, col).setValue(field);   // column added after the sheet was made
+  sheet.getRange(u._row, col).setValue(value);
+}
+
+/** What this member may do as an admin: every right for admin หลัก, the chosen ones for admin รอง, none otherwise. */
+function permsOf_(u) {
+  if (u.isAdmin) return ADMIN_PERMS.slice();
+  var p;
+  try { p = JSON.parse(u.adminPerms || '[]'); } catch (e) { p = []; }
+  return Array.isArray(p) ? ADMIN_PERMS.filter(function (k) { return p.indexOf(k) !== -1; }) : [];
+}
+
+function can_(u, perm) { return permsOf_(u).indexOf(perm) !== -1; }
+
+function requirePerm_(token, perm) {
+  var u = requireUser_(token);
+  if (!can_(u, perm)) throw new Error('ไม่มีสิทธิ์' + PERM_LABEL[perm] + ' (admin หลักเป็นผู้กำหนดสิทธิ์ของ admin รอง)');
+  return u;
+}
+
+/** admin รอง manages ordinary members only; admin accounts are left to admin หลัก. */
+function guardMember_(admin, u) {
+  if (!admin.isAdmin && (u.isAdmin || permsOf_(u).length)) throw new Error('บัญชี admin จัดการได้เฉพาะ admin หลัก');
 }
 
 function publicUser_(u) {
@@ -1278,7 +1339,9 @@ function publicUser_(u) {
     phone: String(u.phone || ''),
     email: u.email || '',
     status: u.status,
-    isAdmin: u.isAdmin,
+    isAdmin: u.isAdmin,   // admin หลัก (other apps read this too)
+    adminLevel: u.isAdmin ? 'main' : permsOf_(u).length ? 'sub' : '',
+    perms: permsOf_(u),
     createdAt: u.createdAt ? new Date(u.createdAt).getTime() : null,
     lastLogin: u.lastLogin ? new Date(u.lastLogin).getTime() : null
   };
@@ -1325,9 +1388,10 @@ function requireUser_(token) {
   throw new Error('session_expired');
 }
 
+/** admin หลัก only (appointing admins). Everything else checks one right with requirePerm_. */
 function requireAdmin_(token) {
   var u = requireUser_(token);
-  if (!u.isAdmin) throw new Error('ต้องเป็นผู้ดูแลระบบ');
+  if (!u.isAdmin) throw new Error('ทำได้เฉพาะ admin หลัก');
   return u;
 }
 

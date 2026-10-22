@@ -154,7 +154,7 @@
             '<button type="button" class="st-choice st-gray' + (!pick.status ? " on" : "") + '" data-s="" aria-pressed="' + !pick.status + '">ไม่ระบุ</button>' +
           "</div></div>" +
           '<label class="st-field"><span>สถานที่ (เครื่อง / ห้อง)' +
-            (me().isAdmin ? ' <a class="st-edit-list" href="#/status-settings" data-close>⚙️ แก้ไขรายการ</a>' : "") +
+            (Auth.can("status") ? ' <a class="st-edit-list" href="#/status-settings" data-close>⚙️ แก้ไขรายการ</a>' : "") +
             '</span><select id="stLoc"><option value="">— ไม่ระบุ —</option>' +
             [["เครื่อง", data.config.locations.filter(function (l) { return !isRoom(l); })], ["ห้อง", data.config.locations.filter(isRoom)]]
               .filter(function (g) { return g[1].length; }).map(function (g) {
@@ -248,7 +248,7 @@
       root.innerHTML =
         '<div class="team card">' +
           '<div class="team-head"><h2>สถานะทีม</h2><span class="team-online"><i class="st-dot"></i> ออนไลน์ ' + online + "</span>" +
-            (u && u.isAdmin ? '<a class="team-gear" href="#/status-settings" title="ตั้งค่าตัวเลือกสถานะและสถานที่" aria-label="ตั้งค่าสถานะ">⚙️</a>' : "") + "</div>" +
+            (Auth.can("status") ? '<a class="team-gear" href="#/status-settings" title="ตั้งค่าตัวเลือกสถานะและสถานที่" aria-label="ตั้งค่าสถานะ">⚙️</a>' : "") + "</div>" +
           '<button type="button" class="team-mine" data-me>✏️ ตั้งสถานะของฉัน</button>' +
           '<div class="team-chips">' + chips + "</div>" +
           '<input class="team-search" type="search" placeholder="ค้นหาชื่อ ตำแหน่ง หรือสถานที่…" aria-label="ค้นหาในสถานะทีม" value="' + esc(query) + '">' +

@@ -13,6 +13,19 @@
   var TOKEN_KEY = "lpch-ro-token";
   var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
     ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"], ["Other", "อื่นๆ"]];
+  // Admin rights (same keys as ADMIN_PERMS in Code.gs). admin หลัก has all of them; admin หลัก picks them for each admin รอง.
+  var PERMS = [
+    ["users", "จัดการสมาชิก", "อนุมัติ ระงับ ลบ และเปลี่ยนตำแหน่งสมาชิกทั่วไป"],
+    ["delete", "ลบข้อความ", "ลบข้อความในแชทประกาศและข้อความส่วนตัว"],
+    ["menus", "จัดการเมนู", "เพิ่ม แก้ไข เรียงลำดับเมนูและปุ่ม Workspace"],
+    ["status", "ตั้งค่าสถานะ", "ตัวเลือกสถานะ รายชื่อเครื่องและห้อง"],
+  ];
+  function permLabel(k) { return (PERMS.filter(function (p) { return p[0] === k; })[0] || [k, k])[1]; }
+  function levelOf(u) { return !u ? "" : u.isAdmin ? "main" : (u.adminLevel === "sub" && (u.perms || []).length ? "sub" : ""); }
+  function levelBadge(u) {
+    var l = levelOf(u);
+    return l === "main" ? ' <span class="badge">admin หลัก</span>' : l === "sub" ? ' <span class="badge sub">admin รอง</span>' : "";
+  }
   // Inside a Google Apps Script web app the page talks to Code.gs through google.script.run.
   var gas = !!(window.google && google.script && google.script.run);
   var remote = gas || !!CFG.apiUrl;
@@ -76,9 +89,14 @@
 
     function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
+    function permsOf(u) {
+      return u.isAdmin ? PERMS.map(function (p) { return p[0]; })
+        : PERMS.map(function (p) { return p[0]; }).filter(function (k) { return (u.adminPerms || []).indexOf(k) !== -1; });
+    }
     function pub(u) {
       return { username: u.username, fullName: u.fullName, role: u.role, phone: u.phone, email: u.email,
-        status: u.status, isAdmin: u.isAdmin, createdAt: u.createdAt, lastLogin: u.lastLogin };
+        status: u.status, isAdmin: u.isAdmin, adminLevel: u.isAdmin ? "main" : permsOf(u).length ? "sub" : "", perms: permsOf(u),
+        createdAt: u.createdAt, lastLogin: u.lastLogin };
     }
 
     function fail(msg) { throw new Error(msg); }
@@ -104,8 +122,16 @@
 
     function requireAdmin(d, token) {
       var u = requireUser(d, token);
-      if (!u.isAdmin) fail("ต้องเป็นผู้ดูแลระบบ");
+      if (!u.isAdmin) fail("ทำได้เฉพาะ admin หลัก");
       return u;
+    }
+    function requirePerm(d, token, perm) {
+      var u = requireUser(d, token);
+      if (permsOf(u).indexOf(perm) === -1) fail("ไม่มีสิทธิ์" + permLabel(perm) + " (admin หลักเป็นผู้กำหนดสิทธิ์ของ admin รอง)");
+      return u;
+    }
+    function guardMember(admin, u) {
+      if (!admin.isAdmin && (u.isAdmin || permsOf(u).length)) fail("บัญชี admin จัดการได้เฉพาะ admin หลัก");
     }
 
     var EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
@@ -224,25 +250,41 @@
           return { username: u.username, fullName: u.fullName, role: u.role };
         }) };
       },
-      listUsers: function (d, r) { requireAdmin(d, r.token); return { users: d.users.map(pub) }; },
+      listUsers: function (d, r) { requirePerm(d, r.token, "users"); return { users: d.users.map(pub) }; },
       updateUser: function (d, r) {
-        var admin = requireAdmin(d, r.token);
+        var admin = requirePerm(d, r.token, "users");
         var u = find(d, r.username);
         if (!u) fail("ไม่พบผู้ใช้");
         if (u === admin && (r.isAdmin === false || (r.status && r.status !== "active"))) fail("ไม่สามารถยกเลิกสิทธิ์หรือระงับบัญชีของตัวเองได้");
+        guardMember(admin, u);
+        if (typeof r.isAdmin === "boolean" && !admin.isAdmin) fail("ตั้งหรือยกเลิก admin ได้เฉพาะ admin หลัก");
         if (r.status) {
           u.status = r.status;
           if (r.status !== "active") d.sessions = d.sessions.filter(function (s) { return s.username !== u.username; });
         }
-        if (typeof r.isAdmin === "boolean") u.isAdmin = r.isAdmin;
+        if (typeof r.isAdmin === "boolean") { u.isAdmin = r.isAdmin; u.adminPerms = []; }
         if (r.role) u.role = r.role;
         return { user: pub(u) };
       },
-      deleteUser: function (d, r) {
+      setAdmin: function (d, r) {
         var admin = requireAdmin(d, r.token);
         var u = find(d, r.username);
         if (!u) fail("ไม่พบผู้ใช้");
+        if (u === admin) fail("ไม่สามารถเปลี่ยนสิทธิ์ admin ของตัวเองได้");
+        if (["main", "sub", "none"].indexOf(r.level) === -1) fail("ระดับ admin ไม่ถูกต้อง");
+        var perms = PERMS.map(function (p) { return p[0]; }).filter(function (k) { return (r.perms || []).indexOf(k) !== -1; });
+        if (r.level === "sub" && !perms.length) fail("เลือกสิทธิ์ของ admin รองอย่างน้อย 1 อย่าง");
+        if (r.level !== "none" && u.status !== "active") fail("ตั้งเป็น admin ได้เฉพาะบัญชีที่ใช้งานอยู่");
+        u.isAdmin = r.level === "main";
+        u.adminPerms = r.level === "sub" ? perms : [];
+        return { user: pub(u), message: u.fullName + ": " + (r.level === "main" ? "admin หลัก" : r.level === "sub" ? "admin รอง (" + perms.map(permLabel).join(", ") + ")" : "ไม่ใช่ admin") };
+      },
+      deleteUser: function (d, r) {
+        var admin = requirePerm(d, r.token, "users");
+        var u = find(d, r.username);
+        if (!u) fail("ไม่พบผู้ใช้");
         if (u === admin) fail("ไม่สามารถลบบัญชีของตัวเองได้");
+        guardMember(admin, u);
         d.users = d.users.filter(function (x) { return x !== u; });
         d.sessions = d.sessions.filter(function (s) { return s.username !== u.username; });
         return {};
@@ -457,6 +499,8 @@
   function mountAdmin(el) {
     var users = [];
     var filter = "pending";
+    var editing = null;                   // username whose admin rights are open (admin หลัก only)
+    var main = !!(user && user.isAdmin);  // admin หลัก; otherwise an admin รอง with the "จัดการสมาชิก" right
 
     function load() {
       el.innerHTML = '<p class="muted">กำลังโหลด…</p>';
@@ -464,51 +508,95 @@
         .catch(function (e) { el.innerHTML = '<p class="auth-error">' + esc(e.message) + "</p>"; });
     }
 
+    // admin หลัก manages every account; admin รอง only ordinary members (the server checks the same)
+    function manageable(u) { return main || !levelOf(u); }
+
+    function permEditor(u) {
+      var l = levelOf(u) || "none", mine = l === "sub" ? (u.perms || []) : [], name = "lvl-" + u.username;
+      return '<tr class="perm-row"><td colspan="7"><div class="perm-editor" data-for="' + esc(u.username) + '">' +
+        "<h4>🛡️ สิทธิ์ admin ของ " + esc(u.fullName) + "</h4>" +
+        '<div class="perm-levels" role="radiogroup" aria-label="ระดับ admin">' +
+          [["none", "ไม่ใช่ admin", "สมาชิกทั่วไป"], ["sub", "admin รอง", "ทำได้เฉพาะสิทธิ์ที่เลือก"], ["main", "admin หลัก", "ทำได้ทุกอย่าง รวมถึงตั้ง admin"]].map(function (o) {
+            return '<label class="perm-level"><input type="radio" name="' + esc(name) + '" value="' + o[0] + '"' + (l === o[0] ? " checked" : "") + ">" +
+              "<span><strong>" + o[1] + "</strong><small>" + o[2] + "</small></span></label>";
+          }).join("") + "</div>" +
+        '<fieldset class="perm-list"' + (l === "sub" ? "" : " disabled") + "><legend>สิทธิ์ของ admin รอง</legend>" +
+          PERMS.map(function (p) {
+            return '<label class="perm-check"><input type="checkbox" value="' + p[0] + '"' + (mine.indexOf(p[0]) !== -1 ? " checked" : "") + ">" +
+              "<span><strong>" + esc(p[1]) + "</strong><small>" + esc(p[2]) + "</small></span></label>";
+          }).join("") + "</fieldset>" +
+        (u.status !== "active" ? '<p class="perm-warn">บัญชีนี้ยังไม่ได้ใช้งาน (รออนุมัติหรือถูกระงับ) จึงตั้งเป็น admin ไม่ได้</p>' : "") +
+        '<div class="menu-buttons"><button type="button" class="auth-submit" data-perm="save">บันทึกสิทธิ์</button>' +
+          '<button type="button" class="chip" data-perm="cancel">ยกเลิก</button></div>' +
+      "</div></td></tr>";
+    }
+
     function render(msg) {
-      var counts = { all: users.length, pending: 0, active: 0, disabled: 0 };
-      users.forEach(function (u) { counts[u.status] = (counts[u.status] || 0) + 1; });
+      var counts = { all: users.length, pending: 0, active: 0, disabled: 0, admin: 0 };
+      users.forEach(function (u) { counts[u.status] = (counts[u.status] || 0) + 1; if (levelOf(u)) counts.admin++; });
       if (filter === "pending" && !counts.pending) filter = "all";
-      var list = users.filter(function (u) { return filter === "all" || u.status === filter; });
+      var list = users.filter(function (u) { return filter === "all" || (filter === "admin" ? !!levelOf(u) : u.status === filter); });
 
       el.innerHTML =
-        '<div class="toolbar">' + [["pending", "รออนุมัติ"], ["active", "ใช้งาน"], ["disabled", "ระงับ"], ["all", "ทั้งหมด"]].map(function (f) {
+        '<div class="toolbar">' + [["pending", "รออนุมัติ"], ["active", "ใช้งาน"], ["disabled", "ระงับ"], ["admin", "admin"], ["all", "ทั้งหมด"]].map(function (f) {
           return '<button class="chip' + (filter === f[0] ? " active" : "") + '" data-filter="' + f[0] + '">' + f[1] + " (" + (counts[f[0]] || 0) + ")</button>";
         }).join("") + "</div>" +
+        (main ? '<p class="admin-help">กด <strong>🛡️ สิทธิ์ admin</strong> เพื่อตั้งเป็น admin หลัก (ทำได้ทุกอย่าง) หรือ admin รอง (เลือกสิทธิ์เอง)</p>'
+          : '<p class="admin-help">คุณเป็น <strong>admin รอง</strong>: จัดการได้เฉพาะสมาชิกทั่วไป บัญชี admin จัดการได้เฉพาะ admin หลัก</p>') +
         (msg ? '<div class="note">' + esc(msg) + "</div>" : "") +
         '<div class="table-wrap stack-wrap card flush"><table class="users stack"><thead><tr>' +
         "<th>ชื่อ-นามสกุล</th><th>Username</th><th>ตำแหน่ง</th><th>ติดต่อ</th><th>สถานะ</th><th>สมัครเมื่อ / เข้าล่าสุด</th><th></th></tr></thead><tbody>" +
         (list.length ? list.map(function (u) {
           var st = STATUS[u.status] || [u.status, ""];
           var self = user && u.username === user.username;
+          var can = !self && manageable(u);
           var acts = [];
-          if (u.status !== "active") acts.push('<button class="chip active" data-act="approve">' + (u.status === "pending" ? "อนุมัติ" : "เปิดใช้งาน") + "</button>");
-          if (u.status === "active" && !self) acts.push('<button class="chip" data-act="disable">ระงับ</button>');
-          if (!self) acts.push('<button class="chip" data-act="admin">' + (u.isAdmin ? "ยกเลิก admin" : "ตั้งเป็น admin") + "</button>");
-          if (!self) acts.push('<button class="chip danger" data-act="delete">ลบ</button>');
+          if (can && u.status !== "active") acts.push('<button class="chip active" data-act="approve">' + (u.status === "pending" ? "อนุมัติ" : "เปิดใช้งาน") + "</button>");
+          if (can && u.status === "active") acts.push('<button class="chip" data-act="disable">ระงับ</button>');
+          if (main && !self) acts.push('<button class="chip' + (editing === u.username ? " active" : "") + '" data-act="perm" aria-expanded="' + (editing === u.username) + '">🛡️ สิทธิ์ admin</button>');
+          if (can) acts.push('<button class="chip danger" data-act="delete">ลบ</button>');
+          var tags = levelOf(u) === "sub" ? '<div class="perm-tags">' + u.perms.map(function (k) { return "<span>" + esc(permLabel(k)) + "</span>"; }).join("") + "</div>" : "";
           return '<tr data-user="' + esc(u.username) + '">' +
-            '<td class="cell-name"><strong>' + esc(u.fullName) + "</strong>" + (u.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td>" +
+            '<td class="cell-name"><strong>' + esc(u.fullName) + "</strong>" + levelBadge(u) + tags + "</td>" +
             '<td data-label="Username">' + esc(u.username) + "</td>" +
-            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง">' + ROLES.map(function (r) {
+            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" + ROLES.map(function (r) {
               return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
             }).join("") + "</select></td>" +
             '<td class="small" data-label="ติดต่อ">' + (esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") || "—") + "</td>" +
             '<td data-label="สถานะ"><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
             '<td class="small" data-label="สมัคร / เข้าล่าสุด">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
-            '<td class="cell-actions"><div class="actions">' + acts.join("") + "</div></td></tr>";
+            '<td class="cell-actions"><div class="actions">' + acts.join("") + "</div></td></tr>" +
+            (editing === u.username ? permEditor(u) : "");
         }).join("") : '<tr><td colspan="7" class="muted">ไม่มีรายการ</td></tr>') +
         "</tbody></table></div>";
     }
 
+    function replaceUser(u) { users = users.map(function (x) { return x.username === u.username ? u : x; }); }
+
     function update(username, data, okMsg) {
       call("updateUser", Object.assign({ username: username }, data)).then(function (res) {
-        users = users.map(function (u) { return u.username === username ? res.user : u; });
+        replaceUser(res.user);
         render(okMsg);
       }).catch(function (e) { render("⚠️ " + e.message); });
     }
 
     el.addEventListener("click", function (e) {
       var f = e.target.getAttribute("data-filter");
-      if (f) { filter = f; render(); return; }
+      if (f) { filter = f; editing = null; render(); return; }
+      var pb = e.target.closest && e.target.closest("[data-perm]");
+      if (pb) {
+        var box = pb.closest(".perm-editor"), who = box.getAttribute("data-for");
+        if (pb.getAttribute("data-perm") === "cancel") { editing = null; render(); return; }
+        var level = (box.querySelector('input[type=radio]:checked') || {}).value || "none";
+        var perms = [].map.call(box.querySelectorAll(".perm-list input:checked"), function (c) { return c.value; });
+        pb.disabled = true;
+        call("setAdmin", { username: who, level: level, perms: level === "sub" ? perms : [] }).then(function (res) {
+          replaceUser(res.user);
+          editing = null;
+          render(res.message);
+        }).catch(function (ex) { pb.disabled = false; render("⚠️ " + ex.message); });
+        return;
+      }
       var act = e.target.getAttribute("data-act");
       var tr = e.target.closest("tr[data-user]");
       if (!act || !tr || act === "role") return;
@@ -516,7 +604,7 @@
       var u = users.filter(function (x) { return x.username === username; })[0];
       if (act === "approve") update(username, { status: "active" }, "เปิดใช้งานบัญชี " + u.fullName + " แล้ว");
       if (act === "disable") update(username, { status: "disabled" }, "ระงับบัญชี " + u.fullName + " แล้ว");
-      if (act === "admin") update(username, { isAdmin: !u.isAdmin }, "อัปเดตสิทธิ์ของ " + u.fullName + " แล้ว");
+      if (act === "perm") { editing = editing === username ? null : username; render(); }
       if (act === "delete" && confirm("ลบบัญชี " + u.fullName + " ?")) {
         call("deleteUser", { username: username }).then(function () {
           users = users.filter(function (x) { return x.username !== username; });
@@ -526,6 +614,11 @@
     });
 
     el.addEventListener("change", function (e) {
+      if (e.target.type === "radio" && e.target.closest(".perm-editor")) {
+        // the list of rights only applies to admin รอง
+        e.target.closest(".perm-editor").querySelector(".perm-list").disabled = e.target.value !== "sub";
+        return;
+      }
       if (e.target.getAttribute("data-act") !== "role") return;
       var username = e.target.closest("tr").getAttribute("data-user");
       update(username, { role: e.target.value }, "เปลี่ยนตำแหน่งเรียบร้อย");
@@ -544,7 +637,8 @@
         '<div class="card"><h3>👤 ข้อมูลสมาชิก</h3><table class="specs"><tbody>' +
           "<tr><th>ชื่อ-นามสกุล</th><td>" + esc(user.fullName) + "</td></tr>" +
           "<tr><th>Username</th><td>" + esc(user.username) + "</td></tr>" +
-          "<tr><th>ตำแหน่ง</th><td>" + esc(roleName) + (user.isAdmin ? ' <span class="badge">admin</span>' : "") + "</td></tr>" +
+          "<tr><th>ตำแหน่ง</th><td>" + esc(roleName) + levelBadge(user) + "</td></tr>" +
+          (levelOf(user) === "sub" ? "<tr><th>สิทธิ์ admin รอง</th><td>" + esc(user.perms.map(permLabel).join(", ")) + "</td></tr>" : "") +
         "</tbody></table>" +
         '<form class="auth-form profile-form" novalidate>' +
           field("อีเมล *", '<input name="email" type="email" autocomplete="email" value="' + esc(user.email || "") + '" required>',
@@ -691,6 +785,15 @@
     // Raw API call with the session token (used by the chat when it is stored on the server).
     call: call,
     get user() { return user; },
+    // May the signed-in member use this admin right? admin หลัก: every right; admin รอง: the ones admin หลัก gave.
+    // No right named = admin หลัก only. (A Code.gs from before admin รอง sends no perms: isAdmin decides, as before.)
+    can: function (perm) {
+      if (!user) return false;
+      if (user.isAdmin) return true;
+      return !!perm && levelOf(user) === "sub" && user.perms.indexOf(perm) !== -1;
+    },
+    // "main" (admin หลัก) | "sub" (admin รอง) | ""
+    adminLevel: function () { return levelOf(user); },
     onChange: function (cb) { listeners.push(cb); },
     // Resolves with the signed-in user, or null if a login is needed.
     init: function () {

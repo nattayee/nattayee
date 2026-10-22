@@ -10,9 +10,9 @@
   // Member pages (not in the top menu).
   S.pages.account = { title: "บัญชีของฉัน", lead: "ข้อมูลสมาชิก การเปลี่ยนรหัสผ่าน และอุปกรณ์ที่เข้าสู่ระบบ", widgets: ["account"] };
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
-  S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนดสิทธิ์ผู้ดูแลระบบ", widgets: ["admin"], adminOnly: true };
-  S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true };
-  S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true };
+  S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนด admin หลัก / admin รอง", widgets: ["admin"], adminOnly: true, perm: "users" };
+  S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true, perm: "status" };
+  S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true, perm: "menus" };
   var navEl = document.getElementById("nav");
 
   function esc(s) {
@@ -108,7 +108,7 @@
           "<div><strong>" + esc(q.label) + "</strong><span>" + esc(q.desc || "") + "</span></div></a>";
       }).join("");
       // admins edit these buttons on the "จัดการเมนู" page (menus.js)
-      var manage = Auth.user && Auth.user.isAdmin && window.Menus ? '<div class="menu-adminbar"><a class="chip" href="#/menus">⚙️ จัดการปุ่ม Workspace</a></div>' : "";
+      var manage = Auth.can("menus") && window.Menus ? '<div class="menu-adminbar"><a class="chip" href="#/menus">⚙️ จัดการปุ่ม Workspace</a></div>' : "";
       return section("Workspace", "เลือกส่วนงาน", manage + '<div class="grid tiles">' + tiles + "</div>");
     },
 
@@ -345,7 +345,7 @@
   function route() {
     if (!Auth.user) return;
     var page = (location.hash.replace(/^#\/?/, "") || "home").split("?")[0];
-    if (!S.pages[page] || (S.pages[page].adminOnly && !Auth.user.isAdmin)) page = "home";
+    if (!S.pages[page] || (S.pages[page].adminOnly && !Auth.can(S.pages[page].perm))) page = "home";
 
     unmountWidgets();
     app.innerHTML = renderPage(page);
@@ -426,11 +426,13 @@
         '<span class="user-name">' + esc(u.fullName) + "</span></button>" +
       '<div class="user-drop" id="userDrop" hidden>' +
         '<div class="user-info"><strong>' + esc(u.fullName) + "</strong><span>" + esc(Auth.roleName(u.role)) +
-          (u.isAdmin ? " · admin" : "") + "</span></div>" +
+          ({ main: " · admin หลัก", sub: " · admin รอง" }[Auth.adminLevel()] || "") + "</span></div>" +
         '<a href="#/inbox">✉️ ข้อความส่วนตัว</a>' +
         '<a href="#/account">👤 บัญชีของฉัน</a>' +
         (window.Status ? '<button type="button" id="statusBtn">📍 ตั้งสถานะของฉัน</button>' : "") +
-        (u.isAdmin ? '<a href="#/admin">👥 จัดการสมาชิก</a><a href="#/menus">🧭 จัดการเมนู</a><a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
+        (Auth.can("users") ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
+        (Auth.can("menus") ? '<a href="#/menus">🧭 จัดการเมนู</a>' : "") +
+        (Auth.can("status") ? '<a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
         '<button type="button" id="themeBtn" class="phone-only">' + themeLabel() + "</button>" +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +
