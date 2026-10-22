@@ -620,6 +620,10 @@ button.chk.done.q-late:hover{background:var(--late-soft);box-shadow:inset 0 0 0 
 .stamps div{display:flex;flex-wrap:wrap;gap:4px 10px}
 .stamps b{min-width:80px;font-weight:500}
 .stamps span{color:var(--muted)}
+.stamps .stamp-edit{margin-left:auto;padding:0 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--accent);font:inherit;font-size:12px;line-height:22px;cursor:pointer}
+.stamps .stamp-edit:hover{border-color:var(--accent)}
+.stamps .stamp-links{display:flex;flex-wrap:wrap;gap:4px}
+.stamps .stamp-links .stamp-edit{margin-left:0;color:var(--fg)}
 /* รหัส PIN */
 .pin-what{margin:0;font-size:13.5px;color:var(--muted)}
 .pin-what b{color:var(--fg);font-weight:500}
@@ -2130,7 +2134,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-22.1';
+const PAGE_VERSION = '2026-10-22.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2956,6 +2960,7 @@ function render() {
   renderNav();
   pinTop();
   applyBoxes();
+  if (caseDlg.open && editingCase) syncCaseStamps();
   renderPendBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
@@ -5936,21 +5941,38 @@ function fillCaseSelects(c) {
   chipGroup($('#f-room'), 'room', withCur(state.config.rooms, c.room), c.room);
   chipGroup($('#f-tech'), 'tech', withCur(state.config.techniques, c.tech), c.tech);
 }
+// สรุปขั้นตอนในหน้าแก้ไขเคส: ปุ่ม "แก้" / "บันทึก" เปิดหน้าต่าง PIN ของขั้นตอนนั้นซ้อนขึ้นมา
+// แก้ได้ทุกเมื่อ รวมถึงหลัง Plan complete (เคสที่ไม่อยู่ในงานรอแล้ว เปิดจากตารางวันฉายหรือค้นหาได้) · Plan 2… / boost กดทีละขั้นตอน
+const STAMP_KEYS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'bsteps'];
+function renderCaseStamps(k) {
+  const see = qaVisible(), c = editingCase;
+  const btn = (key, done, sid, label) => `<button type="button" class="stamp-edit" data-stamp="${key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''}>${label ? esc(label) : done ? 'แก้' : 'บันทึก'}</button>`;
+  $('#f-stamps').innerHTML = stepsOf(k).map(x => {
+    const at = c[x.key], val = x.value && see ? c[x.key + 'Val'] : '';
+    return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, c[x.key + 'By'], fmtStamp(at), x.value && see && c[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span>${btn(x.key, at)}</div>`;
+  }).join('') + (boostStepsOn() ? subPlans(c).map(b => {
+    const r = boostStamps(c)[b.sid] || {};
+    return `<div><b>${esc(b.name)}</b><span class="stamp-links">${stepsOf(k).map(x => btn(x.key, r[x.key], b.sid, `${r[x.key] ? '✓ ' : ''}${LINE_SHORT[x.key] || x.label}${r[x.key] && x.value && see && r[x.key + 'Val'] ? ' ' + r[x.key + 'Val'] : ''}`)).join('')}</span></div>`;
+  }).join('') : '')
+    + '<div><span>กด "บันทึก" หรือ "แก้" เพื่อบันทึกใหม่หรือล้าง (ใส่รหัส PIN) · แก้ได้แม้ Plan complete แล้ว</span></div>';
+}
+// บันทึกขั้นตอนจากหน้าแก้ไขเคสแล้ว: เอาค่าล่าสุดมาไว้ในฟอร์ม (กดบันทึกการแก้ไขทีหลังไม่ทับ) และวาดสรุปใหม่
+function syncCaseStamps() {
+  const rec = state.cases.find(x => x.id === editingCase.id), k = catOf($('#f-cat').value);
+  if (!rec) return;
+  for (const key of STAMP_KEYS) editingCase[key] = rec[key];
+  if (stampsOn() && k.kind !== 'simple') renderCaseStamps(k);
+}
 function syncCaseForm() {
   const k = catOf($('#f-cat').value);
   const simple = k.kind === 'simple';
   $$('.plan-only', caseForm).forEach(el => { el.hidden = simple; });
   if (!roomSitesOn()) $('#f-room-field').hidden = true;
-  // ปุ่มบันทึกขั้นตอนใช้รหัส PIN: วันเวลา Finish / Evaluate แก้ที่ปุ่มในรายการเคส ที่นี่แสดงอย่างเดียว
+  // ปุ่มบันทึกขั้นตอนใช้รหัส PIN: ช่องวันเวลา Finish / Evaluate ซ่อน · แก้ทีละขั้นตอนจากปุ่มในสรุป (renderCaseStamps)
   const stamped = stampsOn() && !simple;
   if (stampsOn()) $('#f-fin-field').hidden = $('#f-eval-field').hidden = true;
   $('#f-stamps').hidden = !stamped;
-  const see = qaVisible();
-  if (stamped) $('#f-stamps').innerHTML = stepsOf(k).map(x => {
-    const at = editingCase[x.key], val = x.value && see ? editingCase[x.key + 'Val'] : '';
-    return `<div><b>${esc(x.label)}</b><span>${at ? `✓ ${esc([val, editingCase[x.key + 'By'], fmtStamp(at), x.value && see && editingCase[x.key + 'Note']].filter(Boolean).join(' · '))}` : 'ยังไม่บันทึก'}</span></div>`;
-  }).join('') + (boostStepsOn() ? subPlans(editingCase).map(b => { const r = boostStamps(editingCase)[b.sid] || {}; return `<div><b>${esc(b.name)}</b><span>${esc(stepsOf(k).map(x => `${r[x.key] ? '✓ ' : ''}${LINE_SHORT[x.key] || x.label}${r[x.key] && x.value && see && r[x.key + 'Val'] ? ' ' + r[x.key + 'Val'] : ''}`).join(' · '))}</span></div>`; }).join('') : '')
-    + '<div><span>บันทึก แก้ หรือล้าง ได้ที่ปุ่มในรายการเคส (ใส่รหัส PIN)</span></div>';
+  if (stamped) renderCaseStamps(k);
   $('#f-n-field').hidden = !countsOn();
   syncSites('f');
   $('#tech-field').hidden = simple || !k.tech;
@@ -7019,6 +7041,8 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-btn') return openPinSettings();
   if (t.id === 'pin-forgot') { pinCtx.forgot = true; syncPinForm(); return $('#pin-proof').focus(); }
   if (t.id === 'pin-clear') return submitPin(null, true);
+  const inCaseDlg = !!t.closest('#case-dlg');   // ปุ่มขั้นตอนในหน้าแก้ไขเคส: ใช้สิทธิ์แก้ไขเคส
+  if (inCaseDlg && ds.stamp) return canEditCases() ? openStamp(ds.id, ds.stamp, ds.sid || '') : toast(RO_MSG, { err: true });
   if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ['add-rc', 'add-other', 'case-del', 'log-del'].includes(t.id))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
