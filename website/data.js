@@ -245,23 +245,6 @@ window.SITE = {
     rtt: {
       title: "RTT",
       lead: "นักรังสีการแพทย์ (Radiation Therapy Technologist)",
-      groups: [
-        { title: "SOP", icon: "📋", items: [
-          { label: "SOP: CT simulation", type: "Doc", url: "#" },
-          { label: "SOP: Treatment delivery", type: "Doc", url: "#" },
-          { label: "SOP: IGRT (CBCT / kV-kV)", type: "Doc", url: "#" },
-          { label: "Patient identification & time-out", type: "Doc", url: "#" },
-        ] },
-        { title: "ตารางงาน", icon: "🗓️", items: [
-          { label: "ตารางฉายรังสีประจำวัน", type: "Sheet", url: "#" },
-          { label: "ตารางเวร RTT", type: "Sheet", url: "#" },
-          { label: "ตารางนัด CT simulation", type: "Sheet", url: "#" },
-        ] },
-        { title: "แบบฟอร์ม", icon: "📝", items: [
-          { label: "Setup note / Treatment record", type: "Form", url: "#" },
-          { label: "Incident / near-miss report", type: "Form", url: "#" },
-        ] },
-      ],
     },
     nurse: {
       title: "Nurse",

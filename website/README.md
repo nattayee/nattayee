@@ -109,7 +109,7 @@
 | Home | ปุ่ม Workspace ไปแต่ละส่วนงาน (รวมแชทและข้อความส่วนตัว) และแถบสถานะทีม |
 | 💬 แชท | แชทประกาศ/ข่าวสาร แบบเต็มจอเหมือนแอปแชท (`#/chat`) พร้อมตัวเลขข้อความที่ยังไม่อ่าน |
 | Machines ▾ | Linac 1, Linac 2, CT Simulator, HDR Brachytherapy — ข้อมูลเครื่อง คู่มือ บันทึก QA |
-| RTT | SOP, ตารางงาน, แบบฟอร์มของนักรังสีการแพทย์ |
+| RTT | หน้าของนักรังสีการแพทย์ (ผู้ดูแลระบบเพิ่มเมนูย่อยได้) |
 | Nurse | Patient education, consent, การดูแลผลข้างเคียง |
 | RO | ใบส่งปรึกษา/สั่งการรักษา, งานวิชาการ, BED/EQD2 calculator |
 | MP ▾ | **Machine QA** (แอป [Linac QA](https://script.google.com/macros/s/AKfycbzbr7zos77u_DMBvXs-JLKsYiCdLXwuzTL0dQugLDLtVGUq47xYPESaWSeakd8k2WWO/exec)), **Dosimetry** (แอป [TRS-398 Output Calibration](https://script.google.com/macros/s/AKfycbx76ApGTgQZAnF67ehNR_VN8USNmuA7u9Pt6y_vNZx9Yqt7LFMontdDNXq_YypUIjLD/exec)) — เปิดในแท็บใหม่ เข้าสู่ระบบให้อัตโนมัติด้วยบัญชีเว็บนี้, Treatment Planning, Patient-specific QA, Radiation Safety |
