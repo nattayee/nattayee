@@ -318,6 +318,10 @@ button.cd:hover{box-shadow:inset 0 0 0 2px currentColor}
 .chips.q-chips span{background:var(--qc,var(--surface));color:var(--qf,var(--fg))}
 .chips.q-chips input:checked+span{background:var(--qc,var(--accent-soft));border-color:var(--accent);color:var(--qf,var(--fg));font-weight:600;box-shadow:inset 0 0 0 1px var(--accent)}
 .tags-box{display:grid;gap:14px}
+.pin-groups{display:grid;gap:8px}
+.pin-groups .check{align-items:flex-start;white-space:normal}   /* คำอธิบายยาว: ขึ้นบรรทัดใหม่บนมือถือ */
+.pin-groups .check input{margin-top:3px}
+.pin-groups small{font-size:12.5px}
 .fxg-c0 .av{flex:none}
 .doc-chip{flex:none;display:inline-block;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;color:var(--muted);font:600 11.5px/20px var(--mono)}
 .doc-chip.painted{border-color:var(--cs);background:var(--cs);color:var(--c)}
@@ -1716,6 +1720,23 @@ const addFxOn = () => serverHas(ADD_API);
 const REPLAN_API = 28;   // Code.gs ที่สร้างงานวางแผนใหม่ให้ MP คนเดิมได้ (replanCase)
 const replanOn = () => serverHas(REPLAN_API);
 const replanMpOn = () => serverHas(29);   // Code.gs ที่เลือกส่งงานวางแผนใหม่ให้ MP คนอื่นได้
+// ตั้งค่า → รหัส PIN: แอดมินเลือกกลุ่มงานที่ต้องใส่ PIN (ค่าเริ่มต้นทุกกลุ่ม) · Code.gs ตรวจตามที่ตั้ง (checkPin_ act)
+const PIN_GROUPS = [
+  ['steps', 'ปุ่มขั้นตอน', 'Finish, Evaluate, Dose check, F0, Delta4, SRS MapCheck, Plan complete รวม Plan 2 / boost และปุ่ม ✓ ใต้ค่า'],
+  ['edit', 'หน้าแก้ไขเคส', 'บันทึกการแก้ไขและลบเคส'],
+  ['logs', 'กิจกรรม', 'บันทึก แก้ ลบ RC, Brachytherapy, Hyperthermia, งานวิชาการ ฯลฯ'],
+  ['fx', 'สถานะ fraction', 'ฉายแล้ว, Hold, HV, Re-CT, ย้ายห้อง, เพิ่ม fraction ในตารางวันฉาย'],
+  ['course', 'Complete course / Cancel RT', 'ปุ่มจบการฉายของเคส'],
+  ['ptags', 'รายละเอียดผู้ป่วย', 'NPO, BD protocol, คิว'],
+  ['mqt', 'Mosaiq Time', 'ช่องเวลาหน้า HN'],
+];
+const PIN_CFG_API = 30;
+const pinCfgOn = () => serverHas(PIN_CFG_API);
+const PIN_OF_MODE = { stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt' };
+// ต้องใส่ PIN ไหม (Code.gs รุ่นเก่า = ต้องใส่ทุกงาน) · ตั้ง/เปลี่ยน PIN ของตัวเองต้องใส่เสมอ
+const pinNeed = mode => { const g = PIN_OF_MODE[mode]; return !g || !pinCfgOn() || (state.config.pin || {})[g] !== false; };
+// งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt'].includes(mode);
 const DEFAULT_CONFIG = {
   boxes: Object.fromEntries(Object.entries(BOXES).map(([v, xs]) => [v, xs.map(x => x[0])])),   // ลำดับกล่องของแต่ละแถบ
   logo: '',             // โลโก้มุมซ้ายบน (แอดมินตั้งที่ ตั้งค่า → โลโก้) · ว่าง = ไอคอนเดิม
@@ -1791,6 +1812,7 @@ const DEFAULT_CONFIG = {
   ],
   // replan (ต่อสถานะ) / moveReplan (ย้ายห้อง): บันทึกแล้วส่งงานวางแผนใหม่ให้ MP คนเดิม (prescription = fraction ที่เหลือ) แสดงในงานรอ
   moveReplan: true,
+  pin: Object.fromEntries(PIN_GROUPS.map(([k]) => [k, true])),   // กลุ่มงานที่ต้องใส่รหัส PIN
   qColors: { q1: '', q2: '', q3: '', q4: '' },   // สีคิว (ว่าง = สีเริ่มต้น)
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
@@ -2032,6 +2054,7 @@ function mergeConfig(c) {
   }
   out.fxSeen = d.fxTypes.map(t => t.id);
   out.moveReplan = c.moveReplan !== undefined ? !!c.moveReplan : d.moveReplan;
+  out.pin = Object.fromEntries(PIN_GROUPS.map(([k]) => [k, !(c.pin && c.pin[k] === false)]));
   out.qColors = Object.fromEntries(Q_IDS.map(id => [id, hexOf(c.qColors && c.qColors[id])]));
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
@@ -2134,7 +2157,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-22.2';
+const PAGE_VERSION = '2026-10-22.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2201,6 +2224,7 @@ function localStore() {
   }
   const upsert = (list, r) => { const i = list.findIndex(x => x.id === r.id); if (i < 0) list.push(r); else list[i] = r; };
   const demoCheckPin = pin => {
+    if (pin === '' && pinCtx && !pinNeed(pinCtx.mode)) return;   // งานที่แอดมินตั้งไม่ต้องใส่ PIN
     if (!demoPin.get()) throw new Error('PIN|ยังไม่ได้ตั้งรหัส PIN');
     if (demoPin.hash(pin) !== demoPin.get()) throw new Error('รหัส PIN ไม่ถูกต้อง');
   };
@@ -3143,7 +3167,7 @@ function mqParse(v) {
 }
 const groupMq = cs => cs.map(x => mqParse(x.mqt)).find(Boolean) || '';
 const mqDraft = {};   // Mosaiq Time ที่พิมพ์แต่ยังไม่บันทึก { caseId: '83' } (แถวถูกวาดใหม่ได้โดยค่าไม่หาย)
-let mqRedraw = false;   // กำลังวาดตารางวันฉายใหม่: Chrome ส่ง change ของช่องที่กำลังพิมพ์ตอนเอาช่องเดิมออก ไม่ใช่การกดบันทึก
+let mqRedraw = false, mqSaving = false;   // mqSaving: กำลังบันทึกแบบไม่ใส่ PIN (ออกจากช่องระหว่างนั้นไม่บันทึกซ้ำ)   // กำลังวาดตารางวันฉายใหม่: Chrome ส่ง change ของช่องที่กำลังพิมพ์ตอนเอาช่องเดิมออก ไม่ใช่การกดบันทึก
 // ตัวกรองตารางวันฉาย (ปุ่มที่หัวคอลัมน์ผู้ป่วย ใช้ช่องเลือกค่าแบบเดียวกับตาราง) · จำไว้จนกว่าจะโหลดหน้าใหม่
 // ผู้ป่วยที่มีหลายเคสมีได้หลายค่า: แสดงเมื่อมีค่าใดค่าหนึ่งที่เลือก · หลายตัวกรอง = ต้องตรงทุกตัว · จำนวนใต้วันที่นับตามที่กรองแล้ว
 // Mosaiq Time · คิว · เวลา BD protocol: ช่องเลือกมีปุ่มเรียงด้วย (ค่าที่เรียง: FXG_SORT · ยังไม่มีค่าอยู่ท้ายเสมอ)
@@ -3551,7 +3575,7 @@ function syncFx() {
   }
   if (t.act === 'given') {
     prev.innerHTML = ctx.date > today() ? `ยังไม่ถึง ${esc(fmtDay(ctx.date))} บันทึกฉายแล้วล่วงหน้าไม่ได้`
-      : `บันทึกว่า <b>${ctx.num ? `Fx ${esc(ctx.num)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(ctx.date))}${ctx.auto && state.user.hasPin ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
+      : `บันทึกว่า <b>${ctx.num ? `Fx ${esc(ctx.num)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(ctx.date))}${ctx.auto && state.user.hasPin && pinNeed('fx') ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
     return;
   }
   const ev = fxDraft(), evs = parseFx(c).filter(e => e.date !== ctx.date);
@@ -3577,7 +3601,7 @@ function syncFx() {
 // Mosaiq Time หน้า HN: Enter หรือออกจากช่อง (ค่าเปลี่ยน) → ยืนยันด้วยรหัส PIN · บันทึกให้ทุกเคสของผู้ป่วยนี้ · ช่องว่าง = ล้าง
 function saveMq(el, enter) {
   const id = el.dataset.mqt, c = state.cases.find(x => x.id === id);
-  if (!c || mqRedraw || (pinDlg.open && pinCtx.mode === 'mqt')) return;
+  if (!c || mqRedraw || mqSaving || (pinDlg.open && pinCtx.mode === 'mqt')) return;
   const group = hnGroup(c), cur = groupMq(group), v = mqParse(el.value);
   if (v === null) { toast('Mosaiq Time ต้องเป็นเวลา เช่น 0830 หรือ 08:30', { err: true }); el.focus(); el.select(); return; }
   // แถวถัดไปตอนนี้ (เรียงตามเวลาอยู่: แถวที่บันทึกย้ายที่ได้ แต่ Enter ยังไปแถวที่อยู่ถัดลงมาก่อนบันทึก)
@@ -3598,6 +3622,11 @@ function saveMq(el, enter) {
   $('#pin-note-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
+  if (pinSkipDialog('mqt')) {   // ไม่ต้องใส่ PIN: บันทึกเลย · Enter = ไปแถวถัดไป
+    const ctx = pinCtx;
+    mqSaving = true;
+    return submitPin(null).finally(() => { mqSaving = false; }).then(() => { if (!ctx.saved) { delete mqDraft[id]; render(); } else if (enter) mqFocus(next); });
+  }
   pinDlg.showModal();
   firstPinInput().focus();
 }
@@ -5166,6 +5195,9 @@ function renderSettings() {
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div>
       <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): ส่งงานวางแผนใหม่ให้ MP คนเดิม</span></label>
       <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
+    <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>ติ๊ก = ต้องใส่รหัส PIN 4 หลักของตัวเองก่อนบันทึก · ไม่ติ๊ก = บันทึกได้เลย (ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบ · การลบยังถามยืนยัน)</p></div>
+      ${pinCfgOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ตั้งงานที่ไม่ต้องใส่ PIN ได้เมื่อใช้ Code.gs รุ่น 2026-10-22.1 ขึ้นไป · ตอนนี้ทุกงานยังต้องใส่ PIN</span></p>'}
+      <div class="pin-groups">${PIN_GROUPS.map(([k, l, note]) => `<label class="check"><input type="checkbox" data-k="pin.${k}"${d.pin[k] ? ' checked' : ''}> <span><b>${esc(l)}</b><small class="muted"> ${esc(note)}</small></span></label>`).join('')}</div></div>
     <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
       <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
       <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p>
@@ -6550,7 +6582,7 @@ const pinDlg = $('#pin-dlg'), pinForm = $('#pin-form');
 const PIN_RE = /^\d{4}$/;
 let pinCtx = null;
 function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidden = !msg; }
-const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]'));
+const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]')) || $('#pin-save');   // ไม่ต้องใส่ PIN = ปุ่มบันทึก
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
   const del = pinCtx.mode === 'del' || pinCtx.mode === 'logdel', danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
@@ -6563,7 +6595,8 @@ function syncPinForm() {
     $('#pin-note-lbl').textContent = 'หมายเหตุ (ไม่บังคับ)';
     $('#pin-note').placeholder = 'เช่น ผ่านเกณฑ์หลังวัดซ้ำ, แพทย์รับทราบ';
   }
-  $('#pin-new-box').hidden = has && !set;
+  const need = set || pinNeed(pinCtx.mode);   // ไม่ต้องใส่ PIN: ซ่อนช่อง PIN ทั้งหมด
+  $('#pin-new-box').hidden = !need || (has && !set);
   $('#pin-new-note').hidden = set;
   $('#pin-new-note').textContent = `คุณยังไม่ได้ตั้งรหัส PIN ตั้งรหัสตัวเลข 4 หลักของคุณก่อน แล้วระบบจะ${del ? 'ลบ' : 'บันทึก'}ให้ทันที (ใช้รหัสนี้ทุกครั้งที่กดปุ่มบันทึกขั้นตอน แก้ไขหรือลบเคสและกิจกรรม)`;
   $('#pin-proof-box').hidden = !(set && has);
@@ -6573,7 +6606,8 @@ function syncPinForm() {
   proof.maxLength = pinCtx.forgot ? 200 : 4;
   proof.inputMode = pinCtx.forgot ? 'text' : 'numeric';
   $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
-  $('#pin-field').hidden = set || !has;
+  $('#pin-field').hidden = !need || set || !has;
+  if (!need) $('#pin-forgot').hidden = $('#pin-proof-box').hidden = true;
   $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'logdel' ? 'ลบรายการ' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
   $('#pin-save').classList.toggle('danger', danger);
   for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
@@ -6617,12 +6651,13 @@ function openCasePin(mode, rec) {
   const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`, what = `${esc(catOf(rec.cat).label)}${rec.name ? ` · ${esc(rec.name)}` : ''}`;
   $('#pin-title').textContent = `${mode === 'del' ? 'ลบเคส' : 'บันทึกการแก้ไข'} · ${rec.hn || ''}`;
   $('#pin-what').innerHTML = mode === 'del'
-    ? `ลบเคสนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ยืนยันด้วยรหัส PIN ของ ${who}`
+    ? `ลบเคสนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบเคสเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
     : `${what} · ยืนยันการแก้ไขด้วยรหัส PIN ของ ${who}`;
   $('#pin-val-field').hidden = true;
   $('#pin-note-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
+  if (pinSkipDialog(mode)) return submitPin(null);
   pinDlg.showModal();
   firstPinInput().focus();
 }
@@ -6637,12 +6672,13 @@ function openLogPin(mode, rec) {
   $('#pin-title').textContent = mode === 'logbatch' ? `บันทึกกิจกรรม · Brachytherapy ${n} คน`
     : `${mode === 'logdel' ? 'ลบกิจกรรม' : mode === 'logadd' ? 'บันทึกกิจกรรม' : 'บันทึกการแก้ไขกิจกรรม'} · ${kindOf(rec.kind).label}${rec.hn ? ' ' + rec.hn : ''}`;
   $('#pin-what').innerHTML = mode === 'logdel'
-    ? `ลบรายการนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ยืนยันด้วยรหัส PIN ของ ${who}`
+    ? `ลบรายการนี้ (${what}) ออกจากระบบ ย้อนกลับไม่ได้ · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบรายการเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
     : `${what} · ยืนยัน${mode === 'logedit' ? 'การแก้ไข' : 'การบันทึก'}ด้วยรหัส PIN ของ ${who}`;
   $('#pin-val-field').hidden = true;
   $('#pin-note-field').hidden = true;
   $('#pin-clear').hidden = true;
   syncPinForm();
+  if (pinSkipDialog(mode)) return submitPin(null);
   pinDlg.showModal();
   firstPinInput().focus();
 }
@@ -6697,13 +6733,14 @@ async function submitPin(e, clear) {
     if (t.act === 'add' && !chipValue($('#pin-fx-addn'))) { $('#pin-fx-addn input').focus(); return pinErr('เลือกจำนวน fraction ที่เพิ่ม'); }
     if (t.act === 'add' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('ใส่เหตุผลที่เพิ่ม fraction'); }
   }
-  const has = !!state.user.hasPin, needNew = ctx.mode === 'set' || !has;
+  const need = ctx.mode === 'set' || pinNeed(ctx.mode);
+  const has = !!state.user.hasPin, needNew = need && (ctx.mode === 'set' || !has);
   const newPin = $('#pin-new').value;
   if (ctx.mode === 'set' && has && !(ctx.forgot ? $('#pin-proof').value : PIN_RE.test($('#pin-proof').value))) { $('#pin-proof').focus(); return pinErr(ctx.forgot ? 'ใส่รหัสผ่าน LPCH' : 'ใส่รหัส PIN เดิม 4 หลัก'); }
   if (needNew && !PIN_RE.test(newPin)) { $('#pin-new').focus(); return pinErr('รหัส PIN ต้องเป็นตัวเลข 4 หลัก'); }
   if (needNew && newPin !== $('#pin-new2').value) { $('#pin-new2').focus(); return pinErr('รหัส PIN สองช่องไม่ตรงกัน'); }
-  const pin = needNew ? newPin : $('#pin').value;
-  if (!PIN_RE.test(pin)) { $('#pin').focus(); return pinErr('ใส่รหัส PIN 4 หลักของคุณ'); }
+  const pin = !need ? '' : needNew ? newPin : $('#pin').value;
+  if (need && !PIN_RE.test(pin)) { $('#pin').focus(); return pinErr('ใส่รหัส PIN 4 หลักของคุณ'); }
   const x = ctx.mode === 'stamp' ? STEPS.find(v => v.key === ctx.step) : null;
   const value = clear ? null : x && x.value ? withPct($('#pin-val').value) : '';
   if (x && x.value && !clear && !value) { $('#pin-val').focus(); return pinErr(`กรอกค่า ${x.label} ก่อนบันทึก`); }
@@ -6839,6 +6876,7 @@ async function submitPin(e, clear) {
     pinDlg.close();
   } catch (err) {
     const m = errMsg(err);
+    if (!pinDlg.open) { toast(m.replace(/^Error:\s{0,}/, '').replace('PIN|', ''), { err: true }); return; }   // บันทึกเลยโดยไม่เปิดหน้าต่าง
     if (m.includes('PIN|')) { state.user.hasPin = false; renderAcct(); syncPinForm(); pinErr('ยังไม่ได้ตั้งรหัส PIN ตั้งรหัสใหม่ด้านบน'); return; }
     pinErr(m.replace(/^Error:\s{0,}/, ''));
     for (const id of ['#pin', '#pin-proof']) $(id).value = '';
