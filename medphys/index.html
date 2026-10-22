@@ -1491,7 +1491,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <div class="field"><span class="lbl">รายละเอียดผู้ป่วย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span>
           <div class="chips" id="pin-tags" aria-label="รายละเอียดผู้ป่วย"></div>
           <input id="pin-tags-other" maxlength="120" autocomplete="off" placeholder="อื่นๆ พิมพ์เอง คั่นด้วยจุลภาค เช่น Full BD, ใส่ bolus" aria-label="รายละเอียดอื่นๆ"></div>
-        <label class="field" id="pin-bd-box" hidden><span class="lbl">เวลา BD protocol <span class="sub-lbl">แสดงต่อจาก HN</span></span>
+        <label class="field" id="pin-bd-box" hidden><span class="lbl">เวลา BD protocol <span class="sub-lbl">แสดงต่อจาก MP ในตารางวันฉาย</span></span>
           <select id="pin-bd-time" aria-label="เวลา BD protocol"></select></label>
       </div>
       <label class="field" id="pin-note-field" hidden><span class="lbl" id="pin-note-lbl">หมายเหตุ (ไม่บังคับ)</span><input id="pin-note" maxlength="200" autocomplete="off" placeholder="เช่น ผ่านเกณฑ์หลังวัดซ้ำ, แพทย์รับทราบ"></label>
@@ -2157,7 +2157,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-22.3';
+const PAGE_VERSION = '2026-10-22.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3138,7 +3138,7 @@ const fxGrid = { from: '' };   // คอลัมน์แรกของตา�
 const hnGroup = c => (str(c.hn) ? state.cases.filter(x => x.hn === c.hn && inCourse(x) && courseTabOf(x) === courseTabOf(c)) : [c]);
 const groupTags = cs => uniqTags(cs.flatMap(x => splitList(x.ptags)));
 // คิวและเวลา BD protocol เก็บรวมในรายละเอียดผู้ป่วย (ptags) เป็นข้อความที่อ่านได้ในชีต: "คิว เช้า 1", "BD protocol 08:30"
-// คิว = สีพื้นหลัง HN ในตารางวันฉาย · เวลา BD protocol (08:00–17:00 ทุก 10 นาที) แสดงต่อจาก HN ก่อนรหัสแพทย์
+// คิว = สีพื้นหลัง HN ในตารางวันฉาย · เวลา BD protocol (08:00–17:00 ทุก 10 นาที) แสดงต่อจาก MP
 const QUEUES = [{ id: 'q1', label: 'เช้า 1' }, { id: 'q2', label: 'เช้า 2' }, { id: 'q3', label: 'บ่าย' }, { id: 'q4', label: 'เย็น' }];
 const qOfTag = t => { const m = str(t).match(/^คิว\s*(.+)$/); return (m && QUEUES.find(q => q.label === m[1].trim())) || null; };
 const isBdName = t => /^(bd|bladder)\b/i.test(t) && /protocol/i.test(t);   // ตัวเลือกที่ใส่เวลาได้ (BD protocol / Bladder protocol)
@@ -3319,7 +3319,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
   const hn = canEditCases() ? `<button type="button" class="hn hn-btn${qc}" data-edit="${esc(c.id)}" title="${esc(info + ' · กดเพื่อแก้ไขเคส')}">${esc(c.hn || '—')}</button>` : `<span class="hn${qc}" title="${esc(info)}">${esc(c.hn || '—')}</span>`;
   const chips = ti.plain.map(t => `<span class="ptag">${esc(t)}</span>`).join('');
-  // คิว = สีพื้นหลัง HN · เวลา BD protocol ต่อจาก HN ก่อนรหัสแพทย์
+  // คิว = สีพื้นหลัง HN · เวลา BD protocol ต่อจากรหัสแพทย์และ MP
   const bdChip = ti.bd && ti.bd.time ? `<span class="bd-time" title="${esc(`${ti.bd.name} ${ti.bd.time}`)}">BD ${esc(ti.bd.time)}</span>` : '';
   // Mosaiq Time หน้า HN (ไม่มีหัวคอลัมน์) · พิมพ์แล้ว Enter = บันทึกด้วย PIN ให้ทุกเคสของผู้ป่วยนี้
   const mq = groupMq(cs);
@@ -3378,7 +3378,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
     return `<span class="${cls.join(' ')}" role="cell"${tip ? ` title="${esc(tip)}"` : h ? ` title="${esc(h)}"` : ''}>${body}</span>`;
   }).join('');
-  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${mqBox}${hn}${bdChip}${mps}${ptags}${prog}</div>${cells}</div>`;
+  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${mqBox}${hn}${mps}${bdChip}${ptags}${prog}</div>${cells}</div>`;
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
