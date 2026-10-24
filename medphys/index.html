@@ -340,6 +340,40 @@ button.duty-line:hover{border-color:var(--accent)}
 .pt .pt-must>.lbl,.pt .pt-req>.lbl{justify-content:flex-start;gap:6px}
 .pt .pt-must>.lbl::after,.pt .pt-req>.lbl::after{content:'*';color:var(--late)}
 .pt-note{margin:0;color:var(--muted);font-size:12.5px}
+/* แถบ CT-SIM: ตารางแบบไฟล์เดิม แยกตามวัน · ฟอร์มเพิ่มผู้ป่วย · ดึงไปแถบงาน */
+.ct-wrap{max-height:none}
+.ct-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.ct-tbl th{position:sticky;top:0;z-index:1;padding:6px;background:var(--sunken);color:var(--muted);font-size:11.5px;font-weight:600;line-height:1.2;text-align:left;vertical-align:bottom;border-bottom:1px solid var(--line)}
+.ct-tbl td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+.ct-tbl td.num{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.ct-tbl td.ct-note,.ct-tbl td.ct-name,.ct-tbl td.ct-cats{white-space:normal;min-width:120px}
+.ct-tbl tr.ct-day td{padding:10px 8px 6px;background:var(--surface);border-bottom:1px solid var(--line-strong);white-space:normal}
+.ct-tbl tr.ct-day.today td{box-shadow:inset 3px 0 0 var(--accent)}
+.ct-tbl tr.ct-row.click{cursor:pointer}
+.ct-tbl tr.ct-row.click:hover td,.ct-tbl tr.ct-row:focus-visible td{background:var(--accent-soft)}
+.ct-duty{font-size:12.5px}
+.chip.muted-chip{color:var(--faint)}
+.ct-sub{margin:6px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:14px}
+.ct-counts{display:flex;flex-wrap:wrap;gap:10px 18px}
+.ct-checks{display:flex;flex-wrap:wrap;gap:8px 20px}
+.ct-send{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.ct-took{margin:0;color:var(--muted);font-size:12.5px}
+.ct-form .pt-off{display:none!important}
+.ct-form .ctf-must>.lbl,.ct-form .ctf-req>.lbl{justify-content:flex-start;gap:6px}
+.ct-form .ctf-must>.lbl::after,.ct-form .ctf-req>.lbl::after{content:'*';color:var(--late)}
+.ct-pull-btn{margin-left:auto}
+.ct-pull-btn .n{margin-left:6px;padding:0 6px;border-radius:999px;background:var(--warn);color:var(--surface);font-size:11.5px;font-weight:600}
+.ct-from{margin:0 0 4px;padding:8px 12px;border-radius:10px;background:var(--accent-soft);font-size:13px}
+.ct-pull{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.ct-pull li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.ct-pull-main{flex:1 1 220px;min-width:0}
+.ct-pull-main small{display:block;color:var(--muted);font-size:12.5px}
+.ct-pull-acts{display:flex;gap:6px;margin-left:auto}
+.ct-skipped{margin-top:12px}
+.ct-skipped summary{cursor:pointer;color:var(--muted);font-size:13px}
+.ct-rooms-set{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.ct-room-set{display:inline-flex;align-items:center;gap:4px}
+.ct-room-set input{width:150px}
 .fxg-key{line-height:1.5;text-align:right}
 .fxg-c0 .hn{flex:none;padding:1px 5px;border-radius:5px}
 .hn.q1,.ptag.q1{background:var(--q1);color:var(--q1-fg,var(--fg))}
@@ -1151,6 +1185,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
         <button type="button" data-view="pend">งานรอ</button>
         <button type="button" data-view="queue">ตารางแจกเคส</button>
         <button type="button" data-view="course">Complete</button>
+        <button type="button" data-view="ctsim">CT-SIM</button>
         <button type="button" data-view="dash">แดชบอร์ด</button>
         <button type="button" data-view="logs">RC และกิจกรรม</button>
         <button type="button" data-view="p4p">สรุป P4P</button>
@@ -1200,8 +1235,9 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <!-- งาน -->
   <section id="view-work" hidden>
     <div class="sec" id="intake-sec" data-box="intake">
-      <div class="sec-head"><h2>แจกเคสใหม่</h2><p id="queue-note"></p></div>
+      <div class="sec-head"><h2>แจกเคสใหม่</h2><p id="queue-note"></p><button type="button" class="btn sm ct-pull-btn" id="ct-pull" hidden>ดึงจาก CT-SIM</button></div>
       <form class="intake" id="intake" novalidate autocomplete="off">
+        <p class="ct-from" id="i-ctfrom" hidden></p>
         <div class="intake-top">
           <label class="field"><span class="lbl"><span>HN<b class="req" title="บังคับเสมอ">*</b></span></span><input id="i-hn" inputmode="numeric" required></label>
           <label class="field"><span class="lbl"><span>Name<b class="req" data-req="name" hidden>*</b></span></span><input id="i-name"></label>
@@ -1329,6 +1365,20 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <ul class="list" id="course-list"></ul>
   </section>
 
+  <section id="view-ctsim" hidden>
+    <div class="toolbar">
+      <div class="seg-mini" id="ct-rooms" aria-label="เครื่อง CT"></div>
+      <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
+      <input type="search" class="tab-q" data-tq="ctsim" placeholder="ค้นหา HN, ชื่อ, แพทย์, Organ" autocomplete="off" aria-label="ค้นหาในแถบนี้">
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="ct-xlsx" title="ไฟล์ Excel ของเดือนนี้ เครื่องที่เลือก แบบไฟล์ CT-SIM เดิม (แผ่น CT-SIM, SUM, Competency)">ส่งออก Excel</button>
+      <button type="button" class="btn primary" id="ct-add" hidden>+ เพิ่มผู้ป่วย</button>
+    </div>
+    <p class="muted" id="ct-help" style="margin:-4px 0 10px;font-size:13px"></p>
+    <p class="notice" id="ct-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบ CT-SIM ต้องใช้ Code.gs รุ่น 2026-10-24.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <div class="table-wrap ct-wrap"><table class="ct-tbl" id="ct-tbl"></table></div>
+  </section>
+
   <section id="view-queue" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
@@ -1439,6 +1489,75 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="submit" class="btn primary" id="case-save">บันทึก</button>
     </footer>
   </form>
+</dialog>
+
+<!-- CT-SIM: เพิ่ม/แก้ผู้ป่วย (ช่องตาม ตั้งค่า → CT-SIM · data-ctf) -->
+<dialog id="ct-dlg" aria-labelledby="ct-title">
+  <form class="dlg ct-form" id="ct-form" novalidate autocomplete="off">
+    <header class="dlg-head"><h2 id="ct-title">เพิ่มผู้ป่วย CT-SIM</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <div class="row2">
+        <div class="field ctf-must"><span class="lbl">เครื่อง CT</span><div class="chips" id="t-machine" role="radiogroup" aria-label="เครื่อง CT"></div></div>
+        <label class="field ctf-must"><span class="lbl">วันที่ทำ CT</span><input type="date" id="t-date"></label>
+      </div>
+      <div class="row2">
+        <label class="field ctf-must"><span class="lbl">HN</span><input id="t-hn" inputmode="numeric" autocomplete="off"></label>
+        <label class="field" data-ctf="name"><span class="lbl">Name</span><input id="t-name" autocomplete="off"></label>
+      </div>
+      <div class="field dx-field" data-ctf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="t-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="t-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="t-dx-list" role="listbox" hidden></ul></div></div>
+      <div class="field" data-ctf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="t-doc" role="radiogroup" aria-label="แพทย์"></div></div>
+      <div class="field" data-ctf="cats"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง · MP ใช้ตอนแจกเคส</span></span><div class="chips cats" id="t-cats" aria-label="เทคนิค"></div></div>
+      <div class="field" data-ctf="type"><span class="lbl">Type</span><div class="chips" id="t-type" role="radiogroup" aria-label="Type"></div></div>
+      <div class="field" data-ctf="aim"><span class="lbl">Aim</span><div class="chips" id="t-aim" role="radiogroup" aria-label="Aim"></div></div>
+      <div class="field" data-ctf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="t-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
+      <div class="field" data-ctf="tech"><span class="lbl">Technique</span><div class="chips" id="t-tech" role="radiogroup" aria-label="Technique"></div></div>
+      <div class="field with-other" data-ctf="area"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="t-area" aria-label="บริเวณที่ฉาย"></div><input id="t-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+      <div class="dose-row" data-ctf="dose">
+        <label class="field"><span class="lbl">Dose/fx (Gy)</span><input type="number" id="t-dpf" min="0" step="any" inputmode="decimal" placeholder="2"></label>
+        <label class="field"><span class="lbl">Fx</span><input type="number" id="t-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+        <label class="field rx-field"><span class="lbl"><span>Prescription (Gy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="t-rx" min="0" step="any" inputmode="decimal" placeholder="50"></label>
+        <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="t-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="t-freq-other" autocomplete="off" placeholder="ความถี่อื่น" aria-label="ความถี่อื่น" hidden></div>
+      </div>
+      <div class="field" data-ctf="sim"><span class="lbl"><label for="t-sim">Start RT</label><label class="oncall"><input type="checkbox" id="t-oncall"> on call</label></span><input type="date" id="t-sim"></div>
+      <div class="extra-grid" id="t-extra" data-ctf="extra" hidden></div>
+      <h3 class="ct-sub">ห้อง CT</h3>
+      <div class="field" data-ctf="organ"><span class="lbl">Organ</span><div class="chips" id="t-organ" role="radiogroup" aria-label="Organ"></div></div>
+      <div class="field" data-ctf="mask"><span class="lbl">Mask</span><div class="chips" id="t-mask" role="radiogroup" aria-label="Mask"></div></div>
+      <div class="field" data-ctf="cm"><span class="lbl">CM (สารทึบรังสี)</span><div class="chips" id="t-cm" role="radiogroup" aria-label="CM"></div></div>
+      <div class="ct-counts" id="t-counts"></div>
+      <div class="row2">
+        <div class="field" data-ctf="pstat"><span class="lbl">สถานะ</span><div class="chips" id="t-pstat" role="radiogroup" aria-label="สถานะ"></div></div>
+        <div class="field" data-ctf="hdr"><span class="lbl">HDR</span><div class="chips" id="t-hdr" role="radiogroup" aria-label="HDR"></div></div>
+      </div>
+      <div class="ct-checks">
+        <label class="check" data-ctf="bite"><input type="checkbox" id="t-bite"> Bitelock</label>
+        <label class="check" data-ctf="crad"><input type="checkbox" id="t-crad"> C-RAD</label>
+        <label class="check" data-ctf="research"><input type="checkbox" id="t-research"> เคสวิจัย</label>
+      </div>
+      <label class="field" data-ctf="note"><span class="lbl">Note</span><input id="t-note" autocomplete="off" placeholder="เช่น vaclock, BD protocol"></label>
+      <label class="check ct-send"><input type="checkbox" id="t-send"> <span><b>ส่งไปแถบงาน</b> · MP ดึงข้อมูลนี้ไปแจกเคสได้</span></label>
+      <p class="ct-took" id="t-took" hidden></p>
+    </div>
+    <footer class="dlg-foot">
+      <button type="button" class="btn ghost danger" id="ct-del">ลบ</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>ยกเลิก</button>
+      <button type="submit" class="btn primary" id="ct-save">บันทึก</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- แถบงาน: ดึงผู้ป่วยจาก CT-SIM มาใส่ฟอร์มแจกเคส -->
+<dialog id="ctpull-dlg" aria-labelledby="ctpull-title">
+  <div class="dlg">
+    <header class="dlg-head"><h2 id="ctpull-title">ดึงจาก CT-SIM</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <p class="muted" style="margin:0;font-size:13px">ผู้ป่วยที่ห้อง CT ส่งมา (ยังไม่แจก) · "ใช้ข้อมูลนี้" = ใส่ข้อมูลลงฟอร์มแจกเคส แจกแล้วรายการนี้ผูกกับเคส · "ไม่ต้องแจก" = เอาออกจากรายการ</p>
+      <ul class="ct-pull" id="ctpull-list"></ul>
+      <details class="ct-skipped" id="ctpull-skip-box" hidden><summary>ไม่ต้องแจก (<span id="ctpull-skip-n"></span>)</summary><ul class="ct-pull" id="ctpull-skip"></ul></details>
+    </div>
+    <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ปิด</button></footer>
+  </div>
 </dialog>
 
 <!-- กิจกรรม -->
@@ -1772,18 +1891,31 @@ const PIN_GROUPS = [
   ['ptags', 'รายละเอียดผู้ป่วย', 'NPO, BD protocol, คิว'],
   ['mqt', 'Mosaiq Time', 'ช่องเวลาหน้า HN'],
   ['ptadd', 'เพิ่มผู้ป่วย (ตารางวันฉาย)', 'เพิ่ม แก้ ลบผู้ป่วยที่บันทึกในแถบห้องฉาย (ไม่แจกงานให้ MP)'],
-  ['duty', 'ผู้ปฏิบัติงานประจำวัน', 'RTT และ RA ใต้วันที่ในตารางวันฉาย'],
+  ['duty', 'ผู้ปฏิบัติงานประจำวัน', 'RTT, RA (และ QC ของ CT-SIM) ใต้วันที่'],
+  ['ct', 'CT-SIM', 'เพิ่ม แก้ ลบผู้ป่วยในแถบ CT-SIM'],
 ];
 const PIN_CFG_API = 30;
 const pinCfgOn = () => serverHas(PIN_CFG_API);
 // Code.gs ที่เพิ่มผู้ป่วยในแถบห้องฉาย (courseAdd) และบันทึกผู้ปฏิบัติงานประจำวัน (dutyDay) ได้
 const DIRECT_API = 31;
 const directOn = () => serverHas(DIRECT_API);
-const PIN_OF_MODE = { stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty' };
+const CT_API = 32;   // Code.gs ที่มีแถบ CT-SIM (ctSave, ctRemove, ctMark) และผูกเคสที่แจกกับรายการ CT
+const ctOn = () => serverHas(CT_API);
+// แถบ CT-SIM: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → CT-SIM: off ไม่แสดง · show แสดง · req บังคับกรอก) · HN วันที่ และเครื่อง CT บังคับเสมอ
+const CT_FORM = [
+  ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'แพทย์ (Doc)', 'req'], ['cats', 'เทคนิค', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
+  ['room', 'ห้องฉาย', 'off'], ['tech', 'Technique', 'off'], ['area', 'บริเวณที่ฉาย', 'off'], ['dose', 'Dose/fx, Fx, Prescription, ความถี่', 'off'], ['sim', 'Start RT', 'off'], ['extra', 'หัวข้อเพิ่มเติม', 'off'],
+  ['organ', 'Organ', 'req'], ['mask', 'Mask', 'show'], ['cm', 'CM (สารทึบรังสี)', 'show'],
+  ['coil', 'Coil', 'show'], ['ydev', 'Y', 'show'], ['inj', 'Syring Injector', 'show'], ['nss', 'Normal Saline', 'show'], ['syr', 'Syring 50cc', 'show'],
+  ['pstat', 'สถานะ (รถนอน)', 'show'], ['hdr', 'HDR', 'show'], ['bite', 'Bitelock', 'show', false], ['crad', 'C-RAD', 'show', false], ['research', 'เคสวิจัย', 'show', false], ['note', 'Note', 'show'],
+];
+const CT_COUNTS = [['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'], ['syr', 'Syring 50cc']];   // จำนวน 1–4
+const CT_LISTS = [['organs', 'Organ'], ['masks', 'Mask'], ['cms', 'CM (สารทึบรังสี)'], ['pstats', 'สถานะ'], ['hdrs', 'HDR']];
+const PIN_OF_MODE = { stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty', ctsave: 'ct', ctdel: 'ct' };
 // ต้องใส่ PIN ไหม (Code.gs รุ่นเก่า = ต้องใส่ทุกงาน) · ตั้ง/เปลี่ยน PIN ของตัวเองต้องใส่เสมอ
 const pinNeed = mode => { const g = PIN_OF_MODE[mode]; return !g || !pinCfgOn() || (state.config.pin || {})[g] !== false; };
 // งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
-const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd'].includes(mode);
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave'].includes(mode);
 // ฟอร์มเพิ่มผู้ป่วยในแถบห้องฉาย (ตั้งค่า → ตารางวันฉาย): off = ไม่แสดง · show = แสดง · req = บังคับกรอก · HN และเทคนิคบังคับเสมอ
 const PT_FIELDS = [
   ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'Doc', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
@@ -1849,7 +1981,7 @@ const DEFAULT_CONFIG = {
   holidays: [new Date().getFullYear(), new Date().getFullYear() + 1].flatMap(thaiFixedHolidays),
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
-  nav: ['work', 'pend', 'queue', 'course', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true, guest: true })),
+  nav: ['work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
@@ -1873,6 +2005,16 @@ const DEFAULT_CONFIG = {
   dayMax: { all: 40, rooms: {} },
   ptForm: Object.fromEntries(PT_FIELDS.map(([k, , v]) => [k, v])),   // ช่องในฟอร์มเพิ่มผู้ป่วยของแถบห้องฉาย
   dutyRoles: { rtt: ['RTT'], ra: ['RA'] },   // ตำแหน่งใน LPCH ที่เลือกเป็น RTT / RA ประจำวันได้
+  // แถบ CT-SIM: เครื่อง CT (รหัสคงที่ ชื่อแก้ได้) · ตัวเลือกของช่องห้อง CT · ช่องในฟอร์ม
+  ct: {
+    rooms: [{ id: 'ct1', label: 'CT-1 (30)' }, { id: 'ct2', label: 'CT-2 (32)' }],
+    organs: ['Head', 'Chest', 'Spine', 'Breast', 'Abdomen', 'Pelvis', 'Other'],
+    masks: ['S', 'Green', 'S-re', 'Green-re', 'SRS'],
+    cms: ['Ult 370', 'Ult 300', 'Optiray350'],
+    pstats: ['รถนอน'],
+    hdrs: ['HDR', 'HDRซ้ำ'],
+    form: Object.fromEntries(CT_FORM.map(([k, , v]) => [k, v])),
+  },
   // รายละเอียดผู้ป่วยหลัง HN ในตารางวันฉาย (เลือกได้หลายอย่าง + พิมพ์เอง)
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
   roles: LPCH_ROLES.slice(),   // ตำแหน่งที่ตั้งสิทธิ์รายแถบได้ (ตั้งค่า → แถบเมนู)
@@ -1913,8 +2055,8 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['work', 'pend', 'queue', 'course', 'dash', 'logs', 'p4p', 'settings'];
-const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
+const VIEWS = ['work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'settings'];
+const VIEW_LABEL = { work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', settings: 'ตั้งค่า' };
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
 // ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
@@ -2020,9 +2162,22 @@ function normLog(o) {
   l.created = l.created || nowISO();
   return l;
 }
+// แถบ CT-SIM: ผู้ป่วยที่ทำ CT จำลองการฉาย (ช่องเดียวกับ CT_FIELDS ใน Code.gs + สถานะการแจกเคส)
+const CT_KEYS = ['id', 'ct', 'date', 'hn', 'name', 'organ', 'mask', 'bite', 'cm', 'coil', 'ydev', 'inj', 'nss', 'syr', 'doc', 'pstat', 'hdr', 'crad', 'note', 'research',
+  'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'send', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'];
+function normCt(o) {
+  const c = {};
+  for (const k of CT_KEYS) c[k] = str(o[k]);
+  c.date = dateStr(c.date);
+  c.sim = /^on\s*call$/i.test(c.sim) ? 'on call' : dateStr(c.sim);
+  c.doc = c.doc.toUpperCase();
+  c.id = c.id || uid();
+  c.created = c.created || nowISO();
+  return c;
+}
 // ผู้ปฏิบัติงานประจำวัน { id: 'วันที่|ห้อง', date, room, rtt: [ชื่อ], ra: [ชื่อ], by, at }
 const dutyNames = v => (Array.isArray(v) ? v : str(v).split(',')).map(str).filter(Boolean);
-const normDuty = o => ({ id: str(o.id), date: dateStr(o.date), room: str(o.room), rtt: dutyNames(o.rtt), ra: dutyNames(o.ra), by: str(o.by), at: str(o.at) });
+const normDuty = o => ({ id: str(o.id), date: dateStr(o.date), room: str(o.room), rtt: dutyNames(o.rtt), ra: dutyNames(o.ra), qc: dutyNames(o.qc), by: str(o.by), at: str(o.at) });
 function normLeave(o) {
   const v = {};
   for (const f of LEAVE_FIELDS) v[f] = str(o[f]);
@@ -2124,6 +2279,13 @@ function mergeConfig(c) {
   out.ptForm = Object.fromEntries(PT_FIELDS.map(([k, , v]) => { const x = c.ptForm && c.ptForm[k]; return [k, PT_OPTS.some(o => o[0] === x) ? x : v]; }));
   const roleList = (v, def) => (Array.isArray(v) ? v.map(str).filter((r, i, a) => ROLE_RE.test(r) && a.indexOf(r) === i) : def.slice());
   out.dutyRoles = { rtt: roleList(c.dutyRoles && c.dutyRoles.rtt, d.dutyRoles.rtt), ra: roleList(c.dutyRoles && c.dutyRoles.ra, d.dutyRoles.ra) };
+  const ct = c.ct && typeof c.ct === 'object' ? c.ct : {}, seenRoom = new Set();
+  out.ct = {
+    rooms: Array.isArray(ct.rooms) ? ct.rooms.filter(x => x && /^[\w-]{1,20}$/.test(str(x.id)) && !seenRoom.has(str(x.id)) && seenRoom.add(str(x.id))).map(x => ({ id: str(x.id), label: str(x.label).slice(0, 40) })) : clone(d.ct.rooms),
+    form: Object.fromEntries(CT_FORM.map(([k, , v, req]) => { const x = ct.form && ct.form[k]; return [k, ['off', 'show', ...(req === false ? [] : ['req'])].includes(x) ? x : v]; })),
+  };
+  if (!out.ct.rooms.length) out.ct.rooms = clone(d.ct.rooms);
+  for (const [k] of CT_LISTS) out.ct[k] = Array.isArray(ct[k]) ? [...new Set(ct[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.ct[k].slice();
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
   // หัวข้อเพิ่มเติมที่ใช้คอลัมน์เดียวกับช่องของระบบ (เช่นเคยตั้ง "ห้องฉาย" เอง) ให้ช่องของระบบอ่านคอลัมน์นั้นแทน
@@ -2225,7 +2387,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-22.5';
+const PAGE_VERSION = '2026-10-24.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2274,6 +2436,9 @@ const sheetStore = {
   courseAdd: (rec, pin) => call('courseAdd', rec, pin),
   courseRemove: (id, pin) => call('courseRemove', id, pin),
   duty: (date, list, pin) => call('dutyDay', date, list, pin),
+  ctSave: (rec, pin) => call('ctSave', rec, pin),
+  ctRemove: (id, pin) => call('ctRemove', id, pin),
+  ctMark: (id, mark) => call('ctMark', id, mark),
   dutyMembers: () => call('dutyMembers'),
   members: () => call('lpchMembers'),
   removeLog: (id, pin) => call('removeLog', id, pin),
@@ -2287,6 +2452,7 @@ function localStore() {
   if (!db || !Array.isArray(db.cases) || !Array.isArray(db.logs)) db = demoDb();
   if (!Array.isArray(db.leaves)) db.leaves = [];
   if (!Array.isArray(db.duty)) db.duty = [];
+  if (!Array.isArray(db.ctsim)) db.ctsim = [];
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* โหมดส่วนตัว: เก็บในหน่วยความจำ */ } };
   const old = db.cases.filter(c => c && MOVED_CATS.includes(c.cat));
   if (old.length) {
@@ -2333,9 +2499,13 @@ function localStore() {
         const how = rec.how === 'manual' || follow ? rec.how : 'auto';
         const r = { ...rec, how, mp: how === 'manual' ? rec.mp : follow ? out[0].mp : nextFor(rec.cat, rec.in), created: nowISO() };
         if (!r.mp) throw new Error(`${catOf(rec.cat).label}: ${NOBODY}`);
+        delete r.ctFrom;
         out.push(r);
       }
-      out.forEach(r => upsert(db.cases, clone(r))); persist(); return out;
+      out.forEach(r => upsert(db.cases, clone(r)));
+      const ct = recs[0] && recs[0].ctFrom && db.ctsim.find(x => x.id === recs[0].ctFrom);   // แจกจากรายการ CT-SIM: ผูกกับเคสที่แจก
+      if (ct) Object.assign(ct, { took: out.map(r => r.id).join(', '), tookBy: state.user.name || 'ผู้ใช้ตัวอย่าง', tookAt: nowStamp() });
+      persist(); return out;
     },
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
     saveConfig: async cfg => { db.config = clone(cfg); persist(); return true; },
@@ -2498,13 +2668,39 @@ function localStore() {
     duty: async (date, list, pin) => {
       if (!isDay(date)) throw new Error('วันที่ไม่ถูกต้อง');
       demoCheckPin(pin);
-      for (const r of list) {
-        const id = `${date}|${str(r.room)}`, rtt = dutyNames(r.rtt), ra = dutyNames(r.ra);
+      const ct = list.some(r => /^CT:/.test(str(r.room)));
+      for (const r of list.filter(x => /^CT:/.test(str(x.room)) === ct)) {
+        const id = `${date}|${str(r.room)}`, rtt = dutyNames(r.rtt), ra = dutyNames(r.ra), qc = dutyNames(r.qc);
         db.duty = db.duty.filter(x => x.id !== id);
-        if (rtt.length || ra.length) db.duty.push({ id, date, room: str(r.room), rtt: rtt.join(', '), ra: ra.join(', '), by: state.user.name || 'ผู้ใช้ตัวอย่าง', at: nowStamp() });
+        if (rtt.length || ra.length || qc.length) db.duty.push({ id, date, room: str(r.room), rtt: rtt.join(', '), ra: ra.join(', '), qc: qc.join(', '), by: state.user.name || 'ผู้ใช้ตัวอย่าง', at: nowStamp() });
       }
       persist();
-      return clone(db.duty.filter(x => x.date === date));
+      return clone(db.duty.filter(x => x.date === date && /^CT:/.test(x.room) === ct));
+    },
+    // แถบ CT-SIM: กติกาเดียวกับ ctSave / ctRemove / ctMark ใน Code.gs
+    ctSave: async (rec, pin) => {
+      if (!str(rec.hn)) throw new Error('กรอก HN');
+      if (!str(rec.ct)) throw new Error('เลือกเครื่อง CT');
+      if (!isDay(rec.date)) throw new Error('วันที่ทำ CT ไม่ถูกต้อง');
+      demoCheckPin(pin);
+      const set = Object.fromEntries(CT_KEYS.filter(k => !['id', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'].includes(k)).map(k => [k, str(rec[k])]));
+      set.send = set.send ? 'yes' : '';
+      const old = rec.id && db.ctsim.find(x => x.id === rec.id);
+      if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return clone(old); }
+      const c = { ...set, id: rec.id || uid(), took: '', tookBy: '', tookAt: '', by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
+      db.ctsim.push(c);
+      persist();
+      return clone(c);
+    },
+    ctRemove: async (id, pin) => { demoCheckPin(pin); const n = db.ctsim.length; db.ctsim = db.ctsim.filter(x => x.id !== id); persist(); return db.ctsim.length < n; },
+    ctMark: async (id, mark) => {
+      const c = db.ctsim.find(x => x.id === id);
+      if (!c) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      const gone = mark !== 'skip' && c.took && c.took !== 'skip' && splitList(c.took).every(id => !db.cases.some(x => x.id === id));
+      if (mark === 'skip' ? c.took : c.took !== 'skip' && !gone) throw new Error(c.took === 'skip' ? 'รายการนี้ตั้งไม่ต้องแจกไว้แล้ว' : c.took ? 'รายการนี้แจกเคสไปแล้ว' : 'รายการนี้ยังรอแจกเคสอยู่');
+      Object.assign(c, mark === 'skip' ? { took: 'skip', tookBy: state.user.name || 'ผู้ใช้ตัวอย่าง', tookAt: nowStamp() } : { took: '', tookBy: '', tookAt: '' });
+      persist();
+      return clone(c);
     },
     dutyMembers: async () => {
       const dir = demoMembers(), roles = state.config.dutyRoles;
@@ -2573,7 +2769,7 @@ function demoDb() {
 
 /* ---------- สถานะ ---------- */
 const state = {
-  config: mergeConfig(null), cases: [], logs: [], leaves: [], duty: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
+  config: mergeConfig(null), cases: [], logs: [], leaves: [], duty: [], ct: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
@@ -3130,6 +3326,7 @@ function render() {
   else if (state.view === 'pend') renderPend();
   else if (state.view === 'queue') renderQueue();
   else if (state.view === 'course') renderCourse();
+  else if (state.view === 'ctsim') renderCt();
   else renderSettings();
 }
 
@@ -3209,6 +3406,255 @@ function openSearchHit(id) {
   if (!navOn('work')) return;
   Object.assign(state, { view: 'work', tab: 'all', cat: '', person: '', q: c.hn || c.name });
   render();
+}
+
+/* ---------- แถบ CT-SIM ---------- */
+// ผู้ป่วยที่ทำ CT จำลองการฉาย แยกเครื่อง (ตั้งค่า → CT-SIM) รายเดือน · ตารางแบบไฟล์ CT-SIM เดิม แยกตามวัน (วันล่าสุดก่อน)
+// หัวของแต่ละวัน: จำนวนผู้ป่วยและผู้ปฏิบัติงาน (RTT, RA, Daily QC) · กดแถวเพื่อแก้ · บันทึกแล้วส่งให้แถบงาน (MP ดึงไปแจกเคส)
+const ctRooms = () => state.config.ct.rooms;
+const ctLabel = id => { const r = ctRooms().find(x => x.id === id); return r ? r.label || r.id : id || '—'; };
+const ctRoomSel = () => { const v = pref.get('ctRoom', ''); return ctRooms().some(r => r.id === v) ? v : ctRooms()[0].id; };
+const ctMode = k => state.config.ct.form[k] || 'off';
+// สถานะการแจกเคสของรายการ CT: wait = รอ MP แจก · took = แจกแล้ว · skip = ไม่ต้องแจก · none = ไม่ได้ส่งแถบงาน
+const ctState = r => (r.took === 'skip' ? 'skip' : r.took ? 'took' : r.send ? 'wait' : 'none');
+const ctCases = r => (ctState(r) === 'took' ? splitList(r.took).map(id => state.cases.find(c => c.id === id)).filter(Boolean) : []);
+function ctStateChip(r) {
+  const st = ctState(r), cs = ctCases(r);
+  if (st === 'took') return `<span class="chip ok" title="${esc(`แจกเคสแล้ว${r.tookBy ? ` โดย ${r.tookBy}` : ''} ${fmtStamp(r.tookAt) || ''}`.trim())}">แจกแล้ว${cs.length ? ' · ' + esc([...new Set(cs.map(c => c.mp))].join(', ')) : ''}</span>`;
+  if (st === 'skip') return `<span class="chip" title="${esc(`MP ตั้งว่าไม่ต้องแจก${r.tookBy ? ` (${r.tookBy})` : ''}`)}">ไม่ต้องแจก</span>`;
+  return st === 'wait' ? '<span class="chip warn">รอ MP แจก</span>' : '<span class="chip muted-chip">ไม่ส่ง</span>';
+}
+const ctCatLabels = r => splitList(r.cats).map(id => catOf(id).label).join(', ');
+const ctDocText = code => (code ? docName(code) || code : '');
+// คอลัมน์ในตาราง (ตามไฟล์เดิม) · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์
+const CT_COLS = [
+  ['hn', 'HN'], ['name', 'Name'], ['organ', 'Organ'], ['mask', 'Mask'], ['bite', 'bitelock'], ['cm', 'CM'], ['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'],
+  ['syr', 'Syring 50cc'], ['doc', 'แพทย์'], ['pstat', 'สถานะ'], ['hdr', 'HDR'], ['crad', 'C-RAD'], ['note', 'Note'], ['research', 'เคสวิจัย'], ['cats', 'เทคนิค'],
+];
+const ctOfMonth = (room, ym) => state.ct.filter(r => r.ct === room && r.date.slice(0, 7) === ym).sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created));
+function renderCt() {
+  const room = ctRoomSel(), ym = state.month, edit = canEdit() && ctOn();
+  $('#ct-rooms').innerHTML = ctRooms().map(r => `<button type="button" data-ctroom="${esc(r.id)}" aria-pressed="${r.id === room}">${esc(r.label || r.id)}</button>`).join('');
+  $('#ct-add').hidden = !edit;
+  $('#ct-api').hidden = ctOn() || !canEdit();
+  syncTabQ('ctsim');
+  const words = tabWords('ctsim'), all = ctOfMonth(room, ym);
+  // ลำดับ (No.) และลำดับในวัน (N/D) นับเหมือนไฟล์ส่งออก (ทั้งเดือน ก่อนค้นหา)
+  const no = new Map(), nd = new Map();
+  all.forEach((r, i) => { no.set(r.id, i + 1); nd.set(r.id, all.filter((x, j) => j <= i && x.date === r.date).length); });
+  const list = words.length ? all.filter(r => wordsIn(words, [r.hn, r.name, r.doc, ctDocText(r.doc), r.organ, r.note, r.mask, r.cm, ctCatLabels(r)].join(' ').toLowerCase())) : all;
+  const cols = CT_COLS.filter(([k]) => k === 'hn' || ctMode(k) !== 'off');
+  const td = today(), days = [...new Set([...list.map(r => r.date), ...state.duty.filter(x => x.room === 'CT:' + room && x.date.slice(0, 7) === ym && !words.length).map(x => x.date), ...(td.slice(0, 7) === ym && !words.length ? [td] : [])])].sort().reverse();
+  const nWait = all.filter(r => ctState(r) === 'wait').length;
+  $('#ct-help').textContent = `${ctLabel(room)} · ${fmtMonth(ym)} · ${all.length} คน${nWait ? ` · รอ MP แจก ${nWait}` : ''}${edit ? ' · กดแถวเพื่อแก้ · "ผู้ปฏิบัติงาน" ใต้วันที่ = RTT, RA, Daily QC ของวันนั้น' : ''}`;
+  const span = cols.length + 3;
+  const head = `<thead><tr><th>No.</th><th>N/D</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>แถบงาน</th></tr></thead>`;
+  const cell = (r, k) => {
+    const v = k === 'doc' ? ctDocText(r.doc) : k === 'cats' ? ctCatLabels(r) : r[k];
+    return `<td class="ct-${k}">${k === 'hn' ? `<b class="hn">${esc(v || '—')}</b>` : esc(v)}</td>`;
+  };
+  const body = days.map(d => {
+    const rows = list.filter(r => r.date === d), du = dutyOfRoom(d, 'CT:' + room), has = du.rtt.length || du.ra.length || du.qc.length;
+    const duty = edit ? `<button type="button" class="link-btn" data-ctduty="${d}">${has ? esc(dutyText(du)) : '+ ผู้ปฏิบัติงาน (RTT, RA, QC)'}</button>` : esc(dutyText(du));
+    return `<tr class="ct-day${d === td ? ' today' : ''}"><td colspan="${span}"><b>${esc(LONG_DAY_FMT.format(parseISO(d)))}</b><span class="muted"> · ${rows.length} คน</span>${duty ? `<span class="ct-duty"> · ${duty}</span>` : ''}</td></tr>`
+      + rows.map(r => `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-ctedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num">${no.get(r.id)}</td><td class="num">${nd.get(r.id)}</td>${cols.map(([k]) => cell(r, k)).join('')}<td>${ctStateChip(r)}</td></tr>`).join('');
+  }).join('');
+  $('#ct-tbl').innerHTML = head + `<tbody>${body || `<tr><td colspan="${span}" class="empty-state">${words.length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้น' : `ยังไม่มีผู้ป่วยของ ${esc(ctLabel(room))} ในเดือนนี้`}</td></tr>`}</tbody>`;
+}
+
+// ฟอร์มเพิ่ม/แก้ผู้ป่วย (ช่องตาม ตั้งค่า → CT-SIM) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้
+const ctDlg = $('#ct-dlg'), ctForm = $('#ct-form');
+let editingCt = null;
+const ctChips = (id, name, list, v) => chipGroup($(id), name, v && !list.includes(v) ? [...list, v] : list, v);
+function openCtForm(id) {
+  const r = id ? state.ct.find(x => x.id === id) : null;
+  if (id && !r) return;
+  if (!canEdit()) return toast(RO_MSG, { err: true });
+  if (!ctOn()) return toast('แถบ CT-SIM ต้องใช้ Code.gs รุ่น 2026-10-24.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
+  const cfg = state.config, ct = cfg.ct;
+  editingCt = r ? clone(r) : normCt({ id: uid(), ct: ctRoomSel(), date: today(), send: 'yes' });
+  const c = editingCt;
+  $('#ct-title').textContent = r ? `แก้ไขผู้ป่วย CT-SIM ${r.hn}` : 'เพิ่มผู้ป่วย CT-SIM';
+  chipGroup($('#t-machine'), 'tmachine', ctRooms().map(x => x.id), c.ct, ctLabel);
+  $$('#t-machine label').forEach(l => { $('span', l).textContent = ctLabel($('input', l).value); });
+  for (const f of ['date', 'hn', 'name', 'note']) $('#t-' + f).value = c[f] || '';
+  ctChips('#t-doc', 'tdoc', docCodes(), c.doc);
+  $$('#t-doc label').forEach(l => { const v = $('input', l).value; if (docName(v)) l.title = docName(v); });
+  const picked = splitList(c.cats);
+  $('#t-cats').innerHTML = cfg.cats.filter(k => k.kind !== 'simple' && (k.on || picked.includes(k.id))).map(k => `<label><input type="checkbox" name="tcat" value="${esc(k.id)}"${picked.includes(k.id) ? ' checked' : ''}><span>${esc(k.label)}</span></label>`).join('');
+  ctChips('#t-type', 'ttype', cfg.types, c.type);
+  ctChips('#t-aim', 'taim', cfg.aims, c.aim);
+  ctChips('#t-room', 'troom', cfg.rooms, c.room);
+  ctChips('#t-tech', 'ttech', cfg.techniques, c.tech);
+  renderArea('t', c.area);
+  renderFreq('t', c.freq);
+  fillDose('t', c);
+  $('#t-oncall').checked = c.sim === 'on call';
+  $('#t-sim').value = c.sim === 'on call' ? '' : c.sim || '';
+  $('#t-dx').value = dxValue(c);
+  let extra = {};
+  try { extra = JSON.parse(c.extra || '{}') || {}; } catch (e) { extra = {}; }
+  renderExtra('t', extra);
+  ctChips('#t-organ', 'torgan', ct.organs, c.organ);
+  ctChips('#t-mask', 'tmask', ct.masks, c.mask);
+  ctChips('#t-cm', 'tcm', ct.cms, c.cm);
+  ctChips('#t-pstat', 'tpstat', ct.pstats, c.pstat);
+  ctChips('#t-hdr', 'thdr', ct.hdrs, c.hdr);
+  $('#t-counts').innerHTML = CT_COUNTS.map(([k, l]) => `<div class="field" data-ctf="${k}"><span class="lbl">${esc(l)}</span><div class="chips" id="t-${k}" role="radiogroup" aria-label="${esc(l)}">${['1', '2', '3', '4'].map(v => `<label><input type="radio" name="t${k}" value="${v}"${c[k] === v ? ' checked' : ''}><span>${v}</span></label>`).join('')}</div></div>`).join('');
+  for (const k of ['bite', 'crad', 'research']) $('#t-' + k).checked = /^yes$/i.test(c[k]);
+  $('#t-send').checked = !!c.send;
+  const st = ctState(c);
+  $('#t-took').hidden = st !== 'took' && st !== 'skip';
+  $('#t-took').innerHTML = st === 'took' ? `MP แจกเคสจากรายการนี้แล้ว${c.tookBy ? ` (${esc(c.tookBy)} ${esc(fmtStamp(c.tookAt) || '')})` : ''} · ${ctCases(c).map(x => `${esc(catOf(x.cat).label)} → ${esc(x.mp)}`).join(', ') || 'เคสถูกลบไปแล้ว'} · แก้ที่นี่ไม่เปลี่ยนเคสที่แจกไปแล้ว`
+    : st === 'skip' ? 'MP ตั้งว่ารายการนี้ไม่ต้องแจกเคส' : '';
+  $('#ct-del').hidden = !r;
+  syncCtForm();
+  ctDlg.showModal();
+  if (!r) $('#t-hn').focus();
+}
+function syncCtForm() {
+  const f = state.config.ct.form;
+  for (const el of $$('[data-ctf]', ctForm)) {
+    const v = f[el.dataset.ctf] || 'off';
+    el.classList.toggle('pt-off', v === 'off');
+    el.classList.toggle('ctf-req', v === 'req');
+  }
+  for (const id of ['#t-dpf', '#t-fx']) $(id).closest('.field').classList.toggle('ctf-req', f.dose === 'req');
+  const cats = chipValues($('#t-cats')).map(catOf);
+  $('[data-ctf="tech"]', ctForm).classList.toggle('pt-off', f.tech === 'off' || (f.cats !== 'off' && !cats.some(k => k.tech)));
+  $('[data-ctf="room"]', ctForm).classList.toggle('pt-off', f.room === 'off' || !roomSitesOn());
+  $('#t-sim').disabled = $('#t-oncall').checked;
+  $('.ct-sub', ctForm).hidden = !CT_FORM.slice(12).some(([k]) => f[k] !== 'off');
+  syncDose('t');
+}
+// ช่องที่กรอกแล้ว (ใช้ตรวจช่องบังคับกรอก)
+const CT_FILLED = {
+  name: () => str($('#t-name').value), dx: () => str($('#t-dx').value), doc: () => chipValue($('#t-doc')), cats: () => chipValues($('#t-cats')).length,
+  type: () => chipValue($('#t-type')), aim: () => chipValue($('#t-aim')), room: () => !roomSitesOn() || chipValue($('#t-room')),
+  tech: () => !chipValues($('#t-cats')).map(catOf).some(k => k.tech) || chipValue($('#t-tech')), area: () => readArea('t'),
+  dose: () => str($('#t-dpf').value) && str($('#t-fx').value), sim: () => $('#t-oncall').checked || $('#t-sim').value, extra: () => true,
+  organ: () => chipValue($('#t-organ')), mask: () => chipValue($('#t-mask')), cm: () => chipValue($('#t-cm')), pstat: () => chipValue($('#t-pstat')), hdr: () => chipValue($('#t-hdr')),
+  coil: () => chipValue($('#t-coil')), ydev: () => chipValue($('#t-ydev')), inj: () => chipValue($('#t-inj')), nss: () => chipValue($('#t-nss')), syr: () => chipValue($('#t-syr')),
+  note: () => str($('#t-note').value),
+};
+function submitCt(e) {
+  e.preventDefault();
+  const hn = str($('#t-hn').value), machine = chipValue($('#t-machine')), date = $('#t-date').value;
+  if (!machine) { focusChips($('#t-machine')); return toast('เลือกเครื่อง CT', { err: true }); }
+  if (!isDay(date)) { $('#t-date').focus(); return toast('ใส่วันที่ทำ CT', { err: true }); }
+  if (!hn) { $('#t-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
+  const inputErr = (ctMode('dose') !== 'off' && checkDose('t')) || (ctMode('area') !== 'off' && checkArea('t'));
+  if (inputErr) return toast(inputErr, { err: true });
+  const f = state.config.ct.form, miss = CT_FORM.find(([k]) => f[k] === 'req' && CT_FILLED[k] && !CT_FILLED[k]());
+  if (miss) {
+    const box = miss[0] === 'dose' ? $(str($('#t-dpf').value) ? '#t-fx' : '#t-dpf').closest('.field') : $(`[data-ctf="${miss[0]}"]`, ctForm);
+    if (box.classList.contains('field')) box.classList.add('missing');
+    const el = $('input, select', box);
+    if (el) el.focus();
+    return toast(`${['name', 'dx', 'dose', 'sim', 'note'].includes(miss[0]) ? 'กรอก' : 'เลือก'} ${miss[0] === 'dose' ? 'Dose/fx และ Fx' : miss[1]} ก่อนบันทึก (ช่องบังคับ)`, { err: true });
+  }
+  const extra = readExtra('t');
+  const rec = normCt({
+    ...editingCt, ct: machine, date, hn, name: $('#t-name').value, note: $('#t-note').value, ...readDx('t'), doc: chipValue($('#t-doc')),
+    cats: chipValues($('#t-cats')).join(', '), type: chipValue($('#t-type')), aim: chipValue($('#t-aim')), room: chipValue($('#t-room')), tech: chipValue($('#t-tech')),
+    area: readArea('t'), ...readDose('t'), sim: $('#t-oncall').checked ? 'on call' : $('#t-sim').value,
+    extra: Object.values(extra).some(Boolean) ? JSON.stringify(extra) : '',
+    organ: chipValue($('#t-organ')), mask: chipValue($('#t-mask')), cm: chipValue($('#t-cm')), pstat: chipValue($('#t-pstat')), hdr: chipValue($('#t-hdr')),
+    ...Object.fromEntries(CT_COUNTS.map(([k]) => [k, chipValue($('#t-' + k))])),
+    ...Object.fromEntries(['bite', 'crad', 'research'].map(k => [k, $('#t-' + k).checked ? 'YES' : ''])),
+    send: $('#t-send').checked ? 'yes' : '',
+  });
+  openCtPin('ctsave', rec);
+}
+// ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: CT-SIM) · ctsave = เพิ่ม/แก้ · ctdel = ลบ
+function openCtPin(mode, rec) {
+  const isNew = !state.ct.some(x => x.id === rec.id);
+  pinCtx = { mode, rec, id: rec.id, isNew, forgot: false, auto: mode === 'ctsave' };
+  const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`, what = [ctLabel(rec.ct), fmtDay(rec.date), rec.name, rec.organ].filter(Boolean).map(esc).join(' · ');
+  $('#pin-title').textContent = `${mode === 'ctdel' ? 'ลบผู้ป่วย CT-SIM' : isNew ? 'เพิ่มผู้ป่วย CT-SIM' : 'บันทึกการแก้ไข CT-SIM'} · ${rec.hn || ''}`;
+  $('#pin-what').innerHTML = mode === 'ctdel'
+    ? `ลบรายการนี้ (${what}) ออกจากแถบ CT-SIM ย้อนกลับไม่ได้${rec.took && rec.took !== 'skip' ? ' · เคสที่ MP แจกไปแล้วไม่ถูกลบ' : ''} · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
+    : `${what}${rec.send && !rec.took ? ' · ส่งไปแถบงานให้ MP แจกเคส' : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-note-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  if (pinSkipDialog(mode)) return submitPin(null);
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
+function ctSaved(rec, isNew) {
+  const i = state.ct.findIndex(x => x.id === rec.id);
+  if (i < 0) state.ct.push(rec); else state.ct[i] = rec;
+  ctDlg.close();
+  if (rec.date.slice(0, 7) !== state.month) state.month = rec.date.slice(0, 7);
+  if (rec.ct !== ctRoomSel()) pref.set('ctRoom', rec.ct);
+  render();
+  toast(`${isNew ? 'เพิ่ม' : 'บันทึก'} ${rec.hn} · ${ctLabel(rec.ct)} ${fmtDay(rec.date)}${rec.send && !rec.took ? ' · ส่งไปแถบงานแล้ว' : ''}`);
+}
+function ctDeleted(id) {
+  state.ct = state.ct.filter(x => x.id !== id);
+  ctDlg.close();
+  render();
+  toast('ลบรายการ CT-SIM แล้ว');
+}
+ctForm.addEventListener('submit', submitCt);
+ctForm.addEventListener('change', e => { siteChip(e); clearMissing(e); if (e.target.name === 'tcat' || e.target.id === 't-oncall') syncCtForm(); });
+ctForm.addEventListener('input', e => { doseInput(e); clearMissing(e); });
+
+// แถบงาน: ดึงผู้ป่วยจาก CT-SIM มาใส่ฟอร์มแจกเคส · แจกแล้วผูกรายการกับเคส (Code.gs บันทึกใน addCases) · ไม่ต้องแจก = ctMark
+let intakeCt = '';   // id ของรายการ CT ที่ดึงมาใส่ฟอร์มอยู่
+const ctPulled = () => state.ct.filter(r => ctState(r) === 'wait').sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created));
+const ctpullDlg = $('#ctpull-dlg');
+function renderCtPullBtn() {
+  const n = ctPulled().length, b = $('#ct-pull');
+  b.hidden = !ctOn() || !canEdit() || !(n || state.ct.length);
+  b.innerHTML = `ดึงจาก CT-SIM${n ? ` <span class="n">${n}</span>` : ''}`;
+  const r = intakeCt && state.ct.find(x => x.id === intakeCt);
+  $('#i-ctfrom').hidden = !r;
+  if (r) $('#i-ctfrom').innerHTML = `ข้อมูลจาก CT-SIM: <b>${esc(r.hn)}</b> · ${esc(ctLabel(r.ct))} ${esc(fmtDay(r.date))}${r.organ ? ` · ${esc(r.organ)}` : ''} · แจกแล้วรายการนี้ผูกกับเคส <button type="button" class="link-btn" data-ctunlink>ไม่ผูก</button>`;
+}
+const ctPullRow = (r, skip) => `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b> ${esc(r.name)}<small>${[ctLabel(r.ct), fmtDay(r.date), ctDocText(r.doc), r.organ, ctCatLabels(r), r.note].filter(Boolean).map(esc).join(' · ')}</small></div>
+  <span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-ctunskip="${esc(r.id)}">คืนกลับรอแจก</button>` : `<button type="button" class="btn ghost sm" data-ctskip="${esc(r.id)}">ไม่ต้องแจก</button><button type="button" class="btn primary sm" data-ctuse="${esc(r.id)}">ใช้ข้อมูลนี้</button>`}</span></li>`;
+function openCtPull() {
+  const list = ctPulled(), from = plusDays(today(), -60), skipped = state.ct.filter(r => ctState(r) === 'skip' && r.date >= from).sort((a, b) => b.date.localeCompare(a.date));
+  $('#ctpull-list').innerHTML = list.length ? list.map(r => ctPullRow(r)).join('') : '<li class="empty-state">ไม่มีผู้ป่วยรอแจกจาก CT-SIM</li>';
+  $('#ctpull-skip-box').hidden = !skipped.length;
+  $('#ctpull-skip-n').textContent = skipped.length;
+  $('#ctpull-skip').innerHTML = skipped.map(r => ctPullRow(r, true)).join('');
+  if (!ctpullDlg.open) ctpullDlg.showModal();
+}
+// รายการ CT → ค่าในฟอร์มแจกเคส · Organ ที่ตรงกับบริเวณที่ฉายในตั้งค่าใส่ให้ถ้ายังไม่ได้เลือกบริเวณ
+function ctToIntake(r) {
+  let extra = {};
+  try { extra = JSON.parse(r.extra || '{}') || {}; } catch (e) { extra = {}; }
+  const area = r.area || state.config.areas.find(a => a.toLowerCase() === str(r.organ).toLowerCase()) || '';
+  const cats = splitList(r.cats).filter(id => state.config.cats.some(k => k.id === id && k.on));
+  return { ...extra, hn: r.hn, name: r.name, ct: r.date, in: workdayFrom(today()), note: r.note, sim: r.sim, doc: r.doc, type: r.type, aim: r.aim, room: r.room, tech: r.tech,
+    area, dpf: r.dpf, fx: r.fx, rx: r.rx, freq: r.freq, icd: r.icd, dx: r.dx, cats };
+}
+function useCt(id) {
+  const r = state.ct.find(x => x.id === id);
+  if (!r) return;
+  fillIntake(ctToIntake(r));
+  intakeTouched = true;
+  intakeCt = id;
+  ctpullDlg.close();
+  renderCtPullBtn();
+  $('#intake-sec').scrollIntoView({ block: 'start' });
+  $('#i-hn').focus();
+  toast(`ใส่ข้อมูล ${r.hn} จาก CT-SIM แล้ว · ตรวจแล้วกดแจกเคส`);
+}
+async function markCt(id, mark) {
+  try {
+    const rec = normCt(await store.ctMark(id, mark));
+    const i = state.ct.findIndex(x => x.id === id);
+    if (i >= 0) state.ct[i] = rec;
+    if (intakeCt === id && mark) intakeCt = '';
+    renderCtPullBtn();
+    if (ctpullDlg.open) openCtPull();
+    toast(mark ? `${rec.hn} · ไม่ต้องแจกเคส` : `${rec.hn} · กลับมารอแจกเคส`);
+  } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 
 /* ---------- แถบ Complete ---------- */
@@ -3333,10 +3779,10 @@ const fxgFilter = groups => { const f = lineState('fxg').filter; return groups.f
 const dayLimit = room => { const m = state.config.dayMax || {}; return +((room && m.rooms && m.rooms[room]) || m.all) || 0; };
 // ผู้ปฏิบัติงานของวันนั้น: เลือกห้องไว้ = ห้องนั้นและรายการที่ไม่แยกห้อง · ทุกห้อง = ทุกห้องรวมกัน (ชื่อไม่ซ้ำ)
 function dutyOf(d, room) {
-  const xs = state.duty.filter(x => x.date === d && (!room || x.room === room || !x.room));
+  const xs = state.duty.filter(x => x.date === d && !/^CT:/.test(x.room) && (!room || x.room === room || !x.room));
   return { rtt: [...new Set(xs.flatMap(x => x.rtt))], ra: [...new Set(xs.flatMap(x => x.ra))] };
 }
-const dutyText = du => [du.rtt.length && `RTT ${du.rtt.join(', ')}`, du.ra.length && `RA ${du.ra.join(', ')}`].filter(Boolean).join(' · ');
+const dutyText = du => [du.rtt.length && `RTT ${du.rtt.join(', ')}`, du.ra.length && `RA ${du.ra.join(', ')}`, du.qc && du.qc.length && `QC ${du.qc.join(', ')}`].filter(Boolean).join(' · ');
 // ห้องที่เลือกผู้ปฏิบัติงานแยกกัน: ห้องที่เลือกอยู่ หรือทุกห้องในตั้งค่า (ไม่มีห้อง = ไม่แยกห้อง)
 const dutyRooms = room => (room && room !== NO_ROOM ? [room] : state.config.rooms.length ? state.config.rooms.slice() : ['']);
 // แก้ไขจาก HN: เคสที่แจกงาน = สิทธิ์แก้ไขเคส · ผู้ป่วยที่เพิ่มในแถบห้องฉาย = บันทึกในแถบห้องฉายได้
@@ -3826,14 +4272,19 @@ function loadDutyDir() {
   return dutyDir.loading;
 }
 const DUTY_GROUPS = [['rtt', 'นักรังสีการแพทย์ (RTT)'], ['ra', 'ผู้ช่วย (RA)']];
+// แถบ CT-SIM: เพิ่มคนทำ Daily QC (เลือกจากรายชื่อ RTT) · ห้อง = "CT:<รหัสเครื่อง>" (แยกจากห้องฉาย)
+const CT_DUTY_GROUPS = [...DUTY_GROUPS, ['qc', 'Daily QC']];
 const isoStamp = v => { const d = new Date(v || ''); return isNaN(d) ? '' : `${iso(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };   // เวลา ISO → "2026-10-01 10:00" (เวลาเครื่อง)
-function openDuty(date) {
+// kind 'ct' = เครื่อง CT ที่เลือกในแถบ CT-SIM (มี Daily QC) · อื่น ๆ = ห้องฉายของตารางวันฉาย
+function openDuty(date, kind) {
   if (!isDay(date)) return;
-  if (!directOn()) return toast('การเลือกผู้ปฏิบัติงานต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป', { err: true });
-  const room = pref.get('courseRoom', ''), rooms = dutyRooms(state.config.rooms.includes(room) ? room : '');
-  pinCtx = { mode: 'duty', date, rooms, forgot: false, auto: false };
+  const ct = kind === 'ct';
+  if (ct ? !ctOn() : !directOn()) return toast(`การเลือกผู้ปฏิบัติงานต้องใช้ Code.gs รุ่น ${ct ? '2026-10-24.1' : '2026-10-22.2'} ขึ้นไป`, { err: true });
+  const room = pref.get('courseRoom', ''), rooms = ct ? ['CT:' + ctRoomSel()] : dutyRooms(state.config.rooms.includes(room) ? room : '');
+  pinCtx = { mode: 'duty', date, rooms, kind: ct ? 'ct' : '', groups: ct ? CT_DUTY_GROUPS : DUTY_GROUPS, forgot: false, auto: false };
   $('#pin-title').textContent = `ผู้ปฏิบัติงาน · ${LONG_DAY_FMT.format(parseISO(date))}`;
-  $('#pin-what').innerHTML = `เลือกนักรังสีการแพทย์ (RTT) และผู้ช่วย (RA) ที่ปฏิบัติงานวันนี้${rooms.length > 1 ? ' แยกตามห้องฉาย' : rooms[0] ? ` ห้อง ${esc(roomLabel(rooms[0]))}` : ''} · แสดงใต้วันที่ในตารางวันฉาย · เอาติ๊กออกหมด = ล้าง`;
+  $('#pin-what').innerHTML = ct ? `เลือกนักรังสีการแพทย์ (RTT) ผู้ช่วย (RA) และคนทำ Daily QC ของ ${esc(ctLabel(ctRoomSel()))} วันนี้ · ใช้ในแผ่น Competency ของไฟล์ส่งออก (Tech 1–5 · ผู้ช่วย 1–2 · QC) · เอาติ๊กออกหมด = ล้าง`
+    : `เลือกนักรังสีการแพทย์ (RTT) และผู้ช่วย (RA) ที่ปฏิบัติงานวันนี้${rooms.length > 1 ? ' แยกตามห้องฉาย' : rooms[0] ? ` ห้อง ${esc(roomLabel(rooms[0]))}` : ''} · แสดงใต้วันที่ในตารางวันฉาย · เอาติ๊กออกหมด = ล้าง`;
   renderDutyBox(Object.fromEntries(rooms.map(r => [r, dutyOfRoom(date, r)])));
   $('#pin-val-field').hidden = true;
   $('#pin-note-field').hidden = true;
@@ -3847,14 +4298,15 @@ function openDuty(date) {
     if (p) p.then(() => { if (pinDlg.open && pinCtx && pinCtx.mode === 'duty' && pinCtx.date === date) renderDutyBox(readDutyBox()); });
   }
 }
-const dutyOfRoom = (d, r) => { const x = state.duty.find(v => v.date === d && v.room === r); return { rtt: x ? x.rtt.slice() : [], ra: x ? x.ra.slice() : [] }; };
-// ชื่อที่เคยเลือกใน 60 วัน (ใช้ได้แม้ดึงรายชื่อจาก LPCH ไม่ได้)
-const dutyRecent = g => { const from = plusDays(today(), -60); return state.duty.filter(x => x.date >= from).flatMap(x => x[g]); };
+const dutyOfRoom = (d, r) => { const x = state.duty.find(v => v.date === d && v.room === r); return { rtt: x ? x.rtt.slice() : [], ra: x ? x.ra.slice() : [], qc: x ? x.qc.slice() : [] }; };
+// ชื่อที่เคยเลือกใน 60 วัน (ใช้ได้แม้ดึงรายชื่อจาก LPCH ไม่ได้) · Daily QC เลือกจากรายชื่อ RTT
+const dutyRecent = g => { const from = plusDays(today(), -60); return state.duty.filter(x => x.date >= from).flatMap(x => (g === 'qc' ? [...x.rtt, ...x.qc] : x[g])); };
+const dutyLabelOf = r => (/^CT:/.test(r) ? ctLabel(r.slice(3)) : roomLabel(r) || 'ทุกห้อง');
 // sel = { ห้อง: { rtt: [ชื่อ], ra: [ชื่อ] } }
 function renderDutyBox(sel) {
   const rooms = pinCtx.rooms;
-  $('#pin-duty-rooms').innerHTML = rooms.map(r => `<div class="duty-room" data-droom="${esc(r)}">${rooms.length > 1 || r ? `<h4>${esc(roomLabel(r) || 'ทุกห้อง')}</h4>` : ''}${DUTY_GROUPS.map(([g, l]) => {
-    const cur = (sel[r] || {})[g] || [], names = [...new Set([...dutyDir[g], ...dutyRecent(g), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
+  $('#pin-duty-rooms').innerHTML = rooms.map(r => `<div class="duty-room" data-droom="${esc(r)}">${rooms.length > 1 || r ? `<h4>${esc(dutyLabelOf(r))}</h4>` : ''}${pinCtx.groups.map(([g, l]) => {
+    const cur = (sel[r] || {})[g] || [], names = [...new Set([...dutyDir[g === 'qc' ? 'rtt' : g], ...dutyRecent(g), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
     return `<div class="field"><span class="lbl">${esc(l)}</span><div class="duty-pick"><div class="chips" data-dgrp="${g}">${names.map(n => `<label><input type="checkbox" value="${esc(n)}"${cur.includes(n) ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>
       <input class="duty-other" data-dother="${g}" maxlength="60" autocomplete="off" placeholder="+ พิมพ์ชื่อแล้วกด Enter" aria-label="เพิ่มชื่อ ${esc(l)}${r ? ` ห้อง ${esc(r)}` : ''}"></div></div>`;
   }).join('')}</div>`).join('');
@@ -3867,17 +4319,19 @@ function renderDutyBox(sel) {
 function readDutyBox() {
   const out = {};
   for (const box of $$('#pin-duty-rooms .duty-room')) {
-    out[box.dataset.droom] = Object.fromEntries(DUTY_GROUPS.map(([g]) => [g, uniqTags([...chipValues($(`[data-dgrp="${g}"]`, box)), ...splitList($(`[data-dother="${g}"]`, box).value)])]));
+    out[box.dataset.droom] = Object.fromEntries(pinCtx.groups.map(([g]) => [g, uniqTags([...chipValues($(`[data-dgrp="${g}"]`, box)), ...splitList($(`[data-dother="${g}"]`, box).value)])]));
   }
   return out;
 }
 async function saveDuty(ctx, pin) {
-  const sel = readDutyBox(), list = ctx.rooms.map(r => ({ room: r, rtt: (sel[r] || {}).rtt || [], ra: (sel[r] || {}).ra || [] }));
+  const sel = readDutyBox(), list = ctx.rooms.map(r => ({ room: r, ...Object.fromEntries(ctx.groups.map(([g]) => [g, (sel[r] || {})[g] || []])) }));
   const out = await store.duty(ctx.date, list, pin);
-  state.duty = state.duty.filter(x => x.date !== ctx.date).concat((out || []).map(normDuty));
-  renderCourse();
-  const du = dutyOf(ctx.date, ctx.rooms.length === 1 ? ctx.rooms[0] : '');
-  toast(`${fmtDay(ctx.date)} · ${du.rtt.length || du.ra.length ? dutyText(du) : 'ล้างผู้ปฏิบัติงานแล้ว'}`);
+  // เซิร์ฟเวอร์คืนรายการของวันนั้นเฉพาะแถบเดียวกัน (ห้องฉาย หรือเครื่อง CT): เก็บของอีกแถบไว้
+  const mine = x => /^CT:/.test(x.room) === (ctx.kind === 'ct');
+  state.duty = state.duty.filter(x => x.date !== ctx.date || !mine(x)).concat((out || []).map(normDuty).filter(mine));
+  if (ctx.kind === 'ct') renderCt(); else renderCourse();
+  const du = ctx.kind === 'ct' ? dutyOfRoom(ctx.date, ctx.rooms[0]) : dutyOf(ctx.date, ctx.rooms.length === 1 ? ctx.rooms[0] : '');
+  toast(`${fmtDay(ctx.date)} · ${du.rtt.length || du.ra.length || (du.qc || []).length ? dutyText(du) : 'ล้างผู้ปฏิบัติงานแล้ว'}`);
 }
 // พิมพ์ชื่อแล้วกด Enter = เพิ่มเป็นตัวเลือกที่ติ๊กไว้ (ไม่บันทึกหน้าต่าง)
 $('#pin-duty-rooms').addEventListener('keydown', e => {
@@ -3916,6 +4370,7 @@ $('#pin-tags').addEventListener('change', syncBd);
 function renderWork() {
   renderCaseMode();
   $('#intake-sec').hidden = !canEdit();
+  renderCtPullBtn();
   $('#open-leaves').textContent = canEdit() ? 'จัดการวันลา' : 'ดูวันลา';
   renderIntake();
   const ym = thisMonth(), td = today();
@@ -5125,6 +5580,184 @@ async function exportP4P(btn) {
   } catch (e) { toast('สร้างไฟล์ Excel ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { btn.disabled = false; btn.textContent = label; }
 }
+// ส่งออก Excel ของเครื่อง CT ที่เลือก เดือนนี้ แบบไฟล์ CT-SIM เดิม: แผ่น CT-SIM (ข้อมูล + ช่องเลือก) · SUM (สรุปแพทย์ HDR อุปกรณ์) · Competency (งานรายวัน + ผู้ปฏิบัติงาน)
+// แผ่น SUM และ Competency เป็นสูตรที่อ้างข้อมูลในแผ่น CT-SIM (แก้/เพิ่มแถวในไฟล์แล้วตัวเลขเปลี่ยนตาม) · ไม่มีชื่อแพทย์ในตั้งค่า = ใช้รหัส
+async function exportCt(btn) {
+  const room = ctRoomSel(), ym = state.month, recs = ctOfMonth(room, ym), ct = state.config.ct;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้างไฟล์…';
+  try {
+    const ExcelJS = await loadExcel();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = state.config.appName;
+    wb.calcProperties.fullCalcOnLoad = true;
+    ctSheets(wb, room, ym, recs, ct);
+    const [y, m] = ym.split('-').map(Number), idx = ctRooms().findIndex(r => r.id === room) + 1;
+    const file = `CT-SIM${idx}-${pad(m)}_${String(y + 543).slice(-2)}.xlsx`;   // แบบชื่อไฟล์เดิม "CT-SIM1 10_68" (ชื่ออังกฤษ: บางเบราว์เซอร์ไม่รับชื่อไทย)
+    const saved = await saveBlob(new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), file);
+    toast(saved ? `ดาวน์โหลด ${file} แล้ว (${ctLabel(room)} ${recs.length} คน)` : 'ยกเลิกการดาวน์โหลด');
+  } catch (e) { toast('สร้างไฟล์ Excel ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+function ctSheets(wb, room, ym, recs, ct) {
+  const [y, m] = ym.split('-').map(Number), nDays = new Date(y, m, 0).getDate();
+  const xd = ds => { const [a, b, c] = ds.split('-').map(Number); return new Date(Date.UTC(a, b - 1, c)); };   // วันที่ของ Excel (ไม่ขึ้นกับเขตเวลา)
+  const N = Math.max(300, recs.length + 50);   // แถวข้อมูลที่สูตรอ้าง (2–N) เพิ่มแถวในไฟล์ได้
+  const col = k => `'CT-SIM'!$${k}$2:$${k}$${N}`;
+  const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } }, box = { top: thin, left: thin, bottom: thin, right: thin };
+  const bold = { bold: true }, yellow = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }, head = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E7F5' } };
+  const docs = [...new Set([...docCodes(), ...recs.map(r => r.doc).filter(Boolean)])], docText = code => ctDocText(code);
+  const list = vals => `"${vals.join(',')}"`;
+  // --- CT-SIM: ข้อมูลรายคน (ลำดับ ลำดับในวัน) ---
+  const ws = wb.addWorksheet('CT-SIM', { views: [{ state: 'frozen', ySplit: 1 }] });
+  const COLS = [['No.', 5], ['Date', 7], ['N/D', 5], ['HN', 13], ['Name', 25], ['Organ', 10], ['Mask', 10], ['bitelock', 8], ['CM', 10], ['Coil', 6], ['Y', 5], ['Syring Injector', 11], ['Normal Saline', 10],
+    ['Syring 50cc', 9], ['แพทย์', 12], ['สถานะ', 8], ['HDR', 9], ['C-RAD', 8], ['Note', 17], ['เคสวิจัย', 8]];
+  COLS.forEach(([t, w], i) => { const c = ws.getCell(1, i + 1); c.value = t; c.font = bold; c.fill = head; c.border = box; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; ws.getColumn(i + 1).width = w; });
+  ws.getColumn(21).width = 3; ws.getColumn(22).width = 9; ws.getColumn(23).width = 9;
+  Object.assign(ws.getCell('V1'), { value: 'จำนวน\nเคสวิจัย', font: bold, fill: yellow, alignment: { wrapText: true, vertical: 'middle', horizontal: 'center' } });
+  Object.assign(ws.getCell('W1'), { value: { formula: `COUNTIF(T2:T${N},"YES")`, result: recs.filter(r => /^yes$/i.test(r.research)).length }, font: bold, fill: yellow });
+  ws.getRow(1).height = 30;
+  const num = v => (/^\d{1,4}$/.test(str(v)) ? +v : str(v));
+  recs.forEach((r, i) => {
+    const row = i + 2, nd = recs.filter((x, j) => j <= i && x.date === r.date).length;
+    const vals = [i ? { formula: `IF(C${row}>0,A${row - 1}+1,"")`, result: i + 1 } : 1, xd(r.date), nd, /^[1-9]\d{0,14}$/.test(r.hn) ? +r.hn : r.hn, r.name, r.organ, r.mask, r.bite ? 'YES' : '', r.cm,
+      num(r.coil), num(r.ydev), num(r.inj), num(r.nss), num(r.syr), docText(r.doc), r.pstat, r.hdr, r.crad ? 'YES' : '', r.note, r.research ? 'YES' : ''];
+    vals.forEach((v, j) => { const c = ws.getCell(row, j + 1); c.value = v === '' ? null : v; c.border = box; });
+    ws.getCell(row, 2).numFmt = 'd-mmm';
+  });
+  for (let row = recs.length + 2; row <= N; row++) ws.getCell(row, 1).value = { formula: `IF(C${row}>0,A${row - 1}+1,"")`, result: '' };
+  for (let row = 2; row <= N; row++) ws.getCell(row, 2).numFmt = 'd-mmm';
+  const dv = (ref, vals) => { if (vals.length) ws.dataValidations.add(ref, { type: 'list', allowBlank: true, formulae: [list(vals)] }); };
+  dv(`F2:F${N}`, ct.organs); dv(`G2:G${N}`, ct.masks); dv(`I2:I${N}`, ct.cms); dv(`J2:N${N}`, ['1', '2', '3', '4']); dv(`O2:O${N}`, docs.map(docText));
+  dv(`P2:P${N}`, ct.pstats); dv(`Q2:Q${N}`, ct.hdrs); dv(`H2:H${N}`, ['YES']); dv(`R2:R${N}`, ['YES']); dv(`T2:T${N}`, ['YES']);
+  ws.addConditionalFormatting({ ref: `A2:T${N}`, rules: [{ type: 'expression', formulae: ['$B2=TODAY()'], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFF2CC' } } } }] });
+  ws.addConditionalFormatting({ ref: `T2:T${N}`, rules: [{ type: 'expression', formulae: ['T2="YES"'], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFC6EFCE' } } } }] });
+  ws.autoFilter = 'A1:T1';
+  // ค่าที่คำนวณไว้ให้ (ไฟล์คำนวณใหม่เองตอนเปิด)
+  const cnt = (f, d) => recs.filter(r => (!d || r.date === d) && f(r)).length;
+  const sum = k => recs.reduce((t, r) => t + (+r[k] || 0), 0);
+  const isHdr = r => r.hdr === ct.hdrs[0];
+  // --- SUM: แพทย์ · HDR · CT · อุปกรณ์ที่ใช้ (รับมา/รับเพิ่มกรอกในไฟล์) ---
+  const s = wb.addWorksheet('SUM');   // ลำดับแผ่นแบบไฟล์เดิม: CT-SIM, SUM, Competency (สูตรอ้าง Competency!D6 ได้แม้สร้างทีหลัง)
+  s.getColumn(1).width = 4; s.getColumn(2).width = 16; s.getColumn(3).width = 8; s.getColumn(4).width = 3; s.getColumn(5).width = 20;
+  for (let c = 6; c <= 14; c++) s.getColumn(c).width = c === 13 || c === 14 ? 12 : 10;
+  s.mergeCells('A1:N1'); s.mergeCells('A2:N2');
+  Object.assign(s.getCell('A1'), { value: `สรุปสถิติห้อง CT-Sim · ${ctLabel(room)}`, font: { bold: true, size: 14 }, alignment: { horizontal: 'center' } });
+  Object.assign(s.getCell('A2'), { value: { formula: 'Competency!D6', result: xd(`${ym}-01`) }, numFmt: 'mmmm yyyy', font: { bold: true, size: 12 }, alignment: { horizontal: 'center' } });
+  const block = (row, title, perDoc, extra) => {
+    s.mergeCells(`B${row}:C${row}`);
+    Object.assign(s.getCell(`B${row}`), { value: title, font: bold, fill: head, alignment: { horizontal: 'center' }, border: box });
+    let r = row + 1;
+    if (row === 3) { [['B', 'แพทย์'], ['C', 'จำนวน']].forEach(([c, t]) => Object.assign(s.getCell(`${c}${r}`), { value: t, font: bold, border: box })); r++; }
+    const first = r;
+    docs.forEach(code => { const n = docText(code); s.getCell(`B${r}`).value = n; s.getCell(`C${r}`).value = perDoc(n, code, r); s.getCell(`B${r}`).border = s.getCell(`C${r}`).border = box; r++; });
+    Object.assign(s.getCell(`B${r}`), { value: 'รวม', font: bold, border: box });
+    Object.assign(s.getCell(`C${r}`), { value: { formula: `SUM(C${first}:C${r - 1})`, result: 0 }, font: bold, border: box });
+    const total = r;
+    (extra || []).forEach(([t, f]) => { r++; s.getCell(`B${r}`).value = t; s.getCell(`C${r}`).value = f; s.getCell(`B${r}`).border = s.getCell(`C${r}`).border = box; });
+    return { first, total, end: r };
+  };
+  const all = block(3, 'เคสรวม', (n, code) => ({ formula: `COUNTIF(${col('O')},"${n}")`, result: cnt(r => r.doc === code) }));
+  s.getCell(`C${all.total}`).value = { formula: `SUM(C${all.first}:C${all.total - 1})`, result: recs.filter(r => r.doc).length };
+  const hdr0 = ct.hdrs[0] || 'HDR';
+  const hdr = block(all.total + 4, 'HDR', (n, code) => ({ formula: `COUNTIFS(${col('O')},"${n}",${col('Q')},"${hdr0}")`, result: cnt(r => r.doc === code && r.hdr === hdr0) }),
+    ct.hdrs.slice(1).map(h => [h, { formula: `COUNTIF(${col('Q')},"${h}")`, result: cnt(r => r.hdr === h) }]));
+  s.getCell(`C${hdr.total}`).value = { formula: `SUM(C${hdr.first}:C${hdr.total - 1})`, result: cnt(r => r.doc && r.hdr === hdr0) };
+  const ctb = block(hdr.end + 2, 'CT', (n, code, r) => ({ formula: `C${all.first + (r - (hdr.end + 3))}-C${hdr.first + (r - (hdr.end + 3))}`, result: cnt(x => x.doc === code && x.hdr !== hdr0) }));
+  s.getCell(`C${ctb.total}`).value = { formula: `SUM(C${ctb.first}:C${ctb.total - 1})`, result: cnt(x => x.doc && x.hdr !== hdr0) };
+  // อุปกรณ์: Mask (ไม่ใช่ reuse และ SRS) → CM → Bitelock → SRS → จำนวนที่ใช้ (Coil ฯลฯ) → Mask reuse
+  const maskName = v => (/^s-re/i.test(v) ? 'S-reuse' : /^green-re/i.test(v) ? 'L-reuse' : /^srs$/i.test(v) ? 'SRS Mask' : `Mask ${v}`);
+  const isRe = v => /-re/i.test(v);
+  const items = [
+    ...ct.masks.filter(v => !isRe(v) && !/^srs$/i.test(v)).map(v => [maskName(v), `COUNTIF(${col('G')},"${v}")`, cnt(r => r.mask === v), true]),
+    ...ct.cms.map(v => [v, `COUNTIF(${col('I')},"${v}")`, cnt(r => r.cm === v), true]),
+    ['Bitelock', `COUNTIF(${col('H')},"YES")`, cnt(r => !!r.bite), true],
+    ...ct.masks.filter(v => /^srs$/i.test(v)).map(v => [maskName(v), `COUNTIF(${col('G')},"${v}")`, cnt(r => r.mask === v), true]),
+    ['coil', `SUM(${col('J')})`, sum('coil'), true], ['Y', `SUM(${col('K')})`, sum('ydev'), true], ['Normal Saline 500ml', `SUM(${col('M')})`, sum('nss'), true],
+    ['syrings 50cc', `SUM(${col('N')})`, sum('syr'), true], ['Syring Injector', `SUM(${col('L')})`, sum('inj'), true],
+    ...ct.masks.filter(isRe).map(v => [maskName(v), `COUNTIF(${col('G')},"${v}")`, cnt(r => r.mask === v), false]),
+  ];
+  [['F3', 'รับมาจากเดือนก่อน'], ['G3', 'เดือนนี้ใช้ไป'], ['H3', 'รับเพิ่ม(วันที่)'], ['I3', 'รับเพิ่ม(วันที่)'], ['J3', 'รับเพิ่ม(วันที่)'], ['K3', 'รับเพิ่ม(วันที่)'], ['L3', 'รับเพิ่ม(วันที่)'], ['M3', 'ยอดรวมปัจจุบัน'], ['N3', 'ยอดคงเหลือ']]
+    .forEach(([a, t]) => Object.assign(s.getCell(a), { value: t, font: bold, fill: head, border: box, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } }));
+  s.getRow(3).height = 32;
+  s.mergeCells('E4:G4'); s.mergeCells('M4:N4');
+  items.forEach(([t, f, v, bal], i) => {
+    const r = 5 + i;
+    Object.assign(s.getCell(`E${r}`), { value: t, border: box });
+    Object.assign(s.getCell(`G${r}`), { value: { formula: f, result: v }, border: box });
+    for (const c of ['F', 'H', 'I', 'J', 'K', 'L']) s.getCell(`${c}${r}`).border = box;
+    if (bal) {
+      Object.assign(s.getCell(`M${r}`), { value: { formula: `SUM(F${r},H${r},I${r},J${r},K${r},L${r})`, result: 0 }, border: box });
+      Object.assign(s.getCell(`N${r}`), { value: { formula: `M${r}-G${r}`, result: -v }, border: box });
+    }
+  });
+  // --- Competency: งานรายวันของเดือน + ผู้ปฏิบัติงาน ---
+  const wc = wb.addWorksheet('Competency', { views: [{ state: 'frozen', xSplit: 3, ySplit: 6 }] });
+  const dayCol = d => 3 + d, L = c => wc.getColumn(c).letter, last = L(dayCol(31));
+  wc.getColumn(1).width = 5; wc.getColumn(2).width = 40; wc.getColumn(3).width = 7;
+  for (let d = 1; d <= 31; d++) wc.getColumn(dayCol(d)).width = 5;
+  wc.getColumn(36).width = 12;
+  wc.mergeCells('A1:A4'); wc.mergeCells('C1:F1'); wc.mergeCells('A5:B5');
+  Object.assign(wc.getCell('B1'), { value: `งานห้อง CT-Sim · ${ctLabel(room)}`, font: { bold: true, size: 13 } });
+  Object.assign(wc.getCell('C1'), { value: { formula: 'D6', result: xd(`${ym}-01`) }, numFmt: 'mmmm yyyy', font: { bold: true, size: 13 } });
+  const fx = { stretcher: r => /นอน/.test(r.pstat), chair: r => /นั่ง/.test(r.pstat), cm: r => !!r.cm, crad: r => !!r.crad, mask: r => !!r.mask };
+  const days = Array.from({ length: nDays }, (_, i) => `${ym}-${pad(i + 1)}`);
+  const perDay = d => {
+    const c13 = Math.max(0, cnt(r => fx.cm(r) && !fx.stretcher(r) && !fx.crad(r), d)), c14 = cnt(fx.chair, d), c16 = cnt(fx.crad, d);
+    const c15 = cnt(fx.stretcher, d) + cnt(isHdr, d) - cnt(r => fx.crad(r) && fx.stretcher(r), d), c11 = Math.max(0, cnt(() => true, d) - c13 - c14 - c15 - c16);
+    const c9 = c11 + c13 + c14 + c15 + c16;
+    return { 8: c9 > 0 ? 1 : 0, 9: c9, 10: c9 > 0 ? 1 : 0, 11: c11, 12: 0, 13: c13, 14: c14, 15: c15, 16: c16, 17: cnt(fx.mask, d) };
+  };
+  const res = Object.fromEntries(days.map(d => [d, perDay(d)])), tot = k => days.reduce((t, d) => t + res[d][k], 0);
+  [['B2', 'จำนวนผู้ป่วยในเวลา', { formula: 'C9', result: tot(9) }], ['B3', 'จำนวนผู้ป่วยนอกเวลา', 0], ['B4', 'รวมผู้ป่วยทั้งหมด', { formula: 'SUM(C2:C3)', result: tot(9) }]].forEach(([a, t, v]) => {
+    const r = +a.slice(1);
+    wc.getCell(a).value = t; wc.getCell(r, 3).value = v; wc.getCell(r, 4).value = 'คน';
+  });
+  Object.assign(wc.getCell('A5'), { value: 'ในเวลาราชการ', font: bold });
+  [['A6', 'ลำดับ'], ['B6', 'รายละเอียดงาน'], ['C6', 'ทำได้']].forEach(([a, t]) => Object.assign(wc.getCell(a), { value: t, font: bold, fill: head, border: box, alignment: { horizontal: 'center' } }));
+  days.forEach((d, i) => Object.assign(wc.getCell(6, dayCol(i + 1)), { value: xd(d), numFmt: 'd', font: bold, fill: head, border: box, alignment: { horizontal: 'center' } }));
+  Object.assign(wc.getCell('B7'), { value: 'งานห้องเอกซเรย์คอมพิวเตอร์ (CT)', font: bold });
+  const TASKS = [
+    [8, 'การตรวจสอบและควบคุมคุณภาพของเครื่องประจำวัน (Daily QC)', c => `IF(${c}9>0,1,0)`],
+    [9, 'การจัดเตรียมอุปกรณ์และเอกสาร', c => `SUM(${c}11:${c}16)`],
+    [10, 'การทำความสะอาด', c => `${c}8`],
+    [11, 'การจัดท่าและเอกซเรย์คอมพิวเตอร์ผู้ป่วยที่ไม่มีการฉีดสารทึบรังสี', c => `MAX(0,COUNTIF(${col('B')},${c}$6)-${c}13-${c}14-${c}15-${c}16)`],
+    [12, 'การจัดท่าและเอกซเรย์คอมพิวเตอร์ผู้ป่วยและมีการทำ Tumor localization', null],
+    [13, 'จัดท่าและเอ็กซ์เรย์คอมพิวเตอร์ผู้ป่วยที่ต้องมีการฉีดสารทึบรังสี', c => `MAX(0,COUNTIFS(${col('I')},"<>",${col('B')},${c}$6)-COUNTIFS(${col('I')},"<>",${col('B')},${c}$6,${col('P')},"*นอน*")-COUNTIFS(${col('I')},"<>",${col('B')},${c}$6,${col('R')},"YES")+COUNTIFS(${col('I')},"<>",${col('B')},${c}$6,${col('P')},"*นอน*",${col('R')},"YES"))`],
+    [14, 'การจัดท่าและการเอกซเรย์คอมพิวเตอร์ผู้ป่วยเปลนั่ง', c => `COUNTIFS(${col('P')},"*นั่ง*",${col('B')},${c}$6)`],
+    [15, 'การจัดท่าและการเอกซเรย์คอมพิวเตอร์ผู้ป่วยเปลนอนหรือเปลนอน O2', c => `COUNTIFS(${col('P')},"*นอน*",${col('B')},${c}$6)+COUNTIFS(${col('Q')},"${ct.hdrs[0] || 'HDR'}",${col('B')},${c}$6)-COUNTIFS(${col('R')},"YES",${col('B')},${c}$6,${col('P')},"*นอน*")`],
+    [16, 'จัดท่าและเอกซเรย์คอมพิวเตอร์ ในผู้ป่วยที่ต้องมีการฉีดสารทึบรังสี ในการทำ CT Chest ที่มีการทำ Gating', c => `COUNTIFS(${col('R')},"YES",${col('B')},${c}$6)`],
+    [17, 'การทำ Immobilize เช่นหน้ากากสั้นและยาว', c => `COUNTIFS(${col('G')},"<>",${col('B')},${c}$6)`],
+  ];
+  TASKS.forEach(([r, t, f], i) => {
+    wc.getCell(r, 1).value = i + 1;
+    Object.assign(wc.getCell(r, 2), { value: t, alignment: { wrapText: true, vertical: 'middle' } });
+    Object.assign(wc.getCell(r, 3), { value: { formula: `SUM(D${r}:${last}${r})`, result: tot(r) }, font: bold });
+    days.forEach((d, j) => { const c = L(dayCol(j + 1)); wc.getCell(r, dayCol(j + 1)).value = f ? { formula: f(c), result: res[d][r] } : 0; });
+    for (let c = 1; c <= 3 + 31; c++) wc.getCell(r, c).border = box;
+  });
+  // ผู้ปฏิบัติงานรายวัน (แถบ CT-SIM → ผู้ปฏิบัติงาน): Tech 1–5 = RTT · ผู้ช่วย 1–2 = RA · QC = Daily QC
+  const SLOTS = [...[1, 2, 3, 4, 5].map(n => ['rtt', n - 1, `Tech ${n}`]), ['ra', 0, 'ผู้ช่วย 1'], ['ra', 1, 'ผู้ช่วย 2'], ['qc', 0, 'QC'], ['qc', 1, 'QC']];
+  const duty = Object.fromEntries(days.map(d => [d, dutyOfRoom(d, 'CT:' + room)]));
+  SLOTS.forEach(([g, k, t], i) => {
+    const r = 18 + i;
+    Object.assign(wc.getCell(r, 3), { value: t, font: bold, border: box });
+    days.forEach((d, j) => { const c = wc.getCell(r, dayCol(j + 1)); c.value = duty[d][g][k] || null; c.border = box; c.alignment = { textRotation: 90, vertical: 'bottom', horizontal: 'center' }; });
+  });
+  for (let r = 18; r <= 26; r++) wc.getRow(r).height = 62;
+  // รายชื่อให้เลือก (คอลัมน์ AJ แบบไฟล์เดิม): RTT แล้ว RA
+  const names = g => [...new Set([...(g === 'rtt' ? dutyDir.rtt : dutyDir.ra), ...days.flatMap(d => (g === 'rtt' ? [...duty[d].rtt, ...duty[d].qc] : duty[d].ra))])];
+  const techs = names('rtt'), aids = names('ra'), aj = 36;
+  Object.assign(wc.getCell(3, aj), { value: 'รายชื่อ', font: bold });
+  [...techs, ...aids].forEach((n, i) => { wc.getCell(4 + i, aj).value = n; });
+  const AJ = wc.getColumn(aj).letter, rng = (a, b) => `$${AJ}$${a}:$${AJ}$${b}`;
+  const lastDay = L(dayCol(nDays));
+  if (techs.length) { wc.dataValidations.add(`D18:${lastDay}22`, { type: 'list', allowBlank: true, formulae: [rng(4, 3 + techs.length)] }); wc.dataValidations.add(`D25:${lastDay}26`, { type: 'list', allowBlank: true, formulae: [rng(4, 3 + techs.length)] }); }
+  if (aids.length) wc.dataValidations.add(`D23:${lastDay}24`, { type: 'list', allowBlank: true, formulae: [rng(4 + techs.length, 3 + techs.length + aids.length)] });
+  const grey = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFE7E6E6' } };
+  wc.addConditionalFormatting({ ref: `D6:${lastDay}26`, rules: [{ type: 'expression', formulae: ['WEEKDAY(D$6)=1'], style: { fill: grey } }, { type: 'expression', formulae: ['WEEKDAY(D$6)=7'], style: { fill: grey } }] });
+}
 // หน้าตัวอย่างบน claude.ai: ให้หน้าเว็บเสนอไฟล์ผ่านความสามารถ downloads (ผู้ใช้ยืนยันก่อนบันทึก) · ที่อื่นใช้ลิงก์ดาวน์โหลดปกติ
 async function saveBlob(blob, name) {
   const host = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads').catch(() => null) : null;
@@ -5348,7 +5981,7 @@ function renderSettings() {
       <td><input data-k="icdExtra.${i}.th" value="${esc(x.th)}" placeholder="ชื่อย่อภาษาไทย" aria-label="ชื่อไทย"></td>
       <td><button type="button" class="icon-btn" data-del="icdExtra.${i}" aria-label="ลบรหัส ${esc(x.code)}">×</button></td>
     </tr>`).join('');
-  const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${d[key].map((v, i) => `<span class="opt-chip" ${dragAttr(`${key}.${i}`)}>${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
+  const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${getPath(d, key).map((v, i) => `<span class="opt-chip" ${dragAttr(`${key}.${i}`)}>${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
   const fieldCards = d.fields.map((f, i) => `<div class="cat-card field-card" data-drag="fields.${i}">
       <div class="fld-l1">
         <label class="field"><span class="lbl">ชื่อหัวข้อ</span><input data-k="fields.${i}.label" value="${esc(f.label)}" placeholder="เช่น Bolus, 4D-CT, Protocol"></label>
@@ -5449,6 +6082,14 @@ function renderSettings() {
       <h3 class="sub-h">ฟอร์มเพิ่มผู้ป่วย</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN และเทคนิคบังคับกรอกเสมอ · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ไข · ต้องมี Start RT และ Fx จึงคำนวณวันฉายได้</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${PT_FIELDS.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ptForm.${k}" aria-label="${esc(l)} ในฟอร์มเพิ่มผู้ป่วย">${PT_OPTS.map(([v, t]) => opt(v, t, d.ptForm[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="sec" data-sec="ctsim"><div class="sec-head"><h2>CT-SIM (แถบ ${esc(navLabel('ctsim'))})</h2><p>เครื่อง CT, ตัวเลือกของช่องห้อง CT และช่องในฟอร์มเพิ่มผู้ป่วย · ผู้ปฏิบัติงานประจำวัน (RTT, RA, Daily QC) เลือกจากสมาชิก LPCH ตามตำแหน่งที่ตั้งใน ตารางวันฉาย · ไฟล์ส่งออกใช้ชื่อแพทย์จาก แพทย์ (Doc) (ไม่มีชื่อ = รหัส) · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู</p></div>
+      ${ctOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบ CT-SIM ต้องใช้ Code.gs รุ่น 2026-10-24.1 ขึ้นไป</span></p>'}
+      <div class="field" style="margin-bottom:14px"><span class="lbl">เครื่อง CT <span class="sub-lbl">ชื่อที่แสดงในแถบและในไฟล์ส่งออก · ลบได้เมื่อยังไม่มีผู้ป่วยของเครื่องนั้น</span></span>
+        <div class="ct-rooms-set">${d.ct.rooms.map((r, i) => `<span class="ct-room-set"><input data-k="ct.rooms.${i}.label" value="${esc(r.label)}" maxlength="40" placeholder="${esc(r.id)}" aria-label="ชื่อเครื่อง CT ที่ ${i + 1}"><button type="button" class="icon-btn" data-ctroomdel="${i}" aria-label="ลบเครื่อง ${esc(r.label || r.id)}"${d.ct.rooms.length < 2 || state.ct.some(x => x.ct === r.id) ? ' disabled' : ''}>×</button></span>`).join('')}<button type="button" class="btn ghost sm" data-add="ctroom">+ เพิ่มเครื่อง CT</button></div></div>
+      <div class="form-grid" style="margin-bottom:12px">${CT_LISTS.map(([k, l]) => optEditor('ct.' + k, l)).join('')}</div>
+      <h3 class="sub-h">ฟอร์มเพิ่มผู้ป่วย CT-SIM</h3>
+      <p class="muted def-note" style="margin:0 0 10px">HN วันที่ และเครื่อง CT บังคับเสมอ · ช่องชุดบน (Name ถึงหัวข้อเพิ่มเติม) เหมือนฟอร์มแจกเคส MP ดึงไปใช้ในแถบงานได้ · ช่องห้อง CT ใช้ในไฟล์ส่งออก · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้</p>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${CT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ct.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT-SIM">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.ct.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>ติ๊ก = ต้องใส่รหัส PIN 4 หลักของตัวเองก่อนบันทึก · ไม่ติ๊ก = บันทึกได้เลย (ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบ · การลบยังถามยืนยัน)</p></div>
       ${pinCfgOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ตั้งงานที่ไม่ต้องใส่ PIN ได้เมื่อใช้ Code.gs รุ่น 2026-10-22.1 ขึ้นไป · ตอนนี้ทุกงานยังต้องใส่ PIN</span></p>'}
       <div class="pin-groups">${PIN_GROUPS.map(([k, l, note]) => `<label class="check"><input type="checkbox" data-k="pin.${k}"${d.pin[k] ? ' checked' : ''}> <span><b>${esc(l)}</b><small class="muted"> ${esc(note)}</small></span></label>`).join('')}</div></div>
@@ -6860,6 +7501,7 @@ function applyRules() {
 let intakeTouched = false, intakeSig = '';
 const defaultsSig = () => today() + JSON.stringify(state.config.defaults || {});
 function resetIntake() {
+  intakeCt = '';
   fillIntake(defaultCase());
   applyRules();
   // ปุ่มเลือกได้หลายอย่างที่ติ๊กค่าเริ่มต้นไว้: กดเลือกอย่างอื่นครั้งแรกจะเปลี่ยนแทน ไม่เพิ่มต่อจากค่าเริ่มต้น
@@ -6902,12 +7544,16 @@ async function submitIntake(e) {
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
     });
   });
+  const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : '';
+  if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
   const btn = $('#i-save');
   btn.disabled = true;
   try {
     const saved = (await store.addCases(recs)).map(normCase);
     state.cases.push(...saved);
     const ids = saved.map(x => x.id);
+    const ctRec = ctFrom && state.ct.find(r => r.id === ctFrom);
+    if (ctRec) Object.assign(ctRec, { took: ids.join(', '), tookBy: state.user.name || '', tookAt: nowStamp() });
     state.fresh = ids;
     resetIntake();
     render();
@@ -6929,6 +7575,12 @@ async function undoAssign(list) {
     const first = list.find(c => catOf(c.cat).kind !== 'simple') || list[0];
     fillIntake({ ...first, cats: list.map(c => c.cat), counts: Object.fromEntries(list.map(c => [c.cat, unitsOf(c)])), tech: (list.find(c => c.tech) || {}).tech || '' });
     intakeTouched = true;
+    // แจกจากรายการ CT-SIM: คืนรายการกลับเป็นรอแจก และผูกกับฟอร์มอีกครั้ง
+    const ctRec = state.ct.find(r => splitList(r.took).some(id => ids.has(id)));
+    if (ctRec) {
+      try { Object.assign(ctRec, normCt(await store.ctMark(ctRec.id, ''))); intakeCt = ctRec.id; } catch (e) { /* รายการยังผูกกับเคสที่ลบไป: MP ตั้งเองได้ที่ดึงจาก CT-SIM */ }
+      renderCtPullBtn();
+    }
     toast(`ยกเลิกการแจกเคส ${first.hn} แล้ว ข้อมูลกลับมาอยู่ในฟอร์ม`);
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
@@ -6943,7 +7595,7 @@ function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidd
 const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]')) || $('#pin-save');   // ไม่ต้องใส่ PIN = ปุ่มบันทึก
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
-  const del = pinCtx.mode === 'del' || pinCtx.mode === 'logdel' || pinCtx.mode === 'ptdel', danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
+  const del = ['del', 'logdel', 'ptdel', 'ctdel'].includes(pinCtx.mode), danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
   if (pinCtx.mode !== 'stamp' && pinCtx.mode !== 'vals') $('#pin-at-field').hidden = true;
   $('#pin-fx-box').hidden = pinCtx.mode !== 'fx';
   $('#pin-tags-box').hidden = pinCtx.mode !== 'ptags';
@@ -6967,7 +7619,7 @@ function syncPinForm() {
   $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
   $('#pin-field').hidden = !need || set || !has;
   if (!need) $('#pin-forgot').hidden = $('#pin-proof-box').hidden = true;
-  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'ptdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'logdel' ? 'ลบรายการ' : pinCtx.mode === 'ptadd' && pinCtx.isNew ? 'เพิ่มผู้ป่วย' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
+  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'ptdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'logdel' || pinCtx.mode === 'ctdel' ? 'ลบรายการ' : (pinCtx.mode === 'ptadd' || pinCtx.mode === 'ctsave') && pinCtx.isNew ? 'เพิ่มผู้ป่วย' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
   $('#pin-save').classList.toggle('danger', danger);
   for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
   pinErr('');
@@ -7130,6 +7782,8 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'ptadd') { const rec = normCase(await store.courseAdd(ctx.rec, pin)); patientSaved(rec, ctx.isNew); pinDlg.close(); return; }
     if (ctx.mode === 'ptdel') { await store.courseRemove(ctx.id, pin); caseDeleted(ctx.id, `ลบ ${ctx.rec.hn || 'ผู้ป่วย'} ออกจากตารางวันฉายแล้ว`); pinDlg.close(); return; }
     if (ctx.mode === 'duty') { await saveDuty(ctx, pin); pinDlg.close(); return; }
+    if (ctx.mode === 'ctsave') { const rec = normCt(await store.ctSave(ctx.rec, pin)); ctSaved(rec, ctx.isNew); pinDlg.close(); return; }
+    if (ctx.mode === 'ctdel') { await store.ctRemove(ctx.id, pin); ctDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'course') {
       const status = clear ? '' : ctx.status;
       let rec = null;
@@ -7416,6 +8070,8 @@ document.addEventListener('click', e => {
   if (!t) {   // รายการเคสแบบบรรทัดเดียว: กดที่แถว (นอกปุ่มและช่องกรอก) = แก้ไขเคส
     const tr = e.target.closest('tr[data-rowedit]');
     if (tr && canEdit() && !e.target.closest('input, select, textarea, label')) openCase(tr.dataset.rowedit);
+    const ctr = e.target.closest('tr[data-ctedit]');
+    if (ctr) openCtForm(ctr.dataset.ctedit);
     return;
   }
   const ds = t.dataset;
@@ -7445,7 +8101,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-clear') return submitPin(null, true);
   const inCaseDlg = !!t.closest('#case-dlg');   // ปุ่มขั้นตอนในหน้าแก้ไขเคส: ใช้สิทธิ์แก้ไขเคส
   if (inCaseDlg && ds.stamp) return canEditCases() ? openStamp(ds.id, ds.stamp, ds.sid || '') : toast(RO_MSG, { err: true });
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ['add-rc', 'add-other', 'log-del', 'course-add'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ds.ctduty || ds.ctskip || ds.ctunskip || ds.ctuse || ['add-rc', 'add-other', 'log-del', 'course-add', 'ct-add', 'ct-pull'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -7453,6 +8109,12 @@ document.addEventListener('click', e => {
   if (ds.openLeaves !== undefined) return openLeaves();
   if (ds.edit) return openCase(ds.edit);
   if (ds.duty) return openDuty(ds.duty);
+  if (ds.ctduty) return openDuty(ds.ctduty, 'ct');
+  if (ds.ctroom) { pref.set('ctRoom', ds.ctroom); return renderCt(); }
+  if (ds.ctuse) return useCt(ds.ctuse);
+  if (ds.ctskip) return markCt(ds.ctskip, 'skip');
+  if (ds.ctunskip) return markCt(ds.ctunskip, '');
+  if (ds.ctunlink !== undefined) { intakeCt = ''; return renderCtPullBtn(); }
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp, ds.sid || '');
   if (ds.course) return openCourse(ds.id, ds.course);
@@ -7517,6 +8179,8 @@ document.addEventListener('click', e => {
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.boxup) { const [v, n] = ds.boxup.split('.'), i = +n, arr = draft.boxes[v]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; renderSettings(); updateSaveBar(); const b = $(`[data-boxup="${v}.${i - 1}"]`); if (b && !b.disabled) b.focus(); return; }
   if (ds.up) { const [list, n] = ds.up.split('.'), i = +n, arr = draft[list]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return renderSettings(); }
+  if (ds.add === 'ctroom') { const ids = draft.ct.rooms.map(r => r.id); let n = ids.length + 1; while (ids.includes('ct' + n)) n++; draft.ct.rooms.push({ id: 'ct' + n, label: `CT-${n}` }); return renderSettings(); }
+  if (ds.ctroomdel !== undefined) { draft.ct.rooms.splice(+ds.ctroomdel, 1); return renderSettings(); }
   if (ds.add === 'rule') { draft.defaults.rules.push({ on: 'icd', match: '' }); renderSettings(); $$('.icd-in').pop().focus(); return; }
   if (ds.delrule) { draft.defaults.rules.splice(+ds.delrule, 1); return renderSettings(); }
   if (ds.add === 'holiday') { draft.holidays.push({ date: '', name: '' }); renderSettings(); $$('[data-k^="holidays."][data-k$=".date"]').pop().focus(); return; }
@@ -7536,6 +8200,10 @@ document.addEventListener('click', e => {
     case 'setup-skip': state.setupSkipped = true; return render();
     case 'case-del': return deleteCase(t);
     case 'course-add': return openPatient('');
+    case 'ct-add': return openCtForm('');
+    case 'ct-del': return openCtPin('ctdel', editingCt);
+    case 'ct-pull': return ctPulled().length || state.ct.some(r => ctState(r) === 'skip') ? openCtPull() : toast('ไม่มีผู้ป่วยรอแจกจาก CT-SIM');
+    case 'ct-xlsx': return exportCt(t);
     case 'log-del': return deleteLog(t);
     case 'save-settings': return saveSettings();
     case 'cancel-settings': draft = null; return renderSettings();
@@ -7622,7 +8290,8 @@ document.addEventListener('click', e => {
 });
 
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
-const TAB_RENDER = { pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs() };
+$('#ct-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-ctedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCtForm(tr.dataset.ctedit); } });
+const TAB_RENDER = { pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt() };
 for (const el of $$('[data-tq]')) {
   el.addEventListener('input', () => { tabQ[el.dataset.tq] = el.value; TAB_RENDER[el.dataset.tq](); });
   el.addEventListener('keydown', e => { if (e.key === 'Escape' && el.value) { e.preventDefault(); el.value = ''; tabQ[el.dataset.tq] = ''; TAB_RENDER[el.dataset.tq](); } });
@@ -7650,6 +8319,7 @@ caseForm.addEventListener('change', e => {
 });
 setupCombo('i');
 setupCombo('f');
+setupCombo('t');
 caseForm.addEventListener('input', e => { doseInput(e); if (e.target.id === 'f-n') syncCaseForm(); });
 intake.addEventListener('submit', submitIntake);
 const clearMissing = e => { const f = e.target.closest && e.target.closest('.field.missing'); if (f) f.classList.remove('missing'); };
@@ -7832,7 +8502,7 @@ function addOption(el) {
   const key = el.dataset.addopt;
   const v = key === 'admins' ? str(el.value).toLowerCase() : str(el.value);
   if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) && !/^[a-z0-9._-]{3,30}$/.test(v)) { toast('ใส่ชื่อผู้ใช้ LPCH (a-z 0-9 . _ -) หรืออีเมล', { err: true }); return; }
-  if (key.endsWith('.options') && v.includes(',')) { toast('ตัวเลือกใส่จุลภาค (,) ไม่ได้ เพิ่มทีละตัวเลือก', { err: true }); return; }
+  if ((key.endsWith('.options') || key.startsWith('ct.')) && v.includes(',')) { toast('ตัวเลือกใส่จุลภาค (,) ไม่ได้ เพิ่มทีละตัวเลือก', { err: true }); return; }
   el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
   if (!v) return;
   const list = getPath(draft, key);
@@ -7916,7 +8586,7 @@ function showGate(why) {
   state.gate = ssoError || why || '';
   ssoError = '';
   state.loaded = false;
-  state.cases = []; state.logs = []; state.leaves = []; state.duty = [];
+  state.cases = []; state.logs = []; state.leaves = []; state.duty = []; state.ct = [];
   render();
   const u = $('#g-user');
   if (u && !document.activeElement.closest('#gate-form')) u.focus();
@@ -7956,6 +8626,7 @@ async function refresh(quiet) {
     state.logs = (d.logs || []).map(normLog);
     state.leaves = (d.leaves || []).map(normLeave);
     state.duty = (d.duty || []).map(normDuty).filter(x => isDay(x.date));
+    state.ct = (d.ctsim || []).map(normCt).filter(x => isDay(x.date));
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;

@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-22.2';
-const API_LEVEL = 31;
+const CODE_VERSION = '2026-10-24.1';
+const API_LEVEL = 32;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -87,7 +87,21 @@ const TABLES = {
   // ผู้ปฏิบัติงานประจำวันในตารางวันฉาย: id = วันที่|ห้อง · RTT / RA = ชื่อคั่นด้วยจุลภาค · เขียนผ่าน dutyDay เท่านั้น
   duty: {
     sheet: 'Duty',
-    fields: [['id', 'id'], ['date', 'วันที่'], ['room', 'ห้องฉาย'], ['rtt', 'RTT'], ['ra', 'RA'], ['by', 'บันทึกโดย'], ['at', 'บันทึกเมื่อ']],
+    fields: [['id', 'id'], ['date', 'วันที่'], ['room', 'ห้องฉาย'], ['rtt', 'RTT'], ['ra', 'RA'], ['qc', 'QC'], ['by', 'บันทึกโดย'], ['at', 'บันทึกเมื่อ']],
+  },
+  // แถบ CT-SIM: ผู้ป่วยที่ทำ CT จำลองการฉาย แยกเครื่อง (ct = รหัสเครื่องใน ตั้งค่า) · ข้อมูลแบบฟอร์มแจกเคส + อุปกรณ์ในห้อง CT
+  // send = ส่งให้แถบงาน · took = id ของเคสที่ MP แจกจากรายการนี้ (หรือ skip = ไม่ต้องแจก) · เขียนผ่าน ctSave / ctMark / addCases เท่านั้น
+  ctsim: {
+    sheet: 'CTSim',
+    fields: [
+      ['id', 'id'], ['ct', 'เครื่อง CT'], ['date', 'วันที่'], ['hn', 'HN'], ['name', 'Name'],
+      ['organ', 'Organ'], ['mask', 'Mask'], ['bite', 'bitelock'], ['cm', 'CM'], ['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'], ['syr', 'Syring 50cc'],
+      ['doc', 'แพทย์'], ['pstat', 'สถานะ'], ['hdr', 'HDR'], ['crad', 'C-RAD'], ['note', 'Note'], ['research', 'เคสวิจัย'],
+      ['cats', 'เทคนิค'], ['type', 'Type'], ['aim', 'Aim'], ['room', 'ห้องฉาย'], ['tech', 'Technique'], ['area', 'บริเวณที่ฉาย'],
+      ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['sim', 'Start RT'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['extra', 'หัวข้อเพิ่มเติม'],
+      ['send', 'ส่งแถบงาน'], ['took', 'แจกเคสแล้ว (id)'], ['tookBy', 'แจกเคสโดย'], ['tookAt', 'แจกเคสเมื่อ'],
+      ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ],
   },
 };
 // ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
@@ -241,6 +255,7 @@ function getData(token) {
     logs: need.logs ? readTable_(ss, 'logs') : [],
     leaves: need.leaves ? readTable_(ss, 'leaves') : [],
     duty: need.duty ? recentDuty_(ss) : [],
+    ctsim: need.ctsim ? recentCt_(ss) : [],
     config: config,
     sheetUrl: ss.getUrl(),
   };
@@ -248,8 +263,8 @@ function getData(token) {
 
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
-const NAV_PREV = { queue: 'pend', course: 'queue' };
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course'] };
+const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim'], ctsim: ['ctsim', 'work'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -273,7 +288,7 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'] };
 
 function saveRecord(table, rec, token) {
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -307,7 +322,7 @@ function saveRecord(table, rec, token) {
  * how = 'follow' ให้ MP คนเดียวกับเคสแรก (คิวไม่ขยับ หักคิวเมื่อวนมาถึง) · how = 'manual' ใช้ MP ที่เลือกมา
  */
 function addCases(recs, token) {
-  requireEdit_(token, ['work']);
+  const u = requireEdit_(token, ['work']);
   if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีเคสที่จะแจก');
   return withLock_(() => {
     const ss = ss_();
@@ -346,6 +361,13 @@ function addCases(recs, token) {
     const header = headerOf_(sh);
     const fields = tableDef_('cases', cfg).fields;
     out.forEach(rec => writeFields_(sh, sh.getLastRow() + 1, header, fields, rec));
+    // แจกจากรายการของแถบ CT-SIM (ctFrom = id ของรายการนั้น): บันทึกว่าแจกแล้วเป็นเคสไหน ใครแจก
+    const ctFrom = String((recs[0] && recs[0].ctFrom) || '').trim();
+    if (ctFrom) {
+      const cs = tableSheet_(ss, 'ctsim'), ch = headerOf_(cs), row = findRow_(cs, ch.indexOf('id') + 1, ctFrom);
+      const set = { took: out.map(r => r.id).join(', '), tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') };
+      if (row) writeFields_(cs, row, ch, TABLES.ctsim.fields.filter(f => f[0] in set), set);
+    }
     return out;
   });
 }
@@ -1121,10 +1143,12 @@ function courseRemove(id, pin, token) {
 
 /**
  * ตารางวันฉาย: นักรังสีการแพทย์ (RTT) และผู้ช่วย (RA) ที่ปฏิบัติงานในวันนั้น แยกตามห้องฉาย ยืนยันด้วยรหัส PIN
- * list = [{ room, rtt: [ชื่อ], ra: [ชื่อ] }] (room ว่าง = ไม่แยกห้อง) · ห้องที่ไม่มีชื่อเลย = ลบรายการของห้องนั้น · คืนรายการของวันนั้น
+ * list = [{ room, rtt: [ชื่อ], ra: [ชื่อ], qc: [ชื่อ] }] (room ว่าง = ไม่แยกห้อง · CT:<รหัส> = เครื่อง CT ของแถบ CT-SIM) · ห้องที่ไม่มีชื่อเลย = ลบรายการของห้องนั้น · คืนรายการของวันนั้น
  */
 function dutyDay(date, list, pin, token) {
-  const u = requireEdit_(token, EDIT_VIEWS.course);
+  // ห้อง CT (room ขึ้นต้นด้วย CT:) = แถบ CT-SIM · ห้องฉาย = แถบห้องฉาย (บันทึกครั้งละแถบ)
+  const isCt = Array.isArray(list) && list.some(x => x && /^CT:/.test(String(x.room || '')));
+  const u = requireEdit_(token, isCt ? EDIT_VIEWS.ctsim : EDIT_VIEWS.course);
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   date = cut(date, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
@@ -1133,15 +1157,15 @@ function dutyDay(date, list, pin, token) {
     const seen = {};
     return (Array.isArray(v) ? v : []).map(x => cut(x, 60).replace(/,/g, ' ').replace(/\s+/g, ' ')).filter(x => x && !seen[x] && (seen[x] = true)).slice(0, 30);
   };
-  const recs = list.slice(0, 30).filter(x => x && typeof x === 'object').map(x => ({ room: cut(x.room, 40), rtt: names(x.rtt), ra: names(x.ra) }));
+  const recs = list.slice(0, 30).filter(x => x && typeof x === 'object' && /^CT:/.test(String(x.room || '')) === isCt).map(x => ({ room: cut(x.room, 40), rtt: names(x.rtt), ra: names(x.ra), qc: names(x.qc) }));
   checkPin_(u, pin, 'duty');
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'duty'), header = headerOf_(sh), idCol = header.indexOf('id') + 1;
     const at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
     recs.forEach(r => {
       const id = date + '|' + r.room, row = findRow_(sh, idCol, id);
-      if (!r.rtt.length && !r.ra.length) { if (row) sh.deleteRow(row); return; }
-      writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.duty.fields, { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), by: by, at: at });
+      if (!r.rtt.length && !r.ra.length && !r.qc.length) { if (row) sh.deleteRow(row); return; }
+      writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.duty.fields, { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), qc: r.qc.join(', '), by: by, at: at });
     });
     return readTable_(ss, 'duty').filter(x => x.date === date);
   });
@@ -1151,6 +1175,73 @@ function dutyDay(date, list, pin, token) {
 function recentDuty_(ss) {
   const from = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   return readTable_(ss, 'duty').filter(x => String(x.date) >= from);
+}
+
+/**
+ * แถบ CT-SIM: เพิ่มหรือแก้ผู้ป่วยที่ทำ CT จำลองการฉาย (RTT / RA / MP ที่บันทึกในแถบ CT-SIM ได้) ยืนยันด้วยรหัส PIN
+ * rec = ช่องใน CT_FIELDS (ct = รหัสเครื่อง CT, date = วันที่ทำ CT, ข้อมูลแบบฟอร์มแจกเคส, อุปกรณ์ในห้อง CT, send = 'yes' ส่งให้แถบงาน)
+ * id ที่ยังไม่มี = เพิ่มใหม่ · สถานะการแจกเคส (took) เปลี่ยนได้ทาง ctMark / addCases เท่านั้น · คืนรายการหลังบันทึก
+ */
+const CT_FIELDS = ['ct', 'date', 'hn', 'name', 'organ', 'mask', 'bite', 'cm', 'coil', 'ydev', 'inj', 'nss', 'syr', 'doc', 'pstat', 'hdr', 'crad', 'note', 'research',
+  'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'send'];
+function ctSave(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.ctsim);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
+  if (!cut(rec.ct, 20)) throw new Error('เลือกเครื่อง CT');
+  if (!isDate(cut(rec.date, 10))) throw new Error('วันที่ทำ CT ไม่ถูกต้อง');
+  const sim = cut(rec.sim, 10);
+  if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
+  checkPin_(u, pin, 'ct');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), header = headerOf_(sh);
+    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const set = {};
+    CT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'extra' ? 4000 : k === 'note' || k === 'dx' ? 2000 : 200); });
+    set.send = set.send ? 'yes' : '';
+    const now = new Date().toISOString();
+    if (row) set.updated = now;
+    else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
+    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.ctsim.fields.filter(f => f[0] in set), set);
+    const want = row ? id : set.id;
+    return readTable_(ss, 'ctsim').filter(x => x.id === want)[0];
+  });
+}
+
+// ลบผู้ป่วยในแถบ CT-SIM ยืนยันด้วยรหัส PIN (เคสที่ MP แจกไปแล้วไม่ถูกลบ) · คืน true เมื่อลบแล้ว
+function ctRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.ctsim);
+  checkPin_(u, pin, 'ct');
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+
+// แถบงาน: รายการจาก CT-SIM ที่ไม่ต้องแจกเคส · mark = 'skip' (เฉพาะที่ยังไม่แจก) หรือ '' (คืนกลับเป็นรอแจก: ที่ตั้งไม่ต้องแจกไว้
+// หรือเคสที่แจกจากรายการนี้ถูกลบหมดแล้ว เช่นกดเลิกทำ) · คืนรายการ
+function ctMark(id, mark, token) {
+  const u = requireEdit_(token, ['work']);
+  mark = mark === 'skip' ? 'skip' : '';
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const took = String(sh.getRange(row, header.indexOf('แจกเคสแล้ว (id)') + 1).getValue() || '').trim();
+    const gone = !mark && took && took !== 'skip' && (() => { const ids = readTable_(ss, 'cases').map(c => c.id); return took.split(',').every(x => ids.indexOf(x.trim()) < 0); })();
+    if (mark ? took : took !== 'skip' && !gone) throw new Error(took === 'skip' ? 'รายการนี้ตั้งไม่ต้องแจกไว้แล้ว' : took ? 'รายการนี้แจกเคสไปแล้ว' : 'รายการนี้ยังรอแจกเคสอยู่');
+    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
+    writeFields_(sh, row, header, TABLES.ctsim.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'ctsim').filter(x => x.id === id)[0];
+  });
+}
+
+// รายการ CT-SIM ที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (ส่งออก Excel รายเดือนย้อนหลังได้ 1 ปี)
+function recentCt_(ss) {
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  return readTable_(ss, 'ctsim').filter(x => String(x.date) >= from);
 }
 
 // ตำแหน่งใน LPCH ที่เป็น RTT / RA (ตั้งค่า → ตารางวันฉาย · config.dutyRoles)
@@ -1176,7 +1267,7 @@ function keepDutyMembers_(users) {
  * ดึงจาก LPCH ด้วยบัญชีที่เข้าระบบ · ดึงไม่ได้ (LPCH ไม่ให้ หรือเปิดจากเมนูในชีต) ใช้รายชื่อล่าสุดที่เคยดึงได้ · { rtt, ra, at, live, why }
  */
 function dutyMembers(token) {
-  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const u = requireEdit_(token, EDIT_VIEWS.course.concat(EDIT_VIEWS.ctsim));
   const roles = dutyRoles_(readConfig_(ss_()) || {});
   let users = null, why = '';
   if (u.via === 'lpch') {
@@ -1277,7 +1368,7 @@ function pinRecord_(u) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
-// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
+// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
 // (ยังรู้ว่าใครทำจากบัญชีที่เข้าระบบ) · ไม่ระบุ act = ตรวจเสมอ
 function checkPin_(u, pin, act) {
   if (act) { const cfg = readConfig_(ss_()) || {}; if (cfg.pin && cfg.pin[act] === false) return; }
