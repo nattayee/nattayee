@@ -854,6 +854,7 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .pend-dot{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px}
 .nav-dot{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;padding:0 4px;border-radius:999px;background:var(--late);color:var(--surface);font:600 10.5px/1 var(--mono);vertical-align:1px}
 .nav-dot.warn{background:var(--warn)}
+.nav-dot.calm{background:var(--muted)}   /* รอ Finish แต่ยังไม่มีเคสด่วน */
 .wait-custom{margin-top:10px}
 /* ตารางแจกเคส */
 #queue-tabs{margin-bottom:10px}
@@ -2387,7 +2388,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-24.1';
+const PAGE_VERSION = '2026-10-24.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6592,22 +6593,23 @@ function workdaysUntil(ds, cap = 3) {
   return n;
 }
 const urgency = ds => { if (!isDay(ds) || daysFrom(ds) < -7) return ''; const n = workdaysUntil(ds); return n <= 1 ? 'late' : n < 3 ? 'warn' : ''; };
-// เคสด่วนในงานรอทุกขั้นตอน (นับเคสละครั้ง) สำหรับวงกลมบนแถบ "งานรอ"
-function pendUrgent() {
-  const late = new Set(), warn = new Set();
-  for (const x of PEND_STEPS()) for (const c of pendingOf(x.key, '')) { const u = urgency(c.sim); if (u === 'late') late.add(c.id); else if (u) warn.add(c.id); }
-  late.forEach(id => warn.delete(id));
-  return { late: late.size, warn: warn.size };
+// วงกลมบนแถบ "งานรอ": จำนวนเคสที่รอ Finish (เท่าตัวเลขบนการ์ด รอ Finish ทุกห้อง)
+// สีตามเคสที่ด่วนที่สุด: Start RT ภายใน 1 วันทำการ = แดง · 2 วันทำการ = เหลือง · ไม่มีเคสด่วน = เทา
+function pendFinish() {
+  const list = pendingOf('fin', ''), u = { n: list.length, late: 0, warn: 0 };
+  for (const c of list) { const x = urgency(c.sim); if (x === 'late') u.late++; else if (x) u.warn++; }
+  return u;
 }
 function renderPendBadge() {
   const b = $('.nav [data-view="pend"]');
   let dot = $('.nav-dot', b);
-  const u = state.loaded || store.mode === 'local' ? pendUrgent() : { late: 0, warn: 0 }, n = u.late + u.warn;
-  if (!n) { if (dot) dot.remove(); b.removeAttribute('title'); return; }
+  const u = state.loaded || store.mode === 'local' ? pendFinish() : { n: 0, late: 0, warn: 0 };
+  if (!u.n) { if (dot) dot.remove(); b.removeAttribute('title'); return; }
   if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
-  dot.className = 'nav-dot ' + (u.late ? 'late' : 'warn');
-  dot.textContent = n;
-  b.title = [u.late && `Start RT ภายใน 1 วันทำการ ${u.late} เคส`, u.warn && `ภายใน 2 วันทำการ ${u.warn} เคส`].filter(Boolean).join(' · ');
+  dot.className = 'nav-dot ' + (u.late ? 'late' : u.warn ? 'warn' : 'calm');
+  dot.textContent = u.n;
+  const soon = [u.late && `ภายใน 1 วันทำการ ${u.late} เคส`, u.warn && `ภายใน 2 วันทำการ ${u.warn} เคส`].filter(Boolean).join(' · ');
+  b.title = `รอ Finish ${u.n} เคส${soon ? ` · Start RT ${soon}` : ''}`;
 }
 function pendingOf(key, room) {
   return planCases().filter(c => {
