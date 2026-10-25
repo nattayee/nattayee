@@ -755,7 +755,7 @@ button.who:hover .nm{text-decoration:underline}
 .col-pop[hidden]{display:none}
 .cp-head{display:flex;align-items:center;gap:6px;padding:10px 12px 6px;font-size:13px;font-weight:600}
 /* ปฏิทินเลือกวัน CT-Sim / Start RT: ตัวเลขใต้วันที่ = จำนวน CT ที่นัด หรือผู้ป่วยใหม่ที่เริ่มฉายวันนั้น */
-.dpk-pop{position:fixed;z-index:60;width:min(320px,calc(100vw - 16px));padding:8px 8px 6px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);box-shadow:var(--shadow);user-select:none}
+.dpk-pop{position:fixed;z-index:60;width:min(320px,calc(100vw - 16px));overflow-y:auto;overscroll-behavior:contain;padding:8px 8px 6px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);box-shadow:var(--shadow);user-select:none}
 .dpk-pop[hidden]{display:none}
 .dpk-head{display:flex;align-items:center;gap:2px}
 .dpk-head b{flex:1;font-size:14px;text-align:center}
@@ -764,6 +764,12 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-head button:hover,.dpk-foot button:hover{background:var(--hover);color:var(--fg)}
 .dpk-head .dpk-now{font-size:12px}
 .dpk-sub{margin:0 0 4px;color:var(--muted);font-size:11.5px;text-align:center}
+.dpk-rooms{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin:0 0 6px}
+.dpk-rooms button{padding:0 9px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:12px;line-height:22px;cursor:pointer}
+.dpk-rooms button:hover{border-color:var(--line-strong);color:var(--fg)}
+.dpk-rooms button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.dpk-rooms small{margin-left:5px;font-size:11px;opacity:.75}
+.dpk-hint{margin:-2px 0 6px;color:var(--accent);font-size:11.5px;text-align:center}
 .dpk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .dpk-wd{padding:2px 0;color:var(--faint);font-size:11px;text-align:center}
 .dpk-d{display:flex;flex-direction:column;align-items:center;min-height:42px;padding:3px 0 2px;border:0;border-radius:8px;background:none;color:var(--fg);font:inherit;font-size:13px;line-height:1.25;cursor:pointer}
@@ -2430,7 +2436,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-25.2';
+const PAGE_VERSION = '2026-10-25.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8351,10 +8357,12 @@ document.addEventListener('focusout', e => { const el = e.target; if (isWorkdayB
 // นับเป็นคน (HN เดียวกันหลายเทคนิค หรือมีทั้งในแถบ CT-SIM และเคสที่แจก = 1 คน) · ไม่นับรายการที่กำลังแก้อยู่
 // คอม: พิมพ์วันที่ในช่องได้ตามเดิม (ปฏิทินเลื่อนตาม) · มือถือ: ช่องอ่านอย่างเดียว ใช้ปฏิทินนี้แทนปฏิทินของเครื่อง
 // CT-Sim, Start RT ของเคส: วันเสาร์–อาทิตย์และวันหยุดกดไม่ได้ (ต้องเป็นวันทำการ)
+// Start RT: ปุ่มห้องฉายในปฏิทินดูจำนวนรายห้อง · เลือกห้องแล้วกดวันที่ = ตั้งห้องฉายในฟอร์มเป็นห้องนั้นด้วย
 const CAL_BOXES = { 'i-ct': 'ct', 'f-ct': 'ct', 't-date': 'ct', 'i-sim': 'sim', 'f-sim': 'sim', 't-sim': 'sim' };
+const CAL_ROOM_BOX = { 'i-sim': 'i-room', 'f-sim': 'f-room', 't-sim': 't-room' };
 const CAL_WD = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const calPop = $('#dpk-pop');
-let calBox = null, calMonth = '', calData = null, calAt = 0;
+let calBox = null, calMonth = '', calData = null, calAt = 0, calRoom = '';
 for (const id of Object.keys(CAL_BOXES)) { const el = $('#' + id); el.classList.add('dpk-box'); if (coarse) el.readOnly = true; }
 // รายการที่กำลังแก้: หน้าแก้ไขเคส = เคสนั้น · ฟอร์ม CT-SIM = รายการนั้น · ฟอร์มแจกเคส = รายการ CT ที่ดึงมาใส่
 const calSkip = el => (el.id[0] === 'f' ? { c: editingCase && editingCase.id, r: '' } : el.id[0] === 't' ? { c: '', r: editingCt && editingCt.id } : { c: '', r: intakeCt });
@@ -8368,7 +8376,7 @@ function calCounts(kind, skip) {
     if (v.keys.has(k)) return;
     v.keys.add(k); v.n++;
     v.by.set(grp, (v.by.get(grp) || 0) + 1);
-    v.who.push([x.hn, x.name].filter(Boolean).join(' ') || '—');
+    v.who.push([grp, [x.hn, x.name].filter(Boolean).join(' ') || '—']);
   };
   const cases = state.cases.filter(c => c.id !== skip.c);
   if (kind === 'ct') {
@@ -8376,37 +8384,57 @@ function calCounts(kind, skip) {
     for (const c of cases) add(c.ct, c, recs.length ? 'ไม่ได้ลงแถบ CT-SIM' : 'CT');
   } else {
     // เคสใหม่: ไม่นับงานวางแผนใหม่ (Re-CT, ย้ายห้อง) งานแบบไม่วางแผน และเคสที่ Cancel RT ก่อนเริ่มฉาย · รวมรายการ CT-SIM ที่รอ MP แจก
-    for (const c of cases) if (catOf(c.cat).kind !== 'simple' && !c.replan && !(c.rt === 'cancel' && c.rtDate && c.rtDate <= c.sim)) add(c.sim, c, roomLabel(roomOf(c)));
-    for (const r of recs) if (ctState(r) === 'wait') add(r.sim, r, roomLabel(r.room || NO_ROOM));
+    for (const c of cases) if (catOf(c.cat).kind !== 'simple' && !c.replan && !(c.rt === 'cancel' && c.rtDate && c.rtDate <= c.sim)) add(c.sim, c, roomOf(c));
+    for (const r of recs) if (ctState(r) === 'wait') add(r.sim, r, r.room || NO_ROOM);
   }
   return m;
 }
 const calWhat = kind => (kind === 'ct' ? 'CT ที่นัด' : 'ผู้ป่วยใหม่เริ่มฉาย');
-const calBy = v => (v.by.size > 1 ? ` (${[...v.by].map(([g, n]) => `${g} ${n}`).join(' · ')})` : ` (${[...v.by.keys()][0]})`);
-const calTip = (d, v, h, kind) => `${LONG_DAY_FMT.format(parseISO(d))}${h ? ' · ' + h : ''} · ${calWhat(kind)} ${v ? v.n : 0} คน${v ? calBy(v) : ''}`;
+const calGrp = (g, kind) => (kind === 'sim' ? roomLabel(g) : g);   // Start RT แยกตามห้อง (เก็บเป็นชื่อห้อง) · CT แยกตามเครื่อง
+// ตัวเลขของวัน: ทุกห้อง หรือเฉพาะห้องที่เลือกในปฏิทิน { n, all, by, who }
+function calOf(v) {
+  if (!v) return null;
+  if (!calRoom) return { n: v.n, all: v.n, by: v.by, who: v.who.map(w => w[1]) };
+  const n = v.by.get(calRoom) || 0;
+  return n ? { n, all: v.n, by: new Map([[calRoom, n]]), who: v.who.filter(w => w[0] === calRoom).map(w => w[1]) } : null;
+}
+const calBy = (v, kind) => (calRoom ? (v.all > v.n ? ` (ทุกห้อง ${v.all})` : '') : v.by.size > 1 ? ` (${[...v.by].map(([g, n]) => `${calGrp(g, kind)} ${n}`).join(' · ')})` : ` (${calGrp([...v.by.keys()][0], kind)})`);
+const calWhatIn = kind => calWhat(kind) + (calRoom ? ` ห้อง ${roomLabel(calRoom)}` : '');
+function calTip(d, raw, h, kind) {
+  const v = calOf(raw), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
+  return `${LONG_DAY_FMT.format(parseISO(d))}${h ? ' · ' + h : ''} · ${calWhatIn(kind)} ${v ? v.n : 0} คน${v ? calBy(v, kind) : rest}`;
+}
 function calInfo(d) {
   const { counts, hol, kind } = calData;
   if (!d) return `<span>เลือกวัน · ชี้ที่วันเพื่อดูรายชื่อ</span>`;
-  const v = counts.get(d), dt = parseISO(d);
-  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${calWhat(kind)} <b>${v ? v.n : 0}</b> คน${v ? esc(calBy(v)) : ''}`
+  const raw = counts.get(d), v = calOf(raw), dt = parseISO(d), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
+  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${esc(v ? calBy(v, kind) : rest)}`
     + (v ? `<div class="dpk-who" title="${esc(v.who.join(', '))}">${esc(v.who.slice(0, 6).join(', '))}${v.who.length > 6 ? ` และอีก ${v.who.length - 6} คน` : ''}</div>` : '');
 }
+// ชิปห้องฉายของฟอร์ม (ช่อง Start RT ที่มีห้องฉายให้เลือกและแสดงอยู่)
+const calRoomBox = el => { const b = CAL_ROOM_BOX[el.id] && $('#' + CAL_ROOM_BOX[el.id]); return b && b.getClientRects().length ? b : null; };
 function renderCal() {
   const el = calBox, kind = CAL_BOXES[el.id], v = isDay(el.value) ? el.value : '', td = today(), work = isWorkdayBox(el);
   calData = { counts: calCounts(kind, calSkip(el)), hol: holidayMap(), kind };
   const { counts, hol } = calData, [y, mo] = calMonth.split('-').map(Number);
   const first = new Date(y, mo - 1, 1), lead = (first.getDay() + 6) % 7, last = new Date(y, mo, 0).getDate();
   let cells = '', total = 0;
+  const inMonth = [...counts].filter(([d]) => d.startsWith(calMonth)).map(x => x[1]);
   for (let i = 0; i < lead; i++) cells += '<span></span>';
   for (let i = 1; i <= last; i++) {
-    const d = `${y}-${pad(mo)}-${pad(i)}`, c = counts.get(d), w = parseISO(d).getDay(), we = w === 0 || w === 6, h = hol[d];
+    const d = `${y}-${pad(mo)}-${pad(i)}`, raw = counts.get(d), c = calOf(raw), w = parseISO(d).getDay(), we = w === 0 || w === 6, h = hol[d];
     if (c) total += c.n;
     const cls = ['dpk-d', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel'].filter(Boolean).join(' ');
-    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, c, h, kind) + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}"><b>${i}</b>${c ? `<i>${c.n}</i>` : ''}</button>`;
+    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}"><b>${i}</b>${c ? `<i>${c.n}</i>` : ''}</button>`;
   }
+  // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
+  const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
+  const monthOf = r => inMonth.reduce((a, x) => a + (r ? x.by.get(r) || 0 : x.n), 0);
+  const roomBar = rooms.length > 1 || (rooms.length && calRoom) ? `<div class="dpk-rooms" role="group" aria-label="ห้องฉาย">${['', ...rooms].map(r => `<button type="button" data-calroom="${esc(r)}" aria-pressed="${calRoom === r}">${r ? esc(roomLabel(r)) : 'ทุกห้อง'}<small>${monthOf(r)}</small></button>`).join('')}</div>` : '';
+  const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-calnav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-calnav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}</div>
-    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? 'จำนวน CT ที่นัด' : 'ผู้ป่วยใหม่ที่เริ่มฉาย'} (คน)</p>
+    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? 'จำนวน CT ที่นัด' : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''}`} (คน)</p>${roomBar}${hint}
     <div class="dpk-grid">${CAL_WD.map(x => `<span class="dpk-wd">${x}</span>`).join('')}${cells}</div>
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
     <div class="dpk-foot"><span>ทั้งเดือน ${total} คน</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
@@ -8415,14 +8443,26 @@ function placeCal() {
   if (!calBox) return;
   const r = calBox.getBoundingClientRect();
   if (!r.width && !r.height) return closeCal();   // ช่องถูกซ่อนหรือปิดหน้าต่างไปแล้ว
+  calPop.style.maxHeight = '';
   const w = calPop.offsetWidth, h = calPop.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
-  // ขึ้นด้านบน: เหนือทั้งช่อง (หัวข้อและ on call ยังกดได้)
-  const below = r.bottom + 4, above = (calBox.closest('.field') || calBox).getBoundingClientRect().top - 4 - h;
+  // ใต้ช่อง หรือเหนือทั้งช่อง (หัวข้อและ on call ยังกดได้) · ที่ไม่พอทั้งสองด้าน: ด้านที่กว้างกว่าแล้วเลื่อนในปฏิทิน · จอเล็กมาก: ทับช่องได้
+  const below = r.bottom + 4, fieldTop = (calBox.closest('.field') || calBox).getBoundingClientRect().top;
+  const roomBelow = vh - 8 - below, roomAbove = fieldTop - 12;
+  let top, maxH = 0;
+  if (h <= roomBelow) top = below;
+  else if (h <= roomAbove) top = fieldTop - 4 - h;
+  else if (Math.max(roomBelow, roomAbove) >= 300) { maxH = Math.max(roomBelow, roomAbove); top = roomBelow >= roomAbove ? below : 8; }
+  else top = Math.max(8, Math.min(below, vh - h - 8));
+  calPop.style.maxHeight = maxH ? `${maxH}px` : '';
   calPop.style.left = `${Math.max(8, Math.min(r.left, vw - w - 8))}px`;
-  calPop.style.top = `${below + h > vh - 8 && above >= 8 ? above : Math.max(8, Math.min(below, vh - h - 8))}px`;
+  calPop.style.top = `${top}px`;
 }
 function openCal(el) {
-  if (calBox !== el) { calBox = el; calMonth = (isDay(el.value) ? el.value : today()).slice(0, 7); calAt = Date.now(); }
+  if (calBox !== el) {
+    calBox = el; calMonth = (isDay(el.value) ? el.value : today()).slice(0, 7); calAt = Date.now();
+    const rb = calRoomBox(el), cur = rb ? chipValue(rb) : '';
+    calRoom = state.config.rooms.includes(cur) ? cur : '';   // เริ่มที่ห้องที่เลือกในฟอร์มอยู่
+  }
   const host = el.closest('dialog') || document.body;   // อยู่ในหน้าต่างเดียวกับช่อง (หน้าต่างแบบ modal บังของที่อยู่นอก)
   if (calPop.parentNode !== host) host.appendChild(calPop);
   calPop.hidden = false;
@@ -8431,7 +8471,13 @@ function openCal(el) {
 }
 function closeCal() { calBox = null; calPop.hidden = true; }
 function pickCal(d) {
-  const el = calBox;
+  const el = calBox, rb = d && calRoom && calRoom !== NO_ROOM && calRoomBox(el);
+  const inp = rb && $$('input', rb).find(i => i.value === calRoom);
+  if (inp && !inp.checked) {
+    inp.checked = true;
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    toast(`ห้องฉาย ${roomLabel(calRoom)} ตามที่เลือกในปฏิทิน`);
+  }
   delete el.dataset.typed;
   el.value = d;
   el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -8461,6 +8507,7 @@ calPop.addEventListener('click', e => {
   if (!b || !calBox) return;
   if (b.dataset.calnav) { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + +b.dataset.calnav, 1); calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
   else if ('calnow' in b.dataset) calMonth = today().slice(0, 7);
+  else if ('calroom' in b.dataset) calRoom = b.dataset.calroom;
   else if (b.dataset.calday) return Date.now() - calAt < 400 ? undefined : pickCal(b.dataset.calday);
   else if ('calclear' in b.dataset) return pickCal('');
   else if ('calclose' in b.dataset) return closeCal();
