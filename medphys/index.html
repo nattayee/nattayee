@@ -764,6 +764,8 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-head button:hover,.dpk-foot button:hover{background:var(--hover);color:var(--fg)}
 .dpk-head .dpk-now{font-size:12px}
 .dpk-sub{margin:0 0 4px;color:var(--muted);font-size:11.5px;text-align:center}
+.l-need{margin:0;padding:8px 12px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600;line-height:1.5}
+.lchk.need-rc,.chk.need-rc{border-style:dashed}
 .dpk-rooms{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin:0 0 6px}
 .dpk-rooms button{padding:0 9px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:12px;line-height:22px;cursor:pointer}
 .dpk-rooms button:hover{border-color:var(--line-strong);color:var(--fg)}
@@ -1613,6 +1615,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <form class="dlg" id="log-form" novalidate>
     <header class="dlg-head"><h2 id="log-title">บันทึกกิจกรรม</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
+      <p class="l-need" id="l-need" hidden>ต้องบันทึก RC ของเคสนี้ก่อน Plan complete · บันทึก RC แล้วจะไปหน้าบันทึก Plan complete ต่อ</p>
       <div class="field"><span class="lbl">ประเภท</span><div class="chips" id="l-kind" role="radiogroup" aria-label="ประเภท"></div></div>
       <p class="linked" id="l-linked" hidden></p>
       <div class="row2">
@@ -2436,7 +2439,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-25.3';
+const PAGE_VERSION = '2026-10-26.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3060,6 +3063,10 @@ function suggestRC(exclude) {
   pool.sort((a, b) => (count[a.code] || 0) - (count[b.code] || 0));
   return pool[0] ? pool[0].code : '';
 }
+// Plan complete ต้องมี RC ของเคสก่อน (RC ที่ผูกกับเคส: ปุ่ม "+ RC" ของเคส) · กด PC ตอนยังไม่มี RC = เปิดหน้าบันทึก RC ก่อน
+const hasRc = c => state.logs.some(l => l.kind === 'rc' && l.caseId === c.id);
+const pcNeedsRc = (c, key, at) => key === 'pc' && !at && catOf(c.cat).kind !== 'simple' && !isDirect(c) && !hasRc(c);
+let rcThenPc = null;   // { id, sid } เคสที่จะไปหน้าบันทึก Plan complete ต่อเมื่อบันทึก RC แล้ว
 function rcIndex() {
   const map = {};
   for (const l of state.logs) if (l.kind === 'rc' && l.caseId) (map[l.caseId] = map[l.caseId] || []).push(l);
@@ -5276,8 +5283,9 @@ function lineStep(c, x, sid) {
   const cls = `lchk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;
   const tip = at ? `${x.label}${val ? ' ' + val : ''} · ${[by, fmtStamp(at)].filter(Boolean).join(' · ')}${note ? ' · ' + note : ''}` : `${x.label} ยังไม่บันทึก`;
   const text = `${at ? '✓ ' : ''}${esc(LINE_SHORT[x.key] || x.label)}${val ? ` <b>${esc(val)}</b>` : ''}`;
+  const rc = pcNeedsRc(c, x.key, at);
   return canEdit()
-    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(tip + (at ? ' · กดเพื่อแก้หรือล้าง' : ' · กดเพื่อบันทึก (ใส่รหัส PIN)'))}">${text}</button>`
+    ? `<button type="button" class="${cls}${rc ? ' need-rc' : ''}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(tip + (at ? ' · กดเพื่อแก้หรือล้าง' : rc ? ' · ต้องบันทึก RC ก่อน: กดเพื่อบันทึก RC แล้วต่อ Plan complete' : ' · กดเพื่อบันทึก (ใส่รหัส PIN)'))}">${text}</button>`
     : `<span class="${cls}" title="${esc(tip)}">${text}</span>`;
 }
 // ปุ่มขั้นตอนของเทคนิคนี้ และปุ่มหนึ่งปุ่มพร้อมคนกด วันเวลา (ตัวเล็กด้านล่าง)
@@ -5305,8 +5313,9 @@ function stepChip(c, x, vals = true, sid = '') {
   const cls = `chk${at ? ' done' : ''}${at && val ? ` q-${qaLevel(x.key, val) || 'none'}` : ''}`;   // สีตามเกณฑ์ของแอดมิน
   const cap = at ? `<small class="chk-cap" title="${esc(full)}">${esc([firstName(by), fmtStamp(at)].filter(Boolean).join(' · '))}</small>${note ? `<small class="chk-note" title="${esc(note)}">${esc(note)}</small>` : ''}`
     : x.value && canEdit() && vals && see && !sid ? valueBox(c, x) : '';
+  const rc = pcNeedsRc(c, x.key, at);
   const btn = canEdit()
-    ? `<button type="button" class="${cls}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
+    ? `<button type="button" class="${cls}${rc ? ' need-rc' : ''}" data-stamp="${x.key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''} title="${esc(at ? `บันทึกแล้ว: ${full}${note ? ` · ${note}` : ''} · กดเพื่อแก้หรือล้าง` : rc ? `ต้องบันทึก RC ก่อน ${x.label}: กดเพื่อบันทึก RC แล้วต่อ ${x.label}` : `บันทึก ${x.label} (ใส่รหัส PIN)`)}">${text}</button>`
     : `<span class="${cls}"${note ? ` title="${esc(note)}"` : ''}>${text}</span>`;
   return `<span class="chk-wrap${x.key === 'pc' ? ' end' : ''}">${btn}${cap}</span>`;
 }
@@ -7193,6 +7202,7 @@ async function restoreCase(prev) {
 
 /* ---------- ฟอร์มกิจกรรม ---------- */
 const logDlg = $('#log-dlg'), logForm = $('#log-form');
+logDlg.addEventListener('close', () => { rcThenPc = null; });   // ปิดโดยไม่บันทึก RC: ไม่ไปหน้า Plan complete
 function syncLogForm() {
   const kind = chipValue($('#l-kind')) || 'rc';
   const br = kind === BRACHY;
@@ -7249,6 +7259,8 @@ function openLog(id, preset = {}) {
   for (const f of ['date', 'hn', 'name', 'title', 'min', 'k', 'note']) $('#l-' + f).value = editingLog[f] || '';
   if (!l && !editingLog.k) $('#l-k').value = '1';
   $('#log-title').textContent = l ? 'แก้ไขกิจกรรม' : (editingLog.kind === 'rc' ? 'บันทึก RC' : 'บันทึกกิจกรรม');
+  $('#l-need').hidden = preset.need !== 'pc';
+  if (preset.need !== 'pc') rcThenPc = null;
   const del = $('#log-del');
   del.hidden = !l; delete del.dataset.armed; del.textContent = 'ลบ';
   syncLogForm();
@@ -7359,9 +7371,13 @@ async function submitLog(e) {
 function logSaved(rec, isNew) {
   const i = state.logs.findIndex(x => x.id === rec.id);
   if (i < 0) state.logs.push(rec); else state.logs[i] = rec;
+  const next = rcThenPc && rec.kind === 'rc' && rec.caseId === rcThenPc.id ? rcThenPc : null;
+  rcThenPc = null;
   logDlg.close();
   render();
-  toast(isNew ? `บันทึก ${kindOf(rec.kind).label} ให้ ${rec.mp} แล้ว` : 'บันทึกการแก้ไขแล้ว');
+  toast(isNew ? `บันทึก ${kindOf(rec.kind).label} ให้ ${rec.mp} แล้ว${next ? ' · ต่อด้วย Plan complete' : ''}` : 'บันทึกการแก้ไขแล้ว');
+  // บันทึก RC จากการกด PC: ไปหน้าบันทึก Plan complete ต่อ (หลังหน้าต่าง PIN ของ RC ปิดแล้ว)
+  if (next) setTimeout(() => openStamp(next.id, 'pc', next.sid), 0);
 }
 async function deleteLog(btn) {
   if (logPinOn()) return openLogPin('logdel', editingLog);   // รหัส PIN เป็นการยืนยันการลบ
@@ -7712,6 +7728,7 @@ function openStamp(id, key, sid = '') {
   const c = state.cases.find(x => x.id === id), x = STEPS.find(v => v.key === key), b = sid && c && subPlans(c).find(v => v.sid === sid);
   if (!c || !x || (sid && !b)) return;
   const r = sid ? boostStamps(c)[sid] || {} : c, at = r[key], val = x.value ? r[key + 'Val'] : '';
+  if (pcNeedsRc(c, key, at)) { rcThenPc = { id, sid }; return openLog(null, { kind: 'rc', caseId: id, need: 'pc' }); }
   pinCtx = { mode: 'stamp', id, sid, step: key, forgot: false, auto: !at };   // บันทึกแล้ว: ต้องเลือกเองว่าบันทึกใหม่หรือล้าง
   const pick = showStampAt();
   $('#pin-title').textContent = `${x.label}${b ? ` · ${b.name}` : ''} · ${c.hn || ''}`;
