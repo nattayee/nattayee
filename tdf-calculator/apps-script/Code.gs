@@ -12,15 +12,16 @@
  *   - Directly: username (or email) + password  →  login
  *   - Next visits: the saved token is checked with  me ; sign-out calls  logout
  *
- * Verified calculations live in a Google Sheet ("TDF Calculator Records", created by setup):
- *   - Only medical physicists (Workspace role MP) enter values: tdfVerify, tdfSavePdf and tdfWithdraw refuse other roles,
- *     who can still sign in and view the records and verified reports (tdfList)
- *   - tdfVerify   a second medical physicist verifies the calculation on the calculator's own screen: they type their
- *                 Workspace username and password there, Code.gs checks them with the Workspace (login, then logout at
- *                 once), and the record is saved as verified ("approved") with both names and the time
- *   - The page only builds the final PDF report for verified records, then uploads it (tdfSavePdf); it is kept in
+ * Calculations and their recheck live in a Google Sheet ("TDF Calculator Records", created by setup):
+ *   - Only medical physicists (Workspace role MP) enter values: tdfSave, tdfRecheck, tdfSavePdf and tdfWithdraw refuse
+ *     other roles, who can still sign in and view the records and rechecked reports (tdfList)
+ *   - tdfSave     keeps the calculation on screen as "pending" (รอ recheck) when the second physicist is not there yet
+ *   - tdfRecheck  a second medical physicist rechecks the calculation on screen: they type their Workspace username and
+ *                 password there, Code.gs checks them with the Workspace (login, then logout at once). A saved record of
+ *                 the same calculation is updated in place (its calculator kept); otherwise a new record is written,
+ *                 calculated by the signed-in physicist. The record becomes "approved" (recheck แล้ว) with both names
+ *   - The page only builds the final PDF report for rechecked records, then uploads it (tdfSavePdf); it is kept in
  *     Google Drive, folder "TDF Reports (อนุมัติแล้ว)/<yyyy-MM>", and the link is written to the sheet
- *   - Records sent for recheck before this version ("pending") stay listed and can be withdrawn by their calculator
  *
  * First time (and after this update): choose the function  setup  and press Run once (allows Sheets, Drive and external requests).
  * Deploy: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
@@ -117,9 +118,9 @@ function tdfLogout(token) {
   return true;
 }
 
-/* ----- calculation records & second-physicist verify ----- */
+/* ----- calculation records & second-physicist recheck ----- */
 
-var REVIEWER_ROLE = 'MP';          // Workspace role of the second physicist who verifies
+var REVIEWER_ROLE = 'MP';          // Workspace role of the second physicist who rechecks
 var EDITOR_ROLE = 'MP';            // Workspace role allowed to enter values; everyone else signed in can only view
 var LIST_LIMIT = 300;
 var RECORD_HEADERS = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf',
@@ -145,42 +146,86 @@ function tdfList(token) {
 }
 
 /**
- * Saves the calculation on screen as verified. The signed-in physicist (role MP) did the calculation; a second
- * physicist (role MP, someone else) verifies it on the same screen with their own Workspace username and password.
- * Their password is only passed on to the Workspace to check it, never stored, and their session is closed at once.
+ * Keeps the calculation on screen as "pending" (รอ recheck) for a second physicist to recheck later. Saving the same
+ * calculation again returns the record already kept (marked existing) instead of a second row.
  */
-function tdfVerify(token, rec, username, password) {
+function tdfSave(token, rec) {
   var me = editor_(token);
   var json = recordJson_(rec);
-  username = String(username || '').trim();
-  if (!username || !password) throw new Error('กรอกชื่อผู้ใช้และรหัสผ่านของนักฟิสิกส์การแพทย์คนที่ 2');
-  var res;
-  try {
-    res = workspace_({ action: 'login', username: username, password: String(password) });
-  } catch (e) {
-    throw new Error('Verify ไม่สำเร็จ: ' + (e.message || e));
-  }
-  try { if (res.token) workspace_({ action: 'logout', token: String(res.token) }); } catch (e) { /* the session expires on its own */ }
-  var v = session_(res).user;
-  if (v.role !== REVIEWER_ROLE) throw new Error('ผู้ verify ต้องเป็นนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + REVIEWER_ROLE + ' ใน Workspace)');
-  if (v.username === me.username) throw new Error('ผู้ verify ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (ผู้ที่เข้าสู่ระบบอยู่)');
   var p = rec.patient;
   return locked_(function () {
     var sh = records_();
     var sig = String(rec.sig || '');
-    var rows = sh.getDataRange().getValues();
-    for (var i = 1; i < rows.length; i++) {
-      if (rows[i][17] === sig && rows[i][2] === 'approved') {
-        throw new Error('การคำนวณนี้ verify แล้ว (เลขที่ ' + rows[i][0] + ') กด “สร้างรายงาน PDF” เพื่อดาวน์โหลดรายงาน');
-      }
+    var found = findBySig_(sh, sig);
+    if (found.approved) throw new Error('การคำนวณนี้ recheck แล้ว (เลขที่ ' + found.approved.values[0] + ') กด “สร้างรายงาน PDF” เพื่อดาวน์โหลดรายงาน');
+    if (found.pending) {
+      var kept = record_(found.pending.values);
+      kept.existing = true;
+      return kept;
     }
     var now = new Date();
-    var id = Utilities.formatDate(now, 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
-    var row = [id, now, 'approved', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
-      me.username, me.name, me.role, v.username, v.name, v.role, now, '', Number(rec.tdf), sig, json, '', ''];
+    var row = [newId_(now), now, 'pending', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json, '', ''];
     sh.appendRow(row);
     return record_(row);
   });
+}
+
+/**
+ * Recheck of the calculation on screen by a second physicist (role MP), with their own Workspace username and password
+ * typed on this screen. Their password is only passed on to the Workspace to check it, never stored, and their session
+ * is closed at once. A saved ("pending") record of the same calculation is updated in place and keeps its calculator;
+ * otherwise the signed-in physicist is the calculator of a new record. The recheck must be by someone else.
+ */
+function tdfRecheck(token, rec, username, password) {
+  var me = editor_(token);
+  var json = recordJson_(rec);
+  username = String(username || '').trim();
+  if (!username || !password) throw new Error('กรอกชื่อผู้ใช้และรหัสผ่านของนักฟิสิกส์การแพทย์ผู้ recheck');
+  var res;
+  try {
+    res = workspace_({ action: 'login', username: username, password: String(password) });
+  } catch (e) {
+    throw new Error('Recheck ไม่สำเร็จ: ' + (e.message || e));
+  }
+  try { if (res.token) workspace_({ action: 'logout', token: String(res.token) }); } catch (e) { /* the session expires on its own */ }
+  var v = session_(res).user;
+  if (v.role !== REVIEWER_ROLE) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + REVIEWER_ROLE + ' ใน Workspace)');
+  var p = rec.patient;
+  return locked_(function () {
+    var sh = records_();
+    var sig = String(rec.sig || '');
+    var found = findBySig_(sh, sig);
+    if (found.approved) throw new Error('การคำนวณนี้ recheck แล้ว (เลขที่ ' + found.approved.values[0] + ') กด “สร้างรายงาน PDF” เพื่อดาวน์โหลดรายงาน');
+    var now = new Date();
+    if (found.pending) {
+      var row = found.pending.values;
+      if (v.username === row[8]) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (' + row[9] + ')');
+      row[2] = 'approved'; row[11] = v.username; row[12] = v.name; row[13] = v.role; row[14] = now; row[15] = ''; row[16] = Number(rec.tdf);
+      sh.getRange(found.pending.row, 1, 1, row.length).setValues([row]);
+      return record_(row);
+    }
+    if (v.username === me.username) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (ผู้ที่เข้าสู่ระบบอยู่)');
+    var fresh = [newId_(now), now, 'approved', rec.type, String(p.hn).slice(0, 20), patientName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, v.username, v.name, v.role, now, '', Number(rec.tdf), sig, json, '', ''];
+    sh.appendRow(fresh);
+    return record_(fresh);
+  });
+}
+
+/** Rows of this calculation (same signature): the rechecked one and the latest one waiting for recheck, if any. */
+function findBySig_(sh, sig) {
+  var rows = sh.getDataRange().getValues(), out = { approved: null, pending: null };
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][17] !== sig) continue;
+    if (rows[i][2] === 'approved' && !out.approved) out.approved = { row: i + 1, values: rows[i] };
+    if (rows[i][2] === 'pending' && !out.pending) out.pending = { row: i + 1, values: rows[i] };
+  }
+  return out;
+}
+
+function newId_(date) {
+  return Utilities.formatDate(date, 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
 }
 
 /** Checks a calculation sent by the page (type, TDF, every patient field) and returns what the sheet keeps of it. */
@@ -191,7 +236,7 @@ function recordJson_(rec) {
   if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
   var blank = function (v) { return !String(v || '').trim(); };
   if (blank(p.hn) || blank(p.prefix) || blank(p.first) || blank(p.last) || blank(rec.doctor)) {
-    throw new Error('กรอก HN คำนำหน้าชื่อ ชื่อ นามสกุล และแพทย์ผู้รักษาให้ครบก่อน verify');
+    throw new Error('กรอก HN คำนำหน้าชื่อ ชื่อ นามสกุล และแพทย์ผู้รักษาให้ครบก่อนบันทึกหรือ recheck');
   }
   var json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
   if (json.length > 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
@@ -199,8 +244,8 @@ function recordJson_(rec) {
 }
 
 /**
- * Keeps the verified report in Google Drive. The page sends the PDF it built (base64); only the calculator or the
- * verifier of a verified record may send it, and a record keeps its first file.
+ * Keeps the rechecked report in Google Drive. The page sends the PDF it built (base64); only the calculator or the
+ * rechecker of a rechecked record may send it, and a record keeps its first file.
  */
 function tdfSavePdf(token, id, base64, fileName) {
   var me = editor_(token);
@@ -213,14 +258,14 @@ function tdfSavePdf(token, id, base64, fileName) {
     var found = findRecord_(sh, id);
     if (!found) throw new Error('ไม่พบรายการ');
     var row = found.values;
-    if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่ verify แล้ว');
-    if (me.username !== row[8] && me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ verify ของรายการนี้');
+    if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่ recheck แล้ว');
+    if (me.username !== row[8] && me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ recheck ของรายการนี้');
     if (row[19]) return record_(row);
     // keep the page's name ("Decay Dose_<HN>_<date>_<time>.pdf"); only characters Drive or downloads dislike are replaced
     var name = String(fileName || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').trim().slice(0, 120) || ('Decay Dose_' + row[4] + '.pdf');
     var file = pdfFolder_(row[14] || new Date()).createFile(Utilities.newBlob(bytes, 'application/pdf', name));
     file.setDescription('TDF ' + Number(row[7]).toFixed(1) + ' · HN ' + row[4] + ' ' + row[5] + ' · แพทย์ ' + row[6] +
-      ' · คำนวณ ' + row[9] + ' · verify ' + row[12] + ' · เลขที่ ' + row[0]);
+      ' · คำนวณ ' + row[9] + ' · recheck ' + row[12] + ' · เลขที่ ' + row[0]);
     row[19] = file.getId();
     row[20] = file.getUrl();
     sh.getRange(found.row, 1, 1, row.length).setValues([row]);
@@ -247,7 +292,7 @@ function pdfFolderLocked_(date) {
   return it.hasNext() ? it.next() : root.createFolder(month);
 }
 
-/** The calculator withdraws their own record sent for recheck before this version (a verified record stays). */
+/** The calculator withdraws their own record still waiting for recheck (a rechecked record stays). */
 function tdfWithdraw(token, id) {
   var me = editor_(token);
   return locked_(function () {
@@ -255,7 +300,7 @@ function tdfWithdraw(token, id) {
     var found = findRecord_(sh, id);
     if (!found) return true;
     if (found.values[8] !== me.username) throw new Error('ถอนได้เฉพาะรายการที่คุณเป็นผู้คำนวณ');
-    if (found.values[2] === 'approved') throw new Error('รายการที่ verify แล้วถอนไม่ได้');
+    if (found.values[2] === 'approved') throw new Error('รายการที่ recheck แล้วถอนไม่ได้');
     sh.deleteRow(found.row);
     return true;
   });
@@ -365,7 +410,7 @@ function user_(token) {
 /** The signed-in user, who must be allowed to enter values (role MP); other roles only view. */
 function editor_(token) {
   var me = user_(token);
-  if (me.role !== EDITOR_ROLE) throw new Error('ดูได้อย่างเดียว · การกรอกค่าและ verify ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + EDITOR_ROLE + ' ใน Workspace)');
+  if (me.role !== EDITOR_ROLE) throw new Error('ดูได้อย่างเดียว · การกรอกค่า บันทึก และ recheck ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + EDITOR_ROLE + ' ใน Workspace)');
   return me;
 }
 

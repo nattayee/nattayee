@@ -110,12 +110,13 @@ html = replaceOnce(
     r[fn].apply(r, args);
   }
 
-  // Shared calculation records, verified by a second physicist and stored by Code.gs in a Google Sheet
+  // Shared calculation records, rechecked by a second physicist and stored by Code.gs in a Google Sheet
   function ask(fn, args) { return new Promise(function (ok, fail) { call(fn, [token].concat(args || []), ok, function (msg) { fail(new Error(msg)); }); }); }
   var server = {
     shared: true,
     list: function () { return ask("tdfList"); },
-    verify: function (rec, username, password) { return ask("tdfVerify", [rec, username, password]); },
+    save: function (rec) { return ask("tdfSave", [rec]); },
+    recheck: function (rec, username, password) { return ask("tdfRecheck", [rec, username, password]); },
     withdraw: function (id) { return ask("tdfWithdraw", [id]); },
     savePdf: function (id, base64, name) { return ask("tdfSavePdf", [id, base64, name]); },
   };
