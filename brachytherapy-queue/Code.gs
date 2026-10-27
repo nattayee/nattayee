@@ -104,6 +104,9 @@ const MSG = {
     noteTooLong: 'หมายเหตุยาวเกินไป (ไม่เกิน 500 ตัวอักษร)',
     signTooLong: 'ชื่อ MP / RC ยาวเกินไป (ไม่เกิน 100 ตัวอักษร)',
     rcSameAsMp: 'RC ต้องไม่ใช่คนเดียวกับ MP (ผู้วางแผน)',
+    signDenied: 'บันทึก MP / RC ได้เฉพาะผู้ที่เข้าสู่ระบบด้วยตำแหน่ง {roles} (แอดมินเปลี่ยนได้ที่ ⚙️ ตั้งค่า)',
+    adminOnly: 'เฉพาะผู้ดูแลระบบ (แอดมินของ LPCH RO Workspace) เท่านั้นที่แก้การตั้งค่าได้',
+    maxInvalid: 'จำนวนเคสสูงสุดต่อวันต้องเป็นตัวเลข 1–50',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
     doctor: 'กรุณาเลือกแพทย์',
@@ -133,6 +136,9 @@ const MSG = {
     noteTooLong: 'Note is too long (up to 500 characters)',
     signTooLong: 'MP / RC name is too long (up to 100 characters)',
     rcSameAsMp: 'RC must be a different person from the MP (planner)',
+    signDenied: 'Only users signed in with role {roles} can record MP / RC (an admin can change this in ⚙️ Settings)',
+    adminOnly: 'Only administrators (LPCH RO Workspace admins) can change the settings',
+    maxInvalid: 'Max cases per day must be a number from 1 to 50',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
     doctor: 'Please select a doctor',
@@ -160,8 +166,12 @@ const DEFAULT_SETTINGS = [
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
   ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
   ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล'],
-  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)']
+  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)'],
+  ['SIGN_ROLES', 'MP', 'ตำแหน่งใน LPCH RO Workspace ที่บันทึก MP / RC ได้ (คั่นด้วย ,) · แอดมินแก้ได้ที่ ⚙️ ตั้งค่า ในหน้าเว็บ'],
+  ['SIGN_USERS', '', 'ชื่อผู้ใช้ (username) ที่บันทึก MP / RC ได้เพิ่มเติม แม้ตำแหน่งไม่ตรง (คั่นด้วย ,)']
 ];
+/** ตำแหน่งใน LPCH RO Workspace (ตัวเลือกในหน้าตั้งค่า) */
+const WS_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
 
 /* ------------------------------------------------------------------ */
 /*  Entry points                                                       */
@@ -363,8 +373,11 @@ function getInitData(token, lang) {
     console.warn('getInitData: ตรวจกับ Workspace ไม่ได้ ใช้ข้อมูลใน token แทน: ' + e.message);
   }
   const settings = getSettings_();
+  const rule = signRule_(settings);
   return {
     user: user,
+    canSign: canSign_(user, settings),
+    signRule: { roles: rule.roles, users: rule.users, allRoles: WS_ROLES },
     doctors: getDoctors_(),
     physicists: getPhysicists_(),
     techniques: TECHNIQUES,
@@ -375,6 +388,43 @@ function getInitData(token, lang) {
     },
     appointments: listAppointments_()
   };
+}
+
+/**
+ * ตั้งค่าโดยแอดมิน: s = { signRoles: [...], signUsers: [...], maxCasesPerDay }
+ * ตรวจกับ Workspace ว่ายังเป็นแอดมินอยู่ก่อนบันทึก
+ */
+function saveSettings(token, s, lang) {
+  const acc = requireUser_(token, lang);
+  const me = member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user);
+  if (!me.isAdmin) throw new Error(msg_(lang, 'adminOnly'));
+  s = s || {};
+  const roles = (Array.isArray(s.signRoles) ? s.signRoles : []).map(x => String(x).trim()).filter(x => /^[A-Za-z0-9 _-]{1,30}$/.test(x));
+  const users = (Array.isArray(s.signUsers) ? s.signUsers : csv_(s.signUsers)).map(x => String(x).trim().toLowerCase())
+    .filter(x => /^[a-z0-9._@-]{1,60}$/.test(x));
+  const max = parseInt(s.maxCasesPerDay, 10);
+  if (!(max >= 1 && max <= 50)) throw new Error(msg_(lang, 'maxInvalid'));
+  const values = { SIGN_ROLES: roles.join(', '), SIGN_USERS: users.join(', '), MAX_CASES_PER_DAY: String(max) };
+  const lock = lock_(lang);
+  try {
+    const sh = getSheet_(SHEET_SETTINGS);
+    const keys = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().map(r => r[0].trim()) : [];
+    Object.keys(values).forEach(k => {
+      const i = keys.indexOf(k);
+      if (i >= 0) sh.getRange(i + 2, 2).setNumberFormat('@').setValue(values[k]);
+      else {
+        const def = DEFAULT_SETTINGS.find(d => d[0] === k);
+        sh.getRange(sh.getLastRow() + 1, 1, 1, 3).setNumberFormat('@').setValues([[k, values[k], def ? def[2] : '']]);
+      }
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  log_(acc.username, 'ตั้งค่า', 'MP/RC: ' + (values.SIGN_ROLES || '-') + (values.SIGN_USERS ? ' + ' + values.SIGN_USERS : '') + ' · เคสสูงสุด/วัน ' + max);
+  const settings = getSettings_();
+  const rule = signRule_(settings);
+  return { canSign: canSign_(acc, settings), signRule: { roles: rule.roles, users: rule.users, allRoles: WS_ROLES }, maxCasesPerDay: maxCases_(settings) };
 }
 
 function listAppointments(token, lang) {
@@ -516,6 +566,11 @@ function updateAppointment(token, apptId, changes, lang) {
 
     // ปรับปฏิทินให้ตรงกับข้อมูลใหม่ (ลงชื่อ MP / RC อย่างเดียวไม่ต้องแตะปฏิทิน)
     const settings = getSettings_();
+    // บันทึก MP / RC ได้เฉพาะตำแหน่ง/ผู้ใช้ที่แอดมินตั้งไว้ (ค่าเริ่มต้น: ตำแหน่ง MP)
+    // ตำแหน่งใน token มาจากตอนเข้าสู่ระบบ ถ้าไม่ผ่านให้ถาม Workspace อีกครั้ง (เผื่อเพิ่งเปลี่ยนตำแหน่ง)
+    if (diff.some(d => d.f === 'mp' || d.f === 'rc') && !canSign_(acc, settings) && !signViaWorkspace_(acc, settings, lang)) {
+      throw new Error(msg_(lang, 'signDenied', { roles: signRule_(settings).roles.join(', ') || '-' }));
+    }
     const calChanged = diff.some(d => d.f !== 'mp' && d.f !== 'rc');
     const cal = calChanged ? getCalendar_(lang) : null;
     let ev = null;
@@ -851,6 +906,26 @@ function sendOverCapacityAlert_(settings, overDays, max, p, user) {
 
 function maxCases_(settings) {
   return Math.max(1, parseInt(settings.MAX_CASES_PER_DAY, 10) || 6);
+}
+
+/** รายการคั่นด้วย , จากชีต Settings */
+function csv_(v) {
+  return String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+}
+/** ใครบันทึก MP / RC ได้: { roles: [...], users: [...] } (ไม่ได้ตั้ง = MP) */
+function signRule_(settings) {
+  return {
+    roles: settings.SIGN_ROLES === undefined ? ['MP'] : csv_(settings.SIGN_ROLES),
+    users: csv_(settings.SIGN_USERS).map(x => x.toLowerCase())
+  };
+}
+function signViaWorkspace_(acc, settings, lang) {
+  try { return canSign_(member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user), settings); } catch (e) { return false; }
+}
+function canSign_(acc, settings) {
+  const rule = signRule_(settings);
+  const role = String(acc.role || '').toLowerCase();
+  return (!!role && rule.roles.some(r => r.toLowerCase() === role)) || rule.users.indexOf(String(acc.username || '').toLowerCase()) >= 0;
 }
 
 function rowToObj_(r, row) {
