@@ -310,6 +310,18 @@
     td.stcell { white-space: normal; min-width: 150px; }
     .stline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .btn.xs { padding: 1px 8px; font-size: 12px; border-radius: 7px; }
+    /* ลงชื่อ MP (ผู้วางแผน) / RC (Recheck) */
+    .signs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+    .sign {
+      font: inherit; font-size: 12px; line-height: 1.5; padding: 1px 8px; border-radius: 7px; cursor: pointer;
+      border: 1px dashed var(--line); background: none; color: var(--muted); text-align: left; max-width: 220px;
+    }
+    .sign:hover { border-color: var(--accent); color: var(--accent); }
+    .sign.on { border-style: solid; border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+    .sign b { font-weight: 700; }
+    .signin { display: flex; gap: 6px; align-items: center; }
+    .signin input { flex: 1; min-width: 0; }
+    .fxsign { font-size: 12.5px; color: var(--muted); }
     .edited { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); text-decoration: underline; text-align: left; }
     .histbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
     .histbox h4 { margin: 0 0 6px; font-size: 14px; }
@@ -796,6 +808,23 @@
           <label for="eNote" data-i18n="note"></label>
           <textarea id="eNote" rows="2" maxlength="500"></textarea>
         </div>
+        <div class="row">
+          <div class="field">
+            <label for="eMp" data-i18n="f_mp"></label>
+            <div class="signin">
+              <input type="text" id="eMp" list="signNames" maxlength="100" autocomplete="off">
+              <button type="button" class="btn xs" data-me="eMp" data-i18n="sign_me"></button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="eRc" data-i18n="f_rc"></label>
+            <div class="signin">
+              <input type="text" id="eRc" list="signNames" maxlength="100" autocomplete="off">
+              <button type="button" class="btn xs" data-me="eRc" data-i18n="sign_me"></button>
+            </div>
+          </div>
+        </div>
+        <datalist id="signNames"></datalist>
         <div class="acts" style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap">
           <button type="button" class="btn" id="eClose" data-i18n="e_close"></button>
           <button type="submit" class="btn" id="eSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700" data-i18n="e_save"></button>
@@ -878,6 +907,9 @@
       e_nochange: 'ไม่มีการเปลี่ยนแปลง', e_history: 'ประวัติการแก้ไข', e_created: 'ลงนัดโดย {name} · {at}', e_none: 'ยังไม่มีการแก้ไข',
       e_cancel_hint: 'เปลี่ยนเป็น "ยกเลิก" แล้วนัดในปฏิทินจะถูกลบ', e_restore_hint: 'นัดจะถูกสร้างในปฏิทินอีกครั้ง',
       f_date: 'วันที่นัด', f_doctor: 'แพทย์', f_technique: 'รูปแบบการใส่', f_note: 'หมายเหตุ', f_status: 'สถานะ',
+      f_mp: 'MP (ผู้วางแผน)', f_rc: 'RC (Recheck)', sign_me: 'ใส่ชื่อฉัน',
+      sign_add_title: 'กดเพื่อลงชื่อคุณ ({name}) เป็น {f} — ถ้าเป็นคนอื่นให้กด ✏️ แก้ไข', sign_edit_title: '{f}: {name} — กดเพื่อแก้ไขหรือล้างชื่อ',
+      t_signed: 'ลงชื่อ {f}: {name} แล้ว',
       no_appts: 'ไม่มีนัด', loading: 'กำลังโหลด…', today_tag: ' (วันนี้)', over_max: '⚠️ เกิน {max} เคส',
       st_booked: 'นัดแล้ว', st_done: 'มาตามนัด', st_cancel: 'ยกเลิก',
       a_done: '✓ มาแล้ว', a_done_title: 'บันทึกว่ามาตามนัด', a_cancel: 'ยกเลิก', a_cancel_title: 'ยกเลิกเฉพาะ fraction นี้',
@@ -964,6 +996,9 @@
       e_nochange: 'Nothing changed', e_history: 'Edit history', e_created: 'Booked by {name} · {at}', e_none: 'No edits yet',
       e_cancel_hint: 'Changing to "Cancelled" deletes the calendar event', e_restore_hint: 'The calendar event will be created again',
       f_date: 'Date', f_doctor: 'Doctor', f_technique: 'Insertion type', f_note: 'Note', f_status: 'Status',
+      f_mp: 'MP (planner)', f_rc: 'RC (recheck)', sign_me: 'Use my name',
+      sign_add_title: 'Sign as {f} with your name ({name}) — for someone else use ✏️ Edit', sign_edit_title: '{f}: {name} — click to change or clear',
+      t_signed: '{f} signed: {name}',
       no_appts: 'No appointments', loading: 'Loading…', today_tag: ' (today)', over_max: '⚠️ over {max}',
       st_booked: 'Booked', st_done: 'Attended', st_cancel: 'Cancelled',
       a_done: '✓ Arrived', a_done_title: 'Mark as attended', a_cancel: 'Cancel', a_cancel_title: 'Cancel this fraction only',
@@ -1692,6 +1727,19 @@
     return '<tr><th>' + esc(t('th_queue')) + '</th><th>HN</th><th>' + esc(t('th_name')) + '</th><th>' + esc(t('th_doctor')) +
       '</th><th>' + esc(t('th_tech')) + '</th><th>Fx</th><th>' + esc(t('th_note')) + '</th><th>' + esc(t('th_status')) + '</th><th></th></tr>';
   }
+  // ลงชื่อ MP (ผู้วางแผน) / RC (Recheck): ยังว่าง = ปุ่ม "+ MP" กดแล้วลงชื่อผู้ใช้ทันที, มีชื่อแล้ว = กดเพื่อแก้ไข
+  const SIGNS = [['mp', 'MP'], ['rc', 'RC']];
+  const myName = () => (state.user ? state.user.fullName || state.user.username : '');
+  function signsHtml(a) {
+    const html = SIGNS.map(([f, ab]) => {
+      if (a[f]) return '<button type="button" class="sign on" data-act="sign" data-f="' + f + '" data-id="' + esc(a.apptId) + '" title="' +
+        esc(t('sign_edit_title', { f: t('f_' + f), name: a[f] })) + '"><b>' + ab + '</b> ' + esc(a[f]) + '</button>';
+      if (a.status === ST_CANCEL) return '';
+      return '<button type="button" class="sign" data-act="sign" data-f="' + f + '" data-id="' + esc(a.apptId) + '" title="' +
+        esc(t('sign_add_title', { f: t('f_' + f), name: myName() })) + '">+ ' + ab + '</button>';
+    }).join('');
+    return html ? '<div class="signs">' + html + '</div>' : '';
+  }
   function rowHtml(a, queueNo) {
     const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
     return '<tr class="' + (cls === 'cancel' ? 'cancel' : '') + '">' +
@@ -1704,6 +1752,7 @@
       '<td class="name hint">' + esc(a.note) + '</td>' +
       '<td class="stcell act"><div class="stline"><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
         '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></div>' +
+        signsHtml(a) +
         (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
           esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '</button>' : '') + '</td>' +
       '<td class="act"><div class="acts">' + actionButtons(a) + '</div></td></tr>';
@@ -1746,6 +1795,17 @@
     const who = 'HN ' + a.hn + ' ' + a.name;
     if (b.dataset.act === 'edit' || b.dataset.act === 'hist') { openEdit(a, b.dataset.act === 'hist'); return; }
     if (b.dataset.act === 'find') { openFind(a.hn); return; }
+    if (b.dataset.act === 'sign') {
+      const f = b.dataset.f;
+      if (a[f] || !myName()) { openEdit(a, false, f === 'mp' ? 'eMp' : 'eRc'); return; }
+      b.disabled = true;
+      try {
+        const res = await api.edit(a.apptId, { [f]: myName() });
+        state.appts = res.appointments; renderAll();
+        toast(t('t_signed', { f: t('f_' + f), name: myName() }));
+      } catch (err) { toast(errMsg(err), true); b.disabled = false; }
+      return;
+    }
     let p;
     if (b.dataset.act === 'done') p = api.done(a.apptId);
     else if (b.dataset.act === 'cancel') {
@@ -1827,7 +1887,7 @@
 
   /* ================= แก้ไขนัด + ประวัติ ================= */
   let editing = null;
-  function openEdit(a, focusHistory) {
+  function openEdit(a, focusHistory, focusId) {
     editing = a;
     $('eWho').textContent = 'HN ' + a.hn + ' · ' + a.name + ' · Fx ' + a.fx + '/' + a.totalFx;
     $('eDate').value = a.date;
@@ -1839,11 +1899,16 @@
     $('eDoctor').value = a.doctor;
     ePick.set(a.technique || '');
     $('eNote').value = a.note || '';
+    $('eMp').value = a.mp || '';
+    $('eRc').value = a.rc || '';
+    const names = new Set([myName()]);
+    state.appts.forEach(x => { if (x.mp) names.add(x.mp); if (x.rc) names.add(x.rc); });
+    $('signNames').innerHTML = Array.from(names).filter(Boolean).sort().map(n => '<option value="' + esc(n) + '">').join('');
     renderEditHints();
     renderHistory(a);
     $('editModal').classList.add('show');
     setTimeout(() => {
-      if (focusHistory) $('eHistory').scrollIntoView({ block: 'nearest' }); else $('eDate').focus();
+      if (focusHistory) $('eHistory').scrollIntoView({ block: 'nearest' }); else $(focusId || 'eDate').focus();
     }, 0);
   }
   function closeEdit() { $('editModal').classList.remove('show'); editing = null; }
@@ -1863,6 +1928,7 @@
   $('eDate').addEventListener('change', renderEditHints);
   $('eStatus').addEventListener('change', renderEditHints);
   $('eClose').addEventListener('click', closeEdit);
+  document.querySelectorAll('[data-me]').forEach(b => b.addEventListener('click', () => { $(b.dataset.me).value = myName(); $(b.dataset.me).focus(); }));
   $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) closeEdit(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editing) { closeEdit(); e.stopImmediatePropagation(); } });
 
@@ -1946,7 +2012,8 @@
             '<span class="fxno">Fx ' + esc(a.fx) + '/' + esc(a.totalFx) + '</span>' +
             '<span class="fxdate">' + esc(fmtDate(a.date, LONG)) + (a.date === today ? esc(t('today_tag')) : '') +
               (state.holidays[a.date] ? ' <span class="hint">🏖 ' + esc(state.holidays[a.date]) + '</span>' : '') +
-              (a.note ? '<br><span class="hint">' + esc(a.note) + '</span>' : '') + '</span>' +
+              (a.note ? '<br><span class="hint">' + esc(a.note) + '</span>' : '') +
+              (a.mp || a.rc ? '<br><span class="fxsign">' + SIGNS.filter(([f]) => a[f]).map(([f, ab]) => '<b>' + ab + '</b> ' + esc(a[f])).join(' · ') + '</span>' : '') + '</span>' +
             '<span class="fxend">' + (isNext ? '<span class="nexttag">' + esc(t('find_next_tag')) + '</span>' : '') +
               '<span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
               '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></span></li>';
@@ -2060,7 +2127,8 @@
     if (!$('eDate').value) { toast(t('v_fxdate', { n: a.fx }), true); $('eDate').focus(); return; }
     if (!ePick.selected()) { toast(t('v_tech'), true); return; }
     const next = { date: $('eDate').value, status: $('eStatus').value, doctor: $('eDoctor').value,
-      technique: ePick.get(), note: $('eNote').value.trim() };
+      technique: ePick.get(), note: $('eNote').value.trim(),
+      mp: $('eMp').value.trim().replace(/\s+/g, ' '), rc: $('eRc').value.trim().replace(/\s+/g, ' ') };
     if (!next.technique) { toast(t('v_tech_other'), true); $('eTechOther').focus(); return; }
     const ch = {};
     Object.keys(next).forEach(k => { if (next[k] !== (a[k] || '')) ch[k] = next[k]; });

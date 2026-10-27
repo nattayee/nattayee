@@ -55,11 +55,13 @@ const APPT_HEADERS = [
   'รูปแบบการใส่',        // N  Full / Mould / Interstitial needle / ที่กรอกเอง
   'แก้ไขล่าสุดโดย',      // O
   'แก้ไขล่าสุดเมื่อ',     // P
-  'ประวัติการแก้ไข'      // Q  JSON: [{at, by, name, changes:[{f, from, to}]}]
+  'ประวัติการแก้ไข',     // Q  JSON: [{at, by, name, changes:[{f, from, to}]}]
+  'MP (ผู้วางแผน)',      // R  ชื่อผู้วางแผนการรักษา
+  'RC (Recheck)'        // S  ชื่อผู้ตรวจทาน
 ];
 const COL = {};
 ['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
-  'date', 'note', 'status', 'eventId', 'createdBy', 'technique', 'editedBy', 'editedAt', 'history']
+  'date', 'note', 'status', 'eventId', 'createdBy', 'technique', 'editedBy', 'editedAt', 'history', 'mp', 'rc']
   .forEach((k, i) => { COL[k] = i; });
 /** รูปแบบการใส่ที่เลือกได้ (นอกจากนี้กรอกเองในช่อง "อื่นๆ") */
 const TECHNIQUES = ['Full', 'Mould', 'Interstitial needle'];
@@ -94,6 +96,7 @@ const MSG = {
     statusInvalid: 'สถานะไม่ถูกต้อง',
     dateInvalid: 'วันที่นัดไม่ถูกต้อง',
     noteTooLong: 'หมายเหตุยาวเกินไป (ไม่เกิน 500 ตัวอักษร)',
+    signTooLong: 'ชื่อ MP / RC ยาวเกินไป (ไม่เกิน 100 ตัวอักษร)',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
     doctor: 'กรุณาเลือกแพทย์',
@@ -121,6 +124,7 @@ const MSG = {
     statusInvalid: 'Invalid status',
     dateInvalid: 'Invalid appointment date',
     noteTooLong: 'Note is too long (up to 500 characters)',
+    signTooLong: 'MP / RC name is too long (up to 100 characters)',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
     doctor: 'Please select a doctor',
@@ -400,7 +404,7 @@ function createAppointments(token, payload) {
 
         rows.push([
           courseId + '-' + fx, courseId, now, p.hn, safeCell_(p.name), p.doctor, fx, p.totalFx,
-          s.date, safeCell_(p.note), STATUS_BOOKED, ev.getId(), user, safeCell_(p.technique), '', '', ''
+          s.date, safeCell_(p.note), STATUS_BOOKED, ev.getId(), user, safeCell_(p.technique), '', '', '', '', ''
         ]);
       });
     } catch (err) {
@@ -440,7 +444,7 @@ function markDone(token, apptId, lang) {
 }
 
 /**
- * แก้ไขนัด 1 fraction: changes = { date?, doctor?, technique?, note?, status? }
+ * แก้ไขนัด 1 fraction: changes = { date?, doctor?, technique?, note?, status?, mp?, rc? }
  * ปรับนัดในปฏิทินให้ตรง และบันทึกว่าใครแก้อะไร เมื่อไร ในคอลัมน์ประวัติการแก้ไข
  */
 function updateAppointment(token, apptId, changes, lang) {
@@ -456,7 +460,7 @@ function updateAppointment(token, apptId, changes, lang) {
     if (idx < 0) throw new Error(msg_(lang, 'notFound', { id: apptId }));
     const a = rowToObj_(data[idx], idx + 2);
 
-    const next = { date: a.date, doctor: a.doctor, technique: a.technique, note: a.note, status: a.status };
+    const next = { date: a.date, doctor: a.doctor, technique: a.technique, note: a.note, status: a.status, mp: a.mp, rc: a.rc };
     if (c.date !== undefined) {
       next.date = String(c.date).trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(next.date)) throw new Error(msg_(lang, 'dateInvalid'));
@@ -473,24 +477,33 @@ function updateAppointment(token, apptId, changes, lang) {
       next.note = cleanText_(c.note);
       if (next.note.length > 500) throw new Error(msg_(lang, 'noteTooLong'));
     }
+    // MP (ผู้วางแผน) / RC (Recheck): ชื่อผู้ลงชื่อ ว่างได้ (= ล้างชื่อ)
+    ['mp', 'rc'].forEach(f => {
+      if (c[f] === undefined) return;
+      next[f] = cleanText_(c[f]).replace(/\s+/g, ' ');
+      if (next[f].length > 100) throw new Error(msg_(lang, 'signTooLong'));
+    });
     if (c.status !== undefined) {
       next.status = String(c.status).trim();
       if ([STATUS_BOOKED, STATUS_DONE, STATUS_CANCELLED].indexOf(next.status) < 0) throw new Error(msg_(lang, 'statusInvalid'));
     }
 
-    const diff = ['date', 'doctor', 'technique', 'note', 'status']
+    const diff = ['date', 'doctor', 'technique', 'note', 'status', 'mp', 'rc']
       .filter(f => next[f] !== a[f])
       .map(f => ({ f: f, from: a[f], to: next[f] }));
     if (!diff.length) return { ok: true, changed: 0, appointments: listAppointments_() };
 
-    // ปรับปฏิทินให้ตรงกับข้อมูลใหม่
+    // ปรับปฏิทินให้ตรงกับข้อมูลใหม่ (ลงชื่อ MP / RC อย่างเดียวไม่ต้องแตะปฏิทิน)
     const settings = getSettings_();
-    const cal = getCalendar_(lang);
+    const calChanged = diff.some(d => d.f !== 'mp' && d.f !== 'rc');
+    const cal = calChanged ? getCalendar_(lang) : null;
     let ev = null;
-    if (a.eventId) { try { ev = cal.getEventById(a.eventId); } catch (e) { ev = null; } }
+    if (calChanged && a.eventId) { try { ev = cal.getEventById(a.eventId); } catch (e) { ev = null; } }
     let eventId = a.eventId;
     const merged = Object.assign({}, a, next);
-    if (next.status === STATUS_CANCELLED) {
+    if (!calChanged) {
+      // ไม่มีอะไรต้องเปลี่ยนในปฏิทิน
+    } else if (next.status === STATUS_CANCELLED) {
       if (ev) { try { ev.deleteEvent(); } catch (e) { /* ลบไปแล้ว */ } }
       eventId = '';
     } else if (!ev) {
@@ -510,6 +523,8 @@ function updateAppointment(token, apptId, changes, lang) {
     row[COL.technique] = safeCell_(next.technique);
     row[COL.note] = safeCell_(next.note);
     row[COL.status] = next.status;
+    row[COL.mp] = safeCell_(next.mp);
+    row[COL.rc] = safeCell_(next.rc);
     row[COL.eventId] = eventId;
     row[COL.editedBy] = label;
     row[COL.editedAt] = now;
@@ -788,7 +803,8 @@ function rowToObj_(r, row) {
     date: r[COL.date],
     note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy], eventId: r[COL.eventId],
     technique: r[COL.technique] || '', editedBy: r[COL.editedBy] || '', editedAt: r[COL.editedAt] || '',
-    history: parseHistory_(r[COL.history])
+    history: parseHistory_(r[COL.history]),
+    mp: r[COL.mp] || '', rc: r[COL.rc] || ''
   };
 }
 
@@ -986,9 +1002,11 @@ function setupSheets_(apply) {
     if ((h === 'เวลาเริ่ม' || h === 'ชนิด') && !apply) return true;
     if (h === 'เวลาเริ่ม') sh.deleteColumns(10, 2);
     else if (h === 'ชนิด') sh.deleteColumn(10);
-    // เติมหัวคอลัมน์ใหม่ (รูปแบบการใส่ / ประวัติการแก้ไข) ที่ต่อท้าย
+    // เติมหัวคอลัมน์ใหม่ (รูปแบบการใส่ / ประวัติการแก้ไข / MP / RC) ที่ต่อท้าย
     if (sh.getLastColumn() < APPT_HEADERS.length) {
       if (!apply) return true;
+      const maxCols = sh.getMaxColumns();
+      if (maxCols < APPT_HEADERS.length) sh.insertColumnsAfter(maxCols, APPT_HEADERS.length - maxCols);
       sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
     }
   }
