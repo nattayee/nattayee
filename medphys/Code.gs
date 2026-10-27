@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-24.1';
-const API_LEVEL = 32;
+const CODE_VERSION = '2026-10-27.1';
+const API_LEVEL = 33;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1456,13 +1456,14 @@ function requireEdit_(token, views) {
   return u;
 }
 
-// แอดมิน: ดึงสมาชิกที่ใช้งานอยู่และตำแหน่งจาก LPCH RO Workspace (คำสั่ง directory) ใช้ตั้งสิทธิ์รายแถบ · ไม่เก็บรายชื่อไว้ที่นี่
+// แอดมิน: ดึงสมาชิกที่ใช้งานอยู่และตำแหน่งจาก LPCH RO Workspace (คำสั่ง directory) ใช้ตั้งสิทธิ์รายแถบ และเชื่อมบัญชีของนักฟิสิกส์ / แพทย์ ในตั้งค่า
+// ส่งอีเมลด้วยถ้า LPCH ส่งมา · ไม่เก็บรายชื่อไว้ที่นี่
 function lpchMembers(token) {
   const u = who_(token);
   if (!u.isAdmin) throw new Error('ดูรายชื่อสมาชิกได้เฉพาะแอดมิน');
   if (u.via !== 'lpch') throw new Error('ดึงรายชื่อได้เมื่อเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   const out = lpchCall_({ action: 'directory', token: String(token) });
-  const users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || '') })).filter(x => x.username);
+  const users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || ''), email: String(x.email || '').trim().toLowerCase() })).filter(x => x.username);
   const roles = LPCH_ROLES.slice();
   users.forEach(x => { if (x.role && roles.indexOf(x.role) < 0) roles.push(x.role); });
   keepDutyMembers_(users);

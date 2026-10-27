@@ -1195,8 +1195,15 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .opt-new:focus{box-shadow:none}
 .rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
 .rules b{color:var(--fg);font-weight:500}
-.set-row{display:grid;grid-template-columns:30px 84px 118px minmax(0,1fr) minmax(0,1fr) 170px auto auto;grid-template-areas:"idx code color name title pos act btns";gap:8px;align-items:center}
-.set-row.doc-row{grid-template-columns:30px 84px 118px minmax(0,1fr) auto;grid-template-areas:"idx code color name btns"}
+.set-row{display:grid;grid-template-columns:30px 84px 118px minmax(0,1fr) minmax(0,1fr) 170px auto auto;grid-template-areas:"idx code color name title pos act btns" ". acct acct acct acct acct acct .";gap:8px;align-items:center}
+.set-row.doc-row{grid-template-columns:30px 84px 118px minmax(0,1fr) auto;grid-template-areas:"idx code color name btns" ". acct acct acct ."}
+/* บัญชี LPCH RO Workspace ของแต่ละคน (บรรทัดที่ 2): ชื่อผู้ใช้ · อีเมล · ตำแหน่งใน RO Workspace */
+.set-row .acct{grid-area:acct;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:-2px 0 6px;font-size:12.5px;color:var(--muted)}
+.set-row .acct select{width:auto;min-width:0;max-width:min(340px,100%);padding-top:4px;padding-bottom:4px;font-size:12.5px}
+.set-row .acct input{width:min(260px,100%);padding-top:4px;padding-bottom:4px;font-size:12.5px}
+.acct-role{padding:0 7px;border-radius:999px;background:var(--sunken);color:var(--fg);font-size:11.5px;font-weight:600;line-height:20px}
+.acct-role.me{background:var(--accent-soft);color:var(--accent)}
+.acct-warn{color:var(--warn)}
 .set-row .idx{grid-area:idx}.set-row .code{grid-area:code}.set-row .name{grid-area:name}.set-row .title{grid-area:title}.set-row .pos{grid-area:pos}.set-row .check{grid-area:act}.set-row .btns{grid-area:btns;display:flex;gap:2px}
 .set-row .idx{font:12px var(--mono);color:var(--faint);text-align:center}
 .check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
@@ -1206,7 +1213,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .savebar{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;margin-top:20px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .savebar span{margin-right:auto;font-size:13px;color:var(--muted)}
-@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". title title title" ". pos pos act"}.set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color"}}
+@media (max-width:640px){.set-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". title title title" ". pos pos act" ". acct acct acct"}.set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". acct acct acct"}}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:14px;opacity:0;pointer-events:none;transform:translate(-50%,16px);transition:opacity .18s,transform .18s}
 .toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
@@ -1953,6 +1960,7 @@ const DIRECT_API = 31;
 const directOn = () => serverHas(DIRECT_API);
 const CT_API = 32;   // Code.gs ที่มีแถบ CT-SIM (ctSave, ctRemove, ctMark) และผูกเคสที่แจกกับรายการ CT
 const ctOn = () => serverHas(CT_API);
+const MEMBER_EMAIL_API = 33;   // Code.gs ที่ส่งอีเมลของสมาชิก LPCH มากับรายชื่อ (lpchMembers)
 // แถบ CT-SIM: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → CT-SIM: off ไม่แสดง · show แสดง · req บังคับกรอก) · HN วันที่ และเครื่อง CT บังคับเสมอ
 const CT_FORM = [
   ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'แพทย์ (Doc)', 'req'], ['cats', 'เทคนิค', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
@@ -2240,6 +2248,8 @@ function normLeave(o) {
   v.created = v.created || nowISO();
   return v;
 }
+// บัญชี LPCH RO Workspace ที่แอดมินเชื่อมให้นักฟิสิกส์ / แพทย์ (ตั้งค่า): user = ชื่อผู้ใช้ · email (จากรายชื่อสมาชิกหรือพิมพ์เอง)
+const acctOf = x => (x && typeof x === 'object' ? { user: str(x.user).trim(), email: str(x.email).trim().toLowerCase() } : { user: '', email: '' });
 function mergeConfig(c) {
   const d = clone(DEFAULT_CONFIG);
   if (!c || typeof c !== 'object') c = {};   // ยังไม่เคยบันทึก: ค่าเริ่มต้นทั้งหมด (ผ่านขั้นตอนเดียวกัน เช่นสิทธิ์รายแถบ)
@@ -2272,14 +2282,14 @@ function mergeConfig(c) {
     out.staff = c.staff.map(s => {
       const code = str(s.code).toUpperCase();
       const roles = Array.isArray(s.roles) ? s.roles.filter(r => r && /^\d{4}-\d{2}$/.test(r.from) && r.role).map(r => ({ from: r.from, role: str(r.role) })).sort((a, b) => a.from.localeCompare(b.from)) : [];
-      return { code, name: str(s.name), title: str(s.title), active: s.active !== false, roles: roles.length ? roles : defRoles(code), color: hexOf(s.color) };
+      return { code, name: str(s.name), title: str(s.title), active: s.active !== false, roles: roles.length ? roles : defRoles(code), color: hexOf(s.color), ...acctOf(s) };
     }).filter(s => s.code);
   }
   for (const k of ['types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'ptags']) if (Array.isArray(c[k])) out[k] = c[k].map(str).filter(Boolean);
   // แพทย์: ค่าเก่าเป็นรายการรหัสล้วน ['SC', ...] แปลงเป็น { code, name }
   // สีแพทย์: ยังไม่เคยตั้ง (ไม่มีช่อง color) = สีเริ่มต้นตามรหัส · ตั้งเป็นไม่มีสี ('') แล้วคงไว้
   const docColor = (code, x) => (x && typeof x === 'object' && x.color !== undefined ? hexOf(x.color) : DOC_COLORS[code] || '');
-  if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => { const code = str(x && typeof x === 'object' ? x.code : x).toUpperCase(); return { code, name: x && typeof x === 'object' ? str(x.name) : '', color: docColor(code, x) }; }).filter(x => x.code);
+  if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => { const code = str(x && typeof x === 'object' ? x.code : x).toUpperCase(); return { code, name: x && typeof x === 'object' ? str(x.name) : '', color: docColor(code, x), ...acctOf(x) }; }).filter(x => x.code);
   const moved = {}; // ค่าที่เคยตั้งให้เทคนิค Brachy/Hyperthermia ใช้ต่อเป็นค่าของกิจกรรม
   if (Array.isArray(c.cats)) c.cats.forEach(x => { if (x && MOVED_CATS.includes(x.id)) moved[x.id] = { label: x.label, group: x.group, min: x.min, w: x.w }; });
   if (Array.isArray(c.cats) && c.cats.some(x => x && x.id && !MOVED_CATS.includes(x.id))) {
@@ -2439,7 +2449,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-26.1';
+const PAGE_VERSION = '2026-10-27.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2537,7 +2547,7 @@ function localStore() {
   // โหมดตัวอย่าง: สมาชิกสมมติ (ไม่ใช่ชื่อจริง)
   const demoMembers = () => {   // ตำแหน่ง = ของ LPCH + ตำแหน่งของสมาชิก (เหมือน lpchMembers ใน Code.gs)
     const users = [['RO', 'แพทย์ ตัวอย่าง', 2], ['MP', 'นักฟิสิกส์ ตัวอย่าง', 4], ['RTT', 'นักรังสีเทคนิค ตัวอย่าง', 3], ['RA', 'ผู้ช่วย ตัวอย่าง', 2], ['Nurse', 'พยาบาล ตัวอย่าง', 2]]
-      .flatMap(([role, name, n]) => Array.from({ length: n }, (_, i) => ({ username: `${role.toLowerCase()}${i + 1}`, name: `${name} ${i + 1}`, role })));
+      .flatMap(([role, name, n]) => Array.from({ length: n }, (_, i) => ({ username: `${role.toLowerCase()}${i + 1}`, name: `${name} ${i + 1}`, role, email: `${role.toLowerCase()}${i + 1}@example.org` })));
     return { roles: [...new Set([...LPCH_ROLES, ...users.map(u => u.role)])], users };
   };
   return {
@@ -3128,7 +3138,7 @@ function av(code, cls = '') {
   const i = staffIdx(code);
   const h = i < 0 ? 0 : (i % 6) + 1;
   const s = state.config.staff[i], paint = s ? paintStyle(s.color) : '';
-  const title = s && s.name ? `${code} · ${s.name}` : code;
+  const title = [code, s && s.name, s && s.email].filter(Boolean).join(' · ');
   return `<span class="av ${cls}${paint ? ' painted' : ''}" style="${paint || `--c:var(--p${h});--cs:var(--p${h}s)`}" title="${esc(title)}">${esc(code)}</span>`;
 }
 const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(label)}</option>`;
@@ -3150,7 +3160,7 @@ const docCodes = () => state.config.doctors.map(x => x.code);
 const docName = code => (state.config.doctors.find(x => x.code === code) || {}).name || '';
 // รหัสแพทย์แบบป้ายเล็ก (ตารางวันฉาย แสดงก่อนนักฟิสิกส์) ชี้ค้างเห็นชื่อ-สกุล
 const docChipOf = (code, color, title) => { const p = paintStyle(color); return `<span class="doc-chip${p ? ' painted' : ''}"${p ? ` style="${p}"` : ''}${title ? ` title="${esc(title)}"` : ''}>${esc(code || '?')}</span>`; };
-const docChip = code => docChipOf(code, (state.config.doctors.find(x => x.code === code) || {}).color, `แพทย์ ${code}${docName(code) ? ' · ' + docName(code) : ''}`);
+const docChip = code => { const d = state.config.doctors.find(x => x.code === code) || {}; return docChipOf(code, d.color, [`แพทย์ ${code}`, d.name, d.email].filter(Boolean).join(' · ')); };
 const chipValue = el => { const i = $('input:checked', el); return i ? i.value : ''; };
 function typeChip(t) {
   if (!t || t === 'New') return '';
@@ -5948,8 +5958,9 @@ async function fetchMembers(btn) {
     const dir = await store.members();
     state.lpchDir = {
       roles: (dir.roles || []).map(str).filter(r => ROLE_RE.test(r)),
-      users: (dir.users || []).map(u => ({ username: str(u.username), name: str(u.name) || str(u.username), role: str(u.role) })).filter(u => u.username),
+      users: (dir.users || []).map(u => ({ username: str(u.username), name: str(u.name) || str(u.username), role: str(u.role), email: str(u.email).trim().toLowerCase() })).filter(u => u.username),
     };
+    const linked = autoLinkAccts();
     // ตำแหน่งใหม่จาก LPCH: เพิ่มเป็นคอลัมน์ เริ่มต้นแบบตำแหน่งอื่น (ดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") แก้ได้ก่อนบันทึก
     const add = state.lpchDir.roles.filter(r => !draft.roles.includes(r));
     if (add.length) {
@@ -5957,8 +5968,56 @@ async function fetchMembers(btn) {
       draft.nav.forEach(x => { for (const r of add) x.access[r] = x.on && x.guest ? 'view' : ''; });
     }
     renderSettings();
-    toast(`ดึงสมาชิก ${state.lpchDir.users.length} คน${add.length ? ` · เพิ่มตำแหน่ง ${add.join(', ')} แล้วกด "บันทึกการตั้งค่า"` : ''}`);
+    toast(`ดึงสมาชิก ${state.lpchDir.users.length} คน${add.length ? ` · เพิ่มตำแหน่ง ${add.join(', ')}` : ''}${linked ? ` · เชื่อมบัญชี/อีเมลให้ ${linked} คน` : ''}${add.length || linked ? ' แล้วกด "บันทึกการตั้งค่า"' : ''}`);
   } catch (e) { btn.disabled = false; toast('ดึงรายชื่อไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+// บัญชี RO Workspace ของนักฟิสิกส์ (ตำแหน่ง MP) และแพทย์ (RO): เลือกจากรายชื่อสมาชิกที่ดึงมา · อีเมลมาจากรายชื่อ (ถ้า LPCH ส่งมา) หรือพิมพ์เอง
+const ACCT_ROLE = { staff: 'MP', doctors: 'RO' };
+const nameKey = v => str(v).trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.)/, '').replace(/\s+/g, '').toLowerCase();   // ไม่สนคำนำหน้าและช่องว่าง
+// หลังดึงรายชื่อ: คนที่ยังไม่เชื่อมบัญชีและชื่อตรงกับสมาชิกคนเดียว = เชื่อมให้ · ที่เชื่อมแล้วแต่ยังไม่มีอีเมล = ใส่อีเมลจากรายชื่อ · คืนจำนวนคนที่เปลี่ยน
+function autoLinkAccts() {
+  const users = state.lpchDir ? state.lpchDir.users : [];
+  let n = 0;
+  for (const list of ['staff', 'doctors']) for (const x of draft[list]) {
+    let u = x.user ? users.find(v => v.username === x.user) : null;
+    if (!x.user && str(x.name)) {
+      const hit = users.filter(v => nameKey(v.name) === nameKey(x.name));
+      if (hit.length === 1 && !draft[list].some(y => y.user === hit[0].username)) { u = hit[0]; x.user = u.username; n++; if (!x.email && u.email) x.email = u.email; continue; }
+    }
+    if (u && !x.email && u.email) { x.email = u.email; n++; }
+  }
+  return n;
+}
+function acctBar(list) {
+  const dir = state.lpchDir, oldApi = dir && store.mode !== 'local' && !serverHas(MEMBER_EMAIL_API) && !dir.users.some(u => u.email);
+  const why = store.mode === 'local' ? '' : !serverHas(ACCESS_API) ? 'ต้องใช้ Code.gs รุ่น 2026-10-18.3 ขึ้นไป' : state.user.via !== 'lpch' ? 'เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace เพื่อดึงรายชื่อ' : '';
+  return `<div class="mem-bar acct-bar"><span class="muted">บัญชี RO Workspace (บรรทัดใต้ชื่อ): ${dir ? `เลือกจากสมาชิก ${dir.users.length} คน · ${list === 'staff' ? 'ตำแหน่ง MP' : 'ตำแหน่ง RO'} อยู่บนสุด` : 'กดดึงรายชื่อเพื่อเลือกบัญชีของแต่ละคน'} · อีเมลมาจาก RO Workspace หรือพิมพ์เอง</span>`
+    + `${dir ? '' : `<button type="button" class="btn ghost" data-lpchdir${why ? ' disabled' : ''}>ดึงรายชื่อจาก LPCH RO Workspace</button>`}${why && !dir ? `<span class="muted">${esc(why)}</span>` : ''}`
+    + `${oldApi ? '<span class="acct-warn">Code.gs รุ่นนี้ยังไม่ส่งอีเมลมากับรายชื่อ (ต้องใช้รุ่น 2026-10-27.1 ขึ้นไป) · พิมพ์อีเมลเองได้</span>' : ''}</div>`;
+}
+function acctHtml(list, i) {
+  const x = draft[list][i], dir = state.lpchDir, users = dir ? dir.users : [], want = ACCT_ROLE[list], user = str(x.user);
+  const cur = users.find(u => u.username === user);
+  const one = u => opt(u.username, `${u.name} (${u.username}${u.role && u.role !== want ? ' · ' + u.role : ''})`, user);
+  const mine = users.filter(u => u.role === want), others = users.filter(u => u.role !== want);
+  const opts = opt('', user ? 'ไม่เชื่อมบัญชี' : 'ยังไม่เชื่อมบัญชี', user)
+    + (user && !cur ? opt(user, dir ? `${user} · ไม่พบในรายชื่อสมาชิก` : user, user) : '')
+    + (mine.length ? `<optgroup label="${esc(want)}">${mine.map(one).join('')}</optgroup>` : '')
+    + (others.length ? `<optgroup label="ตำแหน่งอื่น">${others.map(one).join('')}</optgroup>` : '');
+  const me = user && user === state.user.username;
+  const meta = cur ? `<span class="acct-role${me ? ' me' : ''}" title="ตำแหน่งใน LPCH RO Workspace">${esc(cur.role || 'ไม่ระบุตำแหน่ง')}${me ? ' · บัญชีของคุณ' : ''}</span>${cur.email && cur.email !== str(x.email).toLowerCase() ? `<span class="acct-warn" title="อีเมลใน RO Workspace">RO Workspace: ${esc(cur.email)}</span>` : ''}`
+    : user && dir ? '<span class="acct-warn">ไม่พบในรายชื่อสมาชิกที่ใช้งานอยู่ (ออกแล้วหรือเปลี่ยนชื่อผู้ใช้)</span>' : me ? '<span class="acct-role me">บัญชีของคุณ</span>' : '';
+  const who = x.code || (list === 'staff' ? 'นักฟิสิกส์' : 'แพทย์');
+  return `<div class="acct"><span>บัญชี</span><select data-acct="${list}.${i}" aria-label="บัญชี LPCH RO Workspace ของ ${esc(who)}"${!dir && !user ? ' title="กดดึงรายชื่อจาก LPCH RO Workspace ด้านบนเพื่อเลือก"' : ''}>${opts}</select>`
+    + `<input type="email" data-k="${list}.${i}.email" value="${esc(x.email || '')}" placeholder="อีเมล (ไม่บังคับ)" inputmode="email" autocomplete="off" spellcheck="false" aria-label="อีเมลของ ${esc(who)}">${meta}</div>`;
+}
+// เลือกบัญชี: เก็บชื่อผู้ใช้ · อีเมลและชื่อ-สกุล (ถ้ายังว่าง) มาจากรายชื่อสมาชิก
+function pickAcct(path, username) {
+  const [list, i] = path.split('.'), x = draft[list][+i], u = state.lpchDir && state.lpchDir.users.find(v => v.username === username);
+  x.user = username;
+  if (u && u.email) x.email = u.email;
+  if (u && !str(x.name)) x.name = u.name;
+  renderSettings();
 }
 // สีในหน้าตั้งค่า: ช่องเลือกสี + ตัวอย่างป้าย + × (ไม่ใช้สี / กลับเป็นสีอัตโนมัติ)
 function colorPreview(path) {
@@ -5994,6 +6053,7 @@ function renderSettings() {
       <select class="pos" data-role="${i}" aria-label="ตำแหน่ง" title="${esc(hist)}">${d.positions.map(x => opt(x.id, x.label, cur)).join('')}</select>
       <label class="check"><input type="checkbox" data-k="staff.${i}.active"${s.active ? ' checked' : ''}> ปฏิบัติงาน</label>
       <span class="btns"><button type="button" class="icon-btn" data-up="staff.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="staff.${i}" aria-label="ลบ">×</button></span>
+      ${acctHtml('staff', i)}
     </div>`;
   }).join('');
   const docRows = d.doctors.map((x, i) => `<div class="set-row doc-row">
@@ -6002,6 +6062,7 @@ function renderSettings() {
       ${colorPick(`doctors.${i}.color`, x.color, `สีของแพทย์ ${x.code || ''}`.trim())}
       <input class="name" data-k="doctors.${i}.name" value="${esc(x.name)}" aria-label="ชื่อ-สกุลแพทย์" placeholder="ชื่อ-สกุล (ไม่บังคับ)">
       <span class="btns"><button type="button" class="icon-btn" data-up="doctors.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="doctors.${i}" aria-label="ลบแพทย์ ${esc(x.code)}">×</button></span>
+      ${acctHtml('doctors', i)}
     </div>`).join('');
   const usedRoles = new Set(d.staff.flatMap(s => (s.roles || []).map(r => r.role)));
   const posRows = d.positions.map((x, i) => {
@@ -6108,9 +6169,11 @@ function renderSettings() {
       ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}</div>`;
   el.innerHTML = `${roleBar}<fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · สีของป้ายรหัสเลือกเองได้ (× = กลับเป็นสีอัตโนมัติ) · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
+      ${acctBar('staff')}
       <div class="set-list">${staffRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="staff">+ เพิ่มนักฟิสิกส์</button></div></div>
     <div class="sec"><div class="sec-head"><h2>แพทย์ (Doc)</h2><p>ลำดับในรายการคือลำดับปุ่มในฟอร์มแจกเคส · ชื่อแสดงเมื่อชี้ที่รหัส และใช้ค้นหาเคสได้ · สีใช้กับป้ายรหัสแพทย์ในรายการเคสและตารางวันฉาย (× = ไม่ใช้สี)</p></div>
+      ${acctBar('doctors')}
       <div class="set-list">${docRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="doctor">+ เพิ่มแพทย์</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
@@ -6279,6 +6342,9 @@ async function saveSettings() {
   const docs = draft.doctors.map(x => str(x.code).toUpperCase());
   if (docs.some(c => !c)) return toast('กรอกรหัสแพทย์ให้ครบทุกแถว', { err: true });
   if (new Set(docs).size !== docs.length) return toast('รหัสแพทย์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
+  for (const x of [...draft.staff, ...draft.doctors]) Object.assign(x, acctOf(x));
+  const badMail = [...draft.staff, ...draft.doctors].find(x => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
+  if (badMail) return toast(`อีเมลของ ${str(badMail.code)} ไม่ถูกต้อง: ${badMail.email}`, { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
   const { me, owner, via, username, lpchAdmin } = state.user;
@@ -8784,6 +8850,7 @@ settingsEl.addEventListener('change', e => {
     return;
   }
   if (el.id === 'logo-file') { pickLogo(el); return; }
+  if (el.dataset.acct) { pickAcct(el.dataset.acct, el.value); return; }
   if (el.type === 'checkbox' || el.tagName === 'SELECT') settingsEdit(el);   // ซ้ำกับ input ก็ไม่เป็นไร (ตั้งค่าเดิมซ้ำ)
   if (el.type === 'color') { settingsEdit(el); renderSettings(); return; }   // ปิดช่องเลือกสีแล้ว: แสดงปุ่ม × ไม่ใช้สี
   if (el.dataset.addopt) { addOption(el); return; }
