@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.4';
-const API_LEVEL = 34;
+const CODE_VERSION = '2026-10-27.5';
+const API_LEVEL = 35;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -258,6 +258,7 @@ function getData(token) {
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
+    tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
     sheetUrl: ss.getUrl(),
   };
@@ -1325,20 +1326,24 @@ function brachyHeadKeys_(h) {
   return out.map(brachyNorm_).filter(Boolean);
 }
 
-function brachyBook_(s) {
+// เปิดชีตของระบบอื่นจากลิงก์ในตั้งค่า (what = ชื่อระบบในข้อความ · ชื่ออังกฤษเว้นวรรคหน้า)
+function extBook_(s, what) {
+  what = /^[A-Za-z]/.test(what) ? ' ' + what : what;
   const raw = String((s && s.url) || '').trim();
   const m = /\/d\/([\w-]{20,})/.exec(raw) || /^([\w-]{20,})$/.exec(raw);
-  if (!m) throw new Error(raw ? 'ลิงก์ชีตของระบบนัด Brachytherapy ต้องเป็นลิงก์ Google Sheet (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ' : 'ยังไม่ได้ใส่ลิงก์ชีตของระบบนัด Brachytherapy');
+  if (!m) throw new Error(raw ? 'ลิงก์ชีตของ' + what + ' ต้องเป็นลิงก์ Google Sheet (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ' : 'ยังไม่ได้ใส่ลิงก์ชีตของ' + what);
   try { return SpreadsheetApp.openById(m[1]); } catch (e) {
-    throw new Error('เปิดชีตของระบบนัด Brachytherapy ไม่ได้ (' + e.message + ') · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้ (แชร์ให้อย่างน้อยดูได้)');
+    throw new Error('เปิดชีตของ' + what + ' ไม่ได้ (' + e.message + ') · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้ (แชร์ให้อย่างน้อยดูได้)');
   }
 }
+const brachyBook_ = s => extBook_(s, 'ระบบนัด Brachytherapy');
 
 // หัวคอลัมน์ที่น่าจะเป็นแต่ละคีย์ · แท็บที่ตรงมากสุด (ต้องมี รหัสนัด วันที่ HN MP)
-function brachyGuess_(headers) {
+function brachyGuess_(headers, keys) {
   const map = {}, used = {};
-  Object.keys(BRACHY_KEYS).forEach(k => {
-    const names = BRACHY_KEYS[k].map(brachyNorm_);
+  keys = keys || BRACHY_KEYS;
+  Object.keys(keys).forEach(k => {
+    const names = keys[k].map(brachyNorm_);
     const h = headers.filter(x => !used[x] && brachyHeadKeys_(x).some(v => names.indexOf(v) >= 0))[0];
     if (h) { map[k] = h; used[h] = true; }
   });
@@ -1347,12 +1352,13 @@ function brachyGuess_(headers) {
 function brachyTabs_(book) {
   return book.getSheets().map(sh => ({ name: sh.getName(), headers: headerOf_(sh).filter(Boolean).slice(0, 40), rows: Math.max(0, sh.getLastRow() - 1) }));
 }
-function brachyPick_(tabs, s) {
+function brachyPick_(tabs, s, keys, enough) {
   const named = s && s.sheet ? tabs.filter(t => t.name === s.sheet)[0] : null;
   if (named) return named;
   let best = null, score = -1;
+  enough = enough || (g => BRACHY_NEED.every(k => g[k]));
   tabs.forEach(t => {
-    const g = brachyGuess_(t.headers), n = Object.keys(g).length + (BRACHY_NEED.every(k => g[k]) ? 100 : 0);
+    const g = brachyGuess_(t.headers, keys), n = Object.keys(g).length + (enough(g) ? 100 : 0);
     if (n > score) { best = t; score = n; }
   });
   return best;
@@ -1432,18 +1438,26 @@ function brachyWanted_(rows, s, cfg) {
   return { want: want, unknown: unknown, counted: counted, from: from };
 }
 
-// ดึงและบันทึก · คืนสรุปที่เก็บไว้ใน Script property BRACHY_SYNC
-function brachySync_(ss, cfg, why) {
-  const s = (cfg && cfg.brachySync) || {};
+// ระบบอื่นที่ดึงมาบันทึก: Brachytherapy (ระบบนัด) · RC จาก TDF Dose Calculator · src ของรายการขึ้นต้นด้วยคีย์
+const EXT = {
+  brachy: { cfg: 'brachySync', prop: 'BRACHY_SYNC', what: 'ระบบนัด Brachytherapy', read: (b, s, soft) => brachyRead_(b, s, soft), wanted: (r, s, c) => brachyWanted_(r, s, c) },
+  tdf: { cfg: 'tdfSync', prop: 'TDF_SYNC', what: 'TDF Dose Calculator', read: (b, s, soft) => tdfRead_(b, s, soft), wanted: (r, s, c) => tdfWanted_(r, s, c) },
+};
+
+// ดึงและบันทึก · คืนสรุปที่เก็บไว้ใน Script property (BRACHY_SYNC, TDF_SYNC)
+function brachySync_(ss, cfg, why) { return extSync_(ss, cfg, 'brachy', why); }
+function extSync_(ss, cfg, key, why) {
+  const x = EXT[key], s = (cfg && cfg[x.cfg]) || {};
   const res = { at: new Date().toISOString(), why: why || '', ok: false, added: 0, updated: 0, removed: 0, manual: 0, counted: 0, unknown: {}, tab: '', error: '' };
   try {
-    const book = brachyBook_(s), got = brachyRead_(book, s), w = brachyWanted_(got.rows, s, cfg);
+    const book = extBook_(s, x.what), got = x.read(book, s), w = x.wanted(got.rows, s, cfg);
     Object.assign(res, { tab: got.tab.name, counted: w.counted, unknown: w.unknown });
+    if (w.self) res.self = w.self;
     withLock_(() => {
       const sh = tableSheet_(ss, 'logs'), header = headerOf_(sh), fields = TABLES.logs.fields;
       const logs = readTable_(ss, 'logs');
       const mine = {}, manual = [];
-      logs.forEach(l => { if (String(l.src).indexOf('brachy:') === 0) mine[l.src] = l; else if (!l.src) manual.push(l); });
+      logs.forEach(l => { if (String(l.src).indexOf(key + ':') === 0) mine[l.src] = l; else if (!l.src) manual.push(l); });
       const same = (a, b) => ['kind', 'mp', 'date', 'hn', 'name', 'title', 'note'].every(k => String(a[k] || '') === String(b[k] || ''));
       const isDup = r => manual.some(l => l.date === r.date && l.hn === r.hn && l.mp === r.mp && (r.kind === 'rc' ? l.kind === 'rc' : l.kind === 'brachy' || l.kind === 'brachyn'));
       const now = new Date().toISOString();
@@ -1475,12 +1489,13 @@ function brachySync_(ss, cfg, why) {
     });
     res.ok = true;
   } catch (e) { res.error = e.message; }
-  try { PropertiesService.getScriptProperties().setProperty('BRACHY_SYNC', JSON.stringify(res).slice(0, 8000)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
+  try { PropertiesService.getScriptProperties().setProperty(x.prop, JSON.stringify(res).slice(0, 8000)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
   return res;
 }
-function brachyStatus_() {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BRACHY_SYNC') || 'null'); } catch (e) { return null; }
+function extStatus_(key) {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(EXT[key].prop) || 'null'); } catch (e) { return null; }
 }
+function brachyStatus_() { return extStatus_('brachy'); }
 
 /**
  * แอดมิน: ตรวจชีตของระบบนัดด้วยค่าที่กำลังตั้ง (ยังไม่บันทึก) · ไม่เขียนอะไร
@@ -1508,23 +1523,146 @@ function brachyCheck(s, token) {
 }
 
 // หน้าเว็บเรียกตอนเปิด: ดึงเมื่อครั้งล่าสุดเกิน BRACHY_EVERY_MIN นาที (force = ปุ่มดึงตอนนี้ของแอดมิน) · คืนสรุปล่าสุด
-function brachyPull(force, token) {
-  const u = who_(token);
+function brachyPull(force, token) { return extPull_('brachy', force, token); }
+function tdfPull(force, token) { return extPull_('tdf', force, token); }
+function extPull_(key, force, token) {
+  const u = who_(token), x = EXT[key];
   if (force && !u.isAdmin) throw new Error('ดึงตอนนี้ได้เฉพาะแอดมิน');
   const ss = ss_(), cfg = readConfig_(ss) || {};
-  if (!cfg.brachySync || !cfg.brachySync.on) return brachyStatus_();
-  const last = brachyStatus_();
+  if (!cfg[x.cfg] || !cfg[x.cfg].on) return extStatus_(key);
+  const last = extStatus_(key);
   if (!force && last && Date.now() - new Date(last.at).getTime() < BRACHY_EVERY_MIN * 60000) return last;
   const cache = CacheService.getScriptCache();
-  if (!force && cache.get('brachy_busy')) return last;
-  cache.put('brachy_busy', '1', 120);
-  try { return brachySync_(ss, cfg, force ? 'ดึงตอนนี้ (' + (u.name || u.username || u.me || '') + ')' : 'เปิดหน้าเว็บ'); } finally { cache.remove('brachy_busy'); }
+  if (!force && cache.get(key + '_busy')) return last;
+  cache.put(key + '_busy', '1', 120);
+  try { return extSync_(ss, cfg, key, force ? 'ดึงตอนนี้ (' + (u.name || u.username || u.me || '') + ')' : 'เปิดหน้าเว็บ'); } finally { cache.remove(key + '_busy'); }
 }
 
 // ตัวตั้งเวลาของ Apps Script (เจ้าของสร้างเอง: Triggers → Add Trigger → brachyTick → Time-driven ทุก 10 นาที) ดึงแม้ไม่มีใครเปิดหน้าเว็บ
+// ดึงทุกระบบที่เปิดไว้ (Brachytherapy และ RC จาก TDF)
 function brachyTick() {
   const ss = ss_(), cfg = readConfig_(ss) || {};
-  if (cfg.brachySync && cfg.brachySync.on) brachySync_(ss, cfg, 'ตั้งเวลา');
+  Object.keys(EXT).forEach(k => { if (cfg[EXT[k].cfg] && cfg[EXT[k].cfg].on) extSync_(ss, cfg, k, 'ตั้งเวลา'); });
+}
+
+/* ---------- RC จาก TDF Dose Calculator (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */
+// ตั้งค่า → RC จาก TDF Dose Calculator (config.tdfSync): { on, url, sheet, map, count: 'approved' | 'reviewed', from }
+// ผลคำนวณที่มีคน Recheck (approved · 'reviewed' = รวมไม่ผ่าน) = RC ของคน Recheck: "TDF <ประเภท> ของ <คนคำนวณ>" HN ชื่อผู้ป่วย วันที่ Recheck
+// ชีตเก็บเป็นคอลัมน์ หรือเก็บทั้งรายการเป็น JSON ในช่องเดียว ({ id, at, status, type, calc, review, patient }) ก็อ่านได้
+const TDF_KEYS = {
+  id: ['id', 'recordid', 'รหัส'],
+  json: ['json', 'data', 'record', 'payload', 'ข้อมูล', 'rec'],
+  date: ['at', 'date', 'created', 'createdat', 'วันที่', 'วันที่คำนวณ'],
+  reviewAt: ['reviewat', 'recheckat', 'reviewedat', 'วันที่recheck', 'วันที่ตรวจ'],
+  status: ['status', 'สถานะ'],
+  type: ['type', 'ประเภท', 'ชนิด'],
+  calc: ['calc', 'calcby', 'calculator', 'calcname', 'calcusername', 'คนคำนวณ', 'ผู้คำนวณ'],
+  rc: ['review', 'reviewer', 'reviewby', 'reviewname', 'reviewusername', 'recheck', 'recheckby', 'rc', 'ผู้ตรวจ', 'คนตรวจ', 'ผู้recheck', 'คนrecheck'],
+  hn: ['hn', 'patienthn'],
+  name: ['name', 'patientname', 'ชื่อ', 'ชื่อผู้ป่วย', 'ชื่อสกุล'],
+};
+const TDF_TYPE = { frac: 'Fractionated', gap: 'Treatment gap', brachy: 'Brachytherapy' };
+const TDF_LABEL = { json: 'ข้อมูล (JSON)', date: 'วันที่', hn: 'HN', rc: 'คน Recheck (RC)' };
+// วันที่: วันที่ของชีต · เวลาเป็นมิลลิวินาที (Date.now()) · ISO · d/M/yyyy
+function extDay_(v, tz) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v) ? '' : Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  const t = String(v).trim();
+  if (typeof v === 'number' || /^\d{11,13}$/.test(t)) return +t > 1e11 ? Utilities.formatDate(new Date(+t), tz, 'yyyy-MM-dd') : '';
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) { const d = new Date(t); return isNaN(d) ? t.slice(0, 10) : Utilities.formatDate(d, tz, 'yyyy-MM-dd'); }
+  return brachyDate_(t);
+}
+const extObj_ = v => {
+  if (v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Date]') return v;
+  const t = String(v || '').trim();
+  if (t.charAt(0) === '{') { try { const o = JSON.parse(t); return o && typeof o === 'object' ? o : null; } catch (e) { return null; } }
+  return null;
+};
+// คน (คนคำนวณ / คน Recheck): { username, name } หรือข้อความ → [ชื่อผู้ใช้, ชื่อ, อีเมล] ที่ใช้จับคู่กับทีม
+const extWho_ = v => { const o = extObj_(v); return o ? [o.username, o.name, o.email].map(x => String(x || '').trim()).filter(Boolean) : (String(v || '').trim() ? [String(v).trim()] : []); };
+
+function tdfRead_(book, s, soft) {
+  const tabs = brachyTabs_(book);
+  const tab = brachyPick_(tabs, s, TDF_KEYS, g => !!g.json || (!!g.rc && !!g.hn));
+  if (!tab) throw new Error('ไม่พบแท็บในชีตของ TDF Dose Calculator');
+  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone();
+  const last = sh.getLastRow(), width = sh.getLastColumn();
+  const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
+  const header = (values.shift() || []).map(v => String(v).trim());
+  const map = Object.assign(brachyGuess_(tab.headers, TDF_KEYS), s && s.map && typeof s.map === 'object' ? s.map : {});
+  // ไม่มีหัวคอลัมน์ JSON: ดูช่องในแถวแรกที่เป็น JSON ของรายการ (มี calc / review / patient)
+  if (!(s && s.map && 'json' in s.map) && !map.json && values.length) {
+    const j = header.filter((h, i) => { const o = extObj_(values[0][i]); return !!o && ('calc' in o || 'review' in o || 'patient' in o); })[0];
+    if (j) map.json = j;
+  }
+  const has = k => !!map[k] && header.indexOf(map[k]) >= 0;
+  const miss = has('json') ? [] : ['date', 'hn', 'rc'].filter(k => (k === 'date' ? !has('date') && !has('reviewAt') : !has(k)));
+  if (miss.length && soft) return { tab: tab, map: map, tabs: tabs, rows: [], missing: miss };
+  if (miss.length) throw new Error('ยังไม่ได้เลือกคอลัมน์ ' + miss.map(k => TDF_LABEL[k]).join(', ') + ' ของแท็บ ' + tab.name + ' · ตั้งค่า → RC จาก TDF Dose Calculator → ตรวจชีต แล้วเลือกคอลัมน์');
+  const col = {};
+  Object.keys(TDF_KEYS).forEach(k => { col[k] = has(k) ? header.indexOf(map[k]) : -1; });
+  const rows = values.map(r => {
+    const c = k => (col[k] >= 0 ? r[col[k]] : '');
+    const j = extObj_(c('json')) || {}, p = extObj_(j.patient) || {};
+    const ca = j.calc || c('calc'), rv = j.review || c('rc'), rvo = extObj_(rv) || {};
+    const o = {
+      id: String(j.id || cellText_(c('id'), tz) || '').trim(),
+      status: String(j.status || cellText_(c('status'), tz) || '').trim(),
+      type: String(j.type || cellText_(c('type'), tz) || '').trim(),
+      calc: extWho_(ca), rc: extWho_(rv),
+      calcName: String((extObj_(ca) || {}).name || (extObj_(ca) ? '' : cellText_(ca, tz)) || '').trim(),
+      hn: String(p.hn || cellText_(c('hn'), tz) || '').replace(/\.0$/, '').trim(),
+      name: String(p.name || p.fullName || cellText_(c('name'), tz) || '').trim(),
+      date: extDay_(rvo.at || c('reviewAt') || j.at || c('date'), tz),
+    };
+    o.key = o.id || (o.hn && o.date ? o.hn + '|' + o.date : '');
+    return o;
+  }).filter(o => o.key);
+  return { tab: tab, map: map, tabs: tabs, rows: rows, missing: [] };
+}
+
+function tdfWanted_(rows, s, cfg) {
+  const want = {}, unknown = {}, staffOf = brachyStaff_(cfg);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(s.from || '')) ? s.from : '';
+  const code = list => list.map(staffOf).filter(Boolean)[0] || '';
+  let counted = 0, self = 0;
+  rows.forEach(r => {
+    const st = r.status.toLowerCase();
+    const counts = st === 'approved' || (s.count === 'reviewed' && st === 'rejected') || (!st && r.rc.length > 0);
+    if (!counts || !r.rc.length || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
+    counted++;
+    const rc = code(r.rc), calc = code(r.calc);
+    if (!rc) { const k = r.rc.slice().reverse().join(' / '); unknown[k] = (unknown[k] || 0) + 1; return; }
+    if (calc && calc === rc) { self++; return; }   // คนคำนวณ Recheck เอง: ไม่นับเป็น RC
+    const title = ['TDF', TDF_TYPE[r.type] || r.type, 'ของ', calc || r.calcName || r.calc[0] || '?'].filter(Boolean).join(' ');
+    want['tdf:' + r.key + ':rc'] = { kind: 'rc', mp: rc, date: r.date, hn: r.hn, name: r.name, title: title, note: 'TDF Dose Calculator' + (st === 'rejected' ? ' · Recheck ไม่ผ่าน' : '') };
+  });
+  return { want: want, unknown: unknown, counted: counted, from: from, self: self };
+}
+
+/**
+ * แอดมิน: ตรวจชีตของ TDF Dose Calculator ด้วยค่าที่กำลังตั้ง · ไม่เขียนอะไร
+ * { title, tabs, tab, map, missing, preview: { rows, counted, rc, self, statuses, types, unknown, first, last } }
+ */
+function tdfCheck(s, token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('ตั้งค่าการดึง RC จาก TDF ได้เฉพาะแอดมิน');
+  s = s && typeof s === 'object' ? s : {};
+  const book = extBook_(s, EXT.tdf.what), got = tdfRead_(book, s, true), w = tdfWanted_(got.rows, s, readConfig_(ss_()) || {});
+  const statuses = {}, types = {};
+  got.rows.forEach(r => {
+    const k = r.status || '(ว่าง)', t = TDF_TYPE[r.type] || r.type || '(ว่าง)';
+    statuses[k] = (statuses[k] || 0) + 1;
+    types[t] = (types[t] || 0) + 1;
+  });
+  const dates = got.rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  return {
+    title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
+    preview: got.missing.length ? null : {
+      rows: got.rows.length, counted: w.counted, rc: Object.keys(w.want).length, self: w.self, statuses: statuses, types: types, unknown: w.unknown,
+      first: dates[0] || '', last: dates[dates.length - 1] || '',
+    },
+  };
 }
 
 /* ---------- วันหยุดราชการไทย (ปฏิทินวันหยุดสาธารณะของ Google) ---------- */

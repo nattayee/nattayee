@@ -1629,7 +1629,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
   <form class="dlg" id="log-form" novalidate>
     <header class="dlg-head"><h2 id="log-title">บันทึกกิจกรรม</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
-      <p class="l-need" id="l-src" hidden>รายการนี้ดึงจากระบบนัด Brachytherapy · แก้หรือยกเลิกที่ระบบนัด (แก้ที่นี่จะถูกแทนที่ตอนดึงครั้งถัดไป)</p>
+      <p class="l-need" id="l-src" hidden></p>
       <p class="l-need" id="l-need" hidden>ต้องบันทึก RC ของเคสนี้ก่อน Plan complete · บันทึก RC แล้วจะไปหน้าบันทึก Plan complete ต่อ</p>
       <div class="field"><span class="lbl">ประเภท</span><div class="chips" id="l-kind" role="radiogroup" aria-label="ประเภท"></div></div>
       <p class="linked" id="l-linked" hidden></p>
@@ -1970,6 +1970,10 @@ const CT_API = 32;   // Code.gs ที่มีแถบ CT-SIM (ctSave, ctRemov
 const ctOn = () => serverHas(CT_API);
 const MEMBER_EMAIL_API = 33;   // Code.gs ที่ส่งอีเมลของสมาชิก LPCH มากับรายชื่อ (lpchMembers)
 const BRACHY_API = 34;   // Code.gs ที่ดึงสถิติ Brachytherapy จากชีตของระบบนัด (brachyCheck, brachyPull, brachyTick)
+const TDF_API = 35;   // Code.gs ที่ดึง RC จาก TDF Dose Calculator (tdfCheck, tdfPull)
+// คอลัมน์ในชีตของ TDF Dose Calculator (มีคอลัมน์ JSON ของทั้งรายการ = ไม่ต้องเลือกคอลัมน์อื่น)
+const TDF_FIELDS = [['rc', 'คน Recheck (RC)'], ['calc', 'คนคำนวณ'], ['hn', 'HN'], ['name', 'ชื่อผู้ป่วย'], ['reviewAt', 'วันที่ Recheck'], ['date', 'วันที่คำนวณ'],
+  ['type', 'ประเภท'], ['status', 'สถานะ'], ['id', 'รหัส'], ['json', 'ข้อมูลทั้งรายการ (JSON)']];
 // คอลัมน์ในชีตของระบบนัด Brachytherapy [คีย์, ชื่อ, บังคับ]
 const BRACHY_FIELDS = [['date', 'วันที่นัด', true], ['hn', 'HN', true], ['mp', 'MP (ผู้วางแผน)', true], ['rc', 'RC'], ['technique', 'เทคนิค / รูปแบบการใส่ (Interstitial needle = เสียบเข็ม)'], ['id', 'รหัสนัด (ไม่มี = ใช้ HN + วันที่ + Fx)'],
   ['name', 'ชื่อผู้ป่วย'], ['status', 'สถานะ'], ['fx', 'Fx'], ['totalFx', 'Fx ทั้งหมด']];
@@ -2079,6 +2083,8 @@ const DEFAULT_CONFIG = {
   dutyRoles: { rtt: ['RTT'], ra: ['RA'] },   // ตำแหน่งใน LPCH ที่เลือกเป็น RTT / RA ประจำวันได้
   // ดึงสถิติ Brachytherapy จากระบบนัด: ลิงก์ชีต · แท็บ · คอลัมน์ (ว่าง = เดาจากหัวคอลัมน์) · นับ all = นัดที่ไม่ยกเลิก | done = มาตามนัด · ดึงตั้งแต่วันที่
   brachySync: { on: false, url: '', sheet: '', map: {}, count: 'all', from: '' },
+  // ดึง RC จาก TDF Dose Calculator: นับ approved = Recheck ผ่าน | reviewed = รวมไม่ผ่าน
+  tdfSync: { on: false, url: '', sheet: '', map: {}, count: 'approved', from: '' },
   // แถบ CT-SIM: เครื่อง CT (รหัสคงที่ ชื่อแก้ได้) · ตัวเลือกของช่องห้อง CT · ช่องในฟอร์ม
   ct: {
     rooms: [{ id: 'ct1', label: 'CT-1 (30)' }, { id: 'ct2', label: 'CT-2 (32)' }],
@@ -2364,6 +2370,9 @@ function mergeConfig(c) {
   const bs = c.brachySync && typeof c.brachySync === 'object' ? c.brachySync : {}, bmap = bs.map && typeof bs.map === 'object' ? bs.map : {};
   out.brachySync = { on: !!bs.on, url: str(bs.url).trim(), sheet: str(bs.sheet), map: Object.fromEntries(BRACHY_FIELDS.filter(([k]) => k in bmap).map(([k]) => [k, str(bmap[k])])),
     count: bs.count === 'done' ? 'done' : 'all', from: /^\d{4}-\d{2}-\d{2}$/.test(str(bs.from)) ? str(bs.from) : '' };
+  const ts = c.tdfSync && typeof c.tdfSync === 'object' ? c.tdfSync : {}, tmap = ts.map && typeof ts.map === 'object' ? ts.map : {};
+  out.tdfSync = { on: !!ts.on, url: str(ts.url).trim(), sheet: str(ts.sheet), map: Object.fromEntries(TDF_FIELDS.filter(([k]) => k in tmap).map(([k]) => [k, str(tmap[k])])),
+    count: ts.count === 'reviewed' ? 'reviewed' : 'approved', from: /^\d{4}-\d{2}-\d{2}$/.test(str(ts.from)) ? str(ts.from) : '' };
   for (const [k] of CT_LISTS) out.ct[k] = Array.isArray(ct[k]) ? [...new Set(ct[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.ct[k].slice();
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
@@ -2466,7 +2475,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-27.4';
+const PAGE_VERSION = '2026-10-27.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -2525,6 +2534,8 @@ const sheetStore = {
   holidays: year => call('thaiHolidays', year),
   brachyCheck: set => call('brachyCheck', set),
   brachyPull: force => call('brachyPull', !!force),
+  tdfCheck: set => call('tdfCheck', set),
+  tdfPull: force => call('tdfPull', !!force),
 };
 function localStore() {
   const KEY = 'medphys-dispatch:v1';
@@ -2664,6 +2675,8 @@ function localStore() {
     members: async () => demoMembers(),
     brachyCheck: async () => { throw new Error('ดึงจากระบบนัด Brachytherapy ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     brachyPull: async () => null,
+    tdfCheck: async () => { throw new Error('ดึงจาก TDF Dose Calculator ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    tdfPull: async () => null,
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
@@ -2852,6 +2865,7 @@ function demoDb() {
 
 /* ---------- สถานะ ---------- */
 const state = {
+  srcChk: {},   // ผลตรวจชีตของระบบอื่น (ตั้งค่า) { brachy, tdf }
   config: mergeConfig(null), cases: [], logs: [], leaves: [], duty: [], ct: [], loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
@@ -5385,7 +5399,7 @@ function renderLogs() {
     return `<li><${canEdit() ? `button type="button" class="lrow" data-logedit="${esc(l.id)}"` : 'div class="lrow"'}>
       <span class="l-date">${esc(fmtDay(l.date))}</span>
       <span class="l-kind">${av(l.mp)}<span class="chip" title="${esc(kind.label)}">${esc((cfg.acts[l.kind] && cfg.acts[l.kind].tab) || kind.label)}</span></span>
-      <span class="l-main">${main}${l.src ? '<span class="src-tag" title="ดึงจากระบบนัด Brachytherapy · แก้ที่ระบบนัด">ระบบนัด</span>' : ''}</span>
+      <span class="l-main">${main}${srcOfLog(l) ? `<span class="src-tag" title="ดึงจาก${esc(sp(srcOfLog(l).sys))} · แก้ที่ระบบนั้น">${esc(srcOfLog(l).tag)}</span>` : ''}</span>
       <span class="l-pts">${num(pts, 3)}</span>
     </${canEdit() ? 'button' : 'div'}></li>`;
   }).join('') : `<li class="empty-state">${words.length ? `ไม่พบบันทึกที่ตรงกับคำค้นใน${esc(fmtMonth(ym))}` : `ยังไม่มีบันทึกใน${esc(fmtMonth(ym))}`}</li>`;
@@ -6040,67 +6054,97 @@ function pickAcct(path, username) {
   if (u && !str(x.name)) x.name = u.name;
   renderSettings();
 }
-// ตั้งค่า → Brachytherapy จากระบบนัด: ลิงก์ชีตของระบบนัด · ตรวจชีต (แท็บ คอลัมน์ ตัวอย่าง) · สรุปการดึงล่าสุด · ดึงตอนนี้
+// ตั้งค่า → ดึงจากระบบอื่น (Brachytherapy จากระบบนัด · RC จาก TDF Dose Calculator): ลิงก์ชีต · ตรวจชีต (แท็บ คอลัมน์ ตัวอย่าง) · สรุปการดึงล่าสุด · ดึงตอนนี้
+const SRC = {
+  brachy: {
+    cfg: 'brachySync', api: BRACHY_API, ver: '2026-10-27.2', fields: BRACHY_FIELDS, h2: 'Brachytherapy จากระบบนัด', tag: 'ระบบนัด', sys: 'ระบบนัด Brachytherapy', item: 'นัด', who: 'MP/RC',
+    desc: () => `ดึงนัดจากระบบนัด Brachytherapy มาบันทึกในแถบ ${esc(navLabel('logs'))} เอง: MP = ผู้วางแผน (Brachy 3D · เทคนิค Interstitial needle = Brachy เสียบเข็ม) · RC = RC · พร้อม HN ชื่อผู้ป่วย และวันนัด · ระบบนัดเพิ่ม แก้ หรือยกเลิกนัด = แก้ตาม`,
+    counts: [['all', 'ทุกนัดที่ไม่ยกเลิก (นัดแล้ว + มาตามนัด)'], ['done', 'เฉพาะ "มาตามนัด"']],
+    check: set => store.brachyCheck(set), pull: force => store.brachyPull(force),
+  },
+  tdf: {
+    cfg: 'tdfSync', api: TDF_API, ver: '2026-10-27.5', fields: TDF_FIELDS, h2: 'RC จาก TDF Dose Calculator', tag: 'TDF', sys: 'TDF Dose Calculator', item: 'ผลคำนวณ', who: 'คน Recheck',
+    desc: () => `ดึงผลคำนวณที่มีคน Recheck จาก TDF Dose Calculator มาบันทึกเป็น RC ในแถบ ${esc(navLabel('logs'))} เอง: คน Recheck ได้ RC "TDF ประเภท ของ คนคำนวณ" พร้อม HN ชื่อผู้ป่วย และวันที่ Recheck · ระบบนั้นแก้หรือถอนผล = แก้ตาม · คนคำนวณ Recheck เองไม่นับ`,
+    counts: [['approved', 'เฉพาะ Recheck ผ่าน'], ['reviewed', 'ทุกครั้งที่มีคน Recheck (ผ่านหรือไม่ผ่าน)']],
+    check: set => store.tdfCheck(set), pull: force => store.tdfPull(force),
+  },
+};
+const SRC_KEYS = Object.keys(SRC);
+const sp = t => (/^[A-Za-z]/.test(t) ? ' ' + t : t);   // ไทยต่อชื่ออังกฤษ: เว้นวรรค
+const srcOfLog = l => SRC[str(l.src).split(':')[0]] || null;
 const stampText = at => { const t = new Date(at); return isNaN(t) ? '' : `${fmtDay(iso(t))} ${pad(t.getHours())}:${pad(t.getMinutes())}`; };
-function brachyStatusHtml(st) {
+const unknownText = unk => esc(unk.map(([k, n]) => `${k} (${n})`).join(', '));
+function srcStatusHtml(key, st) {
+  const x = SRC[key];
   if (!st) return '<span class="muted">ยังไม่เคยดึง</span>';
   if (!st.ok) return `<span class="acct-warn">ดึงล่าสุด ${esc(stampText(st.at))} ไม่สำเร็จ: ${esc(st.error)}</span>`;
   const unk = Object.entries(st.unknown || {});
-  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.why ? ` (${esc(st.why)})` : ''} · แท็บ ${esc(st.tab)} · นัดที่นับ ${st.counted} · เพิ่ม ${st.added} · แก้ ${st.updated} · ลบ ${st.removed}${st.manual ? ` · บันทึกเองไว้แล้ว ${st.manual}` : ''}`
-    + (unk.length ? `<br><span class="acct-warn">ไม่รู้จัก MP/RC: ${esc(unk.map(([k, n]) => `${k} (${n})`).join(', '))} · ใส่รหัส ชื่อ-สกุล หรือบัญชี RO Workspace ให้ตรงที่ ทีมนักฟิสิกส์</span>` : '');
+  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.why ? ` (${esc(st.why)})` : ''} · แท็บ ${esc(st.tab)} · ${x.item}ที่นับ ${st.counted} · เพิ่ม ${st.added} · แก้ ${st.updated} · ลบ ${st.removed}${st.manual ? ` · บันทึกเองไว้แล้ว ${st.manual}` : ''}${st.self ? ` · Recheck เอง ${st.self} (ไม่นับ)` : ''}`
+    + (unk.length ? `<br><span class="acct-warn">ไม่รู้จัก ${x.who}: ${unknownText(unk)} · ใส่รหัส ชื่อ-สกุล หรือบัญชี RO Workspace ให้ตรงที่ ทีมนักฟิสิกส์</span>` : '');
 }
-function brachySec(d) {
-  const b = d.brachySync, chk = state.brachyChk, local = store.mode === 'local', api = local || serverHas(BRACHY_API);
+function srcPreview(key, chk, b) {
+  const pv = chk && chk.preview, x = SRC[key];
+  if (!pv) return '';
+  const unk = Object.entries(pv.unknown || {}), range = pv.first ? ` (${esc(fmtDayY(pv.first))} – ${esc(fmtDayY(pv.last))})` : '';
+  const head = `ชีต <b>${esc(chk.title)}</b> · แท็บ ${esc(chk.tab)}${chk.map.json ? ` (ข้อมูล JSON ในคอลัมน์ ${esc(chk.map.json)})` : ''} · ${x.item} ${pv.rows} รายการ${range} · สถานะ ${esc(Object.entries(pv.statuses).map(([k, n]) => `${k} ${n}`).join(', '))}`;
+  const unkLine = unk.length ? `<br><span class="acct-warn">ไม่รู้จัก ${x.who}: ${unknownText(unk)}</span>` : '';
+  if (key === 'tdf') {
+    return `<div class="br-preview">${head}${pv.types ? `<br>ประเภท: ${esc(Object.entries(pv.types).map(([k, n]) => `${k} ${n}`).join(', '))}` : ''}
+      <br>ตามค่าที่ตั้ง: ผลที่นับ <b>${pv.counted}</b> → RC ${pv.rc} รายการ${pv.self ? ` · คนคำนวณ Recheck เอง ${pv.self} (ไม่นับ)` : ''}${unkLine}</div>`;
+  }
+  // รูปแบบการใส่: ค่าที่พบในชีต (เสียบเข็ม = Brachy เสียบเข็ม) · ไม่ได้เลือกคอลัมน์ = นับเป็น Brachy 3D ทั้งหมด
+  const techCol = 'technique' in b.map ? b.map.technique : chk.map.technique || '';
+  const isNeedle = v => /interstitial|needle|เข็ม|^i$/i.test(str(v).trim());
+  const techs = pv.techniques ? Object.entries(pv.techniques) : [];
+  const techNote = !techCol ? '<br><span class="acct-warn">ไม่ได้เลือกคอลัมน์เทคนิค / รูปแบบการใส่: นับเป็น Brachy 3D ทั้งหมด (ไม่ติ๊กเสียบเข็ม) · เลือกคอลัมน์ที่บอก Interstitial needle</span>'
+    : techs.length ? `<br>รูปแบบการใส่: ${techs.map(([k, n]) => `${esc(k)} ${n}${isNeedle(k) ? ' <b>= เสียบเข็ม</b>' : ''}`).join(', ')}` : '';
+  return `<div class="br-preview">${head}
+      ${techNote}<br>ตามค่าที่ตั้ง: นัดที่นับ <b>${pv.counted}</b> → ผู้วางแผน ${pv.plan} รายการ (เสียบเข็ม ${pv.needle}) · RC ${pv.rc} รายการ${unkLine}</div>`;
+}
+function srcSec(d, key) {
+  const x = SRC[key], b = d[x.cfg], chk = state.srcChk[key], local = store.mode === 'local', api = local || serverHas(x.api), on = state.config[x.cfg].on;
   const tab = chk && chk.tabs.find(t => t.name === (b.sheet || chk.tab));
   const heads = tab ? tab.headers : [];
   const missing = chk && Array.isArray(chk.missing) ? chk.missing : [];
-  const mapRows = chk ? BRACHY_FIELDS.map(([k, l, need]) => {
+  const label = k => (x.fields.find(f => f[0] === k) || [k, k])[1];
+  const mapRows = chk ? x.fields.map(([k, l, need]) => {
     const v = k in b.map ? b.map[k] : chk.map[k] || '';
-    return `<tr${missing.includes(k) ? ' class="br-miss"' : ''}><td>${esc(l)}${need ? ' <b class="req">*</b>' : ''}${missing.includes(k) ? ' <span class="acct-warn">ต้องเลือก</span>' : ''}</td><td><select data-k="brachySync.map.${k}" aria-label="คอลัมน์ ${esc(l)}">${opt('', '— ไม่มี —', v)}${heads.map(h => opt(h, h, v)).join('')}</select></td></tr>`;
+    return `<tr${missing.includes(k) ? ' class="br-miss"' : ''}><td>${esc(l)}${need ? ' <b class="req">*</b>' : ''}${missing.includes(k) ? ' <span class="acct-warn">ต้องเลือก</span>' : ''}</td><td><select data-k="${x.cfg}.map.${k}" aria-label="คอลัมน์ ${esc(l)}">${opt('', '— ไม่มี —', v)}${heads.map(h => opt(h, h, v)).join('')}</select></td></tr>`;
   }).join('') : '';
-  const pv = chk && chk.preview, unk = pv ? Object.entries(pv.unknown) : [];
-  // รูปแบบการใส่: ค่าที่พบในชีต (เสียบเข็ม = Brachy เสียบเข็ม) · ไม่ได้เลือกคอลัมน์ = นับเป็น Brachy 3D ทั้งหมด
-  const techCol = chk ? ('technique' in b.map ? b.map.technique : chk.map.technique || '') : '';
-  const isNeedle = v => /interstitial|needle|เข็ม|^i$/i.test(str(v).trim());
-  const techs = pv && pv.techniques ? Object.entries(pv.techniques) : [];
-  const techNote = !pv ? '' : !techCol ? '<br><span class="acct-warn">ไม่ได้เลือกคอลัมน์เทคนิค / รูปแบบการใส่: นับเป็น Brachy 3D ทั้งหมด (ไม่ติ๊กเสียบเข็ม) · เลือกคอลัมน์ที่บอก Interstitial needle</span>'
-    : techs.length ? `<br>รูปแบบการใส่: ${techs.map(([k, n]) => `${esc(k)} ${n}${isNeedle(k) ? ' <b>= เสียบเข็ม</b>' : ''}`).join(', ')}` : '';
-  const missNote = missing.length ? `<p class="br-preview acct-warn">หัวคอลัมน์ของแท็บ ${esc(chk.tab)} ไม่ตรงกับที่เดาได้: เลือกคอลัมน์ ${esc(missing.map(k => (BRACHY_FIELDS.find(f => f[0] === k) || [k, k])[1]).join(', '))} จากรายการด้านล่าง (เลือกแล้วตรวจให้ใหม่เอง) แล้วกดบันทึกการตั้งค่า</p>` : '';
-  const preview = pv ? `<div class="br-preview">ชีต <b>${esc(chk.title)}</b> · แท็บ ${esc(chk.tab)} · นัด ${pv.rows} รายการ${pv.first ? ` (${esc(fmtDayY(pv.first))} – ${esc(fmtDayY(pv.last))})` : ''} · สถานะ ${esc(Object.entries(pv.statuses).map(([k, n]) => `${k} ${n}`).join(', '))}
-      ${techNote}<br>ตามค่าที่ตั้ง: นัดที่นับ <b>${pv.counted}</b> → ผู้วางแผน ${pv.plan} รายการ (เสียบเข็ม ${pv.needle}) · RC ${pv.rc} รายการ${unk.length ? `<br><span class="acct-warn">ไม่รู้จัก MP/RC: ${esc(unk.map(([k, n]) => `${k} (${n})`).join(', '))}</span>` : ''}</div>` : '';
-  return `<div class="sec" data-sec="brachy"><div class="sec-head"><h2>Brachytherapy จากระบบนัด</h2><p>ดึงนัดจากระบบนัด Brachytherapy มาบันทึกในแถบ ${esc(navLabel('logs'))} เอง: MP = ผู้วางแผน (Brachy 3D · เทคนิค Interstitial needle = Brachy เสียบเข็ม) · RC = RC · พร้อม HN ชื่อผู้ป่วย และวันนัด · ระบบนัดเพิ่ม แก้ หรือยกเลิกนัด = แก้ตาม</p></div>
-      ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจากระบบนัดได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจากระบบนัด Brachytherapy ต้องใช้ Code.gs รุ่น 2026-10-27.2 ขึ้นไป</span></p>' : ''}
-      <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="brachySync.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
-      <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์ Google Sheet ของระบบนัด <span class="sub-lbl">ชีตที่ระบบนัดเก็บข้อมูล (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ …/exec · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้</span></span>
-        <span class="br-url" style="display:flex;gap:8px"><input data-k="brachySync.url" value="${esc(b.url)}" placeholder="docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์ Google Sheet ของระบบนัด Brachytherapy"><button type="button" class="btn ghost" data-brchk${local || !api ? ' disabled' : ''}>ตรวจชีต</button></span></div>
+  const missNote = missing.length ? `<p class="br-preview acct-warn">หัวคอลัมน์ของแท็บ ${esc(chk.tab)} ไม่ตรงกับที่เดาได้: เลือกคอลัมน์ ${esc(missing.map(label).join(', '))} จากรายการด้านล่าง (เลือกแล้วตรวจให้ใหม่เอง) แล้วกดบันทึกการตั้งค่า</p>` : '';
+  return `<div class="sec" data-sec="${key}"><div class="sec-head"><h2>${esc(x.h2)}</h2><p>${x.desc()}</p></div>
+      ${local ? `<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก${esc(sp(x.sys))}ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>` : !api ? `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก${esc(sp(x.sys))}ต้องใช้ Code.gs รุ่น ${x.ver} ขึ้นไป</span></p>` : ''}
+      <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="${x.cfg}.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
+      <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์ Google Sheet ของ${esc(sp(x.sys))} <span class="sub-lbl">ชีตที่ระบบนั้นเก็บข้อมูล (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ …/exec · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้</span></span>
+        <span class="br-url" style="display:flex;gap:8px"><input data-k="${x.cfg}.url" value="${esc(b.url)}" placeholder="docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์ Google Sheet ของ${esc(sp(x.sys))}"><button type="button" class="btn ghost" data-srcchk="${key}"${local || !api ? ' disabled' : ''}>ตรวจชีต</button></span></div>
       <div class="form-grid" style="margin-bottom:6px">
-        <label class="field"><span class="lbl">นัดที่นับ</span><select data-k="brachySync.count">${opt('all', 'ทุกนัดที่ไม่ยกเลิก (นัดแล้ว + มาตามนัด)', b.count)}${opt('done', 'เฉพาะ "มาตามนัด"', b.count)}</select></label>
-        <label class="field"><span class="lbl">ดึงตั้งแต่วันที่ <span class="sub-lbl">ว่าง = ทุกนัด</span></span><input type="date" data-k="brachySync.from" value="${esc(b.from)}"></label>
+        <label class="field"><span class="lbl">${esc(x.item)}ที่นับ</span><select data-k="${x.cfg}.count">${x.counts.map(([v, l]) => opt(v, l, b.count)).join('')}</select></label>
+        <label class="field"><span class="lbl">ดึงตั้งแต่วันที่ <span class="sub-lbl">ว่าง = ทั้งหมด</span></span><input type="date" data-k="${x.cfg}.from" value="${esc(b.from)}"></label>
       </div>
-      <div id="br-chk">${chk ? `<label class="field" style="max-width:360px;margin-bottom:10px"><span class="lbl">แท็บของนัด</span><select data-k="brachySync.sheet">${opt('', `เลือกให้ (${chk.tab})`, b.sheet)}${chk.tabs.map(t => opt(t.name, `${t.name} (${t.rows} แถว)`, b.sheet)).join('')}</select></label>
-        <h3 class="sub-h">คอลัมน์ในแท็บ ${esc(tab ? tab.name : '')}</h3><div class="table-wrap set-table br-map"><table><thead><tr><th style="text-align:left">ข้อมูล</th><th>คอลัมน์ในชีตของระบบนัด</th></tr></thead><tbody>${mapRows}</tbody></table></div>` : ''}
-      ${missNote}${preview}</div>
-      <p class="br-status" id="br-status">${brachyStatusHtml(state.brachy)}</p>
-      <div class="mem-bar"><button type="button" class="btn ghost" data-brpull${local || !api || !state.config.brachySync.on ? ' disabled' : ''}>ดึงตอนนี้</button><span class="muted">${state.config.brachySync.on ? 'ดึงเองเมื่อมีคนเปิดหน้าเว็บและดึงครั้งล่าสุดเกิน 10 นาที' : 'เปิด "ดึงอัตโนมัติ" แล้วกดบันทึกการตั้งค่าก่อน'}</span></div>
-      <p class="muted def-note" style="margin:8px 0 0">ให้ดึงแม้ไม่มีใครเปิดหน้าเว็บ: เจ้าของเปิด Apps Script ของระบบนี้ → Triggers (รูปนาฬิกา) → Add Trigger → ฟังก์ชัน <code>brachyTick</code> · Time-driven · Minutes timer · Every 10 minutes
-        · MP / RC ในระบบนัดจับคู่กับ ทีมนักฟิสิกส์ ด้วยรหัส ชื่อผู้ใช้หรืออีเมล RO Workspace หรือชื่อ-สกุล · มีรายการที่บันทึกเอง (วัน HN คน ประเภทเดียวกัน) แล้วไม่เพิ่มซ้ำ</p>
+      <div id="src-chk-${key}">${chk ? `<label class="field" style="max-width:360px;margin-bottom:10px"><span class="lbl">แท็บของข้อมูล</span><select data-k="${x.cfg}.sheet">${opt('', `เลือกให้ (${chk.tab})`, b.sheet)}${chk.tabs.map(t => opt(t.name, `${t.name} (${t.rows} แถว)`, b.sheet)).join('')}</select></label>
+        <h3 class="sub-h">คอลัมน์ในแท็บ ${esc(tab ? tab.name : '')}</h3><div class="table-wrap set-table br-map"><table><thead><tr><th style="text-align:left">ข้อมูล</th><th>คอลัมน์ในชีตของ${esc(sp(x.sys))}</th></tr></thead><tbody>${mapRows}</tbody></table></div>` : ''}
+      ${missNote}${srcPreview(key, chk, b)}</div>
+      <p class="br-status" id="src-status-${key}">${srcStatusHtml(key, state[key])}</p>
+      <div class="mem-bar"><button type="button" class="btn ghost" data-srcpull="${key}"${local || !api || !on ? ' disabled' : ''}>ดึงตอนนี้</button><span class="muted">${on ? 'ดึงเองเมื่อมีคนเปิดหน้าเว็บและดึงครั้งล่าสุดเกิน 10 นาที' : 'เปิด "ดึงอัตโนมัติ" แล้วกดบันทึกการตั้งค่าก่อน'}</span></div>
+      <p class="muted def-note" style="margin:8px 0 0">ให้ดึงแม้ไม่มีใครเปิดหน้าเว็บ: เจ้าของเปิด Apps Script ของระบบนี้ → Triggers (รูปนาฬิกา) → Add Trigger → ฟังก์ชัน <code>brachyTick</code> (ดึงทุกระบบที่เปิดไว้) · Time-driven · Minutes timer · Every 10 minutes
+        · คนในระบบนั้นจับคู่กับ ทีมนักฟิสิกส์ ด้วยรหัส ชื่อผู้ใช้หรืออีเมล RO Workspace หรือชื่อ-สกุล · มีรายการที่บันทึกเอง (วัน HN คน ประเภทเดียวกัน) แล้วไม่เพิ่มซ้ำ</p>
     </div>`;
 }
-// ตรวจชีตด้วยค่าที่กำลังแก้ (ยังไม่บันทึก) · เปลี่ยนแท็บ คอลัมน์ นัดที่นับ หรือวันที่ = ตรวจใหม่
-async function brachyCheckRun(btn) {
+// ตรวจชีตด้วยค่าที่กำลังแก้ (ยังไม่บันทึก) · เปลี่ยนแท็บ คอลัมน์ ที่นับ หรือวันที่ = ตรวจใหม่
+async function srcCheckRun(key, btn) {
   if (btn) btn.disabled = true;
   try {
-    state.brachyChk = await store.brachyCheck(clone(draft.brachySync));
+    state.srcChk[key] = await SRC[key].check(clone(draft[SRC[key].cfg]));
     renderSettings();
   } catch (e) { if (btn) btn.disabled = false; toast('ตรวจชีตไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-async function brachyPullNow(btn) {
+async function srcPullNow(key, btn) {
   btn.disabled = true;
   try {
-    const st = await store.brachyPull(true);
-    state.brachy = st;
+    const st = await SRC[key].pull(true);
+    state[key] = st;
     if (st && !st.ok) toast('ดึงไม่สำเร็จ: ' + st.error, { err: true });
-    else if (st) toast(`ดึงจากระบบนัดแล้ว · เพิ่ม ${st.added} · แก้ ${st.updated} · ลบ ${st.removed}`);
+    else if (st) toast(`ดึงจาก${SRC[key].tag === 'TDF' ? ' TDF ' : 'ระบบนัด'}แล้ว · เพิ่ม ${st.added} · แก้ ${st.updated} · ลบ ${st.removed}`);
     await refresh(true);
     renderSettings();
   } catch (e) { btn.disabled = false; toast('ดึงไม่สำเร็จ: ' + errMsg(e), { err: true }); }
@@ -6320,7 +6364,7 @@ function renderSettings() {
       <h3 class="sub-h">ฟอร์มเพิ่มผู้ป่วย CT-SIM</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN วันที่ และเครื่อง CT บังคับเสมอ · ช่องชุดบน (Name ถึงหัวข้อเพิ่มเติม) เหมือนฟอร์มแจกเคส MP ดึงไปใช้ในแถบงานได้ · ช่องห้อง CT ใช้ในไฟล์ส่งออก · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${CT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ct.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT-SIM">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.ct.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
-    ${brachySec(d)}
+    ${SRC_KEYS.map(k => srcSec(d, k)).join('')}
     <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>ติ๊ก = ต้องใส่รหัส PIN 4 หลักของตัวเองก่อนบันทึก · ไม่ติ๊ก = บันทึกได้เลย (ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบ · การลบยังถามยืนยัน)</p></div>
       ${pinCfgOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ตั้งงานที่ไม่ต้องใส่ PIN ได้เมื่อใช้ Code.gs รุ่น 2026-10-22.1 ขึ้นไป · ตอนนี้ทุกงานยังต้องใส่ PIN</span></p>'}
       <div class="pin-groups">${PIN_GROUPS.map(([k, l, note]) => `<label class="check"><input type="checkbox" data-k="pin.${k}"${d.pin[k] ? ' checked' : ''}> <span><b>${esc(l)}</b><small class="muted"> ${esc(note)}</small></span></label>`).join('')}</div></div>
@@ -6430,7 +6474,8 @@ async function saveSettings() {
   if (docs.some(c => !c)) return toast('กรอกรหัสแพทย์ให้ครบทุกแถว', { err: true });
   if (new Set(docs).size !== docs.length) return toast('รหัสแพทย์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
   for (const x of [...draft.staff, ...draft.doctors]) Object.assign(x, acctOf(x));
-  if (draft.brachySync.on && !/\/d\/[\w-]{20,}|^[\w-]{20,}$/.test(str(draft.brachySync.url).trim())) return toast('ใส่ลิงก์ Google Sheet ของระบบนัด Brachytherapy (ไม่ใช่ลิงก์หน้าเว็บ …/exec) หรือปิด "ดึงอัตโนมัติ"', { err: true });
+  const badSrc = SRC_KEYS.find(k => draft[SRC[k].cfg].on && !/\/d\/[\w-]{20,}|^[\w-]{20,}$/.test(str(draft[SRC[k].cfg].url).trim()));
+  if (badSrc) return toast(`ใส่ลิงก์ Google Sheet ของ${sp(SRC[badSrc].sys)} (ไม่ใช่ลิงก์หน้าเว็บ …/exec) หรือปิด "ดึงอัตโนมัติ"`, { err: true });
   const badMail = [...draft.staff, ...draft.doctors].find(x => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
   if (badMail) return toast(`อีเมลของ ${str(badMail.code)} ไม่ถูกต้อง: ${badMail.email}`, { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
@@ -7414,7 +7459,9 @@ function openLog(id, preset = {}) {
   if (!l && !editingLog.k) $('#l-k').value = '1';
   $('#log-title').textContent = l ? 'แก้ไขกิจกรรม' : (editingLog.kind === 'rc' ? 'บันทึก RC' : 'บันทึกกิจกรรม');
   $('#l-need').hidden = preset.need !== 'pc';
-  $('#l-src').hidden = !(l && l.src);
+  const from = l && srcOfLog(l);
+  $('#l-src').hidden = !from;
+  if (from) $('#l-src').textContent = `รายการนี้ดึงจาก${sp(from.sys)} · แก้หรือยกเลิกที่${from === SRC.brachy ? 'ระบบนัด' : 'ระบบนั้น'} (แก้ที่นี่จะถูกแทนที่ตอนดึงครั้งถัดไป)`;
   if (preset.need !== 'pc') rcThenPc = null;
   const del = $('#log-del');
   del.hidden = !l; delete del.dataset.armed; del.textContent = 'ลบ';
@@ -8432,8 +8479,8 @@ document.addEventListener('click', e => {
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
   if (ds.lpchdir !== undefined) return fetchMembers(t);
-  if (ds.brchk !== undefined) return brachyCheckRun(t);
-  if (ds.brpull !== undefined) return brachyPullNow(t);
+  if (ds.srcchk) return srcCheckRun(ds.srcchk, t);
+  if (ds.srcpull) return srcPullNow(ds.srcpull, t);
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
     case 'open-leaves': return openLeaves();
@@ -8942,12 +8989,14 @@ settingsEl.addEventListener('change', e => {
   }
   if (el.id === 'logo-file') { pickLogo(el); return; }
   if (el.dataset.acct) { pickAcct(el.dataset.acct, el.value); return; }
-  if (/^brachySync\.(sheet|map\.|count|from|url)/.test(el.dataset.k || '')) {
+  const srcK = /^(brachySync|tdfSync)\.(sheet|map\.|count|from|url)/.exec(el.dataset.k || '');
+  if (srcK) {
+    const key = SRC_KEYS.find(k => SRC[k].cfg === srcK[1]), cfgd = draft[srcK[1]];
     settingsEdit(el);
-    if (el.dataset.k === 'brachySync.sheet') draft.brachySync.map = {};   // แท็บใหม่: เดาคอลัมน์ใหม่
+    if (srcK[2] === 'sheet') cfgd.map = {};   // แท็บใหม่: เดาคอลัมน์ใหม่
     // ลิงก์เปลี่ยน: แท็บและคอลัมน์ของชีตเดิมใช้ไม่ได้ · ไม่วาดทั้งหน้าใหม่ (ปุ่มที่กำลังกดเช่นบันทึกจะหาย)
-    if (el.dataset.k === 'brachySync.url') { state.brachyChk = null; draft.brachySync.sheet = ''; draft.brachySync.map = {}; $('#br-chk').innerHTML = '<p class="muted">เปลี่ยนลิงก์แล้ว · กด "ตรวจชีต" เพื่อเลือกแท็บและคอลัมน์ (ไม่ตรวจก็ใช้แท็บและคอลัมน์ที่เดาได้)</p>'; updateSaveBar(); return; }
-    if (state.brachyChk) brachyCheckRun(null); else renderSettings();
+    if (srcK[2] === 'url') { state.srcChk[key] = null; cfgd.sheet = ''; cfgd.map = {}; $(`#src-chk-${key}`).innerHTML = '<p class="muted">เปลี่ยนลิงก์แล้ว · กด "ตรวจชีต" เพื่อเลือกแท็บและคอลัมน์ (ไม่ตรวจก็ใช้แท็บและคอลัมน์ที่เดาได้)</p>'; updateSaveBar(); return; }
+    if (state.srcChk[key]) srcCheckRun(key, null); else renderSettings();
     return;
   }
   if (el.type === 'checkbox' || el.tagName === 'SELECT') settingsEdit(el);   // ซ้ำกับ input ก็ไม่เป็นไร (ตั้งค่าเดิมซ้ำ)
@@ -9052,6 +9101,7 @@ async function refresh(quiet) {
     state.duty = (d.duty || []).map(normDuty).filter(x => isDay(x.date));
     state.ct = (d.ctsim || []).map(normCt).filter(x => isDay(x.date));
     state.brachy = d.brachy || null;
+    state.tdf = d.tdf || null;
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;
@@ -9075,20 +9125,23 @@ async function refresh(quiet) {
   if (quiet && state.view === 'settings') { if (!draft && !settingsEl.contains(document.activeElement)) renderSettings(); return; }
   render();
 }
-// สถิติ Brachytherapy จากระบบนัด: เปิดหน้าเว็บแล้วดึงครั้งล่าสุดเกิน 10 นาที = ขอให้ Code.gs ดึง (เบื้องหลัง ไม่รอ) · มีเพิ่ม/แก้/ลบ = โหลดข้อมูลใหม่
-let brachyAsk = 0;
+// ดึงจากระบบอื่น (Brachytherapy, TDF): เปิดหน้าเว็บแล้วดึงครั้งล่าสุดเกิน 10 นาที = ขอให้ Code.gs ดึง (เบื้องหลัง ไม่รอ) · มีเพิ่ม/แก้/ลบ = โหลดข้อมูลใหม่
+const srcAsk = {};
 function maybePullBrachy() {
-  const b = state.config.brachySync, last = state.brachy && Date.parse(state.brachy.at);
-  if (store.mode !== 'sheet' || !b || !b.on || !serverHas(BRACHY_API) || !state.loaded || state.user.pending) return;
-  if ((last && Date.now() - last < 10 * 60000) || Date.now() - brachyAsk < 5 * 60000) return;
-  brachyAsk = Date.now();
-  store.brachyPull(false).then(st => {
-    const prev = state.brachy;
-    if (!st) return;
-    state.brachy = st;
-    if ((!prev || st.at !== prev.at) && st.added + st.updated + st.removed > 0) refresh(true);
-    else if (state.view === 'settings' && $('#br-status')) $('#br-status').innerHTML = brachyStatusHtml(st);
-  }).catch(() => { /* ดึงไม่ได้ (เช่นเน็ต) ลองใหม่รอบหน้า */ });
+  if (store.mode !== 'sheet' || !state.loaded || state.user.pending) return;
+  for (const key of SRC_KEYS) {
+    const x = SRC[key], b = state.config[x.cfg], last = state[key] && Date.parse(state[key].at);
+    if (!b || !b.on || !serverHas(x.api)) continue;
+    if ((last && Date.now() - last < 10 * 60000) || Date.now() - (srcAsk[key] || 0) < 5 * 60000) continue;
+    srcAsk[key] = Date.now();
+    x.pull(false).then(st => {
+      const prev = state[key];
+      if (!st) return;
+      state[key] = st;
+      if ((!prev || st.at !== prev.at) && st.added + st.updated + st.removed > 0) refresh(true);
+      else if (state.view === 'settings' && $(`#src-status-${key}`)) $(`#src-status-${key}`).innerHTML = srcStatusHtml(key, st);
+    }).catch(() => { /* ดึงไม่ได้ (เช่นเน็ต) ลองใหม่รอบหน้า */ });
+  }
 }
 if (!VIEWS.includes(state.view)) state.view = 'work';
 if (store.mode === 'sheet') state.user = { me: '', owner: '', isAdmin: false, canEdit: false, pending: true };
