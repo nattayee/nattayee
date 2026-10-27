@@ -265,6 +265,16 @@
 
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .toolbar input[type=search] { max-width: 260px; }
+    /* ช่องค้นหาบนสุดของหน้า */
+    .topsearch { position: relative; }
+    .topsearch > svg { position: absolute; left: 14px; top: 50%; width: 20px; height: 20px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .topsearch input { width: 100%; padding: 12px 14px 12px 44px; font-size: 16px; border-radius: var(--radius); background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+    .qdrop {
+      position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 9; display: grid; gap: 6px; padding: 8px;
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+      max-height: min(70vh, 520px); overflow: auto;
+    }
+    .qdrop .findhit.cur { border-color: var(--accent); }
     .tablewrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -348,7 +358,6 @@
     .homebtn:focus-visible { outline: 2px solid var(--header-ink); outline-offset: 2px; }
     .iconbtn:hover, .seg button:hover { filter: brightness(1.15); }
     /* ค้นหาผู้ป่วย */
-    button.homebtn { font-family: inherit; cursor: pointer; }
     .modal .box.find { max-width: 640px; }
     #findModal { align-items: flex-start; padding-top: 6vh; } /* ไม่ให้กล่องกระโดดขึ้นลงตอนพิมพ์ค้นหา */
     .findbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -525,11 +534,6 @@
     <div class="hright">
       <div class="who" id="whoBox" hidden><span id="userEmail"></span><button type="button" class="logout" id="logoutBtn" data-i18n="logout"></button><br><span class="cal" id="calName"></span></div>
       <div class="tools">
-        <!-- ปุ่มค้นหาผู้ป่วย: ดูว่าเคสนี้นัดวันไหนบ้าง -->
-        <button type="button" class="homebtn" id="findBtn" data-i18n-title="find_title" data-i18n-aria="find_title" hidden>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <span data-i18n="find_btn"></span>
-        </button>
         <!-- ปุ่ม Home: ลิงก์ไปหน้าเว็บหลัก (แก้ลิงก์ได้ที่ href) -->
         <a class="homebtn" id="homeBtn" target="_top" data-i18n-title="home_title" data-i18n-aria="home_title"
            href="https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec">
@@ -582,6 +586,12 @@
   </div>
 
   <main id="appMain" hidden>
+    <!-- ค้นหาบนสุดของหน้า: กรองตารางนัด + เลือกผู้ป่วยเพื่อดูวันนัดทั้งหมด -->
+    <div class="topsearch" id="topSearch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="q" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="qDrop" aria-expanded="false" data-i18n-ph="search_ph" data-i18n-aria="search_ph">
+      <div class="qdrop" id="qDrop" role="listbox" hidden></div>
+    </div>
     <div class="alertbar" id="alertBar" hidden></div>
 
     <div id="viewBook" style="display:grid; gap:16px">
@@ -693,7 +703,6 @@
           <button type="button" class="chip" data-f="past" data-i18n="f_past"></button>
           <button type="button" class="chip" data-f="all" data-i18n="f_all"></button>
         </div>
-        <input type="search" id="q" data-i18n-ph="search_ph">
         <button type="button" class="btn sm" id="refreshBtn" data-i18n="refresh" data-i18n-title="refresh_title"></button>
       </div>
       <div class="stats" id="stats" style="margin-bottom:8px"></div>
@@ -853,13 +862,13 @@
       m_hint: 'กด "ยืนยันลงนัด" เพื่อบันทึกต่อ (ระบบจะบันทึกการแจ้งเตือนไว้ใน log และส่งอีเมลถ้าตั้งค่าไว้) หรือกลับไปแก้วันนัด',
       m_back: 'กลับไปแก้ไข', m_ok: 'ยืนยันลงนัด',
       schedule: 'ตารางนัดคิว', f_today: 'วันนี้', f_upcoming: 'นัดที่จะถึง', f_past: 'ที่ผ่านมา', f_all: 'ทั้งหมด',
-      find_btn: 'ค้นหาผู้ป่วย', find_title: 'ค้นหาผู้ป่วย · ดูวันนัดทั้งหมด', find_ph: 'พิมพ์ HN หรือชื่อ-สกุล',
+      find_title: 'ค้นหาผู้ป่วย · ดูวันนัดทั้งหมด', find_ph: 'พิมพ์ HN หรือชื่อ-สกุล',
       find_hint: 'พิมพ์ HN หรือชื่อผู้ป่วย แล้วกดที่ชื่อเพื่อดูว่านัดวันที่เท่าไหร่บ้าง', find_none: 'ไม่พบผู้ป่วยที่ตรงกับ "{q}"',
       find_more: 'แสดง {n} รายแรก — พิมพ์เพิ่มเพื่อค้นให้แคบลง', find_back: '← ผลการค้นหา', find_copy: '📋 คัดลอกวันนัด',
       find_copied: 'คัดลอกวันนัดแล้ว', find_courses: '{n} คอร์ส', find_next: 'นัดถัดไป {date}', find_no_next: 'ไม่มีนัดที่จะถึง',
       find_course: 'คอร์สที่ {i}', find_fx: '{n} Fx', find_next_tag: 'นัดถัดไป',
       find_sum: 'นัดแล้ว {b} · มาตามนัด {d} · ยกเลิก {c}', find_open: 'ดูวันนัดทั้งหมดของเคสนี้',
-      search_ph: 'ค้นหา HN / ชื่อ / แพทย์', refresh: '↻ รีเฟรช', refresh_title: 'โหลดข้อมูลใหม่จากชีต', refreshed: 'โหลดข้อมูลล่าสุดแล้ว',
+      search_ph: 'ค้นหา HN / ชื่อ / แพทย์ — กดชื่อผู้ป่วยเพื่อดูวันนัดทั้งหมด', refresh: '↻ รีเฟรช', refresh_title: 'โหลดข้อมูลใหม่จากชีต', refreshed: 'โหลดข้อมูลล่าสุดแล้ว',
       stats: 'วันนี้ <b>{a}</b> นัด · นัดที่จะถึง <b>{b}</b> นัด · ผู้ป่วยในคิว <b>{c}</b> ราย',
       th_queue: 'คิว', th_name: 'ชื่อ-สกุล', th_doctor: 'แพทย์', th_note: 'หมายเหตุ', th_status: 'สถานะ', th_tech: 'รูปแบบการใส่',
       technique: 'รูปแบบการใส่', tech_other: 'อื่นๆ', tech_other_ph: 'ระบุรูปแบบการใส่', tech_needle: 'เสียบเข็ม',
@@ -939,13 +948,13 @@
       m_hint: 'Press "Confirm booking" to continue (the alert is logged and emailed if configured), or go back to change the dates.',
       m_back: 'Go back', m_ok: 'Confirm booking',
       schedule: 'Appointment queue', f_today: 'Today', f_upcoming: 'Upcoming', f_past: 'Past', f_all: 'All',
-      find_btn: 'Find patient', find_title: 'Find patient · all appointment dates', find_ph: 'Type an HN or name',
+      find_title: 'Find patient · all appointment dates', find_ph: 'Type an HN or name',
       find_hint: 'Type an HN or patient name, then tap a result to see every date booked', find_none: 'No patient matches "{q}"',
       find_more: 'Showing the first {n} — type more to narrow it down', find_back: '← Results', find_copy: '📋 Copy dates',
       find_copied: 'Dates copied', find_courses: '{n} course(s)', find_next: 'Next {date}', find_no_next: 'No upcoming appointment',
       find_course: 'Course {i}', find_fx: '{n} Fx', find_next_tag: 'next',
       find_sum: 'Booked {b} · Attended {d} · Cancelled {c}', find_open: 'See every date for this case',
-      search_ph: 'Search HN / name / doctor', refresh: '↻ Refresh', refresh_title: 'Reload from the sheet', refreshed: 'Data refreshed',
+      search_ph: 'Search HN / name / doctor — pick a patient to see every date', refresh: '↻ Refresh', refresh_title: 'Reload from the sheet', refreshed: 'Data refreshed',
       stats: 'Today <b>{a}</b> · Upcoming <b>{b}</b> · Patients in queue <b>{c}</b>',
       th_queue: 'Queue', th_name: 'Name', th_doctor: 'Doctor', th_note: 'Note', th_status: 'Status', th_tech: 'Insertion type',
       technique: 'Insertion type', tech_other: 'Other', tech_other_ph: 'Specify insertion type', tech_needle: 'Needles (interstitial)',
@@ -1243,7 +1252,7 @@
   }
   // หน้าเข้าสู่ระบบ (สมัคร/ลืมรหัสผ่านทำที่ LPCH RO Workspace) — mode ไม่ใช้แล้ว เก็บไว้ให้ที่เรียกเดิมใช้ได้
   function showAuth(mode, msg, ok) {
-    $('appMain').hidden = true; $('tabs').hidden = true; $('whoBox').hidden = true; $('findBtn').hidden = true;
+    $('appMain').hidden = true; $('tabs').hidden = true; $('whoBox').hidden = true;
     closeFind();
     $('viewAuth').hidden = false;
     authMsg(msg || '', ok);
@@ -1251,7 +1260,7 @@
   }
   function showApp() {
     $('viewAuth').hidden = true;
-    $('appMain').hidden = false; $('tabs').hidden = false; $('whoBox').hidden = false; $('findBtn').hidden = false;
+    $('appMain').hidden = false; $('tabs').hidden = false; $('whoBox').hidden = false;
     setView(state.view);
   }
   function onAuthLost(msg) {
@@ -1882,27 +1891,33 @@
     return m;
   }
   const nextAppt = (list, today) => list.find(a => a.status === ST_BOOKED && a.date >= today);
-  function renderFindList() {
-    const q = normQ($('findQ').value), today = todayIso();
-    if (!q) { $('findList').innerHTML = '<div class="hint">' + esc(t('find_hint')) + '</div>'; return; }
+  // ผู้ป่วยที่ตรงกับคำค้น (HN / ชื่อ) มีนัดที่จะถึงก่อน (เรียงตามวันนัดถัดไป) แล้วตามด้วยเคสเก่า (นัดล่าสุดก่อน)
+  function findPatients(q) {
+    const today = todayIso();
     const qd = /^[\d\s-]+$/.test(q) ? q.replace(/\D/g, '') : ''; // HN ที่พิมพ์มีขีด/เว้นวรรค
     const hits = Object.values(patients()).filter(p => p.hn.toLowerCase().indexOf(q) >= 0 ||
       (qd && p.hn.replace(/\D/g, '').indexOf(qd) >= 0) || normQ(p.name).indexOf(q) >= 0);
-    if (!hits.length) { $('findList').innerHTML = '<div class="empty">' + esc(t('find_none', { q: $('findQ').value.trim() })) + '</div>'; return; }
-    // มีนัดที่จะถึงก่อน (เรียงตามวันนัดถัดไป) แล้วตามด้วยเคสเก่า (นัดล่าสุดก่อน)
     hits.forEach(p => { p.next = nextAppt(p.list, today); p.last = p.list[p.list.length - 1].date; });
-    hits.sort((x, y) => (x.next ? 0 : 1) - (y.next ? 0 : 1) ||
+    return hits.sort((x, y) => (x.next ? 0 : 1) - (y.next ? 0 : 1) ||
       (x.next ? x.next.date.localeCompare(y.next.date) : y.last.localeCompare(x.last)) || x.hn.localeCompare(y.hn));
-    $('findList').innerHTML = hits.slice(0, FIND_MAX).map(p => {
-      const courses = new Set(p.list.map(a => a.courseId || a.apptId)).size;
-      const active = p.list.filter(a => a.status !== ST_CANCEL);
-      const k = techAbbr((p.next || p.list[p.list.length - 1]).technique);
-      return '<button type="button" class="findhit" data-hn="' + esc(p.hn) + '">' +
-        '<span class="fh-hn">' + (k ? techBadge(k, k) + ' ' : '') + 'HN ' + markHit(p.hn, q) + '</span>' +
-        '<span>' + markHit(p.name, q) + '</span>' +
-        '<span class="fh-sub">' + esc(t('find_courses', { n: courses })) + ' · ' + esc(t('find_fx', { n: active.length })) + ' · ' +
-        esc(p.next ? t('find_next', { date: fmtDate(p.next.date) }) : t('find_no_next')) + '</span></button>';
-    }).join('') + (hits.length > FIND_MAX ? '<div class="hint">' + esc(t('find_more', { n: FIND_MAX })) + '</div>' : '');
+  }
+  function hitHtml(p, q) {
+    const courses = new Set(p.list.map(a => a.courseId || a.apptId)).size;
+    const active = p.list.filter(a => a.status !== ST_CANCEL);
+    const k = techAbbr((p.next || p.list[p.list.length - 1]).technique);
+    return '<button type="button" class="findhit" role="option" data-hn="' + esc(p.hn) + '">' +
+      '<span class="fh-hn">' + (k ? techBadge(k, k) + ' ' : '') + 'HN ' + markHit(p.hn, q) + '</span>' +
+      '<span>' + markHit(p.name, q) + '</span>' +
+      '<span class="fh-sub">' + esc(t('find_courses', { n: courses })) + ' · ' + esc(t('find_fx', { n: active.length })) + ' · ' +
+      esc(p.next ? t('find_next', { date: fmtDate(p.next.date) }) : t('find_no_next')) + '</span></button>';
+  }
+  function renderFindList() {
+    const q = normQ($('findQ').value);
+    if (!q) { $('findList').innerHTML = '<div class="hint">' + esc(t('find_hint')) + '</div>'; return; }
+    const hits = findPatients(q);
+    if (!hits.length) { $('findList').innerHTML = '<div class="empty">' + esc(t('find_none', { q: $('findQ').value.trim() })) + '</div>'; return; }
+    $('findList').innerHTML = hits.slice(0, FIND_MAX).map(p => hitHtml(p, q)).join('') +
+      (hits.length > FIND_MAX ? '<div class="hint">' + esc(t('find_more', { n: FIND_MAX })) + '</div>' : '');
   }
   // กลุ่มนัดเป็นคอร์ส (courseId) เรียงคอร์สใหม่สุดก่อน
   function coursesOf(list) {
@@ -1951,10 +1966,12 @@
     renderFindDetail();
     $('findModal').querySelector('.box').scrollTop = 0;
   }
-  function openFind(hn) {
+  function openFind(hn, q) {
     find.open = true;
+    hideQDrop();
     $('findModal').classList.add('show');
-    if (hn != null) { $('findQ').value = String(hn); showFindDetail(hn); } else showFindList();
+    $('findQ').value = q != null ? q : hn != null ? String(hn) : '';
+    if (hn != null) showFindDetail(hn); else showFindList();
   }
   function closeFind() { find.open = false; find.hn = null; $('findModal').classList.remove('show'); }
   function renderFind() { if (!find.open) return; if (find.hn) renderFindDetail(); else renderFindList(); }
@@ -1965,8 +1982,44 @@
       list.filter(a => a.status !== ST_CANCEL).map(a => 'Fx ' + a.fx + '/' + a.totalFx + ' ' + fmtDate(a.date, LONG) +
         (a.status === ST_DONE ? ' (' + statusText(a.status) + ')' : '')).join('\n')).filter(Boolean).join('\n\n');
   }
-  $('findBtn').addEventListener('click', () => openFind());
   $('findQ').addEventListener('input', renderFindList);
+
+  // รายชื่อผู้ป่วยใต้ช่องค้นหาบนสุด (ตารางนัดยังกรองตามคำค้นเหมือนเดิม)
+  const QDROP_MAX = 8;
+  function hideQDrop() { $('qDrop').hidden = true; $('q').setAttribute('aria-expanded', 'false'); }
+  function renderQDrop() {
+    const q = normQ($('q').value), drop = $('qDrop');
+    if (!q) { hideQDrop(); return; }
+    const hits = findPatients(q);
+    drop.innerHTML = hits.length ? hits.slice(0, QDROP_MAX).map(p => hitHtml(p, q)).join('') +
+        (hits.length > QDROP_MAX ? '<button type="button" class="linkbtn" data-more="1">' + esc(t('find_more', { n: QDROP_MAX })) + '</button>' : '')
+      : '<div class="hint" style="padding:4px 6px">' + esc(t('find_none', { q: $('q').value.trim() })) + '</div>';
+    drop.hidden = false; $('q').setAttribute('aria-expanded', 'true');
+  }
+  function moveQCur(d) {
+    const items = Array.from($('qDrop').querySelectorAll('.findhit')); if (!items.length) return;
+    let i = items.findIndex(b => b.classList.contains('cur'));
+    items.forEach(b => b.classList.remove('cur'));
+    i = i < 0 ? (d > 0 ? 0 : items.length - 1) : (i + d + items.length) % items.length;
+    items[i].classList.add('cur'); items[i].scrollIntoView({ block: 'nearest' });
+  }
+  $('q').addEventListener('input', renderQDrop);
+  $('q').addEventListener('focus', renderQDrop);
+  $('q').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if ($('qDrop').hidden) renderQDrop(); moveQCur(e.key === 'ArrowDown' ? 1 : -1); }
+    else if (e.key === 'Enter') {
+      const b = $('qDrop').querySelector('.findhit.cur') || $('qDrop').querySelector('.findhit');
+      if (b && !$('qDrop').hidden) { e.preventDefault(); openFind(b.dataset.hn, $('q').value.trim()); }
+    } else if (e.key === 'Escape' && !$('qDrop').hidden) { e.stopPropagation(); hideQDrop(); }
+  });
+  // mousedown ไม่ให้ช่องค้นหาเสีย focus ก่อนคลิกเลือก
+  $('qDrop').addEventListener('mousedown', (e) => e.preventDefault());
+  $('qDrop').addEventListener('click', (e) => {
+    const b = e.target.closest('.findhit');
+    if (b) openFind(b.dataset.hn, $('q').value.trim());
+    else if (e.target.closest('[data-more]')) openFind(null, $('q').value.trim());
+  });
+  $('q').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('q')) hideQDrop(); }, 120));
   $('findQ').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
