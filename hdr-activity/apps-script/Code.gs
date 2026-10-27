@@ -86,7 +86,7 @@ function addRecord(dateIso, planning, mp) {
   var value = Number(planning);
   if (!isFinite(value) || value <= 0) throw new Error('ค่า Planning ไม่ถูกต้อง');
 
-  var lock = LockService.getDocumentLock();
+  var lock = LockService.getScriptLock();  // ใช้ได้ทั้งสคริปต์ในชีตและสคริปต์แยก
   lock.waitLock(20000);
   try {
     var sh = sheet_();
