@@ -311,11 +311,17 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .report .rp-k { font-size: 10.5px; color: var(--muted); }
 .report .rp-v { font-size: 14.5px; font-weight: 600; }
 .report .rp-v.one { white-space: nowrap; }
-.report .rp-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 18px;
-  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 16px; background: var(--surface-2); }
-.report .rp-hero .n { font: 600 34px/1 var(--font-mono); color: var(--accent-ink); }
+/* the physical dose leads the report: the dose lost to the breaks (gap) and the total dose; the TDF is a small line */
+.report .rp-hero { display: grid; grid-template-columns: repeat(var(--cells, 1), minmax(0, 1fr));
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; background: var(--surface-2); }
+.report .rp-hero .cell { padding: 8px 16px 7px; min-width: 0; }
+.report .rp-hero .cell + .cell { border-left: 1px solid var(--line); }
 .report .rp-hero .k { font-size: 11px; font-weight: 600; color: var(--ink-2); letter-spacing: .02em; }
-.report .rp-hero .s { color: var(--ink-2); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.report .rp-hero .n { font: 600 32px/1.1 var(--font-mono); color: var(--accent-ink); }
+.report .rp-hero .n small { font-size: 15px; font-weight: 500; margin-left: 4px; }
+.report .rp-hero .cell.lost .n, .report .rp-hero .cell.lost .k { color: var(--decay); }
+.report .rp-hero .sub { font-size: 11.5px; color: var(--ink-2); }
+.report .rp-hero .s { grid-column: 1 / -1; border-top: 1px solid var(--line); padding: 5px 16px 6px; color: var(--ink-2); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .report table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .report th, .report td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: normal; font-family: var(--font-body); vertical-align: top; }
 .report th { color: var(--ink-2); font-weight: 600; background: var(--surface-2); }
@@ -631,7 +637,7 @@ body.locked .wrap { display: none; }
     Orton CG. Time-dose factors (TDFs) in brachytherapy. Br J Radiol 1974;47:603–607 ·
     Ellis F. Dose, time and fractionation: a clinical hypothesis. Clin Radiol 1969;20:1–7.<br>
     เครื่องมือนี้ใช้เพื่อการศึกษาและตรวจทานเท่านั้น ไม่ใช้แทนการวางแผนการรักษาโดยนักฟิสิกส์การแพทย์และแพทย์รังสีรักษา โมเดล TDF/NSD ถูกแทนที่ด้วย LQ model ในเวชปฏิบัติปัจจุบัน
-    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน 7e73d28</div>
+    <div class="org-foot">กลุ่มงานรังสีรักษา โรงพยาบาลมะเร็งลำปาง · เวอร์ชัน d4963b1</div>
   </footer>
 </div>
 
@@ -2026,6 +2032,29 @@ body.locked .wrap { display: none; }
   }
 
   const rows2 = (pairs) => pairs.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join("");
+  /**
+   * The report's headline: physical dose. A gap shows the dose lost to the breaks beside the total dose; other types show
+   * the total dose. Read from the saved results ("4.03 Gy (≈ 1.8 fx)", "57.2 Gy (26 fx)"), so older records work too.
+   */
+  function doseHero(rec) {
+    const results = (rec.snap && rec.snap.results) || [];
+    const find = (label) => { const row = results.find(([k]) => k === label); return row ? String(row[1]) : ""; };
+    const split = (text) => {
+      const m = /^([\d.,]+)\s*Gy\s*(.*)$/.exec(text.trim());
+      return m ? { n: m[1], rest: m[2].replace(/^\((.*)\)$/, "$1") } : null;
+    };
+    const cell = (label, v, sub, cls = "") => `<div class="cell ${cls}"><div class="k">${esc(label)}</div>
+      <div class="n">${esc(v.n)}<small>Gy</small></div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+    const tdfText = `TDF รวม ${fmt(rec.tdf, 1)}`;
+    const lost = rec.type === "gap" ? split(find("Physical dose ที่หายไปจากการพัก")) : null;
+    const total = split(find("Total dose"));
+    const cells = [];
+    if (lost) cells.push(cell("Physical dose ที่หายไปจากการพัก", lost, lost.rest, "lost"));
+    if (total) cells.push(cell("Physical dose รวม", total, [total.rest, tdfText].filter(Boolean).join(" · ")));
+    // no dose in the results (should not happen): fall back to the TDF
+    if (!cells.length) cells.push(`<div class="cell"><div class="k">TDF รวม</div><div class="n">${fmt(rec.tdf, 1)}</div></div>`);
+    return `<div class="rp-hero" style="--cells:${cells.length}">${cells.join("")}<div class="s">${esc(rec.summary || "")}</div></div>`;
+  }
   /** Fills the off-screen A4 report from a record (the live charts are copied in with their styles inlined). */
   function buildReport(rec) {
     const p = rec.patient, s = rec.snap, rv = rec.review;
@@ -2089,8 +2118,7 @@ body.locked .wrap { display: none; }
           <div><div class="rp-k">ผู้ป่วย</div><div class="rp-v">${esc(patientName(p) || "—")}</div></div>
           <div><div class="rp-k">แพทย์ผู้รักษา</div><div class="rp-v one">${esc(rec.doctor || "—")}</div></div>
         </div>
-        <div class="rp-hero"><div class="n">${fmt(rec.tdf, 1)}</div>
-          <div><div class="k">TDF รวม</div><div class="s">${esc(rec.summary || "")}</div></div></div></div>
+        ${doseHero(rec)}</div>
       ${body}
       ${block("สูตรที่ใช้", s.formulas.map((f) => `<div class="rp-eq">${esc(f)}</div>`).join(""))}
       <div class="rp-block rp-signoff">
