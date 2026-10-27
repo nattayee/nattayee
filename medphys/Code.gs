@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.2';
+const CODE_VERSION = '2026-10-27.3';
 const API_LEVEL = 34;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1301,19 +1301,27 @@ function dutyMembers(token) {
 const BRACHY_ST_DONE = 'มาตามนัด', BRACHY_ST_CANCEL = 'ยกเลิก';
 const BRACHY_EVERY_MIN = 10;
 const BRACHY_KEYS = {
-  id: ['apptid', 'appointmentid', 'id', 'รหัสนัด'],
-  date: ['date', 'วันที่', 'วันนัด', 'วันที่นัด', 'apptdate'],
+  id: ['apptid', 'appointmentid', 'appt', 'id', 'รหัสนัด', 'เลขที่นัด', 'รหัสนัดหมาย', 'ไอดี'],
+  date: ['date', 'วันที่', 'วันนัด', 'วันที่นัด', 'นัดวันที่', 'apptdate', 'appointmentdate'],
   hn: ['hn'],
-  name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'patient', 'patientname', 'fullname'],
-  technique: ['technique', 'เทคนิค', 'tech'],
-  mp: ['mp', 'ผู้วางแผน', 'planner', 'physicist'],
-  rc: ['rc'],
+  name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'ผู้ป่วย', 'patient', 'patientname', 'fullname'],
+  technique: ['technique', 'เทคนิค', 'tech', 'วิธี', 'method'],
+  mp: ['mp', 'ผู้วางแผน', 'วางแผน', 'planner', 'plannedby', 'planby', 'physicist', 'นักฟิสิกส์', 'นักฟิสิกส์การแพทย์', 'mpวางแผน'],
+  rc: ['rc', 'ผู้ตรวจ', 'checker', 'mprc'],
   status: ['status', 'สถานะ'],
-  fx: ['fx'],
-  totalFx: ['totalfx', 'fxทั้งหมด'],
+  fx: ['fx', 'fraction', 'ครั้งที่', 'fxที่'],
+  totalFx: ['totalfx', 'fxทั้งหมด', 'จำนวนครั้ง', 'จำนวนfx', 'totalfraction'],
 };
-const BRACHY_NEED = ['id', 'date', 'hn', 'mp'];
-const brachyNorm_ = v => String(v || '').toLowerCase().replace(/[\s_.\-]+/g, '');
+// ต้องมี: วันที่ HN MP · ไม่มีรหัสนัด = ใช้ HN + วันที่ + Fx แทน (เลื่อนวันนัด = ลบรายการเดิม เพิ่มรายการใหม่)
+const BRACHY_NEED = ['date', 'hn', 'mp'];
+const BRACHY_LABEL = { id: 'รหัสนัด', date: 'วันที่', hn: 'HN', mp: 'MP (ผู้วางแผน)' };
+const brachyNorm_ = v => String(v || '').toLowerCase().replace(/[\s_.\-:]+/g, '');
+// หัวคอลัมน์ → คำที่ใช้เทียบ: ทั้งชื่อ · ส่วนนอกวงเล็บ · ส่วนในวงเล็บ (เช่น "MP (ผู้วางแผน)" = mp, ผู้วางแผน)
+function brachyHeadKeys_(h) {
+  const t = String(h || ''), out = [t, t.replace(/\(.*?\)/g, '')];
+  (t.match(/\(([^)]*)\)/g) || []).forEach(x => out.push(x.slice(1, -1)));
+  return out.map(brachyNorm_).filter(Boolean);
+}
 
 function brachyBook_(s) {
   const raw = String((s && s.url) || '').trim();
@@ -1326,11 +1334,11 @@ function brachyBook_(s) {
 
 // หัวคอลัมน์ที่น่าจะเป็นแต่ละคีย์ · แท็บที่ตรงมากสุด (ต้องมี รหัสนัด วันที่ HN MP)
 function brachyGuess_(headers) {
-  const map = {};
+  const map = {}, used = {};
   Object.keys(BRACHY_KEYS).forEach(k => {
     const names = BRACHY_KEYS[k].map(brachyNorm_);
-    const h = headers.filter(x => names.indexOf(brachyNorm_(x)) >= 0)[0];
-    if (h) map[k] = h;
+    const h = headers.filter(x => !used[x] && brachyHeadKeys_(x).some(v => names.indexOf(v) >= 0))[0];
+    if (h) { map[k] = h; used[h] = true; }
   });
   return map;
 }
@@ -1348,13 +1356,15 @@ function brachyPick_(tabs, s) {
   return best;
 }
 
-// อ่านนัดทั้งหมดของแท็บที่เลือก [{ id, date, hn, name, technique, mp, rc, status, fx, totalFx }]
-function brachyRead_(book, s) {
+// อ่านนัดทั้งหมดของแท็บที่เลือก [{ key, id, date, hn, name, technique, mp, rc, status, fx, totalFx }]
+// soft = ตรวจชีต: คอลัมน์ที่ต้องมียังไม่ครบไม่ถือว่าผิด (คืน missing ให้แอดมินเลือกคอลัมน์)
+function brachyRead_(book, s, soft) {
   const tabs = brachyTabs_(book), tab = brachyPick_(tabs, s);
   if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัด');
   const map = Object.assign(brachyGuess_(tab.headers), s && s.map && typeof s.map === 'object' ? s.map : {});
   const miss = BRACHY_NEED.filter(k => !map[k] || tab.headers.indexOf(map[k]) < 0);
-  if (miss.length) throw new Error('แท็บ ' + tab.name + ' ไม่มีคอลัมน์ ' + miss.map(k => ({ id: 'รหัสนัด', date: 'วันที่', hn: 'HN', mp: 'MP (ผู้วางแผน)' })[k]).join(', ') + ' · เลือกคอลัมน์ที่ ตั้งค่า → Brachytherapy');
+  if (miss.length && soft) return { tab: tab, map: map, tabs: tabs, rows: [], missing: miss };
+  if (miss.length) throw new Error('ยังไม่ได้เลือกคอลัมน์ ' + miss.map(k => BRACHY_LABEL[k]).join(', ') + ' ของแท็บ ' + tab.name + ' · ตั้งค่า → Brachytherapy จากระบบนัด → ตรวจชีต แล้วเลือกคอลัมน์');
   const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone();
   const last = sh.getLastRow(), width = sh.getLastColumn();
   const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
@@ -1366,9 +1376,10 @@ function brachyRead_(book, s) {
     Object.keys(col).forEach(k => { o[k] = col[k] < 0 ? '' : cellText_(r[col[k]], tz); });
     o.date = brachyDate_(o.date);
     o.hn = String(o.hn).replace(/\.0$/, '');
+    o.key = o.id || (o.hn && o.date ? o.hn + '|' + o.date + '|' + o.fx : '');
     return o;
-  }).filter(o => o.id);
-  return { tab: tab, map: map, tabs: tabs, rows: rows };
+  }).filter(o => o.key);
+  return { tab: tab, map: map, tabs: tabs, rows: rows, missing: [] };
 }
 
 // วันที่ของระบบนัด: วันที่ของชีต (yyyy-MM-dd) หรือข้อความ d/M/yyyy (ปี พ.ศ. ได้)
@@ -1413,8 +1424,8 @@ function brachyWanted_(rows, s, cfg) {
     const fx = r.fx ? 'Fx ' + r.fx + (r.totalFx ? '/' + r.totalFx : '') : '';
     const note = [fx, r.technique, 'ระบบนัด Brachytherapy'].filter(Boolean).join(' · ');
     const base = { date: r.date, hn: r.hn, name: r.name, note: note };
-    if (mp) want['brachy:' + r.id + ':plan'] = Object.assign({ kind: kind, mp: mp, title: '' }, base);
-    if (rc && mp && rc !== mp) want['brachy:' + r.id + ':rc'] = Object.assign({ kind: 'rc', mp: rc, title: label(kind) + ' ของ ' + mp }, base);
+    if (mp) want['brachy:' + r.key + ':plan'] = Object.assign({ kind: kind, mp: mp, title: '' }, base);
+    if (rc && mp && rc !== mp) want['brachy:' + r.key + ':rc'] = Object.assign({ kind: 'rc', mp: rc, title: label(kind) + ' ของ ' + mp }, base);
   });
   return { want: want, unknown: unknown, counted: counted, from: from };
 }
@@ -1477,13 +1488,13 @@ function brachyCheck(s, token) {
   const u = who_(token);
   if (!u.isAdmin) throw new Error('ตั้งค่าการดึง Brachytherapy ได้เฉพาะแอดมิน');
   s = s && typeof s === 'object' ? s : {};
-  const book = brachyBook_(s), got = brachyRead_(book, s), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
+  const book = brachyBook_(s), got = brachyRead_(book, s, true), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
   const statuses = {}, keys = Object.keys(w.want);
   got.rows.forEach(r => { const k = String(r.status).trim() || '(ว่าง)'; statuses[k] = (statuses[k] || 0) + 1; });
   const dates = got.rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   return {
-    title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map,
-    preview: {
+    title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
+    preview: got.missing.length ? null : {
       rows: got.rows.length, counted: w.counted, statuses: statuses, unknown: w.unknown, first: dates[0] || '', last: dates[dates.length - 1] || '',
       plan: keys.filter(k => /:plan$/.test(k)).length, rc: keys.filter(k => /:rc$/.test(k)).length, needle: keys.filter(k => w.want[k].kind === 'brachyn').length,
     },
