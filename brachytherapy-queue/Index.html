@@ -357,7 +357,12 @@
     .setgroup { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; margin: 0 0 12px; display: grid; gap: 4px; }
     .setgroup legend { font-weight: 700; padding: 0 4px; }
     .fxsign { font-size: 12.5px; color: var(--muted); }
-    .edited { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); text-decoration: underline; text-align: left; }
+    /* "แก้ไขโดย …" ตัวเล็ก สีเทา บรรทัดเดียว (ยาวเกินตัดด้วย … ชี้ดูข้อความเต็มได้) */
+    .linkbtn.edited {
+      display: block; max-width: 230px; margin-top: 3px; font-size: 11px; line-height: 1.4; color: var(--muted); text-decoration: none;
+      text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: inherit;
+    }
+    .linkbtn.edited:hover, .linkbtn.edited:focus-visible { text-decoration: underline; }
     .histbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
     .histbox h4 { margin: 0 0 6px; font-size: 14px; }
     .histbox ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
@@ -973,7 +978,7 @@
       th_queue: 'คิว', th_name: 'ชื่อ-สกุล', th_doctor: 'แพทย์', th_note: 'หมายเหตุ', th_status: 'สถานะ', th_tech: 'รูปแบบการใส่',
       technique: 'รูปแบบการใส่', tech_other: 'อื่นๆ', tech_other_ph: 'ระบุรูปแบบการใส่', tech_needle: 'เสียบเข็ม',
       v_tech: 'กรุณาเลือกรูปแบบการใส่', v_tech_other: 'กรุณาระบุรูปแบบการใส่ในช่อง "อื่นๆ"',
-      a_edit: '✏️ แก้ไข', a_edit_title: 'แก้ไขวันนัด แพทย์ รูปแบบการใส่ หมายเหตุ หรือสถานะ', edited_by: 'แก้ไขโดย {name} · {at}',
+      a_edit: '✏️ แก้ไข', a_edit_title: 'แก้ไขวันนัด แพทย์ รูปแบบการใส่ หมายเหตุ หรือสถานะ', edited_by: 'แก้ไขโดย {name} · {at}', edited_short: 'แก้ไข {name} · {at}',
       edit_title: 'แก้ไขนัด', e_date: 'วันที่นัด', e_close: 'ปิด', e_save: 'บันทึกการแก้ไข', e_saved: 'บันทึกการแก้ไขแล้ว',
       e_nochange: 'ไม่มีการเปลี่ยนแปลง', e_history: 'ประวัติการแก้ไข', e_created: 'ลงนัดโดย {name} · {at}', e_none: 'ยังไม่มีการแก้ไข',
       e_cancel_hint: 'เปลี่ยนเป็น "ยกเลิก" แล้วนัดในปฏิทินจะถูกลบ', e_restore_hint: 'นัดจะถูกสร้างในปฏิทินอีกครั้ง',
@@ -1069,7 +1074,7 @@
       th_queue: 'Queue', th_name: 'Name', th_doctor: 'Doctor', th_note: 'Note', th_status: 'Status', th_tech: 'Insertion type',
       technique: 'Insertion type', tech_other: 'Other', tech_other_ph: 'Specify insertion type', tech_needle: 'Needles (interstitial)',
       v_tech: 'Please choose an insertion type', v_tech_other: 'Please type the insertion type under "Other"',
-      a_edit: '✏️ Edit', a_edit_title: 'Edit date, doctor, insertion type, note or status', edited_by: 'Edited by {name} · {at}',
+      a_edit: '✏️ Edit', a_edit_title: 'Edit date, doctor, insertion type, note or status', edited_by: 'Edited by {name} · {at}', edited_short: 'Edited {name} · {at}',
       edit_title: 'Edit appointment', e_date: 'Appointment date', e_close: 'Close', e_save: 'Save changes', e_saved: 'Changes saved',
       e_nochange: 'Nothing changed', e_history: 'Edit history', e_created: 'Booked by {name} · {at}', e_none: 'No edits yet',
       e_cancel_hint: 'Changing to "Cancelled" deletes the calendar event', e_restore_hint: 'The calendar event will be created again',
@@ -1968,6 +1973,13 @@
     } catch (err) { toast(errMsg(err), true); }
     finally { btn.disabled = false; }
   });
+  // "แก้ไข ชื่อ · 27 ต.ค. 12:48" (ตัดชื่อผู้ใช้ในวงเล็บและวินาทีออก ข้อความเต็มอยู่ใน title)
+  function editedShort(a) {
+    const name = String(a.editedBy || '').replace(/\s*\([^)]*\)\s*$/, '');
+    const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}:\d{2})/.exec(String(a.editedAt || ''));
+    const at = m ? fmtDate(m[1], { day: 'numeric', month: 'short' }) + ' ' + m[2] : String(a.editedAt || '');
+    return t('edited_short', { name: name, at: at });
+  }
   function rowHtml(a, queueNo) {
     const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
     return '<tr class="' + (cls === 'cancel' ? 'cancel' : '') + '">' +
@@ -1980,8 +1992,8 @@
       '<td class="name hint">' + esc(a.note) + '</td>' +
       '<td class="stcell act"><div class="stline"><span class="tag ' + cls + '">' + esc(statusText(a.status)) + '</span>' +
         '<button type="button" class="btn xs" data-act="edit" data-id="' + esc(a.apptId) + '" title="' + esc(t('a_edit_title')) + '">' + esc(t('a_edit')) + '</button></div>' +
-        (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '">' +
-          esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '</button>' : '') + '</td>' +
+        (a.editedAt ? '<button type="button" class="linkbtn edited" data-act="hist" data-id="' + esc(a.apptId) + '" title="' + esc(t('edited_by', { name: a.editedBy, at: a.editedAt })) + '">' +
+          esc(editedShort(a)) + '</button>' : '') + '</td>' +
       // MP / RC อยู่ใต้ปุ่ม มาแล้ว / ยกเลิก / ยกเลิกทั้งคอร์ส
       '<td class="act"><div class="acts">' + actionButtons(a) + '</div>' + signsHtml(a) + '</td></tr>';
   }
