@@ -303,21 +303,25 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .report .rp-sub { color: var(--ink-2); font-size: 12px; }
 .report .rp-meta { text-align: right; font-size: 11.5px; color: var(--ink-2); }
 .report h2 { font-size: 12.5px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); border-left: 3px solid var(--accent); padding-left: 8px; }
-.report .rp-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: stretch; }
-.report .rp-patient { display: grid; grid-template-columns: .8fr 1.6fr 1.4fr; border: 1px solid var(--line); border-radius: 6px; }
-.report .rp-patient div { padding: 7px 12px; min-width: 0; }
-.report .rp-patient div + div { border-left: 1px solid var(--line); }
+/* top of the report: patient on one row (HN · name · physician), the TDF on its own row below */
+.report .rp-top { display: grid; gap: 8px; }
+.report .rp-patient { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; border: 1px solid var(--line); border-radius: 6px; }
+.report .rp-patient > div { padding: 7px 16px; min-width: 0; }
+.report .rp-patient > div + div { border-left: 1px solid var(--line); }
 .report .rp-k { font-size: 10.5px; color: var(--muted); }
 .report .rp-v { font-size: 14.5px; font-weight: 600; }
-.report .rp-hero { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px; }
-.report .rp-hero .n { font: 500 32px/1 var(--font-mono); }
-.report .rp-hero .s { color: var(--ink-2); font-size: 11.5px; line-height: 1.35; }
-.report .rp-hero .s b { color: var(--ink); }
+.report .rp-v.one { white-space: nowrap; }
+.report .rp-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 18px;
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 16px; background: var(--surface-2); }
+.report .rp-hero .n { font: 600 34px/1 var(--font-mono); color: var(--accent-ink); }
+.report .rp-hero .k { font-size: 11px; font-weight: 600; color: var(--ink-2); letter-spacing: .02em; }
+.report .rp-hero .s { color: var(--ink-2); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .report table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .report th, .report td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: normal; font-family: var(--font-body); vertical-align: top; }
 .report th { color: var(--ink-2); font-weight: 600; background: var(--surface-2); }
 .report td.v { text-align: right; font-family: var(--font-mono); }
 .report table.kv td:first-child { width: 42%; color: var(--ink-2); }
+.report table.kv.wide-v td:first-child { width: 22%; }
 .report table.wide { font-size: 10.5px; }
 .report table.wide th, .report table.wide td { padding: 4px 5px; }
 .report table.wide td { white-space: nowrap; }
@@ -329,7 +333,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .report .rp-chart svg { width: 100%; height: auto; display: block; }
 .report .rp-note { font-size: 12px; color: var(--ink-2); border-left: 3px solid var(--decay); padding: 4px 10px; background: #FBF3EA; }
 .report .rp-comp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.report .rp-comp div { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
+.report .rp-comp > div { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 .report .rp-comp .big { font: 500 22px/1.2 var(--font-mono); }
 .report .rp-comp .ok { color: var(--good); } .report .rp-comp .low { color: var(--decay); }
 .report .rp-eq { font: 400 12px var(--font-mono); color: var(--ink-2); }
@@ -798,7 +802,17 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     plan.breaks = [{ start: addDays(plan.start, 28), end: addDays(plan.start, 41), fx: null }];
   })();
   const thaiT = (t) => thaiDate(isoDate(t));
-  const spanText = (a, b) => (Number.isFinite(a) ? (a === b ? thaiT(a) : `${thaiT(a)} – ${thaiT(b)}`) : "—");
+  const TH_MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  /** A date range written once per month and year: "3–12 ส.ค. 2569", "28 ส.ค. – 4 ก.ย. 2569". */
+  const spanText = (a, b) => {
+    if (!Number.isFinite(a)) return "—";
+    if (a === b) return thaiT(a);
+    const x = new Date(a), y = new Date(b);
+    const yearX = x.getUTCFullYear() + 543, yearY = y.getUTCFullYear() + 543;
+    if (yearX !== yearY) return `${thaiT(a)} – ${thaiT(b)}`;
+    if (x.getUTCMonth() === y.getUTCMonth()) return `${x.getUTCDate()}–${y.getUTCDate()} ${TH_MONTH[x.getUTCMonth()]} ${yearX}`;
+    return `${x.getUTCDate()} ${TH_MONTH[x.getUTCMonth()]} – ${y.getUTCDate()} ${TH_MONTH[y.getUTCMonth()]} ${yearX}`;
+  };
 
   /** Treatment-day test: 5–7 fractions a week run from Monday, fewer follow the weekday of the first treatment. */
   function txDay(p) {
@@ -1730,7 +1744,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     const p = rec.patient, s = rec.snap, rv = rec.review;
     const approved = rec.status === "approved" && rv;
     const block = (title, body, cls = "") => `<div class="rp-block ${cls}">${title ? `<h2>${esc(title)}</h2>` : ""}${body}</div>`;
-    const kv = (pairs) => `<table class="kv">${rows2(pairs)}</table>`;
+    const kv = (pairs, cls = "") => `<table class="kv ${cls}">${rows2(pairs)}</table>`;
     const charts = (s.charts || []).map(([id, title]) => {
       const svg = $(id) && $(id).querySelector("svg");
       return svg ? `<div class="rp-chart chart" data-src="${id}"><h3>${esc(title)}</h3></div>` : "";
@@ -1739,7 +1753,8 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     // sections that differ by calculation type
     let body = "";
     const short = s.inputs.length <= 7 && s.results.length <= 9;
-    const inputs = block("ข้อมูลที่ใช้คำนวณ", kv(s.inputs)), results = block("ผลการคำนวณ", kv(s.results));
+    // a gap's inputs are short labels with long values (one row per part): give the values the room
+    const inputs = block("ข้อมูลที่ใช้คำนวณ", kv(s.inputs, rec.type === "gap" ? "wide-v" : "")), results = block("ผลการคำนวณ", kv(s.results));
     if (rec.type === "gap") {
       body += inputs;
       if (s.table) {
@@ -1751,10 +1766,13 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       if (s.comp) {
         const get = (k) => (s.comp.find(([key]) => key === k) || [])[1] || "—";
         const final = get("TDF รวมหลังการตัดสินใจ");
+        // "91.4 (−3.1 จากเป้าหมาย)": the TDF large, the difference from the target small underneath
+        const [, finalTdf = final, finalVs = ""] = /^(\S+)\s*(.*)$/.exec(final) || [];
         body += block("การชดเชยหลังพักฉาย", `<div class="rp-comp">
             <div><div class="rp-k">คำแนะนำ</div><div>${esc(get("คำแนะนำ"))}</div></div>
             <div><div class="rp-k">การตัดสินใจ</div><div><b>${esc(get("การชดเชย"))}</b></div></div>
-            <div><div class="rp-k">TDF รวมหลังการตัดสินใจ</div><div class="big ${/\(\+|\(0\.0/.test(final) ? "ok" : "low"}">${esc(final)}</div></div>
+            <div><div class="rp-k">TDF รวมหลังการตัดสินใจ</div><div class="big ${/\(\+|\(0\.0/.test(final) ? "ok" : "low"}">${esc(finalTdf)}</div>
+              ${finalVs ? `<div class="rp-k">${esc(finalVs.replace(/^\(|\)$/g, ""))}</div>` : ""}</div>
           </div>`);
       }
       if (charts.length) body += block("", charts.join(""));
@@ -1780,12 +1798,12 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       </div>
       ${approved ? "" : block("", `<div class="rp-draft">ฉบับร่าง · ยังไม่ผ่านการ recheck โดยนักฟิสิกส์การแพทย์คนที่ 2 ห้ามใช้ประกอบการรักษา</div>`)}
       <div class="rp-block rp-top"><div class="rp-patient">
-          <div><div class="rp-k">HN</div><div class="rp-v">${esc(p.hn || "—")}</div></div>
+          <div><div class="rp-k">HN</div><div class="rp-v one">${esc(p.hn || "—")}</div></div>
           <div><div class="rp-k">ผู้ป่วย</div><div class="rp-v">${esc(patientName(p) || "—")}</div></div>
-          <div><div class="rp-k">แพทย์ผู้รักษา</div><div class="rp-v">${esc(rec.doctor || "—")}</div></div>
+          <div><div class="rp-k">แพทย์ผู้รักษา</div><div class="rp-v one">${esc(rec.doctor || "—")}</div></div>
         </div>
         <div class="rp-hero"><div class="n">${fmt(rec.tdf, 1)}</div>
-          <div class="s"><b>TDF</b><br>${esc(rec.summary || "")}</div></div></div>
+          <div><div class="k">TDF รวม</div><div class="s">${esc(rec.summary || "")}</div></div></div></div>
       ${body}
       ${block("สูตรที่ใช้", s.formulas.map((f) => `<div class="rp-eq">${esc(f)}</div>`).join(""))}
       <div class="rp-block rp-signoff">
