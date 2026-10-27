@@ -1971,7 +1971,7 @@ const ctOn = () => serverHas(CT_API);
 const MEMBER_EMAIL_API = 33;   // Code.gs ที่ส่งอีเมลของสมาชิก LPCH มากับรายชื่อ (lpchMembers)
 const BRACHY_API = 34;   // Code.gs ที่ดึงสถิติ Brachytherapy จากชีตของระบบนัด (brachyCheck, brachyPull, brachyTick)
 // คอลัมน์ในชีตของระบบนัด Brachytherapy [คีย์, ชื่อ, บังคับ]
-const BRACHY_FIELDS = [['date', 'วันที่นัด', true], ['hn', 'HN', true], ['mp', 'MP (ผู้วางแผน)', true], ['rc', 'RC'], ['technique', 'เทคนิค'], ['id', 'รหัสนัด (ไม่มี = ใช้ HN + วันที่ + Fx)'],
+const BRACHY_FIELDS = [['date', 'วันที่นัด', true], ['hn', 'HN', true], ['mp', 'MP (ผู้วางแผน)', true], ['rc', 'RC'], ['technique', 'เทคนิค / รูปแบบการใส่ (Interstitial needle = เสียบเข็ม)'], ['id', 'รหัสนัด (ไม่มี = ใช้ HN + วันที่ + Fx)'],
   ['name', 'ชื่อผู้ป่วย'], ['status', 'สถานะ'], ['fx', 'Fx'], ['totalFx', 'Fx ทั้งหมด']];
 // แถบ CT-SIM: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → CT-SIM: off ไม่แสดง · show แสดง · req บังคับกรอก) · HN วันที่ และเครื่อง CT บังคับเสมอ
 const CT_FORM = [
@@ -2466,7 +2466,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-27.3';
+const PAGE_VERSION = '2026-10-27.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6059,9 +6059,15 @@ function brachySec(d) {
     return `<tr${missing.includes(k) ? ' class="br-miss"' : ''}><td>${esc(l)}${need ? ' <b class="req">*</b>' : ''}${missing.includes(k) ? ' <span class="acct-warn">ต้องเลือก</span>' : ''}</td><td><select data-k="brachySync.map.${k}" aria-label="คอลัมน์ ${esc(l)}">${opt('', '— ไม่มี —', v)}${heads.map(h => opt(h, h, v)).join('')}</select></td></tr>`;
   }).join('') : '';
   const pv = chk && chk.preview, unk = pv ? Object.entries(pv.unknown) : [];
+  // รูปแบบการใส่: ค่าที่พบในชีต (เสียบเข็ม = Brachy เสียบเข็ม) · ไม่ได้เลือกคอลัมน์ = นับเป็น Brachy 3D ทั้งหมด
+  const techCol = chk ? ('technique' in b.map ? b.map.technique : chk.map.technique || '') : '';
+  const isNeedle = v => /interstitial|needle|เข็ม|^i$/i.test(str(v).trim());
+  const techs = pv && pv.techniques ? Object.entries(pv.techniques) : [];
+  const techNote = !pv ? '' : !techCol ? '<br><span class="acct-warn">ไม่ได้เลือกคอลัมน์เทคนิค / รูปแบบการใส่: นับเป็น Brachy 3D ทั้งหมด (ไม่ติ๊กเสียบเข็ม) · เลือกคอลัมน์ที่บอก Interstitial needle</span>'
+    : techs.length ? `<br>รูปแบบการใส่: ${techs.map(([k, n]) => `${esc(k)} ${n}${isNeedle(k) ? ' <b>= เสียบเข็ม</b>' : ''}`).join(', ')}` : '';
   const missNote = missing.length ? `<p class="br-preview acct-warn">หัวคอลัมน์ของแท็บ ${esc(chk.tab)} ไม่ตรงกับที่เดาได้: เลือกคอลัมน์ ${esc(missing.map(k => (BRACHY_FIELDS.find(f => f[0] === k) || [k, k])[1]).join(', '))} จากรายการด้านล่าง (เลือกแล้วตรวจให้ใหม่เอง) แล้วกดบันทึกการตั้งค่า</p>` : '';
   const preview = pv ? `<div class="br-preview">ชีต <b>${esc(chk.title)}</b> · แท็บ ${esc(chk.tab)} · นัด ${pv.rows} รายการ${pv.first ? ` (${esc(fmtDayY(pv.first))} – ${esc(fmtDayY(pv.last))})` : ''} · สถานะ ${esc(Object.entries(pv.statuses).map(([k, n]) => `${k} ${n}`).join(', '))}
-      <br>ตามค่าที่ตั้ง: นัดที่นับ <b>${pv.counted}</b> → ผู้วางแผน ${pv.plan} รายการ (เสียบเข็ม ${pv.needle}) · RC ${pv.rc} รายการ${unk.length ? `<br><span class="acct-warn">ไม่รู้จัก MP/RC: ${esc(unk.map(([k, n]) => `${k} (${n})`).join(', '))}</span>` : ''}</div>` : '';
+      ${techNote}<br>ตามค่าที่ตั้ง: นัดที่นับ <b>${pv.counted}</b> → ผู้วางแผน ${pv.plan} รายการ (เสียบเข็ม ${pv.needle}) · RC ${pv.rc} รายการ${unk.length ? `<br><span class="acct-warn">ไม่รู้จัก MP/RC: ${esc(unk.map(([k, n]) => `${k} (${n})`).join(', '))}</span>` : ''}</div>` : '';
   return `<div class="sec" data-sec="brachy"><div class="sec-head"><h2>Brachytherapy จากระบบนัด</h2><p>ดึงนัดจากระบบนัด Brachytherapy มาบันทึกในแถบ ${esc(navLabel('logs'))} เอง: MP = ผู้วางแผน (Brachy 3D · เทคนิค Interstitial needle = Brachy เสียบเข็ม) · RC = RC · พร้อม HN ชื่อผู้ป่วย และวันนัด · ระบบนัดเพิ่ม แก้ หรือยกเลิกนัด = แก้ตาม</p></div>
       ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจากระบบนัดได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจากระบบนัด Brachytherapy ต้องใช้ Code.gs รุ่น 2026-10-27.2 ขึ้นไป</span></p>' : ''}
       <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="brachySync.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>

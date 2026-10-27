@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.3';
+const CODE_VERSION = '2026-10-27.4';
 const API_LEVEL = 34;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1305,7 +1305,7 @@ const BRACHY_KEYS = {
   date: ['date', 'วันที่', 'วันนัด', 'วันที่นัด', 'นัดวันที่', 'apptdate', 'appointmentdate'],
   hn: ['hn'],
   name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'ผู้ป่วย', 'patient', 'patientname', 'fullname'],
-  technique: ['technique', 'เทคนิค', 'tech', 'วิธี', 'method'],
+  technique: ['technique', 'เทคนิค', 'tech', 'รูปแบบการใส่', 'รูปแบบการใส่แร่', 'การใส่', 'การใส่แร่', 'ชนิดการใส่', 'รูปแบบ', 'applicator', 'applicatortype', 'insertion', 'insertiontype', 'วิธี', 'method', 'type', 'ชนิด'],
   mp: ['mp', 'ผู้วางแผน', 'วางแผน', 'planner', 'plannedby', 'planby', 'physicist', 'นักฟิสิกส์', 'นักฟิสิกส์การแพทย์', 'mpวางแผน'],
   rc: ['rc', 'ผู้ตรวจ', 'checker', 'mprc'],
   status: ['status', 'สถานะ'],
@@ -1314,6 +1314,8 @@ const BRACHY_KEYS = {
 };
 // ต้องมี: วันที่ HN MP · ไม่มีรหัสนัด = ใช้ HN + วันที่ + Fx แทน (เลื่อนวันนัด = ลบรายการเดิม เพิ่มรายการใหม่)
 const BRACHY_NEED = ['date', 'hn', 'mp'];
+// รูปแบบการใส่ / เทคนิคที่เป็นเสียบเข็ม (Interstitial needle · เสียบเข็ม · รหัส I ของระบบนัด) = Brachy เสียบเข็ม
+const BRACHY_NEEDLE = /interstitial|needle|เข็ม|^i$/i;
 const BRACHY_LABEL = { id: 'รหัสนัด', date: 'วันที่', hn: 'HN', mp: 'MP (ผู้วางแผน)' };
 const brachyNorm_ = v => String(v || '').toLowerCase().replace(/[\s_.\-:]+/g, '');
 // หัวคอลัมน์ → คำที่ใช้เทียบ: ทั้งชื่อ · ส่วนนอกวงเล็บ · ส่วนในวงเล็บ (เช่น "MP (ผู้วางแผน)" = mp, ผู้วางแผน)
@@ -1420,7 +1422,7 @@ function brachyWanted_(rows, s, cfg) {
     const mp = staffOf(r.mp), rc = staffOf(r.rc);
     if (r.mp && !mp) unknown[r.mp] = (unknown[r.mp] || 0) + 1;
     if (r.rc && !rc) unknown[r.rc] = (unknown[r.rc] || 0) + 1;
-    const kind = needleOn && /interstitial|needle|เสียบเข็ม/i.test(r.technique) ? 'brachyn' : 'brachy';
+    const kind = needleOn && BRACHY_NEEDLE.test(String(r.technique).trim()) ? 'brachyn' : 'brachy';
     const fx = r.fx ? 'Fx ' + r.fx + (r.totalFx ? '/' + r.totalFx : '') : '';
     const note = [fx, r.technique, 'ระบบนัด Brachytherapy'].filter(Boolean).join(' · ');
     const base = { date: r.date, hn: r.hn, name: r.name, note: note };
@@ -1489,13 +1491,17 @@ function brachyCheck(s, token) {
   if (!u.isAdmin) throw new Error('ตั้งค่าการดึง Brachytherapy ได้เฉพาะแอดมิน');
   s = s && typeof s === 'object' ? s : {};
   const book = brachyBook_(s), got = brachyRead_(book, s, true), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
-  const statuses = {}, keys = Object.keys(w.want);
-  got.rows.forEach(r => { const k = String(r.status).trim() || '(ว่าง)'; statuses[k] = (statuses[k] || 0) + 1; });
+  const statuses = {}, techniques = {}, keys = Object.keys(w.want);
+  got.rows.forEach(r => {
+    const k = String(r.status).trim() || '(ว่าง)', t = String(r.technique).trim() || '(ว่าง)';
+    statuses[k] = (statuses[k] || 0) + 1;
+    techniques[t] = (techniques[t] || 0) + 1;
+  });
   const dates = got.rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   return {
     title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
     preview: got.missing.length ? null : {
-      rows: got.rows.length, counted: w.counted, statuses: statuses, unknown: w.unknown, first: dates[0] || '', last: dates[dates.length - 1] || '',
+      rows: got.rows.length, counted: w.counted, statuses: statuses, techniques: techniques, unknown: w.unknown, first: dates[0] || '', last: dates[dates.length - 1] || '',
       plan: keys.filter(k => /:plan$/.test(k)).length, rc: keys.filter(k => /:rc$/.test(k)).length, needle: keys.filter(k => w.want[k].kind === 'brachyn').length,
     },
   };
