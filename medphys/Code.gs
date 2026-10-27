@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.1';
-const API_LEVEL = 33;
+const CODE_VERSION = '2026-10-27.2';
+const API_LEVEL = 34;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -78,6 +78,7 @@ const TABLES = {
       ['id', 'id'], ['kind', 'ประเภท'], ['date', 'Date'], ['mp', 'MP'], ['hn', 'HN'], ['name', 'Name'],
       ['caseId', 'เคส (id)'], ['title', 'กิจกรรม'], ['min', 'เวลา'], ['k', 'k'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
+      ['src', 'ที่มา'],   // brachy:<รหัสนัด>:plan|rc = ดึงจากระบบนัด Brachytherapy (ว่าง = บันทึกเอง)
     ],
   },
   leaves: {
@@ -256,6 +257,7 @@ function getData(token) {
     leaves: need.leaves ? readTable_(ss, 'leaves') : [],
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
+    brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     config: config,
     sheetUrl: ss.getUrl(),
   };
@@ -311,6 +313,8 @@ function saveRecord(table, rec, token) {
         return (col < 0 || String(cur[col] == null ? '' : cur[col]).trim() === '') && String(rec[f[0]] == null ? '' : rec[f[0]]).trim() !== '';
       });
     }
+    // หน้าเว็บรุ่นเก่าไม่ส่งช่อง src: ไม่ล้างที่มาของรายการที่ดึงจากระบบนัด
+    if (table === 'logs' && rec.src === undefined) fields = fields.filter(f => f[0] !== 'src');
     writeFields_(sh, found || sh.getLastRow() + 1, header, fields, rec);
     return rec;
   });
@@ -1286,6 +1290,224 @@ function dutyMembers(token) {
   }
   const pick = list => users.filter(x => list.indexOf(x.role) >= 0).map(x => ({ username: x.username, name: x.name, role: x.role }));
   return { rtt: pick(roles.rtt), ra: pick(roles.ra), at: at, live: !why, why: why };
+}
+
+/* ---------- สถิติ Brachytherapy จากระบบนัด Brachytherapy (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */
+// ตั้งค่า → Brachytherapy (config.brachySync): { on, url = ลิงก์ชีตของระบบนัด, sheet = แท็บ, map = { คีย์: หัวคอลัมน์ }, count: 'all' | 'done', from: 'yyyy-MM-dd' }
+// นัดหนึ่งครั้ง (ไม่ยกเลิก · count 'done' = เฉพาะ "มาตามนัด") = กิจกรรม Brachy ของผู้วางแผน (MP) + RC ของคน RC (HN ชื่อ วันนัด)
+// เทคนิค Interstitial needle / เสียบเข็ม = Brachy เสียบเข็ม · MP / RC ในระบบนัดเป็นรหัส ชื่อผู้ใช้ อีเมล หรือชื่อ-สกุล (ตั้งค่า → ทีมนักฟิสิกส์)
+// รายการที่ดึงมามี src = brachy:<รหัสนัด>:plan|rc · ต้นทางแก้ = แก้ตาม · ยกเลิกหรือหายไป = ลบ · มีรายการที่บันทึกเอง (วัน HN คน ประเภทเดียวกัน) = ไม่เพิ่มซ้ำ
+// ดึงเมื่อ: หน้าเว็บเปิดและดึงครั้งล่าสุดเกิน BRACHY_EVERY_MIN นาที (brachyPull) · ปุ่มดึงตอนนี้ (แอดมิน) · ตัวตั้งเวลาของ Apps Script ที่เจ้าของสร้างเอง (brachyTick)
+const BRACHY_ST_DONE = 'มาตามนัด', BRACHY_ST_CANCEL = 'ยกเลิก';
+const BRACHY_EVERY_MIN = 10;
+const BRACHY_KEYS = {
+  id: ['apptid', 'appointmentid', 'id', 'รหัสนัด'],
+  date: ['date', 'วันที่', 'วันนัด', 'วันที่นัด', 'apptdate'],
+  hn: ['hn'],
+  name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'patient', 'patientname', 'fullname'],
+  technique: ['technique', 'เทคนิค', 'tech'],
+  mp: ['mp', 'ผู้วางแผน', 'planner', 'physicist'],
+  rc: ['rc'],
+  status: ['status', 'สถานะ'],
+  fx: ['fx'],
+  totalFx: ['totalfx', 'fxทั้งหมด'],
+};
+const BRACHY_NEED = ['id', 'date', 'hn', 'mp'];
+const brachyNorm_ = v => String(v || '').toLowerCase().replace(/[\s_.\-]+/g, '');
+
+function brachyBook_(s) {
+  const raw = String((s && s.url) || '').trim();
+  const m = /\/d\/([\w-]{20,})/.exec(raw) || /^([\w-]{20,})$/.exec(raw);
+  if (!m) throw new Error(raw ? 'ลิงก์ชีตของระบบนัด Brachytherapy ต้องเป็นลิงก์ Google Sheet (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ' : 'ยังไม่ได้ใส่ลิงก์ชีตของระบบนัด Brachytherapy');
+  try { return SpreadsheetApp.openById(m[1]); } catch (e) {
+    throw new Error('เปิดชีตของระบบนัด Brachytherapy ไม่ได้ (' + e.message + ') · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้ (แชร์ให้อย่างน้อยดูได้)');
+  }
+}
+
+// หัวคอลัมน์ที่น่าจะเป็นแต่ละคีย์ · แท็บที่ตรงมากสุด (ต้องมี รหัสนัด วันที่ HN MP)
+function brachyGuess_(headers) {
+  const map = {};
+  Object.keys(BRACHY_KEYS).forEach(k => {
+    const names = BRACHY_KEYS[k].map(brachyNorm_);
+    const h = headers.filter(x => names.indexOf(brachyNorm_(x)) >= 0)[0];
+    if (h) map[k] = h;
+  });
+  return map;
+}
+function brachyTabs_(book) {
+  return book.getSheets().map(sh => ({ name: sh.getName(), headers: headerOf_(sh).filter(Boolean).slice(0, 40), rows: Math.max(0, sh.getLastRow() - 1) }));
+}
+function brachyPick_(tabs, s) {
+  const named = s && s.sheet ? tabs.filter(t => t.name === s.sheet)[0] : null;
+  if (named) return named;
+  let best = null, score = -1;
+  tabs.forEach(t => {
+    const g = brachyGuess_(t.headers), n = Object.keys(g).length + (BRACHY_NEED.every(k => g[k]) ? 100 : 0);
+    if (n > score) { best = t; score = n; }
+  });
+  return best;
+}
+
+// อ่านนัดทั้งหมดของแท็บที่เลือก [{ id, date, hn, name, technique, mp, rc, status, fx, totalFx }]
+function brachyRead_(book, s) {
+  const tabs = brachyTabs_(book), tab = brachyPick_(tabs, s);
+  if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัด');
+  const map = Object.assign(brachyGuess_(tab.headers), s && s.map && typeof s.map === 'object' ? s.map : {});
+  const miss = BRACHY_NEED.filter(k => !map[k] || tab.headers.indexOf(map[k]) < 0);
+  if (miss.length) throw new Error('แท็บ ' + tab.name + ' ไม่มีคอลัมน์ ' + miss.map(k => ({ id: 'รหัสนัด', date: 'วันที่', hn: 'HN', mp: 'MP (ผู้วางแผน)' })[k]).join(', ') + ' · เลือกคอลัมน์ที่ ตั้งค่า → Brachytherapy');
+  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone();
+  const last = sh.getLastRow(), width = sh.getLastColumn();
+  const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
+  const header = (values.shift() || []).map(v => String(v).trim());
+  const col = {};
+  Object.keys(BRACHY_KEYS).forEach(k => { col[k] = map[k] ? header.indexOf(map[k]) : -1; });
+  const rows = values.map(r => {
+    const o = {};
+    Object.keys(col).forEach(k => { o[k] = col[k] < 0 ? '' : cellText_(r[col[k]], tz); });
+    o.date = brachyDate_(o.date);
+    o.hn = String(o.hn).replace(/\.0$/, '');
+    return o;
+  }).filter(o => o.id);
+  return { tab: tab, map: map, tabs: tabs, rows: rows };
+}
+
+// วันที่ของระบบนัด: วันที่ของชีต (yyyy-MM-dd) หรือข้อความ d/M/yyyy (ปี พ.ศ. ได้)
+function brachyDate_(v) {
+  const t = String(v || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (!m) return t;
+  const y = +m[3] > 2400 ? +m[3] - 543 : +m[3];
+  return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
+
+// MP / RC ของระบบนัด → รหัสนักฟิสิกส์ (รหัส · ชื่อผู้ใช้ · อีเมล · ชื่อ-สกุล ไม่สนคำนำหน้าและช่องว่าง)
+function brachyStaff_(cfg) {
+  const staff = Array.isArray(cfg && cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code }));
+  const key = v => String(v || '').trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.)/, '').replace(/\s+/g, '').toLowerCase();
+  return v => {
+    const t = String(v || '').trim(), low = t.toLowerCase();
+    if (!t) return '';
+    const hit = staff.filter(x => String(x.code || '').toUpperCase() === t.toUpperCase()
+      || (x.user && String(x.user).toLowerCase() === low) || (x.email && String(x.email).toLowerCase() === low) || (x.name && key(x.name) === key(t)))[0];
+    return hit ? String(hit.code).toUpperCase() : '';
+  };
+}
+
+// รายการกิจกรรมที่ควรมี { src: rec } และสรุป (นัดที่นับ, MP/RC ที่ไม่รู้จัก)
+function brachyWanted_(rows, s, cfg) {
+  const want = {}, unknown = {}, staffOf = brachyStaff_(cfg), acts = cfg && cfg.acts;
+  const needleOn = !acts || !!acts.brachyn;
+  const label = k => (acts && acts[k] && acts[k].label) || (k === 'brachyn' ? 'Brachy เสียบเข็ม' : 'Brachy 3D');
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(s.from || '')) ? s.from : '';
+  let counted = 0;
+  rows.forEach(r => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
+    const st = String(r.status).trim();
+    if (st === BRACHY_ST_CANCEL || (s.count === 'done' && st !== BRACHY_ST_DONE)) return;
+    counted++;
+    const mp = staffOf(r.mp), rc = staffOf(r.rc);
+    if (r.mp && !mp) unknown[r.mp] = (unknown[r.mp] || 0) + 1;
+    if (r.rc && !rc) unknown[r.rc] = (unknown[r.rc] || 0) + 1;
+    const kind = needleOn && /interstitial|needle|เสียบเข็ม/i.test(r.technique) ? 'brachyn' : 'brachy';
+    const fx = r.fx ? 'Fx ' + r.fx + (r.totalFx ? '/' + r.totalFx : '') : '';
+    const note = [fx, r.technique, 'ระบบนัด Brachytherapy'].filter(Boolean).join(' · ');
+    const base = { date: r.date, hn: r.hn, name: r.name, note: note };
+    if (mp) want['brachy:' + r.id + ':plan'] = Object.assign({ kind: kind, mp: mp, title: '' }, base);
+    if (rc && mp && rc !== mp) want['brachy:' + r.id + ':rc'] = Object.assign({ kind: 'rc', mp: rc, title: label(kind) + ' ของ ' + mp }, base);
+  });
+  return { want: want, unknown: unknown, counted: counted, from: from };
+}
+
+// ดึงและบันทึก · คืนสรุปที่เก็บไว้ใน Script property BRACHY_SYNC
+function brachySync_(ss, cfg, why) {
+  const s = (cfg && cfg.brachySync) || {};
+  const res = { at: new Date().toISOString(), why: why || '', ok: false, added: 0, updated: 0, removed: 0, manual: 0, counted: 0, unknown: {}, tab: '', error: '' };
+  try {
+    const book = brachyBook_(s), got = brachyRead_(book, s), w = brachyWanted_(got.rows, s, cfg);
+    Object.assign(res, { tab: got.tab.name, counted: w.counted, unknown: w.unknown });
+    withLock_(() => {
+      const sh = tableSheet_(ss, 'logs'), header = headerOf_(sh), fields = TABLES.logs.fields;
+      const logs = readTable_(ss, 'logs');
+      const mine = {}, manual = [];
+      logs.forEach(l => { if (String(l.src).indexOf('brachy:') === 0) mine[l.src] = l; else if (!l.src) manual.push(l); });
+      const same = (a, b) => ['kind', 'mp', 'date', 'hn', 'name', 'title', 'note'].every(k => String(a[k] || '') === String(b[k] || ''));
+      const isDup = r => manual.some(l => l.date === r.date && l.hn === r.hn && l.mp === r.mp && (r.kind === 'rc' ? l.kind === 'rc' : l.kind === 'brachy' || l.kind === 'brachyn'));
+      const now = new Date().toISOString();
+      // แก้รายการเดิม
+      Object.keys(mine).forEach(k => {
+        const r = w.want[k];
+        if (!r || same(mine[k], r)) return;
+        const row = findRow_(sh, header.indexOf('id') + 1, mine[k].id);
+        if (row) { writeFields_(sh, row, header, fields, Object.assign({}, mine[k], r, { updated: now })); res.updated++; }
+      });
+      // ลบ: นัดถูกยกเลิก เปลี่ยนเป็นไม่นับ หรือหายไป (เฉพาะวันที่ตั้งแต่ "ดึงตั้งแต่")
+      const drop = Object.keys(mine).filter(k => !w.want[k] && (!w.from || mine[k].date >= w.from)).map(k => findRow_(sh, header.indexOf('id') + 1, mine[k].id)).filter(Boolean).sort((a, b) => b - a);
+      drop.forEach(r => sh.deleteRow(r));
+      res.removed = drop.length;
+      // เพิ่มใหม่ (ทีละชุด)
+      const add = [];
+      Object.keys(w.want).forEach(k => {
+        if (mine[k]) return;
+        const r = w.want[k];
+        if (isDup(r)) { res.manual++; return; }
+        add.push(Object.assign({ id: Utilities.getUuid(), caseId: '', min: '', k: '', created: now, updated: '', src: k }, r));
+      });
+      if (add.length) {
+        const cols = header.map(h => fields.filter(f => f[1] === h)[0]);
+        sh.getRange(sh.getLastRow() + 1, 1, add.length, header.length).setNumberFormat('@')
+          .setValues(add.map(rec => cols.map(f => (f ? safeText_(rec[f[0]]) : ''))));
+      }
+      res.added = add.length;
+    });
+    res.ok = true;
+  } catch (e) { res.error = e.message; }
+  try { PropertiesService.getScriptProperties().setProperty('BRACHY_SYNC', JSON.stringify(res).slice(0, 8000)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
+  return res;
+}
+function brachyStatus_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BRACHY_SYNC') || 'null'); } catch (e) { return null; }
+}
+
+/**
+ * แอดมิน: ตรวจชีตของระบบนัดด้วยค่าที่กำลังตั้ง (ยังไม่บันทึก) · ไม่เขียนอะไร
+ * { title, tabs: [{ name, headers, rows }], tab, map, preview: { rows, counted, plan, rc, needle, statuses, unknown, first, last } }
+ */
+function brachyCheck(s, token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('ตั้งค่าการดึง Brachytherapy ได้เฉพาะแอดมิน');
+  s = s && typeof s === 'object' ? s : {};
+  const book = brachyBook_(s), got = brachyRead_(book, s), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
+  const statuses = {}, keys = Object.keys(w.want);
+  got.rows.forEach(r => { const k = String(r.status).trim() || '(ว่าง)'; statuses[k] = (statuses[k] || 0) + 1; });
+  const dates = got.rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  return {
+    title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map,
+    preview: {
+      rows: got.rows.length, counted: w.counted, statuses: statuses, unknown: w.unknown, first: dates[0] || '', last: dates[dates.length - 1] || '',
+      plan: keys.filter(k => /:plan$/.test(k)).length, rc: keys.filter(k => /:rc$/.test(k)).length, needle: keys.filter(k => w.want[k].kind === 'brachyn').length,
+    },
+  };
+}
+
+// หน้าเว็บเรียกตอนเปิด: ดึงเมื่อครั้งล่าสุดเกิน BRACHY_EVERY_MIN นาที (force = ปุ่มดึงตอนนี้ของแอดมิน) · คืนสรุปล่าสุด
+function brachyPull(force, token) {
+  const u = who_(token);
+  if (force && !u.isAdmin) throw new Error('ดึงตอนนี้ได้เฉพาะแอดมิน');
+  const ss = ss_(), cfg = readConfig_(ss) || {};
+  if (!cfg.brachySync || !cfg.brachySync.on) return brachyStatus_();
+  const last = brachyStatus_();
+  if (!force && last && Date.now() - new Date(last.at).getTime() < BRACHY_EVERY_MIN * 60000) return last;
+  const cache = CacheService.getScriptCache();
+  if (!force && cache.get('brachy_busy')) return last;
+  cache.put('brachy_busy', '1', 120);
+  try { return brachySync_(ss, cfg, force ? 'ดึงตอนนี้ (' + (u.name || u.username || u.me || '') + ')' : 'เปิดหน้าเว็บ'); } finally { cache.remove('brachy_busy'); }
+}
+
+// ตัวตั้งเวลาของ Apps Script (เจ้าของสร้างเอง: Triggers → Add Trigger → brachyTick → Time-driven ทุก 10 นาที) ดึงแม้ไม่มีใครเปิดหน้าเว็บ
+function brachyTick() {
+  const ss = ss_(), cfg = readConfig_(ss) || {};
+  if (cfg.brachySync && cfg.brachySync.on) brachySync_(ss, cfg, 'ตั้งเวลา');
 }
 
 /* ---------- วันหยุดราชการไทย (ปฏิทินวันหยุดสาธารณะของ Google) ---------- */
