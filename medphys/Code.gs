@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.5';
+const CODE_VERSION = '2026-10-27.6';
 const API_LEVEL = 35;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1548,6 +1548,7 @@ function brachyTick() {
 /* ---------- RC จาก TDF Dose Calculator (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */
 // ตั้งค่า → RC จาก TDF Dose Calculator (config.tdfSync): { on, url, sheet, map, count: 'approved' | 'reviewed', from }
 // ผลคำนวณที่มีคน Recheck (approved · 'reviewed' = รวมไม่ผ่าน) = RC ของคน Recheck: "TDF <ประเภท> ของ <คนคำนวณ>" HN ชื่อผู้ป่วย วันที่ Recheck
+// และ RC ของคนคำนวณ (แต้ม RC เท่ากัน): "TDF <ประเภท> ที่คำนวณเอง · Recheck โดย <คน Recheck>" · คนคำนวณ Recheck เอง = ไม่นับทั้งคู่
 // ชีตเก็บเป็นคอลัมน์ หรือเก็บทั้งรายการเป็น JSON ในช่องเดียว ({ id, at, status, type, calc, review, patient }) ก็อ่านได้
 const TDF_KEYS = {
   id: ['id', 'recordid', 'รหัส'],
@@ -1609,7 +1610,7 @@ function tdfRead_(book, s, soft) {
       id: String(j.id || cellText_(c('id'), tz) || '').trim(),
       status: String(j.status || cellText_(c('status'), tz) || '').trim(),
       type: String(j.type || cellText_(c('type'), tz) || '').trim(),
-      calc: extWho_(ca), rc: extWho_(rv),
+      calc: extWho_(ca), rc: extWho_(rv), rcRaw: rv,
       calcName: String((extObj_(ca) || {}).name || (extObj_(ca) ? '' : cellText_(ca, tz)) || '').trim(),
       hn: String(p.hn || cellText_(c('hn'), tz) || '').replace(/\.0$/, '').trim(),
       name: String(p.name || p.fullName || cellText_(c('name'), tz) || '').trim(),
@@ -1631,18 +1632,22 @@ function tdfWanted_(rows, s, cfg) {
     const counts = st === 'approved' || (s.count === 'reviewed' && st === 'rejected') || (!st && r.rc.length > 0);
     if (!counts || !r.rc.length || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
     counted++;
-    const rc = code(r.rc), calc = code(r.calc);
-    if (!rc) { const k = r.rc.slice().reverse().join(' / '); unknown[k] = (unknown[k] || 0) + 1; return; }
+    const rc = code(r.rc), calc = code(r.calc), miss = list => { const k = list.slice().reverse().join(' / '); unknown[k] = (unknown[k] || 0) + 1; };
     if (calc && calc === rc) { self++; return; }   // คนคำนวณ Recheck เอง: ไม่นับเป็น RC
-    const title = ['TDF', TDF_TYPE[r.type] || r.type, 'ของ', calc || r.calcName || r.calc[0] || '?'].filter(Boolean).join(' ');
-    want['tdf:' + r.key + ':rc'] = { kind: 'rc', mp: rc, date: r.date, hn: r.hn, name: r.name, title: title, note: 'TDF Dose Calculator' + (st === 'rejected' ? ' · Recheck ไม่ผ่าน' : '') };
+    if (!rc) miss(r.rc);
+    if (r.calc.length && !calc) miss(r.calc);
+    const typ = ['TDF', TDF_TYPE[r.type] || r.type].filter(Boolean).join(' ');
+    const rec = (mp, title) => ({ kind: 'rc', mp: mp, date: r.date, hn: r.hn, name: r.name, title: title, note: 'TDF Dose Calculator' + (st === 'rejected' ? ' · Recheck ไม่ผ่าน' : '') });
+    const rcName = (extObj_(r.rcRaw) || {}).name || r.rc[r.rc.length - 1] || '?';
+    if (rc) want['tdf:' + r.key + ':rc'] = rec(rc, typ + ' ของ ' + (calc || r.calcName || r.calc[0] || '?'));
+    if (calc) want['tdf:' + r.key + ':calc'] = rec(calc, typ + ' ที่คำนวณเอง · Recheck โดย ' + (rc || rcName));
   });
   return { want: want, unknown: unknown, counted: counted, from: from, self: self };
 }
 
 /**
  * แอดมิน: ตรวจชีตของ TDF Dose Calculator ด้วยค่าที่กำลังตั้ง · ไม่เขียนอะไร
- * { title, tabs, tab, map, missing, preview: { rows, counted, rc, self, statuses, types, unknown, first, last } }
+ * { title, tabs, tab, map, missing, preview: { rows, counted, rc, calc, self, statuses, types, unknown, first, last } }
  */
 function tdfCheck(s, token) {
   const u = who_(token);
@@ -1659,7 +1664,8 @@ function tdfCheck(s, token) {
   return {
     title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
     preview: got.missing.length ? null : {
-      rows: got.rows.length, counted: w.counted, rc: Object.keys(w.want).length, self: w.self, statuses: statuses, types: types, unknown: w.unknown,
+      rows: got.rows.length, counted: w.counted, rc: Object.keys(w.want).filter(k => /:rc$/.test(k)).length, calc: Object.keys(w.want).filter(k => /:calc$/.test(k)).length,
+      self: w.self, statuses: statuses, types: types, unknown: w.unknown,
       first: dates[0] || '', last: dates[dates.length - 1] || '',
     },
   };
