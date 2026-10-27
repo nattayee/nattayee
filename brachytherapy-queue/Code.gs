@@ -20,6 +20,12 @@
 
 /** เว็บ LPCH RO Workspace ที่ใช้ตรวจชื่อผู้ใช้/รหัสผ่าน (ต้อง Deploy แบบ Who has access: Anyone) */
 const WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
+/**
+ * ชีตข้อมูลของ Treatment Planning Management (ระบบกระจายงานฟิสิกส์การแพทย์) — อ่านรายชื่อทีมนักฟิสิกส์ (แท็บ Config, key staff)
+ * มาเป็นตัวเลือก MP / RC · เปลี่ยนได้ที่ Script property MEDPHYS_SHEET_ID (ใส่ ID หรือลิงก์ของชีต · ใส่ - เพื่อปิด)
+ * บัญชีที่ Deploy เว็บนี้ต้องเปิดชีตนั้นได้
+ */
+const MEDPHYS_SHEET_ID = '1lW4T3rENJatBIULjXNDOMBvIBzMAssPjnmZtY7Q-5yk';
 
 /** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
 const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
@@ -97,6 +103,7 @@ const MSG = {
     dateInvalid: 'วันที่นัดไม่ถูกต้อง',
     noteTooLong: 'หมายเหตุยาวเกินไป (ไม่เกิน 500 ตัวอักษร)',
     signTooLong: 'ชื่อ MP / RC ยาวเกินไป (ไม่เกิน 100 ตัวอักษร)',
+    rcSameAsMp: 'RC ต้องไม่ใช่คนเดียวกับ MP (ผู้วางแผน)',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
     doctor: 'กรุณาเลือกแพทย์',
@@ -125,6 +132,7 @@ const MSG = {
     dateInvalid: 'Invalid appointment date',
     noteTooLong: 'Note is too long (up to 500 characters)',
     signTooLong: 'MP / RC name is too long (up to 100 characters)',
+    rcSameAsMp: 'RC must be a different person from the MP (planner)',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
     doctor: 'Please select a doctor',
@@ -229,12 +237,23 @@ function setup() {
   } catch (e) {
     wsMsg = e.message.indexOf(AUTH_ERR) === 0 ? 'LPCH RO Workspace: เชื่อมต่อได้' : 'LPCH RO Workspace: ⚠️ ' + e.message;
   }
+  // ทดสอบการอ่านรายชื่อทีมนักฟิสิกส์จากระบบกระจายงาน
+  let mpMsg;
+  try {
+    const team = readPhysicists_();
+    CacheService.getScriptCache().remove('physicists');
+    mpMsg = team.length ? 'ทีมนักฟิสิกส์ (MP / RC): ' + team.map(x => x.code + (x.name ? ' ' + x.name : '')).join(', ')
+      : 'ทีมนักฟิสิกส์ (MP / RC): ⚠️ ไม่พบรายชื่อในแท็บ Config ของชีตระบบกระจายงาน';
+  } catch (e) {
+    mpMsg = 'ทีมนักฟิสิกส์ (MP / RC): ⚠️ ' + e.message;
+  }
   console.log('สคริปต์รันในนาม: ' + scriptOwner_());
   console.log(calMsg);
   console.log(wsMsg);
+  console.log(mpMsg);
   try {
     SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, AccessLog แล้ว\n' +
-      calMsg + '\n' + wsMsg + '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
+      calMsg + '\n' + wsMsg + '\n' + mpMsg + '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
 }
 
@@ -347,6 +366,7 @@ function getInitData(token, lang) {
   return {
     user: user,
     doctors: getDoctors_(),
+    physicists: getPhysicists_(),
     techniques: TECHNIQUES,
     holidays: getHolidays_(),
     settings: {
@@ -483,6 +503,7 @@ function updateAppointment(token, apptId, changes, lang) {
       next[f] = cleanText_(c[f]).replace(/\s+/g, ' ');
       if (next[f].length > 100) throw new Error(msg_(lang, 'signTooLong'));
     });
+    if (next.mp && next.rc && next.mp === next.rc && (c.mp !== undefined || c.rc !== undefined)) throw new Error(msg_(lang, 'rcSameAsMp'));
     if (c.status !== undefined) {
       next.status = String(c.status).trim();
       if ([STATUS_BOOKED, STATUS_DONE, STATUS_CANCELLED].indexOf(next.status) < 0) throw new Error(msg_(lang, 'statusInvalid'));
@@ -667,6 +688,44 @@ function listAppointments_() {
     .map((r, i) => r[COL.apptId] ? rowToObj_(r, i + 2) : null)
     .filter(Boolean)
     .sort(compareAppt_);
+}
+
+/** ID ชีตของระบบกระจายงานฟิสิกส์ (Script property ก่อน แล้วค่าใน MEDPHYS_SHEET_ID) · '' = ปิด */
+function medphysSheetId_() {
+  const raw = String(PropertiesService.getScriptProperties().getProperty('MEDPHYS_SHEET_ID') || MEDPHYS_SHEET_ID || '').trim();
+  if (!raw || raw === '-') return '';
+  const m = /\/d\/([a-zA-Z0-9_-]{20,})/.exec(raw);
+  return m ? m[1] : raw;
+}
+
+/** อ่านทีมนักฟิสิกส์จากแท็บ Config (key staff) ของชีตระบบกระจายงาน → [{code, name, color}] เฉพาะคนที่ยังใช้งาน */
+function readPhysicists_() {
+  const id = medphysSheetId_();
+  if (!id) return [];
+  let ss;
+  try { ss = SpreadsheetApp.openById(id); } catch (e) {
+    throw new Error('เปิดชีตของระบบกระจายงานฟิสิกส์ไม่ได้ (' + e.message + ') ตรวจ MEDPHYS_SHEET_ID และบัญชีที่ Deploy ต้องเปิดชีตนั้นได้');
+  }
+  const sh = ss.getSheetByName('Config');
+  if (!sh || sh.getLastRow() < 2) return [];
+  const row = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().find(r => String(r[0]).trim() === 'staff');
+  let staff = [];
+  try { staff = row ? JSON.parse(row[1]) : []; } catch (e) { staff = []; }
+  return (Array.isArray(staff) ? staff : [])
+    .filter(x => x && x.code && x.active !== false)
+    .map(x => ({ code: String(x.code).trim().toUpperCase().slice(0, 10), name: String(x.name || '').trim().slice(0, 100),
+      color: /^#[0-9a-fA-F]{6}$/.test(String(x.color || '')) ? String(x.color) : '' }));
+}
+
+/** ทีมนักฟิสิกส์สำหรับหน้าเว็บ (เก็บไว้ 10 นาที) · อ่านไม่ได้ = [] (ช่อง MP / RC ยังพิมพ์ชื่อเองได้) */
+function getPhysicists_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('physicists');
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* อ่านใหม่ */ } }
+  let team = [];
+  try { team = readPhysicists_(); } catch (e) { console.warn('getPhysicists_: ' + e.message); return []; }
+  try { cache.put('physicists', JSON.stringify(team), 600); } catch (e) { /* ignore */ }
+  return team;
 }
 
 function updateStatus_(acc, apptId, scope, newStatus, deleteEvent, lang) {
