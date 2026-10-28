@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-27.6';
-const API_LEVEL = 35;
+const CODE_VERSION = '2026-10-28.1';
+const API_LEVEL = 36;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -101,6 +101,18 @@ const TABLES = {
       ['cats', 'เทคนิค'], ['type', 'Type'], ['aim', 'Aim'], ['room', 'ห้องฉาย'], ['tech', 'Technique'], ['area', 'บริเวณที่ฉาย'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['sim', 'Start RT'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['extra', 'หัวข้อเพิ่มเติม'],
       ['send', 'ส่งแถบงาน'], ['took', 'แจกเคสแล้ว (id)'], ['tookBy', 'แจกเคสโดย'], ['tookAt', 'แจกเคสเมื่อ'],
+      ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ],
+  },
+  // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
+  // took = id ของรายการ CT-SIM ที่ลงจากนัดนี้ (หรือ skip = ไม่มาทำ CT) · เขียนผ่าน apptSave / apptMark / ctSave เท่านั้น
+  appt: {
+    sheet: 'Appts',
+    fields: [
+      ['id', 'id'], ['date', 'นัด CT-Sim'], ['hn', 'HN'], ['name', 'Name'], ['cm', 'CT'], ['special', 'เทคนิคพิเศษ'],
+      ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['sim', 'Start RT'], ['ct', 'เครื่อง CT'], ['room', 'ห้องฉาย'],
+      ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'],
+      ['took', 'ลง CT-SIM แล้ว (id)'], ['tookBy', 'ลง CT-SIM โดย'], ['tookAt', 'ลง CT-SIM เมื่อ'],
       ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
@@ -257,6 +269,7 @@ function getData(token) {
     leaves: need.leaves ? readTable_(ss, 'leaves') : [],
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
+    appt: need.appt ? recentAppt_(ss) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
@@ -267,7 +280,10 @@ function getData(token) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim'], ctsim: ['ctsim', 'work'] };
+const NAV_LIKE = { appt: 'ctsim' };   // แถบลงนัด (แถบแรก) ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบ CT-SIM
+// แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT)
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim'],
+  ctsim: ['ctsim', 'work', 'appt'], appt: ['appt', 'ctsim'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -278,12 +294,13 @@ function guestNeeds_(user, config) {
 /**
  * สิทธิ์ของตำแหน่ง (role ใน LPCH) ต่อแถบ: 'edit' = บันทึก/แก้ไขได้ · 'view' = ดูอย่างเดียว · '' = มองไม่เห็น
  * ตั้งที่ ตั้งค่า → แถบเมนู (config.nav[i].access[role]) · ตำแหน่งที่ยังไม่ได้ตั้ง: MP บันทึกได้ทุกแถบที่ "แสดง"
- * ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น" (แบบเดิม) · แถบใหม่ที่การตั้งค่าเดิมยังไม่มี ทำตามแถบก่อนหน้า (NAV_PREV) เหมือนหน้าเว็บ
+ * ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น" (แบบเดิม) · แถบใหม่ที่การตั้งค่าเดิมยังไม่มี ทำตามแถบก่อนหน้า (NAV_PREV) หรือแถบที่ระบุ (NAV_LIKE) เหมือนหน้าเว็บ
  */
 function navAccess_(config, view, role) {
   const nav = config && Array.isArray(config.nav) ? config.nav : [];
   const find = v => nav.filter(x => x && x.view === v)[0];
   let x = find(view);
+  if (!x && NAV_LIKE[view]) return navAccess_(config, NAV_LIKE[view], role);
   if (!x) { let p = null; for (let v = view; !p && NAV_PREV[v]; v = NAV_PREV[v]) p = find(NAV_PREV[v]); x = { on: true, guest: p ? p.guest !== false : true }; }
   const acc = x.access && typeof x.access === 'object' ? x.access : null;
   if (acc && Object.prototype.hasOwnProperty.call(acc, role)) return acc[role] === 'edit' || acc[role] === 'view' ? acc[role] : '';
@@ -291,9 +308,12 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'] };
 
+// ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
+const OWN_WRITERS = ['ctsim', 'duty', 'appt'];
 function saveRecord(table, rec, token) {
+  if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
   if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
@@ -444,6 +464,7 @@ function pickNext_(o, trace) {
 }
 
 function deleteRecord(table, id, token) {
+  if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' ลบผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
   return withLock_(() => {
@@ -1211,17 +1232,34 @@ function ctSave(rec, pin, token) {
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
     writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.ctsim.fields.filter(f => f[0] in set), set);
     const want = row ? id : set.id;
+    // ลงจากนัดในแถบลงนัด (apptFrom = id ของนัด เฉพาะรายการใหม่): บันทึกว่านัดนี้ลง CT-SIM แล้ว ใครลง
+    const from = row ? '' : cut(rec.apptFrom, 80);
+    if (from) {
+      const as = tableSheet_(ss, 'appt'), ah = headerOf_(as), ar = findRow_(as, ah.indexOf('id') + 1, from);
+      const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') };
+      if (ar) writeFields_(as, ar, ah, TABLES.appt.fields.filter(f => f[0] in mark), mark);
+    }
     return readTable_(ss, 'ctsim').filter(x => x.id === want)[0];
   });
 }
 
-// ลบผู้ป่วยในแถบ CT-SIM ยืนยันด้วยรหัส PIN (เคสที่ MP แจกไปแล้วไม่ถูกลบ) · คืน true เมื่อลบแล้ว
+// ลบผู้ป่วยในแถบ CT-SIM ยืนยันด้วยรหัส PIN (เคสที่ MP แจกไปแล้วไม่ถูกลบ) · นัดที่ลงเป็นรายการนี้กลับไปรอลง CT-SIM · คืน true เมื่อลบแล้ว
 function ctRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ctsim);
   checkPin_(u, pin, 'ct');
   return withLock_(() => {
-    const sh = tableSheet_(ss_(), 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
+    if (row && id) {
+      const as = ss.getSheetByName(TABLES.appt.sheet);
+      if (as) {
+        const ah = headerOf_(as), clear = { took: '', tookBy: '', tookAt: '' };
+        readTable_(ss, 'appt').filter(a => a.took === id).forEach(a => {
+          const ar = findRow_(as, ah.indexOf('id') + 1, a.id);
+          if (ar) writeFields_(as, ar, ah, TABLES.appt.fields.filter(f => f[0] in clear), clear);
+        });
+      }
+    }
     return !!row;
   });
 }
@@ -1247,6 +1285,68 @@ function ctMark(id, mark, token) {
 function recentCt_(ss) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   return readTable_(ss, 'ctsim').filter(x => String(x.date) >= from);
+}
+
+/**
+ * แถบลงนัด: เพิ่มหรือแก้นัดทำ CT-Sim ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงนัด)
+ * rec = ช่องใน APPT_FIELDS (date = วันนัด CT-Sim, cm = CM / Non-CM, special = เทคนิคพิเศษ, dpf/fx/rx/freq = Prescription, sim = Start RT)
+ * id ที่ยังไม่มี = เพิ่มใหม่ · การลง CT-SIM (took) เปลี่ยนได้ทาง ctSave / apptMark / ctRemove เท่านั้น · คืนรายการหลังบันทึก
+ */
+const APPT_FIELDS = ['date', 'hn', 'name', 'cm', 'special', 'dpf', 'fx', 'rx', 'freq', 'sim', 'ct', 'room', 'doc', 'icd', 'dx', 'note'];
+function apptSave(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.appt);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
+  if (!isDate(cut(rec.date, 10))) throw new Error('วันนัด CT-Sim ไม่ถูกต้อง');
+  const sim = cut(rec.sim, 10);
+  if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
+  checkPin_(u, pin, 'appt');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh);
+    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const set = {};
+    APPT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'note' || k === 'dx' ? 2000 : 200); });
+    const now = new Date().toISOString();
+    if (row) set.updated = now;
+    else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
+    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.appt.fields.filter(f => f[0] in set), set);
+    const want = row ? id : set.id;
+    return readTable_(ss, 'appt').filter(x => x.id === want)[0];
+  });
+}
+
+// ลบนัดในแถบลงนัด ยืนยันด้วยรหัส PIN (รายการ CT-SIM ที่ลงจากนัดนี้แล้วไม่ถูกลบ) · คืน true เมื่อลบแล้ว
+function apptRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.appt);
+  checkPin_(u, pin, 'appt');
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'appt'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+
+// แถบ CT-SIM (หรือลงนัด): นัดที่ผู้ป่วยไม่มาทำ CT · mark = 'skip' (เฉพาะที่ยังรอลง CT-SIM) หรือ '' (คืนกลับเป็นรอ) · คืนรายการ
+function apptMark(id, mark, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.ctsim.concat(EDIT_VIEWS.appt));
+  mark = mark === 'skip' ? 'skip' : '';
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const took = String(sh.getRange(row, header.indexOf('ลง CT-SIM แล้ว (id)') + 1).getValue() || '').trim();
+    if (mark ? took : took !== 'skip') throw new Error(took === 'skip' ? 'นัดนี้ตั้งว่าไม่มาทำ CT ไว้แล้ว' : took ? 'นัดนี้ลง CT-SIM ไปแล้ว' : 'นัดนี้ยังรอลง CT-SIM อยู่');
+    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
+    writeFields_(sh, row, header, TABLES.appt.fields.filter(f => f[0] in set), set);
+    return readTable_(ss, 'appt').filter(x => x.id === id)[0];
+  });
+}
+
+// นัดที่ส่งให้หน้าเว็บ: วันนัด CT ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
+function recentAppt_(ss) {
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  return readTable_(ss, 'appt').filter(x => String(x.date) >= from);
 }
 
 // ตำแหน่งใน LPCH ที่เป็น RTT / RA (ตั้งค่า → ตารางวันฉาย · config.dutyRoles)
