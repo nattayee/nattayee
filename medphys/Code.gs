@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-28.2';
-const API_LEVEL = 36;
+const CODE_VERSION = '2026-10-28.6';
+const API_LEVEL = 37;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -114,6 +114,15 @@ const TABLES = {
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'],
       ['took', 'ลง CT-SIM แล้ว (id)'], ['tookBy', 'ลง CT-SIM โดย'], ['tookAt', 'ลง CT-SIM เมื่อ'],
       ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ],
+  },
+  // แถบ RTT/RA Jobs: ภาระงานรายเดือนของแต่ละคน (id = ชื่อไม่มีคำนำหน้า|YYYY-MM) · งานห้องฉาย/CT ระบบคำนวณจากผู้ปฏิบัติงานประจำวัน
+  // เก็บเฉพาะช่องที่กรอกเองหรือแก้ (cells = { แถวในแบบฟอร์ม: { วันที่: ค่า } }) · วันลา · ตำแหน่ง/แต้มประกันของเดือนนั้น · เขียนผ่าน jobsSave เท่านั้น
+  jobs: {
+    sheet: 'Jobs',
+    fields: [
+      ['id', 'id'], ['ym', 'เดือน'], ['who', 'ชื่อ'], ['user', 'บัญชี'], ['kind', 'แบบฟอร์ม'], ['prof', 'ตำแหน่ง (JSON)'],
+      ['cells', 'ช่องที่กรอก/แก้ (JSON)'], ['leaves', 'วันลา (JSON)'], ['by', 'บันทึกโดย'], ['updated', 'Updated'],
     ],
   },
 };
@@ -270,6 +279,7 @@ function getData(token) {
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
+    jobs: need.jobs ? jobsFor_(ss, user) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
@@ -280,10 +290,11 @@ function getData(token) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { appt: 'ctsim' };   // แถบลงนัด (แถบแรก) ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบ CT-SIM
+const NAV_LIKE = { appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงนัด = สิทธิ์เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim'],
-  ctsim: ['ctsim', 'work', 'appt'], appt: ['appt', 'ctsim', 'course'] };
+// แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน)
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course'], jobs: ['jobs'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -308,10 +319,10 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -1347,6 +1358,53 @@ function apptMark(id, mark, token) {
 function recentAppt_(ss) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   return readTable_(ss, 'appt').filter(x => String(x.date) >= from);
+}
+
+/**
+ * แถบ RTT/RA Jobs: บันทึกภาระงานของเดือน (ของตัวเอง · แอดมินบันทึกแทนได้) ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: RTT/RA Jobs)
+ * rec = { ym: 'YYYY-MM', who: ชื่อ-สกุล (ตรงกับชื่อในผู้ปฏิบัติงานประจำวัน), kind: 'rtt' | 'ra', prof, cells, leaves (JSON) } · คืนรายการหลังบันทึก
+ */
+const JOB_KINDS = ['rtt', 'ra'];
+// ชื่อเทียบกัน: ไม่สนคำนำหน้าและช่องว่าง (เหมือน nameKey ในหน้าเว็บ)
+const nameKey_ = v => String(v == null ? '' : v).trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.)/, '').replace(/\s+/g, '').toLowerCase();
+function jobsSave(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.jobs);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const ym = cut(rec.ym, 7), who = cut(rec.who, 120), kind = cut(rec.kind, 10);
+  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('เดือนไม่ถูกต้อง');
+  if (!nameKey_(who)) throw new Error('ไม่มีชื่อผู้ปฏิบัติงาน');
+  if (JOB_KINDS.indexOf(kind) < 0) throw new Error('แบบฟอร์มไม่ถูกต้อง');
+  const own = u.via === 'lpch' && nameKey_(who) === nameKey_(u.name);
+  if (!own && !u.isAdmin) throw new Error('บันทึกได้เฉพาะภาระงานของตัวเอง (แอดมินบันทึกแทนได้)');
+  const json = (v, isArr, max) => {
+    const t = String(v == null ? '' : v);
+    if (!t) return '';
+    if (t.length > max) throw new Error('ข้อมูลภาระงานยาวเกินไป');
+    let o;
+    try { o = JSON.parse(t); } catch (e) { throw new Error('ข้อมูลภาระงานไม่ถูกต้อง'); }
+    if (isArr ? !Array.isArray(o) : !o || typeof o !== 'object' || Array.isArray(o)) throw new Error('ข้อมูลภาระงานไม่ถูกต้อง');
+    return JSON.stringify(o);
+  };
+  const cells = json(rec.cells, false, 45000), leaves = json(rec.leaves, true, 5000), prof = json(rec.prof, false, 2000);
+  checkPin_(u, pin, 'jobs');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'jobs'), header = headerOf_(sh), id = nameKey_(who) + '|' + ym;
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    const old = row ? readTable_(ss, 'jobs').filter(x => x.id === id)[0] : null;
+    const set = { id: id, ym: ym, who: who, user: own ? String(u.username || '') : (old && old.user) || cut(rec.user, 80), kind: kind, prof: prof, cells: cells, leaves: leaves,
+      by: String(u.name || u.username || u.me || ''), updated: new Date().toISOString() };
+    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.jobs.fields, set);
+    return readTable_(ss, 'jobs').filter(x => x.id === id)[0];
+  });
+}
+// ภาระงานที่ส่งให้หน้าเว็บ: 13 เดือนล่าสุด · ของตัวเอง (ชื่อตรงกับบัญชี LPCH) · แอดมินและบัญชี Google ได้ทุกคน
+function jobsFor_(ss, user) {
+  const d = new Date(Date.now() - 400 * 864e5), from = Utilities.formatDate(d, ss.getSpreadsheetTimeZone(), 'yyyy-MM');
+  const all = readTable_(ss, 'jobs').filter(x => String(x.id).split('|')[1] >= from);
+  if (user.via === 'google' || user.isAdmin) return all;
+  const me = nameKey_(user.name);
+  return me ? all.filter(x => nameKey_(x.who) === me) : [];
 }
 
 // ตำแหน่งใน LPCH ที่เป็น RTT / RA (ตั้งค่า → ตารางวันฉาย · config.dutyRoles)
