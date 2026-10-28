@@ -810,6 +810,19 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-who{overflow:hidden;color:var(--faint);text-overflow:ellipsis;white-space:nowrap}
 .dpk-foot{display:flex;align-items:center;gap:4px;margin-top:2px;color:var(--faint);font-size:11.5px}
 .dpk-foot span{flex:1}
+/* ปฏิทินในหน้าต่าง (ลงนัด, CT-SIM, แก้ไขเคส ฯลฯ): กว้างเท่าเนื้อหาของหน้าต่าง ช่องวันใหญ่ขึ้น */
+.dpk-pop.dpk-wide{padding:12px 14px 8px}
+.dpk-wide .dpk-head b{font-size:16px}
+.dpk-wide .dpk-sub{margin-bottom:8px;font-size:13px}
+.dpk-wide .dpk-grid{gap:4px}
+.dpk-wide .dpk-wd{font-size:12.5px}
+.dpk-wide .dpk-d{min-height:54px;padding-top:5px;font-size:15px}
+.dpk-wide .dpk-d i{min-width:26px;margin-top:4px;padding:0 7px;font-size:12.5px;line-height:19px}
+.dpk-wide .dpk-rooms{gap:5px;margin-bottom:8px}
+.dpk-wide .dpk-rooms button{padding:0 11px;font-size:12.5px;line-height:26px}
+.dpk-wide .dpk-rooms small{margin-left:5px;font-size:11.5px}
+.dpk-wide .dpk-info{font-size:13px}
+.dpk-wide .dpk-foot{font-size:12.5px}
 input.dpk-box::-webkit-calendar-picker-indicator{display:none}   /* ใช้ปฏิทินของหน้าเว็บแทน */
 input.dpk-box[readonly]{cursor:pointer}
 .cp-sort{display:flex;gap:6px;padding:0 12px 8px}
@@ -2580,7 +2593,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-28.2';
+const PAGE_VERSION = '2026-10-28.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9090,6 +9103,10 @@ function placeCal() {
   const r = calBox.getBoundingClientRect();
   if (!r.width && !r.height) return closeCal();   // ช่องถูกซ่อนหรือปิดหน้าต่างไปแล้ว
   calPop.style.maxHeight = '';
+  // อยู่ในหน้าต่าง: กว้างเท่าเนื้อหาของหน้าต่าง (ขอบเดียวกับช่องกรอก) · นอกหน้าต่าง (ฟอร์มแจกเคส): 320px ใต้ช่อง
+  const dr = calPop.parentNode.tagName === 'DIALOG' ? calPop.parentNode.getBoundingClientRect() : null, wide = !!dr && dr.width >= 400;
+  calPop.classList.toggle('dpk-wide', wide);
+  calPop.style.width = wide ? `${Math.round(dr.width - 36)}px` : '';
   const w = calPop.offsetWidth, h = calPop.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
   // ใต้ช่อง หรือเหนือทั้งช่อง (หัวข้อและ on call ยังกดได้) · ที่ไม่พอทั้งสองด้าน: ด้านที่กว้างกว่าแล้วเลื่อนในปฏิทิน · จอเล็กมาก: ทับช่องได้
   const below = r.bottom + 4, fieldTop = (calBox.closest('.field') || calBox).getBoundingClientRect().top;
@@ -9100,7 +9117,7 @@ function placeCal() {
   else if (Math.max(roomBelow, roomAbove) >= 300) { maxH = Math.max(roomBelow, roomAbove); top = roomBelow >= roomAbove ? below : 8; }
   else top = Math.max(8, Math.min(below, vh - h - 8));
   calPop.style.maxHeight = maxH ? `${maxH}px` : '';
-  calPop.style.left = `${Math.max(8, Math.min(r.left, vw - w - 8))}px`;
+  calPop.style.left = `${Math.max(8, Math.min(wide ? dr.left + 18 : r.left, vw - w - 8))}px`;
   calPop.style.top = `${top}px`;
 }
 function openCal(el) {
