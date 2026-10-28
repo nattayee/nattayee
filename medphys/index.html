@@ -2593,7 +2593,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-28.4';
+const PAGE_VERSION = '2026-10-28.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3979,7 +3979,15 @@ function renderAppt() {
   $('#ap-tbl').innerHTML = head + `<tbody>${body || `<tr><td colspan="${span}" class="empty-state">${words.length ? 'ไม่พบนัดที่ตรงกับคำค้น' : `ยังไม่มีนัดทำ CT-Sim ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
 }
 
-// ฟอร์มลงนัด (ช่องตาม ตั้งค่า → ลงนัด) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้
+// แพทย์ที่เป็นผู้ใช้ที่เข้าระบบอยู่ (ตั้งค่า → แพทย์): บัญชี LPCH ที่เชื่อมไว้ → อีเมล → ชื่อ-สกุลตรงกันคนเดียว (แพทย์ที่ยังไม่เชื่อมบัญชี · ไม่สนคำนำหน้า) · ไม่ใช่แพทย์ = ''
+function myDoctor() {
+  const u = state.user || {}, docs = state.config.doctors, low = v => str(v).trim().toLowerCase(), user = low(u.username), mail = low(u.me);
+  const d = (user && docs.find(x => low(x.user) === user)) || (mail && docs.find(x => low(x.email) === mail));
+  if (d) return d.code;
+  const byName = u.via === 'lpch' && str(u.name) ? docs.filter(x => !x.user && str(x.name) && nameKey(x.name) === nameKey(u.name)) : [];
+  return byName.length === 1 ? byName[0].code : '';
+}
+// ฟอร์มลงนัด (ช่องตาม ตั้งค่า → ลงนัด) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ลงนัดใหม่: แพทย์เริ่มที่ผู้ใช้ที่เข้าระบบ (ถ้าเป็นแพทย์และช่องแพทย์แสดงอยู่)
 const apDlg = $('#ap-dlg'), apForm = $('#ap-form');
 let editingAp = null;
 function openApForm(id) {
@@ -3988,7 +3996,7 @@ function openApForm(id) {
   if (!canEdit()) return toast(RO_MSG, { err: true });
   if (!apptOn()) return toast(AP_OLD, { err: true });
   const cfg = state.config, ap = cfg.appt;
-  editingAp = r ? clone(r) : normAppt({ id: uid() });
+  editingAp = r ? clone(r) : normAppt({ id: uid(), doc: apMode('doc') !== 'off' ? myDoctor() : '' });
   const a = editingAp;
   $('#ap-title').textContent = r ? `แก้ไขนัด ${r.hn}` : 'ลงนัด';
   for (const f of ['hn', 'name', 'date', 'note']) $('#a-' + f).value = a[f] || '';
