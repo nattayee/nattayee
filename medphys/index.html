@@ -2580,7 +2580,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-28.1';
+const PAGE_VERSION = '2026-10-28.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4153,6 +4153,16 @@ function ctCourseRows() {
     return Object.assign(c, { how: 'ctsim', mp: '', ctId: r.id, ctDate: r.date, ctRoom: r.ct });
   }) : [];
 }
+// นัดในแถบลงนัดที่ยังไม่ลง CT-SIM: แถวในตารางวันฉาย "รอ CT-Sim" วันฉายตาม Prescription (Fx, ความถี่) และ Start RT ที่ลงนัด (ยังไม่มีเคส · apId = id ของนัด)
+// ไม่นับนัดค้างเก่า: Start RT เลยมาเกิน 14 วัน หรือไม่มี Start RT และวันนัด CT เลยมาเกิน 60 วัน · ลง CT-SIM แล้วใช้แถวของรายการ CT แทน
+function apCourseRows() {
+  return apWaiting().filter(a => (isDay(a.sim) ? daysFrom(a.sim) >= -14 : daysFrom(a.date) >= -60)).map(a => {
+    const v = apToCt(a), c = normCase({ ...v, id: 'ap:' + a.id, cat: v.cats, ct: a.date, in: a.date, created: a.created });
+    return Object.assign(c, { how: 'appt', mp: '', apId: a.id, apDate: a.date, apCm: a.cm, apSp: a.special });
+  });
+}
+// แถวที่ยังไม่มีเคส (จากแถบ CT-SIM หรือแถบลงนัด): Mosaiq Time, รายละเอียดผู้ป่วย และหน้าแก้ไขเคสใช้ไม่ได้
+const preRow = c => !!(c.ctId || c.apId);
 // งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
 const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
 const rpTag = c => { const m = rpOf(c); return m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
@@ -4244,7 +4254,7 @@ const FXG_SORT = {
   q: cs => (tagInfo(groupTags(cs)).q || {}).id || '',
   bd: cs => (tagInfo(groupTags(cs)).bd || {}).time || '',
 };
-const FXG_ST = ['รอ Plan complete', 'รอฉาย', 'กำลังฉาย', 'ไม่มีวันฉาย'];
+const FXG_ST = ['รอ CT-Sim', 'รอ Plan complete', 'รอฉาย', 'กำลังฉาย', 'ไม่มีวันฉาย'];
 function fxgVals(g, key) {
   const cs = g.items.map(x => x.c), sc = g.main.sc;
   let v;
@@ -4255,7 +4265,7 @@ function fxgVals(g, key) {
   else if (key === 'mqt') v = [groupMq(cs)];
   else if (key === 'q') v = [(tagInfo(groupTags(cs)).q || {}).label];
   else if (key === 'bd') { const bd = tagInfo(groupTags(cs)).bd; v = [bd && (bd.time || BD_NOTIME)]; }
-  else { const td = today(), e = sc && fxEventAt(sc.evs, td); v = [!g.ready ? 'รอ Plan complete' : !sc ? 'ไม่มีวันฉาย' : sc.hold ? sc.hold.label : e && e.act === 'skip' ? e.label : sc.start > td ? 'รอฉาย' : 'กำลังฉาย']; }
+  else { const td = today(), e = sc && fxEventAt(sc.evs, td); v = [!g.ready ? (g.main.c.apId ? 'รอ CT-Sim' : 'รอ Plan complete') : !sc ? 'ไม่มีวันฉาย' : sc.hold ? sc.hold.label : e && e.act === 'skip' ? e.label : sc.start > td ? 'รอฉาย' : 'กำลังฉาย']; }
   v = [...new Set(v.filter(Boolean))];
   return v.length ? v : [BLANK];
 }
@@ -4277,7 +4287,8 @@ const hnCanEdit = c => (isDirect(c) ? accessOf('course') === 'edit' && directOn(
 // fraction ที่ฉายแล้ว (ก่อนวันนี้) นับทุกบริเวณ
 const fxGiven = (sc, td) => { let n = 0; if (sc) for (const [d, l] of sc.fx) if (d < td) for (const v of l) n += Math.max(0, v.to - v.from + 1); return n; };
 function renderCourse() {
-  const all = [...state.cases.filter(inCourse), ...ctCourseRows()], rooms = dashRooms();
+  const all = [...state.cases.filter(inCourse), ...ctCourseRows(), ...apCourseRows()], rooms = dashRooms();
+  if (!rooms.includes(NO_ROOM) && all.some(c => preRow(c) && !c.room)) rooms.push(NO_ROOM);   // นัด/รายการ CT ที่ยังไม่ระบุห้องฉาย
   let room = pref.get('courseRoom', '');
   if (!rooms.includes(room)) room = '';
   const tab = COURSE_TABS.some(t => t[0] === state.courseTab) ? state.courseTab : 'on';
@@ -4294,7 +4305,7 @@ function renderCourse() {
   $('#course-add').hidden = !canEdit() || !directOn();
   $('#course-api-text').textContent = `${oldApi} ต้องใช้ Code.gs รุ่น ${oldVer} ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่`;
   $('#course-help').textContent = tab === 'on'
-    ? `ผู้ป่วยละบรรทัด ตั้งแต่ลง CT-SIM และแจกเคส · ยังไม่ Plan complete = "รอ Plan complete" (ช่องจาง บันทึกสถานะ fraction ไม่ได้จนกว่า MP กด Plan complete) · หัวตารางคือวันที่ (เริ่มที่วันนี้ ข้ามเสาร์–อาทิตย์) และจำนวนผู้ป่วยที่ฉายวันนั้น · ช่องคือเลข fraction · เขียวเข้ม ✓ = บันทึกฉายแล้ว · เขียวอ่อน = ผ่านมาแล้ว · กรอบ = วันนี้${fxCanEdit() ? ' · กดช่องเพื่อบันทึก ฉายแล้ว, Hold, HV, Re-CT, Off RT ฯลฯ' : ''}`
+    ? `ผู้ป่วยละบรรทัด ตั้งแต่ลงนัด ลง CT-SIM และแจกเคส · นัดที่ยังไม่ทำ CT = "รอ CT-Sim" · ยังไม่ Plan complete = "รอ Plan complete" (ช่องจาง บันทึกสถานะ fraction ไม่ได้จนกว่า MP กด Plan complete) · หัวตารางคือวันที่ (เริ่มที่วันนี้ ข้ามเสาร์–อาทิตย์) และจำนวนผู้ป่วยที่ฉายวันนั้น · ช่องคือเลข fraction · เขียวเข้ม ✓ = บันทึกฉายแล้ว · เขียวอ่อน = ผ่านมาแล้ว · กรอบ = วันนี้${fxCanEdit() ? ' · กดช่องเพื่อบันทึก ฉายแล้ว, Hold, HV, Re-CT, Off RT ฯลฯ' : ''}`
     : 'แถบวันฉาย: วันที่และเลข fraction เรียงต่อกัน สีเขียว = ฉายแล้ว · ขีดฆ่า = ยกเลิก';
   const hol = holidayMap(), td = today();
   const list = of(tab).map(c => ({ c, sc: caseSchedule(c, hol) }));
@@ -4310,7 +4321,7 @@ function renderCourse() {
     }
     // แถวของผู้ป่วยใช้ตารางของเคสที่ Plan complete แล้ว (ก่อนเคสที่ยังรอ และรายการ CT-SIM) ที่มี fraction มากที่สุด (หลายเทคนิคของคนเดียวกันมักฉายวันเดียวกัน)
     // ไม่มีเคสที่ Plan complete = แถว "รอ Plan complete" (เห็นวันฉายตาม Start RT แต่บันทึกสถานะ fraction ไม่ได้)
-    const rank = x => (planReady(x.c) ? 2e6 : 0) + (x.c.ctId ? 0 : 1e6) + (x.sc ? x.sc.planned : -1);
+    const rank = x => (planReady(x.c) ? 2e6 : 0) + (preRow(x.c) ? 0 : 1e6) + (x.c.apId ? 0 : 5e5) + (x.sc ? x.sc.planned : -1);
     for (const g of groups) { g.main = g.items.reduce((a, b) => (rank(b) > rank(a) ? b : a)); g.ready = planReady(g.main.c); }
     groups.sort((a, b) => (a.main.sc ? a.main.sc.start : '9999').localeCompare(b.main.sc ? b.main.sc.start : '9999') || a.main.c.in.localeCompare(b.main.c.in));
     // เรียงตาม Mosaiq Time / คิว / เวลา BD protocol (ปุ่มในช่องเลือก) · เท่ากันคงลำดับเดิม · ยังไม่มีค่าอยู่ท้ายเสมอ
@@ -4344,13 +4355,13 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   // ใต้วันที่: บรรทัดบน = ผู้ป่วยทั้งหมดของวันนั้น (มี fraction หรืออยู่ในช่วง Hold ฯลฯ)
   // บรรทัดล่าง = ฉายแล้ว (เขียว: ฉายแล้ว หรือสถานะแบบฉายตามปกติ) / Hold, HV, Re-CT ฯลฯ (เหลือง) / ค้างบันทึก (แดง: ยังไม่ได้บันทึก) รวมกันเท่าบรรทัดบน
   const dayStat = d => {
-    const st = { all: 0, g: 0, y: 0, r: 0, p: 0 };
+    const st = { all: 0, g: 0, y: 0, r: 0, p: 0, a: 0 };
     if (hol[d]) return st;
     for (const g of groups) {
       const sc = g.main.sc;
       if (!sc) continue;
       // รอ Plan complete: นับในจำนวนทั้งหมดของวันที่มี fraction (ห้องที่เลือก) แยกจากฉายแล้ว/Hold/ค้างบันทึก
-      if (!g.ready) { if (sc.fx.has(d) && (!room || fxRooms(sc.fx.get(d)).includes(room))) { st.all++; st.p++; } continue; }
+      if (!g.ready) { if (sc.fx.has(d) && (!room || fxRooms(sc.fx.get(d)).includes(room))) { st.all++; st.p++; if (g.main.c.apId) st.a++; } continue; }
       const e = fxEventAt(sc.evs, d);
       // เลือกห้องไว้: วันที่ผู้ป่วยฉายห้องอื่นไม่นับ · ย้ายออกจากห้องนี้ = นับเป็นสถานะอื่น (เหลือง)
       if (sc.fx.has(d) && room && !fxRooms(sc.fx.get(d)).includes(room)) { const l = sc.fx.get(d); if (l.some(x => x.mv) && fxBase(l).includes(room)) { st.all++; st.y++; } continue; }
@@ -4364,7 +4375,7 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const lim = dayLimit(room), dutyEdit = canEdit() && directOn();
   const head = days.map((d, i) => {
     const dt = parseISO(d), h = hol[d], st = dayStat(d), over = !!lim && st.all > lim, du = dutyOf(d, room);
-    const tip = `${LONG_DAY_FMT.format(dt)}${h ? ' · ' + h : ''} · ทั้งหมด ${st.all} คน${over ? ` (เกิน ${lim} คน)` : ''}${st.all ? ` · ฉายแล้ว ${st.g} · Hold, HV ฯลฯ ${st.y} · ค้างบันทึก ${st.r}${st.p ? ` · รอ Plan complete ${st.p}` : ''}` : ''}`;
+    const tip = `${LONG_DAY_FMT.format(dt)}${h ? ' · ' + h : ''} · ทั้งหมด ${st.all} คน${over ? ` (เกิน ${lim} คน)` : ''}${st.all ? ` · ฉายแล้ว ${st.g} · Hold, HV ฯลฯ ${st.y} · ค้างบันทึก ${st.r}${st.p > st.a ? ` · รอ Plan complete ${st.p - st.a}` : ''}${st.a ? ` · รอ CT-Sim ${st.a}` : ''}` : ''}`;
     const has = du.rtt.length || du.ra.length, dTip = has ? dutyText(du) : 'ยังไม่ได้เลือก RTT และ RA ที่ปฏิบัติงาน';
     const dBody = has ? `<i class="t">RTT ${du.rtt.length}</i><i class="a">RA ${du.ra.length}</i>` : d === td ? '+ RTT/RA' : '+';
     const duty = h ? '' : dutyEdit ? `<button type="button" class="fxg-duty${has ? '' : ' none'}" data-duty="${d}" title="${esc(`${dTip} · กดเพื่อเลือกผู้ปฏิบัติงาน`)}">${dBody}</button>`
@@ -4377,8 +4388,8 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const moved = groups.some(g => g.items.some(x => roomsOf(x.c).length > 1));
   const awayHere = !!room && groups.some(g => g.items.some(x => parseMoves(x.c).length));
   const added = groups.some(g => parseAdds(g.main.c).length);
-  const pend = groups.some(g => !g.ready);
-  const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ...(pend ? [['pend', 'รอ Plan complete']] : []), ...(moved ? [['rm', 'ฉายห้องอื่น']] : []), ...(awayHere ? [['moved', 'ย้ายไปห้องอื่น']] : []), ...(added ? [['added', 'เพิ่ม fraction']] : []), ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
+  const pend = groups.some(g => !g.ready), pendAp = groups.some(g => !g.ready && g.main.c.apId), pendLbl = pendAp ? 'รอ CT-Sim / Plan complete' : 'รอ Plan complete';
+  const legend = [['given', 'ฉายแล้ว (บันทึก)'], ['done', 'ผ่านมาแล้ว'], ['today', 'วันนี้'], ['boost', 'Boost'], ...(pend ? [['pend', pendLbl]] : []), ...(moved ? [['rm', 'ฉายห้องอื่น']] : []), ...(awayHere ? [['moved', 'ย้ายไปห้องอื่น']] : []), ...(added ? [['added', 'เพิ่ม fraction']] : []), ['skip', 'ไม่ได้ฉาย (Hold, HV, Re-CT)'], ['hol', 'วันหยุด']].map(([k, l]) => `<span><i class="lg-${k}"></i>${l}</span>`).join('');
   // ผู้ปฏิบัติงานของวันนี้ (หรือวันแรกที่แสดง) แยกตามห้อง
   const dd = days.includes(td) ? td : days[0], rows = dutyRooms(room).map(r => ({ r, du: dutyOf(dd, r || '') })).filter(x => x.du.rtt.length || x.du.ra.length);
   const dutyIn = rows.length ? `<b>${dd === td ? 'วันนี้' : esc(fmtDay(dd))}</b>${rows.map(x => `<span>${!room && x.r ? `<em>${esc(roomLabel(x.r))}</em> ` : ''}${esc(dutyText(x.du))}</span>`).join('')}` : '';
@@ -4395,7 +4406,7 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const typing = (document.activeElement || {}).dataset || {};   // กำลังพิมพ์ Mosaiq Time: วาดใหม่แล้วกลับไปที่ช่องเดิม
   mqRedraw = true;
   box.innerHTML = `<div class="fxg${c0 < 200 ? ' narrow' : ''}" role="table" aria-label="ตารางวันฉาย">
-      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length < total ? `${groups.length} จาก ${total}` : total} คน</span></span><span class="fxg-filt">${filt}</span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i>${pend ? '<i class="p">+รอ Plan complete</i>' : ''}</small></div>${head}</div>
+      <div class="fxg-head" role="row"><div class="fxg-c0" role="columnheader"><span>ผู้ป่วย <span class="muted">${groups.length < total ? `${groups.length} จาก ${total}` : total} คน</span></span><span class="fxg-filt">${filt}</span><small class="muted fxg-key">ทั้งหมด (คน)<br><i class="g">ฉายแล้ว</i>/<i class="y">Hold ฯลฯ</i>/<i class="r">ค้างบันทึก</i>${pend ? `<i class="p">+${pendLbl}</i>` : ''}</small></div>${head}</div>
       ${groups.length ? groups.map(g => fxGridRow(g, days, hol, td, edit, room)).join('') : total ? '<p class="empty-state">ไม่มีผู้ป่วยที่ตรงกับตัวกรอง · <button type="button" class="btn ghost sm" data-fxclear>ล้างตัวกรอง</button></p>' : `<p class="empty-state">${tabWords('course').length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้นในแท็บนี้' : 'ไม่มีผู้ป่วยที่กำลังฉายหรือรอฉาย'}</p>`}
     </div>`;
   mqRedraw = false;
@@ -4403,9 +4414,9 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   if (back) { back.focus(); back.setSelectionRange(back.value.length, back.value.length); }
 }
 function fxGridRow(g, days, hol, td, edit, room = '') {
-  const { c, sc } = g.main, cs = g.items.map(x => x.c).filter(x => !x.ctId || !g.ready), evs = sc ? sc.evs : parseFx(c), adds = parseAdds(c);
-  // รอ Plan complete: เห็นวันฉายแต่กดบันทึกสถานะไม่ได้ · แถวจาก CT-SIM (ยังไม่มีเคส): Mosaiq Time และรายละเอียดผู้ป่วยบันทึกไม่ได้
-  const pend = !g.ready, ctRow = !!c.ctId;
+  const { c, sc } = g.main, cs = g.items.map(x => x.c).filter(x => !preRow(x) || !g.ready), evs = sc ? sc.evs : parseFx(c), adds = parseAdds(c);
+  // รอ Plan complete / รอ CT-Sim: เห็นวันฉายแต่กดบันทึกสถานะไม่ได้ · แถวจาก CT-SIM หรือลงนัด (ยังไม่มีเคส): Mosaiq Time และรายละเอียดผู้ป่วยบันทึกไม่ได้
+  const pend = !g.ready, ctRow = preRow(c), pendLbl = c.apId ? 'รอ CT-Sim' : 'รอ Plan complete';
   if (pend) edit = false;
   // Re-CT ครั้งที่ n: ช่องของสถานะ และ fraction แรกที่กลับมาฉาย ("Re-CT 1") · fraction ต่อจากนั้นชี้ค้างเห็นว่าอยู่หลัง Re-CT ครั้งไหน
   const rounds = reRounds(evs), fxDays = sc ? [...sc.fx.keys()].sort() : [], backAt = new Map();
@@ -4415,7 +4426,8 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
   const info = [ti.q && `คิว ${ti.q.label}`, ti.bd && ti.bd.time && `${ti.bd.name} ${ti.bd.time}`, [...new Set(cs.map(x => catOf(x.cat).label))].join(' + '), c.name, docs.map(d => (docName(d) ? `${d} ${docName(d)}` : d)).join(', '), [...new Set(cs.map(x => x.mp).filter(Boolean))].join(', '), c.room, doseText(c), ...sitesOf(c).map(x => '+ ' + siteText(x)),
     sc && `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}`].filter(Boolean).join(' · ');
   const dr = isDirect(c) ? ' direct' : '', drTip = dr ? ' · เพิ่มในแถบห้องฉาย (ไม่ได้แจกงานให้ MP)' : '';
-  const pendTip = !pend ? '' : ctRow ? ` · CT-SIM ${ctLabel(c.ctRoom)} ${fmtDay(c.ctDate)} · รอ MP แจกเคส` : ` · ${caseStatus(c)[1]} · บันทึกสถานะ fraction ได้หลัง Plan complete`;
+  const pendTip = !pend ? '' : c.apId ? ` · ลงนัด CT-Sim ${fmtDay(c.apDate)}${c.apCm ? ` · ${c.apCm}` : ''}${c.apSp ? ` · ${c.apSp}` : ''} · ยังไม่ลง CT-SIM`
+    : ctRow ? ` · CT-SIM ${ctLabel(c.ctRoom)} ${fmtDay(c.ctDate)} · รอ MP แจกเคส` : ` · ${caseStatus(c)[1]} · บันทึกสถานะ fraction ได้หลัง Plan complete`;
   const hn = !ctRow && hnCanEdit(c) ? `<button type="button" class="hn hn-btn${qc}${dr}" data-edit="${esc(c.id)}" title="${esc(info + drTip + pendTip + ' · กดเพื่อแก้ไข')}">${esc(c.hn || '—')}</button>` : `<span class="hn${qc}${dr}" title="${esc(info + drTip + pendTip)}">${esc(c.hn || '—')}</span>`;
   const chips = ti.plain.map(t => `<span class="ptag">${esc(t)}</span>`).join('');
   // คิว = สีพื้นหลัง HN · เวลา BD protocol ต่อจากรหัสแพทย์และ MP
@@ -4429,7 +4441,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     : `<span class="ptags"${tags.length ? ` title="${esc(tags.join(', '))}"` : ''}>${chips}</span>`;
   const given = fxGiven(sc, td);
   // ไม่มีวันฉาย (ไม่มีช่องให้กด): กดป้ายเพื่อบันทึก Off RT / Complete course / Cancel RT ของวันนี้
-  const prog = pend ? `<span class="fx-prog fx-pend" title="${esc(`รอ Plan complete${pendTip}${sc ? ` · Start RT ${fmtDay(sc.start)} (${sc.planned || '?'} fx)` : ' · ยังคำนวณวันฉายไม่ได้ (ไม่มี Start RT หรือ Fx)'}`)}">รอ Plan complete</span>`
+  const prog = pend ? `<span class="fx-prog fx-pend" title="${esc(`${pendLbl}${pendTip}${sc ? ` · Start RT ${fmtDay(sc.start)} (${sc.planned || '?'} fx)` : ' · ยังคำนวณวันฉายไม่ได้ (ไม่มี Start RT หรือ Fx)'}`)}">${pendLbl}</span>`
     : !sc ? (edit ? `<button type="button" class="fx-prog fx-warn" data-fxc="${esc(c.id)}" data-day="${td}" title="ยังคำนวณวันฉายไม่ได้: ใส่ Start RT และ Fx ในหน้าแก้ไขเคส · กดเพื่อบันทึก Off RT, Complete course หรือ Cancel RT">ไม่มีวันฉาย</button>`
       : '<span class="fx-prog fx-warn" title="ยังคำนวณวันฉายไม่ได้: ใส่ Start RT และ Fx ในหน้าแก้ไขเคส">ไม่มีวันฉาย</span>')
     : sc.hold ? `<span class="fx-prog fx-warn" title="${esc(`${fxTip(sc.hold)} · เหลือ ${sc.pending} fx`)}">${esc(sc.hold.label)}</span>`
@@ -4458,7 +4470,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
       if (pend) cls.push('pend');
       if (sc.boost.has(d)) cls.push('boost');
       body = `<b>${esc(num)}</b>`;
-      tip = `Fx ${num}${sc.planned ? '/' + sc.planned : ''}${sc.boost.has(d) ? ' · Boost' : ''} · ${dayTxt}${pend ? ' · รอ Plan complete (ยังบันทึกสถานะไม่ได้)' : ''}`;
+      tip = `Fx ${num}${sc.planned ? '/' + sc.planned : ''}${sc.boost.has(d) ? ' · Boost' : ''} · ${dayTxt}${pend ? ` · ${pendLbl} (ยังบันทึกสถานะไม่ได้)` : ''}`;
       // เพิ่ม fraction: ช่องที่เพิ่มมีกรอบเส้นประ · วันที่บันทึกเพิ่มมีเลข +n มุมขวาบน
       if (list.some(v => v.added)) { cls.push('added'); tip += ' · fraction ที่เพิ่ม'; }
       const ad = adds.find(a => a.date === d);
