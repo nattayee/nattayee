@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-28.6';
-const API_LEVEL = 37;
+const CODE_VERSION = '2026-10-29.1';
+const API_LEVEL = 38;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -112,6 +112,7 @@ const TABLES = {
       ['id', 'id'], ['date', 'นัด CT-Sim'], ['hn', 'HN'], ['name', 'Name'], ['cm', 'CT'], ['special', 'เทคนิคพิเศษ'],
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['sim', 'Start RT'], ['ct', 'เครื่อง CT'], ['room', 'ห้องฉาย'],
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'],
+      ['order', 'ใบสั่ง CT Sim (JSON)'],
       ['took', 'ลง CT-SIM แล้ว (id)'], ['tookBy', 'ลง CT-SIM โดย'], ['tookAt', 'ลง CT-SIM เมื่อ'],
       ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
@@ -1300,25 +1301,34 @@ function recentCt_(ss) {
 
 /**
  * แถบลงนัด: เพิ่มหรือแก้นัดทำ CT-Sim ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงนัด)
- * rec = ช่องใน APPT_FIELDS (date = วันนัด CT-Sim, cm = CM / Non-CM, special = เทคนิคพิเศษ, dpf/fx/rx/freq = Prescription, sim = Start RT)
+ * rec = ช่องใน APPT_FIELDS (date = วันนัด CT-Sim หรือ 'on call', cm = CM / Non-CM, special = เทคนิคพิเศษ, dpf/fx/rx/freq = Prescription, sim = Start RT,
+ *   order = ใบสั่ง CT Sim ส่วนที่เหลือ เป็น JSON: อายุ เพศ Examination Part ท่า Contrast Lab Immobilization ขอบเขตการสแกน)
  * id ที่ยังไม่มี = เพิ่มใหม่ · การลง CT-SIM (took) เปลี่ยนได้ทาง ctSave / apptMark / ctRemove เท่านั้น · คืนรายการหลังบันทึก
  */
-const APPT_FIELDS = ['date', 'hn', 'name', 'cm', 'special', 'dpf', 'fx', 'rx', 'freq', 'sim', 'ct', 'room', 'doc', 'icd', 'dx', 'note'];
+const APPT_FIELDS = ['date', 'hn', 'name', 'cm', 'special', 'dpf', 'fx', 'rx', 'freq', 'sim', 'ct', 'room', 'doc', 'icd', 'dx', 'note', 'order'];
 function apptSave(rec, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.appt);
   rec = rec && typeof rec === 'object' ? rec : {};
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
   if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
-  if (!isDate(cut(rec.date, 10))) throw new Error('วันนัด CT-Sim ไม่ถูกต้อง');
+  const date = cut(rec.date, 10);
+  if (!isDate(date) && date !== 'on call') throw new Error('วันนัด CT-Sim ไม่ถูกต้อง');
   const sim = cut(rec.sim, 10);
   if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
+  const order = String(rec.order == null ? '' : rec.order);
+  if (order) {
+    if (order.length > 20000) throw new Error('ข้อมูลใบสั่ง CT Sim ยาวเกินไป');
+    let o;
+    try { o = JSON.parse(order); } catch (e) { throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง'); }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง');
+  }
   checkPin_(u, pin, 'appt');
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
     const set = {};
-    APPT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'note' || k === 'dx' ? 2000 : 200); });
+    APPT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'order' ? 20000 : k === 'note' || k === 'dx' ? 2000 : 200); });
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
@@ -1357,7 +1367,7 @@ function apptMark(id, mark, token) {
 // นัดที่ส่งให้หน้าเว็บ: วันนัด CT ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
 function recentAppt_(ss) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-  return readTable_(ss, 'appt').filter(x => String(x.date) >= from);
+  return readTable_(ss, 'appt').filter(x => (x.date === 'on call' ? String(x.created).slice(0, 10) : String(x.date)) >= from);   // On Call: นับจากวันที่ลงนัด
 }
 
 /**
