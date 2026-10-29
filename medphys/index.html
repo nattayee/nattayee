@@ -868,6 +868,13 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-wide .dpk-rooms small{margin-left:5px;font-size:11.5px}
 .dpk-wide .dpk-info{font-size:13px}
 .dpk-wide .dpk-foot{font-size:12.5px}
+.dpk-wide.dpk-short{padding-top:8px}   /* จอเตี้ย: ช่องวันเตี้ยลงให้เห็นทั้งเดือน */
+.dpk-wide.dpk-short .dpk-sub,.dpk-wide.dpk-short .dpk-rooms{margin-bottom:4px}
+.dpk-wide.dpk-short .dpk-rooms button{line-height:22px}
+.dpk-wide.dpk-short .dpk-grid{gap:2px}
+.dpk-wide.dpk-short .dpk-d{min-height:40px;padding-top:2px}
+.dpk-wide.dpk-short .dpk-d i{margin-top:1px;line-height:16px}
+.dpk-wide.dpk-short .dpk-info{min-height:30px;margin-top:4px;padding-top:4px}
 input.dpk-box::-webkit-calendar-picker-indicator{display:none}   /* ใช้ปฏิทินของหน้าเว็บแทน */
 input.dpk-box[readonly]{cursor:pointer}
 .cp-sort{display:flex;gap:6px;padding:0 12px 8px}
@@ -2669,7 +2676,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-28.6';
+const PAGE_VERSION = '2026-10-29.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9787,24 +9794,46 @@ function renderCal() {
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
     <div class="dpk-foot"><span>ทั้งเดือน ${total} คน${kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
 }
-function placeCal() {
+// fit = ตอนเปิด / เปลี่ยนเดือนหรือห้อง: จัดให้เห็นทั้งปฏิทิน (เลื่อนเนื้อหาของหน้าต่าง · แบบเตี้ยบนจอเตี้ย) · เลื่อนหน้าหรือเลื่อนหน้าต่าง: แค่ตามช่องไป
+function placeCal(fit) {
   if (!calBox) return;
-  const r = calBox.getBoundingClientRect();
-  if (!r.width && !r.height) return closeCal();   // ช่องถูกซ่อนหรือปิดหน้าต่างไปแล้ว
+  if (!calBox.getClientRects().length) return closeCal();   // ช่องถูกซ่อนหรือปิดหน้าต่างไปแล้ว
   calPop.style.maxHeight = '';
   // อยู่ในหน้าต่าง: กว้างเท่าเนื้อหาของหน้าต่าง (ขอบเดียวกับช่องกรอก) · นอกหน้าต่าง (ฟอร์มแจกเคส): 320px ใต้ช่อง
   const dr = calPop.parentNode.tagName === 'DIALOG' ? calPop.parentNode.getBoundingClientRect() : null, wide = !!dr && dr.width >= 400;
   calPop.classList.toggle('dpk-wide', wide);
   calPop.style.width = wide ? `${Math.round(dr.width - 36)}px` : '';
-  const w = calPop.offsetWidth, h = calPop.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
-  // ใต้ช่อง หรือเหนือทั้งช่อง (หัวข้อและ on call ยังกดได้) · ที่ไม่พอทั้งสองด้าน: ด้านที่กว้างกว่าแล้วเลื่อนในปฏิทิน · จอเล็กมาก: ทับช่องได้
-  const below = r.bottom + 4, fieldTop = (calBox.closest('.field') || calBox).getBoundingClientRect().top;
-  const roomBelow = vh - 8 - below, roomAbove = fieldTop - 12;
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight, field = calBox.closest('.field') || calBox;
+  // ใต้ช่อง หรือเหนือทั้งช่อง (หัวข้อและ on call ยังกดได้)
+  const room = () => { const r = calBox.getBoundingClientRect(), ft = field.getBoundingClientRect().top; return { r, ft, below: vh - 8 - (r.bottom + 4), above: ft - 12 }; };
+  const fits = (x, h) => h <= x.below || h <= x.above;
+  let m = room(), h = calPop.offsetHeight;
+  if (fit === true) {
+    // ที่เลื่อนได้: เนื้อหาของหน้าต่าง หรือทั้งหน้า (ช่องต้องไม่ไปอยู่ใต้หัวหน้าที่ติดอยู่ด้านบน)
+    const body = calBox.closest('.dlg-body') || (calPop.parentNode.tagName === 'DIALOG' ? null : document.scrollingElement);
+    const frame = () => (body === document.scrollingElement ? { top: Math.max(0, $('header.top').getBoundingClientRect().bottom), bottom: vh } : body.getBoundingClientRect());
+    calPop.classList.remove('dpk-short');
+    h = calPop.offsetHeight;
+    for (const short of wide ? [false, true] : [false]) {
+      if (short) { calPop.classList.add('dpk-short'); h = calPop.offsetHeight; }
+      if (fits(m, h)) break;
+      // เลื่อนเนื้อหาของหน้าต่างให้ช่องขึ้นไปด้านบน (ปฏิทินวางใต้ช่อง) หรือลงมาด้านล่าง (วางเหนือช่อง) โดยช่องยังอยู่ในกรอบหน้าต่าง
+      if (body) {
+        const box = frame(), down = h - m.below, up = h - m.above;
+        if (down <= body.scrollHeight - body.clientHeight - body.scrollTop && m.ft - down >= box.top) body.scrollTop += down;
+        else if (up <= body.scrollTop && m.r.bottom + up <= box.bottom) body.scrollTop -= up;
+        m = room();
+        if (fits(m, h)) break;
+      }
+    }
+  }
+  // ยังไม่พอทั้งสองด้าน: ให้เห็นทั้งปฏิทิน (บังช่องบางส่วน) · สูงกว่าจอ: เลื่อนในปฏิทิน
+  const w = calPop.offsetWidth, r = m.r, below = r.bottom + 4;
   let top, maxH = 0;
-  if (h <= roomBelow) top = below;
-  else if (h <= roomAbove) top = fieldTop - 4 - h;
-  else if (Math.max(roomBelow, roomAbove) >= 300) { maxH = Math.max(roomBelow, roomAbove); top = roomBelow >= roomAbove ? below : 8; }
-  else top = Math.max(8, Math.min(below, vh - h - 8));
+  if (h <= m.below) top = below;
+  else if (h <= m.above) top = m.ft - 4 - h;
+  else if (h <= vh - 16) top = m.below >= m.above ? vh - 8 - h : 8;
+  else { top = 8; maxH = vh - 16; }
   calPop.style.maxHeight = maxH ? `${maxH}px` : '';
   calPop.style.left = `${Math.max(8, Math.min(wide ? dr.left + 18 : r.left, vw - w - 8))}px`;
   calPop.style.top = `${top}px`;
@@ -9819,7 +9848,7 @@ function openCal(el) {
   if (calPop.parentNode !== host) host.appendChild(calPop);
   calPop.hidden = false;
   renderCal();
-  placeCal();
+  placeCal(true);
 }
 function closeCal() { calBox = null; calPop.hidden = true; }
 function pickCal(d) {
@@ -9848,7 +9877,7 @@ document.addEventListener('input', e => {
   if (e.target !== calBox || !isDay(calBox.value)) return;
   calMonth = calBox.value.slice(0, 7);   // พิมพ์วันที่: ปฏิทินเลื่อนไปเดือนนั้น
   renderCal();
-  placeCal();
+  placeCal(true);
 });
 // Esc ปิดปฏิทินก่อน (ไม่ปิดหน้าต่าง)
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && calBox && !calPop.hidden) { e.preventDefault(); e.stopPropagation(); closeCal(); } }, true);
@@ -9864,12 +9893,13 @@ calPop.addEventListener('click', e => {
   else if ('calclear' in b.dataset) return pickCal('');
   else if ('calclose' in b.dataset) return closeCal();
   renderCal();
-  placeCal();
+  placeCal(true);
 });
 calPop.addEventListener('pointerover', e => { const b = e.target.closest('[data-calday]'); if (b && calData) $('.dpk-info', calPop).innerHTML = calInfo(b.dataset.calday); });
 calPop.addEventListener('pointerleave', () => { if (calBox && calData) $('.dpk-info', calPop).innerHTML = calInfo(isDay(calBox.value) && calBox.value.startsWith(calMonth) ? calBox.value : ''); });
-window.addEventListener('resize', placeCal);
-document.addEventListener('scroll', placeCal, true);
+window.addEventListener('resize', () => placeCal(true));
+// เลื่อนในปฏิทินเอง (จอเตี้ยมาก) ไม่ต้องจัดตำแหน่งใหม่: จัดใหม่จะดีดกลับขึ้นบนสุด
+document.addEventListener('scroll', e => { if (e.target !== calPop) placeCal(); }, true);
 
 document.addEventListener('pointerdown', e => {
   const input = e.target.closest('.chips label') && $('input', e.target.closest('.chips label'));
