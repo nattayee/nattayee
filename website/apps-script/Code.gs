@@ -327,11 +327,17 @@ ACTIONS.changePassword = function (req) {
   return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย' };
 };
 
-// แก้ไขอีเมลและเบอร์โทรของตัวเอง
+// แก้ไขชื่อ-นามสกุล อีเมล และเบอร์โทรของตัวเอง (หน้าเว็บรุ่นก่อนไม่ส่ง fullName: ชื่อเดิมคงไว้)
 ACTIONS.updateProfile = function (req) {
   var u = requireUser_(req.token);
   var email = normEmail_(req.email);
   if (emailTaken_(email, u.username)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
+  if (req.fullName !== undefined) {
+    var fullName = String(req.fullName || '').replace(/\s+/g, ' ').trim();
+    if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
+    if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
+    if (fullName !== u.fullName) setUserField_(u, 'fullName', fullName);
+  }
   setUserField_(u, 'email', email);
   setUserField_(u, 'phone', String(req.phone || '').trim().slice(0, 40));
   return { user: publicUser_(findUser_(u.username)), message: 'บันทึกข้อมูลเรียบร้อย' };
@@ -461,7 +467,7 @@ ACTIONS.chatList = function (req) {
   requireUser_(req.token);
   var rows = sheet_('Messages', MESSAGE_HEADERS).getDataRange().getValues().slice(1);
   rows.sort(function (a, b) { return Number(a[1]) - Number(b[1]); });
-  return { messages: rows.slice(-CHAT_LIMIT).map(function (r) { return JSON.parse(r[3]); }) };
+  return { messages: freshNames_(rows.slice(-CHAT_LIMIT).map(function (r) { return JSON.parse(r[3]); })) };
 };
 
 ACTIONS.chatAdd = function (req) {
@@ -900,8 +906,9 @@ ACTIONS.notify = function (req) {
     if (m.createdAt > since) dm.push({ id: m.id, from: m.from, text: snippet_(m.text, 140), images: m.images.length, createdAt: m.createdAt });
   });
 
-  var byTime = function (a, b) { return a.createdAt - b.createdAt; };
-  return { now: Date.now(), chat: chat.sort(byTime).slice(-10), chatUnread: chatUnread, dm: dm.sort(byTime).slice(-10), dmUnread: dmUnread };
+  var byTime = function (a, b) { return a.createdAt - b.createdAt; }, users = usersByName_();
+  return { now: Date.now(), chat: freshNames_(chat.sort(byTime).slice(-10), users), chatUnread: chatUnread,
+    dm: freshNames_(dm.sort(byTime).slice(-10), users), dmUnread: dmUnread };
 };
 
 /* ----- private messages: only the sender and the recipient can read a conversation (admins too) ----- */
@@ -932,7 +939,7 @@ ACTIONS.dmThread = function (req) {
   var msgs = dmRows_(u.username).filter(function (r) { return r.convo === key; })
     .map(function (r) { return r.msg; });
   msgs.sort(function (a, b) { return a.createdAt - b.createdAt; });
-  return { partner: dmPerson_(person_(other), users), messages: msgs.slice(-DM_LIMIT) };
+  return { partner: dmPerson_(person_(other), users), messages: freshNames_(msgs.slice(-DM_LIMIT), users) };
 };
 
 ACTIONS.dmSend = function (req) {
@@ -1034,6 +1041,28 @@ function usersByName_() {
   var out = {};
   allUsers_().forEach(function (u) { out[u.username] = u; });
   return out;
+}
+
+/**
+ * Messages keep the name each person had when they wrote, read, reacted or forwarded (the sheet is the record).
+ * What goes to the page shows the name every member uses now: any {username, name} inside, and the
+ * "ชื่อ (ตำแหน่ง)" labels of people a chat message was sent to. Accounts that no longer exist keep the stored name.
+ */
+function freshNames_(value, users) {
+  users = users || usersByName_();
+  (function walk(v) {
+    if (!v || typeof v !== 'object') return;
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (typeof v.username === 'string' && typeof v.name === 'string' && users[v.username]) v.name = String(users[v.username].fullName);
+    if (v.toNames && Array.isArray(v.to)) {
+      v.to.forEach(function (t) {
+        var u = String(t).indexOf('u:') === 0 && users[String(t).slice(2)];
+        if (u) v.toNames[u.username.replace(/\W/g, '_')] = u.fullName + ' (' + u.role + ')';
+      });
+    }
+    for (var k in v) if (v[k] && typeof v[k] === 'object') walk(v[k]);
+  })(value);
+  return value;
 }
 
 /** Partner as shown on the page, with the current name and role from the Users sheet. */
@@ -1138,7 +1167,7 @@ function updateMessage_(id, fn) {
   if (fn(found.msg) !== false) {
     sheet_('Messages', MESSAGE_HEADERS).getRange(found.row, 4).setValue(JSON.stringify(found.msg));
   }
-  return { message: found.msg };
+  return { message: freshNames_(found.msg) };
 }
 
 function saveImage_(dataUrl, name, folder) {

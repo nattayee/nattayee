@@ -564,5 +564,6 @@
 
   window.addEventListener("hashchange", route);
   Auth.onChange(applyAuth);
+  Auth.onProfile(renderUserMenu);   // name changed on บัญชีของฉัน
   Auth.init().then(applyAuth);
 })();

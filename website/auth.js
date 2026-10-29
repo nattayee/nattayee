@@ -211,6 +211,12 @@
         var u = requireUser(d, r.token);
         var email = normEmail(r.email);
         if (emailTaken(d, email, u.username)) fail("อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว");
+        if (r.fullName !== undefined) {
+          var fullName = String(r.fullName || "").replace(/\s+/g, " ").trim();
+          if (!fullName) fail("กรุณากรอกชื่อ-นามสกุล");
+          if (fullName.length > 80) fail("ชื่อยาวเกินไป");
+          u.fullName = fullName;
+        }
         u.email = email;
         u.phone = String(r.phone || "").trim().slice(0, 40);
         return { user: pub(u), message: "บันทึกข้อมูลเรียบร้อย" };
@@ -313,6 +319,7 @@
   var token = load(TOKEN_KEY);
   var user = null;
   var listeners = [];
+  var profileListeners = [];   // name / email / phone saved on บัญชีของฉัน
 
   // Sign-ins record the browser they came from (บัญชีของฉัน › อุปกรณ์ที่เข้าสู่ระบบ)
   var UA_ACTIONS = { login: 1, register: 1, ssoTicket: 1 };
@@ -635,12 +642,13 @@
       (user.email ? "" : '<div class="note">⚠️ บัญชีของคุณยังไม่มีอีเมล กรุณาเพิ่มอีเมลเพื่อใช้รับรหัสเมื่อลืมรหัสผ่าน</div>') +
       '<div class="grid wide">' +
         '<div class="card"><h3>👤 ข้อมูลสมาชิก</h3><table class="specs"><tbody>' +
-          "<tr><th>ชื่อ-นามสกุล</th><td>" + esc(user.fullName) + "</td></tr>" +
           "<tr><th>Username</th><td>" + esc(user.username) + "</td></tr>" +
           "<tr><th>ตำแหน่ง</th><td>" + esc(roleName) + levelBadge(user) + "</td></tr>" +
           (levelOf(user) === "sub" ? "<tr><th>สิทธิ์ admin รอง</th><td>" + esc(user.perms.map(permLabel).join(", ")) + "</td></tr>" : "") +
         "</tbody></table>" +
         '<form class="auth-form profile-form" novalidate>' +
+          field("ชื่อ-นามสกุล *", '<input name="fullName" autocomplete="name" maxlength="80" value="' + esc(user.fullName || "") + '" required>',
+            "ชื่อที่ทุกคนเห็นในแชท ข้อความ และสถานะทีม") +
           field("อีเมล *", '<input name="email" type="email" autocomplete="email" value="' + esc(user.email || "") + '" required>',
             "ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน") +
           field("เบอร์โทร / เบอร์ภายใน", '<input name="phone" type="tel" autocomplete="tel" value="' + esc(user.phone || "") + '">') +
@@ -675,12 +683,18 @@
     }
 
     wire(el.querySelector(".profile-form"), {
-      check: function (f) { return EMAIL_OK.test(f.email.value.trim()) ? "" : "รูปแบบอีเมลไม่ถูกต้อง"; },
-      send: function (f) { return call("updateProfile", { email: f.email.value, phone: f.phone.value }); },
+      check: function (f) {
+        if (!f.fullName.value.trim()) return "กรุณากรอกชื่อ-นามสกุล";
+        return EMAIL_OK.test(f.email.value.trim()) ? "" : "รูปแบบอีเมลไม่ถูกต้อง";
+      },
+      send: function (f) { return call("updateProfile", { fullName: f.fullName.value, email: f.email.value, phone: f.phone.value }); },
       done: function (res) {
-        user = res.user; // keep the header badge in step without re-rendering this page
+        user = res.user;
+        el.querySelector('.profile-form [name="fullName"]').value = user.fullName;
         var warn = el.querySelector(".note");
         if (warn && user.email) warn.remove();
+        // the header and user menu show the new name straight away (this page is not drawn again)
+        profileListeners.forEach(function (cb) { cb(user); });
       },
     });
 
@@ -795,6 +809,7 @@
     // "main" (admin หลัก) | "sub" (admin รอง) | ""
     adminLevel: function () { return levelOf(user); },
     onChange: function (cb) { listeners.push(cb); },
+    onProfile: function (cb) { profileListeners.push(cb); },
     // Resolves with the signed-in user, or null if a login is needed.
     init: function () {
       if (!token) return Promise.resolve(null);
