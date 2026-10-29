@@ -145,23 +145,28 @@
   - RC และกิจกรรม: เฉพาะเดือนที่เลือก (HN ชื่อ MP ชื่อกิจกรรม หมายเหตุ) · ตัวเลขบนแท็บนับตามคำค้น
   - แดชบอร์ดและสรุป P4P เป็นหน้าสรุปตัวเลข จึงไม่มีช่องค้นหา
 - **แถบลงนัด** (แถบแรก · ต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป): ลงนัดทำ CT-Sim ก่อนผู้ป่วยมาห้อง CT
-  - **ฟอร์มลงนัด = ใบสั่ง CT Simulation** (หน้าตาเดียวกับไฟล์ CT Simulation Order Form version2 · หน้า A4 · จอแคบย่อทั้งหน้า): กรอกบนใบได้เลย ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงนัด)
-    - ช่องที่ระบบมีอยู่แล้ว: Name · **HN** · Diagnosis (ICD-10) · Oncologist · CT Room (เครื่อง CT) · **Date of CT SIM** (= SIM ในกล่อง Patient Appointment)
-      · RT = Start RT · Room L1/L2/L3 = ห้องฉาย 3 ห้องแรกในตั้งค่า (Infinity / Precise / VersaHD) · Protocol = Conventional + เทคนิคพิเศษ (SRS/SRT, SBRT, DIBH)
-      · Contrast None / IV = CT (Non-CM / CM) · Special Instruction = Note
-    - ส่วนใหม่ (เก็บในช่อง `order` ของนัด ต้องใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป): Age · Gender · Examination Part และข้อย่อย (4D/MIP/AIP/MINIP, NPO … hrs, Look upward,
-      Head tilt, Frog leg, กระเพาะปัสสาวะ, Control Bladder … min ฯลฯ) · Position (HFS/FFS/HFP/FFP · กดซ้ำ = เอาออก) · IV … ml / Flow Rate … ml/sec · Lab (Date, Creatinine, CrCl)
-      · Immobilization (SRS / Short / Long Mask, Add cork, Vac-lok, Other) · พิมพ์ในช่องเติมคำ = ติ๊กข้อนั้นให้
-    - **M.D. to indicate scan volume**: ลากบนรูปโครงกระดูกในใบ (จากขอบบนถึงขอบล่างของขอบเขตการสแกน) · ลากเส้นแดงเพื่อปรับ · ลากในแถบเพื่อเลื่อน · "ล้างขอบเขต"
-    - **No appointment (SIM + RT: On Call)**: ไม่ต้องใส่วันนัด · นัดอยู่ในกลุ่ม "On Call" ด้านบนของเดือนนี้จนกว่าจะลง CT-SIM (ลง CT-SIM แล้ววันที่ CT = วันที่ลง)
-    - Attending Oncologist Signature: ชื่อแพทย์ใน Oncologist (และผู้บันทึก วันเวลา)
-    - Prescription (Dose/fx, Fx, Prescription, ความถี่) ไม่อยู่ในใบสั่ง: กรอกใต้ใบ ใช้แสดงวันฉายในตารางห้องฉาย
-    - **PDF**: ปุ่ม PDF บนหัวหน้าต่าง (ตามที่กรอกอยู่ ยังไม่ต้องบันทึก) และปุ่ม PDF ท้ายแถวในตาราง (นัดที่บันทึกแล้ว) · A4 หน้าเดียว หน้าตาเดียวกับใบสั่ง · ชื่อไฟล์ "CT-Sim-order HN วันนัด.pdf"
-    - **แพทย์**: ลงนัดใหม่เลือก Oncologist เป็นผู้ใช้ที่เข้าระบบให้ (ถ้าเป็นแพทย์) · จับคู่จากบัญชี LPCH ที่เชื่อมไว้ → อีเมล → ชื่อ-สกุลตรงกันคนเดียว · เปลี่ยนเองได้ · แก้นัดเดิมไม่เปลี่ยน
-    - วันนัด CT-Sim และ Start RT ใช้ปฏิทินจำนวนเคส (ต้องเป็นวันทำการ) · Start RT ตัวเลขเป็น **เทคนิคพิเศษ/เทคนิคอื่นๆ** · เลือกห้องในปฏิทินแล้วกดวันที่ = ติ๊ก Room ให้
-    - ตั้งค่า → ลงนัด: ตัวเลือกของ Contrast (CT) และ Protocol / เทคนิคพิเศษ · **ตัวเลือกในใบสั่ง** (เพิ่มได้): Examination Part (บรรทัดละแถว "หัวข้อ | ข้อย่อย, ข้อย่อย" ·
-      ขึ้นต้นด้วย | = ข้อย่อยของหัวข้อบน · {} = ช่องเติมคำ) · Immobilization (ข้อคั่นด้วย , ว่าง = เว้นช่อง) · Position · Gender · ช่องบังคับกรอก (ช่องในใบสั่งแสดงเสมอ)
-    - ลง CT-SIM จากนัด: Organ ได้จาก Examination Part ข้อแรก (Brain, Head and Neck = Head) · เทคนิคพิเศษ SRS/SRT เลือก Technique SRS ให้
+  - ฟอร์มลงนัด: **HN** · **CT** (CM / Non-CM) · **เทคนิคพิเศษ** (SRS, SRT, SBRT, DIBH เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ) ·
+    **Prescription** (Dose/fx, Fx, Prescription คำนวณให้, ความถี่) · **ลงนัดวันทำ CT-Sim** · **Start RT** (หรือ on call) · **Draw area** · ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงนัด)
+    - **แพทย์**: ลงนัดใหม่เลือกแพทย์ที่เป็นผู้ใช้ที่เข้าระบบให้ (ช่องแพทย์ต้องแสดงอยู่) · จับคู่จาก ตั้งค่า → แพทย์ (Doc): บัญชี LPCH ที่เชื่อมไว้ → อีเมล →
+      ชื่อ-สกุลตรงกันคนเดียว (แพทย์ที่ยังไม่เชื่อมบัญชี · ไม่สนคำนำหน้า) · เปลี่ยนเองได้ · แก้นัดเดิมใช้แพทย์ที่บันทึกไว้
+    - วันนัด CT-Sim และ Start RT ใช้ปฏิทินจำนวนเคส (ต้องเป็นวันทำการ) · Start RT ตัวเลขเป็น **เทคนิคพิเศษ/เทคนิคอื่นๆ** เทคนิคพิเศษสีแดง (ดู ปฏิทินจำนวนเคส)
+    - **Draw area**: ลากบนรูปโครงกระดูก (รูปจากใบสั่ง) จากขอบบนถึงขอบล่างของบริเวณที่จะทำ CT · ลากเส้นแดงเพื่อปรับ · ลากในแถบเพื่อเลื่อน · "ล้างขอบเขต"
+    - **on call ที่วันนัด CT-Sim** = ยังไม่มีวันนัด (Start RT on call ด้วย · ใบสั่งติ๊ก No appointment) · นัดอยู่ในกลุ่ม "On Call" ด้านบนของเดือนนี้จนกว่าจะลง CT-SIM
+      (ลง CT-SIM แล้ววันที่ CT = วันที่ลง)
+    - ตั้งค่า → ลงนัด: ตัวเลือกของช่อง CT และเทคนิคพิเศษ (เพิ่ม/ลบได้) · ช่องในฟอร์ม ไม่แสดง / แสดง / บังคับกรอก
+      (ค่าเริ่มต้น: CT บังคับ · เทคนิคพิเศษ, Prescription, Start RT, Draw area, Note แสดง · Name, เครื่อง CT, ห้องฉาย, แพทย์, Diag และช่องของใบสั่งไม่แสดง) · HN และวันนัด CT-Sim บังคับเสมอ
+    - **ช่องของใบสั่ง** (เปิดได้ที่ ตั้งค่า → ลงนัด · เริ่มต้นไม่แสดง): Age · Gender · IV … ml / Flow Rate … ml/sec (พิมพ์แล้วเลือก CT = CM ให้) · Examination Part
+      (หัวข้อละแถว พร้อมข้อย่อย 4D/MIP/AIP/MINIP, NPO … hrs, Look upward, Head tilt, Frog leg, กระเพาะปัสสาวะ, Control Bladder … min ฯลฯ) · Position (HFS/FFS/HFP/FFP) ·
+      Immobilization (SRS / Short / Long Mask, Add cork, Vac-lok, Other) · Pre-procedural Lab (Date, Creatinine, CrCl) · พิมพ์ในช่องเติมคำ = ติ๊กข้อนั้นให้
+      · ตัวเลือก (เพิ่มได้): Examination Part (บรรทัดละแถว "หัวข้อ | ข้อย่อย, ข้อย่อย" · ขึ้นต้นด้วย | = ข้อย่อยของหัวข้อบน · {} = ช่องเติมคำ) · Immobilization
+      (ข้อคั่นด้วย , ว่าง = เว้นช่อง) · Position · Gender
+    - Draw area และช่องของใบสั่งเก็บในช่อง `order` ของนัด · นัด CT แบบ on call · ทั้งสองอย่างต้องใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป
+    - **ใบสั่ง CT Simulation (PDF)**: ข้อมูลนัดใส่ลงใบสั่งให้เอง (หน้าตาเดียวกับไฟล์ CT Simulation Order Form version2 · A4 หน้าเดียว · ชื่อไฟล์ "CT-Sim-order HN วันนัด.pdf")
+      ปุ่ม **ใบสั่ง PDF** บนหัวหน้าต่าง (ตามที่กรอกอยู่ ยังไม่ต้องบันทึก) และปุ่ม **PDF** ในคอลัมน์ ใบสั่ง ของตาราง (นัดที่บันทึกแล้ว)
+      - Name HN Diagnosis Oncologist CT Room Date of CT SIM (= SIM) · RT = Start RT · Room L1/L2/L3 = ห้องฉายตามลำดับในตั้งค่า (Infinity / Precise / VersaHD)
+      - Protocol: Conventional (ไม่มีเทคนิคพิเศษ) · SRS/SRT (เลือก SRS หรือ SRT) · SBRT · DIBH · Contrast None / IV = CT Non-CM / CM · Special Instruction = Note
+      - M.D. to indicate scan volume = Draw area · Attending Oncologist Signature = แพทย์ (และผู้บันทึก วันเวลา) · ช่องที่ไม่ได้กรอกเว้นว่างไว้เขียนเอง
+    - ลง CT-SIM จากนัด: Organ ได้จาก Examination Part ข้อแรก (Brain, Head and Neck = Head)
   - ตารางรายเดือนแยกตามวันนัด CT (วันแรกก่อน): หัววันบอกจำนวนคน เทคนิคพิเศษ (สีแดง) และเทคนิคอื่นๆ · คอลัมน์ตามช่องที่แสดงในฟอร์ม · กดแถวเพื่อแก้หรือลบ
     สถานะ: **รอลง CT-SIM** · **ลง CT-SIM แล้ว** (เครื่องและวันที่ CT) · **ไม่มาทำ CT**
   - **นัดขึ้นในตารางวันฉาย (แถบห้องฉาย) ทันทีที่ลงนัด**: แถว **"รอ CT-Sim"** วันฉายและเลข fraction ตาม Prescription (Fx, ความถี่) และ Start RT ที่ลงนัด (ดู ตารางวันฉาย)
@@ -650,7 +655,7 @@
 | `Duty` | id (วันที่\|ห้อง), วันที่, ห้องฉาย (`CT:<รหัส>` = เครื่อง CT), RTT, RA, QC (ชื่อคั่นด้วยจุลภาค), บันทึกโดย, บันทึกเมื่อ |
 | `CTSim` | id, เครื่อง CT, วันที่, HN, Name, Organ, Mask, bitelock, CM, Coil, Y, Syring Injector, Normal Saline, Syring 50cc, แพทย์, สถานะ, HDR, C-RAD, Note, เคสวิจัย, ช่องแบบฟอร์มแจกเคส, ส่งแถบงาน, แจกเคสแล้ว (id ของเคส หรือ skip), แจกเคสโดย/เมื่อ, บันทึกโดย |
 | `Jobs` | id (ชื่อ\|เดือน), เดือน, ชื่อ, บัญชี, แบบฟอร์ม (`rtt` / `ra`), ตำแหน่ง (JSON), ช่องที่กรอก/แก้ (JSON: แถวในแบบฟอร์ม → วันที่ → ค่า), วันลา (JSON), บันทึกโดย, Updated |
-| `Appts` | id, นัด CT-Sim, HN, Name, CT (CM / Non-CM), เทคนิคพิเศษ, Dose/fx (Gy), Fx, Prescription (Gy), ความถี่, Start RT, เครื่อง CT, ห้องฉาย, แพทย์, ICD-10, Diagnosis, Note, ใบสั่ง CT Sim (JSON: อายุ เพศ Examination Part ท่า IV Lab Immobilization ขอบเขตการสแกน), ลง CT-SIM แล้ว (id ของรายการ CT หรือ skip = ไม่มาทำ CT), ลง CT-SIM โดย/เมื่อ, บันทึกโดย · สร้างเมื่อลงนัดครั้งแรก · แท็บ `CTSim`, `Duty`, `Appts` เขียนผ่านแถบของตัวเองเท่านั้น |
+| `Appts` | id, นัด CT-Sim, HN, Name, CT (CM / Non-CM), เทคนิคพิเศษ, Dose/fx (Gy), Fx, Prescription (Gy), ความถี่, Start RT, เครื่อง CT, ห้องฉาย, แพทย์, ICD-10, Diagnosis, Note, ใบสั่ง CT Sim (JSON: Draw area อายุ เพศ IV Examination Part ท่า Immobilization Lab), ลง CT-SIM แล้ว (id ของรายการ CT หรือ skip = ไม่มาทำ CT), ลง CT-SIM โดย/เมื่อ, บันทึกโดย · สร้างเมื่อลงนัดครั้งแรก · แท็บ `CTSim`, `Duty`, `Appts` เขียนผ่านแถบของตัวเองเท่านั้น |
 | `Config` | ทีมและประวัติตำแหน่ง, ตำแหน่งและแต้ม, แพทย์, คนถัดไปที่ตั้งเอง, เวลาและน้ำหนักของแต่ละหมวด, ตัวเลือกในฟอร์ม, หัวข้อเพิ่มเติม, ช่องบังคับกรอก, ค่าเริ่มต้นในฟอร์ม, อีเมลแอดมิน, แต้มต่อรายเดือน (JSON) |
 
 ข้อมูลทั้งหมดเป็นข้อความล้วน เพิ่มคอลัมน์ของตัวเองต่อท้ายได้ ระบบจะไม่เขียนทับ
