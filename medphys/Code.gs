@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-30.2';
-const API_LEVEL = 40;
+const CODE_VERSION = '2026-10-30.3';
+const API_LEVEL = 41;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -111,6 +111,16 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['hn', 'HN'], ['title', 'คำนำหน้า'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'วันเกิด'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'],
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ],
+  },
+  // แถบนัดคิวใส่แร่: นัดใส่แร่หนึ่งแถวต่อหนึ่ง Fraction (course = คอร์สเดียวกัน) · status = นัดแล้ว / มาตามนัด / ยกเลิก · mp / rc = รหัสนักฟิสิกส์ที่ลงชื่อ
+  // hist = ประวัติการแก้ไข (JSON) · src = bq:<รหัสนัดเดิม> เมื่อนำเข้าจากระบบนัดคิวใส่แร่เดิม · เขียนผ่าน bqCreate / bqEdit / bqCancel / bqImport เท่านั้น
+  bq: {
+    sheet: 'BrachyQueue',
+    fields: [
+      ['id', 'id'], ['course', 'คอร์ส'], ['date', 'วันที่นัด'], ['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'],
+      ['fx', 'Fx'], ['total', 'จำนวน Fx'], ['note', 'หมายเหตุ'], ['status', 'สถานะ'], ['mp', 'MP'], ['rc', 'RC'],
+      ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'],
     ],
   },
   // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
@@ -290,6 +300,7 @@ function getData(token) {
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
     reg: need.reg ? regRows_(ss) : [],
+    bq: need.bq ? recentBq_(ss) : [],
     jobs: need.jobs ? jobsFor_(ss, user) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
@@ -301,12 +312,12 @@ function getData(token) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน)
-// แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดดึงข้อมูลผู้ป่วยที่ลงทะเบียน
+// แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt'] };
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -331,10 +342,10 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -1311,6 +1322,189 @@ function recentCt_(ss) {
 }
 
 /**
+ * แถบนัดคิวใส่แร่: ลงนัดหนึ่งคอร์ส (หลาย Fraction · หนึ่งแถวต่อหนึ่ง Fx) ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: นัดคิวใส่แร่)
+ * p = { hn, name, doc, tech, note, dates: [วันที่ของ Fx 1, 2, …] } · ต้องมี HN ชื่อ-สกุล รูปแบบการใส่ · 1–30 Fx · คืนนัดทั้งคอร์ส
+ * จำนวนเคสต่อวันและ HN ซ้ำวันเดียวกัน หน้าเว็บเตือนก่อนลงนัด (ลงต่อได้เหมือนระบบนัดคิวใส่แร่เดิม)
+ */
+const BQ_BOOKED = 'นัดแล้ว';
+const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'mp', 'rc'];
+const bqWho_ = u => String(u.name || u.username || u.me || '');
+const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+// ลงชื่อ MP / RC ได้: ตำแหน่ง (config.bq.signRoles · ยังไม่ตั้ง = MP) หรือชื่อผู้ใช้ใน config.bq.signUsers · บัญชี Google (เปิดจากชีต) ได้เสมอ
+function bqCanSign_(u, cfg) {
+  if (u.via === 'google') return true;
+  const b = (cfg && cfg.bq) || {}, roles = Array.isArray(b.signRoles) ? b.signRoles : ['MP'], users = Array.isArray(b.signUsers) ? b.signUsers : [];
+  return roles.some(r => String(r).toLowerCase() === String(u.role || '').toLowerCase()) || users.map(x => String(x).toLowerCase()).indexOf(String(u.username || '').toLowerCase()) >= 0;
+}
+// เขียนหลายแถวต่อท้ายชีตในครั้งเดียว (ข้อความล้วน)
+function bqAppend_(sh, header, recs) {
+  if (!recs.length) return;
+  const cols = header.map(h => TABLES.bq.fields.filter(f => f[1] === h)[0]);
+  sh.getRange(sh.getLastRow() + 1, 1, recs.length, header.length).setNumberFormat('@')
+    .setValues(recs.map(rec => cols.map(f => (f ? safeText_(rec[f[0]]) : ''))));
+}
+function bqCreate(p, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.bq);
+  p = p && typeof p === 'object' ? p : {};
+  const hn = bqCut_(p.hn, 40), name = bqCut_(p.name, 200), tech = bqCut_(p.tech, 100);
+  const dates = (Array.isArray(p.dates) ? p.dates : []).map(d => bqCut_(d, 10));
+  if (!hn) throw new Error('กรอก HN');
+  if (!name) throw new Error('กรอกชื่อ-สกุลผู้ป่วย');
+  if (!tech) throw new Error('เลือกรูปแบบการใส่');
+  if (!dates.length || dates.length > 30) throw new Error('จำนวน Fraction ต้องอยู่ระหว่าง 1–30');
+  if (dates.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error('วันนัดไม่ถูกต้อง');
+  checkPin_(u, pin, 'bq');
+  const course = 'BT' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+  withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'bq'), now = new Date().toISOString(), sorted = dates.slice().sort();
+    bqAppend_(sh, headerOf_(sh), sorted.map((d, i) => ({ id: Utilities.getUuid(), course: course, date: d, hn: hn, name: name, doc: bqCut_(p.doc, 200), tech: tech,
+      fx: String(i + 1), total: String(sorted.length), note: bqCut_(p.note, 2000), status: BQ_BOOKED, mp: '', rc: '', hist: '', src: '', by: bqWho_(u), created: now, editedBy: '', updated: '' })));
+  });
+  bqStats_();
+  return readTable_(ss_(), 'bq').filter(x => x.course === course);
+}
+
+// แก้นัดหนึ่ง Fx: วันที่ แพทย์ รูปแบบการใส่ หมายเหตุ สถานะ (นัดแล้ว / มาตามนัด / ยกเลิก) MP RC · เก็บประวัติ (ใคร เมื่อไร อะไรเปลี่ยน) · คืนนัดหลังแก้
+function bqEdit(id, ch, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.bq);
+  ch = ch && typeof ch === 'object' ? ch : {};
+  const set = {};
+  BQ_EDIT.forEach(k => { if (k in ch) set[k] = bqCut_(ch[k], k === 'note' ? 2000 : 200); });
+  if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
+  if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+  if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
+  const cfg = readConfig_(ss_()) || {};
+  checkPin_(u, pin, 'bq');
+  const rec = withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = readTable_(ss, 'bq').filter(x => x.id === id)[0];
+    const diff = Object.keys(set).filter(k => String(cur[k] || '') !== set[k]);
+    if (!diff.length) return cur;
+    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะตำแหน่งที่ตั้งไว้ (ตั้งค่า → นัดคิวใส่แร่)');
+    const mp = 'mp' in set ? set.mp : cur.mp, rc = 'rc' in set ? set.rc : cur.rc;
+    if (rc && rc === mp) throw new Error('RC ต้องไม่ใช่คนเดียวกับ MP');
+    const out = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, diff.map(k => ({ f: k, from: String(cur[k] || ''), to: set[k] }))) };
+    diff.forEach(k => { out[k] = set[k]; });
+    writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in out), out);
+    return readTable_(ss, 'bq').filter(x => x.id === id)[0];
+  });
+  bqStats_();
+  return rec;
+}
+// ประวัติการแก้ไข (JSON) [{ at, by, ch: [{ f, from, to }] }] · เก็บ 40 ครั้งล่าสุด
+function bqHist_(old, u, ch) {
+  let list = [];
+  try { list = JSON.parse(old || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  list.push({ at: Utilities.formatDate(new Date(), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by: bqWho_(u), ch: ch });
+  return JSON.stringify(list.slice(-40));
+}
+// ยกเลิกนัด: scope 'course' = ทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ · อื่น ๆ = เฉพาะ Fx นี้ · คืน { changed, ids }
+function bqCancel(id, scope, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.bq);
+  checkPin_(u, pin, 'bq');
+  const res = withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), tg = all.filter(x => x.id === id)[0];
+    if (!tg) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const pick = scope === 'course' ? all.filter(x => x.course && x.course === tg.course && x.status === BQ_BOOKED) : [tg].filter(x => x.status !== BRACHY_ST_CANCEL);
+    const now = new Date().toISOString(), ids = [];
+    pick.forEach(x => {
+      const row = findRow_(sh, header.indexOf('id') + 1, x.id);
+      if (!row) return;
+      const out = { status: BRACHY_ST_CANCEL, updated: now, editedBy: bqWho_(u), hist: bqHist_(x.hist, u, [{ f: 'status', from: x.status, to: BRACHY_ST_CANCEL }]) };
+      writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in out), out);
+      ids.push(x.id);
+    });
+    return { changed: ids.length, ids: ids };
+  });
+  bqStats_();
+  return res;
+}
+// นัดที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
+function recentBq_(ss) {
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  return readTable_(ss, 'bq').filter(x => String(x.date) >= from);
+}
+// สถิติ Brachytherapy จากแถบนี้ (ตั้งค่า → Brachytherapy: ที่มา = แถบนัดคิวใส่แร่): อัปเดตกิจกรรม MP / RC ทันทีหลังแก้นัด
+function bqStats_() {
+  try {
+    const ss = ss_(), cfg = readConfig_(ss) || {}, s = cfg.brachySync || {};
+    if (s.on && s.src === 'internal') extSync_(ss, cfg, 'brachy', 'แถบนัดคิวใส่แร่');
+  } catch (e) { /* ดึงรอบถัดไปแทน */ }
+}
+// นัดในแถบนี้ในรูปเดียวกับที่อ่านจากชีตของระบบนัดเดิม (brachyRead_) · รหัสนัดเดิมที่นำเข้าคงไว้ = กิจกรรมเดิมไม่ซ้ำ
+function bqRows_(ss) {
+  const rows = readTable_(ss, 'bq').map(x => ({ key: x.id, id: x.id, date: x.date, hn: x.hn, name: x.name, technique: x.tech, mp: x.mp, rc: x.rc, status: x.status, fx: x.fx, totalFx: x.total }));
+  return { tab: { name: TABLES.bq.sheet, headers: [], rows: rows.length }, map: {}, tabs: [], rows: rows, missing: [] };
+}
+
+/**
+ * แอดมิน: นำเข้านัดจากระบบนัดคิวใส่แร่เดิม (ชีตเดียวกับ ตั้งค่า → Brachytherapy จากระบบนัด) ครั้งเดียว · นำเข้าซ้ำ = เพิ่มเฉพาะนัดที่ยังไม่มี
+ * รหัสนัดเดิมใช้เป็น id (ไม่มีคอลัมน์รหัส = HN|วันที่|Fx) · แพทย์ / MP / RC จับคู่กับรายชื่อในตั้งค่า (ไม่ตรง = เก็บข้อความเดิม)
+ * คืน { tab, rows, added, skipped, first, last, doctors: { ชื่อที่ไม่รู้จัก: จำนวน }, staff: { … } }
+ */
+// คอลัมน์ของระบบเดิม: แบบเดียวกับที่ดึงสถิติ (BRACHY_KEYS ประกาศทีหลังในไฟล์ → สร้างตอนเรียก) + แพทย์ หมายเหตุ คอร์ส ผู้ลงนัด ประวัติ
+const bqImportKeys_ = () => Object.assign({}, BRACHY_KEYS, {
+  doctor: ['doctor', 'แพทย์', 'doc', 'physician', 'แพทย์ผู้สั่ง', 'แพทย์เจ้าของไข้'], note: ['note', 'หมายเหตุ', 'remark', 'notes'],
+  course: ['courseid', 'course', 'คอร์ส', 'รหัสคอร์ส'], created: ['createdat', 'created', 'ลงนัดเมื่อ', 'วันที่ลงนัด', 'timestamp'],
+  createdBy: ['createdby', 'ลงนัดโดย', 'ผู้ลงนัด'], history: ['history', 'ประวัติ', 'ประวัติการแก้ไข'],
+});
+const BQ_HIST_F = { doctor: 'doc', technique: 'tech' };
+function bqImport(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('นำเข้านัดได้เฉพาะแอดมิน');
+  const ss = ss_(), cfg = readConfig_(ss) || {}, s = cfg.brachySync || {};
+  const book = brachyBook_(s), tabs = brachyTabs_(book), tab = brachyPick_(tabs, s);
+  if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัด');
+  const map = Object.assign(brachyGuess_(tab.headers, bqImportKeys_()), s.map && typeof s.map === 'object' ? s.map : {});
+  if (!map.date || !map.hn) throw new Error('ไม่พบคอลัมน์วันที่หรือ HN ในแท็บ ' + tab.name + ' · ตั้งค่า → Brachytherapy จากระบบนัด → ตรวจชีต แล้วเลือกคอลัมน์');
+  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone(), last = sh.getLastRow();
+  const values = last > 1 ? sh.getRange(1, 1, last, sh.getLastColumn()).getValues() : [];
+  const header = (values.shift() || []).map(v => String(v).trim()), at = k => (map[k] ? header.indexOf(map[k]) : -1);
+  const docKey = v => String(v || '').replace(/^(นพ\.|พญ\.|นาย|นางสาว|นาง|ดร\.)/, '').replace(/\s+/g, '').toLowerCase();
+  const docs = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && x.code);
+  const docOf = v => { const t = String(v || '').trim(), hit = t && docs.filter(x => String(x.code).toUpperCase() === t.toUpperCase() || (x.name && docKey(x.name) === docKey(t)))[0]; return hit ? String(hit.code).toUpperCase() : t; };
+  const staffOf = brachyStaff_(cfg), unknownDoc = {}, unknownStaff = {};
+  const stOf = v => (/ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
+  const now = new Date().toISOString();
+  let rows = values.map(r => {
+    const g = k => { const i = at(k); return i < 0 ? '' : cellText_(r[i], tz); };
+    const o = { date: brachyDate_(g('date')), hn: String(g('hn')).replace(/\.0$/, '').trim(), fx: g('fx'), total: g('totalFx') };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date) || !o.hn) return null;
+    const doc = docOf(g('doctor')), mp = g('mp'), rc = g('rc');
+    if (g('doctor') && doc === String(g('doctor')).trim() && !docs.some(x => String(x.code).toUpperCase() === doc.toUpperCase())) unknownDoc[doc] = (unknownDoc[doc] || 0) + 1;
+    [mp, rc].forEach(v => { if (v && !staffOf(v)) unknownStaff[v] = (unknownStaff[v] || 0) + 1; });
+    let hist = [];
+    try { hist = JSON.parse(g('history') || '[]'); } catch (e) { hist = []; }
+    hist = (Array.isArray(hist) ? hist : []).map(h => ({ at: String(h.at || ''), by: String(h.name || h.by || ''),
+      ch: (Array.isArray(h.changes) ? h.changes : Array.isArray(h.ch) ? h.ch : []).map(c => ({ f: BQ_HIST_F[c.f] || c.f, from: String(c.from == null ? '' : c.from), to: String(c.to == null ? '' : c.to) })) }));
+    return Object.assign(o, { id: g('id') || o.hn + '|' + o.date + '|' + o.fx, course: g('course'), name: g('name'), doc: doc, tech: g('technique'), note: g('note'),
+      status: stOf(g('status')), mp: staffOf(mp) || mp, rc: staffOf(rc) || rc, hist: hist.length ? JSON.stringify(hist.slice(-40)) : '', by: g('createdBy'), created: g('created') || now, editedBy: '', updated: '' });
+  }).filter(Boolean);
+  // ไม่มีคอลัมน์คอร์ส: Fx 1 (หรือ Fx ไม่เพิ่มจากครั้งก่อน) ของ HN เดียวกัน = เริ่มคอร์สใหม่
+  const lastOf = {};
+  rows.slice().sort((a, b) => a.hn.localeCompare(b.hn) || a.date.localeCompare(b.date) || (+a.fx || 0) - (+b.fx || 0)).forEach(o => {
+    if (o.course) return;
+    const p = lastOf[o.hn];
+    if (!p || +o.fx <= 1 || (+o.fx || 0) <= (+p.fx || 0)) lastOf[o.hn] = { fx: o.fx, course: 'IMP-' + o.hn + '-' + o.date };
+    else lastOf[o.hn].fx = o.fx;
+    o.course = lastOf[o.hn].course;
+  });
+  rows.forEach(o => { o.src = 'bq:' + o.id; });
+  const res = withLock_(() => {
+    const sh2 = tableSheet_(ss, 'bq'), have = {};
+    readTable_(ss, 'bq').forEach(x => { have[x.id] = true; });
+    const add = rows.filter(o => !have[o.id] && (have[o.id] = true));
+    bqAppend_(sh2, headerOf_(sh2), add);
+    return { added: add.length, skipped: rows.length - add.length };
+  });
+  const dates = rows.map(o => o.date).sort();
+  return { tab: tab.name, title: book.getName(), rows: rows.length, added: res.added, skipped: res.skipped, first: dates[0] || '', last: dates[dates.length - 1] || '',
+    doctors: unknownDoc, staff: unknownStaff, map: map };
+}
+
+/**
  * แถบลงทะเบียน: เพิ่มหรือแก้ผู้ป่วย ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงทะเบียน)
  * rec = ช่องใน REG_FIELDS · HN คำนำหน้า ชื่อ-สกุล บังคับตาม ตั้งค่า → ลงทะเบียน (config.reg.form · ยังไม่ตั้ง = บังคับ) · ต้องมี HN หรือชื่อ-สกุล
  * HN ซ้ำกับผู้ป่วยคนอื่นไม่ได้ (ไม่สนช่องว่างและตัวพิมพ์) · id ที่ยังไม่มี = เพิ่มใหม่ · คืนรายการหลังบันทึก
@@ -1531,7 +1725,7 @@ function dutyMembers(token) {
 }
 
 /* ---------- สถิติ Brachytherapy จากระบบนัด Brachytherapy (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */
-// ตั้งค่า → Brachytherapy (config.brachySync): { on, url = ลิงก์ชีตของระบบนัด, sheet = แท็บ, map = { คีย์: หัวคอลัมน์ }, count: 'all' | 'done', from: 'yyyy-MM-dd' }
+// ตั้งค่า → Brachytherapy (config.brachySync): { on, src: '' = ชีตของระบบนัดเดิม | 'internal' = แถบนัดคิวใส่แร่ของระบบนี้, url = ลิงก์ชีตของระบบนัด, sheet = แท็บ, map = { คีย์: หัวคอลัมน์ }, count: 'all' | 'done', from: 'yyyy-MM-dd' }
 // นัดหนึ่งครั้ง (ไม่ยกเลิก · count 'done' = เฉพาะ "มาตามนัด") = กิจกรรม Brachy ของผู้วางแผน (MP) + RC ของคน RC (HN ชื่อ วันนัด)
 // เทคนิค Interstitial needle / เสียบเข็ม = Brachy เสียบเข็ม · MP / RC ในระบบนัดเป็นรหัส ชื่อผู้ใช้ อีเมล หรือชื่อ-สกุล (ตั้งค่า → ทีมนักฟิสิกส์)
 // รายการที่ดึงมามี src = brachy:<รหัสนัด>:plan|rc · ต้นทางแก้ = แก้ตาม · ยกเลิกหรือหายไป = ลบ · มีรายการที่บันทึกเอง (วัน HN คน ประเภทเดียวกัน) = ไม่เพิ่มซ้ำ
@@ -1677,7 +1871,7 @@ function brachyWanted_(rows, s, cfg) {
 
 // ระบบอื่นที่ดึงมาบันทึก: Brachytherapy (ระบบนัด) · RC จาก TDF Dose Calculator · src ของรายการขึ้นต้นด้วยคีย์
 const EXT = {
-  brachy: { cfg: 'brachySync', prop: 'BRACHY_SYNC', what: 'ระบบนัด Brachytherapy', read: (b, s, soft) => brachyRead_(b, s, soft), wanted: (r, s, c) => brachyWanted_(r, s, c) },
+  brachy: { cfg: 'brachySync', prop: 'BRACHY_SYNC', what: 'ระบบนัด Brachytherapy', read: (b, s, soft) => (s.src === 'internal' ? bqRows_(ss_()) : brachyRead_(b, s, soft)), wanted: (r, s, c) => brachyWanted_(r, s, c) },
   tdf: { cfg: 'tdfSync', prop: 'TDF_SYNC', what: 'TDF Dose Calculator', read: (b, s, soft) => tdfRead_(b, s, soft), wanted: (r, s, c) => tdfWanted_(r, s, c) },
 };
 
@@ -1687,7 +1881,7 @@ function extSync_(ss, cfg, key, why) {
   const x = EXT[key], s = (cfg && cfg[x.cfg]) || {};
   const res = { at: new Date().toISOString(), why: why || '', ok: false, added: 0, updated: 0, removed: 0, manual: 0, counted: 0, unknown: {}, tab: '', error: '' };
   try {
-    const book = extBook_(s, x.what), got = x.read(book, s), w = x.wanted(got.rows, s, cfg);
+    const book = key === 'brachy' && s.src === 'internal' ? null : extBook_(s, x.what), got = x.read(book, s), w = x.wanted(got.rows, s, cfg);
     Object.assign(res, { tab: got.tab.name, counted: w.counted, unknown: w.unknown });
     if (w.self) res.self = w.self;
     withLock_(() => {
@@ -1742,7 +1936,7 @@ function brachyCheck(s, token) {
   const u = who_(token);
   if (!u.isAdmin) throw new Error('ตั้งค่าการดึง Brachytherapy ได้เฉพาะแอดมิน');
   s = s && typeof s === 'object' ? s : {};
-  const book = brachyBook_(s), got = brachyRead_(book, s, true), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
+  const inside = s.src === 'internal', book = inside ? null : brachyBook_(s), got = inside ? bqRows_(ss_()) : brachyRead_(book, s, true), w = brachyWanted_(got.rows, s, readConfig_(ss_()) || {});
   const statuses = {}, techniques = {}, keys = Object.keys(w.want);
   got.rows.forEach(r => {
     const k = String(r.status).trim() || '(ว่าง)', t = String(r.technique).trim() || '(ว่าง)';
@@ -1751,7 +1945,7 @@ function brachyCheck(s, token) {
   });
   const dates = got.rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   return {
-    title: book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
+    title: inside ? 'แถบนัดคิวใส่แร่ (ระบบนี้)' : book.getName(), tabs: got.tabs, tab: got.tab.name, map: got.map, missing: got.missing,
     preview: got.missing.length ? null : {
       rows: got.rows.length, counted: w.counted, statuses: statuses, techniques: techniques, unknown: w.unknown, first: dates[0] || '', last: dates[dates.length - 1] || '',
       plan: keys.filter(k => /:plan$/.test(k)).length, rc: keys.filter(k => /:rc$/.test(k)).length, needle: keys.filter(k => w.want[k].kind === 'brachyn').length,
@@ -1988,7 +2182,7 @@ function pinRecord_(u) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
-// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct, appt, jobs, reg) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
+// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct, appt, jobs, reg, bq) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
 // (ยังรู้ว่าใครทำจากบัญชีที่เข้าระบบ) · ไม่ระบุ act = ตรวจเสมอ
 function checkPin_(u, pin, act) {
   if (act) { const cfg = readConfig_(ss_()) || {}; if (cfg.pin && cfg.pin[act] === false) return; }
