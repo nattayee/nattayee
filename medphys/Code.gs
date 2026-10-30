@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-30.1';
-const API_LEVEL = 39;
+const CODE_VERSION = '2026-10-30.2';
+const API_LEVEL = 40;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -104,12 +104,12 @@ const TABLES = {
       ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
-  // แถบลงทะเบียน: ผู้ป่วยที่ลงทะเบียน (HN ไม่ซ้ำ · คำนำหน้า ชื่อ สกุล บังคับ) · birth = วันเกิด (YYYY-MM-DD) · sex = เพศ (ตัวเลือก Gender ของใบสั่ง)
-  // แถบลงนัดดึงไปใช้ (ชื่อ อายุ เพศ แพทย์ Diag) · เขียนผ่าน regSave / regRemove เท่านั้น
+  // แถบลงทะเบียน: ผู้ป่วยที่ลงทะเบียน (HN ไม่ซ้ำ · HN คำนำหน้า ชื่อ-สกุล บังคับตาม ตั้งค่า → ลงทะเบียน) · birth = วันเกิด (YYYY-MM-DD) · sex = เพศ (ตัวเลือก Gender ของใบสั่ง)
+  // แถบลงนัดดึงไปใช้ (ชื่อ อายุ เพศ แพทย์ Diag) · เขียนผ่าน regSave / regRemove เท่านั้น · รุ่น 2026-10-30.1 เก็บชื่อและสกุลแยกคอลัมน์ (อ่านใน regRows_)
   reg: {
     sheet: 'Registry',
     fields: [
-      ['id', 'id'], ['hn', 'HN'], ['title', 'คำนำหน้า'], ['first', 'ชื่อ'], ['last', 'สกุล'], ['sex', 'เพศ'], ['birth', 'วันเกิด'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'],
+      ['id', 'id'], ['hn', 'HN'], ['title', 'คำนำหน้า'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'วันเกิด'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'],
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
@@ -289,7 +289,7 @@ function getData(token) {
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
-    reg: need.reg ? readTable_(ss, 'reg') : [],
+    reg: need.reg ? regRows_(ss) : [],
     jobs: need.jobs ? jobsFor_(ss, user) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
@@ -1312,24 +1312,40 @@ function recentCt_(ss) {
 
 /**
  * แถบลงทะเบียน: เพิ่มหรือแก้ผู้ป่วย ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงทะเบียน)
- * rec = ช่องใน REG_FIELDS · HN คำนำหน้า ชื่อ สกุล บังคับ · HN ซ้ำกับผู้ป่วยคนอื่นไม่ได้ (ไม่สนช่องว่างและตัวพิมพ์) · id ที่ยังไม่มี = เพิ่มใหม่ · คืนรายการหลังบันทึก
+ * rec = ช่องใน REG_FIELDS · HN คำนำหน้า ชื่อ-สกุล บังคับตาม ตั้งค่า → ลงทะเบียน (config.reg.form · ยังไม่ตั้ง = บังคับ) · ต้องมี HN หรือชื่อ-สกุล
+ * HN ซ้ำกับผู้ป่วยคนอื่นไม่ได้ (ไม่สนช่องว่างและตัวพิมพ์) · id ที่ยังไม่มี = เพิ่มใหม่ · คืนรายการหลังบันทึก
  */
-const REG_FIELDS = ['hn', 'title', 'first', 'last', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note'];
+const REG_FIELDS = ['hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note'];
 const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase();
+const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name).trim();
+// ผู้ป่วยที่ลงทะเบียน · แถวที่บันทึกด้วยรุ่น 2026-10-30.1 (คอลัมน์ ชื่อ และ สกุล) ใช้สองคอลัมน์นั้นเป็นชื่อ-สกุล
+function regRows_(ss) {
+  const rows = readTable_(ss, 'reg'), sh = ss.getSheetByName(TABLES.reg.sheet);
+  if (!sh || !rows.some(r => !r.name)) return rows;
+  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), head = values.shift().map(v => String(v).trim());
+  const id = head.indexOf('id'), first = head.indexOf('ชื่อ'), last = head.indexOf('สกุล');
+  if (id < 0 || (first < 0 && last < 0)) return rows;
+  const old = {};
+  values.forEach(v => { old[String(v[id]).trim()] = [first < 0 ? '' : v[first], last < 0 ? '' : v[last]].map(x => String(x).trim()).filter(Boolean).join(' '); });
+  rows.forEach(r => { if (!r.name) r.name = old[r.id] || ''; });
+  return rows;
+}
 function regSave(rec, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.reg);
   rec = rec && typeof rec === 'object' ? rec : {};
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-  const miss = [['hn', 'HN'], ['title', 'คำนำหน้า'], ['first', 'ชื่อ'], ['last', 'สกุล']].filter(f => !cut(rec[f[0]], 200)).map(f => f[1]);
+  const cfg = readConfig_(ss_()) || {}, form = (cfg.reg && cfg.reg.form) || {};
+  const miss = [['hn', 'HN'], ['title', 'คำนำหน้า'], ['name', 'ชื่อ-สกุล']].filter(f => (form[f[0]] || 'req') === 'req' && !cut(rec[f[0]], 200)).map(f => f[1]);
   if (miss.length) throw new Error('กรอก ' + miss.join(' '));
+  if (!cut(rec.hn, 40) && !cut(rec.name, 200)) throw new Error('กรอก HN หรือชื่อ-สกุล');
   const birth = cut(rec.birth, 10);
   if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) throw new Error('วันเกิดไม่ถูกต้อง');
   checkPin_(u, pin, 'reg');
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
-    const dup = readTable_(ss, 'reg').filter(x => hnKey_(x.hn) === hnKey_(cut(rec.hn, 40)) && (!row || x.id !== id))[0];
-    if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + [dup.title + dup.first, dup.last].join(' ').trim() + ')');
+    const key = hnKey_(cut(rec.hn, 40)), dup = key ? regRows_(ss).filter(x => hnKey_(x.hn) === key && (!row || x.id !== id))[0] : null;
+    if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + regName_(dup) + ')');
     const set = {};
     REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
     const now = new Date().toISOString();
@@ -1337,7 +1353,7 @@ function regSave(rec, pin, token) {
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
     writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.reg.fields.filter(f => f[0] in set), set);
     const want = row ? id : set.id;
-    return readTable_(ss, 'reg').filter(x => x.id === want)[0];
+    return regRows_(ss).filter(x => x.id === want)[0];
   });
 }
 

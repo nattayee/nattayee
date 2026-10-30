@@ -1458,7 +1458,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="button" class="btn primary" id="rg-add" hidden>+ ลงทะเบียน</button>
     </div>
     <p class="muted" id="rg-help" style="margin:-4px 0 10px;font-size:13px"></p>
-    <p class="notice" id="rg-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <p class="notice" id="rg-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
     <div class="table-wrap ct-wrap"><table class="ct-tbl rg-tbl" id="rg-tbl"></table></div>
   </section>
 
@@ -1810,12 +1810,9 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
     <header class="dlg-head"><h2 id="rg-title">ลงทะเบียนผู้ป่วย</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <p class="notice" id="r-dup" hidden></p>
-      <label class="field ctf-must"><span class="lbl">HN</span><input id="r-hn" inputmode="numeric" maxlength="40" autocomplete="off"></label>
-      <div class="field ctf-must"><span class="lbl">คำนำหน้า</span><div class="chips" id="r-title" role="radiogroup" aria-label="คำนำหน้า"></div><input id="r-title-other" maxlength="40" autocomplete="off" placeholder="คำนำหน้าอื่น เช่น พระภิกษุ, ว่าที่ร.ต." aria-label="คำนำหน้าอื่น" hidden></div>
-      <div class="row2">
-        <label class="field ctf-must"><span class="lbl">ชื่อ</span><input id="r-first" maxlength="100" autocomplete="off"></label>
-        <label class="field ctf-must"><span class="lbl">สกุล</span><input id="r-last" maxlength="100" autocomplete="off"></label>
-      </div>
+      <label class="field" data-rgf="hn"><span class="lbl">HN</span><input id="r-hn" inputmode="numeric" maxlength="40" autocomplete="off"></label>
+      <div class="field" data-rgf="title"><span class="lbl">คำนำหน้า</span><div class="chips" id="r-title" role="radiogroup" aria-label="คำนำหน้า"></div><input id="r-title-other" maxlength="40" autocomplete="off" placeholder="คำนำหน้าอื่น เช่น พระภิกษุ, ว่าที่ร.ต." aria-label="คำนำหน้าอื่น" hidden></div>
+      <label class="field" data-rgf="name"><span class="lbl">ชื่อ-สกุล</span><input id="r-name" maxlength="200" autocomplete="off" placeholder="เช่น สมชาย ใจดี"></label>
       <div class="row2">
         <div class="field" data-rgf="sex"><span class="lbl">เพศ</span><div class="chips" id="r-sex" role="radiogroup" aria-label="เพศ"></div></div>
         <div class="field" data-rgf="birth"><span class="lbl"><label for="r-birth">วันเกิด</label><span class="rg-age" id="r-age"></span></span><input type="date" id="r-birth"></div>
@@ -2275,10 +2272,10 @@ const APPT_FORM = [
   ['lab', 'Pre-procedural Lab (ใบสั่ง)', 'off', false], ['vol', 'Draw area (ขอบเขตที่จะทำ CT)', 'show'], ['note', 'Note', 'show'],
 ];
 const APPT_LISTS = [['cms', 'CT'], ['specials', 'เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยก)']];
-const REG_API = 39;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove)
+const REG_API = 40;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove) แบบชื่อ-สกุลช่องเดียว และ HN คำนำหน้า ชื่อ-สกุล บังคับตามตั้งค่า
 const regOn = () => serverHas(REG_API);
-// แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น] (ตั้งค่า → ลงทะเบียน) · HN คำนำหน้า ชื่อ สกุล บังคับเสมอ
-const REG_FORM = [['sex', 'เพศ', 'show'], ['birth', 'วันเกิด (อายุ)', 'show'], ['phone', 'เบอร์โทร', 'off'], ['right', 'สิทธิการรักษา', 'off'], ['doc', 'แพทย์ (Doc)', 'show'], ['dx', 'Diag (ICD-10)', 'show'], ['note', 'Note', 'show']];
+// แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, ซ่อนไม่ได้] (ตั้งค่า → ลงทะเบียน) · HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมี HN หรือชื่อ-สกุลอย่างน้อยหนึ่งช่อง
+const REG_FORM = [['hn', 'HN', 'req', true], ['title', 'คำนำหน้า', 'req'], ['name', 'ชื่อ-สกุล', 'req', true], ['sex', 'เพศ', 'show'], ['birth', 'วันเกิด (อายุ)', 'show'], ['phone', 'เบอร์โทร', 'off'], ['right', 'สิทธิการรักษา', 'off'], ['doc', 'แพทย์ (Doc)', 'show'], ['dx', 'Diag (ICD-10)', 'show'], ['note', 'Note', 'show']];
 const REG_LISTS = [['titles', 'คำนำหน้า'], ['rights', 'สิทธิการรักษา']];
 // คอลัมน์ในชีตของ TDF Dose Calculator (มีคอลัมน์ JSON ของทั้งรายการ = ไม่ต้องเลือกคอลัมน์อื่น)
 const TDF_FIELDS = [['rc', 'คน Recheck (RC)'], ['calc', 'คนคำนวณ'], ['hn', 'HN'], ['name', 'ชื่อผู้ป่วย'], ['reviewAt', 'วันที่ Recheck'], ['date', 'วันที่คำนวณ'],
@@ -2723,7 +2720,7 @@ function mergeConfig(c) {
   for (const [k] of APPT_LISTS) out.appt[k] = Array.isArray(ap[k]) ? [...new Set(ap[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.appt[k].slice();
   if (out.appt.specials.join() === 'SRS/SRT,SBRT,DIBH') out.appt.specials = d.appt.specials.slice();
   const rg = c.reg && typeof c.reg === 'object' ? c.reg : {};
-  out.reg = { form: Object.fromEntries(REG_FORM.map(([k, , v]) => { const x = rg.form && rg.form[k]; return [k, ['off', 'show', 'req'].includes(x) ? x : v]; })) };
+  out.reg = { form: Object.fromEntries(REG_FORM.map(([k, , v, keep]) => { const x = rg.form && rg.form[k]; return [k, [...(keep ? [] : ['off']), 'show', 'req'].includes(x) ? x : v]; })) };
   for (const [k] of REG_LISTS) out.reg[k] = Array.isArray(rg[k]) ? [...new Set(rg[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.reg[k].slice();   // ค่าเริ่มต้นของรุ่น 2026-10-29.3 (SRS/SRT ช่องเดียว) → กลับเป็นแยก SRS, SRT
   const jb = c.jobs && typeof c.jobs === 'object' ? c.jobs : {}, jnum = (v, dv) => (v === '' || v == null || !isFinite(+v) ? dv : +v);
   const jprof = k => { const x = jb[k] && typeof jb[k] === 'object' ? jb[k] : {}, dv = d.jobs[k]; return { title: str(x.title).slice(0, 80) || dv.title, guar: jnum(x.guar, dv.guar), rate: jnum(x.rate, dv.rate), group: str(x.group).slice(0, 20) || dv.group }; };
@@ -2839,7 +2836,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-30.1';
+const PAGE_VERSION = '2026-10-30.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3187,12 +3184,13 @@ function localStore() {
     apptRemove: async (id, pin) => { demoCheckPin(pin); const n = db.appt.length; db.appt = db.appt.filter(x => x.id !== id); persist(); return db.appt.length < n; },
     // แถบลงทะเบียน: กติกาเดียวกับ regSave / regRemove ใน Code.gs
     regSave: async (rec, pin) => {
-      const miss = [['hn', 'HN'], ['title', 'คำนำหน้า'], ['first', 'ชื่อ'], ['last', 'สกุล']].filter(([k]) => !str(rec[k])).map(([, l]) => l);
+      const form = state.config.reg.form, miss = [['hn', 'HN'], ['title', 'คำนำหน้า'], ['name', 'ชื่อ-สกุล']].filter(([k]) => form[k] === 'req' && !str(rec[k])).map(([, l]) => l);
       if (miss.length) throw new Error('กรอก ' + miss.join(' '));
+      if (!str(rec.hn) && !str(rec.name)) throw new Error('กรอก HN หรือชื่อ-สกุล');
       if (str(rec.birth) && !isDay(str(rec.birth))) throw new Error('วันเกิดไม่ถูกต้อง');
       demoCheckPin(pin);
-      const old = rec.id && db.reg.find(x => x.id === rec.id), dup = db.reg.find(x => hnKey(x.hn) === hnKey(rec.hn) && x !== old);
-      if (dup) throw new Error(`HN ${str(rec.hn)} ลงทะเบียนแล้ว (${[dup.title + dup.first, dup.last].join(' ').trim()})`);
+      const old = rec.id && db.reg.find(x => x.id === rec.id), dup = hnKey(rec.hn) && db.reg.find(x => hnKey(x.hn) === hnKey(rec.hn) && x !== old);
+      if (dup) throw new Error(`HN ${str(rec.hn)} ลงทะเบียนแล้ว (${regName(normReg(dup))})`);
       const set = Object.fromEntries(REG_KEYS.filter(k => !['id', 'by', 'created', 'updated'].includes(k)).map(k => [k, str(rec[k])]));
       if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return clone(old); }
       const r = { ...set, id: rec.id || uid(), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
@@ -3309,11 +3307,11 @@ function demoDb() {
     duty.push({ id: day + '|CT:ct1', date: day, room: 'CT:ct1', rtt: T(3), ra: 'ผู้ช่วย ตัวอย่าง 2', qc: T(3), by, at: `${day} ${at}` });
   }
   // ผู้ป่วยที่ลงทะเบียน (ชื่อสมมติ): สองคนแรกมีนัดด้านบน
-  const rg = (i, title, first, last, sex, birth, o) => ({ id: 'demo-r' + i, hn: String(999000300 + i), title, first, last, sex, birth, created: new Date(t0 + i * 36e5).toISOString(), ...o });
+  const rg = (i, title, name, sex, birth, o) => ({ id: 'demo-r' + i, hn: String(999000300 + i), title, name, sex, birth, created: new Date(t0 + i * 36e5).toISOString(), ...o });
   const reg = [
-    rg(1, 'นาย', 'ตัวอย่าง', 'หนึ่ง', 'Male', '1958-04-12', { doc: 'SC', icd: 'C34.9' }),
-    rg(2, 'นาง', 'ตัวอย่าง', 'สอง', 'Female', '1966-09-03', { doc: 'TA', icd: 'C50.9' }),
-    rg(5, 'นางสาว', 'ตัวอย่าง', 'ห้า', 'Female', '1979-01-25', { created: new Date().toISOString() }),
+    rg(1, 'นาย', 'ตัวอย่าง หนึ่ง', 'Male', '1958-04-12', { doc: 'SC', icd: 'C34.9' }),
+    rg(2, 'นาง', 'ตัวอย่าง สอง', 'Female', '1966-09-03', { doc: 'TA', icd: 'C50.9' }),
+    rg(5, 'นางสาว', 'ตัวอย่าง ห้า', 'Female', '1979-01-25', { created: new Date().toISOString() }),
   ];
   return { cases, logs, leaves, appt, duty, reg, config: null, demo: true };
 }
@@ -4546,10 +4544,11 @@ $('#ap-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[
 
 // แถบลงทะเบียน (แถบแรก): ผู้ป่วยที่ลงทะเบียน · HN คำนำหน้า ชื่อ สกุล บังคับ · HN ไม่ซ้ำ · ช่องอื่นตาม ตั้งค่า → ลงทะเบียน
 // แถบลงนัดดึงไปใช้: ช่อง HN ของฟอร์มลงนัด (พิมพ์ HN หรือชื่อ) และปุ่มลงนัดในตาราง → ชื่อ อายุ เพศ แพทย์ Diag
-const REG_KEYS = ['id', 'hn', 'title', 'first', 'last', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'by', 'created', 'updated'];
+const REG_KEYS = ['id', 'hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'by', 'created', 'updated'];
 function normReg(o) {
   const r = {};
   for (const k of REG_KEYS) r[k] = str(o[k]);
+  r.name = r.name || [o.first, o.last].map(str).filter(Boolean).join(' ');   // ข้อมูลตัวอย่างรุ่น 2026-10-30.1 (ชื่อ สกุล แยกกัน)
   r.birth = isDay(r.birth) ? r.birth : '';
   r.doc = r.doc.toUpperCase();
   r.id = r.id || uid();
@@ -4558,7 +4557,7 @@ function normReg(o) {
 const hnKey = v => str(v).replace(/\s+/g, '').toUpperCase();
 const regByHn = hn => (hnKey(hn) ? state.reg.find(r => hnKey(r.hn) === hnKey(hn)) : null);
 // ชื่อเต็ม: คำนำหน้าภาษาไทยติดชื่อ (นางสาวสมใจ ใจดี) · คำนำหน้าภาษาอังกฤษเว้นวรรค (Mr. John Smith)
-const regName = r => `${r.title}${/[A-Za-z]/.test(r.title) ? ' ' : ''}${r.first} ${r.last}`.trim();
+const regName = r => `${r.title}${/[A-Za-z]/.test(r.title) ? ' ' : ''}${r.name}`.trim();
 // อายุ (ปีเต็ม) ณ วันที่ on (เริ่มต้น = วันนี้)
 function ageOn(birth, on) {
   if (!isDay(birth)) return '';
@@ -4568,11 +4567,11 @@ function ageOn(birth, on) {
 }
 const rgMode = k => state.config.reg.form[k] || 'off';
 const rgDay = r => (r.created ? iso(new Date(r.created)) : '');
-const rgText = r => [r.hn, regName(r), r.first, r.last, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.note].join(' ').toLowerCase();
+const rgText = r => [r.hn, regName(r), r.name, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.note].join(' ').toLowerCase();
 // นัดของผู้ป่วย (แถบลงนัด) ล่าสุดก่อน
 const regAppts = r => state.appt.filter(a => hnKey(a.hn) === hnKey(r.hn)).sort((a, b) => (isDay(b.date) ? b.date : '9').localeCompare(isDay(a.date) ? a.date : '9') || b.created.localeCompare(a.created));
 const apShort = a => `${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${apState(a) === 'took' ? ' · ลง CT-SIM แล้ว' : apState(a) === 'skip' ? ' · ไม่มาทำ CT' : ''}`;
-const RG_OLD = 'แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const RG_OLD = 'แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 // คอลัมน์ในตาราง · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์ (อายุ ตามช่องวันเกิด)
 const RG_COLS = [['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'อายุ'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'], ['doc', 'แพทย์'], ['dx', 'Diag'], ['note', 'Note']];
 // ตาราง: ผู้ป่วยที่ลงทะเบียนในเดือนที่เลือก (ล่าสุดก่อน) แยกตามวัน · มีคำค้น = ค้นทุกเดือน
@@ -4590,7 +4589,7 @@ function renderReg() {
   const span = cols.length + 2;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>นัด</th></tr></thead>`;
   const cell = (r, k) => {
-    if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td>`;
+    if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b></td>`;
     if (k === 'name') return `<td class="ct-name">${esc(regName(r))}</td>`;
     const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? dxShort(r) : r[k];
     return `<td class="ct-${k}"${k === 'birth' && r.birth ? ` title="เกิด ${esc(apDate(r.birth))}"` : ''}>${esc(v)}</td>`;
@@ -4629,8 +4628,8 @@ function openRgForm(id) {
   const cfg = state.config;
   editingRg = r ? clone(r) : normReg({ id: uid(), doc: rgMode('doc') !== 'off' ? myDoctor() : '' });
   const g = editingRg;
-  $('#rg-title').textContent = r ? `แก้ไขผู้ป่วย ${r.hn}` : 'ลงทะเบียนผู้ป่วย';
-  for (const f of ['hn', 'first', 'last', 'phone', 'note']) $('#r-' + f).value = g[f] || '';
+  $('#rg-title').textContent = r ? `แก้ไขผู้ป่วย ${r.hn || regName(r)}` : 'ลงทะเบียนผู้ป่วย';
+  for (const f of ['hn', 'name', 'phone', 'note']) $('#r-' + f).value = g[f] || '';
   titleChips(g.title);
   ctChips('#r-sex', 'rsex', cfg.order.genders, g.sex);
   $('#r-birth').value = g.birth;
@@ -4667,27 +4666,28 @@ function syncRgForm() {
 const rgDup = () => { const k = hnKey($('#r-hn').value); return k ? state.reg.find(x => hnKey(x.hn) === k && x.id !== editingRg.id) : null; };
 // ช่องที่กรอกแล้ว (ใช้ตรวจช่องบังคับกรอก)
 const RG_FILLED = {
-  sex: () => chipValue($('#r-sex')), birth: () => $('#r-birth').value, phone: () => str($('#r-phone').value), right: () => chipValue($('#r-right')),
+  hn: () => str($('#r-hn').value), title: () => readTitle(), name: () => str($('#r-name').value), sex: () => chipValue($('#r-sex')), birth: () => $('#r-birth').value, phone: () => str($('#r-phone').value), right: () => chipValue($('#r-right')),
   doc: () => chipValue($('#r-doc')), dx: () => str($('#r-dx').value), note: () => str($('#r-note').value),
 };
-const readRgForm = () => normReg({ ...editingRg, hn: str($('#r-hn').value), title: readTitle(), first: $('#r-first').value, last: $('#r-last').value, sex: chipValue($('#r-sex')), birth: $('#r-birth').value,
+const readRgForm = () => normReg({ ...editingRg, hn: str($('#r-hn').value), title: readTitle(), name: $('#r-name').value.replace(/\s+/g, ' '), sex: chipValue($('#r-sex')), birth: $('#r-birth').value,
   phone: $('#r-phone').value, right: chipValue($('#r-right')), doc: chipValue($('#r-doc')), note: $('#r-note').value, ...readDx('r') });
 function submitRg(e, thenAp) {
   if (e) e.preventDefault();
   const rec = readRgForm();
   const flag = (el, msg) => { const f = el.closest('.field'); if (f) f.classList.add('missing'); el.focus(); toast(msg, { err: true }); };
-  if (!rec.hn) return flag($('#r-hn'), 'กรอก HN ก่อนบันทึก');
-  if (!rec.title) return flag(chipValue($('#r-title')) === OTHER ? $('#r-title-other') : $('#r-title input'), chipValue($('#r-title')) === OTHER ? 'กรอกคำนำหน้า' : 'เลือกคำนำหน้า');
-  if (!rec.first) return flag($('#r-first'), 'กรอกชื่อ');
-  if (!rec.last) return flag($('#r-last'), 'กรอกสกุล');
+  const other = chipValue($('#r-title')) === OTHER;
+  // ช่องบังคับ (ตั้งค่า → ลงทะเบียน) ตามลำดับในฟอร์ม · HN คำนำหน้า ชื่อ-สกุล ข้อความเดิม
+  const f = state.config.reg.form, miss = REG_FORM.find(([k]) => f[k] === 'req' && !RG_FILLED[k]());
+  if (miss) {
+    const [k, l] = miss, box = $(`[data-rgf="${k}"]`, rgForm), el = k === 'title' ? (other ? $('#r-title-other') : $('#r-title input')) : $('input', box);
+    const msg = k === 'hn' ? 'กรอก HN ก่อนบันทึก' : k === 'title' ? (other ? 'กรอกคำนำหน้า' : 'เลือกคำนำหน้า') : k === 'name' ? 'กรอกชื่อ-สกุล'
+      : `${['phone', 'dx', 'note'].includes(k) ? 'กรอก' : k === 'birth' ? 'ใส่' : 'เลือก'} ${l} ก่อนบันทึก (ช่องบังคับ)`;
+    return flag(el || box, msg);
+  }
+  if (!rec.hn && !rec.name) return flag($('#r-hn'), 'กรอก HN หรือชื่อ-สกุล');
   const dup = rgDup();
   if (dup) return flag($('#r-hn'), `HN ${rec.hn} ลงทะเบียนแล้ว (${regName(dup)})`);
   if (rec.birth && rec.birth > today()) return flag($('#r-birth'), 'วันเกิดต้องไม่เกินวันนี้');
-  const f = state.config.reg.form, miss = REG_FORM.find(([k]) => f[k] === 'req' && !RG_FILLED[k]());
-  if (miss) {
-    const box = $(`[data-rgf="${miss[0]}"]`, rgForm), el = $('input', box);
-    return flag(el || box, `${['phone', 'dx', 'note'].includes(miss[0]) ? 'กรอก' : miss[0] === 'birth' ? 'ใส่' : 'เลือก'} ${miss[1]} ก่อนบันทึก (ช่องบังคับ)`);
-  }
   openRgPin('rgsave', rec, thenAp);
 }
 // ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงทะเบียน) · rgsave = ลงทะเบียน/แก้ · rgdel = ลบ · thenAp = บันทึกแล้วเปิดฟอร์มลงนัด
@@ -4695,7 +4695,7 @@ function openRgPin(mode, rec, thenAp) {
   const isNew = !state.reg.some(x => x.id === rec.id);
   pinCtx = { mode, rec, id: rec.id, isNew, thenAp: !!thenAp, forgot: false, auto: mode === 'rgsave' };
   const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`;
-  $('#pin-title').textContent = `${mode === 'rgdel' ? 'ลบผู้ป่วย' : isNew ? 'ลงทะเบียน' : 'บันทึกการแก้ไขผู้ป่วย'} · ${rec.hn || ''}`;
+  $('#pin-title').textContent = `${mode === 'rgdel' ? 'ลบผู้ป่วย' : isNew ? 'ลงทะเบียน' : 'บันทึกการแก้ไขผู้ป่วย'} · ${rec.hn || regName(rec)}`;
   $('#pin-what').innerHTML = mode === 'rgdel'
     ? `ลบ ${esc(regName(rec))} ออกจากแถบลงทะเบียน ย้อนกลับไม่ได้ · นัดของผู้ป่วยไม่ถูกลบ · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
     : `${esc(regName(rec))}${thenAp ? ' · แล้วเปิดฟอร์มลงนัด' : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`;
@@ -4713,7 +4713,7 @@ function rgSaved(rec, isNew, thenAp) {
   rgDlg.close();
   if (isNew && state.view === 'reg' && !tabWords('reg').length) state.month = rgDay(rec).slice(0, 7) || state.month;
   render();
-  toast(`${isNew ? 'ลงทะเบียน' : 'บันทึก'} ${rec.hn} · ${regName(rec)}`);
+  toast(`${isNew ? 'ลงทะเบียน' : 'บันทึก'} ${[rec.hn, regName(rec)].filter(Boolean).join(' · ')}`);
   if (thenAp) openApForm('', rec);
 }
 function rgDeleted(id) {
@@ -4740,7 +4740,7 @@ $('#rg-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[
 const regToAp = rg => ({ hn: rg.hn, name: regName(rg), doc: rg.doc, icd: rg.icd, dx: rg.dx,
   order: JSON.stringify(Object.fromEntries([['age', ageOn(rg.birth)], ['sex', rg.sex]].filter(([, v]) => v))) });
 function apFromReg(rg, force) {
-  $('#a-hn').value = rg.hn;
+  $('#a-hn').value = rg.hn;   // ยังไม่มี HN: ช่อง HN ว่างให้กรอก
   const put = (el, v) => { if (v && (force || !str(el.value))) el.value = v; };
   put($('#a-name'), regName(rg));
   const age = ageOn(rg.birth, $('#a-date').value);
@@ -4748,11 +4748,11 @@ function apFromReg(rg, force) {
   if (rg.sex && (force || !chipValue($('#a-sex')))) ctChips('#a-sex', 'asex', state.config.order.genders, rg.sex);
   if (rg.doc && !chipValue($('#a-doc'))) { ctChips('#a-doc', 'adoc', docCodes(), rg.doc); $$('#a-doc label').forEach(l => { const v = $('input', l).value; if (docName(v)) l.title = docName(v); }); }
   if ((rg.icd || rg.dx) && !str($('#a-dx').value)) $('#a-dx').value = dxValue(rg);
-  apRegNote();
+  apRegNote(rg);
 }
 // บรรทัดใต้ HN: ผู้ป่วยที่ลงทะเบียนไว้ (ชื่อ อายุ เพศ)
-function apRegNote() {
-  const rg = regByHn($('#a-hn').value), el = $('#a-reg');
+function apRegNote(picked) {
+  const rg = regByHn($('#a-hn').value) || (picked && !picked.hn ? picked : null), el = $('#a-reg');
   el.hidden = !rg;
   if (rg) { const age = ageOn(rg.birth, $('#a-date').value); el.textContent = `ลงทะเบียนแล้ว: ${regName(rg)}${age ? ` · อายุ ${age} ปี` : ''}${rg.sex ? ` · ${rg.sex}` : ''}`; }
 }
@@ -4760,8 +4760,8 @@ function apRegNote() {
 function regSearch(q) {
   const k = hnKey(q), words = str(q).toLowerCase().split(/\s+/).filter(Boolean);
   if (!k) return [];
-  const byHn = state.reg.filter(r => hnKey(r.hn).startsWith(k));
-  const byName = state.reg.filter(r => !byHn.includes(r) && words.every(w => `${regName(r)} ${r.first} ${r.last}`.toLowerCase().includes(w)));
+  const byHn = state.reg.filter(r => r.hn && hnKey(r.hn).startsWith(k));
+  const byName = state.reg.filter(r => !byHn.includes(r) && words.every(w => `${regName(r)} ${r.name}`.toLowerCase().includes(w)));
   return [...byHn, ...byName].slice(0, 8);
 }
 function setupRegCombo() {
@@ -4771,7 +4771,7 @@ function setupRegCombo() {
   const draw = () => {
     items = regSearch(input.value);
     if (!items.length || (items.length === 1 && hnKey(items[0].hn) === hnKey(input.value))) return close();
-    list.innerHTML = items.map((r, i) => { const age = ageOn(r.birth); return `<li role="option" id="a-hn-o${i}" data-i="${i}" aria-selected="${i === active}"><span class="code">${esc(r.hn)}</span><span>${esc(regName(r))}${age || r.sex ? `<small>${esc([age && `อายุ ${age} ปี`, r.sex].filter(Boolean).join(' · '))}</small>` : ''}</span></li>`; }).join('');
+    list.innerHTML = items.map((r, i) => { const age = ageOn(r.birth); return `<li role="option" id="a-hn-o${i}" data-i="${i}" aria-selected="${i === active}"><span class="code">${esc(r.hn || 'ไม่มี HN')}</span><span>${esc(regName(r))}${age || r.sex ? `<small>${esc([age && `อายุ ${age} ปี`, r.sex].filter(Boolean).join(' · '))}</small>` : ''}</span></li>`; }).join('');
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
     input.setAttribute('aria-activedescendant', active >= 0 ? `a-hn-o${active}` : '');
@@ -8186,11 +8186,11 @@ function renderSettings() {
       <p class="muted def-note" style="margin:0 0 10px">HN และเทคนิคบังคับกรอกเสมอ · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ไข · ต้องมี Start RT และ Fx จึงคำนวณวันฉายได้</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${PT_FIELDS.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ptForm.${k}" aria-label="${esc(l)} ในฟอร์มเพิ่มผู้ป่วย">${PT_OPTS.map(([v, t]) => opt(v, t, d.ptForm[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="reg"><div class="sec-head"><h2>ลงทะเบียน (แถบ ${esc(navLabel('reg'))})</h2><p>ตัวเลือกคำนำหน้าและสิทธิการรักษา และช่องในฟอร์มลงทะเบียน · แถบลงนัดดึงข้อมูลผู้ป่วยไปใช้: พิมพ์ HN หรือชื่อในช่อง HN ของฟอร์มลงนัด หรือกดปุ่ม "+ ลงนัด" ในแถบลงทะเบียน (ชื่อ อายุ เพศ แพทย์ Diag) · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู (ยังไม่ตั้ง = เท่าแถบลงนัด)</p></div>
-      ${regOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.1 ขึ้นไป</span></p>'}
+      ${regOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป</span></p>'}
       <div class="form-grid" style="margin-bottom:12px">${REG_LISTS.map(([k, l]) => optEditor('reg.' + k, l)).join('')}</div>
       <h3 class="sub-h">ฟอร์มลงทะเบียน</h3>
-      <p class="muted def-note" style="margin:0 0 10px">HN คำนำหน้า ชื่อ สกุล บังคับกรอกเสมอ · HN ซ้ำกับผู้ป่วยที่ลงทะเบียนแล้วไม่ได้ · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · เพศเลือกให้จากคำนำหน้า (นาย, ด.ช. · นาง, นางสาว, ด.ญ.) ตัวเลือกของเพศ = Gender ใน ตัวเลือกในใบสั่ง CT Simulation (ด้านล่าง)</p>
-      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${REG_FORM.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="reg.form.${k}" aria-label="${esc(l)} ในฟอร์มลงทะเบียน">${PT_OPTS.map(([v, t]) => opt(v, t, d.reg.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
+      <p class="muted def-note" style="margin:0 0 10px">HN คำนำหน้า ชื่อ-สกุล เริ่มต้นบังคับกรอก (HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมีอย่างน้อยหนึ่งช่อง) · HN ซ้ำกับผู้ป่วยที่ลงทะเบียนแล้วไม่ได้ (ไม่กรอก HN ไม่ตรวจซ้ำ) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · เพศเลือกให้จากคำนำหน้า (นาย, ด.ช. · นาง, นางสาว, ด.ญ.) ตัวเลือกของเพศ = Gender ใน ตัวเลือกในใบสั่ง CT Simulation (ด้านล่าง)</p>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${REG_FORM.map(([k, l, , keep]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="reg.form.${k}" aria-label="${esc(l)} ในฟอร์มลงทะเบียน">${PT_OPTS.filter(([v]) => !keep || v !== 'off').map(([v, t]) => opt(v, t, d.reg.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="appt"><div class="sec-head"><h2>ลงนัด (แถบ ${esc(navLabel('appt'))})</h2><p>ตัวเลือกของช่อง CT และเทคนิคพิเศษ ช่องในฟอร์มลงนัด และตัวเลือกของใบสั่ง CT Simulation · ข้อมูลนัดใส่ลงใบสั่ง CT Simulation (PDF หน้าตาตามไฟล์ CT Simulation Order Form version2) ให้เอง: ปุ่ม ใบสั่ง PDF ในฟอร์ม และปุ่ม PDF ในตาราง · เทคนิคพิเศษเป็นสีแดงในแถบลงนัด และปฏิทิน Start RT นับแยกเป็น เทคนิคพิเศษ/เทคนิคอื่นๆ (เคสและรายการ CT ดูจาก Technique, Note และนัดที่ผูกกัน) · นัดที่ยังไม่ลง CT-SIM รอในแถบ ${esc(navLabel('ctsim'))} (ปุ่ม "นัดรอลง CT") · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู</p></div>
       ${apptOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป</span></p>'}
       ${apptOn() && !orderOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>Draw area ช่องของใบสั่ง และนัด CT แบบ on call บันทึกได้เมื่อใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป</span></p>' : ''}
