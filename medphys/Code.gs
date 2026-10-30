@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-29.1';
-const API_LEVEL = 38;
+const CODE_VERSION = '2026-10-30.1';
+const API_LEVEL = 39;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -102,6 +102,15 @@ const TABLES = {
       ['dpf', 'Dose/fx (Gy)'], ['fx', 'Fx'], ['rx', 'Prescription (Gy)'], ['freq', 'ความถี่'], ['sim', 'Start RT'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['extra', 'หัวข้อเพิ่มเติม'],
       ['send', 'ส่งแถบงาน'], ['took', 'แจกเคสแล้ว (id)'], ['tookBy', 'แจกเคสโดย'], ['tookAt', 'แจกเคสเมื่อ'],
       ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ],
+  },
+  // แถบลงทะเบียน: ผู้ป่วยที่ลงทะเบียน (HN ไม่ซ้ำ · คำนำหน้า ชื่อ สกุล บังคับ) · birth = วันเกิด (YYYY-MM-DD) · sex = เพศ (ตัวเลือก Gender ของใบสั่ง)
+  // แถบลงนัดดึงไปใช้ (ชื่อ อายุ เพศ แพทย์ Diag) · เขียนผ่าน regSave / regRemove เท่านั้น
+  reg: {
+    sheet: 'Registry',
+    fields: [
+      ['id', 'id'], ['hn', 'HN'], ['title', 'คำนำหน้า'], ['first', 'ชื่อ'], ['last', 'สกุล'], ['sex', 'เพศ'], ['birth', 'วันเกิด'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'],
+      ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
   // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
@@ -280,6 +289,7 @@ function getData(token) {
     duty: need.duty ? recentDuty_(ss) : [],
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
+    reg: need.reg ? readTable_(ss, 'reg') : [],
     jobs: need.jobs ? jobsFor_(ss, user) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
@@ -291,11 +301,12 @@ function getData(token) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงนัด = สิทธิ์เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน)
+// แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดดึงข้อมูลผู้ป่วยที่ลงทะเบียน
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course'], jobs: ['jobs'] };
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -320,10 +331,10 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -1300,6 +1311,48 @@ function recentCt_(ss) {
 }
 
 /**
+ * แถบลงทะเบียน: เพิ่มหรือแก้ผู้ป่วย ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงทะเบียน)
+ * rec = ช่องใน REG_FIELDS · HN คำนำหน้า ชื่อ สกุล บังคับ · HN ซ้ำกับผู้ป่วยคนอื่นไม่ได้ (ไม่สนช่องว่างและตัวพิมพ์) · id ที่ยังไม่มี = เพิ่มใหม่ · คืนรายการหลังบันทึก
+ */
+const REG_FIELDS = ['hn', 'title', 'first', 'last', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note'];
+const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase();
+function regSave(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.reg);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const miss = [['hn', 'HN'], ['title', 'คำนำหน้า'], ['first', 'ชื่อ'], ['last', 'สกุล']].filter(f => !cut(rec[f[0]], 200)).map(f => f[1]);
+  if (miss.length) throw new Error('กรอก ' + miss.join(' '));
+  const birth = cut(rec.birth, 10);
+  if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) throw new Error('วันเกิดไม่ถูกต้อง');
+  checkPin_(u, pin, 'reg');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
+    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const dup = readTable_(ss, 'reg').filter(x => hnKey_(x.hn) === hnKey_(cut(rec.hn, 40)) && (!row || x.id !== id))[0];
+    if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + [dup.title + dup.first, dup.last].join(' ').trim() + ')');
+    const set = {};
+    REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
+    const now = new Date().toISOString();
+    if (row) set.updated = now;
+    else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
+    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.reg.fields.filter(f => f[0] in set), set);
+    const want = row ? id : set.id;
+    return readTable_(ss, 'reg').filter(x => x.id === want)[0];
+  });
+}
+
+// ลบผู้ป่วยในแถบลงทะเบียน ยืนยันด้วยรหัส PIN (นัดของผู้ป่วยไม่ถูกลบ) · คืน true เมื่อลบแล้ว
+function regRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.reg);
+  checkPin_(u, pin, 'reg');
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'reg'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+
+/**
  * แถบลงนัด: เพิ่มหรือแก้นัดทำ CT-Sim ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: ลงนัด)
  * rec = ช่องใน APPT_FIELDS (date = วันนัด CT-Sim หรือ 'on call', cm = CM / Non-CM, special = เทคนิคพิเศษ, dpf/fx/rx/freq = Prescription, sim = Start RT,
  *   order = ใบสั่ง CT Sim ส่วนที่เหลือ เป็น JSON: อายุ เพศ Examination Part ท่า Contrast Lab Immobilization ขอบเขตการสแกน)
@@ -1919,7 +1972,7 @@ function pinRecord_(u) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
-// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
+// act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct, appt, jobs, reg) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
 // (ยังรู้ว่าใครทำจากบัญชีที่เข้าระบบ) · ไม่ระบุ act = ตรวจเสมอ
 function checkPin_(u, pin, act) {
   if (act) { const cfg = readConfig_(ss_()) || {}; if (cfg.pin && cfg.pin[act] === false) return; }
