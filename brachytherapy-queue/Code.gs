@@ -8,7 +8,7 @@
  *   นัดอยู่ในแท็บ BrachyQueue ใช้ร่วมกับแถบ "นัดคิวใส่แร่" ของระบบนั้น (คอลัมน์ Calendar Event ID เป็นของระบบนี้)
  *   แพทย์ ทีมนักฟิสิกส์ รูปแบบการใส่ วันหยุด จำนวนเคสสูงสุด และสิทธิ์ลงชื่อ MP / RC อ่านจากแท็บ Config ของระบบนั้น
  *   การตั้งค่าปฏิทินของระบบนี้อยู่ในแท็บ BQ Settings · บันทึกการใช้งานอยู่ในแท็บ BQ Log
- *   ย้ายข้อมูลจากชีตเดิม: รันฟังก์ชัน migrateFromOldSheet หนึ่งครั้ง (รันซ้ำได้ ไม่เพิ่มซ้ำ)
+ *   ย้ายเคสจากชีตเดิม: ทำให้เองครั้งแรกที่เปิดเว็บหลังอัปเดต (หรือรัน migrateFromOldSheet เอง · รันซ้ำได้ ไม่เพิ่มซ้ำ)
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
  * - เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace (WORKSPACE_URL) ระบบนี้ไม่เก็บรหัสผ่านเอง
  *   สมัครสมาชิก อนุมัติ ระงับ และลืมรหัสผ่าน ทำที่ Workspace ทั้งหมด
@@ -171,6 +171,7 @@ function doGet(e) {
     return errorPage_('เปิด Google Sheet ของระบบไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบ',
       'Could not open the system\'s Google Sheet. Please contact the administrator.', String(err && err.message || err));
   }
+  autoMigrate_();
   let html = HtmlService.createHtmlOutputFromFile('Index').getContent();
   // เปิดจากปุ่มใน LPCH RO Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ" (?sso=บัตรผ่าน): แลกบัตรที่เซิร์ฟเวอร์ก่อนส่งหน้าเว็บ
   // แล้วส่ง token (หรือข้อความ error) ไปกับหน้าเว็บใน window.BQ_SSO (แบบเดียวกับแอป TRS-398)
@@ -212,8 +213,12 @@ function showDialog() {
 function setup() {
   ensureSetup_();
   authSecret_(); // สร้างกุญแจลงชื่อ token ไว้ล่วงหน้า
+  autoMigrate_();
   const ss = ss_();
   const conf = conf_(true);
+  const props = PropertiesService.getScriptProperties();
+  const migMsg = props.getProperty('MIGRATED_FROM') ? 'ย้ายเคสจากชีตเดิมแล้ว: ' + props.getProperty('MIGRATED_FROM')
+    : '⚠️ ยังย้ายเคสจากชีตเดิมไม่ได้: ' + (props.getProperty('MIGRATE_ERROR') || '-');
   const dataMsg = 'ชีตข้อมูล: ' + ss.getName() + ' · นัดในแท็บ ' + SHEET_BQ + ' ' + listAppointments_().length + ' รายการ';
   // ทดสอบปฏิทิน (และติดตามปฏิทินที่แชร์มาให้) แล้วแสดงผลใน "บันทึกการดำเนินการ"
   let calMsg;
@@ -235,9 +240,9 @@ function setup() {
   const docMsg = 'แพทย์: ' + (conf.doctors.map(x => x.code + (x.name ? ' ' + x.name : '')).join(', ') || '⚠️ ไม่พบ');
   const bqMsg = 'จำนวนเคสสูงสุด/วัน ' + conf.bq.max + ' · รูปแบบการใส่ ' + conf.bq.techs.join(', ') + ' · ลงชื่อ MP / RC: ' + (conf.bq.signRoles.join(', ') || '-') +
     ' · วันหยุด ' + conf.holidays.length + ' วัน';
-  [ 'สคริปต์รันในนาม: ' + scriptOwner_(), dataMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg ].forEach(m => console.log(m));
+  [ 'สคริปต์รันในนาม: ' + scriptOwner_(), dataMsg, migMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg ].forEach(m => console.log(m));
   try {
-    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย\n' + [dataMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg].join('\n') +
+    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย\n' + [dataMsg, migMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg].join('\n') +
       '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
 }
@@ -250,9 +255,10 @@ function setup() {
  * - Settings: ค่าปฏิทิน → BQ Settings · จำนวนเคสสูงสุด / สิทธิ์ MP RC → Config bq (เฉพาะเมื่อยังไม่มี)
  * - Holidays → Config holidays (เพิ่มเฉพาะวันที่ยังไม่มี) · AccessLog → BQ Log (ครั้งแรกเท่านั้น)
  */
-function migrateFromOldSheet() {
+function migrateFromOldSheet(auto) {
   ensureSetup_();
   const props = PropertiesService.getScriptProperties();
+  auto = auto === true;
   const rawId = String(props.getProperty('OLD_SHEET_ID') || OLD_SHEET_ID || '').trim();
   const oldId = (rawId.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || rawId;
   const ss = ss_();
@@ -260,8 +266,10 @@ function migrateFromOldSheet() {
   const old = SpreadsheetApp.openById(oldId);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error(msg_('th', 'busy'));
-  const report = ['ย้ายจาก "' + old.getName() + '" → "' + ss.getName() + '"'];
+  const report = ['ย้ายจาก "' + old.getName() + '" → "' + ss.getName() + '"' + (auto ? ' (อัตโนมัติ)' : '')];
   try {
+    // ย้ายอัตโนมัติ: คนอื่นเพิ่งย้ายเสร็จระหว่างรอล็อก = ไม่ต้องทำซ้ำ
+    if (auto && props.getProperty('MIGRATED_FROM')) return '';
     const conf = conf_(true), raw = readConfigRaw_();
     const strip = v => String(v || '').replace(/^(นพ\.|พญ\.|นาย|นางสาว|นาง|น\.ส\.|ดร\.)\s*/, '').replace(/\s+/g, '').toLowerCase();
     const docOf = v => {
@@ -390,6 +398,23 @@ function migrateFromOldSheet() {
   report.forEach(m => console.log(m));
   try { SpreadsheetApp.getUi().alert('ย้ายข้อมูลแล้ว\n' + report.join('\n')); } catch (e) { /* รันจาก editor ไม่มี UI */ }
   return report.join('\n');
+}
+
+/**
+ * ย้ายเคสจากชีตเดิมให้เองครั้งแรกที่เปิดเว็บหลังอัปเดต (ยังไม่เคยย้าย = ยังไม่มี Script property MIGRATED_FROM)
+ * ย้ายไม่สำเร็จ (เช่น เปิดชีตเดิมไม่ได้) ไม่ขวางการเปิดหน้า: เก็บสาเหตุไว้ใน MIGRATE_ERROR แล้วลองใหม่ครั้งถัดไป
+ * ปิดการย้ายอัตโนมัติ: ตั้ง Script property AUTO_MIGRATE = off
+ */
+function autoMigrate_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MIGRATED_FROM') || String(props.getProperty('AUTO_MIGRATE') || '').toLowerCase() === 'off') return;
+  try {
+    migrateFromOldSheet(true);
+    props.deleteProperty('MIGRATE_ERROR');
+  } catch (e) {
+    props.setProperty('MIGRATE_ERROR', nowStr_() + ' · ' + e.message);
+    console.warn('autoMigrate_: ' + e.message);
+  }
 }
 
 /**
