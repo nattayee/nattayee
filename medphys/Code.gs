@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.6';
+const CODE_VERSION = '2026-11-01.7';
 const API_LEVEL = 44;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1330,11 +1330,9 @@ const BQ_BOOKED = 'นัดแล้ว';
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc'];
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-// ลงชื่อ MP / RC ได้: ตำแหน่ง (config.bq.signRoles · ยังไม่ตั้ง = MP) หรือชื่อผู้ใช้ใน config.bq.signUsers · บัญชี Google (เปิดจากชีต) ได้เสมอ
-function bqCanSign_(u, cfg) {
-  if (u.via === 'google') return true;
-  const b = (cfg && cfg.bq) || {}, roles = Array.isArray(b.signRoles) ? b.signRoles : ['MP'], users = Array.isArray(b.signUsers) ? b.signUsers : [];
-  return roles.some(r => String(r).toLowerCase() === String(u.role || '').toLowerCase()) || users.map(x => String(x).toLowerCase()).indexOf(String(u.username || '').toLowerCase()) >= 0;
+// ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
+function bqCanSign_(u) {
+  return !!u && (u.via === 'google' || String(u.role || '').toUpperCase() === 'MP');
 }
 // เขียนหลายแถวต่อท้ายชีตในครั้งเดียว (ข้อความล้วน)
 function bqAppend_(sh, header, recs) {
@@ -1381,7 +1379,7 @@ function bqEdit(id, ch, pin, token) {
     const cur = readTable_(ss, 'bq').filter(x => x.id === id)[0];
     const diff = Object.keys(set).filter(k => String(cur[k] || '') !== set[k]);
     if (!diff.length) return cur;
-    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะตำแหน่งที่ตั้งไว้ (ตั้งค่า → นัดคิวใส่แร่)');
+    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP');
     const mp = 'mp' in set ? set.mp : cur.mp, rc = 'rc' in set ? set.rc : cur.rc;
     if (rc && rc === mp) throw new Error('RC ต้องไม่ใช่คนเดียวกับ MP');
     const out = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, diff.map(k => ({ f: k, from: String(cur[k] || ''), to: set[k] }))) };
@@ -1403,7 +1401,7 @@ function bqEditDay(ids, ch, pin, token) {
   ids = (Array.isArray(ids) ? ids : []).map(String).slice(0, 60);
   if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
   const cfg = readConfig_(ss_()) || {};
-  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะตำแหน่งที่ตั้งไว้ (ตั้งค่า → นัดคิวใส่แร่)');
+  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP');
   checkPin_(u, pin, 'bq');
   const out = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), recs = [];

@@ -3205,7 +3205,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.9';
+const PAGE_VERSION = '2026-11-01.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5435,12 +5435,9 @@ function bqRttChips(id, name, v) {
   if (!dutyDir.loaded) { const p = loadDutyDir(); if (p) p.then(() => { if ($(id).isConnected) draw(); }); }
 }
 const bqRttVal = (box, other) => str($(other).value) || chipValue($(box));
-// ลงชื่อ MP / RC ได้: ตำแหน่ง / ชื่อผู้ใช้ใน ตั้งค่า → นัดคิวใส่แร่ · บัญชี Google และโหมดตัวอย่างได้เสมอ (ตรงกับ bqCanSign_ ใน Code.gs)
-function bqCanSign() {
-  const u = state.user || {}, b = state.config.bq;
-  if (u.via === 'google' || store.mode === 'local') return true;
-  return b.signRoles.some(r => r.toLowerCase() === str(u.role).toLowerCase()) || b.signUsers.includes(str(u.username).toLowerCase());
-}
+// ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตรงกับ bqCanSign_ ใน Code.gs) · รายชื่อให้เลือก = ทีมนักฟิสิกส์ (MP) ที่ปฏิบัติงาน
+const BQ_SIGN_MSG = 'ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP';
+function bqCanSign() { const u = state.user || {}; return u.via === 'google' || str(u.role).toUpperCase() === 'MP'; }
 function bqMerge(recs) {
   for (const r of recs) { const i = state.bq.findIndex(x => x.id === r.id); if (i < 0) state.bq.push(r); else state.bq[i] = r; }
   bqVer++;
@@ -5877,7 +5874,7 @@ function openBqEdit(id, focus) {
   const sign = bqCanSign();
   $$('#e-mp input, #e-rc input').forEach(i => { i.disabled = !sign; });
   $('#e-sign-note').hidden = sign;
-  $('#e-sign-note').textContent = sign ? '' : `ลงชื่อ MP / RC ได้เฉพาะตำแหน่ง ${state.config.bq.signRoles.join(', ') || '—'} (ตั้งค่า → นัดคิวใส่แร่)`;
+  $('#e-sign-note').textContent = sign ? '' : BQ_SIGN_MSG;
   let hist = [];
   try { hist = JSON.parse(a.hist || '[]'); } catch (e) { hist = []; }
   $('#e-hist-box').hidden = !Array.isArray(hist) || !hist.length;
@@ -5916,7 +5913,7 @@ function openBqSet(ids, k, date) {
   if (accessOf('bq') !== 'edit') return toast(RO_MSG, { err: true });
   if (!bqOn()) return toast(BQ_OLD, { err: true });
   if (k === 'rtt' && !bqRttOn()) return toast(bqRttOld(), { err: true });
-  if (k !== 'rtt' && !bqCanSign()) return toast(`ลงชื่อ MP / RC ได้เฉพาะตำแหน่ง ${state.config.bq.signRoles.join(', ') || '—'} (ตั้งค่า → นัดคิวใส่แร่)`, { err: true });
+  if (k !== 'rtt' && !bqCanSign()) return toast(BQ_SIGN_MSG, { err: true });
   const rows = ids.map(id => state.bq.find(a => a.id === id)).filter(Boolean);
   if (!rows.length) return;
   const day = rows.length > 1 || !!date, cur = bqDayVal(rows, k), me = myCrew(), self = myStaff();
@@ -9511,9 +9508,7 @@ function renderSettings() {
         <label class="field"><span class="lbl">RTT เริ่มต้น <span class="sub-lbl">ใส่ให้นัดใหม่ (แก้ในฟอร์มได้) · ปุ่ม + RTT เลือกคนนี้ไว้ก่อน · ว่าง = ไม่ใส่</span></span><input data-k="bq.rtt" list="bq-rtt-names" maxlength="60" value="${esc(d.bq.rtt)}" placeholder="ชื่อ RTT" autocomplete="off"><datalist id="bq-rtt-names">${bqRttNames().map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>
         <label class="field"><span class="lbl">วันนัดใส่แร่ในแถบ${esc(navLabel('course'))} <span class="sub-lbl">HN ตรงกับผู้ป่วยในตารางวันฉาย = วันนั้นไม่ฉาย เลื่อนไปวันทำการถัดไปอัตโนมัติ · บันทึกสถานะเองในวันนั้น = ใช้ที่บันทึก</span></span><select data-k="bq.hold">${opt('auto', `สถานะ ${bqHoldType('auto').label} อัตโนมัติ`, d.bq.hold)}${(d.fxTypes || []).filter(t => t.act === 'skip').map(t => opt(t.id, `สถานะ ${t.label}`, d.bq.hold)).join('')}${opt('off', 'ไม่ใช้ (ฉายตามตาราง)', d.bq.hold)}</select></label>
       </div>
-      <div class="field" style="margin-bottom:12px"><span class="lbl">ลงชื่อ MP / RC ได้ <span class="sub-lbl">ตำแหน่งใน LPCH หรือชื่อผู้ใช้ LPCH · บัญชี Google ของเจ้าของชีตได้เสมอ</span></span>
-        <div class="duty-roles">${[...new Set([...d.roles, ...d.bq.signRoles])].map(r => `<label class="check"><input type="checkbox" data-bqroles="1" value="${esc(r)}"${d.bq.signRoles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>
-        <input data-bqusers="1" value="${esc(d.bq.signUsers.join(', '))}" placeholder="ชื่อผู้ใช้ LPCH เพิ่มเติม คั่นด้วยจุลภาค" autocomplete="off" spellcheck="false" aria-label="ชื่อผู้ใช้ LPCH ที่ลงชื่อ MP / RC ได้"></div>
+      <p class="muted def-note" style="margin:0 0 12px">ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
       <h3 class="sub-h">นำเข้านัดจากระบบนัดคิวใส่แร่เดิม</h3>
       <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · กด ตรวจก่อนนำเข้า (ยังไม่เขียนอะไร) ดูจำนวนนัดและคอลัมน์ แล้วกด นำเข้า · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
       ${store.mode === 'sheet' && !bqImpOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การนำเข้าต้องใช้ Code.gs รุ่น 2026-11-01.1 ขึ้นไป (ตรวจก่อนนำเข้า และอ่านคอลัมน์ เลขนัด, Fraction ที่, จำนวน Fraction ของระบบเดิม)</span></p>' : ''}
