@@ -1575,6 +1575,11 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .fxc.ev.auto{outline:1.5px dashed currentColor;outline-offset:-4px}
 .fx-auto{display:inline-block;margin-top:4px;color:var(--muted)}
 #bq-link .btn{margin-left:8px}
+/* สมาชิก LPCH: เชื่อมกับรายชื่อของระบบนี้แล้ว (ป้ายใต้ชื่อ) · ยังไม่อยู่ในรายชื่อ = จาง */
+.mem-u{display:inline-flex;flex-direction:column;line-height:1.25}
+.mem-u small{font-size:11px;color:var(--accent)}
+.mem-u.nolink{color:var(--muted)}
+.crew-row .name{flex:1 1 220px}
 </style>
 </head>
 <body>
@@ -2604,6 +2609,9 @@ const DEFAULT_CONFIG = {
     { code: 'NY', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] },
     { code: 'WS', name: '', active: true, roles: [{ from: '2000-01', role: 'staff' }] },
   ],
+  // RTT, RA และบุคลากรอื่นที่ไม่ใช่ MP / แพทย์ (ตั้งค่า → RTT, RA และบุคลากรอื่น): ชื่อ ตำแหน่ง (ตำแหน่งใน LPCH) บัญชี LPCH อีเมล ปฏิบัติงาน
+  // ใช้ทุกแถบ: ผู้ปฏิบัติงานประจำวัน (ห้องฉาย, CT-SIM) · RTT/RA Jobs · RTT ของนัดใส่แร่ · ผู้ใช้ที่เข้าสู่ระบบ ↔ ชื่อในรายการ
+  crew: [],
   doctors: ['SC', 'TA', 'PM', 'TC', 'VS'].map(code => ({ code, name: '', color: DOC_COLORS[code] || '' })), // รหัสแพทย์ + ชื่อ-สกุล (ไม่บังคับ) + สี
   types: ['New', 'Adap', 'Emer high', 'Emer low', 'ย้าย', 'เพิ่ม F.S.', 'Replan', 'CP'],
   aims: ['Curative', 'Palliative', 'On tx'],
@@ -2933,6 +2941,9 @@ function mergeConfig(c) {
   // แพทย์: ค่าเก่าเป็นรายการรหัสล้วน ['SC', ...] แปลงเป็น { code, name }
   // สีแพทย์: ยังไม่เคยตั้ง (ไม่มีช่อง color) = สีเริ่มต้นตามรหัส · ตั้งเป็นไม่มีสี ('') แล้วคงไว้
   const docColor = (code, x) => (x && typeof x === 'object' && x.color !== undefined ? hexOf(x.color) : DOC_COLORS[code] || '');
+  const seenCrew = new Set();
+  out.crew = (Array.isArray(c.crew) ? c.crew : []).filter(x => x && typeof x === 'object').map(x => ({ name: str(x.name).replace(/\s+/g, ' ').trim().slice(0, 120), role: ROLE_RE.test(str(x.role)) ? str(x.role) : '', active: x.active !== false, ...acctOf(x) }))
+    .filter(x => (x.name || x.user) && !(x.user && seenCrew.has(x.user)) && (!x.user || seenCrew.add(x.user)));
   if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => { const code = str(x && typeof x === 'object' ? x.code : x).toUpperCase(); return { code, name: x && typeof x === 'object' ? str(x.name) : '', color: docColor(code, x), ...acctOf(x) }; }).filter(x => x.code);
   const moved = {}; // ค่าที่เคยตั้งให้เทคนิค Brachy/Hyperthermia ใช้ต่อเป็นค่าของกิจกรรม
   if (Array.isArray(c.cats)) c.cats.forEach(x => { if (x && MOVED_CATS.includes(x.id)) moved[x.id] = { label: x.label, group: x.group, min: x.min, w: x.w }; });
@@ -3124,7 +3135,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.4';
+const PAGE_VERSION = '2026-11-01.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4068,7 +4079,7 @@ function renderAcct() {
   const roleTag = () => `${u.role || '—'}${u.isAdmin ? ' · แอดมิน' : anyEdit() ? '' : ' · ดูอย่างเดียว'}`;
   // กดชื่อผู้ใช้ = ตั้งหรือเปลี่ยนรหัส PIN ของตัวเอง (ใช้ยืนยันตอนกดปุ่มบันทึกขั้นตอน)
   if (stampsOn() && (state.loaded || store.mode === 'local')) chip = (name, tag, title) => `<button type="button" class="who" id="pin-btn" title="${esc(title)} · กดเพื่อ${u.hasPin ? 'เปลี่ยน' : 'ตั้ง'}รหัส PIN">${USER_SVG}<span class="nm">${esc(name)}</span><span class="chip">${esc(tag)}</span>${u.hasPin || !u.canEdit ? '' : '<span class="pin-badge">ตั้ง PIN</span>'}</button>`;
-  if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
+  if (!gated && u.via === 'lpch') who = chip(u.name, roleTag(), `เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace: ${u.username} · ${meLinkText() ? `เชื่อมกับ ${meLinkText()} (ตั้งค่า)` : 'ยังไม่เชื่อมกับรายชื่อใน ตั้งค่า'}`) + `<button type="button" class="logout-btn" id="logout" title="ออกจากระบบ ${esc(u.username)}">${LOGOUT_SVG}<span>ออกจากระบบ</span></button>`;
   else if (!gated && store.mode === 'sheet' && !state.loaded) who = chip(state.error ? 'เชื่อมต่อไม่สำเร็จ' : 'กำลังตรวจสอบผู้ใช้…', state.error ? 'ดูแถบสีแดง' : 'รอสักครู่', 'ยังไม่ทราบผู้ใช้');
   else if (!gated && oldServer()) who = chip('ยังไม่เชื่อม LPCH', 'Code.gs รุ่นเก่า', 'ลิงก์นี้ยังเปิด Code.gs รุ่นเก่า');
   else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
@@ -4644,13 +4655,33 @@ function renderAppt() {
 }
 
 // แพทย์ที่เป็นผู้ใช้ที่เข้าระบบอยู่ (ตั้งค่า → แพทย์): บัญชี LPCH ที่เชื่อมไว้ → อีเมล → ชื่อ-สกุลตรงกันคนเดียว (แพทย์ที่ยังไม่เชื่อมบัญชี · ไม่สนคำนำหน้า) · ไม่ใช่แพทย์ = ''
-function myDoctor() {
-  const u = state.user || {}, docs = state.config.doctors, low = v => str(v).trim().toLowerCase(), user = low(u.username), mail = low(u.me);
-  const d = (user && docs.find(x => low(x.user) === user)) || (mail && docs.find(x => low(x.email) === mail));
-  if (d) return d.code;
-  const byName = u.via === 'lpch' && str(u.name) ? docs.filter(x => !x.user && str(x.name) && nameKey(x.name) === nameKey(u.name)) : [];
-  return byName.length === 1 ? byName[0].code : '';
+// ผู้ใช้ที่เข้าสู่ระบบ ↔ รายชื่อในตั้งค่า (staff = MP · doctors = แพทย์ · crew = RTT, RA และบุคลากรอื่น) ใช้ทุกแถบ:
+// บัญชี LPCH ที่เชื่อมไว้ → อีเมล → ชื่อ-สกุลตรงกันคนเดียว (ที่ยังไม่เชื่อมบัญชี)
+function linkOf(list, u = state.user || {}) {
+  const xs = (state.config && state.config[list]) || [], low = v => str(v).trim().toLowerCase(), user = low(u.username), mail = low(u.me);
+  const hit = (user && xs.find(x => low(x.user) === user)) || (mail && xs.find(x => low(x.email) === mail));
+  if (hit) return hit;
+  const byName = u.via === 'lpch' && str(u.name) ? xs.filter(x => !x.user && str(x.name) && nameKey(x.name) === nameKey(u.name)) : [];
+  return byName.length === 1 ? byName[0] : null;
 }
+function myDoctor() { const d = linkOf('doctors'); return d ? d.code : ''; }
+// หัวเว็บ: ผู้ใช้ที่เข้าสู่ระบบเชื่อมกับรายชื่อไหน
+const meLinkText = () => { const s = myStaff(), d = myDoctor(), c = myCrew(); return [s && `MP ${s}`, d && `แพทย์ ${d}`, c && `${c.role || 'รายชื่อ'} ${c.name}`].filter(Boolean).join(' · '); };
+function myStaff() { const x = linkOf('staff'); return x ? x.code : ''; }
+const myCrew = () => linkOf('crew');
+// กลุ่มในผู้ปฏิบัติงานประจำวันของตำแหน่ง (ตั้งค่า → ตารางวันฉาย): rtt · ra · '' = ไม่อยู่ในกลุ่ม
+const crewGroup = role => (state.config.dutyRoles.rtt.includes(role) ? 'rtt' : state.config.dutyRoles.ra.includes(role) ? 'ra' : '');
+// รายชื่อ RTT / RA ที่เลือกได้ทุกแถบ (ผู้ปฏิบัติงานประจำวัน · RTT/RA Jobs · RTT ของนัดใส่แร่): ตั้งค่า → RTT, RA และบุคลากรอื่น (ปฏิบัติงาน) ก่อน
+// แล้วสมาชิก LPCH ตามตำแหน่งที่ยังไม่อยู่ในรายการ · g = rtt | ra | qc (Daily QC เลือกจาก RTT)
+function crewNames(g) {
+  const grp = g === 'qc' ? 'rtt' : g, list = state.config.crew || [];
+  const mine = list.filter(x => x.active && x.name && crewGroup(x.role) === grp).map(x => x.name);
+  const users = new Set(list.map(x => x.user).filter(Boolean)), keys = new Set(list.map(x => nameKey(x.name)).filter(Boolean));
+  const live = dutyDir.who.filter(x => x.group === grp && !users.has(x.user) && !keys.has(nameKey(x.name))).map(x => x.name);
+  return [...new Set([...mine, ...live])];
+}
+// ชื่อที่ตั้งไม่ปฏิบัติงาน: ไม่เสนอให้เลือก (ที่บันทึกไว้แล้วยังแสดง)
+const crewOff = () => new Set((state.config.crew || []).filter(x => !x.active).map(x => nameKey(x.name)));
 // ฟอร์มลงนัด (ช่องตาม ตั้งค่า → ลงนัด) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ลงนัดใหม่: แพทย์เริ่มที่ผู้ใช้ที่เข้าระบบ (ถ้าเป็นแพทย์และช่องแพทย์แสดงอยู่)
 // ข้อมูลนัดใส่ลงใบสั่ง CT Simulation (PDF) ให้เอง · Draw area และช่องของใบสั่งที่นัดไม่มี (อายุ เพศ IV Examination Part ท่า Immobilization Lab) เก็บเป็น JSON ในช่อง order
 // ช่องของใบสั่งเปิดได้ที่ ตั้งค่า → ลงนัด (เริ่มต้นไม่แสดง) · นัด CT แบบ on call = No appointment (SIM + RT: On Call)
@@ -5259,7 +5290,7 @@ const bqDocText = v => { const c = docCodeOf(v); return c ? `${c} ${docName(c)}`
 // RTT ของนัดใส่แร่: RTT เริ่มต้น (ตั้งค่า → นัดคิวใส่แร่) ก่อน แล้วรายชื่อ RTT จาก LPCH (ตำแหน่งที่ตั้งใน ตารางวันฉาย) ผู้ปฏิบัติงานประจำวัน และ RTT ที่เคยลงในแถบนี้
 function bqRttNames(extra = []) {
   const def = state.config.bq.rtt, from = plusDays(today(), -120);
-  const names = [...dutyDir.rtt, ...dutyRecent('rtt'), ...state.bq.filter(a => a.rtt && a.date >= from).map(a => a.rtt), ...extra].map(n => str(n).trim()).filter(Boolean);
+  const off = crewOff(), names = [...crewNames('rtt'), ...[...dutyRecent('rtt'), ...state.bq.filter(a => a.rtt && a.date >= from).map(a => a.rtt)].filter(n => !off.has(nameKey(n))), ...extra].map(n => str(n).trim()).filter(Boolean);
   const rest = [...new Set(names)].filter(n => n !== def).sort((a, b) => a.localeCompare(b, 'th'));
   return def ? [def, ...rest] : rest;
 }
@@ -5687,11 +5718,14 @@ function openBqEdit(id, focus) {
   chipGroup($('#e-status'), 'estatus', Object.values(BQ_ST), a.status);
   docChipsTo('#e-doc', 'edoc', docCodeOf(a.doc) || a.doc);
   bqTechChips('#e-tech', 'etech', '#e-tech-other', a.tech);
-  signChips('#e-mp', 'emp', a.mp);
-  signChips('#e-rc', 'erc', a.rc);
+  // กด + MP / + RC: เลือกตัวเองไว้ให้ (MP ที่เชื่อมบัญชี LPCH ใน ตั้งค่า → ทีมนักฟิสิกส์) · RC ต้องไม่ใช่ MP คนเดิม
+  const self = bqCanSign() ? myStaff() : '';
+  signChips('#e-mp', 'emp', a.mp || (focus === 'mp' ? self : ''));
+  signChips('#e-rc', 'erc', a.rc || (focus === 'rc' && self !== a.mp ? self : ''));
   $('#e-rtt-f').hidden = !bqRttOn();
   $('#e-rtt-other').value = '';
-  bqRttChips('#e-rtt', 'ertt', a.rtt || (focus === 'rtt' ? state.config.bq.rtt : ''));   // กด + RTT: เลือก RTT เริ่มต้นไว้ให้
+  const me = myCrew(), meRtt = me && me.active && crewGroup(me.role) === 'rtt' ? me.name : '';
+  bqRttChips('#e-rtt', 'ertt', a.rtt || (focus === 'rtt' ? meRtt || state.config.bq.rtt : ''));   // กด + RTT: RTT ที่เข้าสู่ระบบ = ตัวเอง · อื่น ๆ = RTT เริ่มต้น
   const sign = bqCanSign();
   $$('#e-mp input, #e-rc input').forEach(i => { i.disabled = !sign; });
   $('#e-sign-note').hidden = sign;
@@ -6487,11 +6521,12 @@ function openTags(id) {
 }
 /* ---------- ผู้ปฏิบัติงานประจำวัน (RTT / RA ใต้วันที่ในตารางวันฉาย) ---------- */
 // รายชื่อให้เลือก: สมาชิก LPCH RO Workspace ตามตำแหน่งใน ตั้งค่า → ตารางวันฉาย (ดึงครั้งแรกที่เปิด) + ชื่อที่เคยเลือกใน 60 วัน + พิมพ์เอง
-const dutyDir = { rtt: [], ra: [], why: '', at: '', loaded: false, loading: null };
+const dutyDir = { rtt: [], ra: [], who: [], why: '', at: '', loaded: false, loading: null };   // who = [{ name, user, group }]
 function loadDutyDir() {
   if (dutyDir.loaded || dutyDir.loading) return dutyDir.loading;
   dutyDir.loading = store.dutyMembers().then(r => {
-    Object.assign(dutyDir, { rtt: (r.rtt || []).map(x => str(x.name)).filter(Boolean), ra: (r.ra || []).map(x => str(x.name)).filter(Boolean), why: r.live ? '' : str(r.why), at: str(r.at), loaded: true });
+    const who = g => (r[g] || []).map(x => ({ name: str(x.name), user: str(x.username), group: g })).filter(x => x.name);
+    Object.assign(dutyDir, { rtt: (r.rtt || []).map(x => str(x.name)).filter(Boolean), ra: (r.ra || []).map(x => str(x.name)).filter(Boolean), who: [...who('rtt'), ...who('ra')], why: r.live ? '' : str(r.why), at: str(r.at), loaded: true });
   }).catch(e => { Object.assign(dutyDir, { why: errMsg(e), loaded: true }); }).finally(() => { dutyDir.loading = null; });
   return dutyDir.loading;
 }
@@ -6532,12 +6567,13 @@ const dutyLabelOf = r => (/^CT:/.test(r) ? ctLabel(r.slice(3)) : roomLabel(r) ||
 function renderDutyBox(sel) {
   const rooms = pinCtx.rooms;
   $('#pin-duty-rooms').innerHTML = rooms.map(r => `<div class="duty-room" data-droom="${esc(r)}">${rooms.length > 1 || r ? `<h4>${esc(dutyLabelOf(r))}</h4>` : ''}${pinCtx.groups.map(([g, l]) => {
-    const cur = (sel[r] || {})[g] || [], names = [...new Set([...dutyDir[g === 'qc' ? 'rtt' : g], ...dutyRecent(g), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
+    const off = crewOff(), cur = (sel[r] || {})[g] || [], names = [...new Set([...crewNames(g), ...dutyRecent(g).filter(n => !off.has(nameKey(n))), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
     return `<div class="field"><span class="lbl">${esc(l)}</span><div class="duty-pick"><div class="chips" data-dgrp="${g}">${names.map(n => `<label><input type="checkbox" value="${esc(n)}"${cur.includes(n) ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>
       <input class="duty-other" data-dother="${g}" maxlength="60" autocomplete="off" placeholder="+ พิมพ์ชื่อแล้วกด Enter" aria-label="เพิ่มชื่อ ${esc(l)}${r ? ` ห้อง ${esc(r)}` : ''}"></div></div>`;
   }).join('')}</div>`).join('');
-  const n = dutyDir.rtt.length + dutyDir.ra.length;
-  $('#pin-duty-src').textContent = !dutyDir.loaded ? 'กำลังดึงรายชื่อจาก LPCH RO Workspace…'
+  const n = dutyDir.rtt.length + dutyDir.ra.length, nc = (state.config.crew || []).filter(x => x.active && crewGroup(x.role)).length;
+  $('#pin-duty-src').textContent = nc ? `รายชื่อจาก ตั้งค่า → RTT, RA และบุคลากรอื่น (${nc} คน)${dutyDir.loaded && !dutyDir.why ? ' และสมาชิก LPCH ที่ยังไม่อยู่ในรายการ' : ''} · พิมพ์ชื่อเองได้`
+    : !dutyDir.loaded ? 'กำลังดึงรายชื่อจาก LPCH RO Workspace…'
     : dutyDir.why ? `ดึงรายชื่อจาก LPCH ไม่ได้ (${dutyDir.why})${n ? ` · ใช้รายชื่อล่าสุดที่เคยดึงได้${isoStamp(dutyDir.at) ? ` เมื่อ ${fmtStamp(isoStamp(dutyDir.at))}` : ''}` : ''} · พิมพ์ชื่อเองได้`
     : n ? `รายชื่อจาก LPCH RO Workspace: ตำแหน่ง ${state.config.dutyRoles.rtt.join(', ') || '—'} (RTT) · ${state.config.dutyRoles.ra.join(', ') || '—'} (RA) · ตั้งตำแหน่งได้ที่ ตั้งค่า → ตารางวันฉาย`
     : `ไม่มีสมาชิกตำแหน่ง ${[...state.config.dutyRoles.rtt, ...state.config.dutyRoles.ra].join(', ') || '—'} ใน LPCH · พิมพ์ชื่อเองได้ หรือตั้งตำแหน่งที่ ตั้งค่า → ตารางวันฉาย`;
@@ -7975,7 +8011,7 @@ function ctSheets(wb, room, ym, recs, ct) {
   });
   for (let r = 18; r <= 26; r++) wc.getRow(r).height = 62;
   // รายชื่อให้เลือก (คอลัมน์ AJ แบบไฟล์เดิม): RTT แล้ว RA
-  const names = g => [...new Set([...(g === 'rtt' ? dutyDir.rtt : dutyDir.ra), ...days.flatMap(d => (g === 'rtt' ? [...duty[d].rtt, ...duty[d].qc] : duty[d].ra))])];
+  const names = g => [...new Set([...crewNames(g), ...days.flatMap(d => (g === 'rtt' ? [...duty[d].rtt, ...duty[d].qc] : duty[d].ra))])];
   const techs = names('rtt'), aids = names('ra'), aj = 36;
   Object.assign(wc.getCell(3, aj), { value: 'รายชื่อ', font: bold });
   [...techs, ...aids].forEach((n, i) => { wc.getCell(4 + i, aj).value = n; });
@@ -8051,8 +8087,11 @@ function jobDraft(who, ym, kind) {
   return jobsDrafts[k];
 }
 // คนที่มีภาระงานในเดือนนั้น: ชื่อในผู้ปฏิบัติงานประจำวัน (RTT / RA / QC) และคนที่บันทึกไว้แล้ว
+// ชื่อของผู้ใช้ที่เข้าสู่ระบบในแถบ RTT/RA Jobs: ชื่อใน ตั้งค่า → RTT, RA และบุคลากรอื่น ที่เชื่อมบัญชีไว้ · ไม่มี = ชื่อใน LPCH
+const jobMyName = () => { const x = myCrew(); return x && x.name ? x.name : str(state.user.name); };
 function jobPeople(ym) {
   const m = new Map(), add = (who, kind) => { const k = nameKey(who); if (!k) return; if (!m.has(k)) m.set(k, { who, kind }); else if (!m.get(k).kind) m.get(k).kind = kind; };
+  for (const x of state.config.crew || []) if (x.active && crewGroup(x.role)) add(x.name, crewGroup(x.role));   // ทุกคนในรายชื่อ (แอดมินเลือกได้)
   for (const j of state.jobs) if (j.ym === ym) add(j.who, j.kind);
   for (const x of state.duty) if (x.date.slice(0, 7) === ym) { x.rtt.forEach(n => add(n, 'rtt')); x.ra.forEach(n => add(n, 'ra')); x.qc.forEach(n => add(n, 'rtt')); }
   return [...m.values()].sort((a, b) => a.who.localeCompare(b.who, 'th'));
@@ -8060,9 +8099,9 @@ function jobPeople(ym) {
 const jobsSel = { who: '' };   // แอดมินเลือกคน (ผู้ใช้ทั่วไป = ตัวเองเสมอ)
 // ภาระงานที่แสดง: ตัวเอง (RTT / RA) · แอดมินเลือกได้ทุกคน
 function jobsTarget(ym) {
-  const u = state.user, people = jobPeople(ym), mine = u.name ? people.find(p => nameKey(p.who) === nameKey(u.name)) : null;
-  const meKind = jobKindOfRole(u.role) || (mine && mine.kind) || '';
-  const me = u.name && u.via !== 'google' && meKind ? { who: u.name, kind: meKind } : null;
+  const u = state.user, cr = myCrew(), myName = jobMyName(), people = jobPeople(ym), mine = myName ? people.find(p => nameKey(p.who) === nameKey(myName)) : null;
+  const meKind = (cr && crewGroup(cr.role)) || jobKindOfRole(u.role) || (mine && mine.kind) || '';
+  const me = myName && u.via !== 'google' && meKind ? { who: myName, kind: meKind } : null;
   if (!u.isAdmin) return { list: me ? [me] : [], cur: me };
   const list = [...(me ? [me] : []), ...people.filter(p => !me || nameKey(p.who) !== nameKey(me.who))];
   if (jobsSel.who && !list.some(p => nameKey(p.who) === nameKey(jobsSel.who))) list.push({ who: jobsSel.who, kind: (jobRec(jobsSel.who, ym) || {}).kind || 'rtt' });
@@ -8216,7 +8255,7 @@ function jobsView(who, kind, ym) {
     time: rows.filter(x => x.type === 'item').reduce((a, x) => a + x.an, 0), onDuty: Object.keys(duty).length };
 }
 let jobsCur = null;   // ข้อมูลที่แสดงอยู่ (ช่องที่พิมพ์คำนวณผลรวมใหม่จากนี้ ไม่คำนวณผู้ป่วยใหม่)
-const jobsCanEdit = v => canEdit() && (jobsOn() || store.mode === 'local') && (!!state.user.isAdmin || nameKey(v.who) === nameKey(state.user.name));
+const jobsCanEdit = v => canEdit() && (jobsOn() || store.mode === 'local') && (!!state.user.isAdmin || nameKey(v.who) === nameKey(jobMyName()));
 const fmtN = (n, dp = 2) => (Number.isInteger(n) ? String(n) : n.toFixed(dp));
 function renderJobs() {
   const ym = state.month, tg = jobsTarget(ym), cur = tg.cur, sel = $('#jobs-who'), kindSel = $('#jobs-kind');
@@ -8351,7 +8390,7 @@ function openJobsPin() {
   const v = jobsCur;
   if (!v || !v.dr.dirty) return;
   if (!jobsOn() && store.mode !== 'local') return toast('แถบ RTT/RA Jobs ต้องใช้ Code.gs รุ่น 2026-10-28.6 ขึ้นไป', { err: true });
-  const d = v.dr, rec = { ym: v.ym, who: v.who, user: nameKey(v.who) === nameKey(state.user.name) ? state.user.username || '' : d.user, kind: d.kind,
+  const d = v.dr, rec = { ym: v.ym, who: v.who, user: nameKey(v.who) === nameKey(jobMyName()) ? state.user.username || '' : d.user, kind: d.kind,
     prof: JSON.stringify(d.prof), cells: JSON.stringify(d.cells), leaves: JSON.stringify(d.leaves.filter(l => isDay(l.date))) };
   pinCtx = { mode: 'jobsave', rec, isNew: !jobRec(v.who, v.ym), forgot: false, auto: true };
   const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`;
@@ -8805,8 +8844,10 @@ function membersHtml(d) {
   if (!dir) return `<div class="mem-bar">${btn}<span class="muted">ตำแหน่งใหม่ใน LPCH จะเพิ่มเป็นคอลัมน์ในตารางด้านบน</span></div>`;
   const roles = [...d.roles, ...dir.roles.filter(r => !d.roles.includes(r))];
   const rest = dir.users.filter(u => !roles.includes(u.role));
-  const row = (r, us) => `<div class="mem-role"><b>${esc(r)}</b><span class="n">${us.length}</span><span class="mem-names">${us.map(u => `<span title="${esc(u.username)}">${esc(u.name)}</span>`).join('') || '<span class="muted">ไม่มีสมาชิก</span>'}</span></div>`;
-  return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน</span></div>
+  const tag = u => lpchLinkTag(u, d);
+  const row = (r, us) => `<div class="mem-role"><b>${esc(r)}</b><span class="n">${us.length}</span><span class="mem-names">${us.map(u => `<span class="mem-u${tag(u) ? '' : ' nolink'}" title="${esc(`${u.username} · ${tag(u) ? `เชื่อมกับ ${tag(u)}` : 'ยังไม่อยู่ในรายชื่อของระบบนี้'}`)}">${esc(u.name)}${tag(u) ? `<small>${esc(tag(u))}</small>` : ''}</span>`).join('') || '<span class="muted">ไม่มีสมาชิก</span>'}</span></div>`;
+  const miss = ['staff', 'doctors', 'crew'].reduce((n, l) => n + lpchMissing(l, d).length, 0), linkedN = dir.users.filter(u => tag(u)).length;
+  return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน · เชื่อมกับรายชื่อของระบบนี้แล้ว ${linkedN} คน</span>${miss ? `<button type="button" class="btn ghost" data-lpchadd="all">+ เพิ่มทุกคนที่ยังไม่อยู่ในรายชื่อ (${miss} คน)</button>` : ''}</div>
     <div class="mem-list">${roles.map(r => row(r, dir.users.filter(u => u.role === r))).join('')}${rest.length ? row('ไม่ระบุตำแหน่ง', rest) : ''}</div>`;
 }
 async function fetchMembers(btn) {
@@ -8829,13 +8870,14 @@ async function fetchMembers(btn) {
   } catch (e) { btn.disabled = false; toast('ดึงรายชื่อไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 // บัญชี RO Workspace ของนักฟิสิกส์ (ตำแหน่ง MP) และแพทย์ (RO): เลือกจากรายชื่อสมาชิกที่ดึงมา · อีเมลมาจากรายชื่อ (ถ้า LPCH ส่งมา) หรือพิมพ์เอง
-const ACCT_ROLE = { staff: 'MP', doctors: 'RO' };
+const ACCT_ROLE = { staff: 'MP', doctors: 'RO', crew: '' };
+const ACCT_WHAT = { staff: 'MP', doctors: 'แพทย์ (RO)', crew: 'RTT, RA และบุคลากรอื่น' };
 const nameKey = v => str(v).trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.)/, '').replace(/\s+/g, '').toLowerCase();   // ไม่สนคำนำหน้าและช่องว่าง
 // หลังดึงรายชื่อ: คนที่ยังไม่เชื่อมบัญชีและชื่อตรงกับสมาชิกคนเดียว = เชื่อมให้ · ที่เชื่อมแล้วแต่ยังไม่มีอีเมล = ใส่อีเมลจากรายชื่อ · คืนจำนวนคนที่เปลี่ยน
 function autoLinkAccts() {
   const users = state.lpchDir ? state.lpchDir.users : [];
   let n = 0;
-  for (const list of ['staff', 'doctors']) for (const x of draft[list]) {
+  for (const list of ['staff', 'doctors', 'crew']) for (const x of draft[list]) {
     let u = x.user ? users.find(v => v.username === x.user) : null;
     if (!x.user && str(x.name)) {
       const hit = users.filter(v => nameKey(v.name) === nameKey(x.name));
@@ -8845,15 +8887,50 @@ function autoLinkAccts() {
   }
   return n;
 }
+// สมาชิก LPCH → รายชื่อของระบบนี้: MP → ทีมนักฟิสิกส์ · RO → แพทย์ · ตำแหน่งอื่น → RTT, RA และบุคลากรอื่น
+const lpchListOf = u => (u.role === 'MP' ? 'staff' : u.role === 'RO' ? 'doctors' : 'crew');
+// สมาชิกที่ยังไม่อยู่ในรายชื่อ (ยังไม่มีใครเชื่อมบัญชีนี้ และไม่มีชื่อ-สกุลตรงกันที่ยังไม่เชื่อม)
+function lpchMissing(list, d = draft) {
+  const users = state.lpchDir ? state.lpchDir.users : [];
+  const linked = new Set(['staff', 'doctors', 'crew'].flatMap(l => (d[l] || []).map(x => str(x.user)).filter(Boolean)));
+  return users.filter(u => lpchListOf(u) === list && !linked.has(u.username) && !(d[list] || []).some(x => !x.user && str(x.name) && nameKey(x.name) === nameKey(u.name)));
+}
+// รหัสจากชื่อผู้ใช้ (ตัวอักษร 2 ตัวแรก · ซ้ำ = ลองแบบอื่น) แก้ได้ก่อนบันทึก
+function lpchCode(u, used, max) {
+  const t = str(u.username).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'X';
+  const tries = [t.slice(0, 2), t[0] + (t[2] || ''), t[0] + (t[3] || ''), t.slice(0, 3), ...Array.from({ length: 9 }, (_, i) => t.slice(0, 2) + (i + 1))];
+  return tries.find(c => c.length >= 2 && c.length <= max && !used.has(c)) || '';
+}
+// เพิ่มสมาชิก LPCH ที่ยังไม่มีเข้ารายชื่อ (ยังไม่บันทึก) · MP ใหม่ยังไม่ติ๊ก ปฏิบัติงาน (ไม่เข้าคิวแจกเคสจนกว่าแอดมินติ๊ก)
+function lpchAdd(lists) {
+  let n = 0;
+  for (const list of lists) for (const u of lpchMissing(list)) {
+    const acct = { user: u.username, email: u.email || '' };
+    if (list === 'crew') draft.crew.push({ name: u.name, role: ROLE_RE.test(u.role) ? u.role : '', active: true, ...acct });
+    else {
+      const used = new Set(draft[list].map(x => str(x.code).toUpperCase())), code = lpchCode(u, used, list === 'staff' ? 4 : 6);
+      draft[list].push(list === 'staff' ? { code, name: u.name, title: '', active: false, roles: [{ from: '2000-01', role: 'staff' }], color: '', ...acct } : { code, name: u.name, color: '', ...acct });
+    }
+    n++;
+  }
+  renderSettings();
+  toast(n ? `เพิ่ม ${n} คนจาก LPCH RO Workspace · ตรวจรหัส ตำแหน่ง และ "ปฏิบัติงาน" (MP ใหม่ยังไม่เข้าคิวแจกเคส) แล้วกด "บันทึกการตั้งค่า"` : 'สมาชิก LPCH อยู่ในรายชื่อครบแล้ว');
+}
+// ป้ายใต้ชื่อสมาชิก LPCH: เชื่อมกับรายชื่อไหนของระบบนี้
+function lpchLinkTag(u, d) {
+  const s = d.staff.find(x => x.user === u.username), doc = d.doctors.find(x => x.user === u.username), c = d.crew.find(x => x.user === u.username);
+  return s ? `MP ${s.code}` : doc ? `แพทย์ ${doc.code}` : c ? (c.role || 'รายชื่อ') + (c.active ? '' : ' · ไม่ปฏิบัติงาน') : '';
+}
 function acctBar(list) {
   const dir = state.lpchDir, oldApi = dir && store.mode !== 'local' && !serverHas(MEMBER_EMAIL_API) && !dir.users.some(u => u.email);
   const why = store.mode === 'local' ? '' : !serverHas(ACCESS_API) ? 'ต้องใช้ Code.gs รุ่น 2026-10-18.3 ขึ้นไป' : state.user.via !== 'lpch' ? 'เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace เพื่อดึงรายชื่อ' : '';
-  return `<div class="mem-bar acct-bar"><span class="muted">บัญชี RO Workspace (บรรทัดใต้ชื่อ): ${dir ? `เลือกจากสมาชิก ${dir.users.length} คน · ${list === 'staff' ? 'ตำแหน่ง MP' : 'ตำแหน่ง RO'} อยู่บนสุด` : 'กดดึงรายชื่อเพื่อเลือกบัญชีของแต่ละคน'} · อีเมลมาจาก RO Workspace หรือพิมพ์เอง</span>`
+  return `<div class="mem-bar acct-bar"><span class="muted">บัญชี RO Workspace (บรรทัดใต้ชื่อ): ${dir ? `เลือกจากสมาชิก ${dir.users.length} คน · ${list === 'staff' ? 'ตำแหน่ง MP' : list === 'crew' ? 'ตำแหน่งของคนนั้น' : 'ตำแหน่ง RO'} อยู่บนสุด` : 'กดดึงรายชื่อเพื่อเลือกบัญชีของแต่ละคน'} · อีเมลมาจาก RO Workspace หรือพิมพ์เอง</span>`
     + `${dir ? '' : `<button type="button" class="btn ghost" data-lpchdir${why ? ' disabled' : ''}>ดึงรายชื่อจาก LPCH RO Workspace</button>`}${why && !dir ? `<span class="muted">${esc(why)}</span>` : ''}`
+    + `${dir && lpchMissing(list).length ? `<button type="button" class="btn ghost" data-lpchadd="${list}">+ เพิ่ม${list === 'crew' ? 'สมาชิกตำแหน่งอื่น' : list === 'staff' ? ' MP' : 'แพทย์ (RO)'} จาก LPCH ที่ยังไม่มี (${lpchMissing(list).length} คน)</button>` : ''}`
     + `${oldApi ? '<span class="acct-warn">Code.gs รุ่นนี้ยังไม่ส่งอีเมลมากับรายชื่อ (ต้องใช้รุ่น 2026-10-27.1 ขึ้นไป) · พิมพ์อีเมลเองได้</span>' : ''}</div>`;
 }
 function acctHtml(list, i) {
-  const x = draft[list][i], dir = state.lpchDir, users = dir ? dir.users : [], want = ACCT_ROLE[list], user = str(x.user);
+  const x = draft[list][i], dir = state.lpchDir, users = dir ? dir.users : [], want = list === 'crew' ? x.role || 'RTT' : ACCT_ROLE[list], user = str(x.user);
   const cur = users.find(u => u.username === user);
   const one = u => opt(u.username, `${u.name} (${u.username}${u.role && u.role !== want ? ' · ' + u.role : ''})`, user);
   const mine = users.filter(u => u.role === want), others = users.filter(u => u.role !== want);
@@ -8864,7 +8941,7 @@ function acctHtml(list, i) {
   const me = user && user === state.user.username;
   const meta = cur ? `<span class="acct-role${me ? ' me' : ''}" title="ตำแหน่งใน LPCH RO Workspace">${esc(cur.role || 'ไม่ระบุตำแหน่ง')}${me ? ' · บัญชีของคุณ' : ''}</span>${cur.email && cur.email !== str(x.email).toLowerCase() ? `<span class="acct-warn" title="อีเมลใน RO Workspace">RO Workspace: ${esc(cur.email)}</span>` : ''}`
     : user && dir ? '<span class="acct-warn">ไม่พบในรายชื่อสมาชิกที่ใช้งานอยู่ (ออกแล้วหรือเปลี่ยนชื่อผู้ใช้)</span>' : me ? '<span class="acct-role me">บัญชีของคุณ</span>' : '';
-  const who = x.code || (list === 'staff' ? 'นักฟิสิกส์' : 'แพทย์');
+  const who = x.code || x.name || (list === 'staff' ? 'นักฟิสิกส์' : list === 'crew' ? 'บุคลากร' : 'แพทย์');
   return `<div class="acct"><span>บัญชี</span><select data-acct="${list}.${i}" aria-label="บัญชี LPCH RO Workspace ของ ${esc(who)}"${!dir && !user ? ' title="กดดึงรายชื่อจาก LPCH RO Workspace ด้านบนเพื่อเลือก"' : ''}>${opts}</select>`
     + `<input type="email" data-k="${list}.${i}.email" value="${esc(x.email || '')}" placeholder="อีเมล (ไม่บังคับ)" inputmode="email" autocomplete="off" spellcheck="false" aria-label="อีเมลของ ${esc(who)}">${meta}</div>`;
 }
@@ -8874,6 +8951,7 @@ function pickAcct(path, username) {
   x.user = username;
   if (u && u.email) x.email = u.email;
   if (u && !str(x.name)) x.name = u.name;
+  if (u && list === 'crew' && !x.role && ROLE_RE.test(u.role)) x.role = u.role;
   renderSettings();
 }
 // ตั้งค่า → ดึงจากระบบอื่น (Brachytherapy จากระบบนัด · RC จาก TDF Dose Calculator): ลิงก์ชีต · ตรวจชีต (แท็บ คอลัมน์ ตัวอย่าง) · สรุปการดึงล่าสุด · ดึงตอนนี้
@@ -8995,6 +9073,17 @@ function renderSettings() {
   const d = draft, el = $('#view-settings');
   const ymNow = thisMonth();
   const since = from => (from <= '2000-12' ? 'เริ่มต้น' : fmtMonth(from));
+  // ตำแหน่งให้เลือก (ไม่รวม MP / RO ที่มีรายชื่อของตัวเอง) · บอกกลุ่ม RTT / RA ตาม ตั้งค่า → ตารางวันฉาย
+  const grpOf = r => (d.dutyRoles.rtt.includes(r) ? 'RTT' : d.dutyRoles.ra.includes(r) ? 'RA' : '');
+  const crewRoles = [...new Set([...d.roles, ...d.dutyRoles.rtt, ...d.dutyRoles.ra, ...(state.lpchDir ? state.lpchDir.roles : []), ...d.crew.map(x => x.role)])].filter(r => r && r !== 'MP' && r !== 'RO');
+  const crewRows = d.crew.map((x, i) => `<div class="set-row crew-row">
+      <span class="idx">${i + 1}</span>
+      <input class="name" data-k="crew.${i}.name" value="${esc(x.name)}" maxlength="120" aria-label="ชื่อ-สกุล" placeholder="ชื่อ-สกุล">
+      <select class="pos" data-k="crew.${i}.role" aria-label="ตำแหน่งของ ${esc(x.name || 'บุคลากร')}">${opt('', 'ไม่ระบุตำแหน่ง', x.role)}${crewRoles.map(r => opt(r, grpOf(r) && grpOf(r) !== r ? `${r} (${grpOf(r)})` : r, x.role)).join('')}</select>
+      <label class="check"><input type="checkbox" data-k="crew.${i}.active"${x.active ? ' checked' : ''}> ปฏิบัติงาน</label>
+      <span class="btns"><button type="button" class="icon-btn" data-up="crew.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="crew.${i}" aria-label="ลบ ${esc(x.name)}">×</button></span>
+      ${acctHtml('crew', i)}
+    </div>`).join('');
   const staffRows = d.staff.map((s, i) => {
     const cur = positionOf(s.code, ymNow, d).id;
     const hist = (s.roles || []).map(r => `${(d.positions.find(x => x.id === r.role) || { label: r.role }).label} ตั้งแต่ ${since(r.from)}`).join(' → ');
@@ -9130,6 +9219,11 @@ function renderSettings() {
       ${acctBar('doctors')}
       <div class="set-list">${docRows}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="doctor">+ เพิ่มแพทย์</button></div></div>
+    <div class="sec" data-sec="crew"><div class="sec-head"><h2>RTT, RA และบุคลากรอื่น</h2><p>รายชื่อเดียวที่ใช้ทุกแถบ: ผู้ปฏิบัติงานประจำวัน (ห้องฉาย, CT-SIM) · RTT/RA Jobs · RTT ของนัดใส่แร่ · ตำแหน่งที่เป็น RTT / RA ตั้งที่ ตารางวันฉาย
+      · เชื่อมบัญชี LPCH RO Workspace = ระบบรู้ว่าใครเข้าสู่ระบบ (ภาระงานของตัวเอง ลง RTT ของตัวเอง) · ไม่ติ๊ก ปฏิบัติงาน = ไม่เสนอให้เลือก (ที่บันทึกไว้แล้วยังอยู่) · ยังไม่มีรายชื่อ = ใช้สมาชิก LPCH ตามตำแหน่ง</p></div>
+      ${acctBar('crew')}
+      <div class="set-list">${crewRows || '<p class="muted" style="margin:0">ยังไม่มีรายชื่อ · กดดึงรายชื่อจาก LPCH แล้วกด เพิ่ม หรือเพิ่มเอง</p>'}</div>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="crew">+ เพิ่มรายชื่อ</button></div></div>
     <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
       <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มประกัน/เดือน</th><th>แต้มตั้งต้น/เดือน</th><th>เริ่มเดือนที่</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="position">+ เพิ่มตำแหน่ง</button></div></div>
@@ -9350,11 +9444,17 @@ async function saveSettings() {
   const docs = draft.doctors.map(x => str(x.code).toUpperCase());
   if (docs.some(c => !c)) return toast('กรอกรหัสแพทย์ให้ครบทุกแถว', { err: true });
   if (new Set(docs).size !== docs.length) return toast('รหัสแพทย์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
-  for (const x of [...draft.staff, ...draft.doctors]) Object.assign(x, acctOf(x));
+  draft.crew = draft.crew.filter(x => str(x.name) || str(x.user));
+  if (draft.crew.some(x => !str(x.name))) return toast('กรอกชื่อ-สกุลใน RTT, RA และบุคลากรอื่น ให้ครบ', { err: true });
+  const crewKeys = draft.crew.map(x => nameKey(x.name));
+  if (new Set(crewKeys).size !== crewKeys.length) return toast('ชื่อใน RTT, RA และบุคลากรอื่น ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
+  const crewUsers = draft.crew.map(x => str(x.user)).filter(Boolean);
+  if (new Set(crewUsers).size !== crewUsers.length) return toast('บัญชี LPCH หนึ่งบัญชีเชื่อมได้กับรายชื่อเดียว (RTT, RA และบุคลากรอื่น)', { err: true });
+  for (const x of [...draft.staff, ...draft.doctors, ...draft.crew]) Object.assign(x, acctOf(x));
   const badSrc = SRC_KEYS.find(k => draft[SRC[k].cfg].on && !(k === 'brachy' && draft.brachySync.src === 'internal') && !/\/d\/[\w-]{20,}|^[\w-]{20,}$/.test(str(draft[SRC[k].cfg].url).trim()));
   if (badSrc) return toast(`ใส่ลิงก์ Google Sheet ของ${sp(SRC[badSrc].sys)} (ไม่ใช่ลิงก์หน้าเว็บ …/exec) หรือปิด "ดึงอัตโนมัติ"`, { err: true });
-  const badMail = [...draft.staff, ...draft.doctors].find(x => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
-  if (badMail) return toast(`อีเมลของ ${str(badMail.code)} ไม่ถูกต้อง: ${badMail.email}`, { err: true });
+  const badMail = [...draft.staff, ...draft.doctors, ...draft.crew].find(x => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
+  if (badMail) return toast(`อีเมลของ ${str(badMail.code || badMail.name)} ไม่ถูกต้อง: ${badMail.email}`, { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
   if (!draft.positions.length || draft.positions.some(x => !str(x.label))) return toast('กรอกชื่อตำแหน่งให้ครบ', { err: true });
   const { me, owner, via, username, lpchAdmin } = state.user;
@@ -10388,7 +10488,7 @@ function openLog(id, preset = {}) {
   renderBrRows();
   chipGroup($('#l-kind'), 'kind', kinds.map(k => k.key), editingLog.kind);
   $$('#l-kind span').forEach((s, i) => { s.textContent = kinds[i].label; });
-  mpChips($('#l-mp'), 'lmp', editingLog.mp);
+  mpChips($('#l-mp'), 'lmp', editingLog.mp || (!l && editingLog.kind !== 'rc' ? myStaff() : ''));   // กิจกรรมใหม่ (ไม่ใช่ RC): MP ที่เข้าสู่ระบบ
   for (const f of ['date', 'hn', 'name', 'title', 'min', 'k', 'note']) $('#l-' + f).value = editingLog[f] || '';
   if (!l && !editingLog.k) $('#l-k').value = '1';
   $('#log-title').textContent = l ? 'แก้ไขกิจกรรม' : (editingLog.kind === 'rc' ? 'บันทึก RC' : 'บันทึกกิจกรรม');
@@ -11283,7 +11383,7 @@ function renderLeaves() {
 }
 function openLeaves() {
   $('.leave-add', leaveForm).hidden = !canEdit();
-  mpChips($('#v-mp'), 'vmp', chipValue($('#v-mp')));
+  mpChips($('#v-mp'), 'vmp', chipValue($('#v-mp')) || myStaff());   // วันลา: MP ที่เข้าสู่ระบบเลือกไว้ให้
   $('#v-from').value = today();
   $('#v-to').value = today();
   $('#v-note').value = '';
@@ -11464,8 +11564,10 @@ document.addEventListener('click', e => {
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
   if (ds.lpchdir !== undefined) return fetchMembers(t);
+  if (ds.lpchadd) return lpchAdd(ds.lpchadd === 'all' ? ['staff', 'doctors', 'crew'] : [ds.lpchadd]);
   if (ds.srcchk) return srcCheckRun(ds.srcchk, t);
   if (ds.srcpull) return srcPullNow(ds.srcpull, t);
+  if (ds.add === 'crew') { draft.crew.push({ name: '', role: draft.dutyRoles.rtt[0] || 'RTT', active: true, user: '', email: '' }); renderSettings(); $$('[data-k^="crew."][data-k$=".name"]').pop().focus(); return; }
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
     case 'open-leaves': return openLeaves();

@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.4';
+const CODE_VERSION = '2026-11-01.5';
 const API_LEVEL = 43;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -301,7 +301,7 @@ function getData(token) {
     appt: need.appt ? recentAppt_(ss) : [],
     reg: need.reg ? regRows_(ss) : [],
     bq: need.bq ? recentBq_(ss) : [],
-    jobs: need.jobs ? jobsFor_(ss, user) : [],
+    jobs: need.jobs ? jobsFor_(ss, user, config) : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
@@ -1671,7 +1671,7 @@ function jobsSave(rec, pin, token) {
   if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('เดือนไม่ถูกต้อง');
   if (!nameKey_(who)) throw new Error('ไม่มีชื่อผู้ปฏิบัติงาน');
   if (JOB_KINDS.indexOf(kind) < 0) throw new Error('แบบฟอร์มไม่ถูกต้อง');
-  const own = u.via === 'lpch' && nameKey_(who) === nameKey_(u.name);
+  const own = u.via === 'lpch' && jobNames_(u, readConfig_(ss_()) || {}).indexOf(nameKey_(who)) >= 0;
   if (!own && !u.isAdmin) throw new Error('บันทึกได้เฉพาะภาระงานของตัวเอง (แอดมินบันทึกแทนได้)');
   const json = (v, isArr, max) => {
     const t = String(v == null ? '' : v);
@@ -1695,12 +1695,18 @@ function jobsSave(rec, pin, token) {
   });
 }
 // ภาระงานที่ส่งให้หน้าเว็บ: 13 เดือนล่าสุด · ของตัวเอง (ชื่อตรงกับบัญชี LPCH) · แอดมินและบัญชี Google ได้ทุกคน
-function jobsFor_(ss, user) {
+function jobsFor_(ss, user, cfg) {
   const d = new Date(Date.now() - 400 * 864e5), from = Utilities.formatDate(d, ss.getSpreadsheetTimeZone(), 'yyyy-MM');
   const all = readTable_(ss, 'jobs').filter(x => String(x.id).split('|')[1] >= from);
   if (user.via === 'google' || user.isAdmin) return all;
-  const me = nameKey_(user.name);
-  return me ? all.filter(x => nameKey_(x.who) === me) : [];
+  const mine = jobNames_(user, cfg || readConfig_(ss) || {});
+  return all.filter(x => mine.indexOf(nameKey_(x.who)) >= 0);
+}
+// ชื่อของผู้ใช้ในแถบ RTT/RA Jobs: ชื่อใน LPCH และชื่อใน ตั้งค่า → RTT, RA และบุคลากรอื่น ที่เชื่อมบัญชี LPCH นี้ไว้ (เทียบแบบไม่สนคำนำหน้า)
+function jobNames_(user, cfg) {
+  const out = [nameKey_(user.name)], uname = String(user.username || '').toLowerCase();
+  (Array.isArray(cfg.crew) ? cfg.crew : []).forEach(x => { if (x && uname && String(x.user || '').toLowerCase() === uname && nameKey_(x.name)) out.push(nameKey_(x.name)); });
+  return out.filter(Boolean);
 }
 
 // ตำแหน่งใน LPCH ที่เป็น RTT / RA (ตั้งค่า → ตารางวันฉาย · config.dutyRoles)
