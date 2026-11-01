@@ -3004,7 +3004,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-10-30.3';
+const PAGE_VERSION = '2026-11-01.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3065,6 +3065,7 @@ const sheetStore = {
   bqEdit: (id, ch, pin) => call('bqEdit', id, ch, pin),
   bqCancel: (id, scope, pin) => call('bqCancel', id, scope, pin),
   bqImport: () => call('bqImport'),
+  bqImportCheck: () => call('bqImportCheck'),
   jobsSave: (rec, pin) => call('jobsSave', rec, pin),
   dutyMembers: () => call('dutyMembers'),
   members: () => call('lpchMembers'),
@@ -3419,6 +3420,7 @@ function localStore() {
       return { changed: pick.length, ids: pick.map(x => x.id) };
     },
     bqImport: async () => { throw new Error('นำเข้านัดได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    bqImportCheck: async () => { throw new Error('นำเข้านัดได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     // แถบ RTT/RA Jobs: กติกาเดียวกับ jobsSave ใน Code.gs (ผู้ใช้ตัวอย่าง = แอดมิน บันทึกแทนได้ทุกคน)
     jobsSave: async (rec, pin) => {
       const ym = str(rec.ym), who = str(rec.who).trim();
@@ -5040,6 +5042,8 @@ setupRegCombo('a', apFromReg, () => apRegNote());
 // แดชบอร์ด (จำนวนเคสต่อวัน ปฏิทินเคสรายวัน) · ค้นหาผู้ป่วยดูวันนัดทุกคอร์ส · สถิติ MP/RC ไปแถบ RC และกิจกรรม เมื่อ ตั้งค่า → Brachytherapy: ที่มา = แถบนี้
 const BQ_API = 41;   // Code.gs ที่มีแถบนัดคิวใส่แร่ (bqCreate, bqEdit, bqCancel, bqImport)
 const bqOn = () => serverHas(BQ_API);
+const BQ_IMPORT_API = 42;   // Code.gs ที่ตรวจก่อนนำเข้าได้ (bqImportCheck) และอ่านหัวคอลัมน์ของระบบเดิม (เลขนัด, Fraction ที่, จำนวน Fraction …)
+const bqImpOn = () => serverHas(BQ_IMPORT_API);
 const BQ_OLD = 'แถบนัดคิวใส่แร่ต้องใช้ Code.gs รุ่น 2026-10-30.3 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 const BQ_ST = { booked: 'นัดแล้ว', done: 'มาตามนัด', cancel: 'ยกเลิก' };
 const BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'note', 'status', 'mp', 'rc', 'hist', 'src', 'by', 'created', 'editedBy', 'updated'];
@@ -5130,7 +5134,7 @@ function bqQueueHtml(edit) {
   const filt = [['today', `วันนี้ ${nToday}`], ['upcoming', `นัดที่จะถึง ${up.length}`], ['past', 'ที่ผ่านมา'], ['all', 'ทั้งหมด']];
   const body = shown.map(d => { const rows = list.filter(a => a.date === d); return bqDayHead(d, rows.filter(bqLive).length, 11) + bqRowsHtml(rows, edit); }).join('');
   return `<div class="cal-opts bq-filt" role="group" aria-label="ช่วงของนัด">${filt.map(([k, l]) => `<button type="button" data-bqf="${k}" aria-pressed="${k === F}">${esc(l)}</button>`).join('')}</div>
-    <p class="bq-stats">วันนี้ <b>${nToday}</b> นัด · นัดที่จะถึง <b>${up.length}</b> นัด · ผู้ป่วยในคิว <b>${new Set(up.map(a => hnKey(a.hn))).size}</b> ราย · สูงสุด ${bqMax()} เคส/วัน${edit ? ' · กดแถวเพื่อแก้ไข' : ''}</p>
+    <p class="bq-stats">วันนี้ <b>${nToday}</b> นัด · นัดที่จะถึง <b>${up.length}</b> นัด · ผู้ป่วยในคิว <b>${new Set(up.map(a => bqPid(a.hn, a.name))).size}</b> ราย · สูงสุด ${bqMax()} เคส/วัน${edit ? ' · กดแถวเพื่อแก้ไข' : ''}</p>
     <div class="table-wrap ct-wrap"><table class="ct-tbl bq-tbl" id="bq-tbl">${BQ_HEAD}<tbody>${body || '<tr><td colspan="11" class="empty-state">ไม่มีนัด</td></tr>'}</tbody></table></div>
     ${days.length > shown.length ? `<p style="margin-top:10px"><button type="button" class="btn ghost sm" data-bqmore="1">แสดงเพิ่ม (อีก ${days.length - shown.length} วัน)</button></p>` : ''}`;
 }
@@ -5191,12 +5195,15 @@ function bqCalHtml(ym, per, max, hol, td, sel) {
 }
 const THAI_WD = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
+// ผู้ป่วยคนเดียวกัน: HN เดียวกัน · ไม่มี HN (ระบบเดิมใส่ "-") = ชื่อเดียวกัน
+const bqPid = (hn, name) => (/[0-9A-Za-z]/.test(str(hn)) ? hnKey(hn) : '~' + str(name).replace(/\s+/g, ' ').trim().toLowerCase());
+const bqSame = (a, hn, name) => bqPid(a.hn, a.name) === bqPid(hn, name);
 // ค้นหาผู้ป่วย (HN หรือชื่อ): รายชื่อ → กดดูวันนัดทุกคอร์ส
 function bqPatients() {
   const m = new Map();
   for (const a of state.bq.slice().sort(bqOrder)) {
-    const k = hnKey(a.hn);
-    if (!m.has(k)) m.set(k, { hn: a.hn, name: a.name, rows: [] });
+    const k = bqPid(a.hn, a.name);
+    if (!m.has(k)) m.set(k, { pid: k, hn: a.hn, name: a.name, rows: [] });
     const p = m.get(k);
     p.name = a.name || p.name;
     p.rows.push(a);
@@ -5209,25 +5216,25 @@ function bqFindHtml(words) {
   all.sort((a, b) => (next(a) ? 0 : 1) - (next(b) ? 0 : 1) || (b.rows[b.rows.length - 1].date).localeCompare(a.rows[a.rows.length - 1].date));
   const list = all.slice(0, 30);
   return `<p class="bq-stats">พิมพ์ HN หรือชื่อผู้ป่วย แล้วกดที่ชื่อเพื่อดูวันนัดทุกคอร์ส${all.length > list.length ? ` · แสดง ${list.length} รายแรก พิมพ์เพิ่มเพื่อค้นให้แคบลง` : ''}</p>
-    <div class="bq-find">${list.map(p => { const nx = next(p), courses = new Set(p.rows.map(a => a.course || a.id)).size; return `<button type="button" class="bq-pt" data-bqpt="${esc(p.hn)}"><b class="hn">${esc(p.hn)}</b><span>${esc(p.name)}<br><small>${courses} คอร์ส · ${nx ? `นัดถัดไป ${esc(fmtDay(nx.date))} (Fx ${esc(nx.fx)}/${esc(nx.total)})` : 'ไม่มีนัดที่จะถึง'}</small></span><span class="muted">ดูวันนัด ›</span></button>`; }).join('') || '<p class="empty-state">ไม่พบผู้ป่วยที่ตรงกับคำค้น</p>'}</div>`;
+    <div class="bq-find">${list.map(p => { const nx = next(p), courses = new Set(p.rows.map(a => a.course || a.id)).size; return `<button type="button" class="bq-pt" data-bqpt="${esc(p.pid)}"><b class="hn">${esc(p.hn)}</b><span>${esc(p.name)}<br><small>${courses} คอร์ส · ${nx ? `นัดถัดไป ${esc(fmtDay(nx.date))} (Fx ${esc(nx.fx)}/${esc(nx.total)})` : 'ไม่มีนัดที่จะถึง'}</small></span><span class="muted">ดูวันนัด ›</span></button>`; }).join('') || '<p class="empty-state">ไม่พบผู้ป่วยที่ตรงกับคำค้น</p>'}</div>`;
 }
-function bqCourses(hn) {
-  const rows = state.bq.filter(a => hnKey(a.hn) === hnKey(hn)).sort(bqOrder), m = new Map();
+function bqCourses(pid) {
+  const rows = state.bq.filter(a => bqPid(a.hn, a.name) === pid).sort(bqOrder), m = new Map();
   for (const a of rows) { const k = a.course || a.id; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
   return [...m.values()];
 }
-function bqPatientHtml(hn) {
-  const td = today(), courses = bqCourses(hn), all = courses.flat(), nx = all.find(a => a.date >= td && a.status === BQ_ST.booked);
-  const name = (all[all.length - 1] || {}).name || '';
-  return `<div class="toolbar"><button type="button" class="btn ghost sm" data-bqback="1">← ผลการค้นหา</button><span class="spacer"></span><button type="button" class="btn ghost sm" data-bqcopy="${esc(hn)}">📋 คัดลอกวันนัด</button></div>
+function bqPatientHtml(pid) {
+  const td = today(), courses = bqCourses(pid), all = courses.flat(), nx = all.find(a => a.date >= td && a.status === BQ_ST.booked);
+  const { hn = '', name = '' } = all[all.length - 1] || {};
+  return `<div class="toolbar"><button type="button" class="btn ghost sm" data-bqback="1">← ผลการค้นหา</button><span class="spacer"></span><button type="button" class="btn ghost sm" data-bqcopy="${esc(pid)}">📋 คัดลอกวันนัด</button></div>
     <h3 style="margin:0 0 4px"><span class="hn">${esc(hn)}</span> ${esc(name)}</h3>
     <p class="bq-stats">${courses.length} คอร์ส · ${nx ? `นัดถัดไป <b>${esc(bqDay(nx.date))}</b>` : 'ไม่มีนัดที่จะถึง'}</p>
     ${courses.map((c, i) => { const n = s => c.filter(a => a.status === s).length; return `<div class="bq-course"><h4>คอร์สที่ ${i + 1} · ${bqTech(c[0].tech)} · ${c.length} Fx · ${esc(ctDocText(c[0].doc))}</h4>
       <p class="sum">นัดแล้ว ${n(BQ_ST.booked)} · มาตามนัด ${n(BQ_ST.done)} · ยกเลิก ${n(BQ_ST.cancel)}</p>
       <ol>${c.map(a => `<li class="${a === nx ? 'next' : bqLive(a) ? '' : 'cancel'}">Fx ${esc(a.fx)}/${esc(a.total)} · ${esc(bqDay(a.date))} · ${esc(a.status)}${a === nx ? ' · นัดถัดไป' : ''}${a.mp ? ` · MP ${esc(a.mp)}` : ''}${a.rc ? ` · RC ${esc(a.rc)}` : ''}</li>`).join('')}</ol></div>`; }).join('') || '<p class="empty-state">ไม่พบนัดของผู้ป่วยนี้</p>'}`;
 }
-async function bqCopy(hn) {
-  const courses = bqCourses(hn), all = courses.flat(), name = (all[all.length - 1] || {}).name || '';
+async function bqCopy(pid) {
+  const courses = bqCourses(pid), all = courses.flat(), { hn = '', name = '' } = all[all.length - 1] || {};
   const text = [`HN ${hn} ${name}`, ...courses.map((c, i) => `คอร์สที่ ${i + 1} (${c[0].tech}): ` + c.filter(bqLive).map(a => `Fx ${a.fx} ${apDate(a.date)}`).join(', '))].join('\n');
   try { await navigator.clipboard.writeText(text); toast('คัดลอกวันนัดแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้', { err: true }); }
 }
@@ -5283,7 +5290,7 @@ function bqGen() {
   return out;
 }
 // คำเตือนของแต่ละ Fx [[ระดับ, ข้อความ]] · ระดับ bad = ต้องยืนยันก่อนลงนัด
-function bqWarn(dates, hn) {
+function bqWarn(dates, hn, name) {
   const td = today(), hol = holidayMap(), max = bqMax(), add = {};
   for (const d of dates) add[d] = (add[d] || 0) + 1;
   return dates.map(d => {
@@ -5291,7 +5298,7 @@ function bqWarn(dates, hn) {
     if (d < td) w.push(['bad', 'เป็นวันที่ผ่านมาแล้ว']);
     if (hol[d]) w.push(['', `วันหยุด: ${hol[d]}`]);
     else if ([0, 6].includes(parseISO(d).getDay())) w.push(['', 'วันเสาร์–อาทิตย์']);
-    if (hnKey(hn) && state.bq.some(a => a.status === BQ_ST.booked && hnKey(a.hn) === hnKey(hn) && a.date === d)) w.push(['bad', 'HN นี้มีนัดในวันนี้อยู่แล้ว']);
+    if (str(hn) && state.bq.some(a => a.status === BQ_ST.booked && bqSame(a, hn, name) && a.date === d)) w.push(['bad', 'ผู้ป่วยนี้มีนัดในวันนี้อยู่แล้ว']);
     const n = bqCount(d), tot = n + add[d];
     w.push(tot > max ? ['bad', `วันนี้จะมี ${tot} เคส เกิน ${max} เคส`] : ['okw', `มีนัดแล้ว ${n}/${max} เคส`]);
     return w;
@@ -5314,7 +5321,7 @@ function bqSync() {
   $('#q-cal').innerHTML = bqPickCal(dates);
   $('#q-cal-help').textContent = pat === 'manual' ? 'กดวันในปฏิทินทีละวันจนครบทุก Fx (เรียง Fx ตามวันให้เอง · กดวันเดิมซ้ำ = วันละ 2 Fx) · ตัวเลข = นัดที่มีแล้ว/สูงสุด'
     : 'ปฏิทินแสดงวันที่สร้างให้ · กดวัน = เปลี่ยนวันเริ่ม · ตัวเลข = นัดที่มีแล้ว/สูงสุด · จะเลือกวันเองให้เลือก "เลือกวันเองตาม Fraction"';
-  const ws = bqWarn(dates, $('#q-hn').value);
+  const ws = bqWarn(dates, $('#q-hn').value, $('#q-name').value);
   $('#q-fxs').innerHTML = !total ? '<p class="muted" style="margin:0;font-size:13px">ใส่จำนวน Fraction วันเริ่ม และรูปแบบการนัด เพื่อดูวันนัด</p>'
     : Array.from({ length: Math.min(total, 30) }, (_, i) => `<div class="bq-fx"><b>Fx ${i + 1}</b><span class="fxd"><input type="date" data-qfx="${i}" value="${esc(dates[i] || '')}" aria-label="วันที่ Fx ${i + 1}">${pat === 'manual' && dates[i] ? `<button type="button" class="icon-btn" data-qdel="${i}" aria-label="ล้างวันของ Fx ${i + 1}" title="ล้างวันของ Fx ${i + 1}">×</button>` : ''}</span>
       ${dates[i] ? (ws[i] || []).map(([c, t]) => `<span class="w ${c}">${esc(t)}</span>`).join('') : '<span class="w">ยังไม่ได้เลือกวัน</span>'}</div>`).join('');
@@ -5361,12 +5368,12 @@ function submitBq(e) {
   const td = today(), max = bqMax(), add = {}, msgs = [];
   for (const d of dates) add[d] = (add[d] || 0) + 1;
   for (const d of Object.keys(add)) if (bqCount(d) + add[d] > max) msgs.push(`${bqDay(d)}: มีอยู่ ${bqCount(d)} + เพิ่ม ${add[d]} = ${bqCount(d) + add[d]} เคส (เกิน ${max} เคส/วัน)`);
-  const dup = dates.filter(d => state.bq.some(a => a.status === BQ_ST.booked && hnKey(a.hn) === hnKey(hn) && a.date === d));
-  if (dup.length) msgs.push(`HN นี้มีนัดในวันเดียวกันอยู่แล้ว: ${dup.map(fmtDay).join(', ')}`);
+  const dup = dates.filter(d => state.bq.some(a => a.status === BQ_ST.booked && bqSame(a, hn, name) && a.date === d));
+  if (dup.length) msgs.push(`ผู้ป่วยนี้มีนัดในวันเดียวกันอยู่แล้ว: ${dup.map(fmtDay).join(', ')}`);
   const past = dates.filter(d => d < td);
   if (past.length) msgs.push(`เป็นวันที่ผ่านมาแล้ว: ${past.map(fmtDay).join(', ')}`);
-  const up = state.bq.filter(a => a.status === BQ_ST.booked && hnKey(a.hn) === hnKey(hn) && a.date >= td).sort(bqOrder)[0];
-  if (up && !dup.length) msgs.push(`HN ${hn} มีนัดที่ยังไม่ถึงอยู่แล้ว (${bqDay(up.date)}) · ลงคอร์สใหม่เพิ่ม`);
+  const up = state.bq.filter(a => a.status === BQ_ST.booked && bqSame(a, hn, name) && a.date >= td).sort(bqOrder)[0];
+  if (up && !dup.length) msgs.push(`ผู้ป่วยนี้ (HN ${hn}) มีนัดที่ยังไม่ถึงอยู่แล้ว (${bqDay(up.date)}) · ลงคอร์สใหม่เพิ่ม`);
   if (msgs.length && !bqNew.armed) {
     bqNew.armed = true;
     $('#q-warn').innerHTML = `<b>⚠️ โปรดตรวจสอบก่อนลงนัด</b><ul>${msgs.map(m => `<li>${esc(m)}</li>`).join('')}</ul><span>กด "ยืนยันลงนัด" เพื่อบันทึกต่อ หรือแก้วันนัดก่อน</span>`;
@@ -5477,21 +5484,32 @@ $('#bq-body').addEventListener('pointerover', e => {
   tip.hidden = false;
 });
 $('#bq-body').addEventListener('pointerleave', () => { const tip = $('#bq-body .bq-tip'); if (tip) tip.hidden = true; });
-// ตั้งค่า → นัดคิวใส่แร่: นำเข้านัดจากระบบนัดคิวใส่แร่เดิม (ชีตเดียวกับ Brachytherapy จากระบบนัด)
-async function bqImportNow(btn) {
+// ตั้งค่า → นัดคิวใส่แร่: นำเข้านัดจากระบบนัดคิวใส่แร่เดิม (ชีตเดียวกับ Brachytherapy จากระบบนัด) · ตรวจก่อน (ไม่เขียน) → นำเข้า
+async function bqImportRun(btn, check) {
   if (!str(state.config.brachySync.url)) return toast('ใส่และบันทึกลิงก์ชีตของระบบนัดคิวใส่แร่เดิมที่ ตั้งค่า → Brachytherapy จากระบบนัด ก่อน', { err: true });
   btn.disabled = true;
   try {
-    const r = await store.bqImport();
-    state.bqImp = r;
-    toast(`นำเข้านัด ${r.added} รายการ${r.skipped ? ` · มีอยู่แล้ว ${r.skipped}` : ''}`);
-    await refresh(true);
-  } catch (e) { toast('นำเข้าไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+    const r = await (check ? store.bqImportCheck() : store.bqImport());
+    state.bqImp = { ...r, check };
+    if (!check) { toast(`นำเข้านัด ${r.added} รายการ${r.skipped ? ` · มีอยู่แล้ว ${r.skipped}` : ''}`); await refresh(true); }
+  } catch (e) { toast((check ? 'ตรวจไม่สำเร็จ: ' : 'นำเข้าไม่สำเร็จ: ') + errMsg(e), { err: true }); }
   finally { btn.disabled = false; }
+  renderSettings();
 }
-const bqImpText = r => !r ? '' : `ชีต ${esc(r.title)} · แท็บ ${esc(r.tab)} · ${r.rows} นัด${r.first ? ` (${esc(fmtDayY(r.first))} – ${esc(fmtDayY(r.last))})` : ''} · เพิ่ม ${r.added} · มีอยู่แล้ว ${r.skipped}`
-  + (Object.keys(r.doctors || {}).length ? `<br><span class="acct-warn">แพทย์ที่ไม่ตรงกับรายชื่อแพทย์: ${unknownText(Object.entries(r.doctors))} (เก็บชื่อเดิมไว้)</span>` : '')
-  + (Object.keys(r.staff || {}).length ? `<br><span class="acct-warn">MP/RC ที่ไม่ตรงกับทีมนักฟิสิกส์: ${unknownText(Object.entries(r.staff))}</span>` : '');
+// สรุปของชีตเดิม: คอลัมน์ที่ใช้ จำนวนนัด สถานะ รูปแบบการใส่ แพทย์ / MP / RC ที่ไม่ตรงกับรายชื่อ
+const BQ_IMP_COLS = [['date', 'วันที่นัด'], ['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['doctor', 'แพทย์'], ['technique', 'รูปแบบการใส่'], ['fx', 'Fx'], ['totalFx', 'จำนวน Fx'], ['status', 'สถานะ'],
+  ['mp', 'MP'], ['rc', 'RC'], ['id', 'รหัสนัด'], ['course', 'คอร์ส'], ['note', 'หมายเหตุ'], ['history', 'ประวัติการแก้ไข'], ['createdBy', 'ผู้ลงนัด'], ['created', 'วันที่ลงนัด']];
+const bqCounts = m => esc(Object.entries(m || {}).map(([k, n]) => `${k} ${n}`).join(' · '));
+function bqImpHtml(r) {
+  if (!r) return '';
+  const map = r.map || {}, miss = BQ_IMP_COLS.filter(([k]) => !map[k]).map(([, l]) => l);
+  return `<div class="br-preview">ชีต <b>${esc(r.title)}</b> · แท็บ ${esc(r.tab)} · ${r.rows} นัด ${r.courses || 0} คอร์ส${r.first ? ` (${esc(fmtDayY(r.first))} – ${esc(fmtDayY(r.last))})` : ''}
+    <br>${r.check ? `ยังไม่มีในแถบนี้ <b>${r.add}</b> นัด · มีอยู่แล้ว ${r.have}` : `นำเข้าแล้ว <b>${r.added}</b> นัด · มีอยู่แล้ว ${r.skipped}`}
+    ${r.statuses ? `<br>สถานะ: ${bqCounts(r.statuses)}` : ''}${r.techs ? `<br>รูปแบบการใส่: ${bqCounts(r.techs)}` : ''}
+    <br>คอลัมน์: ${BQ_IMP_COLS.filter(([k]) => map[k]).map(([k, l]) => `${esc(l)} = ${esc(map[k])}`).join(' · ')}${miss.length ? `<br><span class="acct-warn">ไม่พบคอลัมน์: ${esc(miss.join(', '))}</span>` : ''}
+    ${Object.keys(r.doctors || {}).length ? `<br><span class="acct-warn">แพทย์ที่ไม่ตรงกับรายชื่อแพทย์ (เก็บชื่อเดิมไว้ · ใส่ชื่อ-สกุลที่ ตั้งค่า → แพทย์ แล้วตรวจใหม่เพื่อให้เป็นรหัส): ${unknownText(Object.entries(r.doctors))}</span>` : ''}
+    ${Object.keys(r.staff || {}).length ? `<br><span class="acct-warn">MP/RC ที่ไม่ตรงกับทีมนักฟิสิกส์ (เก็บชื่อเดิมไว้): ${unknownText(Object.entries(r.staff))}</span>` : ''}</div>`;
+}
 setupRegCombo('q', bqFromReg);
 
 // แถบ CT-SIM: นัดที่รอลง CT-SIM (วันนี้ → เลยวันนัด → นัดถัดไป) · ลงข้อมูล = เปิดฟอร์ม CT-SIM พร้อมข้อมูลนัด
@@ -8917,8 +8935,10 @@ function renderSettings() {
         <div class="duty-roles">${[...new Set([...d.roles, ...d.bq.signRoles])].map(r => `<label class="check"><input type="checkbox" data-bqroles="1" value="${esc(r)}"${d.bq.signRoles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>
         <input data-bqusers="1" value="${esc(d.bq.signUsers.join(', '))}" placeholder="ชื่อผู้ใช้ LPCH เพิ่มเติม คั่นด้วยจุลภาค" autocomplete="off" spellcheck="false" aria-label="ชื่อผู้ใช้ LPCH ที่ลงชื่อ MP / RC ได้"></div>
       <h3 class="sub-h">นำเข้านัดจากระบบนัดคิวใส่แร่เดิม</h3>
-      <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
-      <div class="mem-bar"><button type="button" class="btn ghost" data-bqimport="1"${store.mode === 'local' || !bqOn() || !state.user.isAdmin ? ' disabled' : ''}>นำเข้านัด</button><span class="muted">${state.bqImp ? bqImpText(state.bqImp) : `มีนัดในแถบนี้ ${state.bq.length} รายการ`}</span></div>
+      <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · กด ตรวจก่อนนำเข้า (ยังไม่เขียนอะไร) ดูจำนวนนัดและคอลัมน์ แล้วกด นำเข้า · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
+      ${store.mode === 'sheet' && !bqImpOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การนำเข้าต้องใช้ Code.gs รุ่น 2026-11-01.1 ขึ้นไป (ตรวจก่อนนำเข้า และอ่านคอลัมน์ เลขนัด, Fraction ที่, จำนวน Fraction ของระบบเดิม)</span></p>' : ''}
+      <div class="mem-bar"><button type="button" class="btn ghost" data-bqimport="check"${store.mode === 'local' || !bqImpOn() || !state.user.isAdmin ? ' disabled' : ''}>ตรวจก่อนนำเข้า</button>${state.bqImp && state.bqImp.check && state.bqImp.add ? `<button type="button" class="btn primary" data-bqimport="run">นำเข้า ${state.bqImp.add} นัด</button>` : ''}<span class="muted">มีนัดในแถบนี้ ${state.bq.length} รายการ${state.user.isAdmin ? '' : ' · นำเข้าได้เฉพาะแอดมิน'}</span></div>
+      ${bqImpHtml(state.bqImp)}
     </div>
     <div class="sec" data-sec="ctsim"><div class="sec-head"><h2>CT-SIM (แถบ ${esc(navLabel('ctsim'))})</h2><p>เครื่อง CT, ตัวเลือกของช่องห้อง CT และช่องในฟอร์มเพิ่มผู้ป่วย · ผู้ปฏิบัติงานประจำวัน (RTT, RA, Daily QC) เลือกจากสมาชิก LPCH ตามตำแหน่งที่ตั้งใน ตารางวันฉาย · ไฟล์ส่งออกใช้ชื่อแพทย์จาก แพทย์ (Doc) (ไม่มีชื่อ = รหัส) · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู</p></div>
       ${ctOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบ CT-SIM ต้องใช้ Code.gs รุ่น 2026-10-24.1 ขึ้นไป</span></p>'}
@@ -10981,7 +11001,7 @@ document.addEventListener('click', e => {
   if (ds.bqcopy) return bqCopy(ds.bqcopy);
   if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); return a && bqQuick(a, { status: BQ_ST.done }); }
   if (ds.bqsign) return openBqEdit(ds.bqsign, ds.bqk);
-  if (ds.bqimport) return bqImportNow(t);
+  if (ds.bqimport) return bqImportRun(t, ds.bqimport === 'check');
   if (ds.qday) return bqPickDay(ds.qday);
   if (ds.qmon) { bqNew.month = shiftMonth(bqNew.month, +ds.qmon); return bqSync(); }
   if (ds.qdel !== undefined) { const cur = bqGen(); cur.splice(+ds.qdel, 1); bqNew.dates = cur; return bqSync(); }

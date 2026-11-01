@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-10-30.3';
-const API_LEVEL = 41;
+const CODE_VERSION = '2026-11-01.1';
+const API_LEVEL = 42;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1440,21 +1440,23 @@ function bqRows_(ss) {
 }
 
 /**
- * แอดมิน: นำเข้านัดจากระบบนัดคิวใส่แร่เดิม (ชีตเดียวกับ ตั้งค่า → Brachytherapy จากระบบนัด) ครั้งเดียว · นำเข้าซ้ำ = เพิ่มเฉพาะนัดที่ยังไม่มี
- * รหัสนัดเดิมใช้เป็น id (ไม่มีคอลัมน์รหัส = HN|วันที่|Fx) · แพทย์ / MP / RC จับคู่กับรายชื่อในตั้งค่า (ไม่ตรง = เก็บข้อความเดิม)
- * คืน { tab, rows, added, skipped, first, last, doctors: { ชื่อที่ไม่รู้จัก: จำนวน }, staff: { … } }
+ * แอดมิน: นำเข้านัดจากระบบนัดคิวใส่แร่เดิม (ชีตเดียวกับ ตั้งค่า → Brachytherapy จากระบบนัด) · นำเข้าซ้ำ = เพิ่มเฉพาะนัดที่ยังไม่มี
+ * bqImportCheck = ตรวจอย่างเดียว (ไม่เขียน) · bqImport = นำเข้า · ทั้งสองคืนสรุปเดียวกัน:
+ * { tab, title, rows, add (ยังไม่มี), have (มีแล้ว), first, last, statuses, techs, courses, map (คอลัมน์ที่ใช้), doctors / staff: { ชื่อที่ไม่รู้จัก: จำนวน } } · bqImport เพิ่ม added, skipped
+ * รหัสนัดเดิม (เลขนัด) ใช้เป็น id (ไม่มีคอลัมน์รหัส = HN|วันที่|Fx) · แพทย์ / MP / RC จับคู่กับรายชื่อในตั้งค่า (ไม่ตรง = เก็บข้อความเดิม)
  */
-// คอลัมน์ของระบบเดิม: แบบเดียวกับที่ดึงสถิติ (BRACHY_KEYS ประกาศทีหลังในไฟล์ → สร้างตอนเรียก) + แพทย์ หมายเหตุ คอร์ส ผู้ลงนัด ประวัติ
+// คอลัมน์ของระบบเดิม: แบบเดียวกับที่ดึงสถิติ (BRACHY_KEYS ประกาศทีหลังในไฟล์ → สร้างตอนเรียก) + แพทย์ หมายเหตุ คอร์ส ผู้ลงนัด ผู้แก้ล่าสุด ประวัติ
 const bqImportKeys_ = () => Object.assign({}, BRACHY_KEYS, {
   doctor: ['doctor', 'แพทย์', 'doc', 'physician', 'แพทย์ผู้สั่ง', 'แพทย์เจ้าของไข้'], note: ['note', 'หมายเหตุ', 'remark', 'notes'],
-  course: ['courseid', 'course', 'คอร์ส', 'รหัสคอร์ส'], created: ['createdat', 'created', 'ลงนัดเมื่อ', 'วันที่ลงนัด', 'timestamp'],
-  createdBy: ['createdby', 'ลงนัดโดย', 'ผู้ลงนัด'], history: ['history', 'ประวัติ', 'ประวัติการแก้ไข'],
+  course: ['courseid', 'course', 'คอร์ส', 'รหัสคอร์ส'], created: ['createdat', 'created', 'ลงนัดเมื่อ', 'วันที่ลงนัด', 'วันที่บันทึก', 'timestamp'],
+  createdBy: ['createdby', 'ลงนัดโดย', 'ผู้ลงนัด', 'ผู้บันทึก'], editedBy: ['editedby', 'updatedby', 'แก้ไขล่าสุดโดย', 'แก้ไขโดย'],
+  updated: ['updatedat', 'updated', 'แก้ไขล่าสุดเมื่อ', 'แก้ไขเมื่อ'], history: ['history', 'ประวัติ', 'ประวัติการแก้ไข'],
 });
 const BQ_HIST_F = { doctor: 'doc', technique: 'tech' };
-function bqImport(token) {
-  const u = who_(token);
-  if (!u.isAdmin) throw new Error('นำเข้านัดได้เฉพาะแอดมิน');
-  const ss = ss_(), cfg = readConfig_(ss) || {}, s = cfg.brachySync || {};
+// อ่านนัดทั้งหมดจากชีตของระบบเดิมเป็นแถวของแถบนี้
+function bqImportRead_(cfg) {
+  const s = cfg.brachySync || {};
+  if (!String(s.url || '').trim()) throw new Error('ใส่ลิงก์ชีตของระบบนัดคิวใส่แร่เดิมที่ ตั้งค่า → Brachytherapy จากระบบนัด ก่อน');
   const book = brachyBook_(s), tabs = brachyTabs_(book), tab = brachyPick_(tabs, s);
   if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัด');
   const map = Object.assign(brachyGuess_(tab.headers, bqImportKeys_()), s.map && typeof s.map === 'object' ? s.map : {});
@@ -1468,8 +1470,10 @@ function bqImport(token) {
   const staffOf = brachyStaff_(cfg), unknownDoc = {}, unknownStaff = {};
   const stOf = v => (/ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
   const now = new Date().toISOString();
-  let rows = values.map(r => {
+  const rows = values.map(r => {
     const g = k => { const i = at(k); return i < 0 ? '' : cellText_(r[i], tz); };
+    // วันเวลาที่บันทึก / แก้ล่าสุด: เซลล์วันที่เก็บเวลาไว้ด้วย
+    const gt = k => { const i = at(k), v = i < 0 ? '' : r[i]; return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v) ? Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm:ss') : g(k); };
     const o = { date: brachyDate_(g('date')), hn: String(g('hn')).replace(/\.0$/, '').trim(), fx: g('fx'), total: g('totalFx') };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date) || !o.hn) return null;
     const doc = docOf(g('doctor')), mp = g('mp'), rc = g('rc');
@@ -1480,7 +1484,8 @@ function bqImport(token) {
     hist = (Array.isArray(hist) ? hist : []).map(h => ({ at: String(h.at || ''), by: String(h.name || h.by || ''),
       ch: (Array.isArray(h.changes) ? h.changes : Array.isArray(h.ch) ? h.ch : []).map(c => ({ f: BQ_HIST_F[c.f] || c.f, from: String(c.from == null ? '' : c.from), to: String(c.to == null ? '' : c.to) })) }));
     return Object.assign(o, { id: g('id') || o.hn + '|' + o.date + '|' + o.fx, course: g('course'), name: g('name'), doc: doc, tech: g('technique'), note: g('note'),
-      status: stOf(g('status')), mp: staffOf(mp) || mp, rc: staffOf(rc) || rc, hist: hist.length ? JSON.stringify(hist.slice(-40)) : '', by: g('createdBy'), created: g('created') || now, editedBy: '', updated: '' });
+      status: stOf(g('status')), mp: staffOf(mp) || mp, rc: staffOf(rc) || rc, hist: hist.length ? JSON.stringify(hist.slice(-40)) : '', by: g('createdBy'), created: gt('created') || now,
+      editedBy: g('editedBy'), updated: gt('updated') });
   }).filter(Boolean);
   // ไม่มีคอลัมน์คอร์ส: Fx 1 (หรือ Fx ไม่เพิ่มจากครั้งก่อน) ของ HN เดียวกัน = เริ่มคอร์สใหม่
   const lastOf = {};
@@ -1492,16 +1497,34 @@ function bqImport(token) {
     o.course = lastOf[o.hn].course;
   });
   rows.forEach(o => { o.src = 'bq:' + o.id; });
+  return { book: book, tab: tab, rows: rows, map: map, doctors: unknownDoc, staff: unknownStaff };
+}
+// สรุปสำหรับหน้าตั้งค่า · have = รหัสนัดที่อยู่ในแถบนี้แล้ว
+function bqImportSum_(im, have) {
+  const dates = im.rows.map(o => o.date).sort(), count = f => { const m = {}; im.rows.forEach(o => { const k = f(o) || '—'; m[k] = (m[k] || 0) + 1; }); return m; };
+  const add = im.rows.filter(o => !have[o.id]).length;
+  return { tab: im.tab.name, title: im.book.getName(), rows: im.rows.length, add: add, have: im.rows.length - add, first: dates[0] || '', last: dates[dates.length - 1] || '',
+    statuses: count(o => o.status), techs: count(o => o.tech), courses: Object.keys(count(o => o.course)).length, map: im.map, doctors: im.doctors, staff: im.staff };
+}
+const bqHave_ = ss => { const have = {}; readTable_(ss, 'bq').forEach(x => { have[x.id] = true; }); return have; };
+function bqImportCheck(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('นำเข้านัดได้เฉพาะแอดมิน');
+  const ss = ss_();
+  return bqImportSum_(bqImportRead_(readConfig_(ss) || {}), bqHave_(ss));
+}
+function bqImport(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('นำเข้านัดได้เฉพาะแอดมิน');
+  const ss = ss_(), im = bqImportRead_(readConfig_(ss) || {});
   const res = withLock_(() => {
-    const sh2 = tableSheet_(ss, 'bq'), have = {};
-    readTable_(ss, 'bq').forEach(x => { have[x.id] = true; });
-    const add = rows.filter(o => !have[o.id] && (have[o.id] = true));
-    bqAppend_(sh2, headerOf_(sh2), add);
-    return { added: add.length, skipped: rows.length - add.length };
+    const sh = tableSheet_(ss, 'bq'), have = bqHave_(ss), sum = bqImportSum_(im, have);
+    const add = im.rows.filter(o => !have[o.id] && (have[o.id] = true));   // รหัสซ้ำในชีตเดิม: เพิ่มแถวแรก
+    bqAppend_(sh, headerOf_(sh), add);
+    return Object.assign(sum, { added: add.length, skipped: im.rows.length - add.length });
   });
-  const dates = rows.map(o => o.date).sort();
-  return { tab: tab.name, title: book.getName(), rows: rows.length, added: res.added, skipped: res.skipped, first: dates[0] || '', last: dates[dates.length - 1] || '',
-    doctors: unknownDoc, staff: unknownStaff, map: map };
+  bqStats_();
+  return res;
 }
 
 /**
@@ -1733,16 +1756,16 @@ function dutyMembers(token) {
 const BRACHY_ST_DONE = 'มาตามนัด', BRACHY_ST_CANCEL = 'ยกเลิก';
 const BRACHY_EVERY_MIN = 10;
 const BRACHY_KEYS = {
-  id: ['apptid', 'appointmentid', 'appt', 'id', 'รหัสนัด', 'เลขที่นัด', 'รหัสนัดหมาย', 'ไอดี'],
+  id: ['apptid', 'appointmentid', 'appt', 'id', 'รหัสนัด', 'เลขนัด', 'เลขที่นัด', 'รหัสนัดหมาย', 'ไอดี'],
   date: ['date', 'วันที่', 'วันนัด', 'วันที่นัด', 'นัดวันที่', 'apptdate', 'appointmentdate'],
   hn: ['hn'],
-  name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'ผู้ป่วย', 'patient', 'patientname', 'fullname'],
+  name: ['name', 'ชื่อ', 'ชื่อสกุล', 'ชื่อผู้ป่วย', 'ชื่อสกุลผู้ป่วย', 'ผู้ป่วย', 'patient', 'patientname', 'fullname'],
   technique: ['technique', 'เทคนิค', 'tech', 'รูปแบบการใส่', 'รูปแบบการใส่แร่', 'การใส่', 'การใส่แร่', 'ชนิดการใส่', 'รูปแบบ', 'applicator', 'applicatortype', 'insertion', 'insertiontype', 'วิธี', 'method', 'type', 'ชนิด'],
   mp: ['mp', 'ผู้วางแผน', 'วางแผน', 'planner', 'plannedby', 'planby', 'physicist', 'นักฟิสิกส์', 'นักฟิสิกส์การแพทย์', 'mpวางแผน'],
   rc: ['rc', 'ผู้ตรวจ', 'checker', 'mprc'],
   status: ['status', 'สถานะ'],
-  fx: ['fx', 'fraction', 'ครั้งที่', 'fxที่'],
-  totalFx: ['totalfx', 'fxทั้งหมด', 'จำนวนครั้ง', 'จำนวนfx', 'totalfraction'],
+  fx: ['fx', 'fraction', 'ครั้งที่', 'fxที่', 'fractionที่'],
+  totalFx: ['totalfx', 'fxทั้งหมด', 'จำนวนครั้ง', 'จำนวนfx', 'totalfraction', 'จำนวนfraction'],
 };
 // ต้องมี: วันที่ HN MP · ไม่มีรหัสนัด = ใช้ HN + วันที่ + Fx แทน (เลื่อนวันนัด = ลบรายการเดิม เพิ่มรายการใหม่)
 const BRACHY_NEED = ['date', 'hn', 'mp'];
