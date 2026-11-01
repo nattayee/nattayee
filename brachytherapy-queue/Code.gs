@@ -905,24 +905,21 @@ function redirectUrl_(params) {
 
 /**
  * หน้าพาไปเว็บอื่น: Google เปิดหน้าเว็บ Apps Script ใน iframe ที่ยอมให้เปลี่ยนหน้าต่างบนสุดได้เฉพาะหลังผู้ใช้กด
- * (sandbox allow-top-navigation-by-user-activation) สคริปต์จึงพาไปเองไม่ได้ ทั้งหน้าเป็นลิงก์เดียว แตะที่ใดก็ได้เพื่อไปต่อ
- * (ยังลองพาไปเองไว้ด้วย เผื่อเบราว์เซอร์ยอม)
+ * (sandbox allow-top-navigation-by-user-activation) สคริปต์จึงพาไปเองไม่ได้ · หน้านี้มีปุ่มเดียว "ไปที่เวอร์ชันใหม่"
  */
 function redirectPage_(url) {
   const attr = String(url).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const html =
     '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">' +
     '<style>:root{color-scheme:light dark}html,body{height:100%;margin:0}' +
-    'body{font-family:Sarabun,system-ui,sans-serif;background:#f5f3fa;color:#1f1b2e}' +
-    'a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:100%;padding:16px;box-sizing:border-box;' +
-    'color:inherit;text-decoration:none;text-align:center;cursor:pointer;outline:none}' +
-    '.t{font-size:20px;font-weight:700}.h{font-size:14px;opacity:.65}' +
-    '@media (prefers-color-scheme:dark){body{background:#141120;color:#ece8f6}}</style></head><body>' +
-    '<a id="go" href="' + attr + '" target="_top" autofocus>' +
-    '<span class="t">ระบบนัดคิวใส่แร่ย้ายไปที่ Treatment Planning Management แล้ว</span>' +
-    '<span class="h">แตะที่ใดก็ได้เพื่อไปต่อ · Tap anywhere to continue</span></a>' +
-    '<script>try { window.top.location.replace(' + JSON.stringify(url).replace(/</g, '\\u003c') + '); } catch (e) {}' +
-    'document.getElementById("go").focus();</script>' +
+    'body{font-family:Sarabun,system-ui,sans-serif;background:#f5f3fa;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}' +
+    '.go{display:inline-block;padding:20px 36px;line-height:1.5;border-radius:16px;background:#6b3fa0;color:#fff;' +
+    'font-size:24px;font-weight:700;text-decoration:none;box-shadow:0 6px 20px rgba(107,63,160,.35);text-align:center}' +
+    '.go:hover{filter:brightness(1.1)}.go:focus-visible{outline:3px solid #b794f0;outline-offset:4px}' +
+    '@media (max-width:480px){.go{font-size:20px;padding:18px 24px}}' +
+    '@media (prefers-color-scheme:dark){body{background:#141120}.go{background:#b794f0;color:#1a1228;box-shadow:0 6px 20px rgba(0,0,0,.4)}}</style></head><body>' +
+    '<a class="go" id="go" href="' + attr + '" target="_top" autofocus>ไปที่ระบบนัดคิวใส่แร่<span style="white-space:nowrap">เวอร์ชันใหม่ →</span></a>' +
+    '<script>document.getElementById("go").focus();</script>' +
     '</body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('ระบบนัดคิวผู้ป่วยใส่แร่')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
