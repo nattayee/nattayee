@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.5';
-const API_LEVEL = 43;
+const CODE_VERSION = '2026-11-01.6';
+const API_LEVEL = 44;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1391,6 +1391,38 @@ function bqEdit(id, ch, pin, token) {
   });
   bqStats_();
   return rec;
+}
+// ลงชื่อ RTT / MP / RC ครั้งเดียวให้หลายนัด (ทุกเคสของวันหนึ่งจากแถวหัววัน) · ch = { rtt | mp | rc: ชื่อ } หนึ่งช่อง · ไม่ยกเลิกเท่านั้น
+// RC ต้องไม่ใช่ MP ของนัดนั้น (นัดที่ชนข้ามไป) · เก็บประวัติรายนัด · คืนนัดที่แก้ (และนัดที่ค่าเดิมอยู่แล้ว)
+function bqEditDay(ids, ch, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.bq);
+  ch = ch && typeof ch === 'object' ? ch : {};
+  const keys = Object.keys(ch).filter(k => ['rtt', 'mp', 'rc'].indexOf(k) >= 0);
+  if (keys.length !== 1) throw new Error('เลือก RTT, MP หรือ RC อย่างใดอย่างหนึ่ง');
+  const k = keys[0], v = bqCut_(ch[k], 200);
+  ids = (Array.isArray(ids) ? ids : []).map(String).slice(0, 60);
+  if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
+  const cfg = readConfig_(ss_()) || {};
+  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะตำแหน่งที่ตั้งไว้ (ตั้งค่า → นัดคิวใส่แร่)');
+  checkPin_(u, pin, 'bq');
+  const out = withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), recs = [];
+    ids.forEach(id => {
+      const cur = all.filter(x => x.id === id)[0];
+      if (!cur || cur.status === BRACHY_ST_CANCEL) return;
+      if (v && ((k === 'rc' && cur.mp === v) || (k === 'mp' && cur.rc === v))) return;
+      if (String(cur[k] || '') === v) { recs.push(cur); return; }
+      const row = findRow_(sh, header.indexOf('id') + 1, id);
+      if (!row) return;
+      const set = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, [{ f: k, from: String(cur[k] || ''), to: v }]) };
+      set[k] = v;
+      writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in set), set);
+      recs.push(Object.assign({}, cur, set));
+    });
+    return recs;
+  });
+  bqStats_();
+  return out;
 }
 // ประวัติการแก้ไข (JSON) [{ at, by, ch: [{ f, from, to }] }] · เก็บ 40 ครั้งล่าสุด
 function bqHist_(old, u, ch) {

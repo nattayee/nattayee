@@ -1626,6 +1626,11 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .look-sw button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font-size:12px}
 .look-sw i{width:22px;height:22px;border-radius:999px;background:var(--c)}
 .look-pop .muted{margin:0;font-size:12px}
+.bq-dayset{padding:3px 10px;border:1px dashed var(--accent);border-radius:999px;background:transparent;color:var(--accent);font-size:12.5px;font-weight:600;white-space:nowrap;max-width:10em;overflow:hidden;text-overflow:ellipsis}
+.bq-dayset.set{border-style:solid;background:var(--accent-soft)}
+.bq-dayset.old{opacity:.6}
+.bq-dayv{font-size:12.5px;font-weight:600}
+.bqs-form{width:min(560px,calc(100vw - 32px))}
 </style>
 </head>
 <body>
@@ -2141,6 +2146,18 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="button" class="btn" data-close>ยกเลิก</button>
       <button type="submit" class="btn primary" id="bq-save">บันทึก</button>
     </footer>
+  </form>
+</dialog>
+<dialog id="bqs-dlg" aria-labelledby="bqs-title">
+  <form class="dlg bqs-form" id="bqs-form" novalidate autocomplete="off">
+    <header class="dlg-head"><h2 id="bqs-title">เลือกชื่อ</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <p class="bq-info" id="bqs-info"></p>
+      <div class="chips" id="bqs-chips" role="radiogroup" aria-label="รายชื่อ"></div>
+      <input id="bqs-other" maxlength="60" autocomplete="off" placeholder="หรือพิมพ์ชื่อ RTT" aria-label="ชื่อ RTT อื่น" hidden>
+      <p class="ct-took" id="bqs-note" hidden></p>
+    </div>
+    <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ยกเลิก</button><button type="submit" class="btn primary" id="bqs-save">บันทึก</button></footer>
   </form>
 </dialog>
 <dialog id="bqe-dlg" aria-labelledby="bqe-title">
@@ -3188,7 +3205,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.8';
+const PAGE_VERSION = '2026-11-01.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3247,6 +3264,7 @@ const sheetStore = {
   regRemove: (id, pin) => call('regRemove', id, pin),
   bqCreate: (rec, pin) => call('bqCreate', rec, pin),
   bqEdit: (id, ch, pin) => call('bqEdit', id, ch, pin),
+  bqEditDay: (ids, ch, pin) => call('bqEditDay', ids, ch, pin),
   bqCancel: (id, scope, pin) => call('bqCancel', id, scope, pin),
   bqImport: () => call('bqImport'),
   bqImportCheck: () => call('bqImportCheck'),
@@ -3593,6 +3611,24 @@ function localStore() {
       Object.assign(a, { hist: JSON.stringify(hist), editedBy: by, updated: nowISO() });
       persist();
       return clone(a);
+    },
+    bqEditDay: async (ids, ch, pin) => {
+      demoCheckPin(pin);
+      const out = [];
+      for (const id of ids) {
+        const k = Object.keys(ch)[0], v = str(ch[k]), a = db.bq.find(x => x.id === id);
+        if (!['rtt', 'mp', 'rc'].includes(k)) throw new Error('แก้ได้เฉพาะ RTT / MP / RC');
+        if (!a || a.status === BQ_ST.cancel || (v && ((k === 'rc' && a.mp === v) || (k === 'mp' && a.rc === v)))) continue;
+        if (str(a[k]) === v) { out.push(clone(a)); continue; }
+        const by = state.user.name || 'ผู้ใช้ตัวอย่าง', d = new Date();
+        let hist = [];
+        try { hist = JSON.parse(a.hist || '[]'); } catch (e) { hist = []; }
+        hist = [...(Array.isArray(hist) ? hist : []), { at: `${today()} ${pad(d.getHours())}:${pad(d.getMinutes())}`, by, ch: [{ f: k, from: str(a[k]), to: v }] }].slice(-40);
+        Object.assign(a, { [k]: v, hist: JSON.stringify(hist), editedBy: by, updated: nowISO() });
+        out.push(clone(a));
+      }
+      persist();
+      return out;
     },
     bqCancel: async (id, scope, pin) => {
       demoCheckPin(pin);
@@ -5429,6 +5465,7 @@ function bqSaved(recs, msg) {
   bqMerge(recs.map(normBq));
   if (bqDlg.open) bqDlg.close();
   if (bqeDlg.open) bqeDlg.close();
+  if (bqsDlg.open) bqsDlg.close();
   bqNew = null;
   render();
   toast(msg);
@@ -5482,7 +5519,19 @@ function bqRowsHtml(rows, edit) {
       <td>${rtt}</td><td>${who('mp')}</td><td>${who('rc')}</td><td class="bq-act">${edit && a.status === BQ_ST.booked ? `<button type="button" class="btn ghost sm bq-okb" data-bqdone="${esc(a.id)}" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>` : ''}</td></tr>`;
   }).join('');
 }
-const bqDayHead = (d, n, span) => { const max = bqMax(); return `<tr class="ct-day${d === today() ? ' today' : ''}"><td colspan="${span}"><b>${esc(bqDay(d))}</b><span class="muted"> · ${n} เคส</span>${n > max ? ` · <span class="bq-over">⚠️ เกิน ${max} เคส</span>` : ''}</td></tr>`; };
+// แถวหัววัน: วันที่ จำนวนเคส · ใต้คอลัมน์ RTT / MP / RC = เลือกครั้งเดียวให้ทุกเคสของวันนั้น (ไม่นับที่ยกเลิก) · ทุกเคสเหมือนกัน = แสดงชื่อ · ต่างกัน = หลายคน
+const bqDayVal = (rows, k) => { const v = [...new Set(rows.filter(bqLive).map(a => str(a[k])))]; return v.length === 1 ? v[0] : v.length ? null : ''; };
+function bqDayHead(d, n, span, rows, edit) {
+  const max = bqMax(), head = `<b>${esc(bqDay(d))}</b><span class="muted"> · ${n} เคส</span>${n > max ? ` · <span class="bq-over">⚠️ เกิน ${max} เคส</span>` : ''}`;
+  if (!rows || !n) return `<tr class="ct-day${d === today() ? ' today' : ''}"><td colspan="${span}">${head}</td></tr>`;
+  const cell = k => {
+    const v = bqDayVal(rows, k), label = v === null ? 'หลายคน' : v ? (k === 'rtt' ? bqRttShort(v) : v) : `+ ${k.toUpperCase()}`;
+    const can = edit && (k === 'rtt' || bqCanSign());
+    if (!can) return v ? `<span class="bq-dayv">${esc(label)}</span>` : '';
+    return `<button type="button" class="bq-dayset${v ? ' set' : ''}${k === 'rtt' && !bqRttOn() ? ' old' : ''}" data-bqdayk="${k}" data-bqdate="${d}" title="${esc(`เลือก ${k.toUpperCase()} ครั้งเดียวให้ทุกเคสของ${bqDay(d)}${v === null ? ' (ตอนนี้แต่ละเคสต่างกัน)' : v ? ` · ตอนนี้ ${v}` : ''}`)}">${esc(label)}</button>`;
+  };
+  return `<tr class="ct-day${d === today() ? ' today' : ''}"><td colspan="${span - 4}">${head}</td><td>${cell('rtt')}</td><td>${cell('mp')}</td><td>${cell('rc')}</td><td></td></tr>`;
+}
 // ตารางนัดคิว: วันนี้ · นัดที่จะถึง (เริ่มต้น) · ที่ผ่านมา (ล่าสุดก่อน) · ทั้งหมด
 function bqQueueHtml(edit) {
   const td = today(), F = state.bqF, live = state.bq.filter(bqLive);
@@ -5491,7 +5540,7 @@ function bqQueueHtml(edit) {
   const list = state.bq.filter(pick).sort((a, b) => (F === 'past' ? b.date.localeCompare(a.date) : 0) || bqOrder(a, b));
   const days = [...new Set(list.map(a => a.date))], shown = days.slice(0, state.bqLimit);
   const filt = [['today', `วันนี้ ${nToday}`], ['upcoming', `นัดที่จะถึง ${up.length}`], ['past', 'ที่ผ่านมา'], ['all', 'ทั้งหมด']];
-  const body = shown.map(d => { const rows = list.filter(a => a.date === d); return bqDayHead(d, rows.filter(bqLive).length, BQ_COLS) + bqRowsHtml(rows, edit); }).join('');
+  const body = shown.map(d => { const rows = list.filter(a => a.date === d); return bqDayHead(d, rows.filter(bqLive).length, BQ_COLS, rows, edit) + bqRowsHtml(rows, edit); }).join('');
   return `<div class="cal-opts bq-filt" role="group" aria-label="ช่วงของนัด">${filt.map(([k, l]) => `<button type="button" data-bqf="${k}" aria-pressed="${k === F}">${esc(l)}</button>`).join('')}</div>
     <p class="bq-stats">วันนี้ <b>${nToday}</b> นัด · นัดที่จะถึง <b>${up.length}</b> นัด · ผู้ป่วยในคิว <b>${new Set(up.map(a => bqPid(a.hn, a.name))).size}</b> ราย · สูงสุด ${bqMax()} เคส/วัน${edit ? ' · กดแถวเพื่อแก้ไข' : ''}</p>
     <div class="table-wrap ct-wrap"><table class="ct-tbl bq-tbl" id="bq-tbl">${BQ_HEAD}<tbody>${body || `<tr><td colspan="${BQ_COLS}" class="empty-state">ไม่มีนัด</td></tr>`}</tbody></table></div>
@@ -5859,11 +5908,48 @@ for (const [box, other] of [['#e-rtt', '#e-rtt-other'], ['#q-rtt', '#q-rtt-other
 bqeForm.addEventListener('change', e => { if (e.target.name === 'etech') { $('#e-tech-other').hidden = e.target.value !== OTHER; if (e.target.value === OTHER) setTimeout(() => $('#e-tech-other').focus()); } });
 const bqChText = ch => Object.entries(ch).map(([k, v]) => `${BQ_FIELD[k] || k} → ${k === 'date' ? fmtDay(v) : v || 'ว่าง'}`).join(' · ');
 // ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: นัดคิวใส่แร่) · bqnew = ลงนัด · bqedit = แก้ / มาแล้ว / ลงชื่อ · bqcancel = ยกเลิก (Fx หรือทั้งคอร์ส)
+// เลือกชื่อ RTT / MP / RC อย่างเดียว (ไม่แสดงข้อมูลผู้ป่วย): ปุ่ม + ในแถว = นัดนั้น · ปุ่มในแถวหัววัน = ทุกเคสของวันนั้น
+const BQ_DAY_API = 44;   // Code.gs ที่บันทึกหลายนัดในครั้งเดียว (bqEditDay)
+const bqsDlg = $('#bqs-dlg');
+let bqSet = null;
+function openBqSet(ids, k, date) {
+  if (accessOf('bq') !== 'edit') return toast(RO_MSG, { err: true });
+  if (!bqOn()) return toast(BQ_OLD, { err: true });
+  if (k === 'rtt' && !bqRttOn()) return toast(bqRttOld(), { err: true });
+  if (k !== 'rtt' && !bqCanSign()) return toast(`ลงชื่อ MP / RC ได้เฉพาะตำแหน่ง ${state.config.bq.signRoles.join(', ') || '—'} (ตั้งค่า → นัดคิวใส่แร่)`, { err: true });
+  const rows = ids.map(id => state.bq.find(a => a.id === id)).filter(Boolean);
+  if (!rows.length) return;
+  const day = rows.length > 1 || !!date, cur = bqDayVal(rows, k), me = myCrew(), self = myStaff();
+  const pre = cur || (k === 'rtt' ? (me && me.active && crewGroup(me.role) === 'rtt' ? me.name : state.config.bq.rtt) : k === 'mp' ? self : self && !rows.some(a => a.mp === self) ? self : '');
+  bqSet = { ids: rows.map(a => a.id), k, date: date || rows[0].date, day };
+  $('#bqs-title').textContent = `${k.toUpperCase()} · ${fmtDay(bqSet.date)}`;
+  $('#bqs-info').textContent = day ? `ให้ทุกเคสของ${bqDay(bqSet.date)} (${rows.length} เคส ไม่นับที่ยกเลิก)${cur === null ? ' · ตอนนี้แต่ละเคสต่างกัน เลือกแล้วเป็นคนเดียวกันทุกเคส' : ''}` : `${k === 'rtt' ? 'RTT' : k === 'mp' ? 'MP (ผู้วางแผน)' : 'RC (Recheck)'} ของนัดนี้`;
+  $('#bqs-other').hidden = k !== 'rtt';
+  $('#bqs-other').value = '';
+  if (k === 'rtt') bqRttChips('#bqs-chips', 'bqs', pre); else signChips('#bqs-chips', 'bqs', pre);
+  $('#bqs-note').hidden = k !== 'rc';
+  $('#bqs-note').textContent = k === 'rc' ? 'RC ต้องไม่ใช่คนเดียวกับ MP ของนัดนั้น (นัดที่ MP เป็นคนนี้ข้ามไป)' : '';
+  bqsDlg.showModal();
+  focusChips($('#bqs-chips'));
+}
+$('#bqs-other').addEventListener('input', () => { if (str($('#bqs-other').value)) $$('#bqs-chips input').forEach(i => { i.checked = false; }); });
+$('#bqs-chips').addEventListener('change', () => { $('#bqs-other').value = ''; });
+$('#bqs-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const { k, ids, day, date } = bqSet, v = k === 'rtt' ? bqRttVal('#bqs-chips', '#bqs-other') : chipValue($('#bqs-chips'));
+  const rows = ids.map(id => state.bq.find(a => a.id === id)).filter(Boolean);
+  const clash = a => v && ((k === 'rc' && a.mp === v) || (k === 'mp' && a.rc === v));
+  const todo = rows.filter(a => str(a[k]) !== v && !clash(a)), skipped = rows.filter(clash).length;
+  if (!todo.length) return toast(skipped ? `${k === 'rc' ? 'RC' : 'MP'} ต้องไม่ใช่คนเดียวกับ${k === 'rc' ? ' MP' : ' RC'} ของนัด` : 'ไม่มีการเปลี่ยนแปลง', { err: !!skipped });
+  if (!day) return openBqPin('bqedit', { id: todo[0].id, row: todo[0], ch: { [k]: v } });
+  openBqPin('bqday', { ids: todo.map(a => a.id), ch: { [k]: v }, date, skipped, row: { hn: fmtDay(date) } });
+});
 function openBqPin(mode, ctx) {
   pinCtx = { mode, ...ctx, forgot: false, auto: mode !== 'bqcancel' };
   const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`, r = ctx.rec || ctx.row;
   $('#pin-title').textContent = `${mode === 'bqnew' ? 'ลงนัดใส่แร่' : mode === 'bqcancel' ? 'ยกเลิกนัดใส่แร่' : 'บันทึกนัดใส่แร่'} · ${r.hn}`;
-  $('#pin-what').innerHTML = mode === 'bqnew' ? `${esc(r.name)} · ${esc(r.tech)} · ${r.dates.length} Fx (${esc(r.dates.map(fmtDay).join(', '))}) · ยืนยันด้วยรหัส PIN ของ ${who}`
+  $('#pin-what').innerHTML = mode === 'bqday' ? `${esc(bqDay(ctx.date))} · ${ctx.ids.length} เคส · ${esc(bqChText(ctx.ch))}${ctx.skipped ? ` · ข้าม ${ctx.skipped} เคส (RC กับ MP คนเดียวกัน)` : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`
+    : mode === 'bqnew' ? `${esc(r.name)} · ${esc(r.tech)} · ${r.dates.length} Fx (${esc(r.dates.map(fmtDay).join(', '))}) · ยืนยันด้วยรหัส PIN ของ ${who}`
     : mode === 'bqcancel' ? `ยกเลิกทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ (${esc(r.name)}) · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดยกเลิกนัดเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
       : `${esc(r.name)} Fx ${esc(r.fx)}/${esc(r.total)} · ${esc(bqChText(ctx.ch))} · ยืนยันด้วยรหัส PIN ของ ${who}`;
   $('#pin-val-field').hidden = true;
@@ -11242,6 +11328,14 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'rgdel') { await store.regRemove(ctx.id, pin); rgDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'bqnew') { const recs = await store.bqCreate(ctx.rec, pin); pinDlg.close(); bqSaved(recs, `ลงนัด ${ctx.rec.hn} ${recs.length} Fx แล้ว`); return; }
     if (ctx.mode === 'bqedit') { const rec = await store.bqEdit(ctx.id, ctx.ch, pin); pinDlg.close(); bqSaved([rec], `${ctx.row.hn} Fx ${ctx.row.fx}/${ctx.row.total} · ${bqChText(ctx.ch)}`); return; }
+    if (ctx.mode === 'bqday') {   // ทุกเคสของวันนั้น: ครั้งเดียว (Code.gs ใหม่) หรือทีละนัด (Code.gs เดิม)
+      let recs = [];
+      if (serverHas(BQ_DAY_API)) recs = await store.bqEditDay(ctx.ids, ctx.ch, pin);
+      else for (const id of ctx.ids) recs.push(await store.bqEdit(id, ctx.ch, pin));
+      pinDlg.close();
+      bqSaved(recs, `${fmtDay(ctx.date)} · ${recs.length} เคส · ${bqChText(ctx.ch)}${ctx.skipped ? ` · ข้าม ${ctx.skipped} เคส` : ''}`);
+      return;
+    }
     if (ctx.mode === 'bqcancel') {
       const r = await store.bqCancel(ctx.id, 'course', pin), who = state.user.name || '';
       pinDlg.close();
@@ -11560,7 +11654,8 @@ document.addEventListener('click', e => {
   if (ds.bqback) { state.bqPt = ''; return renderBq(); }
   if (ds.bqcopy) return bqCopy(ds.bqcopy);
   if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); return a && bqQuick(a, { status: BQ_ST.done }); }
-  if (ds.bqsign) return ds.bqk === 'rtt' && !bqRttOn() ? toast(bqRttOld(), { err: true }) : openBqEdit(ds.bqsign, ds.bqk);
+  if (ds.bqsign) return openBqSet([ds.bqsign], ds.bqk);
+  if (ds.bqdayk) return openBqSet(state.bq.filter(a => a.date === ds.bqdate && bqLive(a)).map(a => a.id), ds.bqdayk, ds.bqdate);
   if (ds.bqlink) return bqLinkNow(t);
   if (ds.bqimport) return bqImportRun(t, ds.bqimport === 'check');
   if (ds.qday) return bqPickDay(ds.qday);
