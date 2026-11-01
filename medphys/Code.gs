@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.1';
+const CODE_VERSION = '2026-11-01.2';
 const API_LEVEL = 42;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1803,8 +1803,11 @@ function brachyGuess_(headers, keys) {
   });
   return map;
 }
+// แท็บในชีตของระบบอื่น · ระบบนั้นย้ายข้อมูลมาไว้ในชีตของระบบนี้ (ลิงก์เดียวกัน) = ไม่นับแท็บของระบบนี้ (BrachyQueue หัวคอลัมน์คล้ายแท็บนัดของระบบเดิม)
 function brachyTabs_(book) {
-  return book.getSheets().map(sh => ({ name: sh.getName(), headers: headerOf_(sh).filter(Boolean).slice(0, 40), rows: Math.max(0, sh.getLastRow() - 1) }));
+  const own = book.getId() === ss_().getId() ? Object.keys(TABLES).map(k => TABLES[k].sheet).concat([CONFIG_SHEET]) : [];
+  return book.getSheets().filter(sh => own.indexOf(sh.getName()) < 0)
+    .map(sh => ({ name: sh.getName(), headers: headerOf_(sh).filter(Boolean).slice(0, 40), rows: Math.max(0, sh.getLastRow() - 1) }));
 }
 function brachyPick_(tabs, s, keys, enough) {
   const named = s && s.sheet ? tabs.filter(t => t.name === s.sheet)[0] : null;
