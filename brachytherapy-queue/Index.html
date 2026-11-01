@@ -914,6 +914,12 @@
           <legend data-i18n="set_max"></legend>
           <input type="number" id="sMax" min="1" max="50" step="1" style="max-width:120px">
         </fieldset>
+        <p class="hint" style="margin:0 0 12px" data-i18n="set_shared"></p>
+        <fieldset class="setgroup">
+          <legend data-i18n="set_sync"></legend>
+          <p class="hint" style="margin:0 0 8px" data-i18n="set_sync_hint"></p>
+          <button type="button" class="btn" id="sSync" data-i18n="set_sync_btn" style="justify-self:start"></button>
+        </fieldset>
         <div class="acts">
           <button type="button" class="btn" id="sClose" data-i18n="e_close"></button>
           <button type="submit" class="btn" id="sSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700" data-i18n="set_save"></button>
@@ -991,6 +997,9 @@
       sign_locked: 'บันทึก MP / RC ได้เฉพาะตำแหน่ง {roles}', set_title: 'ตั้งค่า (ผู้ดูแลระบบ)', set_sign: 'ผู้ที่บันทึก MP / RC ได้',
       set_sign_hint: 'เลือกตำแหน่งใน LPCH RO Workspace ที่ลงชื่อ MP (ผู้วางแผน) / RC (Recheck) ได้', set_users: 'ชื่อผู้ใช้เพิ่มเติม',
       set_users_ph: 'เช่น nattayee, sirirat', set_users_hint: 'username ใน LPCH RO Workspace คั่นด้วยจุลภาค · บันทึกได้แม้ตำแหน่งไม่ตรง',
+      set_shared: 'ค่าในหน้านี้ แพทย์ ทีมนักฟิสิกส์ รูปแบบการใส่ และวันหยุด ใช้ร่วมกับระบบกระจายงาน (Treatment Planning Management) · แพทย์ ทีม รูปแบบการใส่ และวันหยุด แก้ที่ระบบนั้น',
+      set_sync: 'ปฏิทิน', set_sync_hint: 'นัดที่ลงหรือแก้จากแถบนัดคิวใส่แร่ของระบบกระจายงานยังไม่อยู่ในปฏิทิน กดเพื่อสร้าง/ย้าย/ลบนัดในปฏิทินให้ตรงกับข้อมูล (เฉพาะนัดตั้งแต่วันนี้)',
+      set_sync_btn: '🔄 ซิงก์ปฏิทิน', t_synced: 'ซิงก์ปฏิทินแล้ว: สร้าง {made} · ลบ {removed} · แก้ {fixed}', t_sync_fail: ' · ไม่สำเร็จ {n}',
       set_max: 'จำนวนเคสสูงสุดต่อวัน', set_save: 'บันทึกการตั้งค่า', set_saved: 'บันทึกการตั้งค่าแล้ว', v_max: 'จำนวนเคสสูงสุดต่อวันต้องเป็น 1–50', t_unsigned: 'ล้างชื่อ {f} แล้ว', v_rc_same: 'RC ต้องไม่ใช่คนเดียวกับ MP (ผู้วางแผน)',
       no_appts: 'ไม่มีนัด', loading: 'กำลังโหลด…', today_tag: ' (วันนี้)', over_max: '⚠️ เกิน {max} เคส',
       st_booked: 'นัดแล้ว', st_done: 'มาตามนัด', st_cancel: 'ยกเลิก',
@@ -1087,6 +1096,9 @@
       sign_locked: 'Only {roles} can record MP / RC', set_title: 'Settings (admin)', set_sign: 'Who can record MP / RC',
       set_sign_hint: 'Pick the LPCH RO Workspace roles that can sign MP (planner) / RC (recheck)', set_users: 'Extra usernames',
       set_users_ph: 'e.g. nattayee, sirirat', set_users_hint: 'LPCH RO Workspace usernames, comma-separated · allowed whatever their role',
+      set_shared: 'These settings, the doctors, physics team, insertion types and holidays are shared with Treatment Planning Management · edit doctors, team, insertion types and holidays there',
+      set_sync: 'Calendar', set_sync_hint: 'Bookings made or changed in Treatment Planning Management are not on the calendar yet. Click to create / move / remove calendar events to match (from today on)',
+      set_sync_btn: '🔄 Sync calendar', t_synced: 'Calendar synced: {made} created · {removed} removed · {fixed} updated', t_sync_fail: ' · {n} failed',
       set_max: 'Max cases per day', set_save: 'Save settings', set_saved: 'Settings saved', v_max: 'Max cases per day must be 1–50', t_unsigned: '{f} cleared', v_rc_same: 'RC must be a different person from the MP (planner)',
       no_appts: 'No appointments', loading: 'Loading…', today_tag: ' (today)', over_max: '⚠️ over {max}',
       st_booked: 'Booked', st_done: 'Attended', st_cancel: 'Cancelled',
@@ -1193,7 +1205,8 @@
       cancel: (id, scope) => call('cancelAppointment', auth.token, id, scope, lang),
       done: (id) => call('markDone', auth.token, id, lang),
       edit: (id, ch) => call('updateAppointment', auth.token, id, ch, lang),
-      saveSettings: (v) => call('saveSettings', auth.token, v, lang)
+      saveSettings: (v) => call('saveSettings', auth.token, v, lang),
+      syncCal: () => call('syncCalendarNow', auth.token, lang)
     };
   }
 
@@ -1206,7 +1219,8 @@
     const ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
     const ruleOut = () => ({ roles: cfg().roles, users: cfg().users, allRoles: ROLES });
     const canSign = (u) => !!u && (cfg().roles.some(r => r.toLowerCase() === String(u.role).toLowerCase()) || cfg().users.indexOf(u.username) >= 0);
-    const DOCS = ['ทัศน์วรรณ อาษากิจ', 'ศิริรัตน์ เชื้อสำราญ', 'พัฒธิดา มโนรส', 'ทินกร จอมใจ'];
+    // แพทย์ในโหมดทดลอง (ของจริงอ่านจาก Config ของระบบกระจายงาน: รหัส + ชื่อ)
+    const DOCS = [{ code: 'TA', name: 'ทัศน์วรรณ อาษากิจ' }, { code: 'SC', name: 'ศิริรัตน์ เชื้อสำราญ' }, { code: 'PM', name: 'พัฒธิดา มโนรส' }, { code: 'TC', name: 'ทินกร จอมใจ' }];
     const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
     const save = (a) => store.set(KEY, JSON.stringify(a));
     // เรียงตามวันที่ แล้วตามลำดับที่ลงนัด (เหมือนลำดับแถวในชีต)
@@ -1269,7 +1283,7 @@
               fx++;
               const ds = iso(d);
               all.push({ apptId: courseId + '-' + fx, courseId, hn: String(6500100 + k * 37), name: first[k % first.length] + ' ' + last[k % last.length],
-                doctor: DOCS[k % 4], fx, totalFx: total, date: ds, note: '', status: ds < todayStr ? ST_DONE : ST_BOOKED,
+                doctor: DOCS[k % 4].code, fx, totalFx: total, date: ds, note: '', status: ds < todayStr ? ST_DONE : ST_BOOKED,
                 technique: ['Full', 'Mould', 'เสียบเข็ม'][k % 3], createdAt: ds + ' 09:00', createdBy: 'demo', history: [] });
             }
             d.setDate(d.getDate() + 1);
@@ -1323,6 +1337,7 @@
         store.set(CFG_KEY, JSON.stringify(c));
         return delay({ canSign: canSign(u), signRule: ruleOut(), maxCasesPerDay: c.max });
       }),
+      syncCal: () => needUser(() => delay({ made: 0, removed: 0, fixed: 0, failed: 0, appointments: sorted() })),
       edit: (id, ch) => {
         const all = load(); const a = all.find(x => x.apptId === id);
         const diff = Object.keys(ch).filter(f => (a[f] || '') !== ch[f]).map(f => ({ f, from: a[f] || '', to: ch[f] }));
@@ -1957,6 +1972,16 @@
     const again = $('sRoles').querySelector('[data-role="' + CSS.escape(r) + '"]'); if (again) again.focus();
   });
   $('setBtn').addEventListener('click', openSettings);
+  $('sSync').addEventListener('click', async () => {
+    const b = $('sSync'), label = b.textContent;
+    b.disabled = true; b.textContent = t('working');
+    try {
+      const r = await api.syncCal();
+      state.appts = r.appointments; renderAll();
+      toast(t('t_synced', { made: r.made, removed: r.removed, fixed: r.fixed }) + (r.failed ? t('t_sync_fail', { n: r.failed }) : ''), !!r.failed);
+    } catch (err) { toast(errMsg(err), true); }
+    finally { b.disabled = false; b.textContent = label; }
+  });
   $('sClose').addEventListener('click', closeSettings);
   $('setModal').addEventListener('click', (e) => { if (e.target === $('setModal')) closeSettings(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('setModal').classList.contains('show')) closeSettings(); });
@@ -1986,7 +2011,7 @@
       '<td>' + (a.status === ST_CANCEL ? '–' : queueNo[a.apptId]) + '</td>' +
       '<td><button type="button" class="linkbtn hnlink" data-act="find" data-id="' + esc(a.apptId) + '" title="' + esc(t('find_open')) + '">' + esc(a.hn) + '</button></td>' +
       '<td class="name">' + esc(a.name) + '</td>' +
-      '<td>' + esc(a.doctor) + '</td>' +
+      '<td title="' + esc(a.doctor) + '">' + esc(docName(a.doctor)) + '</td>' +
       '<td>' + (a.technique ? '<span class="techtag">' + esc(techText(a.technique)) + '</span>' : '<span class="hint">–</span>') + '</td>' +
       '<td>' + esc(a.fx) + '/' + esc(a.totalFx) + '</td>' +
       '<td class="name hint">' + esc(a.note) + '</td>' +
@@ -2005,7 +2030,7 @@
     if (state.filter === 'today') list = list.filter(a => a.date === today);
     else if (state.filter === 'upcoming') list = list.filter(a => a.date >= today);
     else if (state.filter === 'past') list = list.filter(a => a.date < today).reverse();
-    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor + ' ' + (a.technique || '')).toLowerCase().includes(q));
+    if (q) list = list.filter(a => (a.hn + ' ' + a.name + ' ' + a.doctor + ' ' + docName(a.doctor) + ' ' + (a.technique || '')).toLowerCase().includes(q));
 
     const active = state.appts.filter(a => a.status !== ST_CANCEL);
     const todays = active.filter(a => a.date === today).length;
@@ -2061,6 +2086,15 @@
   }
   $('tbody').addEventListener('click', onActionClick);
   $('dayDetail').addEventListener('click', onActionClick);
+
+  /* ================= แพทย์ (รหัส + ชื่อ จากระบบกระจายงาน) ================= */
+  state.doctors = [];
+  // แสดงชื่อแพทย์จากรหัส (ไม่อยู่ในรายชื่อ = ข้อความเดิม เช่น ชื่อที่นำเข้าจากระบบเดิม)
+  function docName(v) {
+    const d = state.doctors.find(x => x.code === v);
+    return d ? (d.name || d.code) : String(v || '');
+  }
+  const docOption = (x) => '<option value="' + esc(x.code) + '">' + esc(x.name ? x.name + ' (' + x.code + ')' : x.code) + '</option>';
 
   /* ================= รูปแบบการใส่ ================= */
   state.techniques = ['Full', 'Mould', 'เสียบเข็ม'];
@@ -2132,7 +2166,7 @@
     $('eStatus').innerHTML = [ST_BOOKED, ST_DONE, ST_CANCEL].map(v =>
       '<option value="' + esc(v) + '"' + (v === a.status ? ' selected' : '') + '>' + esc(statusText(v)) + '</option>').join('');
     if (a.doctor && !Array.from($('eDoctor').options).some(o => o.value === a.doctor)) {
-      $('eDoctor').insertAdjacentHTML('beforeend', '<option value="' + esc(a.doctor) + '">' + esc(a.doctor) + '</option>');
+      $('eDoctor').insertAdjacentHTML('beforeend', '<option value="' + esc(a.doctor) + '">' + esc(docName(a.doctor)) + '</option>');
     }
     $('eDoctor').value = a.doctor;
     ePick.set(a.technique || '');
@@ -2255,7 +2289,7 @@
     html += cs.map((list, i) => {
       const a0 = list[0], k = techAbbr(a0.technique);
       return '<div class="course"><h4>' + esc(t('find_course', { i: cs.length - i })) +
-        (k ? ' ' + techBadge(k, k) : '') + '<span class="hint">' + esc((a0.technique ? techText(a0.technique) + ' · ' : '') + a0.doctor +
+        (k ? ' ' + techBadge(k, k) : '') + '<span class="hint">' + esc((a0.technique ? techText(a0.technique) + ' · ' : '') + docName(a0.doctor) +
           ' · ' + t('find_fx', { n: a0.totalFx })) + '</span></h4><ol class="fxlist">' +
         list.map(a => {
           const cls = a.status === ST_CANCEL ? 'cancel' : a.status === ST_DONE ? 'done' : 'booked';
@@ -2361,6 +2395,7 @@
     if (f === 'status') return statusText(v);
     if (f === 'date') return fmtDate(v);
     if (f === 'technique') return techText(v);
+    if (f === 'doctor') return docName(v);
     if (f === 'mp' || f === 'rc') return physName(v);
     return v;
   }
@@ -2593,7 +2628,7 @@
         (n ? '<span class="cnt">' + (n > state.max ? '⚠️ ' : '') + esc(cases(n)) + '</span>' : '') + '</div>' +
         (hol ? '<div class="hol">🏖 ' + esc(hol) + '</div>' : '') +
         techSummary(list) +
-        (n ? '<ul>' + list.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + a.doctor + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
+        (n ? '<ul>' + list.map((a, i) => '<li class="' + (a.status === ST_DONE ? 'done' : '') + '" title="' + esc('HN ' + a.hn + ' ' + a.name + ' · ' + docName(a.doctor) + (a.technique ? ' · ' + techText(a.technique) : '') + ' · Fx ' + a.fx + '/' + a.totalFx) + '">' +
           (a.status === ST_DONE ? '✓ ' : (i + 1) + '. ') + (techAbbr(a.technique) ? techBadge(techAbbr(a.technique), techAbbr(a.technique)) : '') +
           esc(a.hn) + ' ' + esc(a.name) + '</li>').join('') +
           '</ul>' : '') +
@@ -2623,7 +2658,7 @@
       (n > state.max ? ' <span class="badtext">' + esc(t('dd_over', { max: state.max, n: n - state.max })) + '</span>' : '') + '</h3>';
     if (state.holidays[d]) html += '<p class="hint">🏖 ' + esc(t('w_holiday', { name: state.holidays[d] })) + '</p>';
     if (Object.keys(byDoc).length) {
-      html += '<div class="docsum">' + Object.keys(byDoc).map(k => '<span>👩‍⚕️ ' + esc(k) + ' · ' + byDoc[k] + '</span>').join('') +
+      html += '<div class="docsum">' + Object.keys(byDoc).map(k => '<span>👩‍⚕️ ' + esc(docName(k)) + ' · ' + byDoc[k] + '</span>').join('') +
         techSummary(active) + '</div>';
     }
     if (!all.length) { $('dayDetail').innerHTML = html + '<div class="empty">' + esc(t('no_appts_day')) + '</div>'; return; }
@@ -2650,10 +2685,12 @@
       $('setBtn').hidden = !(d.user && d.user.isAdmin);
       state.techniques = d.techniques || ['Full', 'Mould', 'เสียบเข็ม'];
       techPick.render(); ePick.render();
-      $('eDoctor').innerHTML = d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
+      // รายชื่อแพทย์: [{ code, name }] (รุ่นเก่าส่งเป็นชื่อล้วน)
+      state.doctors = (d.doctors || []).map(x => (typeof x === 'string' ? { code: x, name: '' } : x));
+      $('eDoctor').innerHTML = state.doctors.map(docOption).join('');
       state.max = d.settings.maxCasesPerDay || 6;
       $('doctor').innerHTML = '<option value="" data-i18n="choose_doctor">' + esc(t('choose_doctor')) + '</option>' +
-        d.doctors.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('');
+        state.doctors.map(docOption).join('');
       d.holidays.forEach(h => { state.holidays[h.date] = h.name || t('holiday_default'); });
       $('startDate').value = iso(nextFree(addDays(new Date(), 1)));
       state.appts = d.appointments;

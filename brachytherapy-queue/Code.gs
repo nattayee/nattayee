@@ -4,16 +4,19 @@
  *
  * - หน้าเว็บกรอก HN / ชื่อผู้ป่วย / แพทย์ / จำนวน fraction (เปลี่ยนภาษา ไทย/อังกฤษ และโหมดกลางวัน/กลางคืนได้)
  * - กดปุ่มเดียว: สร้างนัดทุก fraction ลง Google Calendar (ทั้งวัน) + บันทึกลง Google Sheet
+ * - ข้อมูลอยู่ในชีตเดียวกับ Treatment Planning Management (ระบบกระจายงานฟิสิกส์การแพทย์): DATA_SHEET_ID
+ *   นัดอยู่ในแท็บ BrachyQueue ใช้ร่วมกับแถบ "นัดคิวใส่แร่" ของระบบนั้น (คอลัมน์ Calendar Event ID เป็นของระบบนี้)
+ *   แพทย์ ทีมนักฟิสิกส์ รูปแบบการใส่ วันหยุด จำนวนเคสสูงสุด และสิทธิ์ลงชื่อ MP / RC อ่านจากแท็บ Config ของระบบนั้น
+ *   การตั้งค่าปฏิทินของระบบนี้อยู่ในแท็บ BQ Settings · บันทึกการใช้งานอยู่ในแท็บ BQ Log
+ *   ย้ายข้อมูลจากชีตเดิม: รันฟังก์ชัน migrateFromOldSheet หนึ่งครั้ง (รันซ้ำได้ ไม่เพิ่มซ้ำ)
  * - แจ้งเตือนเมื่อวันใดมีเคสเกินกำหนด (ค่าเริ่มต้น 6 เคส/วัน)
  * - เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace (WORKSPACE_URL) ระบบนี้ไม่เก็บรหัสผ่านเอง
  *   สมัครสมาชิก อนุมัติ ระงับ และลืมรหัสผ่าน ทำที่ Workspace ทั้งหมด
  *   เปิดจากปุ่มใน Workspace ที่ติ๊ก "เข้าสู่ระบบอัตโนมัติ" (?sso=...) จะเข้าได้ทันทีโดยไม่ต้องกรอกรหัสผ่าน
- *   บันทึกทุกการใช้งานในชีต AccessLog
+ *   บันทึกทุกการใช้งานในแท็บ BQ Log
  * - ยกเลิกนัดได้ (ลบ event ในปฏิทิน และเปลี่ยนสถานะในชีต)
  *
- * สร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet หลังบ้าน (ระบบจะรู้จักชีตเอง)
- * ถ้าสร้างโปรเจกต์แยกที่ script.google.com ให้ใส่ลิงก์หรือ ID ของชีตที่ SPREADSHEET_ID ด้านล่าง
- * แล้ว Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone"
+ * Deploy เป็น Web app แบบ Execute as: "Me", Who has access: "Anyone" (บัญชีที่ Deploy ต้องแก้ไขชีต DATA_SHEET_ID ได้)
  * ครั้งแรกหลังอัปเดตเป็นการเข้าสู่ระบบผ่าน Workspace: เลือกฟังก์ชัน setup แล้วกด Run หนึ่งครั้ง
  * เพื่ออนุญาตสิทธิ์ "เชื่อมต่อกับบริการภายนอก" (UrlFetchApp) ก่อน Deploy เวอร์ชันใหม่
  */
@@ -21,14 +24,12 @@
 /** เว็บ LPCH RO Workspace ที่ใช้ตรวจชื่อผู้ใช้/รหัสผ่าน (ต้อง Deploy แบบ Who has access: Anyone) */
 const WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 /**
- * ชีตข้อมูลของ Treatment Planning Management (ระบบกระจายงานฟิสิกส์การแพทย์) — อ่านรายชื่อทีมนักฟิสิกส์ (แท็บ Config, key staff)
- * มาเป็นตัวเลือก MP / RC · เปลี่ยนได้ที่ Script property MEDPHYS_SHEET_ID (ใส่ ID หรือลิงก์ของชีต · ใส่ - เพื่อปิด)
- * บัญชีที่ Deploy เว็บนี้ต้องเปิดชีตนั้นได้
+ * ชีตข้อมูลหลัก = ชีตของ Treatment Planning Management (ระบบกระจายงานฟิสิกส์การแพทย์)
+ * เปลี่ยนได้ที่ Script property DATA_SHEET_ID (ใส่ ID หรือลิงก์ของชีต)
  */
-const MEDPHYS_SHEET_ID = '1lW4T3rENJatBIULjXNDOMBvIBzMAssPjnmZtY7Q-5yk';
-
-/** ลิงก์หรือ ID ของ Google Sheet หลังบ้าน (เว้นว่างได้ถ้าสคริปต์สร้างจากเมนูในชีต) */
-const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y/edit';
+const DATA_SHEET_ID = '1lW4T3rENJatBIULjXNDOMBvIBzMAssPjnmZtY7Q-5yk';
+/** ชีตเดิมของระบบนี้ (ใช้ตอนย้ายข้อมูลด้วย migrateFromOldSheet เท่านั้น · เปลี่ยนได้ที่ Script property OLD_SHEET_ID) */
+const OLD_SHEET_ID = '1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y';
 
 /**
  * ปฏิทินที่จะลงนัด: ใช้ปฏิทินในบัญชีที่ Deploy สคริปต์ ที่ชื่อตรงกับ CALENDAR_NAME
@@ -38,39 +39,24 @@ const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1kYj1MUI7APT4Q__L
 const CALENDAR_NAME = 'คิวใส่แร่';
 const CALENDAR_ID = '';
 
-const SHEET_APPTS = 'Appointments';
-const SHEET_DOCTORS = 'Doctors';
-const SHEET_HOLIDAYS = 'Holidays';
-const SHEET_SETTINGS = 'Settings';
-const SHEET_LOG = 'AccessLog';
-
-const APPT_HEADERS = [
-  'เลขนัด',            // A  apptId  (courseId-fx)
-  'รหัสคอร์ส',          // B  courseId
-  'วันที่บันทึก',        // C  createdAt
-  'HN',                // D
-  'ชื่อ-สกุลผู้ป่วย',     // E
-  'แพทย์',              // F
-  'Fraction ที่',        // G
-  'จำนวน Fraction',     // H
-  'วันที่นัด',           // I  yyyy-MM-dd
-  'หมายเหตุ',           // J
-  'สถานะ',              // K  นัดแล้ว / ยกเลิก / มาตามนัด
-  'Calendar Event ID', // L
-  'ผู้บันทึก',           // M  ชื่อผู้ใช้
-  'รูปแบบการใส่',        // N  Full / Mould / Interstitial needle / ที่กรอกเอง
-  'แก้ไขล่าสุดโดย',      // O
-  'แก้ไขล่าสุดเมื่อ',     // P
-  'ประวัติการแก้ไข',     // Q  JSON: [{at, by, name, changes:[{f, from, to}]}]
-  'MP (ผู้วางแผน)',      // R  ชื่อผู้วางแผนการรักษา
-  'RC (Recheck)'        // S  ชื่อผู้ตรวจทาน
+/** แท็บนัดที่ใช้ร่วมกับระบบกระจายงาน (คอลัมน์ตามชื่อหัวตาราง · ลำดับคอลัมน์ไม่สำคัญ) */
+const SHEET_BQ = 'BrachyQueue';
+const BQ_FIELDS = [
+  ['id', 'id'], ['course', 'คอร์ส'], ['date', 'วันที่นัด'], ['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'],
+  ['fx', 'Fx'], ['total', 'จำนวน Fx'], ['note', 'หมายเหตุ'], ['status', 'สถานะ'], ['mp', 'MP'], ['rc', 'RC'],
+  ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'],
+  ['eventId', 'Calendar Event ID']   // ของระบบนี้ (ระบบกระจายงานไม่ได้ใช้)
 ];
-const COL = {};
-['apptId', 'courseId', 'createdAt', 'hn', 'name', 'doctor', 'fx', 'totalFx',
-  'date', 'note', 'status', 'eventId', 'createdBy', 'technique', 'editedBy', 'editedAt', 'history', 'mp', 'rc']
-  .forEach((k, i) => { COL[k] = i; });
-/** รูปแบบการใส่ที่เลือกได้ (นอกจากนี้กรอกเองในช่อง "อื่นๆ") */
-const TECHNIQUES = ['Full', 'Mould', 'Interstitial needle'];
+const SHEET_CONFIG = 'Config';          // การตั้งค่าของระบบกระจายงาน (key, ค่า JSON)
+const SHEET_SETTINGS = 'BQ Settings';   // การตั้งค่าปฏิทินของระบบนี้
+const SHEET_LOG = 'BQ Log';
+/** ค่าเริ่มต้นเมื่อ Config ยังไม่มีค่า (เหมือนระบบกระจายงาน) */
+const DEFAULT_BQ = { max: 6, techs: ['Full', 'Mould', 'เสียบเข็ม'], signRoles: ['MP'], signUsers: [] };
+const DEFAULT_DOCTOR_CODES = ['SC', 'TA', 'PM', 'TC', 'VS'];
+const DEFAULT_STAFF = ['JR', 'WM', 'NY', 'WS'];
+/** ประวัติการแก้ไข: ชื่อช่องของหน้าเว็บนี้ ↔ ชื่อช่องในแท็บ BrachyQueue */
+const HIST_TO_BQ = { doctor: 'doc', technique: 'tech' };
+const HIST_FROM_BQ = { doc: 'doctor', tech: 'technique' };
 
 const STATUS_BOOKED = 'นัดแล้ว';
 const STATUS_CANCELLED = 'ยกเลิก';
@@ -105,12 +91,13 @@ const MSG = {
     signTooLong: 'ชื่อ MP / RC ยาวเกินไป (ไม่เกิน 100 ตัวอักษร)',
     rcSameAsMp: 'RC ต้องไม่ใช่คนเดียวกับ MP (ผู้วางแผน)',
     signDenied: 'บันทึก MP / RC ได้เฉพาะผู้ที่เข้าสู่ระบบด้วยตำแหน่ง {roles} (แอดมินเปลี่ยนได้ที่ ⚙️ ตั้งค่า)',
+    configBusy: 'การตั้งค่าในชีตอ่านไม่ได้ (แท็บ Config) ลองใหม่อีกครั้ง',
     adminOnly: 'เฉพาะผู้ดูแลระบบ (แอดมินของ LPCH RO Workspace) เท่านั้นที่แก้การตั้งค่าได้',
     maxInvalid: 'จำนวนเคสสูงสุดต่อวันต้องเป็นตัวเลข 1–50',
     hn: 'กรุณากรอก HN',
     name: 'กรุณากรอกชื่อผู้ป่วย',
     doctor: 'กรุณาเลือกแพทย์',
-    doctorUnknown: 'แพทย์ "{doctor}" ไม่อยู่ในรายชื่อ (ชีต Doctors)',
+    doctorUnknown: 'แพทย์ "{doctor}" ไม่อยู่ในรายชื่อแพทย์ (ระบบกระจายงาน → ตั้งค่า → แพทย์)',
     fxRange: 'จำนวน fraction ต้องอยู่ระหว่าง 1–30',
     fxMismatch: 'จำนวนวันนัดไม่ตรงกับจำนวน fraction',
     fxDate: 'วันที่ของ Fx {n} ไม่ถูกต้อง',
@@ -118,7 +105,7 @@ const MSG = {
     notFound: 'ไม่พบนัด {id}',
     calMissing: 'ใช้ปฏิทิน {id} ไม่ได้: สคริปต์รันในนาม {who} ให้ {id} แชร์ปฏิทินให้ {who} ด้วยสิทธิ์ "ทำการเปลี่ยนแปลงกิจกรรม" แล้วรัน setup อีกครั้ง{detail}',
     calNameMissing: 'ไม่พบปฏิทินชื่อ "{name}" ในบัญชี {who} (ปฏิทินที่มี: {list}) ตรวจสอบชื่อที่ CALENDAR_NAME',
-    sheetMissing: 'ไม่พบชีต {name} (เมนู นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
+    sheetMissing: 'ไม่พบแท็บ {name} ในชีตข้อมูล (รันฟังก์ชัน setup)'
   },
   en: {
     sessionExpired: 'Please log in again',
@@ -137,12 +124,13 @@ const MSG = {
     signTooLong: 'MP / RC name is too long (up to 100 characters)',
     rcSameAsMp: 'RC must be a different person from the MP (planner)',
     signDenied: 'Only users signed in with role {roles} can record MP / RC (an admin can change this in ⚙️ Settings)',
+    configBusy: 'Could not read the settings (Config tab). Please try again',
     adminOnly: 'Only administrators (LPCH RO Workspace admins) can change the settings',
     maxInvalid: 'Max cases per day must be a number from 1 to 50',
     hn: 'Please enter HN',
     name: 'Please enter patient name',
     doctor: 'Please select a doctor',
-    doctorUnknown: 'Doctor "{doctor}" is not in the list (Doctors sheet)',
+    doctorUnknown: 'Doctor "{doctor}" is not in the doctor list (Treatment Planning Management → Settings → Doctors)',
     fxRange: 'Fractions must be between 1 and 30',
     fxMismatch: 'Number of dates does not match number of fractions',
     fxDate: 'Invalid date for Fx {n}',
@@ -150,7 +138,7 @@ const MSG = {
     notFound: 'Appointment {id} not found',
     calMissing: 'Cannot use calendar {id}: the script runs as {who}. {id} must share the calendar with {who} with "Make changes to events", then run setup again{detail}',
     calNameMissing: 'No calendar named "{name}" in {who} (calendars found: {list}). Check CALENDAR_NAME',
-    sheetMissing: 'Sheet {name} not found (menu: นัดคิวใส่แร่ > ตั้งค่าชีตครั้งแรก)'
+    sheetMissing: 'Tab {name} not found in the data sheet (run setup)'
   }
 };
 function msg_(lang, key, vars) {
@@ -164,12 +152,10 @@ const DEFAULT_SETTINGS = [
   ['EVENT_PREFIX', '[ใส่แร่]', 'คำนำหน้าชื่อนัดในปฏิทิน'],
   ['SHOW_NAME_IN_CALENDAR', 'TRUE', 'TRUE = แสดงชื่อผู้ป่วยในปฏิทิน, FALSE = แสดงเฉพาะ HN'],
   ['LOCATION', 'ห้องใส่แร่ (Brachytherapy)', 'สถานที่ที่แสดงในนัด'],
-  ['MAX_CASES_PER_DAY', '6', 'จำนวนเคสสูงสุดต่อวัน ถ้าเกินจะแจ้งเตือน'],
   ['ALERT_EMAIL', '', 'อีเมลที่จะรับแจ้งเตือนเมื่อวันใดเกินจำนวนเคส (คั่นหลายอีเมลด้วย ,) เว้นว่าง = ไม่ส่งอีเมล'],
-  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)'],
-  ['SIGN_ROLES', 'MP', 'ตำแหน่งใน LPCH RO Workspace ที่บันทึก MP / RC ได้ (คั่นด้วย ,) · แอดมินแก้ได้ที่ ⚙️ ตั้งค่า ในหน้าเว็บ'],
-  ['SIGN_USERS', '', 'ชื่อผู้ใช้ (username) ที่บันทึก MP / RC ได้เพิ่มเติม แม้ตำแหน่งไม่ตรง (คั่นด้วย ,)']
+  ['SESSION_HOURS', '12', 'เข้าสู่ระบบแล้วใช้งานได้นานกี่ชั่วโมงก่อนต้องเข้าสู่ระบบใหม่ (ถ้าติ๊ก "จำฉันไว้" = 7 วัน)']
 ];
+// จำนวนเคสสูงสุดต่อวัน รูปแบบการใส่ และสิทธิ์ลงชื่อ MP / RC อยู่ใน Config (key bq) ใช้ร่วมกับระบบกระจายงาน
 /** ตำแหน่งใน LPCH RO Workspace (ตัวเลือกในหน้าตั้งค่า) */
 const WS_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
 
@@ -209,7 +195,9 @@ function doGet(e) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('นัดคิวใส่แร่')
-    .addItem('ตั้งค่าชีตครั้งแรก', 'setup')
+    .addItem('ตั้งค่า / ตรวจระบบ', 'setup')
+    .addItem('ย้ายข้อมูลจากชีตเดิม', 'migrateFromOldSheet')
+    .addItem('ซิงก์ปฏิทินกับแท็บ BrachyQueue', 'syncCalendar')
     .addItem('เปิดหน้าลงนัด', 'showDialog')
     .addToUi();
 }
@@ -223,14 +211,10 @@ function showDialog() {
 /** สร้างชีตและหัวตารางที่จำเป็น (รันซ้ำได้ ไม่ลบข้อมูลเดิม) */
 function setup() {
   ensureSetup_();
-  // จำ ID ชีตไว้ เผื่อเว็บแอปหาชีตที่ผูกไม่เจอ
-  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss_().getId());
   authSecret_(); // สร้างกุญแจลงชื่อ token ไว้ล่วงหน้า
-  // คอลัมน์ HN และวันที่นัดต้องเป็นข้อความ (กันเลข 0 นำหน้า HN หาย และกันชีตแปลงวันที่)
   const ss = ss_();
-  ss.getSheetByName(SHEET_APPTS).getRange('D:D').setNumberFormat('@');
-  ss.getSheetByName(SHEET_APPTS).getRange('I:I').setNumberFormat('@');
-  ss.getSheetByName(SHEET_HOLIDAYS).getRange('A:A').setNumberFormat('@');
+  const conf = conf_(true);
+  const dataMsg = 'ชีตข้อมูล: ' + ss.getName() + ' · นัดในแท็บ ' + SHEET_BQ + ' ' + listAppointments_().length + ' รายการ';
   // ทดสอบปฏิทิน (และติดตามปฏิทินที่แชร์มาให้) แล้วแสดงผลใน "บันทึกการดำเนินการ"
   let calMsg;
   try {
@@ -247,24 +231,221 @@ function setup() {
   } catch (e) {
     wsMsg = e.message.indexOf(AUTH_ERR) === 0 ? 'LPCH RO Workspace: เชื่อมต่อได้' : 'LPCH RO Workspace: ⚠️ ' + e.message;
   }
-  // ทดสอบการอ่านรายชื่อทีมนักฟิสิกส์จากระบบกระจายงาน
-  let mpMsg;
+  const mpMsg = 'ทีมนักฟิสิกส์ (MP / RC): ' + (conf.staff.map(x => x.code + (x.name ? ' ' + x.name : '')).join(', ') || '⚠️ ไม่พบ');
+  const docMsg = 'แพทย์: ' + (conf.doctors.map(x => x.code + (x.name ? ' ' + x.name : '')).join(', ') || '⚠️ ไม่พบ');
+  const bqMsg = 'จำนวนเคสสูงสุด/วัน ' + conf.bq.max + ' · รูปแบบการใส่ ' + conf.bq.techs.join(', ') + ' · ลงชื่อ MP / RC: ' + (conf.bq.signRoles.join(', ') || '-') +
+    ' · วันหยุด ' + conf.holidays.length + ' วัน';
+  [ 'สคริปต์รันในนาม: ' + scriptOwner_(), dataMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg ].forEach(m => console.log(m));
   try {
-    const team = readPhysicists_();
-    CacheService.getScriptCache().remove('physicists');
-    mpMsg = team.length ? 'ทีมนักฟิสิกส์ (MP / RC): ' + team.map(x => x.code + (x.name ? ' ' + x.name : '')).join(', ')
-      : 'ทีมนักฟิสิกส์ (MP / RC): ⚠️ ไม่พบรายชื่อในแท็บ Config ของชีตระบบกระจายงาน';
-  } catch (e) {
-    mpMsg = 'ทีมนักฟิสิกส์ (MP / RC): ⚠️ ' + e.message;
-  }
-  console.log('สคริปต์รันในนาม: ' + scriptOwner_());
-  console.log(calMsg);
-  console.log(wsMsg);
-  console.log(mpMsg);
-  try {
-    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย: สร้างชีต Appointments, Doctors, Holidays, Settings, AccessLog แล้ว\n' +
-      calMsg + '\n' + wsMsg + '\n' + mpMsg + '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
+    SpreadsheetApp.getUi().alert('ตั้งค่าเรียบร้อย\n' + [dataMsg, calMsg, wsMsg, mpMsg, docMsg, bqMsg].join('\n') +
+      '\nDeploy เว็บแอปเวอร์ชันใหม่ แล้วเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   } catch (e) { /* รันจาก editor ไม่มี UI */ }
+}
+
+/**
+ * ย้ายข้อมูลจากชีตเดิม (OLD_SHEET_ID) มาชีตข้อมูลหลัก: รันจากหน้าแก้ไขสคริปต์หนึ่งครั้ง (รันซ้ำได้ ไม่เพิ่มซ้ำ)
+ * - นัด (Appointments) → BrachyQueue: id = เลขนัดเดิม, ที่มา = bq:<เลขนัด> (แบบเดียวกับปุ่มนำเข้าของระบบกระจายงาน)
+ *   นัดที่นำเข้าไว้แล้ว (จากปุ่มนำเข้าหรือรันครั้งก่อน): เติม Calendar Event ID และเปลี่ยนชื่อแพทย์เป็นรหัสถ้าจับคู่ได้ (ช่องอื่นไม่แตะ)
+ * - แพทย์ / MP / RC จับคู่กับรหัสใน Config ตามชื่อ (ไม่ตรง = เก็บข้อความเดิม แล้วแจ้งในบันทึก)
+ * - Settings: ค่าปฏิทิน → BQ Settings · จำนวนเคสสูงสุด / สิทธิ์ MP RC → Config bq (เฉพาะเมื่อยังไม่มี)
+ * - Holidays → Config holidays (เพิ่มเฉพาะวันที่ยังไม่มี) · AccessLog → BQ Log (ครั้งแรกเท่านั้น)
+ */
+function migrateFromOldSheet() {
+  ensureSetup_();
+  const props = PropertiesService.getScriptProperties();
+  const rawId = String(props.getProperty('OLD_SHEET_ID') || OLD_SHEET_ID || '').trim();
+  const oldId = (rawId.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || rawId;
+  const ss = ss_();
+  if (!oldId || oldId === ss.getId()) throw new Error('OLD_SHEET_ID ต้องเป็นชีตเดิมของระบบนัดคิว (ไม่ใช่ชีตข้อมูลหลัก)');
+  const old = SpreadsheetApp.openById(oldId);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error(msg_('th', 'busy'));
+  const report = ['ย้ายจาก "' + old.getName() + '" → "' + ss.getName() + '"'];
+  try {
+    const conf = conf_(true), raw = readConfigRaw_();
+    const strip = v => String(v || '').replace(/^(นพ\.|พญ\.|นาย|นางสาว|นาง|น\.ส\.|ดร\.)\s*/, '').replace(/\s+/g, '').toLowerCase();
+    const docOf = v => {
+      const t = String(v || '').trim();
+      const hit = t && conf.doctors.find(x => x.code === t.toUpperCase() || (x.name && strip(x.name) === strip(t)));
+      return hit ? hit.code : t;
+    };
+    const staffOf = v => {
+      const t = String(v || '').trim();
+      const hit = t && conf.staff.find(x => x.code === t.toUpperCase() || (x.name && strip(x.name) === strip(t)));
+      return hit ? hit.code : t;
+    };
+    const techOf = v => (/^interstitial/i.test(v) && conf.bq.techs.indexOf(v) < 0 && conf.bq.techs.indexOf('เสียบเข็ม') >= 0 ? 'เสียบเข็ม' : v);
+
+    // 1) นัด
+    const sh = old.getSheetByName('Appointments');
+    const unknownDoc = {}, unknownStaff = {};
+    let added = 0, linked = 0, docFixed = 0, kept = 0;
+    if (sh && sh.getLastRow() >= 2) {
+      const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues();
+      const head = values.shift().map(v => String(v).trim());
+      const C = { id: 'เลขนัด', course: 'รหัสคอร์ส', created: 'วันที่บันทึก', hn: 'HN', name: 'ชื่อ-สกุลผู้ป่วย', doc: 'แพทย์',
+        fx: 'Fraction ที่', total: 'จำนวน Fraction', date: 'วันที่นัด', note: 'หมายเหตุ', status: 'สถานะ', eventId: 'Calendar Event ID',
+        by: 'ผู้บันทึก', tech: 'รูปแบบการใส่', editedBy: 'แก้ไขล่าสุดโดย', updated: 'แก้ไขล่าสุดเมื่อ', hist: 'ประวัติการแก้ไข',
+        mp: 'MP (ผู้วางแผน)', rc: 'RC (Recheck)' };
+      const at = {};
+      Object.keys(C).forEach(k => { at[k] = head.indexOf(C[k]); });
+      if (at.id < 0 || at.hn < 0 || at.date < 0) throw new Error('แท็บ Appointments ของชีตเดิมไม่มีคอลัมน์ เลขนัด / HN / วันที่นัด');
+      const have = {};
+      readBq_().forEach(o => { have[o.id] = o; if (o.src) have[o.src] = o; });
+      const recs = [], eventPatch = {}, docPatch = {};
+      values.forEach(r => {
+        const g = k => (at[k] < 0 ? '' : String(r[at[k]]).trim());
+        const id = g('id');
+        if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(g('date')) || !g('hn')) return;
+        const hit = have[id] || have['bq:' + id];
+        if (hit) {
+          // มีอยู่แล้ว: เติมเฉพาะ event ที่ยังไม่มี และแพทย์ที่ยังเป็นชื่อเต็ม
+          if (!hit.eventId && g('eventId')) { eventPatch[hit.id] = g('eventId'); linked++; }
+          const code = docOf(hit.doc);
+          if (code !== hit.doc && conf.doctors.some(x => x.code === code)) { docPatch[hit.id] = code; docFixed++; }
+          if (!eventPatch[hit.id] && !docPatch[hit.id]) kept++;
+          return;
+        }
+        const doc = docOf(g('doc')), mp = g('mp'), rc = g('rc');
+        if (g('doc') && !conf.doctors.some(x => x.code === doc)) unknownDoc[doc] = (unknownDoc[doc] || 0) + 1;
+        [mp, rc].forEach(v => { if (v && !conf.staff.some(x => x.code === staffOf(v))) unknownStaff[v] = (unknownStaff[v] || 0) + 1; });
+        let hist = [];
+        try { hist = JSON.parse(g('hist') || '[]'); } catch (e) { hist = []; }
+        hist = (Array.isArray(hist) ? hist : []).map(h => ({ at: String(h.at || ''), by: String(h.name || h.by || ''),
+          ch: (Array.isArray(h.changes) ? h.changes : Array.isArray(h.ch) ? h.ch : [])
+            .map(c => ({ f: HIST_TO_BQ[c.f] || c.f, from: String(c.from == null ? '' : c.from), to: String(c.to == null ? '' : c.to) })) }));
+        const st = g('status');
+        recs.push({ id: id, course: g('course'), date: g('date'), hn: g('hn'), name: g('name'), doc: doc, tech: techOf(g('tech')),
+          fx: g('fx'), total: g('total'), note: g('note'),
+          status: /ยกเลิก/.test(st) ? STATUS_CANCELLED : /มาตามนัด|มาแล้ว/.test(st) ? STATUS_DONE : STATUS_BOOKED,
+          mp: staffOf(mp), rc: staffOf(rc), hist: hist.length ? JSON.stringify(hist.slice(-40)) : '', src: 'bq:' + id,
+          by: g('by'), created: g('created'), editedBy: g('editedBy'), updated: g('updated'), eventId: g('eventId') });
+        have[id] = { id: id };
+      });
+      bqAppend_(recs);
+      added = recs.length;
+      bqPatchColumn_('eventId', eventPatch);
+      bqPatchColumn_('doc', docPatch);
+    }
+    report.push('นัด: เพิ่มใหม่ ' + added + ' · มีอยู่แล้ว ' + (linked + docFixed + kept) + ' (เติม Calendar Event ID ' + linked + ' · แพทย์เป็นรหัส ' + docFixed + ')');
+    if (Object.keys(unknownDoc).length) report.push('⚠️ แพทย์ที่ไม่อยู่ในรายชื่อ (เก็บชื่อเดิม): ' +
+      Object.keys(unknownDoc).map(k => k + ' ×' + unknownDoc[k]).join(', ') + ' → เพิ่มที่ระบบกระจายงาน → ตั้งค่า → แพทย์ แล้วรันซ้ำ');
+    if (Object.keys(unknownStaff).length) report.push('⚠️ MP / RC ที่ไม่อยู่ในทีม (เก็บชื่อเดิม): ' +
+      Object.keys(unknownStaff).map(k => k + ' ×' + unknownStaff[k]).join(', '));
+
+    // 2) การตั้งค่า
+    const os = old.getSheetByName('Settings'), oldSet = {};
+    if (os && os.getLastRow() >= 2) os.getRange(2, 1, os.getLastRow() - 1, 2).getDisplayValues().forEach(r => { if (r[0]) oldSet[r[0].trim()] = r[1]; });
+    const nsh = getSheet_(SHEET_SETTINGS);
+    const nkeys = nsh.getLastRow() >= 2 ? nsh.getRange(2, 1, nsh.getLastRow() - 1, 2).getDisplayValues() : [];
+    let setCopied = 0;
+    DEFAULT_SETTINGS.forEach(d => {
+      const v = oldSet[d[0]];
+      const i = nkeys.findIndex(r => r[0].trim() === d[0]);
+      if (v === undefined || v === '' || i < 0 || nkeys[i][1] === v) return;
+      nsh.getRange(i + 2, 2).setNumberFormat('@').setValue(v);
+      setCopied++;
+    });
+    report.push('ตั้งค่าปฏิทิน → ' + SHEET_SETTINGS + ': ' + setCopied + ' ค่า');
+    if (!raw.bq) {
+      const roles = oldSet.SIGN_ROLES === undefined ? DEFAULT_BQ.signRoles : csv_(oldSet.SIGN_ROLES);
+      writeConfigKey_('bq', { max: Math.min(50, Math.max(1, parseInt(oldSet.MAX_CASES_PER_DAY, 10) || DEFAULT_BQ.max)),
+        techs: DEFAULT_BQ.techs.slice(), signRoles: roles, signUsers: csv_(oldSet.SIGN_USERS).map(x => x.toLowerCase()) });
+      report.push('จำนวนเคสสูงสุด / สิทธิ์ MP RC → Config bq');
+    } else report.push('Config bq มีอยู่แล้ว (ใช้ค่าของระบบกระจายงาน)');
+
+    // 3) วันหยุด
+    const oh = old.getSheetByName('Holidays'), tz = old.getSpreadsheetTimeZone();
+    if (oh && oh.getLastRow() >= 2) {
+      const list = Array.isArray(raw.holidays) ? raw.holidays.slice() : [];
+      const seen = {};
+      list.forEach(h => { if (h && h.date) seen[h.date] = true; });
+      let addH = 0;
+      oh.getRange(2, 1, oh.getLastRow() - 1, 2).getValues().forEach(r => {
+        const d = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd') : String(r[0]).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || seen[d]) return;
+        list.push({ date: d, name: String(r[1] || '').trim() });
+        seen[d] = true;
+        addH++;
+      });
+      if (addH) writeConfigKey_('holidays', list.sort((a, b) => String(a.date).localeCompare(String(b.date))));
+      report.push('วันหยุด → Config holidays: เพิ่ม ' + addH + ' วัน');
+    }
+
+    // 4) บันทึกการใช้งาน (ครั้งแรกเท่านั้น)
+    const ol = old.getSheetByName('AccessLog');
+    if (!props.getProperty('MIGRATED_LOG') && ol && ol.getLastRow() >= 2) {
+      const rows = ol.getRange(2, 1, ol.getLastRow() - 1, 4).getDisplayValues();
+      const lsh = getSheet_(SHEET_LOG);
+      lsh.getRange(lsh.getLastRow() + 1, 1, rows.length, 4).setValues(rows.map(r => r.map(v => safeCell_(v))));
+      props.setProperty('MIGRATED_LOG', '1');
+      report.push('AccessLog → ' + SHEET_LOG + ': ' + rows.length + ' แถว');
+    }
+    SpreadsheetApp.flush();
+    props.setProperty('MIGRATED_FROM', oldId + ' · ' + nowStr_());
+  } finally {
+    lock.releaseLock();
+  }
+  log_('(ระบบ)', 'ย้ายข้อมูลจากชีตเดิม', report.join(' | '));
+  report.forEach(m => console.log(m));
+  try { SpreadsheetApp.getUi().alert('ย้ายข้อมูลแล้ว\n' + report.join('\n')); } catch (e) { /* รันจาก editor ไม่มี UI */ }
+  return report.join('\n');
+}
+
+/**
+ * ซิงก์ปฏิทินกับแท็บ BrachyQueue (นัดที่ลงหรือแก้จากแถบนัดคิวใส่แร่ของระบบกระจายงานไม่ได้ลงปฏิทิน)
+ * เฉพาะนัดตั้งแต่วันนี้: ยังไม่มี event = สร้าง · ยกเลิกแล้วแต่ยังมี event = ลบ · วันที่หรือชื่อไม่ตรง = แก้
+ * รันเองจากหน้าแก้ไขสคริปต์ / ปุ่มในหน้าตั้งค่าของแอดมิน หรือตั้ง Trigger แบบตั้งเวลา (เช่น ทุก 1 ชั่วโมง)
+ */
+function syncCalendar() {
+  ensureSetup_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error(msg_('th', 'busy'));
+  const res = { made: 0, removed: 0, fixed: 0, failed: 0 };
+  try {
+    const tz = Session.getScriptTimeZone(), today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+    const settings = getSettings_(), conf = conf_(true), cal = getCalendar_('th');
+    const patch = {};
+    listAppointments_().filter(a => a.date >= today).forEach(a => {
+      try {
+        let ev = null;
+        if (a.eventId) { try { ev = cal.getEventById(a.eventId); } catch (e) { ev = null; } }
+        if (a.status === STATUS_CANCELLED) {
+          if (ev) { ev.deleteEvent(); res.removed++; }
+          if (a.eventId) patch[a.apptId] = '';
+          return;
+        }
+        if (!ev) { patch[a.apptId] = createEvent_(cal, settings, a, conf).getId(); res.made++; return; }
+        const title = eventTitle_(settings, a), d = Utilities.formatDate(ev.getAllDayStartDate(), tz, 'yyyy-MM-dd');
+        if (d !== a.date || ev.getTitle() !== title) {
+          if (d !== a.date) ev.setAllDayDate(toDate_(a.date));
+          ev.setTitle(title);
+          ev.setDescription(eventDesc_(a, conf));
+          res.fixed++;
+        }
+      } catch (e) {
+        res.failed++;
+        console.warn('syncCalendar ' + a.apptId + ': ' + e.message);
+      }
+    });
+    bqPatchColumn_('eventId', patch);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  const msg = 'ซิงก์ปฏิทิน: สร้าง ' + res.made + ' · ลบ ' + res.removed + ' · แก้ ' + res.fixed + (res.failed ? ' · ไม่สำเร็จ ' + res.failed : '');
+  if (res.made || res.removed || res.fixed || res.failed) log_('(ระบบ)', 'ซิงก์ปฏิทิน', msg);
+  console.log(msg);
+  return res;
+}
+
+/** ปุ่มซิงก์ปฏิทินในหน้าตั้งค่า (เฉพาะแอดมิน) */
+function syncCalendarNow(token, lang) {
+  const acc = requireUser_(token, lang);
+  const me = member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user);
+  if (!me.isAdmin) throw new Error(msg_(lang, 'adminOnly'));
+  const res = syncCalendar();
+  return Object.assign(res, { appointments: listAppointments_() });
 }
 
 /* ------------------------------------------------------------------ */
@@ -372,18 +553,17 @@ function getInitData(token, lang) {
     if (String(e.message).indexOf(AUTH_ERR) === 0) throw e;
     console.warn('getInitData: ตรวจกับ Workspace ไม่ได้ ใช้ข้อมูลใน token แทน: ' + e.message);
   }
-  const settings = getSettings_();
-  const rule = signRule_(settings);
+  const conf = conf_();
   return {
     user: user,
-    canSign: canSign_(user, settings),
-    signRule: { roles: rule.roles, users: rule.users, allRoles: WS_ROLES },
-    doctors: getDoctors_(),
-    physicists: getPhysicists_(),
-    techniques: TECHNIQUES,
-    holidays: getHolidays_(),
+    canSign: canSign_(user, conf),
+    signRule: signRuleOut_(conf),
+    doctors: conf.doctors.map(x => ({ code: x.code, name: x.name })),
+    physicists: conf.staff,
+    techniques: conf.bq.techs,
+    holidays: conf.holidays,
     settings: {
-      maxCasesPerDay: maxCases_(settings),
+      maxCasesPerDay: conf.bq.max,
       calendarName: calendarNameSafe_(lang)
     },
     appointments: listAppointments_()
@@ -392,7 +572,7 @@ function getInitData(token, lang) {
 
 /**
  * ตั้งค่าโดยแอดมิน: s = { signRoles: [...], signUsers: [...], maxCasesPerDay }
- * ตรวจกับ Workspace ว่ายังเป็นแอดมินอยู่ก่อนบันทึก
+ * เก็บใน Config (key bq) ใช้ร่วมกับแถบนัดคิวใส่แร่ของระบบกระจายงาน · ตรวจกับ Workspace ว่ายังเป็นแอดมินอยู่ก่อนบันทึก
  */
 function saveSettings(token, s, lang) {
   const acc = requireUser_(token, lang);
@@ -404,27 +584,18 @@ function saveSettings(token, s, lang) {
     .filter(x => /^[a-z0-9._@-]{1,60}$/.test(x));
   const max = parseInt(s.maxCasesPerDay, 10);
   if (!(max >= 1 && max <= 50)) throw new Error(msg_(lang, 'maxInvalid'));
-  const values = { SIGN_ROLES: roles.join(', '), SIGN_USERS: users.join(', '), MAX_CASES_PER_DAY: String(max) };
   const lock = lock_(lang);
   try {
-    const sh = getSheet_(SHEET_SETTINGS);
-    const keys = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().map(r => r[0].trim()) : [];
-    Object.keys(values).forEach(k => {
-      const i = keys.indexOf(k);
-      if (i >= 0) sh.getRange(i + 2, 2).setNumberFormat('@').setValue(values[k]);
-      else {
-        const def = DEFAULT_SETTINGS.find(d => d[0] === k);
-        sh.getRange(sh.getLastRow() + 1, 1, 1, 3).setNumberFormat('@').setValues([[k, values[k], def ? def[2] : '']]);
-      }
-    });
-    SpreadsheetApp.flush();
+    // แก้เฉพาะค่าใน key bq ของ Config (ค่าอื่นของระบบกระจายงานคงเดิม · รูปแบบการใส่แก้ที่ระบบกระจายงาน)
+    const raw = readConfigRaw_();
+    const bq = Object.assign({}, raw.bq && typeof raw.bq === 'object' ? raw.bq : {}, { max: max, signRoles: [...new Set(roles)], signUsers: [...new Set(users)] });
+    writeConfigKey_('bq', bq);
   } finally {
     lock.releaseLock();
   }
-  log_(acc.username, 'ตั้งค่า', 'MP/RC: ' + (values.SIGN_ROLES || '-') + (values.SIGN_USERS ? ' + ' + values.SIGN_USERS : '') + ' · เคสสูงสุด/วัน ' + max);
-  const settings = getSettings_();
-  const rule = signRule_(settings);
-  return { canSign: canSign_(acc, settings), signRule: { roles: rule.roles, users: rule.users, allRoles: WS_ROLES }, maxCasesPerDay: maxCases_(settings) };
+  log_(acc.username, 'ตั้งค่า', 'MP/RC: ' + (roles.join(', ') || '-') + (users.length ? ' + ' + users.join(', ') : '') + ' · เคสสูงสุด/วัน ' + max);
+  const conf = conf_(true);
+  return { canSign: canSign_(acc, conf), signRule: signRuleOut_(conf), maxCasesPerDay: conf.bq.max };
 }
 
 function listAppointments(token, lang) {
@@ -446,7 +617,8 @@ function createAppointments(token, payload) {
   const lock = lock_(lang);
   try {
     const settings = getSettings_();
-    const max = maxCases_(settings);
+    const conf = conf_();
+    const max = conf.bq.max;
     const overDays = findOverCapacity_(p.sessions, max);
 
     if (!p.force) {
@@ -458,7 +630,8 @@ function createAppointments(token, payload) {
 
     const cal = getCalendar_(lang);
     const tz = Session.getScriptTimeZone();
-    const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
+    const now = new Date().toISOString();
+    const who = whoName_(acc);
     // ต่อท้ายด้วยรหัสสุ่ม กันรหัสซ้ำเมื่อบันทึกหลายรายการในวินาทีเดียวกัน
     const courseId = 'BT' + Utilities.formatDate(new Date(), tz, 'yyMMddHHmmss') +
       Utilities.getUuid().replace(/-/g, '').slice(0, 4).toUpperCase();
@@ -468,14 +641,12 @@ function createAppointments(token, payload) {
       p.sessions.forEach((s, i) => {
         const fx = i + 1;
         const a = { hn: p.hn, name: p.name, doctor: p.doctor, technique: p.technique, note: p.note,
-          fx: fx, totalFx: p.totalFx, date: s.date, courseId: courseId, createdBy: user };
-        const ev = createEvent_(cal, settings, a);
+          fx: fx, totalFx: p.totalFx, date: s.date, courseId: courseId, createdBy: who };
+        const ev = createEvent_(cal, settings, a, conf);
         created.push(ev);
-
-        rows.push([
-          courseId + '-' + fx, courseId, now, p.hn, safeCell_(p.name), p.doctor, fx, p.totalFx,
-          s.date, safeCell_(p.note), STATUS_BOOKED, ev.getId(), user, safeCell_(p.technique), '', '', '', '', ''
-        ]);
+        rows.push({ id: courseId + '-' + fx, course: courseId, date: s.date, hn: p.hn, name: p.name, doc: p.doctor, tech: p.technique,
+          fx: String(fx), total: String(p.totalFx), note: p.note, status: STATUS_BOOKED, mp: '', rc: '', hist: '', src: '',
+          by: who, created: now, editedBy: '', updated: '', eventId: ev.getId() });
       });
     } catch (err) {
       // ถ้าสร้าง event ไม่ครบ ให้ลบที่สร้างไปแล้ว เพื่อไม่ให้ปฏิทินกับชีตไม่ตรงกัน
@@ -484,11 +655,10 @@ function createAppointments(token, payload) {
       throw new Error(msg_(lang, 'calFail', { err: err.message }));
     }
 
-    const sh = getSheet_(SHEET_APPTS);
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, APPT_HEADERS.length).setValues(rows);
+    bqAppend_(rows);
     SpreadsheetApp.flush();
 
-    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + p.doctor + ' / ' + p.technique + ' / ' + rows.length + ' Fx (' +
+    log_(user, 'ลงนัด', 'HN ' + p.hn + ' ' + p.name + ' / ' + docName_(p.doctor, conf) + ' / ' + p.technique + ' / ' + rows.length + ' Fx (' +
       p.sessions.map(s => s.date).join(', ') + ') คอร์ส ' + courseId);
     if (overDays.length) {
       log_(user, 'แจ้งเตือนเกินเคส', overDays.map(d => d.date + ' = ' + d.total + ' เคส').join(', '));
@@ -522,13 +692,9 @@ function updateAppointment(token, apptId, changes, lang) {
   const c = changes || {};
   const lock = lock_(lang);
   try {
-    const sh = getSheet_(SHEET_APPTS);
-    const last = sh.getLastRow();
-    if (last < 2) throw new Error(msg_(lang, 'notFound', { id: apptId }));
-    const data = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
-    const idx = data.findIndex(r => r[COL.apptId] === apptId);
-    if (idx < 0) throw new Error(msg_(lang, 'notFound', { id: apptId }));
-    const a = rowToObj_(data[idx], idx + 2);
+    const conf = conf_();
+    const a = listAppointments_().find(x => x.apptId === apptId);
+    if (!a) throw new Error(msg_(lang, 'notFound', { id: apptId }));
 
     const next = { date: a.date, doctor: a.doctor, technique: a.technique, note: a.note, status: a.status, mp: a.mp, rc: a.rc };
     if (c.date !== undefined) {
@@ -537,7 +703,8 @@ function updateAppointment(token, apptId, changes, lang) {
     }
     if (c.doctor !== undefined) {
       next.doctor = String(c.doctor).trim();
-      if (getDoctors_().indexOf(next.doctor) < 0) throw new Error(msg_(lang, 'doctorUnknown', { doctor: next.doctor }));
+      // แพทย์เดิมที่ไม่อยู่ในรายชื่อ (นำเข้าจากระบบเดิม) คงไว้ได้
+      if (next.doctor !== a.doctor && !conf.doctors.some(x => x.code === next.doctor)) throw new Error(msg_(lang, 'doctorUnknown', { doctor: next.doctor }));
     }
     if (c.technique !== undefined) {
       next.technique = cleanText_(c.technique);
@@ -568,8 +735,8 @@ function updateAppointment(token, apptId, changes, lang) {
     const settings = getSettings_();
     // บันทึก MP / RC ได้เฉพาะตำแหน่ง/ผู้ใช้ที่แอดมินตั้งไว้ (ค่าเริ่มต้น: ตำแหน่ง MP)
     // ตำแหน่งใน token มาจากตอนเข้าสู่ระบบ ถ้าไม่ผ่านให้ถาม Workspace อีกครั้ง (เผื่อเพิ่งเปลี่ยนตำแหน่ง)
-    if (diff.some(d => d.f === 'mp' || d.f === 'rc') && !canSign_(acc, settings) && !signViaWorkspace_(acc, settings, lang)) {
-      throw new Error(msg_(lang, 'signDenied', { roles: signRule_(settings).roles.join(', ') || '-' }));
+    if (diff.some(d => d.f === 'mp' || d.f === 'rc') && !canSign_(acc, conf) && !signViaWorkspace_(acc, conf, lang)) {
+      throw new Error(msg_(lang, 'signDenied', { roles: conf.bq.signRoles.join(', ') || '-' }));
     }
     const calChanged = diff.some(d => d.f !== 'mp' && d.f !== 'rc');
     const cal = calChanged ? getCalendar_(lang) : null;
@@ -583,30 +750,17 @@ function updateAppointment(token, apptId, changes, lang) {
       if (ev) { try { ev.deleteEvent(); } catch (e) { /* ลบไปแล้ว */ } }
       eventId = '';
     } else if (!ev) {
-      eventId = createEvent_(cal, settings, merged).getId();
+      eventId = createEvent_(cal, settings, merged, conf).getId();
     } else {
       if (next.date !== a.date) ev.setAllDayDate(toDate_(next.date));
       ev.setTitle(eventTitle_(settings, merged));
-      ev.setDescription(eventDesc_(merged));
+      ev.setDescription(eventDesc_(merged, conf));
     }
 
-    const label = userLabel_(acc);
-    const now = nowStr_();
-    const history = a.history.concat([{ at: now, by: acc.username, name: label, changes: diff }]);
-    const row = data[idx].slice();
-    row[COL.date] = next.date;
-    row[COL.doctor] = next.doctor;
-    row[COL.technique] = safeCell_(next.technique);
-    row[COL.note] = safeCell_(next.note);
-    row[COL.status] = next.status;
-    row[COL.mp] = safeCell_(next.mp);
-    row[COL.rc] = safeCell_(next.rc);
-    row[COL.eventId] = eventId;
-    row[COL.editedBy] = label;
-    row[COL.editedAt] = now;
-    row[COL.history] = JSON.stringify(history);
-    row[COL.name] = safeCell_(row[COL.name]);
-    sh.getRange(idx + 2, 1, 1, APPT_HEADERS.length).setValues([row]);
+    bqUpdate_(a, {
+      date: next.date, doc: next.doctor, tech: next.technique, note: next.note, status: next.status, mp: next.mp, rc: next.rc,
+      eventId: eventId, editedBy: whoName_(acc), updated: new Date().toISOString(), hist: histAdd_(a.histRaw, acc, diff)
+    });
     SpreadsheetApp.flush();
 
     log_(acc.username, 'แก้ไขนัด', 'HN ' + a.hn + ' ' + a.name + ' Fx ' + a.fx + '/' + a.totalFx + ' (' + apptId + '): ' +
@@ -616,7 +770,7 @@ function updateAppointment(token, apptId, changes, lang) {
     let overCapacity = [];
     const becameActive = next.status !== STATUS_CANCELLED && (next.date !== a.date || a.status === STATUS_CANCELLED);
     if (becameActive) {
-      const max = maxCases_(settings);
+      const max = conf.bq.max;
       const total = listAppointments_().filter(x => x.date === next.date && x.status !== STATUS_CANCELLED).length;
       if (total > max) {
         overCapacity = [{ date: next.date, total: total }];
@@ -735,95 +889,40 @@ function lock_(lang) {
 
 /** คืนรายการนัดทั้งหมด เรียงตามวันที่/เวลา */
 function listAppointments_() {
-  const sh = getSheet_(SHEET_APPTS);
-  const last = sh.getLastRow();
-  if (last < 2) return [];
-  const rows = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
-  return rows
-    .map((r, i) => r[COL.apptId] ? rowToObj_(r, i + 2) : null)
-    .filter(Boolean)
-    .sort(compareAppt_);
-}
-
-/** ID ชีตของระบบกระจายงานฟิสิกส์ (Script property ก่อน แล้วค่าใน MEDPHYS_SHEET_ID) · '' = ปิด */
-function medphysSheetId_() {
-  const raw = String(PropertiesService.getScriptProperties().getProperty('MEDPHYS_SHEET_ID') || MEDPHYS_SHEET_ID || '').trim();
-  if (!raw || raw === '-') return '';
-  const m = /\/d\/([a-zA-Z0-9_-]{20,})/.exec(raw);
-  return m ? m[1] : raw;
-}
-
-/** อ่านทีมนักฟิสิกส์จากแท็บ Config (key staff) ของชีตระบบกระจายงาน → [{code, name, color}] เฉพาะคนที่ยังใช้งาน */
-function readPhysicists_() {
-  const id = medphysSheetId_();
-  if (!id) return [];
-  let ss;
-  try { ss = SpreadsheetApp.openById(id); } catch (e) {
-    throw new Error('เปิดชีตของระบบกระจายงานฟิสิกส์ไม่ได้ (' + e.message + ') ตรวจ MEDPHYS_SHEET_ID และบัญชีที่ Deploy ต้องเปิดชีตนั้นได้');
-  }
-  const sh = ss.getSheetByName('Config');
-  if (!sh || sh.getLastRow() < 2) return [];
-  const row = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().find(r => String(r[0]).trim() === 'staff');
-  let staff = [];
-  try { staff = row ? JSON.parse(row[1]) : []; } catch (e) { staff = []; }
-  return (Array.isArray(staff) ? staff : [])
-    .filter(x => x && x.code && x.active !== false)
-    .map(x => ({ code: String(x.code).trim().toUpperCase().slice(0, 10), name: String(x.name || '').trim().slice(0, 100),
-      color: /^#[0-9a-fA-F]{6}$/.test(String(x.color || '')) ? String(x.color) : '' }));
-}
-
-/** ทีมนักฟิสิกส์สำหรับหน้าเว็บ (เก็บไว้ 10 นาที) · อ่านไม่ได้ = [] (ช่อง MP / RC ยังพิมพ์ชื่อเองได้) */
-function getPhysicists_() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get('physicists');
-  if (hit) { try { return JSON.parse(hit); } catch (e) { /* อ่านใหม่ */ } }
-  let team = [];
-  try { team = readPhysicists_(); } catch (e) { console.warn('getPhysicists_: ' + e.message); return []; }
-  try { cache.put('physicists', JSON.stringify(team), 600); } catch (e) { /* ignore */ }
-  return team;
+  const tz = Session.getScriptTimeZone();
+  return readBq_().map(o => toAppt_(o, tz)).filter(a => a.apptId && /^\d{4}-\d{2}-\d{2}$/.test(a.date)).sort(compareAppt_);
 }
 
 function updateStatus_(acc, apptId, scope, newStatus, deleteEvent, lang) {
   const user = acc.username;
-  const label = userLabel_(acc);
   const lock = lock_(lang);
   try {
-    const sh = getSheet_(SHEET_APPTS);
-    const last = sh.getLastRow();
-    if (last < 2) throw new Error(msg_(lang, 'notFound', { id: apptId }));
-    const data = sh.getRange(2, 1, last - 1, APPT_HEADERS.length).getDisplayValues();
-    const target = data.find(r => r[COL.apptId] === apptId);
+    const all = listAppointments_();
+    const target = all.find(a => a.apptId === apptId);
     if (!target) throw new Error(msg_(lang, 'notFound', { id: apptId }));
-
-    const cal = getCalendar_(lang);
-    const changedIds = [];
-    data.forEach((r, i) => {
-      const match = scope === 'course'
-        ? r[COL.courseId] === target[COL.courseId] && r[COL.status] === STATUS_BOOKED
-        : r[COL.apptId] === apptId;
-      if (!match || r[COL.status] === newStatus) return;
-
-      if (deleteEvent && r[COL.eventId]) {
+    const pick = all.filter(a => (scope === 'course'
+      ? a.courseId && a.courseId === target.courseId && a.status === STATUS_BOOKED
+      : a.apptId === apptId) && a.status !== newStatus);
+    const cal = pick.some(a => deleteEvent && a.eventId) ? getCalendar_(lang) : null;
+    const now = new Date().toISOString(), who = whoName_(acc);
+    pick.forEach(a => {
+      if (deleteEvent && a.eventId) {
         try {
-          const ev = cal.getEventById(r[COL.eventId]);
+          const ev = cal.getEventById(a.eventId);
           if (ev) ev.deleteEvent();
         } catch (e) { /* event อาจถูกลบไปแล้ว */ }
       }
       // บันทึกสถานะใหม่พร้อมประวัติว่าใครเปลี่ยน
-      const now = nowStr_();
-      const history = parseHistory_(r[COL.history]).concat([{ at: now, by: user, name: label,
-        changes: [{ f: 'status', from: r[COL.status], to: newStatus }] }]);
-      sh.getRange(i + 2, COL.status + 1).setValue(newStatus);
-      if (deleteEvent) sh.getRange(i + 2, COL.eventId + 1).setValue('');
-      sh.getRange(i + 2, COL.editedBy + 1, 1, 3).setValues([[label, now, JSON.stringify(history)]]);
-      changedIds.push(r[COL.apptId]);
+      const set = { status: newStatus, editedBy: who, updated: now, hist: histAdd_(a.histRaw, acc, [{ f: 'status', from: a.status, to: newStatus }]) };
+      if (deleteEvent) set.eventId = '';
+      bqUpdate_(a, set);
     });
     SpreadsheetApp.flush();
-    if (changedIds.length) {
+    if (pick.length) {
       log_(user, newStatus === STATUS_CANCELLED ? 'ยกเลิกนัด' : 'บันทึกมาตามนัด',
-        'HN ' + target[COL.hn] + ' ' + target[COL.name] + ': ' + changedIds.join(', '));
+        'HN ' + target.hn + ' ' + target.name + ': ' + pick.map(a => a.apptId).join(', '));
     }
-    return { ok: true, changed: changedIds.length, appointments: listAppointments_() };
+    return { ok: true, changed: pick.length, appointments: listAppointments_() };
   } finally {
     lock.releaseLock();
   }
@@ -844,7 +943,7 @@ function validatePayload_(payload, lang) {
   if (!p.hn) throw new Error(msg_(lang, 'hn'));
   if (!p.name) throw new Error(msg_(lang, 'name'));
   if (!p.doctor) throw new Error(msg_(lang, 'doctor'));
-  if (getDoctors_().indexOf(p.doctor) < 0) throw new Error(msg_(lang, 'doctorUnknown', { doctor: p.doctor }));
+  if (!conf_().doctors.some(x => x.code === p.doctor)) throw new Error(msg_(lang, 'doctorUnknown', { doctor: p.doctor }));
   if (!p.technique || p.technique === 'อื่นๆ' || p.technique.length > 100) throw new Error(msg_(lang, 'technique'));
   if (p.note.length > 500) throw new Error(msg_(lang, 'noteTooLong'));
   if (!(p.totalFx >= 1 && p.totalFx <= 30)) throw new Error(msg_(lang, 'fxRange'));
@@ -897,60 +996,77 @@ function sendOverCapacityAlert_(settings, overDays, max, p, user) {
       to: to,
       subject: '[นัดใส่แร่] แจ้งเตือน: มีวันที่เกิน ' + max + ' เคส',
       body: 'มีการลงนัดที่ทำให้จำนวนเคสเกิน ' + max + ' เคส/วัน\n\n' + lines.join('\n') +
-        '\n\nนัดล่าสุด: HN ' + p.hn + ' (' + p.doctor + ', ' + p.totalFx + ' Fx)\nผู้บันทึก: ' + user
+        '\n\nนัดล่าสุด: HN ' + p.hn + ' (' + docName_(p.doctor, conf_()) + ', ' + p.totalFx + ' Fx)\nผู้บันทึก: ' + user
     });
   } catch (e) {
     log_(user, 'ส่งอีเมลแจ้งเตือนไม่สำเร็จ', e.message);
   }
 }
 
-function maxCases_(settings) {
-  return Math.max(1, parseInt(settings.MAX_CASES_PER_DAY, 10) || 6);
-}
-
 /** รายการคั่นด้วย , จากชีต Settings */
 function csv_(v) {
   return String(v || '').split(',').map(x => x.trim()).filter(Boolean);
 }
-/** ใครบันทึก MP / RC ได้: { roles: [...], users: [...] } (ไม่ได้ตั้ง = MP) */
-function signRule_(settings) {
-  return {
-    roles: settings.SIGN_ROLES === undefined ? ['MP'] : csv_(settings.SIGN_ROLES),
-    users: csv_(settings.SIGN_USERS).map(x => x.toLowerCase())
-  };
+/** ใครบันทึก MP / RC ได้ (Config bq.signRoles / bq.signUsers ใช้ร่วมกับระบบกระจายงาน · ยังไม่ตั้ง = MP) */
+function signRuleOut_(conf) {
+  return { roles: conf.bq.signRoles, users: conf.bq.signUsers, allRoles: WS_ROLES };
 }
-function signViaWorkspace_(acc, settings, lang) {
-  try { return canSign_(member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user), settings); } catch (e) { return false; }
+function signViaWorkspace_(acc, conf, lang) {
+  try { return canSign_(member_(workspace_({ action: 'me', token: acc.wsToken }, lang).user), conf); } catch (e) { return false; }
 }
-function canSign_(acc, settings) {
-  const rule = signRule_(settings);
+function canSign_(acc, conf) {
   const role = String(acc.role || '').toLowerCase();
-  return (!!role && rule.roles.some(r => r.toLowerCase() === role)) || rule.users.indexOf(String(acc.username || '').toLowerCase()) >= 0;
+  return (!!role && conf.bq.signRoles.some(r => String(r).toLowerCase() === role)) ||
+    conf.bq.signUsers.map(x => String(x).toLowerCase()).indexOf(String(acc.username || '').toLowerCase()) >= 0;
 }
 
-function rowToObj_(r, row) {
+/** แถวในแท็บ BrachyQueue → นัดในรูปที่หน้าเว็บใช้ */
+function toAppt_(o, tz) {
   return {
-    row: row,
-    apptId: r[COL.apptId], courseId: r[COL.courseId], createdAt: r[COL.createdAt],
-    hn: r[COL.hn], name: r[COL.name], doctor: r[COL.doctor],
-    fx: Number(r[COL.fx]), totalFx: Number(r[COL.totalFx]),
-    date: r[COL.date],
-    note: r[COL.note], status: r[COL.status], createdBy: r[COL.createdBy], eventId: r[COL.eventId],
-    technique: r[COL.technique] || '', editedBy: r[COL.editedBy] || '', editedAt: r[COL.editedAt] || '',
-    history: parseHistory_(r[COL.history]),
-    mp: r[COL.mp] || '', rc: r[COL.rc] || ''
+    row: o._row,
+    apptId: o.id, courseId: o.course, createdAt: localTime_(o.created, tz),
+    hn: o.hn, name: o.name, doctor: o.doc,
+    fx: Number(o.fx) || 0, totalFx: Number(o.total) || 0,
+    date: o.date,
+    note: o.note, status: o.status || STATUS_BOOKED, createdBy: o.by, eventId: o.eventId,
+    technique: o.tech || '', editedBy: o.editedBy || '', editedAt: localTime_(o.updated, tz),
+    history: histOut_(o.hist), histRaw: o.hist,
+    mp: o.mp || '', rc: o.rc || ''
   };
 }
 
-function parseHistory_(v) {
-  if (!v) return [];
-  try { const h = JSON.parse(v); return Array.isArray(h) ? h : []; } catch (e) { return []; }
+/** เวลาแบบ ISO (ที่ระบบกระจายงานเขียน) → "yyyy-MM-dd HH:mm:ss" ตามเวลาท้องถิ่น · ค่าอื่นคืนตามเดิม */
+function localTime_(v, tz) {
+  const t = String(v || '');
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(t)) return t;
+  const d = new Date(t);
+  return isNaN(d) ? t : Utilities.formatDate(d, tz || Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 }
 
-/** ชื่อที่แสดงในประวัติ: "ชื่อ นามสกุล (username)" */
-function userLabel_(acc) {
-  const full = String(acc.fullName || '').trim();
-  return full && full !== acc.username ? full + ' (' + acc.username + ')' : acc.username;
+/** ประวัติในแท็บ [{ at, by (ชื่อ), ch: [{ f, from, to }] }] → แบบที่หน้าเว็บใช้ [{ at, name, changes }] (รับรูปแบบเดิมของระบบนี้ด้วย) */
+function histOut_(v) {
+  let list = [];
+  try { list = JSON.parse(v || '[]'); } catch (e) { list = []; }
+  return (Array.isArray(list) ? list : []).map(h => ({
+    at: String(h.at || ''), by: '', name: String(h.name || h.by || ''),
+    changes: (Array.isArray(h.ch) ? h.ch : Array.isArray(h.changes) ? h.changes : [])
+      .map(c => ({ f: HIST_FROM_BQ[c.f] || c.f, from: String(c.from == null ? '' : c.from), to: String(c.to == null ? '' : c.to) }))
+  }));
+}
+
+/** เพิ่มประวัติหนึ่งครั้ง (แบบเดียวกับระบบกระจายงาน · เก็บ 40 ครั้งล่าสุด) คืน JSON */
+function histAdd_(raw, acc, diff) {
+  let list = [];
+  try { list = JSON.parse(raw || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  list.push({ at: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), by: whoName_(acc),
+    ch: diff.map(d => ({ f: HIST_TO_BQ[d.f] || d.f, from: String(d.from == null ? '' : d.from), to: String(d.to == null ? '' : d.to) })) });
+  return JSON.stringify(list.slice(-40));
+}
+
+/** ชื่อผู้ใช้ที่เก็บในช่อง ลงนัดโดย / แก้ไขโดย (เหมือนระบบกระจายงาน: ชื่อ-สกุล) */
+function whoName_(acc) {
+  return String(acc.fullName || acc.username || '').trim();
 }
 
 function cleanText_(v) {
@@ -969,11 +1085,11 @@ function eventTitle_(settings, a) {
     '(Fx ' + a.fx + '/' + a.totalFx + ')'].filter(Boolean).join(' ');
 }
 
-function eventDesc_(a) {
+function eventDesc_(a, conf) {
   return [
     'HN: ' + a.hn,
     'ผู้ป่วย: ' + a.name,
-    'แพทย์: ' + a.doctor,
+    'แพทย์: ' + docName_(a.doctor, conf || conf_()),
     'รูปแบบการใส่: ' + (a.technique || '-'),
     'Fraction: ' + a.fx + ' / ' + a.totalFx,
     a.note ? 'หมายเหตุ: ' + a.note : '',
@@ -982,9 +1098,9 @@ function eventDesc_(a) {
   ].filter(Boolean).join('\n');
 }
 
-function createEvent_(cal, settings, a) {
+function createEvent_(cal, settings, a, conf) {
   const ev = cal.createAllDayEvent(eventTitle_(settings, a), toDate_(a.date),
-    { description: eventDesc_(a), location: settings.LOCATION || '' });
+    { description: eventDesc_(a, conf), location: settings.LOCATION || '' });
   try { ev.setColor(CalendarApp.EventColor.MAUVE); } catch (e) { /* ignore */ }
   return ev;
 }
@@ -1037,26 +1153,136 @@ function getCalendar_(lang) {
   return cal;
 }
 
-function getDoctors_() {
-  const sh = getSheet_(SHEET_DOCTORS);
-  const last = sh.getLastRow();
-  if (last < 2) return DEFAULT_DOCTORS.slice();
-  const list = sh.getRange(2, 1, last - 1, 1).getDisplayValues()
-    .map(r => r[0].trim()).filter(Boolean);
-  return list.length ? list : DEFAULT_DOCTORS.slice();
+/** ชื่อแพทย์จากรหัส (ไม่อยู่ในรายชื่อ = ข้อความเดิม) */
+function docName_(code, conf) {
+  const d = (conf || conf_()).doctors.find(x => x.code === code);
+  return d ? (d.name ? d.name + ' (' + d.code + ')' : d.code) : String(code || '');
 }
 
-function getHolidays_() {
-  const sh = getSheet_(SHEET_HOLIDAYS);
+/** Config ของระบบกระจายงาน: { key: ค่า JSON } (อ่านทั้งแท็บ) */
+function readConfigRaw_() {
+  const sh = ss_().getSheetByName(SHEET_CONFIG);
+  const out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(r => {
+    const k = String(r[0]).trim();
+    if (!k) return;
+    try { out[k] = JSON.parse(r[1]); } catch (e) { /* ข้ามค่าที่อ่านไม่ได้ */ }
+  });
+  return out;
+}
+
+/** เขียนค่าเดียวใน Config (แถวของ key นั้น · ไม่มี = เพิ่มแถว) ค่าอื่นไม่แตะ */
+function writeConfigKey_(key, value) {
+  const ss = ss_();
+  const sh = ss.getSheetByName(SHEET_CONFIG) || ss.insertSheet(SHEET_CONFIG);
+  if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 2).setValues([['key', 'value (JSON)']]).setFontWeight('bold');
+  const keys = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0]).trim()) : [];
+  const i = keys.indexOf(key);
+  const row = i >= 0 ? i + 2 : sh.getLastRow() + 1;
+  sh.getRange(row, 1, 1, 2).setNumberFormat('@').setValues([[key, JSON.stringify(value)]]);
+  conf_.cache = null;
+}
+
+/**
+ * ค่าที่ใช้ร่วมกับระบบกระจายงาน (อ่านครั้งเดียวต่อคำขอ · fresh = อ่านใหม่):
+ * { bq: { max, techs, signRoles, signUsers }, doctors: [{code, name}], staff: [{code, name, color}], holidays: [{date, name}] }
+ */
+function conf_(fresh) {
+  if (conf_.cache && !fresh) return conf_.cache;
+  const c = readConfigRaw_();
+  const str = v => String(v == null ? '' : v).trim();
+  const b = c.bq && typeof c.bq === 'object' ? c.bq : {};
+  const list = (v, d) => (Array.isArray(v) ? [...new Set(v.map(str).filter(Boolean))] : d.slice());
+  const bq = {
+    max: Math.min(50, Math.max(1, Math.floor(+b.max) || DEFAULT_BQ.max)),
+    techs: list(b.techs, DEFAULT_BQ.techs),
+    signRoles: list(b.signRoles, DEFAULT_BQ.signRoles),
+    signUsers: list(b.signUsers, DEFAULT_BQ.signUsers).map(x => x.toLowerCase())
+  };
+  const doctors = (Array.isArray(c.doctors) ? c.doctors : DEFAULT_DOCTOR_CODES.map(code => ({ code: code })))
+    .map(x => (x && typeof x === 'object' ? { code: str(x.code).toUpperCase(), name: str(x.name) } : { code: str(x).toUpperCase(), name: '' }))
+    .filter(x => x.code);
+  const staff = (Array.isArray(c.staff) && c.staff.length ? c.staff : DEFAULT_STAFF.map(code => ({ code: code })))
+    .filter(x => x && x.code && x.active !== false)
+    .map(x => ({ code: str(x.code).toUpperCase().slice(0, 10), name: str(x.name).slice(0, 100),
+      color: /^#[0-9a-fA-F]{6}$/.test(str(x.color)) ? str(x.color) : '' }));
+  const seen = {};
+  const holidays = (Array.isArray(c.holidays) ? c.holidays : [])
+    .filter(h => h && /^\d{4}-\d{2}-\d{2}$/.test(str(h.date)) && !seen[h.date] && (seen[h.date] = true))
+    .map(h => ({ date: str(h.date), name: str(h.name) }));
+  conf_.cache = { bq: bq, doctors: doctors, staff: staff, holidays: holidays };
+  return conf_.cache;
+}
+
+/* ---------- แท็บ BrachyQueue: อ่าน/เขียนตามชื่อหัวตาราง ---------- */
+
+function bqSheet_() {
+  return getSheet_(SHEET_BQ);
+}
+function bqHeader_(sh) {
+  const n = sh.getLastColumn();
+  return n ? sh.getRange(1, 1, 1, n).getDisplayValues()[0].map(v => String(v).trim()) : [];
+}
+/** ทุกแถว → [{ id, course, ..., eventId, _row }] */
+function readBq_() {
+  const sh = bqSheet_();
   const last = sh.getLastRow();
   if (last < 2) return [];
-  const tz = Session.getScriptTimeZone();
-  return sh.getRange(2, 1, last - 1, 2).getValues()
-    .filter(r => r[0])
-    .map(r => ({
-      date: r[0] instanceof Date ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd') : String(r[0]).trim(),
-      name: String(r[1] || '')
-    }));
+  const values = sh.getRange(1, 1, last, sh.getLastColumn()).getDisplayValues();
+  const header = values.shift().map(v => String(v).trim());
+  const cols = BQ_FIELDS.map(f => header.indexOf(f[1]));
+  return values.map((r, i) => {
+    const o = { _row: i + 2 };
+    BQ_FIELDS.forEach((f, k) => { o[f[0]] = cols[k] < 0 ? '' : String(r[cols[k]]).trim(); });
+    return o;
+  }).filter(o => o.id);
+}
+/** ต่อท้ายหลายแถวในครั้งเดียว (เก็บเป็นข้อความ) */
+function bqAppend_(recs) {
+  if (!recs.length) return;
+  const sh = bqSheet_();
+  const header = bqHeader_(sh);
+  const fields = header.map(h => BQ_FIELDS.find(f => f[1] === h));
+  sh.getRange(sh.getLastRow() + 1, 1, recs.length, header.length).setNumberFormat('@')
+    .setValues(recs.map(rec => fields.map(f => (f ? safeCell_(rec[f[0]] == null ? '' : rec[f[0]]) : ''))));
+}
+/** แก้ช่องเดียวของหลายนัดในครั้งเดียว: byId = { id: ค่าใหม่ } (อ่าน/เขียนทั้งคอลัมน์ · ใช้ตอนย้ายข้อมูลและซิงก์ปฏิทิน) */
+function bqPatchColumn_(field, byId) {
+  const ids = Object.keys(byId);
+  if (!ids.length) return 0;
+  const sh = bqSheet_();
+  const header = bqHeader_(sh);
+  const idCol = header.indexOf('id') + 1, col = header.indexOf(BQ_FIELDS.find(f => f[0] === field)[1]) + 1;
+  const last = sh.getLastRow();
+  if (idCol < 1 || col < 1 || last < 2) return 0;
+  const idv = sh.getRange(2, idCol, last - 1, 1).getDisplayValues();
+  const range = sh.getRange(2, col, last - 1, 1);
+  const vals = range.getDisplayValues();
+  let n = 0;
+  idv.forEach((r, i) => {
+    const id = String(r[0]).trim();
+    if (id && Object.prototype.hasOwnProperty.call(byId, id)) { vals[i][0] = safeCell_(byId[id]); n++; }
+  });
+  range.setNumberFormat('@').setValues(vals);
+  return n;
+}
+/** เขียนเฉพาะช่องที่ส่งมาในแถวของนัดนี้ (ค้นแถวจาก id ใหม่ทุกครั้ง กันแถวเลื่อน) */
+function bqUpdate_(a, set) {
+  const sh = bqSheet_();
+  const header = bqHeader_(sh);
+  const idCol = header.indexOf('id') + 1;
+  const last = sh.getLastRow();
+  let row = 0;
+  if (idCol > 0 && last >= 2) {
+    const ids = sh.getRange(2, idCol, last - 1, 1).getDisplayValues();
+    for (let i = 0; i < ids.length; i++) if (String(ids[i][0]).trim() === a.apptId) { row = i + 2; break; }
+  }
+  if (!row) throw new Error(msg_('th', 'notFound', { id: a.apptId }));
+  BQ_FIELDS.filter(f => f[0] in set).forEach(f => {
+    const col = header.indexOf(f[1]) + 1;
+    if (col > 0) sh.getRange(row, col).setNumberFormat('@').setValue(safeCell_(set[f[0]] == null ? '' : set[f[0]]));
+  });
 }
 
 function getSettings_() {
@@ -1076,27 +1302,18 @@ function getSheet_(name) {
   return sh;
 }
 
-/**
- * Google Sheet หลังบ้าน: ใช้ SPREADSHEET_ID ถ้าใส่ไว้ ไม่งั้นใช้ชีตที่สคริปต์ผูกอยู่
- * หรือ ID ที่ setup() จำไว้ (กรณีเว็บแอปหาชีตที่ผูกไม่เจอ)
- */
+/** ชีตข้อมูลหลัก (DATA_SHEET_ID หรือ Script property DATA_SHEET_ID) */
 function ss_() {
   if (ss_.cache) return ss_.cache;
-  let ss = null;
-  const fixed = String(SPREADSHEET_ID || '').trim();
-  if (fixed) ss = SpreadsheetApp.openById((fixed.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || fixed);
-  if (!ss) { try { ss = SpreadsheetApp.getActive(); } catch (e) { ss = null; } }
-  if (!ss) {
-    const saved = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-    if (saved) ss = SpreadsheetApp.openById(saved);
+  const raw = String(PropertiesService.getScriptProperties().getProperty('DATA_SHEET_ID') || DATA_SHEET_ID || '').trim();
+  const id = (raw.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || raw;
+  try {
+    ss_.cache = SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('เปิดชีตข้อมูลไม่ได้ (' + e.message + ') ตรวจ DATA_SHEET_ID และบัญชีที่ Deploy ต้องแก้ไขชีตนั้นได้ / ' +
+      'Could not open the data sheet: check DATA_SHEET_ID and that the deploying account can edit it');
   }
-  if (!ss) {
-    throw new Error('ไม่พบ Google Sheet ของระบบ: สคริปต์นี้ไม่ได้สร้างจากเมนู ส่วนขยาย > Apps Script ของชีต ' +
-      'ให้ใส่ลิงก์ชีตที่ SPREADSHEET_ID บนสุดของ Code.gs แล้ว Deploy เวอร์ชันใหม่ / ' +
-      'Spreadsheet not found: paste the sheet link into SPREADSHEET_ID at the top of Code.gs and deploy a new version');
-  }
-  ss_.cache = ss;
-  return ss;
+  return ss_.cache;
 }
 
 /**
@@ -1120,53 +1337,22 @@ function ensureSetup_() {
 function setupSheets_(apply) {
   const ss = ss_();
 
-  let sh = ss.getSheetByName(SHEET_APPTS);
+  // แท็บนัด (ใช้ร่วมกับระบบกระจายงาน): ยังไม่มีแท็บ = สร้าง · ขาดหัวคอลัมน์ = เติมต่อท้าย (ไม่ย้ายคอลัมน์เดิม)
+  let sh = ss.getSheetByName(SHEET_BQ);
   if (!sh) {
     if (!apply) return true;
-    sh = ss.insertSheet(SHEET_APPTS);
-    sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS])
-      .setFontWeight('bold').setBackground('#ede7f6');
+    sh = ss.insertSheet(SHEET_BQ);
+    sh.getRange(1, 1, 1, BQ_FIELDS.length).setValues([BQ_FIELDS.map(f => f[1])]).setFontWeight('bold');
     sh.setFrozenRows(1);
-    // เก็บวันที่เป็นข้อความ เพื่อไม่ให้ชีตแปลง timezone หรือรูปแบบวันที่
-    sh.getRange('I:I').setNumberFormat('@');
-    sh.getRange('D:D').setNumberFormat('@'); // HN อาจขึ้นต้นด้วย 0
   } else {
-    // อัปเดตจากเวอร์ชันก่อน: ลบคอลัมน์ที่ไม่ใช้แล้ว (เวลาเริ่ม/เวลาสิ้นสุด หรือ ชนิด) ที่อยู่หลัง "วันที่นัด"
-    const h = sh.getRange(1, 10).getDisplayValues()[0][0];
-    if ((h === 'เวลาเริ่ม' || h === 'ชนิด') && !apply) return true;
-    if (h === 'เวลาเริ่ม') sh.deleteColumns(10, 2);
-    else if (h === 'ชนิด') sh.deleteColumn(10);
-    // เติมหัวคอลัมน์ใหม่ (รูปแบบการใส่ / ประวัติการแก้ไข / MP / RC) ที่ต่อท้าย
-    if (sh.getLastColumn() < APPT_HEADERS.length) {
+    const header = bqHeader_(sh);
+    const missing = BQ_FIELDS.map(f => f[1]).filter(h => header.indexOf(h) < 0);
+    if (missing.length) {
       if (!apply) return true;
-      const maxCols = sh.getMaxColumns();
-      if (maxCols < APPT_HEADERS.length) sh.insertColumnsAfter(maxCols, APPT_HEADERS.length - maxCols);
-      sh.getRange(1, 1, 1, APPT_HEADERS.length).setValues([APPT_HEADERS]).setFontWeight('bold').setBackground('#ede7f6');
+      const maxCols = sh.getMaxColumns(), need = header.length + missing.length;
+      if (maxCols < need) sh.insertColumnsAfter(maxCols, need - maxCols);
+      sh.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
     }
-  }
-
-  sh = ss.getSheetByName(SHEET_DOCTORS);
-  if (!sh) {
-    if (!apply) return true;
-    sh = ss.insertSheet(SHEET_DOCTORS);
-    sh.getRange(1, 1).setValue('ชื่อแพทย์').setFontWeight('bold');
-    sh.getRange(2, 1, DEFAULT_DOCTORS.length, 1).setValues(DEFAULT_DOCTORS.map(d => [d]));
-  } else if (sh.getLastRow() >= 2) {
-    // แทนที่รายชื่อตัวอย่างจากเวอร์ชันก่อนด้วยรายชื่อแพทย์จริง
-    const cur = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().map(r => r[0].trim()).filter(Boolean);
-    if (cur.length && cur.every(n => OLD_SAMPLE_DOCTORS.indexOf(n) >= 0)) {
-      if (!apply) return true;
-      sh.getRange(2, 1, sh.getLastRow() - 1, 1).clearContent();
-      sh.getRange(2, 1, DEFAULT_DOCTORS.length, 1).setValues(DEFAULT_DOCTORS.map(d => [d]));
-    }
-  }
-
-  sh = ss.getSheetByName(SHEET_HOLIDAYS);
-  if (!sh) {
-    if (!apply) return true;
-    sh = ss.insertSheet(SHEET_HOLIDAYS);
-    sh.getRange(1, 1, 1, 2).setValues([['วันที่ (yyyy-MM-dd)', 'ชื่อวันหยุด']]).setFontWeight('bold');
-    sh.getRange('A:A').setNumberFormat('@');
   }
 
   sh = ss.getSheetByName(SHEET_SETTINGS);
