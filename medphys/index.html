@@ -1582,6 +1582,15 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .set-row.crew-row{grid-template-columns:30px minmax(0,1fr) 170px auto auto;grid-template-areas:"idx name pos act btns" ". acct acct acct ."}
 @media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". acct acct"}}
 .bq-sign.old{opacity:.6}
+/* ใบคะแนน: ที่มาของแต้มแต่ละแถว */
+.p4p-src-btn{margin-left:6px;font-size:12.5px}
+.p4p-src td{background:var(--sunken);padding:6px 10px !important;text-align:left !important}
+.p4p-src-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.p4p-src-list li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px}
+.p4p-src-list .when{font-family:var(--mono);color:var(--muted);min-width:64px}
+.p4p-src-list .what{flex:1 1 200px}
+.p4p-src-list .what small{display:block;color:var(--muted)}
+.src-tag.own{background:transparent;border:1px dashed var(--line);color:var(--muted)}
 </style>
 </head>
 <body>
@@ -3138,7 +3147,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.6';
+const PAGE_VERSION = '2026-11-01.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7615,6 +7624,28 @@ function renderP4P() {
   $('#aim-share').textContent = cur + pal ? `Curative ${num((cur / (cur + pal)) * 100, 0)}% · Palliative ${num((pal / (cur + pal)) * 100, 0)}%` : '';
 }
 
+// ที่มาของแต้มแต่ละแถว (กด "ที่มา" ในใบคะแนน): เคสนับตามวัน In · กิจกรรมนับตามวันที่ · ของคนนั้นในเดือนนั้น (ตรงกับ p4pWork)
+const p4pOpen = new Set();   // `${รหัส}|${เดือน}|${แถว}` ที่เปิดดูที่มาอยู่
+function p4pEntries(code, key, ym) {
+  const cfg = state.config, [a, b] = key.split(':'), out = [];
+  for (const c of state.cases) {
+    if (c.mp !== code || !c.in.startsWith(ym)) continue;
+    const moved = MOVED_CATS.includes(c.cat) && cfg.acts[c.cat], k = catOf(c.cat);
+    if (moved ? key === c.cat : (a === 'cat' && k.id === b) || (key === 'mu' && k.mu)) out.push({ type: 'case', date: c.in, rec: c, n: unitsOf(c) });
+  }
+  if (a !== 'cat' && key !== 'mu') for (const l of state.logs) if (l.mp === code && l.kind === key && l.date.startsWith(ym)) out.push({ type: 'log', date: l.date, rec: l, n: 1 });
+  return out.sort((x, y) => x.date.localeCompare(y.date));
+}
+// รายการ: วันที่ HN ชื่อ อะไร ที่มา (ดึงจากระบบนัด / TDF) · ปุ่มเปิดเคส / แก้หรือลบกิจกรรม (ที่ดึงมา = ดูและไปแก้ที่ต้นทาง)
+function p4pSourceHtml(code, key, ym) {
+  const edit = canEdit();
+  return `<ul class="p4p-src-list">${p4pEntries(code, key, ym).map(e => {
+    const r = e.rec, from = e.type === 'log' && srcOfLog(r);
+    const what = e.type === 'case' ? `เคส ${catOf(r.cat).label}${e.n > 1 ? ` × ${e.n}` : ''}` : [r.title, r.note].filter(Boolean).join(' · ') || kindOf(r.kind).label;
+    const btn = !edit ? '' : e.type === 'case' ? `<button type="button" class="btn ghost sm" data-p4pcase="${esc(r.id)}">เปิดเคส</button>` : `<button type="button" class="btn ghost sm" data-logedit="${esc(r.id)}">${from ? 'ดู / ไปแก้ที่ต้นทาง' : 'แก้ / ลบ'}</button>`;
+    return `<li><span class="when">${esc(fmtDay(e.date))}</span><span class="hn">${esc(r.hn || '—')}</span><span class="what">${esc(r.name || '')}<small>${esc(what)}</small></span>${from ? `<span class="src-tag" title="ดึงจาก${esc(sp(from.sys))} · ลบที่นี่แล้วจะกลับมาตอนดึงครั้งถัดไป แก้ที่ต้นทาง">${esc(from.tag)}</span>` : '<span class="src-tag own">บันทึกในระบบนี้</span>'}${btn}</li>`;
+  }).join('') || '<li class="muted">ไม่พบรายการ</li>'}</ul>`;
+}
 // ใบคะแนนรายคน: เริ่มจาก −แต้มประกัน แล้วสะสมแต้มทีละกิจกรรมจนได้คะแนนรวม
 function personTable(code, r, ym, carryCell) {
   const cfg = state.config;
@@ -7625,9 +7656,11 @@ function personTable(code, r, ym, carryCell) {
   rows.push(`<tr><td>แต้มต่อ <span class="unit">ตั้งต้นตามตำแหน่ง แก้ได้</span></td><td></td><td></td><td></td><td></td>${carryCell(code)}${balCell()}</tr>`);
   const item = (label, unit, it, count) => {
     if (!count && !state.allRows) return;
-    const u = unitPts(it.min, it.w), pts = u * count;
+    const u = unitPts(it.min, it.w), pts = u * count, open = count && p4pOpen.has(`${code}|${ym}|${it.key}`);
     bal += pts;
-    rows.push(`<tr class="${count ? '' : 'nil'}"><td>${esc(label)} <span class="unit">${unit}</span></td><td>${num(it.min, 2)}</td><td>${num(it.w, 3)}</td><td>${num(u, 3)}</td><td>${count || '–'}</td><td>${count ? signed(pts, 3) : '–'}</td>${balCell()}</tr>`);
+    const src = count ? ` <button type="button" class="link-btn p4p-src-btn" data-p4psrc="${esc(it.key)}" aria-expanded="${!!open}" title="ดูเคส / กิจกรรมที่นับในแถวนี้">ที่มา ${open ? '▴' : '▾'}</button>` : '';
+    rows.push(`<tr class="${count ? '' : 'nil'}"><td>${esc(label)} <span class="unit">${unit}</span>${src}</td><td>${num(it.min, 2)}</td><td>${num(it.w, 3)}</td><td>${num(u, 3)}</td><td>${count || '–'}</td><td>${count ? signed(pts, 3) : '–'}</td>${balCell()}</tr>`);
+    if (open) rows.push(`<tr class="p4p-src"><td colspan="7">${p4pSourceHtml(code, it.key, ym)}</td></tr>`);
   };
   const group = (title, fill) => {
     const at = rows.length;
@@ -10502,7 +10535,10 @@ function openLog(id, preset = {}) {
   $('#l-need').hidden = preset.need !== 'pc';
   const from = l && srcOfLog(l);
   $('#l-src').hidden = !from;
-  if (from) $('#l-src').textContent = `รายการนี้ดึงจาก${sp(from.sys)} · แก้หรือยกเลิกที่${from === SRC.brachy ? 'ระบบนัด' : 'ระบบนั้น'} (แก้ที่นี่จะถูกแทนที่ตอนดึงครั้งถัดไป)`;
+  if (from) $('#l-src').textContent = `รายการนี้ดึงจาก${sp(from.sys)} · แก้หรือยกเลิกที่${from === SRC.brachy ? 'ระบบนัด' : 'ระบบนั้น'} (แก้หรือลบที่นี่จะถูกแทนที่ตอนดึงครั้งถัดไป)`;
+  // ดึงจากแถบนัดคิวใส่แร่ (src brachy:<รหัสนัด>:plan|rc): ปุ่มเปิดนัดนั้น แก้ / ล้างชื่อ MP หรือ RC ที่นัด
+  const bqSrc = from === SRC.brachy && /^brachy:(.+):(plan|rc)$/.exec(str(l.src)), bqRow = bqSrc && state.bq.find(a => a.id === bqSrc[1]);
+  if (bqRow && accessOf('bq') === 'edit') $('#l-src').insertAdjacentHTML('beforeend', ` <button type="button" class="link-btn" data-bqfromlog="${esc(bqRow.id)}" data-bqk="${bqSrc[2] === 'rc' ? 'rc' : 'mp'}">เปิดนัดใส่แร่ ${esc(fmtDay(bqRow.date))} (แก้ ${bqSrc[2] === 'rc' ? 'RC' : 'MP'} ที่นัด)</button>`);
   if (preset.need !== 'pc') rcThenPc = null;
   const del = $('#log-del');
   del.hidden = !l; delete del.dataset.armed; del.textContent = 'ลบ';
@@ -11508,7 +11544,10 @@ document.addEventListener('click', e => {
   if (ds.brdel) { brRows.splice(+ds.brdel, 1); renderBrRows(); syncLogForm(); return; }
   if (ds.stampsave) return openValsPin(ds.id, ds.stampsave);
   if (ds.rc) { const c = state.cases.find(x => x.id === ds.rc); return openLog(null, { kind: 'rc', caseId: c && c.id }); }
-  if (ds.logedit) return openLog(ds.logedit);
+  if (ds.logedit) { if (logDlg.open) logDlg.close(); return openLog(ds.logedit); }
+  if (ds.p4psrc) { const k = `${state.who}|${state.month}|${ds.p4psrc}`; if (p4pOpen.has(k)) p4pOpen.delete(k); else p4pOpen.add(k); return renderP4P(); }
+  if (ds.p4pcase) return openCase(ds.p4pcase);
+  if (ds.bqfromlog) { logDlg.close(); return openBqEdit(ds.bqfromlog, ds.bqk); }
   if (ds.mate) { state.person = state.person === ds.mate ? '' : ds.mate; state.limit = 60; return render(); }
   if (ds.tab) { state.tab = ds.tab; state.limit = 60; return render(); }
   if (ds.logtab !== undefined) { state.logKind = ds.logtab; return render(); }
