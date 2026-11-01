@@ -5187,16 +5187,18 @@ function setupRegCombo(pre, pick, typed, skipReg) {
 }
 setupRegCombo('a', apFromReg, () => apRegNote());
 // ฟอร์มอื่นที่มีช่อง HN (แจกเคส · แก้ไขเคส / เพิ่มผู้ป่วยในห้องฉาย · CT-SIM · ลงทะเบียน · กิจกรรม RC): เลือกผู้ป่วยที่มีในระบบ = ใส่ชื่อ แพทย์ Diag
-// force (เลือกจากรายการ) = ใส่ทับชื่อ · แพทย์และ Diag ใส่เมื่อยังว่าง · after = อัปเดตส่วนอื่นของฟอร์ม
+// force (เลือกจากรายการ) = ใส่ทับชื่อ · แพทย์และ Diag ใส่เมื่อยังว่าง · after = อัปเดตส่วนอื่นของฟอร์ม (เฉพาะเมื่อเลือกจากรายการ:
+// พิมพ์ HN แล้วออกจากช่องไปกดปุ่มในฟอร์ม ปุ่มนั้นต้องไม่ถูกวาดใหม่ระหว่างกด)
 function ptFill(pre, r, force, after) {
-  if (r.hn) $(`#${pre}-hn`).value = r.hn;
-  const put = (el, v) => { if (el && v && (force || !str(el.value))) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); } };
-  put($(`#${pre}-name`), regName(r));
+  const hn = $(`#${pre}-hn`);
+  if (r.hn) hn.value = r.hn;
+  const nm = $(`#${pre}-name`);
+  if (nm && regName(r) && (force || !str(nm.value))) { nm.value = regName(r); nm.dispatchEvent(new Event('input', { bubbles: true })); }
   const box = $(`#${pre}-doc`), pick = box && r.doc && !chipValue(box) && $(`input[value="${CSS.escape(r.doc)}"]`, box);
   if (pick) { pick.checked = true; pick.dispatchEvent(new Event('change', { bubbles: true })); }
   const dx = $(`#${pre}-dx`), v = dxValue(r);
-  if (dx && v && !str(dx.value)) { dx.value = v; dx.dispatchEvent(new Event('input', { bubbles: true })); $(`#${pre}-dx-list`) && ($(`#${pre}-dx-list`).hidden = true); }
-  if (after) after();
+  if (dx && v && !str(dx.value)) { dx.value = v; dx.dispatchEvent(new Event('change', { bubbles: true })); }
+  if (after && force) after();
 }
 setupRegCombo('i', (r, f) => ptFill('i', r, f));
 setupRegCombo('f', (r, f) => ptFill('f', r, f));
@@ -5605,11 +5607,12 @@ function bqActFx(i) {
   if (bqNew.act >= 0 && d) bqNew.month = d.slice(0, 7);
   bqSync();
 }
+// force = เลือกจากรายการ (วาดปฏิทินและคำเตือนใหม่) · พิมพ์ HN แล้วออกจากช่อง = เติมชื่อ/แพทย์ที่ยังว่าง ไม่วาดใหม่ (ปุ่มที่กำลังกดไม่หาย)
 function bqFromReg(r, force) {
   if (r.hn) $('#q-hn').value = r.hn;
-  if (force || !str($('#q-name').value)) $('#q-name').value = regName(r);
+  if (regName(r) && (force || !str($('#q-name').value))) $('#q-name').value = regName(r);
   if (r.doc && (force || !chipValue($('#q-doc')))) docChipsTo('#q-doc', 'qdoc', r.doc);
-  bqSync();
+  if (force) bqSync();
 }
 function submitBq(e) {
   e.preventDefault();
