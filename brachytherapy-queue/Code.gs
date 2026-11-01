@@ -28,6 +28,12 @@ const WORKSPACE_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H
  * เปลี่ยนได้ที่ Script property DATA_SHEET_ID (ใส่ ID หรือลิงก์ของชีต)
  */
 const DATA_SHEET_ID = '1lW4T3rENJatBIULjXNDOMBvIBzMAssPjnmZtY7Q-5yk';
+/**
+ * เปิดเว็บนี้แล้วพาไปหน้าเว็บนี้แทน (ใช้แถบนัดคิวใส่แร่ของ Treatment Planning Management แทนหน้าเว็บของระบบนี้)
+ * บัตรผ่าน ?sso= จาก LPCH RO Workspace ส่งต่อไปด้วย จึงเข้าสู่ระบบอัตโนมัติได้เหมือนเดิม
+ * เปลี่ยนได้ที่ Script property REDIRECT_URL · ใส่ - เพื่อปิดการพาไปและใช้หน้าเว็บของระบบนี้ตามเดิม
+ */
+const REDIRECT_URL = 'https://script.google.com/macros/s/AKfycbzbb97RT1RdFDzVp0EB10ecOSFjtNCxcL_mSOPnD5ofSPzUA6FmNSO6P9h3vCUep3oa/exec';
 /** ชีตเดิมของระบบนี้ (ใช้ตอนย้ายข้อมูลด้วย migrateFromOldSheet เท่านั้น · เปลี่ยนได้ที่ Script property OLD_SHEET_ID) */
 const OLD_SHEET_ID = '1kYj1MUI7APT4Q__LoTCHrcTt10v0_216Yf-rsCEY34Y';
 
@@ -164,6 +170,8 @@ const WS_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
 /* ------------------------------------------------------------------ */
 
 function doGet(e) {
+  const go = redirectUrl_(e && e.parameter);
+  if (go) return redirectPage_(go);
   try {
     ensureSetup_();
   } catch (err) {
@@ -880,6 +888,36 @@ function log_(user, action, detail) {
     if (!sh) return;
     sh.appendRow([nowStr_(), user || '(ไม่ทราบ)', action, detail || '']);
   } catch (e) { /* ไม่ให้ log ที่ผิดพลาดทำให้งานหลักล้ม */ }
+}
+
+/** ลิงก์ที่จะพาไป (REDIRECT_URL หรือ Script property REDIRECT_URL) พร้อมบัตรผ่าน ?sso= · '' = ไม่พาไป */
+function redirectUrl_(params) {
+  let url = REDIRECT_URL;
+  try {
+    const v = PropertiesService.getScriptProperties().getProperty('REDIRECT_URL');
+    if (v !== null && v !== '') url = v;
+  } catch (e) { /* ใช้ค่าใน Code.gs */ }
+  url = String(url || '').trim();
+  if (!/^https:\/\//.test(url)) return '';
+  const sso = params && params.sso ? String(params.sso).replace(/[^0-9a-zA-Z_-]/g, '') : '';
+  return sso ? url + (url.indexOf('?') < 0 ? '?' : '&') + 'sso=' + encodeURIComponent(sso) : url;
+}
+
+/** หน้าที่พาไปเว็บอื่นทันที (หน้าเว็บ Apps Script อยู่ใน iframe จึงเปลี่ยนหน้าที่หน้าต่างบนสุด) มีลิงก์ให้กดเองถ้าเบราว์เซอร์ไม่ยอม */
+function redirectPage_(url) {
+  const attr = String(url).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const html =
+    '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">' +
+    '<style>:root{color-scheme:light dark}body{font-family:Sarabun,system-ui,sans-serif;background:#f5f3fa;color:#1f1b2e;display:flex;' +
+    'min-height:90vh;align-items:center;justify-content:center;margin:0;padding:16px;text-align:center}a{color:#6b3fa0;font-weight:700}' +
+    '@media (prefers-color-scheme:dark){body{background:#141120;color:#ece8f6}a{color:#b794f0}}</style></head><body><div>' +
+    '<p>กำลังไปที่ระบบนัดคิวใส่แร่ (Treatment Planning Management)…</p>' +
+    '<p><a href="' + attr + '" target="_top">กดที่นี่ถ้าหน้าไม่เปลี่ยนเอง · Continue</a></p></div>' +
+    '<script>try { window.top.location.replace(' + JSON.stringify(url).replace(/</g, '\\u003c') + '); } catch (e) {}</script>' +
+    '</body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('ระบบนัดคิวผู้ป่วยใส่แร่')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function errorPage_(message, messageEn, detail) {
