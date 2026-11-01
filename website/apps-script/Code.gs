@@ -333,9 +333,7 @@ ACTIONS.updateProfile = function (req) {
   var email = normEmail_(req.email);
   if (emailTaken_(email, u.username)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
   if (req.fullName !== undefined) {
-    var fullName = String(req.fullName || '').replace(/\s+/g, ' ').trim();
-    if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
-    if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
+    var fullName = cleanName_(req.fullName);
     if (fullName !== u.fullName) setUserField_(u, 'fullName', fullName);
   }
   setUserField_(u, 'email', email);
@@ -411,6 +409,8 @@ ACTIONS.updateUser = function (req) {
   }
   guardMember_(admin, u);
   if (typeof req.isAdmin === 'boolean' && !admin.isAdmin) throw new Error('ตั้งหรือยกเลิก admin ได้เฉพาะ admin หลัก');
+  // admin แก้ชื่อ-นามสกุลให้ได้ (admin รอง: เฉพาะสมาชิกทั่วไป ตาม guardMember_) · ตรวจก่อนเขียนอะไรลงชีต
+  var fullName = req.fullName !== undefined ? cleanName_(req.fullName) : null;
   if (req.status) {
     if (['active', 'pending', 'disabled'].indexOf(req.status) === -1) throw new Error('สถานะไม่ถูกต้อง');
     setUserField_(u, 'status', req.status);
@@ -424,6 +424,7 @@ ACTIONS.updateUser = function (req) {
     if (ROLES.indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
     setUserField_(u, 'role', req.role);
   }
+  if (fullName !== null && fullName !== u.fullName) setUserField_(u, 'fullName', fullName);
   return { user: publicUser_(findUser_(u.username)) };
 };
 
@@ -1340,6 +1341,14 @@ function setUserField_(u, field, value) {
 }
 
 /** What this member may do as an admin: every right for admin หลัก, the chosen ones for admin รอง, none otherwise. */
+/** ชื่อ-นามสกุล as saved: spaces tidied, required, up to 80 characters. */
+function cleanName_(v) {
+  var name = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  if (!name) throw new Error('กรุณากรอกชื่อ-นามสกุล');
+  if (name.length > 80) throw new Error('ชื่อยาวเกินไป');
+  return name;
+}
+
 function permsOf_(u) {
   if (u.isAdmin) return ADMIN_PERMS.slice();
   var p;

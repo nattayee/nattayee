@@ -264,12 +264,16 @@
         if (u === admin && (r.isAdmin === false || (r.status && r.status !== "active"))) fail("ไม่สามารถยกเลิกสิทธิ์หรือระงับบัญชีของตัวเองได้");
         guardMember(admin, u);
         if (typeof r.isAdmin === "boolean" && !admin.isAdmin) fail("ตั้งหรือยกเลิก admin ได้เฉพาะ admin หลัก");
+        var fullName = r.fullName !== undefined ? String(r.fullName || "").replace(/\s+/g, " ").trim() : null;
+        if (fullName === "") fail("กรุณากรอกชื่อ-นามสกุล");
+        if (fullName && fullName.length > 80) fail("ชื่อยาวเกินไป");
         if (r.status) {
           u.status = r.status;
           if (r.status !== "active") d.sessions = d.sessions.filter(function (s) { return s.username !== u.username; });
         }
         if (typeof r.isAdmin === "boolean") { u.isAdmin = r.isAdmin; u.adminPerms = []; }
         if (r.role) u.role = r.role;
+        if (fullName) u.fullName = fullName;
         return { user: pub(u) };
       },
       setAdmin: function (d, r) {
@@ -507,6 +511,7 @@
     var users = [];
     var filter = "pending";
     var editing = null;                   // username whose admin rights are open (admin หลัก only)
+    var renaming = null;                  // username whose ชื่อ-นามสกุล is being edited
     var main = !!(user && user.isAdmin);  // admin หลัก; otherwise an admin รอง with the "จัดการสมาชิก" right
 
     function load() {
@@ -563,8 +568,14 @@
           if (main && !self) acts.push('<button class="chip' + (editing === u.username ? " active" : "") + '" data-act="perm" aria-expanded="' + (editing === u.username) + '">🛡️ สิทธิ์ admin</button>');
           if (can) acts.push('<button class="chip danger" data-act="delete">ลบ</button>');
           var tags = levelOf(u) === "sub" ? '<div class="perm-tags">' + u.perms.map(function (k) { return "<span>" + esc(permLabel(k)) + "</span>"; }).join("") + "</div>" : "";
+          var nameCell = renaming === u.username
+            ? '<div class="name-edit"><input data-name-input maxlength="80" value="' + esc(u.fullName) + '" aria-label="ชื่อ-นามสกุลของ ' + esc(u.username) + '">' +
+                '<button type="button" class="chip active" data-act="name-save">บันทึก</button><button type="button" class="chip" data-act="name-cancel">ยกเลิก</button></div>'
+            : "<strong>" + esc(u.fullName) + "</strong>" +
+              (manageable(u) ? ' <button type="button" class="name-btn" data-act="name" title="แก้ชื่อ-นามสกุล" aria-label="แก้ชื่อ-นามสกุลของ ' + esc(u.fullName) + '">✏️</button>' : "") +
+              levelBadge(u) + tags;
           return '<tr data-user="' + esc(u.username) + '">' +
-            '<td class="cell-name"><strong>' + esc(u.fullName) + "</strong>" + levelBadge(u) + tags + "</td>" +
+            '<td class="cell-name">' + nameCell + "</td>" +
             '<td data-label="Username">' + esc(u.username) + "</td>" +
             '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" + ROLES.map(function (r) {
               return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
@@ -580,6 +591,27 @@
 
     function replaceUser(u) { users = users.map(function (x) { return x.username === u.username ? u : x; }); }
 
+    function focusName() {
+      var input = el.querySelector("[data-name-input]");
+      if (input) { input.focus(); input.select(); }
+    }
+
+    function saveName(tr) {
+      var username = tr.getAttribute("data-user"), input = tr.querySelector("[data-name-input]");
+      var name = input.value.replace(/\s+/g, " ").trim();
+      if (!name) { input.focus(); input.setCustomValidity("กรุณากรอกชื่อ-นามสกุล"); input.reportValidity(); return; }
+      input.disabled = true;
+      call("updateUser", { username: username, fullName: name }).then(function (res) {
+        replaceUser(res.user);
+        renaming = null;
+        if (user && res.user.username === user.username) {   // admin หลัก renamed themself: header too
+          user = Object.assign({}, user, { fullName: res.user.fullName });
+          profileListeners.forEach(function (cb) { cb(user); });
+        }
+        render("เปลี่ยนชื่อเป็น " + res.user.fullName + " แล้ว");
+      }).catch(function (e) { renaming = null; render("⚠️ " + e.message); });
+    }
+
     function update(username, data, okMsg) {
       call("updateUser", Object.assign({ username: username }, data)).then(function (res) {
         replaceUser(res.user);
@@ -589,7 +621,7 @@
 
     el.addEventListener("click", function (e) {
       var f = e.target.getAttribute("data-filter");
-      if (f) { filter = f; editing = null; render(); return; }
+      if (f) { filter = f; editing = renaming = null; render(); return; }
       var pb = e.target.closest && e.target.closest("[data-perm]");
       if (pb) {
         var box = pb.closest(".perm-editor"), who = box.getAttribute("data-for");
@@ -609,6 +641,9 @@
       if (!act || !tr || act === "role") return;
       var username = tr.getAttribute("data-user");
       var u = users.filter(function (x) { return x.username === username; })[0];
+      if (act === "name") { renaming = username; render(); focusName(); return; }
+      if (act === "name-cancel") { renaming = null; render(); return; }
+      if (act === "name-save") { saveName(tr); return; }
       if (act === "approve") update(username, { status: "active" }, "เปิดใช้งานบัญชี " + u.fullName + " แล้ว");
       if (act === "disable") update(username, { status: "disabled" }, "ระงับบัญชี " + u.fullName + " แล้ว");
       if (act === "perm") { editing = editing === username ? null : username; render(); }
@@ -618,6 +653,13 @@
           render("ลบบัญชี " + u.fullName + " แล้ว");
         }).catch(function (e2) { render("⚠️ " + e2.message); });
       }
+    });
+
+    el.addEventListener("keydown", function (e) {
+      if (!e.target.hasAttribute || !e.target.hasAttribute("data-name-input")) return;
+      e.target.setCustomValidity("");
+      if (e.key === "Enter") { e.preventDefault(); saveName(e.target.closest("tr")); }
+      if (e.key === "Escape") { renaming = null; render(); }
     });
 
     el.addEventListener("change", function (e) {
