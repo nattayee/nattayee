@@ -1631,6 +1631,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .bq-dayset.old{opacity:.6}
 .bq-dayv{font-size:12.5px;font-weight:600}
 .bqs-form{width:min(560px,calc(100vw - 32px))}
+.pin-rule{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
 </style>
 </head>
 <body>
@@ -2649,9 +2650,31 @@ const CT_COUNTS = [['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], 
 const CT_LISTS = [['organs', 'Organ'], ['masks', 'Mask'], ['cms', 'CM (สารทึบรังสี)'], ['pstats', 'สถานะ'], ['hdrs', 'HDR']];
 const PIN_OF_MODE = { bqnew: 'bq', bqedit: 'bq', bqcancel: 'bq', stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty', ctsave: 'ct', ctdel: 'ct', apsave: 'appt', apdel: 'appt', jobsave: 'jobs', rgsave: 'reg', rgdel: 'reg' };
 // ต้องใส่ PIN ไหม (Code.gs รุ่นเก่า = ต้องใส่ทุกงาน) · ตั้ง/เปลี่ยน PIN ของตัวเองต้องใส่เสมอ
-const pinNeed = mode => { const g = PIN_OF_MODE[mode]; return !g || !pinCfgOn() || (state.config.pin || {})[g] !== false; };
+// กติกาเดียวทุกแถบ ทุกงาน (Code.gs ตรวจแบบเดียวกัน): บันทึกใหม่ = ไม่ต้องใส่ PIN · แก้ไขหรือลบของที่บันทึกไว้แล้ว = ต้องใส่ PIN
+// pinCtx.force = เซิร์ฟเวอร์บอกว่าเป็นการแก้ไข (ข้อมูลเปลี่ยนระหว่างนั้น) หรือกด "ล้าง" ในหน้าต่างที่ยังไม่ได้ขอ PIN
+const pinNeed = mode => {
+  if (mode === 'set' || (pinCtx && pinCtx.mode === mode && pinCtx.force)) return true;
+  if (window.__pinLegacy === true || (store.mode === 'sheet' && state.loaded && (state.api || 0) < 45)) { const g = PIN_OF_MODE[mode]; return !g || !pinCfgOn() || (state.config.pin || {})[g] !== false; }   // Code.gs เก่า: ตามกลุ่มงานที่ตั้งไว้
+  return !pinFresh(mode, pinCtx && pinCtx.mode === mode ? pinCtx : {});
+};
+function pinFresh(mode, ctx) {
+  const c = ctx.id ? state.cases.find(x => x.id === ctx.id) : null, emp = v => !str(v);
+  switch (mode) {
+    case 'bqnew': case 'logadd': case 'logbatch': return true;
+    case 'ptadd': case 'ctsave': case 'apsave': case 'rgsave': case 'jobsave': return !!ctx.isNew;
+    case 'stamp': case 'vals': { if (!c) return false; const r = ctx.sid ? boostStamps(c)[ctx.sid] || {} : c, k = ctx.step || ctx.key; return emp(r[k]); }
+    case 'course': return !!c && emp(c.rt);
+    case 'fx': return !ctx.cur && !ctx.mvDay && !ctx.addCur;
+    case 'ptags': return !!c && emp(c.ptags);
+    case 'mqt': return !!c && emp(c.mqt);
+    case 'duty': return !(ctx.rooms || []).some(r => state.duty.some(v => v.date === ctx.date && v.room === r));
+    case 'bqedit': { const a = ctx.row || {}; return Object.entries(ctx.ch || {}).every(([k, v]) => (k === 'status' ? a.status === BQ_ST.booked && v === BQ_ST.done : emp(a[k]))); }
+    case 'bqday': { const k = Object.keys(ctx.ch || {})[0]; return (ctx.ids || []).every(id => { const a = state.bq.find(x => x.id === id); return a && emp(a[k]); }); }
+    default: return false;   // แก้ไขเคส ลบ ยกเลิก แก้กิจกรรม ฯลฯ
+  }
+}
 // งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
-const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rgsave', 'bqnew', 'bqedit'].includes(mode);
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rgsave', 'bqnew', 'bqedit', 'bqday'].includes(mode);
 // ฟอร์มเพิ่มผู้ป่วยในแถบห้องฉาย (ตั้งค่า → ตารางวันฉาย): off = ไม่แสดง · show = แสดง · req = บังคับกรอก · HN และเทคนิคบังคับเสมอ
 const PT_FIELDS = [
   ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'Doc', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
@@ -3205,7 +3228,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.10';
+const PAGE_VERSION = '2026-11-01.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3272,6 +3295,7 @@ const sheetStore = {
   dutyMembers: () => call('dutyMembers'),
   members: () => call('lpchMembers'),
   removeLog: (id, pin) => call('removeLog', id, pin),
+  removeLeave: (id, pin) => call('removeLeave', id, pin),
   setPin: (pin, proof) => call('setPin', pin, proof),
   holidays: year => call('thaiHolidays', year),
   brachyCheck: set => call('brachyCheck', set),
@@ -3676,6 +3700,7 @@ function localStore() {
       return { rtt: pick(roles.rtt), ra: pick(roles.ra), at: nowISO(), live: true, why: '' };
     },
     removeLog: async (id, pin) => { demoCheckPin(pin); db.logs = db.logs.filter(x => x.id !== id); persist(); return true; },
+    removeLeave: async (id, pin) => { demoCheckPin(pin); db.leaves = db.leaves.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
       if (!/^\d{4}$/.test(pin)) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4 หลัก');
       if (demoPin.get() && !(proof && proof.pin != null && demoPin.hash(proof.pin) === demoPin.get()) && !(proof && proof.password)) throw new Error('รหัส PIN เดิมไม่ถูกต้อง');
@@ -9540,9 +9565,10 @@ function renderSettings() {
       ].map(([k, l, v, auto]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="${esc(k)}" aria-label="แถวเทคนิคของ ${esc(l)}">${opt('', auto, v)}${JOB_TECHS.map(t => opt(t, t, v)).join('')}${opt('-', 'ไม่นับ', v)}</select></td></tr>`).join('')}</tbody></table></div>
       <div class="form-grid" style="margin-top:12px">${optEditor('jobs.sit', 'นับเป็นเปลนั่ง <span class="sub-lbl">รายละเอียดผู้ป่วย (ตารางวันฉาย) หรือสถานะผู้ป่วย (CT-SIM) ที่มีคำนี้</span>')}${optEditor('jobs.lie', 'นับเป็นเปลนอน / เปลนอน O2 <span class="sub-lbl">รายละเอียดหรือสถานะผู้ป่วยที่มีคำนี้</span>')}${optEditor('jobs.leaveTypes', 'ประเภทวันลา / กิจกรรม')}</div></div>
     ${SRC_KEYS.map(k => srcSec(d, k)).join('')}
-    <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>ติ๊ก = ต้องใส่รหัส PIN 4 หลักของตัวเองก่อนบันทึก · ไม่ติ๊ก = บันทึกได้เลย (ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบ · การลบยังถามยืนยัน)</p></div>
-      ${pinCfgOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ตั้งงานที่ไม่ต้องใส่ PIN ได้เมื่อใช้ Code.gs รุ่น 2026-10-22.1 ขึ้นไป · ตอนนี้ทุกงานยังต้องใส่ PIN</span></p>'}
-      <div class="pin-groups">${PIN_GROUPS.map(([k, l, note]) => `<label class="check"><input type="checkbox" data-k="pin.${k}"${d.pin[k] ? ' checked' : ''}> <span><b>${esc(l)}</b><small class="muted"> ${esc(note)}</small></span></label>`).join('')}</div></div>
+    <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>กติกาเดียวทุกแถบ ทุกงาน · ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบทุกครั้ง</p></div>
+      <ul class="pin-rule"><li><b>บันทึกใหม่</b> ไม่ต้องใส่ PIN (แจกเคส ลงนัด ลงทะเบียน เพิ่มผู้ป่วย กิจกรรม ปุ่มขั้นตอน สถานะ fraction ผู้ปฏิบัติงานประจำวัน ลงชื่อ RTT / MP / RC ที่ยังว่าง มาตามนัด ฯลฯ)</li>
+        <li><b>แก้ไขหรือลบ</b> ของที่บันทึกไว้แล้ว ต้องใส่รหัส PIN 4 หลักของตัวเอง (แก้ / ลบเคส ล้างขั้นตอน แก้หรือล้างสถานะ ยกเลิกนัด ยกเลิกวันลา ฯลฯ)</li></ul>
+      ${serverHas(PIN_RULE_API) ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>กติกานี้ทำงานครบเมื่อใช้ Code.gs รุ่น 2026-11-01.8 ขึ้นไป (ที่ใช้อยู่: รุ่น ${esc(state.codeVersion || 'เก่า')})</span></p>`}</div>
     <div class="sec"><div class="sec-head"><h2>ค่าเริ่มต้นและช่องบังคับกรอก</h2><p>ค่าเริ่มต้นใส่ให้ในฟอร์มแจกเคสทุกครั้งที่เปิด แจกเคสเสร็จ หรือกดล้างฟอร์ม แก้ในฟอร์มได้ · ไม่มี = เว้นว่าง · บังคับ = ต้องกรอกก่อนกด "แจกเคส" (Doc, Type, Aim, Technique, CT-Sim และ Start RT บังคับเฉพาะงานวางแผน) · หัวข้อเพิ่มเติมตั้งได้ที่หัวข้อนั้น</p></div>
       <div class="table-wrap set-table def-table"><table><thead><tr><th>ช่อง</th><th>ค่าเริ่มต้น</th><th>บังคับกรอก</th></tr></thead><tbody>${defRows(d)}</tbody></table></div>
       <p class="muted def-note">วันที่: จำนวนวันทำการนับจากวันแจก (0 = วันแจก, −1 = วันทำการก่อนหน้า) ข้ามเสาร์–อาทิตย์และวันหยุด · เทคนิคและบริเวณที่ฉาย: กดเลือกอย่างอื่นในฟอร์มครั้งแรกจะเปลี่ยนแทนค่าเริ่มต้น</p>
@@ -11127,7 +11153,7 @@ function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidd
 const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]')) || $('#pin-save');   // ไม่ต้องใส่ PIN = ปุ่มบันทึก
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
-  const del = ['del', 'logdel', 'ptdel', 'ctdel', 'apdel', 'rgdel', 'bqcancel'].includes(pinCtx.mode), danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
+  const del = ['del', 'logdel', 'ptdel', 'ctdel', 'apdel', 'rgdel', 'bqcancel', 'leavedel'].includes(pinCtx.mode), danger = del || (pinCtx.mode === 'course' && pinCtx.status === 'cancel');
   if (pinCtx.mode !== 'stamp' && pinCtx.mode !== 'vals') $('#pin-at-field').hidden = true;
   $('#pin-fx-box').hidden = pinCtx.mode !== 'fx';
   $('#pin-tags-box').hidden = pinCtx.mode !== 'ptags';
@@ -11276,6 +11302,12 @@ async function submitPin(e, clear) {
     if (t.act === 'move' && !chipValue($('#pin-fx-room'))) { const r = $('#pin-fx-room input'); if (r) r.focus(); return pinErr('เลือกห้องที่ย้ายไป'); }
     if (t.act === 'add' && !chipValue($('#pin-fx-addn'))) { $('#pin-fx-addn input').focus(); return pinErr('เลือกจำนวน fraction ที่เพิ่ม'); }
     if (t.act === 'add' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('ใส่เหตุผลที่เพิ่ม fraction'); }
+  }
+  if (clear && ctx.mode !== 'set' && !pinNeed(ctx.mode)) {   // ล้าง / ลบ = แก้ของที่บันทึกไว้ ต้องใส่ PIN
+    ctx.force = true;
+    syncPinForm();
+    const f = firstPinInput(); if (f) f.focus();
+    return pinErr('การล้างหรือลบต้องใส่รหัส PIN');
   }
   const need = ctx.mode === 'set' || pinNeed(ctx.mode);
   const has = !!state.user.hasPin, needNew = need && (ctx.mode === 'set' || !has);
@@ -11441,6 +11473,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'logedit' || ctx.mode === 'logadd') { await store.editLog(ctx.rec, pin); logSaved(ctx.rec, ctx.mode === 'logadd'); pinDlg.close(); return; }   // editLog บันทึกรายการใหม่ได้ด้วย
     if (ctx.mode === 'logbatch') { await saveBrachy(ctx.batch, pin); pinDlg.close(); return; }
     if (ctx.mode === 'logdel') { await store.removeLog(ctx.id, pin); logDeleted(ctx.id); pinDlg.close(); return; }
+    if (ctx.mode === 'leavedel') { const v = state.leaves.find(l => l.id === ctx.id); await store.removeLeave(ctx.id, pin); pinDlg.close(); if (v) { state.leaves = state.leaves.filter(l => l.id !== v.id); render(); if (leaveDlg.open) renderLeaves(); toast(`ยกเลิกวันลา ${v.mp} ${rangeText(v)} แล้ว`); } return; }
     const note = $('#pin-note-field').hidden ? undefined : str($('#pin-note').value);
     if (ctx.mode === 'vals') { await doStamps(ctx.id, { [ctx.key]: note === undefined ? ctx.value : { value: ctx.value, note } }, pin, at); pinDlg.close(); return; }
     if (ctx.sid) { await doBoostStamp(ctx.id, ctx.sid, ctx.step, value, pin, note, at); pinDlg.close(); return; }
@@ -11448,6 +11481,14 @@ async function submitPin(e, clear) {
     pinDlg.close();
   } catch (err) {
     const m = errMsg(err);
+    if (m.includes('PINNEED|')) {   // เซิร์ฟเวอร์: เป็นการแก้ไข (ของเดิมมีอยู่แล้ว) ต้องใส่ PIN
+      ctx.force = true;
+      if (!pinDlg.open) pinDlg.showModal();
+      syncPinForm();
+      pinErr(m.replace(/^Error:\s{0,}/, '').replace('PINNEED|', ''));
+      const f = firstPinInput(); if (f) f.focus();
+      return;
+    }
     if (!pinDlg.open) { toast(m.replace(/^Error:\s{0,}/, '').replace('PIN|', ''), { err: true }); return; }   // บันทึกเลยโดยไม่เปิดหน้าต่าง
     if (m.includes('PIN|')) { state.user.hasPin = false; renderAcct(); syncPinForm(); pinErr('ยังไม่ได้ตั้งรหัส PIN ตั้งรหัสใหม่ด้านบน'); return; }
     pinErr(m.replace(/^Error:\s{0,}/, ''));
@@ -11576,11 +11617,29 @@ async function addLeave(mp, from, to, note) {
     return true;
   } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); return false; }
 }
-async function removeLeave(id) {
+// ยกเลิกวันลา = ลบของที่บันทึกไว้ ต้องใส่ PIN (Code.gs รุ่น 2026-11-01.8 ขึ้นไป · รุ่นก่อนลบได้เลย)
+const PIN_RULE_API = 45;
+function removeLeave(id, pin) {
   const v = state.leaves.find(l => l.id === id);
   if (!v) return;
+  if (pin === undefined && serverHas(PIN_RULE_API)) {
+    pinCtx = { mode: 'leavedel', id, forgot: false, auto: false };
+    $('#pin-title').textContent = `ยกเลิกวันลา · ${v.mp}`;
+    $('#pin-what').innerHTML = `ยกเลิกวันลา ${esc(v.mp)} ${esc(rangeText(v))} · ยืนยันด้วยรหัส PIN ของ <b>${esc(state.user.name || state.user.me || '')}</b>`;
+    $('#pin-val-field').hidden = true;
+    $('#pin-note-field').hidden = true;
+    $('#pin-clear').hidden = true;
+    syncPinForm();
+    pinDlg.showModal();
+    firstPinInput().focus();
+    return;
+  }
+  return leaveRemoved(v, pin);
+}
+async function leaveRemoved(v, pin) {
+  const id = v.id;
   try {
-    await store.remove('leaves', id);
+    if (pin !== undefined) await store.removeLeave(id, pin); else await store.remove('leaves', id);
     state.leaves = state.leaves.filter(l => l.id !== id);
     render();
     if (leaveDlg.open) renderLeaves();

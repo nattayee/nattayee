@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.7';
-const API_LEVEL = 44;
+const CODE_VERSION = '2026-11-01.8';
+const API_LEVEL = 45;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -511,24 +511,30 @@ function deleteRecord(table, id, token) {
 
 // หน้าแก้ไขเคส: บันทึกหรือลบต้องยืนยันด้วยรหัส PIN ของคนที่เข้าสู่ระบบ (เหมือนปุ่มบันทึกขั้นตอน)
 function editCase(rec, pin, token) {
-  checkPin_(requireEdit_(token, EDIT_VIEWS.cases), pin, 'edit');
+  pinChange_(requireEdit_(token, EDIT_VIEWS.cases), pin, rowExists_('cases', rec && rec.id));
   return saveRecord('cases', rec, token);
 }
 
 function removeCase(id, pin, token) {
-  checkPin_(requireEdit_(token, EDIT_VIEWS.cases), pin, 'edit');
+  pinChange_(requireEdit_(token, EDIT_VIEWS.cases), pin, true);
   return deleteRecord('cases', id, token);
 }
 
 // หน้าแก้ไขกิจกรรม (RC งานวิชาการ ฯลฯ): บันทึกการแก้ไขหรือลบต้องยืนยันด้วยรหัส PIN เหมือนหน้าแก้ไขเคส
 function editLog(rec, pin, token) {
-  checkPin_(requireEdit_(token, EDIT_VIEWS.logs), pin, 'logs');
+  pinChange_(requireEdit_(token, EDIT_VIEWS.logs), pin, rowExists_('logs', rec && rec.id));
   return saveRecord('logs', rec, token);
 }
 
 function removeLog(id, pin, token) {
-  checkPin_(requireEdit_(token, EDIT_VIEWS.logs), pin, 'logs');
+  pinChange_(requireEdit_(token, EDIT_VIEWS.logs), pin, true);
   return deleteRecord('logs', id, token);
+}
+
+// ยกเลิกวันลา: ลบของที่บันทึกไว้ ต้องใส่ PIN
+function removeLeave(id, pin, token) {
+  pinChange_(requireEdit_(token, EDIT_VIEWS.leaves), pin, true);
+  return deleteRecord('leaves', id, token);
 }
 
 function saveConfig(config, token) {
@@ -826,8 +832,8 @@ function stampVals_(steps) {
 
 function stampSteps_(id, steps, pin, token, at) {
   const u = requireEdit_(token, EDIT_VIEWS.cases);
-  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
-  checkPin_(u, pin, 'steps');
+  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes, c0 = caseOf_(id);
+  pinChange_(u, pin, !c0 || keys.some(k => vals[k] === null || has_(c0[k])));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -860,7 +866,10 @@ function stampBoost(id, sid, steps, pin, at, token) {
   if (!/^[\w-]{1,40}$/.test(sid)) throw new Error('ไม่พบแผน boost นี้');
   const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
   if (!keys.length) throw new Error('เลือกขั้นตอนที่จะบันทึก');
-  checkPin_(u, pin, 'steps');
+  const c0 = caseOf_(id);
+  let b0 = {};
+  try { b0 = (JSON.parse(String((c0 && c0.bsteps) || '{}')) || {})[sid] || {}; } catch (e) { b0 = {}; }
+  pinChange_(u, pin, !c0 || keys.some(k => vals[k] === null || has_(b0[k])));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -900,7 +909,8 @@ function courseCase(id, status, date, note, pin, token) {
   note = String(note == null ? '' : note).trim().slice(0, 300);
   if (status && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('ใส่วันที่');
   if (status === 'cancel' && !note) throw new Error('กรอกสาเหตุที่ Cancel RT');
-  checkPin_(u, pin, 'course');
+  const c0 = caseOf_(id);
+  pinChange_(u, pin, !status || !c0 || has_(c0.rt));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -936,7 +946,7 @@ function fractionCase(id, date, ev, pin, token) {
     if (rec.act !== 'skip') rec.back = '';
     if (rec.back && (!isDate(rec.back) || rec.back <= date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
   }
-  checkPin_(u, pin, 'fx');
+  pinChange_(u, pin, !ev || jsonList_((caseOf_(id) || {}).fxlog).some(x => x && String(x.date).slice(0, 10) === date));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     if (rec && rec.act === 'given' && date > Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd')) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึกฉายแล้วล่วงหน้าไม่ได้');
@@ -978,7 +988,7 @@ function moveCase(id, date, mv, pin, token) {
     if (!rec.room) throw new Error('เลือกห้องที่ย้ายไป');
     if (rec.room === rec.from) throw new Error('ห้องที่ย้ายไปต้องไม่ใช่ห้องเดิม');
   }
-  checkPin_(u, pin, 'fx');
+  pinChange_(u, pin, !mv || jsonList_((caseOf_(id) || {}).rmove).some(x => x && String(x.date).slice(0, 10) === date));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -1011,7 +1021,7 @@ function tagCase(id, tags, pin, token) {
   const list = String(tags == null ? '' : tags).split(',').map(x => x.trim().slice(0, 40)).filter(x => x && !seen[x.toLowerCase()] && (seen[x.toLowerCase()] = true));
   const text = list.join(', ');
   if (text.length > 300) throw new Error('รายละเอียดผู้ป่วยยาวเกินไป (ไม่เกิน 300 ตัวอักษร)');
-  checkPin_(u, pin, 'ptags');
+  pinChange_(u, pin, has_((caseOf_(id) || {}).ptags));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -1049,7 +1059,7 @@ function replanCase(id, date, rp, pin, token) {
     }) : [];
     rec.sites = sites.length ? JSON.stringify(sites) : '';
   }
-  checkPin_(u, pin, 'fx');
+  pinChange_(u, pin, !rp);
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
@@ -1103,7 +1113,7 @@ function addFxCase(id, date, add, pin, token) {
     if (!(rec.n >= 1 && rec.n <= 30)) throw new Error('จำนวน fraction ที่เพิ่มต้องเป็น 1–30');
     if (!rec.reason) throw new Error('ใส่เหตุผลที่เพิ่ม fraction');
   }
-  checkPin_(u, pin, 'fx');
+  pinChange_(u, pin, !add || jsonList_((caseOf_(id) || {}).fxadd).some(x => x && String(x.date).slice(0, 10) === date));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -1139,7 +1149,7 @@ function timeCase(id, time, pin, token) {
     if (!m || +m[1] > 23 || +(m[2] || 0) > 59) throw new Error('Mosaiq Time ต้องเป็นเวลา เช่น 08:30');
     text = ('0' + +m[1]).slice(-2) + ':' + (m[2] || '00');
   }
-  checkPin_(u, pin, 'mqt');
+  pinChange_(u, pin, has_((caseOf_(id) || {}).mqt));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
@@ -1167,7 +1177,7 @@ function courseAdd(rec, pin, token) {
   if (cut(rec.ct, 10) && !isDate(cut(rec.ct, 10))) throw new Error('วันที่ CT-Sim ไม่ถูกต้อง');
   const sim = cut(rec.sim, 10);
   if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
-  checkPin_(u, pin, 'ptadd');
+  pinChange_(u, pin, rowExists_('cases', rec.id));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
@@ -1190,7 +1200,7 @@ function courseAdd(rec, pin, token) {
 // ลบผู้ป่วยที่เพิ่มในแถบห้องฉาย (เฉพาะ how = 'direct') ยืนยันด้วยรหัส PIN · คืน true เมื่อลบแล้ว
 function courseRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.course);
-  checkPin_(u, pin, 'ptadd');
+  pinChange_(u, pin, true);
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'cases', readConfig_(ss)), header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, id);
@@ -1218,7 +1228,7 @@ function dutyDay(date, list, pin, token) {
     return (Array.isArray(v) ? v : []).map(x => cut(x, 60).replace(/,/g, ' ').replace(/\s+/g, ' ')).filter(x => x && !seen[x] && (seen[x] = true)).slice(0, 30);
   };
   const recs = list.slice(0, 30).filter(x => x && typeof x === 'object' && /^CT:/.test(String(x.room || '')) === isCt).map(x => ({ room: cut(x.room, 40), rtt: names(x.rtt), ra: names(x.ra), qc: names(x.qc) }));
-  checkPin_(u, pin, 'duty');
+  pinChange_(u, pin, readTable_(ss_(), 'duty').some(x => String(x.date) === date && recs.some(r => r.room === x.room)));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'duty'), header = headerOf_(sh), idCol = header.indexOf('id') + 1;
     const at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
@@ -1254,7 +1264,7 @@ function ctSave(rec, pin, token) {
   if (!isDate(cut(rec.date, 10))) throw new Error('วันที่ทำ CT ไม่ถูกต้อง');
   const sim = cut(rec.sim, 10);
   if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
-  checkPin_(u, pin, 'ct');
+  pinChange_(u, pin, rowExists_('ctsim', rec.id));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
@@ -1280,7 +1290,7 @@ function ctSave(rec, pin, token) {
 // ลบผู้ป่วยในแถบ CT-SIM ยืนยันด้วยรหัส PIN (เคสที่ MP แจกไปแล้วไม่ถูกลบ) · นัดที่ลงเป็นรายการนี้กลับไปรอลง CT-SIM · คืน true เมื่อลบแล้ว
 function ctRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ctsim);
-  checkPin_(u, pin, 'ct');
+  pinChange_(u, pin, true);
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
@@ -1351,7 +1361,7 @@ function bqCreate(p, pin, token) {
   if (!tech) throw new Error('เลือกรูปแบบการใส่');
   if (!dates.length || dates.length > 30) throw new Error('จำนวน Fraction ต้องอยู่ระหว่าง 1–30');
   if (dates.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error('วันนัดไม่ถูกต้อง');
-  checkPin_(u, pin, 'bq');
+
   const course = 'BT' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
   withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), now = new Date().toISOString(), sorted = dates.slice().sort();
@@ -1372,7 +1382,8 @@ function bqEdit(id, ch, pin, token) {
   if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
   const cfg = readConfig_(ss_()) || {};
-  checkPin_(u, pin, 'bq');
+  const cur0 = readTable_(ss_(), 'bq').filter(x => x.id === id)[0] || {};
+  pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && set.status === BRACHY_ST_DONE) : has_(cur0[k]))));
   const rec = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
@@ -1402,7 +1413,8 @@ function bqEditDay(ids, ch, pin, token) {
   if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
   const cfg = readConfig_(ss_()) || {};
   if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP');
-  checkPin_(u, pin, 'bq');
+  const all0 = readTable_(ss_(), 'bq');
+  pinChange_(u, pin, ids.some(id => { const x = all0.filter(r => r.id === id)[0]; return x && has_(x[k]) && String(x[k]) !== v; }));
   const out = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), recs = [];
     ids.forEach(id => {
@@ -1433,7 +1445,7 @@ function bqHist_(old, u, ch) {
 // ยกเลิกนัด: scope 'course' = ทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ · อื่น ๆ = เฉพาะ Fx นี้ · คืน { changed, ids }
 function bqCancel(id, scope, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.bq);
-  checkPin_(u, pin, 'bq');
+  pinChange_(u, pin, true);
   const res = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), tg = all.filter(x => x.id === id)[0];
     if (!tg) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
@@ -1587,7 +1599,7 @@ function regSave(rec, pin, token) {
   if (!cut(rec.hn, 40) && !cut(rec.name, 200)) throw new Error('กรอก HN หรือชื่อ-สกุล');
   const birth = cut(rec.birth, 10);
   if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) throw new Error('วันเกิดไม่ถูกต้อง');
-  checkPin_(u, pin, 'reg');
+  pinChange_(u, pin, rowExists_('reg', rec.id));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
@@ -1607,7 +1619,7 @@ function regSave(rec, pin, token) {
 // ลบผู้ป่วยในแถบลงทะเบียน ยืนยันด้วยรหัส PIN (นัดของผู้ป่วยไม่ถูกลบ) · คืน true เมื่อลบแล้ว
 function regRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.reg);
-  checkPin_(u, pin, 'reg');
+  pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'reg'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
@@ -1639,7 +1651,7 @@ function apptSave(rec, pin, token) {
     try { o = JSON.parse(order); } catch (e) { throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง'); }
     if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง');
   }
-  checkPin_(u, pin, 'appt');
+  pinChange_(u, pin, rowExists_('appt', rec.id));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
@@ -1657,7 +1669,7 @@ function apptSave(rec, pin, token) {
 // ลบนัดในแถบลงนัด ยืนยันด้วยรหัส PIN (รายการ CT-SIM ที่ลงจากนัดนี้แล้วไม่ถูกลบ) · คืน true เมื่อลบแล้ว
 function apptRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.appt);
-  checkPin_(u, pin, 'appt');
+  pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'appt'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
@@ -1713,7 +1725,7 @@ function jobsSave(rec, pin, token) {
     return JSON.stringify(o);
   };
   const cells = json(rec.cells, false, 45000), leaves = json(rec.leaves, true, 5000), prof = json(rec.prof, false, 2000);
-  checkPin_(u, pin, 'jobs');
+  pinChange_(u, pin, rowExists_('jobs', nameKey_(who) + '|' + ym));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'jobs'), header = headerOf_(sh), id = nameKey_(who) + '|' + ym;
     const row = findRow_(sh, header.indexOf('id') + 1, id);
@@ -2244,6 +2256,17 @@ function pinRecord_(u) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
+// ทุกแถบ ทุกงาน: บันทึกใหม่ไม่ต้องใส่ PIN · แก้ไขหรือลบของที่บันทึกไว้แล้วต้องใส่ PIN ของคนที่เข้าสู่ระบบ (กติกาเดียวกับ pinFresh ในหน้าเว็บ)
+// PIN ว่างแต่ต้องใส่ = PINNEED| ให้หน้าเว็บเปิดช่อง PIN · ยังไม่ได้ตั้ง PIN = PIN| (ตั้งรหัสใหม่)
+function pinChange_(u, pin, change) {
+  if (!change) return;
+  if (String(pin == null ? '' : pin) === '' && pinRecord_(u)) throw new Error('PINNEED|การแก้ไขหรือลบต้องใส่รหัส PIN');
+  checkPin_(u, pin);
+}
+const caseOf_ = id => (id ? readTable_(ss_(), 'cases', readConfig_(ss_())).filter(c => c.id === id)[0] || null : null);
+const rowExists_ = (table, id) => !!id && readTable_(ss_(), table).some(x => String(x.id) === String(id));
+const jsonList_ = v => { try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+const has_ = v => String(v == null ? '' : v).trim() !== '';
 // act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct, appt, jobs, reg, bq) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
 // (ยังรู้ว่าใครทำจากบัญชีที่เข้าระบบ) · ไม่ระบุ act = ตรวจเสมอ
 function checkPin_(u, pin, act) {
