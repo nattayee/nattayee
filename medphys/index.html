@@ -1581,6 +1581,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .mem-u.nolink{color:var(--muted)}
 .set-row.crew-row{grid-template-columns:30px minmax(0,1fr) 170px auto auto;grid-template-areas:"idx name pos act btns" ". acct acct acct ."}
 @media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". acct acct"}}
+.bq-sign.old{opacity:.6}
 </style>
 </head>
 <body>
@@ -1686,6 +1687,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <button type="button" class="btn primary" id="bq-add" hidden>+ ลงนัดใส่แร่</button>
     </div>
     <p class="notice" id="bq-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบนัดคิวใส่แร่ต้องใช้ Code.gs รุ่น 2026-10-30.3 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <p class="notice" id="bq-rtt-api" hidden><b>ยังลง RTT ไม่ได้</b><span id="bq-rtt-why"></span></p>
     <p class="notice" id="bq-link" hidden><b>MP / RC ยังไม่นับคะแนน</b><span>ลงชื่อ MP / RC ในแถบนี้จะนับเป็นคะแนน Brachytherapy ของ MP และ RC ของคน Recheck เมื่อ ตั้งค่า → Brachytherapy จากระบบนัด เปิด "ดึงอัตโนมัติ" และ ที่มาของนัด = แถบนี้ <button type="button" class="btn sm primary" id="bq-link-btn" data-bqlink="1" hidden>ตั้งให้นับจากแถบนี้</button></span></p>
     <div id="bq-body"></div>
   </section>
@@ -3136,7 +3138,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.5';
+const PAGE_VERSION = '2026-11-01.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5252,6 +5254,8 @@ const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc'];
 const BQ_FIELD = { date: 'วันที่', doc: 'แพทย์', tech: 'รูปแบบการใส่', note: 'หมายเหตุ', status: 'สถานะ', rtt: 'RTT', mp: 'MP', rc: 'RC' };
 const BQ_RTT_API = 43;   // Code.gs ที่มีคอลัมน์ RTT ในแถบนัดคิวใส่แร่
 const bqRttOn = () => serverHas(BQ_RTT_API);
+// Code.gs รุ่นเก่า: ปุ่ม + RTT ยังแสดง กดแล้วบอกว่าต้องอัปเดต (รุ่นที่ใช้อยู่ · วิธี Deploy)
+const bqRttOld = () => `ลง RTT ต้องใช้ Code.gs รุ่น 2026-11-01.4 ขึ้นไป (ที่ใช้อยู่: รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}) · วาง Code.gs ใหม่จากหน้าคัดลอกโค้ด แล้ว Deploy → Manage deployments → แก้ไข (ดินสอ) → Version: New version → Deploy · ตรวจด้วย …/exec?ping=1`;
 function normBq(o) {
   const r = {};
   for (const k of BQ_KEYS) r[k] = str(o[k]);
@@ -5360,6 +5364,8 @@ function renderBq() {
   $('#bq-add').hidden = !edit;
   $('#bq-api').hidden = bqOn() || !canEdit();
   $('#bq-link').hidden = !edit || bqLinked();
+  $('#bq-rtt-api').hidden = !edit || bqRttOn();
+  if (edit && !bqRttOn()) $('#bq-rtt-why').textContent = bqRttOld();
   $('#bq-link-btn').hidden = !state.user.isAdmin;
   syncTabQ('bq');
   $$('[data-bqv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bqv === state.bqView)));
@@ -5377,7 +5383,7 @@ function bqRowsHtml(rows, edit) {
   return rows.map(a => {
     const st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : '';
     const who = k => (a[k] ? av(a[k]) : sign && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="${k}" title="ลงชื่อ ${k.toUpperCase()}${bqLinked() ? (k === 'mp' ? ' · นับคะแนน Brachytherapy ของ MP' : ' · นับคะแนน RC') : ''}">+ ${k.toUpperCase()}</button>` : '');
-    const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqRttOn() && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${esc(state.config.bq.rtt)})` : ''}">+ RTT</button>` : '';
+    const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
     return `<tr class="ct-row bq-row${st ? ' ' + st : ''}${edit ? ' click' : ''}"${edit ? ` data-bqedit="${esc(a.id)}" tabindex="0"` : ''}>
       <td class="num">${bqLive(a) ? ++q : '–'}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td>${bqDocHtml(a.doc)}</td>
       <td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td class="ct-note">${esc(a.note)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td>
@@ -11435,7 +11441,7 @@ document.addEventListener('click', e => {
   if (ds.bqback) { state.bqPt = ''; return renderBq(); }
   if (ds.bqcopy) return bqCopy(ds.bqcopy);
   if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); return a && bqQuick(a, { status: BQ_ST.done }); }
-  if (ds.bqsign) return openBqEdit(ds.bqsign, ds.bqk);
+  if (ds.bqsign) return ds.bqk === 'rtt' && !bqRttOn() ? toast(bqRttOld(), { err: true }) : openBqEdit(ds.bqsign, ds.bqk);
   if (ds.bqlink) return bqLinkNow(t);
   if (ds.bqimport) return bqImportRun(t, ds.bqimport === 'check');
   if (ds.qday) return bqPickDay(ds.qday);
