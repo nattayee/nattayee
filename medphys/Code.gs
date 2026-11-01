@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-01.2';
-const API_LEVEL = 42;
+const CODE_VERSION = '2026-11-01.4';
+const API_LEVEL = 43;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -113,14 +113,14 @@ const TABLES = {
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
-  // แถบนัดคิวใส่แร่: นัดใส่แร่หนึ่งแถวต่อหนึ่ง Fraction (course = คอร์สเดียวกัน) · status = นัดแล้ว / มาตามนัด / ยกเลิก · mp / rc = รหัสนักฟิสิกส์ที่ลงชื่อ
+  // แถบนัดคิวใส่แร่: นัดใส่แร่หนึ่งแถวต่อหนึ่ง Fraction (course = คอร์สเดียวกัน) · status = นัดแล้ว / มาตามนัด / ยกเลิก · mp / rc = รหัสนักฟิสิกส์ที่ลงชื่อ · rtt = ชื่อ RTT
   // hist = ประวัติการแก้ไข (JSON) · src = bq:<รหัสนัดเดิม> เมื่อนำเข้าจากระบบนัดคิวใส่แร่เดิม · เขียนผ่าน bqCreate / bqEdit / bqCancel / bqImport เท่านั้น
   bq: {
     sheet: 'BrachyQueue',
     fields: [
       ['id', 'id'], ['course', 'คอร์ส'], ['date', 'วันที่นัด'], ['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'],
       ['fx', 'Fx'], ['total', 'จำนวน Fx'], ['note', 'หมายเหตุ'], ['status', 'สถานะ'], ['mp', 'MP'], ['rc', 'RC'],
-      ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'],
+      ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'], ['rtt', 'RTT'],
     ],
   },
   // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
@@ -315,9 +315,9 @@ const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
 const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน)
-// แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน
+// แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq'] };
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq', 'course'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -1323,11 +1323,11 @@ function recentCt_(ss) {
 
 /**
  * แถบนัดคิวใส่แร่: ลงนัดหนึ่งคอร์ส (หลาย Fraction · หนึ่งแถวต่อหนึ่ง Fx) ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: นัดคิวใส่แร่)
- * p = { hn, name, doc, tech, note, dates: [วันที่ของ Fx 1, 2, …] } · ต้องมี HN ชื่อ-สกุล รูปแบบการใส่ · 1–30 Fx · คืนนัดทั้งคอร์ส
+ * p = { hn, name, doc, tech, note, rtt, dates: [วันที่ของ Fx 1, 2, …] } · ต้องมี HN ชื่อ-สกุล รูปแบบการใส่ · 1–30 Fx · คืนนัดทั้งคอร์ส
  * จำนวนเคสต่อวันและ HN ซ้ำวันเดียวกัน หน้าเว็บเตือนก่อนลงนัด (ลงต่อได้เหมือนระบบนัดคิวใส่แร่เดิม)
  */
 const BQ_BOOKED = 'นัดแล้ว';
-const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'mp', 'rc'];
+const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc'];
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ลงชื่อ MP / RC ได้: ตำแหน่ง (config.bq.signRoles · ยังไม่ตั้ง = MP) หรือชื่อผู้ใช้ใน config.bq.signUsers · บัญชี Google (เปิดจากชีต) ได้เสมอ
@@ -1358,13 +1358,13 @@ function bqCreate(p, pin, token) {
   withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), now = new Date().toISOString(), sorted = dates.slice().sort();
     bqAppend_(sh, headerOf_(sh), sorted.map((d, i) => ({ id: Utilities.getUuid(), course: course, date: d, hn: hn, name: name, doc: bqCut_(p.doc, 200), tech: tech,
-      fx: String(i + 1), total: String(sorted.length), note: bqCut_(p.note, 2000), status: BQ_BOOKED, mp: '', rc: '', hist: '', src: '', by: bqWho_(u), created: now, editedBy: '', updated: '' })));
+      fx: String(i + 1), total: String(sorted.length), note: bqCut_(p.note, 2000), status: BQ_BOOKED, rtt: bqCut_(p.rtt, 100), mp: '', rc: '', hist: '', src: '', by: bqWho_(u), created: now, editedBy: '', updated: '' })));
   });
   bqStats_();
   return readTable_(ss_(), 'bq').filter(x => x.course === course);
 }
 
-// แก้นัดหนึ่ง Fx: วันที่ แพทย์ รูปแบบการใส่ หมายเหตุ สถานะ (นัดแล้ว / มาตามนัด / ยกเลิก) MP RC · เก็บประวัติ (ใคร เมื่อไร อะไรเปลี่ยน) · คืนนัดหลังแก้
+// แก้นัดหนึ่ง Fx: วันที่ แพทย์ รูปแบบการใส่ หมายเหตุ สถานะ (นัดแล้ว / มาตามนัด / ยกเลิก) RTT MP RC (RTT ลงได้ทุกคนที่บันทึกแถบนี้ได้) · เก็บประวัติ (ใคร เมื่อไร อะไรเปลี่ยน) · คืนนัดหลังแก้
 function bqEdit(id, ch, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.bq);
   ch = ch && typeof ch === 'object' ? ch : {};
