@@ -3280,7 +3280,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-02.3';
+const PAGE_VERSION = '2026-11-02.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8493,13 +8493,13 @@ function jobsStats(ym) {
   const hol = holidayMap(), td = today(), first = ym + '-01', last = monthEnd(ym), jc = state.config.jobs, lin = {}, ct = {};
   const low = list => list.map(x => str(x).toLowerCase()).filter(Boolean);
   const sit = low(jc.sit), lie = low(jc.lie), hasAny = (vals, keys) => vals.some(v => keys.some(k => v.includes(k)));   // เปลนอน O2 = เปลนอน
-  const cell = (o, room, d) => { const r = o[room] || (o[room] = {}); return r[d] || (r[d] = { pts: new Set(), sit: new Set(), lie: new Set(), cm: new Set(), nocm: new Set(), mask: new Set(), tech: {} }); };
+  const cell = (o, room, d) => { const r = o[room] || (o[room] = {}); return r[d] || (r[d] = { pts: new Set(), sit: new Set(), lie: new Set(), cm: new Set(), nocm: new Set(), mask: new Set(), cbct: new Set(), planar: new Set(), tech: {} }); };
   const addTech = (b, t, k) => { if (t) (b.tech[t] || (b.tech[t] = new Set())).add(k); };
   for (const c of state.cases) {
     if (catOf(c.cat).kind === 'simple' || c.replan || !planReady(c) || !isDay(c.sim) || c.sim > last || (c.rt && c.rtDate && c.rtDate < first)) continue;
     const sc = caseSchedule(c, hol);
     if (!sc) continue;
-    const k = str(c.hn) || c.id, tags = low(splitList(c.ptags)), t = jobTechOf(c.cat, c.tech);
+    const k = str(c.hn) || c.id, tags = low(splitList(c.ptags)), t = jobTechOf(c.cat, c.tech), ti = tagInfo(splitList(c.ptags));
     const stop = c.rt === 'cancel' && c.rtDate ? c.rtDate : sc.off ? sc.off.date : '';   // Cancel RT: ไม่ได้ฉายตั้งแต่วันนั้น
     for (const [d, list] of sc.fx) {
       if (d < first || d > last || d > td || (stop && d >= stop) || (c.rt === 'complete' && c.rtDate && d > c.rtDate)) continue;
@@ -8509,6 +8509,8 @@ function jobsStats(ym) {
         addTech(b, t, k);
         if (hasAny(tags, sit)) b.sit.add(k);
         if (hasAny(tags, lie)) b.lie.add(k);
+        const ig = igJob(ptStatus(ti, room).ig);   // IGRT ของวันนั้น (ค่าเริ่มต้นตามห้องที่ฉายจริง)
+        if (ig) b[ig].add(k);
       }
     }
   }
@@ -8524,6 +8526,10 @@ function jobsStats(ym) {
   }
   return { lin, ct };
 }
+// IGRT → แถวในแบบฟอร์ม: เฉพาะความถี่ Daily (ทุกวันที่ฉาย) · CBCT = "(CBCT)" · Planar และชนิดอื่น (kV-kV ฯลฯ) = "(Port Film)"
+// ไม่มี IGRT / ไม่ทำ / ความถี่อื่น (Weekly ฯลฯ) = ไม่นับอัตโนมัติ (แก้ตัวเลขในตารางเองได้)
+const igDaily = f => !str(f) || /daily|ทุกวัน/i.test(f);
+const igJob = ig => (!ig || !igDaily(ig.freq) || /^(none|no|ไม่ทำ|-)$/i.test(ig.type) ? '' : /cbct|cone/i.test(ig.type) ? 'cbct' : 'planar');
 // หัวข้อในแบบฟอร์ม → ห้อง: Linac n = ห้องฉายที่ n · CT-sim n = เครื่อง CT ที่ n · Simulator (RA) = ทุกเครื่อง CT · HDR = กรอกเอง
 function jobSection(text) {
   const cfg = state.config, l = /Linac\s*(\d)/i.exec(text), c = /CT-sim\s*(\d)/i.exec(text);
@@ -8534,8 +8540,9 @@ function jobSection(text) {
 }
 // วิธีคำนวณของแต่ละแถว (ตามรายละเอียดงาน) · '' = กรอกเอง
 const JOB_RULE_TEXT = { qc: 'เป็นคน Daily QC ในผู้ปฏิบัติงานประจำวัน = 1', day: 'วันที่อยู่เวร = 1', pts: 'ผู้ป่วยทั้งหมดของห้องวันนั้น', sit: 'ผู้ป่วยที่มีรายละเอียด/สถานะ เปลนั่ง',
-  lie: 'ผู้ป่วยที่มีรายละเอียด/สถานะ เปลนอน, O2', mask: 'ผู้ป่วยที่ทำหน้ากากใหม่ (ช่อง Mask)', cm: 'ผู้ป่วยที่ฉีดสารทึบรังสี (ช่อง CM)', nocm: 'ผู้ป่วยที่ไม่ฉีดสารทึบรังสี' };
-function jobRule(sec, text, hasCbct) {
+  lie: 'ผู้ป่วยที่มีรายละเอียด/สถานะ เปลนอน, O2', mask: 'ผู้ป่วยที่ทำหน้ากากใหม่ (ช่อง Mask)', cm: 'ผู้ป่วยที่ฉีดสารทึบรังสี (ช่อง CM)', nocm: 'ผู้ป่วยที่ไม่ฉีดสารทึบรังสี',
+  cbct: 'ผู้ป่วยที่ IGRT เป็น CBCT Daily (ค่าของห้องหรือที่เลือกในรายละเอียดผู้ป่วย)', planar: 'ผู้ป่วยที่ IGRT เป็น Planar Daily (ค่าของห้องหรือที่เลือกในรายละเอียดผู้ป่วย)' };
+function jobRule(sec, text) {
   if (!sec || !['lin', 'ct', 'sim'].includes(sec.t)) return '';
   if (/Daily QC|ควบคุมคุณภาพ/.test(text)) return sec.t === 'sim' ? 'day' : 'qc';
   if (/เอกสาร/.test(text)) return 'pts';
@@ -8544,8 +8551,8 @@ function jobRule(sec, text, hasCbct) {
   if (/เปลนั่ง/.test(text)) return 'sit';
   if (/เปลนอน/.test(text)) return 'lie';
   if (/Immobilize/i.test(text)) return 'mask';
-  if (/CBCT/.test(text)) return 'pts';
-  if (/Port Film/i.test(text)) return hasCbct ? '' : 'pts';
+  if (/CBCT/.test(text)) return sec.t === 'lin' ? 'cbct' : '';
+  if (/Port Film/i.test(text)) return sec.t === 'lin' ? 'planar' : '';
   if (/ไม่มีการฉีด/.test(text)) return 'nocm';
   if (/ฉีดสารทึบรังสี/.test(text)) return 'cm';
   const t = JOB_TECHS.find(x => new RegExp(`(^|[^A-Z0-9])${x}([^A-Z0-9]|$)`).test(text));
@@ -8582,21 +8589,17 @@ function jobsView(who, kind, ym) {
   const days = Array.from({ length: nDays }, (_, i) => `${ym}-${pad(i + 1)}`);
   const stats = jobsStats(ym), duty = jobDuty(who, ym);
   const partOf = r => (M.parts.find(([a, b]) => r >= a && r <= b) || [])[2] || '';
-  const cbct = new Set();
-  let sec = null;
-  for (const [r, type, , text] of M.rows) { if (type === 'head') sec = r; else if (sec && /CBCT/.test(text)) cbct.add(sec); }
   const rows = [];
-  sec = null;
-  let secRow = 0;
+  let sec = null;
   for (const [r, type, no, text, unit, min, k, fixedPts] of M.rows) {
     const part = partOf(r);
-    if (type === 'head') { sec = jobSection(text); secRow = r; rows.push({ r, type, text: sec.label, part: part || 'main' }); continue; }
+    if (type === 'head') { sec = jobSection(text); rows.push({ r, type, text: sec.label, part: part || 'main' }); continue; }
     if (!part) continue;
     if (part !== 'main') sec = null;
     if (type === 'note') { rows.push({ r, type, text, part }); continue; }
     const ov = dr.cells[r] || {};
     if (type === 'fixed') { const val = jobNum(ov.n); rows.push({ r, type, text, part, f: fixedPts, val, am: round2((val || 0) * fixedPts) }); continue; }
-    const rule = jobRule(sec, text, cbct.has(secRow)), f = round2(k * min * rate);
+    const rule = jobRule(sec, text), f = round2(k * min * rate);
     const auto = days.map(d => (d > td ? null : jobAuto(rule, sec, d, duty[d], stats)));
     const vals = days.map((d, i) => (Object.prototype.hasOwnProperty.call(ov, i + 1) ? jobNum(ov[i + 1]) : auto[i]));
     const al = vals.reduce((a, v) => a + (v || 0), 0);
