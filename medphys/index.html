@@ -3301,7 +3301,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-02.5';
+const PAGE_VERSION = '2026-11-02.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9287,8 +9287,9 @@ function membersHtml(d) {
   const rest = dir.users.filter(u => !roles.includes(u.role));
   const tag = u => lpchLinkTag(u, d);
   const row = (r, us) => `<div class="mem-role"><b>${esc(r)}</b><span class="n">${us.length}</span><span class="mem-names">${us.map(u => `<span class="mem-u${tag(u) ? '' : ' nolink'}" title="${esc(`${u.username} · ${tag(u) ? `เชื่อมกับ ${tag(u)}` : 'ยังไม่อยู่ในรายชื่อของระบบนี้'}`)}">${esc(u.name)}${tag(u) ? `<small>${esc(tag(u))}</small>` : ''}</span>`).join('') || '<span class="muted">ไม่มีสมาชิก</span>'}</span></div>`;
-  const miss = ['staff', 'doctors', 'crew'].reduce((n, l) => n + lpchMissing(l, d).length, 0), linkedN = dir.users.filter(u => tag(u)).length;
-  return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน · เชื่อมกับรายชื่อของระบบนี้แล้ว ${linkedN} คน</span>${miss ? `<button type="button" class="btn ghost" data-lpchadd="all">+ เพิ่มทุกคนที่ยังไม่อยู่ในรายชื่อ (${miss} คน)</button>` : ''}</div>
+  const miss = ['staff', 'doctors', 'crew'].reduce((n, l) => n + lpchMissing(l, d).length, 0), linkedN = dir.users.filter(u => tag(u)).length, diffs = lpchNameDiffs(d);
+  const sync = diffs.length ? `<button type="button" class="btn ghost" data-lpchnames title="${esc(diffs.map(x => `${x.from || '(ว่าง)'} → ${x.to}`).join(' · '))}">ใช้ชื่อตาม RO Workspace (${diffs.length} คน)</button>` : '';
+  return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน · เชื่อมกับรายชื่อของระบบนี้แล้ว ${linkedN} คน</span>${sync}${miss ? `<button type="button" class="btn ghost" data-lpchadd="all">+ เพิ่มทุกคนที่ยังไม่อยู่ในรายชื่อ (${miss} คน)</button>` : ''}</div>
     <div class="mem-list">${roles.map(r => row(r, dir.users.filter(u => u.role === r))).join('')}${rest.length ? row('ไม่ระบุตำแหน่ง', rest) : ''}</div>`;
 }
 async function fetchMembers(btn) {
@@ -9327,6 +9328,16 @@ function autoLinkAccts() {
     if (u && !x.email && u.email) { x.email = u.email; n++; }
   }
   return n;
+}
+// ยึดชื่อผู้ใช้ RO Workspace เป็นหลัก: นักฟิสิกส์ / แพทย์ที่เชื่อมบัญชีแล้วแต่ชื่อ-สกุลต่างจาก RO Workspace (ไม่สนคำนำหน้าและช่องว่าง)
+// RTT, RA และบุคลากรอื่นไม่เปลี่ยนให้ (ชื่อใช้เป็นตัวตนในผู้ปฏิบัติงานประจำวันและภาระงานที่บันทึกไว้)
+function lpchNameDiffs(d) {
+  const users = state.lpchDir ? state.lpchDir.users : [], out = [];
+  for (const list of ['staff', 'doctors']) (d[list] || []).forEach((x, i) => {
+    const u = x.user && users.find(v => v.username === x.user);
+    if (u && str(u.name) && u.name !== u.username && nameKey(u.name) !== nameKey(x.name)) out.push({ list, i, from: str(x.name), to: str(u.name) });
+  });
+  return out;
 }
 // สมาชิก LPCH → รายชื่อของระบบนี้: MP → ทีมนักฟิสิกส์ · RO → แพทย์ · ตำแหน่งอื่น → RTT, RA และบุคลากรอื่น
 const lpchListOf = u => (u.role === 'MP' ? 'staff' : u.role === 'RO' ? 'doctors' : 'crew');
@@ -12077,6 +12088,7 @@ document.addEventListener('click', e => {
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
   if (ds.lpchdir !== undefined) return fetchMembers(t);
+  if (ds.lpchnames !== undefined) { const xs = lpchNameDiffs(draft); for (const x of xs) draft[x.list][x.i].name = x.to; renderSettings(); return toast(`ใช้ชื่อตาม RO Workspace แล้ว ${xs.length} คน · กดบันทึกการตั้งค่า`); }
   if (ds.lpchadd) return lpchAdd(ds.lpchadd === 'all' ? ['staff', 'doctors', 'crew'] : [ds.lpchadd]);
   if (ds.srcchk) return srcCheckRun(ds.srcchk, t);
   if (ds.srcpull) return srcPullNow(ds.srcpull, t);

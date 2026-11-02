@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-02.3';
+const CODE_VERSION = '2026-11-02.4';
 const API_LEVEL = 46;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1913,21 +1913,24 @@ function brachyDate_(v) {
   return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
 }
 
-// MP / RC ของระบบนัด → รหัสนักฟิสิกส์ (รหัส · ชื่อผู้ใช้ · อีเมล · ชื่อ-สกุล ไม่สนคำนำหน้าและช่องว่าง)
+// จับคู่คนจากระบบอื่นกับทีมนักฟิสิกส์ · ยึดชื่อผู้ใช้ RO Workspace เป็นหลัก: ชื่อผู้ใช้ → อีเมล → รหัส → ชื่อ-สกุล
+// uname = ชื่อผู้ใช้ที่มากับรายการ (ถ้ามี): จับคู่ด้วยชื่อ-สกุลได้เฉพาะคนที่ยังไม่เชื่อมบัญชี หรือเชื่อมบัญชีเดียวกัน
 function brachyStaff_(cfg) {
   const staff = Array.isArray(cfg && cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code }));
   const key = v => String(v || '').trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.)/, '').replace(/\s+/g, '').toLowerCase();
   // ชื่อสะกดต่างกันแค่สระบน-ล่าง วรรณยุกต์ การันต์ (เช่น พันธุ์ / พันธ์) = คนเดียวกัน ถ้าตรงกับนักฟิสิกส์คนเดียวเท่านั้น
   const loose = v => key(v).replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, '');
-  return v => {
-    const t = String(v || '').trim(), low = t.toLowerCase();
+  const low = v => String(v || '').trim().toLowerCase();
+  return (v, uname) => {
+    const t = String(v || '').trim(), l = low(t), u = low(uname);
     if (!t) return '';
-    let hit = staff.filter(x => String(x.code || '').toUpperCase() === t.toUpperCase()
-      || (x.user && String(x.user).toLowerCase() === low) || (x.email && String(x.email).toLowerCase() === low) || (x.name && key(x.name) === key(t)))[0];
-    if (!hit && loose(t).length >= 4) {
-      const near = staff.filter(x => x.name && loose(x.name) === loose(t));
-      if (near.length === 1) hit = near[0];
-    }
+    const one = list => (list.length === 1 ? list[0] : null);
+    const byName = x => !u || !x.user || low(x.user) === u;
+    const hit = staff.filter(x => x.user && low(x.user) === l)[0]
+      || staff.filter(x => x.email && low(x.email) === l)[0]
+      || staff.filter(x => String(x.code || '').toUpperCase() === t.toUpperCase())[0]
+      || one(staff.filter(x => x.name && byName(x) && key(x.name) === key(t)))
+      || (loose(t).length >= 4 ? one(staff.filter(x => x.name && byName(x) && loose(x.name) === loose(t))) : null);
     return hit ? String(hit.code).toUpperCase() : '';
   };
 }
@@ -2129,7 +2132,7 @@ function tdfRead_(book, s, soft) {
       id: String(j.id || cellText_(c('id'), tz) || '').trim(),
       status: String(j.status || cellText_(c('status'), tz) || '').trim(),
       type: String(j.type || cellText_(c('type'), tz) || '').trim(),
-      calc: extWho_(ca), rc: extWho_(rv), rcRaw: rv,
+      calc: extWho_(ca), rc: extWho_(rv), rcRaw: rv, calcUser: String((extObj_(ca) || {}).username || '').trim(), rcUser: String(rvo.username || '').trim(),
       calcName: String((extObj_(ca) || {}).name || (extObj_(ca) ? '' : cellText_(ca, tz)) || '').trim(),
       hn: String(p.hn || cellText_(c('hn'), tz) || '').replace(/\.0$/, '').trim(),
       name: String(p.name || p.fullName || cellText_(c('name'), tz) || '').trim(),
@@ -2144,14 +2147,14 @@ function tdfRead_(book, s, soft) {
 function tdfWanted_(rows, s, cfg) {
   const want = {}, unknown = {}, staffOf = brachyStaff_(cfg);
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(s.from || '')) ? s.from : '';
-  const code = list => list.map(staffOf).filter(Boolean)[0] || '';
+  const code = (list, uname) => list.map(v => staffOf(v, uname)).filter(Boolean)[0] || '';   // ชื่อผู้ใช้ก่อน แล้วชื่อ-สกุล อีเมล
   let counted = 0, self = 0;
   rows.forEach(r => {
     const st = r.status.toLowerCase();
     const counts = st === 'approved' || (s.count === 'reviewed' && st === 'rejected') || (!st && r.rc.length > 0);
     if (!counts || !r.rc.length || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
     counted++;
-    const rc = code(r.rc), calc = code(r.calc), miss = list => { const k = list.slice().reverse().join(' / '); unknown[k] = (unknown[k] || 0) + 1; };
+    const rc = code(r.rc, r.rcUser), calc = code(r.calc, r.calcUser), miss = list => { const k = list.slice().reverse().join(' / '); unknown[k] = (unknown[k] || 0) + 1; };
     if (calc && calc === rc) { self++; return; }   // คนคำนวณ Recheck เอง: ไม่นับเป็น RC
     if (!rc) miss(r.rc);
     if (r.calc.length && !calc) miss(r.calc);
