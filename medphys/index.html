@@ -1061,6 +1061,10 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .vb-row:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 .vb-lbl{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
 .vb-lbl small{margin-left:6px;color:var(--muted);font-size:11.5px}
+.vb-lbl.two{white-space:normal}
+.vb-lbl.two small{display:block;margin-left:0;line-height:1.35}
+.viz-note{margin:-6px 0 12px;font-size:12.5px;color:var(--muted)}
+.viz-note b{color:var(--fg);font-weight:600}
 .vb-bars{display:grid;gap:2px;border-left:1px solid var(--line-strong)}
 .vb-track{display:flex;align-items:center;gap:6px;min-height:16px}
 .vb-track i{flex:none;height:14px;min-width:2px;border-radius:0 4px 4px 0}
@@ -1091,6 +1095,7 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .vt th,.vt td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
 .vt th:first-child,.vt td:first-child{text-align:left}
 .vt th{color:var(--muted);font-weight:500}
+.vt .vt-x{background:var(--sunken)}
 .viz-kpis{display:flex;gap:10px;margin:-2px 0 12px}
 .viz-kpi{flex:1;padding:8px 12px;border-radius:8px;background:var(--sunken)}
 .viz-kpi small{display:block;font-size:12px;color:var(--muted)}
@@ -3229,7 +3234,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-02.1';
+const PAGE_VERSION = '2026-11-02.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10283,7 +10288,7 @@ function vizCard(id, title, sub, rows, series, opts = {}) {
   const legend = series.length > 1 && type !== 'table' ? `<div class="viz-legend">${series.map((s, i) => `<span><i style="background:var(--viz-${i + 1})"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
   const any = rows.some(r => r.vals.some(v => v > 0));
   const body = !any ? `<p class="viz-empty">${esc(opts.empty || 'ไม่มีข้อมูลในช่วงนี้')}</p>`
-    : type === 'table' ? vizTable(rows, series) : type === 'donut' ? vizDonut(rows, series[0]) : type === 'col' ? vizCols(rows, series) : vizBars(rows, series);
+    : type === 'table' ? vizTable(rows, series, opts.extra) : type === 'donut' ? vizDonut(rows, series[0]) : type === 'col' ? vizCols(rows, series) : vizBars(rows, series);
   return `<figure class="viz" data-vizid="${id}"><div class="viz-head"><h3>${esc(title)}</h3>${seg}${sub ? `<p class="viz-sub">${esc(sub)}</p>` : ''}</div>${opts.top || ''}${any ? legend : ''}${body}</figure>`;
 }
 const vizTip = (r, series, i) => series.map((s, k) => `${r.vals[k]} ${s.unit}`).join(' · ') + ' — ' + r.label + (i != null && series.length === 1 ? ` (${i})` : '');
@@ -10291,7 +10296,7 @@ const vizColor = (series, k, i) => (series.length > 1 ? `var(--viz-${k + 1})` : 
 function vizBars(rows, series) {
   const max = Math.max(1, ...rows.flatMap(r => r.vals)), tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0));
   return `<div class="vb">${rows.map(r => `<div class="vb-row" tabindex="0" data-tip="${esc(vizTip(r, series, series.length === 1 ? vizPct(r.vals[0], tot[0]) : null))}">
-    <span class="vb-lbl">${esc(r.label)}${r.sub ? `<small>${esc(r.sub)}</small>` : ''}</span>
+    <span class="vb-lbl${r.two ? ' two' : ''}">${esc(r.label)}${r.sub ? `<small>${esc(r.sub)}</small>` : ''}</span>
     <span class="vb-bars">${series.map((s, k) => `<span class="vb-track"><i class="${r.vals[k] ? '' : 'zero'}" style="width:calc((100% - 46px) * ${(r.vals[k] / max).toFixed(4)});background:${vizColor(series, k)}"></i><b>${r.vals[k]}</b></span>`).join('')}</span></div>`).join('')}</div>`;
 }
 function vizCols(rows, series) {
@@ -10320,14 +10325,14 @@ function vizDonut(rows, s) {
   return `<div class="vd"><svg viewBox="0 0 120 120" role="img" aria-label="${esc(list.map(r => `${r.label} ${r.vals[0]}`).join(', '))}"><g transform="rotate(-90 60 60)">${arcs}</g><text class="vd-sum" x="60" y="63">${total}</text><text class="vd-unit" x="60" y="78">${esc(s.unit)}</text></svg>
     <ul>${list.map(r => `<li data-tip="${esc(`${r.vals[0]} ${s.unit} — ${r.label} (${vizPct(r.vals[0], total)})`)}"><i style="background:${r.other ? 'var(--viz-other)' : `var(--viz-${r.slot})`}"></i><span>${esc(r.label)}</span><b>${r.vals[0]}</b><small>${vizPct(r.vals[0], total)}</small></li>`).join('')}</ul></div>`;
 }
-function vizTable(rows, series) {
-  const tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0));
-  return `<div class="table-wrap"><table class="vt"><thead><tr><th></th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}${series.length === 1 ? '<th>สัดส่วน</th>' : ''}</tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${esc(r.label)}${r.sub ? ` <span class="muted">${esc(r.sub)}</span>` : ''}</td>${r.vals.map(v => `<td>${v}</td>`).join('')}${series.length === 1 ? `<td>${vizPct(r.vals[0], tot[0])}</td>` : ''}</tr>`).join('')}</tbody>
-    <tfoot><tr><td>รวม${series.length > 1 ? ' (ราย = ผู้ป่วยไม่ซ้ำในแต่ละแถว)' : ''}</td>${tot.map(t => `<td>${t}</td>`).join('')}${series.length === 1 ? '<td>100%</td>' : ''}</tr></tfoot></table></div>`;
+// extra: คอลัมน์เพิ่มท้ายตาราง (ชื่อ) · ค่าอยู่ใน r.extra · r.tsub = คำอธิบายในตาราง (ไม่ระบุ = r.sub)
+function vizTable(rows, series, extra = []) {
+  const tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0)), xtot = extra.map((x, k) => rows.reduce((t, r) => t + ((r.extra || [])[k] || 0), 0));
+  const sub = r => (r.tsub !== undefined ? r.tsub : r.sub);
+  return `<div class="table-wrap"><table class="vt"><thead><tr><th></th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}${series.length === 1 ? '<th>สัดส่วน</th>' : ''}${extra.map(x => `<th class="vt-x">${esc(x)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${esc(r.label)}${sub(r) ? ` <span class="muted">${esc(sub(r))}</span>` : ''}</td>${r.vals.map(v => `<td>${v}</td>`).join('')}${series.length === 1 ? `<td>${vizPct(r.vals[0], tot[0])}</td>` : ''}${extra.map((x, k) => `<td class="vt-x">${(r.extra || [])[k] || 0}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tfoot><tr><td>รวม${series.length > 1 ? ' (ราย = ผู้ป่วยไม่ซ้ำในแต่ละแถว)' : ''}</td>${tot.map(t => `<td>${t}</td>`).join('')}${series.length === 1 ? '<td>100%</td>' : ''}${xtot.map(t => `<td class="vt-x">${t}</td>`).join('')}</tr></tfoot></table></div>`;
 }
-// ชนิดกิจกรรมของ Brachytherapy (แถบ Brachytherapy ของหน้ากิจกรรม)
-const brachyKinds = () => Object.keys(state.config.acts).filter(k => str(state.config.acts[k].tab) === 'Brachytherapy' || /^brachy/.test(k));
 function renderDashCharts() {
   const box = $('#dash-charts');
   if (!box) return;
@@ -10335,7 +10340,7 @@ function renderDashCharts() {
   $('#chart-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${b.p === v}">${l}</button>`).join('');
   rangeBoxes('chart', b.p);
   $('#chart-count').innerHTML = [['case', 'เคส'], ['pt', 'ผู้ป่วย']].map(([v, l]) => `<button type="button" data-vcount="${v}" aria-pressed="${by === v}">${l}</button>`).join('');
-  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · Brachytherapy ตามวันที่บันทึกกิจกรรม`;
+  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · Brachytherapy ตามวันนัดในแถบนัดคิวใส่แร่`;
   const cases = planCases().filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
   const count = cs => (by === 'pt' ? uniq(cs).length : cs.length), unit = by === 'pt' ? 'คน' : 'เคส', series = [{ name: by === 'pt' ? 'ผู้ป่วย' : 'เคส', unit }];
   // ห้องฉาย (ห้องของบริเวณที่ 1) · แพทย์ (ลำดับตามตั้งค่า) · ไม่ระบุไว้ท้าย
@@ -10349,21 +10354,31 @@ function renderDashCharts() {
   for (const c of cases) { const k = str(c.icd).toUpperCase(); if (k) (byIcd.get(k) || byIcd.set(k, []).get(k)).push(c); }
   const icdRows = [...byIcd].map(([k, cs]) => ({ label: `${k} ${dxShort(cs[0]) || ''}`.trim(), short: k, vals: [count(cs)] }))
     .sort((x, y) => y.vals[0] - x.vals[0] || x.short.localeCompare(y.short)).slice(0, 10);
-  // Brachytherapy: ราย = ผู้ป่วย (HN ไม่ซ้ำ) · ครั้ง = จำนวนบันทึก · แยกตามชนิด หรือตามเดือน
-  const kinds = brachyKinds(), logs = state.logs.filter(l => kinds.includes(l.kind) && inBounds(l.date, b));
-  const pts = ls => new Set(ls.map(l => str(l.hn) || 'id:' + l.id)).size;
-  const brBy = pref.get('vizBrBy', 'kind') === 'month' ? 'month' : 'kind';
-  const months = [...new Set(logs.map(l => l.date.slice(0, 7)))].sort();
-  const brRows = brBy === 'month' ? months.map(ym => { const ls = logs.filter(l => l.date.startsWith(ym)); return { label: fmtMonth(ym), short: fmtMonth(ym).split(' ')[0], vals: [ls.length, pts(ls)] }; })
-    : kinds.map(k => { const ls = logs.filter(l => l.kind === k); return { label: kindOf(k).label, vals: [ls.length, pts(ls)] }; });
-  const brTop = `<div class="viz-kpis"><div class="viz-kpi"><small>ราย (ผู้ป่วย)</small><b>${pts(logs)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${logs.length}</b></div></div>
-    <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['kind', 'ชนิด'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vbrby="${v}" aria-pressed="${brBy === v}">${l}</button>`).join('')}</span></div>`;
+  // Brachytherapy: จากแถบนัดคิวใส่แร่ ตามวันนัด · ไม่นับนัดที่ยกเลิก (ตั้งค่า → Brachytherapy นับเฉพาะ "มาตามนัด" = นับเฉพาะมาตามนัด)
+  // ราย (เคส) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx) · แยกตามแพทย์ (ค่าเริ่มต้น) รูปแบบการใส่ หรือเดือน · ตาราง: รูปแบบการใส่ / แพทย์ เป็นคอลัมน์
+  const brDone = (state.config.brachySync || {}).count === 'done';
+  const bqs = state.bq.filter(a => a.status !== BQ_ST.cancel && (!brDone || a.status === BQ_ST.done) && inBounds(a.date, b));
+  const pts = rs => new Set(rs.map(a => str(a.hn) || 'id:' + a.id)).size;
+  const NODOC = 'ไม่ระบุแพทย์', NOTECH = 'ไม่ระบุรูปแบบ', docK = a => str(a.doc) || NODOC, techK = a => str(a.tech) || NOTECH;
+  const ordered = (base, keys, none) => { const have = new Set(keys); return [...base.filter(x => have.has(x)), ...[...have].filter(x => !base.includes(x) && x !== none).sort(), ...(have.has(none) ? [none] : [])]; };
+  const brDocs = ordered(docCodes(), bqs.map(docK), NODOC), brTechs = ordered(state.config.bq.techs, bqs.map(techK), NOTECH);
+  const brBy = ['tech', 'month'].includes(pref.get('vizBrBy', 'doc')) ? pref.get('vizBrBy', 'doc') : 'doc';
+  const split = (rs, keys, keyOf) => keys.map(k => rs.filter(a => keyOf(a) === k).length);
+  const brief = (rs, keys, keyOf) => keys.map(k => [k, rs.filter(a => keyOf(a) === k).length]).filter(x => x[1]).map(([k, n]) => `${k} ${n}`).join(' · ');
+  const brRow = (label, rs, keys, keyOf, o = {}) => ({ label, vals: [pts(rs), rs.length], sub: [o.name, brief(rs, keys, keyOf)].filter(Boolean).join(' · '), tsub: o.name || '', two: true, extra: split(rs, keys, keyOf), short: o.short });
+  const brExtra = brBy === 'tech' ? brDocs : brTechs;
+  const brRows = brBy === 'doc' ? brDocs.map(d => brRow(d, bqs.filter(a => docK(a) === d), brTechs, techK, { name: d === NODOC ? '' : docName(d) }))
+    : brBy === 'tech' ? brTechs.map(t => brRow(t, bqs.filter(a => techK(a) === t), brDocs, docK))
+      : [...new Set(bqs.map(a => a.date.slice(0, 7)))].sort().map(ym => brRow(fmtMonth(ym), bqs.filter(a => a.date.startsWith(ym)), brTechs, techK, { short: fmtMonth(ym).split(' ')[0] }));
+  const brTop = `<div class="viz-kpis"><div class="viz-kpi"><small>เคส (ราย)</small><b>${pts(bqs)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${bqs.length}</b></div><div class="viz-kpi"><small>แพทย์</small><b>${brDocs.filter(d => d !== NODOC).length}</b></div></div>
+    ${bqs.length ? `<p class="viz-note">รูปแบบการใส่: ${brTechs.map(t => `${esc(t)} <b>${bqs.filter(a => techK(a) === t).length}</b>`).join(' · ')}</p>` : ''}
+    <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vbrby="${v}" aria-pressed="${brBy === v}">${l}</button>`).join('')}</span></div>`;
   box.innerHTML = [
     vizCard('room', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละห้อง`, 'ห้องของบริเวณที่ 1 · เคสวางแผน (ไม่นับกิจกรรมแบบง่าย)', roomRows, series),
     vizCard('doc', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละแพทย์`, '', docRows, series),
     vizCard('icd', 'ICD-10 10 อันดับ', `นับเป็น${by === 'pt' ? 'ผู้ป่วย' : 'เคส'} · เฉพาะเคสที่มีรหัส ICD-10`, icdRows, series, { empty: 'ไม่มีเคสที่มีรหัส ICD-10 ในช่วงนี้' }),
-    vizCard('brachy', 'Brachytherapy', 'ราย = ผู้ป่วย (HN ไม่ซ้ำ) · ครั้ง = จำนวนครั้งที่บันทึก', brRows, [{ name: 'ครั้ง', unit: 'ครั้ง' }, { name: 'ราย', unit: 'ราย' }],
-      { types: ['bar', 'col', 'table'], top: brTop, empty: 'ไม่มีบันทึก Brachytherapy ในช่วงนี้' }),
+    vizCard('brachy', 'Brachytherapy', `จากแถบนัดคิวใส่แร่ ตามวันนัด · ${brDone ? 'นับเฉพาะมาตามนัด' : 'ไม่นับนัดที่ยกเลิก'} · เคส (ราย) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx)`, brRows, [{ name: 'เคส (ราย)', unit: 'ราย' }, { name: 'ครั้ง', unit: 'ครั้ง' }],
+      { types: ['bar', 'col', 'table'], top: brTop, extra: brExtra, empty: 'ไม่มีนัดใส่แร่ในช่วงนี้ (แถบนัดคิวใส่แร่)' }),
   ].join('');
 }
 // ป้ายรายละเอียดของแผนภูมิ: ชี้หรือโฟกัสแท่ง/ส่วน · ข้อความใส่ด้วย textContent
