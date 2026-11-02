@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-02.2';
+const CODE_VERSION = '2026-11-02.3';
 const API_LEVEL = 46;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1916,12 +1916,18 @@ function brachyDate_(v) {
 // MP / RC ของระบบนัด → รหัสนักฟิสิกส์ (รหัส · ชื่อผู้ใช้ · อีเมล · ชื่อ-สกุล ไม่สนคำนำหน้าและช่องว่าง)
 function brachyStaff_(cfg) {
   const staff = Array.isArray(cfg && cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code }));
-  const key = v => String(v || '').trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.)/, '').replace(/\s+/g, '').toLowerCase();
+  const key = v => String(v || '').trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.)/, '').replace(/\s+/g, '').toLowerCase();
+  // ชื่อสะกดต่างกันแค่สระบน-ล่าง วรรณยุกต์ การันต์ (เช่น พันธุ์ / พันธ์) = คนเดียวกัน ถ้าตรงกับนักฟิสิกส์คนเดียวเท่านั้น
+  const loose = v => key(v).replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, '');
   return v => {
     const t = String(v || '').trim(), low = t.toLowerCase();
     if (!t) return '';
-    const hit = staff.filter(x => String(x.code || '').toUpperCase() === t.toUpperCase()
+    let hit = staff.filter(x => String(x.code || '').toUpperCase() === t.toUpperCase()
       || (x.user && String(x.user).toLowerCase() === low) || (x.email && String(x.email).toLowerCase() === low) || (x.name && key(x.name) === key(t)))[0];
+    if (!hit && loose(t).length >= 4) {
+      const near = staff.filter(x => x.name && loose(x.name) === loose(t));
+      if (near.length === 1) hit = near[0];
+    }
     return hit ? String(hit.code).toUpperCase() : '';
   };
 }
