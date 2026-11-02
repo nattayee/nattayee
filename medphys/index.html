@@ -2180,6 +2180,7 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
       <details class="bq-hist" id="e-hist-box"><summary>ประวัติการแก้ไข</summary><ol id="e-hist"></ol></details>
     </div>
     <footer class="dlg-foot">
+      <button type="button" class="btn ghost danger" id="bqe-one" title="ยกเลิกเฉพาะนัดนี้ (Fx นี้) · Fx อื่นของคอร์สยังนัดอยู่">ยกเลิกเฉพาะครั้งนี้</button>
       <button type="button" class="btn ghost danger" id="bqe-course" title="ยกเลิกทุก Fraction ที่ยังนัดอยู่ของคอร์สนี้">ยกเลิกทั้งคอร์ส</button>
       <span class="spacer"></span>
       <button type="button" class="btn" data-close>ปิด</button>
@@ -3228,7 +3229,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-01.11';
+const PAGE_VERSION = '2026-11-02.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5904,7 +5905,8 @@ function openBqEdit(id, focus) {
   try { hist = JSON.parse(a.hist || '[]'); } catch (e) { hist = []; }
   $('#e-hist-box').hidden = !Array.isArray(hist) || !hist.length;
   $('#e-hist').innerHTML = (Array.isArray(hist) ? hist : []).slice().reverse().map(h => `<li>${esc(h.at)} · ${esc(h.by)}: ${esc((h.ch || []).map(c => `${BQ_FIELD[c.f] || c.f} ${c.from || '–'} → ${c.to || '–'}`).join(' · '))}</li>`).join('');
-  $('#bqe-course').hidden = !state.bq.some(x => x.course && x.course === a.course && x.status === BQ_ST.booked);
+  $('#bqe-one').hidden = a.status === BQ_ST.cancel;   // ยกเลิกเฉพาะ Fx นี้
+  $('#bqe-course').hidden = !state.bq.some(x => x.course && x.course === a.course && x.status === BQ_ST.booked && x.id !== a.id);   // ยังมี Fx อื่นของคอร์สที่นัดอยู่
   bqeDlg.showModal();
   $('.dlg-body', bqeForm).scrollTop = 0;
   const f = focus && $(`#e-${focus}-f`);
@@ -5972,7 +5974,7 @@ function openBqPin(mode, ctx) {
   $('#pin-title').textContent = `${mode === 'bqnew' ? 'ลงนัดใส่แร่' : mode === 'bqcancel' ? 'ยกเลิกนัดใส่แร่' : 'บันทึกนัดใส่แร่'} · ${r.hn}`;
   $('#pin-what').innerHTML = mode === 'bqday' ? `${esc(bqDay(ctx.date))} · ${ctx.ids.length} เคส · ${esc(bqChText(ctx.ch))}${ctx.skipped ? ` · ข้าม ${ctx.skipped} เคส (RC กับ MP คนเดียวกัน)` : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`
     : mode === 'bqnew' ? `${esc(r.name)} · ${esc(r.tech)} · ${r.dates.length} Fx (${esc(r.dates.map(fmtDay).join(', '))}) · ยืนยันด้วยรหัส PIN ของ ${who}`
-    : mode === 'bqcancel' ? `ยกเลิกทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ (${esc(r.name)}) · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดยกเลิกนัดเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
+    : mode === 'bqcancel' ? `${ctx.scope === 'one' ? `ยกเลิกเฉพาะ Fx ${esc(r.fx)}/${esc(r.total)} วันที่ ${esc(fmtDay(r.date))} (${esc(r.name)}) · Fx อื่นยังนัดอยู่` : `ยกเลิกทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ (${esc(r.name)})`} · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดยกเลิกนัดเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
       : `${esc(r.name)} Fx ${esc(r.fx)}/${esc(r.total)} · ${esc(bqChText(ctx.ch))} · ยืนยันด้วยรหัส PIN ของ ${who}`;
   $('#pin-val-field').hidden = true;
   $('#pin-note-field').hidden = true;
@@ -11364,9 +11366,9 @@ async function submitPin(e, clear) {
       return;
     }
     if (ctx.mode === 'bqcancel') {
-      const r = await store.bqCancel(ctx.id, 'course', pin), who = state.user.name || '';
+      const one = ctx.scope === 'one', r = await store.bqCancel(ctx.id, one ? 'one' : 'course', pin), who = state.user.name || '';
       pinDlg.close();
-      bqSaved(state.bq.filter(a => r.ids.includes(a.id)).map(a => ({ ...a, status: BQ_ST.cancel, editedBy: who })), `ยกเลิกนัด ${ctx.row.hn} ${r.changed} Fx แล้ว`);
+      bqSaved(state.bq.filter(a => r.ids.includes(a.id)).map(a => ({ ...a, status: BQ_ST.cancel, editedBy: who })), one ? `ยกเลิกนัด ${ctx.row.hn} Fx ${ctx.row.fx}/${ctx.row.total} (${fmtDay(ctx.row.date)}) แล้ว` : `ยกเลิกนัด ${ctx.row.hn} ${r.changed} Fx แล้ว`);
       return;
     }
     if (ctx.mode === 'jobsave') { const rec = await store.jobsSave(ctx.rec, pin); jobsSaved(rec); pinDlg.close(); return; }
@@ -11869,7 +11871,8 @@ document.addEventListener('click', e => {
     case 'ap-add': return openApForm('');
     case 'rg-add': return openRgForm('');
     case 'bq-add': return openBqForm();
-    case 'bqe-course': return editingBq && openBqPin('bqcancel', { id: editingBq.id, row: editingBq });
+    case 'bqe-one': return editingBq && openBqPin('bqcancel', { id: editingBq.id, row: editingBq, scope: 'one' });
+    case 'bqe-course': return editingBq && openBqPin('bqcancel', { id: editingBq.id, row: editingBq, scope: 'course' });
     case 'rg-del': return openRgPin('rgdel', editingRg);
     case 'rg-save-ap': return submitRg(null, true);
     case 'ap-del': return openApPin('apdel', editingAp);
