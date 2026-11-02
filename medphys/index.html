@@ -1269,6 +1269,16 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 /* settings */
 .set-list{display:grid;gap:8px}
 .ro-wrap{min-width:0;margin:0;padding:0;border:0}
+/* ตั้งค่า: แถบย่อยตามหมวด + ค้นหา (ติดใต้แถบเมนูตอนเลื่อน) */
+.set-tabs{position:sticky;top:var(--pin-h,0px);z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 14px;padding:8px 0;background:var(--bg)}
+.set-tabs [role="tablist"]{display:flex;flex-wrap:wrap;gap:6px}
+.set-tabs [role="tab"]{min-height:34px;padding:4px 13px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer;white-space:nowrap}
+.set-tabs [role="tab"]:hover{border-color:var(--accent)}
+.set-tabs [role="tab"][aria-selected="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-fg);font-weight:600}
+.set-tabs [role="tab"] small{margin-left:5px;font-size:11.5px;opacity:.75}
+.set-tabs input[type="search"]{flex:1 1 220px;max-width:300px;margin-left:auto}
+.set-empty{margin:24px 0;color:var(--muted);text-align:center}
+@media (max-width:700px){.set-tabs [role="tablist"]{flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding-bottom:2px}.set-tabs input[type="search"]{max-width:none;margin-left:0}}
 .ro-wrap[disabled] .btn.ghost,.ro-wrap[disabled] .icon-btn,.ro-wrap[disabled] .opt-new,.ro-wrap[disabled] .opt-chip button,.ro-wrap[disabled] #reset-demo,.ro-wrap[disabled] #clear-all{display:none}
 .ro-wrap[disabled] input,.ro-wrap[disabled] select{opacity:.75;cursor:default}
 .role-bar{align-items:center}
@@ -3301,7 +3311,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-02.6';
+const PAGE_VERSION = '2026-11-02.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9662,7 +9672,10 @@ function renderSettings() {
         ? `แอดมินของ LPCH RO Workspace ที่เป็น MP เป็นแอดมินที่นี่ด้วย · เจ้าของไฟล์ Google Sheet${state.user.owner ? ` (${esc(state.user.owner)})` : ''} เป็นแอดมินเสมอเมื่อเปิดด้วยบัญชี Google · เพิ่มชื่อผู้ใช้หรืออีเมล LPCH ของ MP ที่ให้เป็นแอดมินด้านล่าง`
         : 'โหมดตัวอย่างไม่มีการเข้าสู่ระบบ ใช้ปุ่มมุมมองด้านบนเพื่อดูหน้าจอของแต่ละสิทธิ์ · ตอนใช้งานจริงเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace'}</p>
       ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}</div>`;
-  el.innerHTML = `${roleBar}<fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
+  el.innerHTML = `${roleBar}<div class="set-tabs" id="set-tabs"><div role="tablist" aria-label="หมวดการตั้งค่า">${SET_TABS.map(([k, l]) => `<button type="button" role="tab" data-settab="${k}" aria-selected="false">${esc(l)}<small></small></button>`).join('')}</div>
+    <input type="search" id="set-q" value="${esc(setQ)}" placeholder="ค้นหาการตั้งค่า เช่น PIN, IGRT, วันหยุด" aria-label="ค้นหาการตั้งค่า" autocomplete="off"></div>
+    <p class="set-empty" id="set-empty" hidden>ไม่พบการตั้งค่าที่มีคำนี้</p>
+    <fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · สีของป้ายรหัสเลือกเองได้ (× = กลับเป็นสีอัตโนมัติ) · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       ${acctBar('staff')}
       <div class="set-list">${staffRows}</div>
@@ -9856,7 +9869,34 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     </fieldset>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
+  applySetTabs();
   updateSaveBar();
+}
+// ตั้งค่าแบ่งเป็นแถบย่อยตามหมวด (จำไว้ในเบราว์เซอร์) · ทั้งหมด = ทุกหัวข้อในหน้าเดียว · ค้นหา = หัวข้อที่มีคำนั้นจากทุกหมวด (รวมค่าในช่อง)
+// หัวข้ออยู่หมวดไหนดูจากชื่อหัวข้อ · หัวข้อใหม่ที่ไม่ตรงหมวดไหน = ระบบ
+const SET_TABS = [['team', 'ทีมงาน'], ['case', 'แจกเคส'], ['p4p', 'P4P และกิจกรรม'], ['room', 'ห้องฉาย'], ['tabs', 'แถบงานอื่น'], ['sys', 'ระบบ'], ['all', 'ทั้งหมด']];
+const SET_RULES = [['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
+  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs)/]];
+let setQ = '';
+const setTab = () => { const t = pref.get('setTab', 'team'); return SET_TABS.some(x => x[0] === t) ? t : 'team'; };
+function applySetTabs() {
+  const secs = $$('#view-settings .ro-wrap > .sec'), q = setQ.trim().toLowerCase(), cur = setTab(), n = { all: secs.length };
+  const hits = sec => sec.textContent.toLowerCase().includes(q) || $$('input:not([type="color"]), select, textarea', sec).some(i => str(i.value).toLowerCase().includes(q));
+  let shown = 0;
+  for (const sec of secs) {
+    if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; }
+    n[sec.dataset.stab] = (n[sec.dataset.stab] || 0) + 1;
+    sec.hidden = q ? !hits(sec) : cur !== 'all' && sec.dataset.stab !== cur;
+    if (!sec.hidden) shown++;
+  }
+  for (const b of $$('#set-tabs [data-settab]')) {
+    const k = b.dataset.settab;
+    b.setAttribute('aria-selected', String(!q && k === cur));
+    $('small', b).textContent = n[k] || 0;
+    b.hidden = !n[k] && k !== 'all';
+  }
+  const empty = $('#set-empty');
+  if (empty) empty.hidden = !q || shown > 0;
 }
 const settingsDirty = () => !!draft && JSON.stringify(draft) !== JSON.stringify(state.config);
 function updateSaveBar() { const b = $('#savebar'); if (b) b.hidden = !settingsDirty(); }
@@ -12088,6 +12128,16 @@ document.addEventListener('click', e => {
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
   if (ds.lpchdir !== undefined) return fetchMembers(t);
+  if (ds.settab) {   // แถบย่อยของตั้งค่า: ล้างคำค้น แล้วกลับไปบนสุดของหมวด
+    pref.set('setTab', ds.settab);
+    setQ = '';
+    const q = $('#set-q');
+    if (q) q.value = '';
+    applySetTabs();
+    const bar = $('#set-tabs');
+    if (bar && bar.getBoundingClientRect().top < 0 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--pin-h')) || 0) + 1) scrollTo({ top: Math.max(0, settingsEl.getBoundingClientRect().top + scrollY - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--pin-h')) || 0) - 8) });
+    return;
+  }
   if (ds.lpchnames !== undefined) { const xs = lpchNameDiffs(draft); for (const x of xs) draft[x.list][x.i].name = x.to; renderSettings(); return toast(`ใช้ชื่อตาม RO Workspace แล้ว ${xs.length} คน · กดบันทึกการตั้งค่า`); }
   if (ds.lpchadd) return lpchAdd(ds.lpchadd === 'all' ? ['staff', 'doctors', 'crew'] : [ds.lpchadd]);
   if (ds.srcchk) return srcCheckRun(ds.srcchk, t);
@@ -12503,6 +12553,8 @@ logForm.addEventListener('keydown', e => {
 });
 
 const settingsEl = $('#view-settings');
+// ค้นหาการตั้งค่า: กรองหัวข้อทันที (ไม่วาดหน้าใหม่)
+settingsEl.addEventListener('input', e => { if (e.target.id === 'set-q') { setQ = e.target.value; applySetTabs(); } });
 // ลากวางได้เฉพาะในรายการเดียวกัน (path เดียวกันไม่นับเลขลำดับท้าย) · เส้นสีบอกตำแหน่งที่จะวาง (ชิป: ซ้าย/ขวา · การ์ด: บน/ล่าง)
 let dragFrom = '';
 const dragList = path => path.slice(0, path.lastIndexOf('.'));
