@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-02.1';
-const API_LEVEL = 45;
+const CODE_VERSION = '2026-11-02.2';
+const API_LEVEL = 46;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -121,6 +121,7 @@ const TABLES = {
       ['id', 'id'], ['course', 'คอร์ส'], ['date', 'วันที่นัด'], ['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'],
       ['fx', 'Fx'], ['total', 'จำนวน Fx'], ['note', 'หมายเหตุ'], ['status', 'สถานะ'], ['mp', 'MP'], ['rc', 'RC'],
       ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'], ['rtt', 'RTT'],
+      ['ct', 'CT'], ['ctRoom', 'ห้อง CT'], ['us', 'Ultrasound'],
     ],
   },
   // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
@@ -1337,7 +1338,9 @@ function recentCt_(ss) {
  * จำนวนเคสต่อวันและ HN ซ้ำวันเดียวกัน หน้าเว็บเตือนก่อนลงนัด (ลงต่อได้เหมือนระบบนัดคิวใส่แร่เดิม)
  */
 const BQ_BOOKED = 'นัดแล้ว';
-const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc'];
+const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
+// CT ของนัดใส่แร่ (API 46): ct = CT / Re-CT · ctRoom = รหัสเครื่อง CT ที่ทำ (นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · us = US (Ultrasound)
+const BQ_CT = ['', 'CT', 'Re-CT'];
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
@@ -1381,8 +1384,13 @@ function bqEdit(id, ch, pin, token) {
   if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
   if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
+  if ('ct' in set && BQ_CT.indexOf(set.ct) < 0) throw new Error('CT ต้องเป็น CT หรือ Re-CT');
+  if ('ct' in set && !set.ct) set.ctRoom = '';   // ไม่ได้ทำ CT = ไม่มีห้อง
+  if ('ctRoom' in set && set.ctRoom && !/^[\w-]{1,20}$/.test(set.ctRoom)) throw new Error('ห้อง CT ไม่ถูกต้อง');
+  if ('us' in set && ['', 'US'].indexOf(set.us) < 0) throw new Error('Ultrasound ไม่ถูกต้อง');
   const cfg = readConfig_(ss_()) || {};
   const cur0 = readTable_(ss_(), 'bq').filter(x => x.id === id)[0] || {};
+  if (('ct' in set ? set.ct : cur0.ct) && !('ctRoom' in set ? set.ctRoom : cur0.ctRoom)) throw new Error('เลือกห้อง CT ที่ทำ');
   pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && set.status === BRACHY_ST_DONE) : has_(cur0[k]))));
   const rec = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
