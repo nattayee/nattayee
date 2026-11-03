@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-03.1';
-const API_LEVEL = 47;
+const CODE_VERSION = '2026-11-03.2';
+const API_LEVEL = 48;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -144,6 +144,15 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['ym', 'เดือน'], ['who', 'ชื่อ'], ['user', 'บัญชี'], ['kind', 'แบบฟอร์ม'], ['prof', 'ตำแหน่ง (JSON)'],
       ['cells', 'ช่องที่กรอก/แก้ (JSON)'], ['leaves', 'วันลา (JSON)'], ['by', 'บันทึกโดย'], ['updated', 'Updated'],
+    ],
+  },
+  // Vac-Lok (API 48): การใช้ Vac-Lok หนึ่งแถวต่อครั้ง (no = เลข Vac-Lok · ผูกกับผู้ป่วยด้วย HN) · off = วัน Off (ว่าง = ตามการฉายของผู้ป่วย) · hold = Hold RT
+  // ctId = รายการ CT-SIM ที่เลือก Vac-Lok (ฟอร์ม CT-SIM) · src = ctsim / manual / vac:<เลข>|<HN>|<วันทำ CT> (นำเข้าจากชีตเดิม) · เขียนผ่าน vacSave / vacRemove / vacImport / ctSave เท่านั้น
+  vac: {
+    sheet: 'VacLok',
+    fields: [
+      ['id', 'id'], ['no', 'Vac-Lok No.'], ['hn', 'HN'], ['name', 'Name'], ['room', 'ห้องฉาย'], ['ct', 'วันทำ CT'], ['off', 'Off'], ['hold', 'Hold RT'],
+      ['note', 'Note'], ['ctId', 'CT-SIM (id)'], ['src', 'ที่มา'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ],
   },
 };
@@ -303,6 +312,7 @@ function getData(token) {
     reg: need.reg ? regRows_(ss) : [],
     bq: need.bq ? recentBq_(ss) : [],
     jobs: need.jobs ? jobsFor_(ss, user, config) : [],
+    vac: need.vac ? readTable_(ss, 'vac') : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
@@ -318,7 +328,7 @@ const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course' };   /
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน)
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq', 'course', 'dash'] };
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'] };
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -343,10 +353,10 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -1284,7 +1294,10 @@ function ctSave(rec, pin, token) {
       const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') };
       if (ar) writeFields_(as, ar, ah, TABLES.appt.fields.filter(f => f[0] in mark), mark);
     }
-    return readTable_(ss, 'ctsim').filter(x => x.id === want)[0];
+    const out = readTable_(ss, 'ctsim').filter(x => x.id === want)[0];
+    // Vac-Lok ที่เลือกในฟอร์ม (API 48 · ไม่ส่ง vac = ไม่แตะ): ผูกการใช้ Vac-Lok กับรายการนี้ · ว่าง = ไม่ใช้ (ลบการใช้ที่ผูกไว้) · คืนการใช้ทั้งหมด
+    if ('vac' in rec) { vacLink_(ss, out, cut(rec.vac, 20), u); out.vacAll = readTable_(ss, 'vac'); }
+    return out;
   });
 }
 
@@ -1295,6 +1308,7 @@ function ctRemove(id, pin, token) {
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
     if (row) sh.deleteRow(row);
+    if (row && id) vacUnlink_(ss, id);
     if (row && id) {
       const as = ss.getSheetByName(TABLES.appt.sheet);
       if (as) {
@@ -1575,6 +1589,197 @@ function bqImport(token) {
   });
   bqStats_();
   return res;
+}
+
+/**
+ * Vac-Lok (แถบ RTT/RA Jobs → Vac-Lok · ฟอร์ม CT-SIM) API 48: การใช้ Vac-Lok หนึ่งแถวต่อครั้ง
+ * vacSave = เพิ่ม/แก้ (บันทึกใหม่ไม่ต้องใส่ PIN · แก้ต้องใส่) · vacRemove = ลบ (ใส่ PIN) · บันทึกได้เมื่อบันทึกในแถบ RTT/RA Jobs หรือ CT-SIM ได้
+ * vacImportCheck / vacImport (แอดมิน) = อ่านชีต Vac-Lok เดิมจากลิงก์ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok
+ */
+const VAC_FIELDS = ['no', 'hn', 'name', 'room', 'ct', 'off', 'hold', 'note', 'ctId'];
+const vacNow_ = () => new Date().toISOString();
+function vacSave(rec, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.vac);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  if (!cut(rec.no, 20)) throw new Error('เลือกเลข Vac-Lok');
+  if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
+  ['ct', 'off', 'hold'].forEach(k => { const v = cut(rec[k], 10); if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('วันที่ไม่ถูกต้อง'); });
+  pinChange_(u, pin, rowExists_('vac', rec.id));
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'vac'), header = headerOf_(sh);
+    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const set = {};
+    VAC_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'note' ? 1000 : k === 'name' ? 200 : 80); });
+    if (row) set.updated = vacNow_();
+    else Object.assign(set, { id: id || Utilities.getUuid(), src: 'manual', by: String(u.name || u.username || u.me || ''), created: vacNow_(), updated: '' });
+    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.vac.fields.filter(f => f[0] in set), set);
+    const want = row ? id : set.id;
+    return readTable_(ss, 'vac').filter(x => x.id === want)[0];
+  });
+}
+function vacRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.vac);
+  pinChange_(u, pin, true);
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'vac'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+// ฟอร์ม CT-SIM เลือก Vac-Lok (เรียกใน lock ของ ctSave): แถวที่ผูกกับรายการนี้ หรือแถวที่นำเข้า (เลขและ HN เดียวกัน ยังไม่ผูก) · ไม่มี = เพิ่มใหม่
+function vacLink_(ss, ct, no, u) {
+  const sh = tableSheet_(ss, 'vac'), header = headerOf_(sh), rows = readTable_(ss, 'vac'), idCol = header.indexOf('id') + 1;
+  const cur = rows.filter(x => x.ctId === ct.id)[0];
+  if (!no) { if (cur) { const r = findRow_(sh, idCol, cur.id); if (r) sh.deleteRow(r); } return; }
+  const imp = cur ? null : rows.filter(x => !x.ctId && String(x.no) === no && hnKey_(x.hn) === hnKey_(ct.hn) && (!x.ct || x.ct === ct.date))[0];
+  const target = cur || imp;
+  const set = { no: no, hn: ct.hn, name: ct.name || (target ? target.name : ''), ct: ct.date, ctId: ct.id };
+  if (ct.room) set.room = ct.room;
+  if (target) { set.updated = vacNow_(); writeFields_(sh, findRow_(sh, idCol, target.id), header, TABLES.vac.fields.filter(f => f[0] in set), set); return; }
+  Object.assign(set, { id: Utilities.getUuid(), room: ct.room || '', src: 'ctsim', by: String(u.name || u.username || u.me || ''), created: vacNow_(), updated: '' });
+  writeFields_(sh, sh.getLastRow() + 1, header, TABLES.vac.fields.filter(f => f[0] in set), set);
+}
+// ลบรายการ CT-SIM: การใช้ Vac-Lok ที่เพิ่มจากฟอร์มนั้นลบด้วย · ที่นำเข้าหรือบันทึกเองเหลือไว้ (เอาการผูกออก)
+function vacUnlink_(ss, ctId) {
+  const sh = ss.getSheetByName(TABLES.vac.sheet);
+  if (!sh) return;
+  const header = headerOf_(sh), idCol = header.indexOf('id') + 1;
+  readTable_(ss, 'vac').filter(x => x.ctId === ctId).forEach(x => {
+    const r = findRow_(sh, idCol, x.id);
+    if (!r) return;
+    if (x.src === 'ctsim') sh.deleteRow(r);
+    else writeFields_(sh, r, header, TABLES.vac.fields.filter(f => f[0] === 'ctId'), { ctId: '' });
+  });
+}
+// วันที่ในชีตเดิม: เซลล์วันที่ · 2026-07-24 · 24/7/2026 (พ.ศ. ได้) · 24 Jul 2026
+function vacDate_(v, tz) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v) ? '' : Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  const t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  const b = brachyDate_(t);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(b)) return b;
+  const m = /^(\d{1,2})[\s-]+([A-Za-z]{3})[A-Za-z]*\.?[\s-]+(\d{2,4})$/.exec(t);
+  const mi = m ? 'janfebmaraprmayjunjulaugsepoctnovdec'.indexOf(m[2].toLowerCase()) : -1;
+  if (mi < 0 || mi % 3) return '';
+  let y = +m[3];
+  if (y < 100) y += 2000;
+  if (y > 2400) y -= 543;
+  return y + '-' + ('0' + (mi / 3 + 1)).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
+// อ่านแท็บหนึ่งของชีต Vac-Lok เดิม: หัวตาราง "Vac-Lok No." + "HN" แถวถัดไปเป็นหัวย่อย (วันทำ CT / Off / Hold RT)
+// แบบมีคอลัมน์ห้องฉาย (Linac 1/2/3 · ห้องตามลำดับใน ตั้งค่า) หรือแบบแยกคอลัมน์ตาม Linac · คืน null ถ้าไม่ใช่ตาราง Vac-Lok
+function vacParse_(sh, tz, rooms) {
+  const last = sh.getLastRow(), cols = sh.getLastColumn();
+  if (last < 3 || cols < 3) return null;
+  const v = sh.getRange(1, 1, last, cols).getValues(), txt = r => (r || []).map(x => String(x == null ? '' : x).trim());
+  let h = -1;
+  for (let i = 0; i < Math.min(v.length, 10) && h < 0; i++) { const r = txt(v[i]); if (r.some(x => /vac/i.test(x)) && r.some(x => /^HN$/i.test(x))) h = i; }
+  if (h < 0) return null;
+  const top = txt(v[h]), sub = txt(v[h + 1]), find = re => top.findIndex(x => re.test(x));
+  const noC = find(/vac/i), hnC = find(/^HN$/i), stC = find(/สถานะ/), roomC = find(/ห้องฉาย/);
+  const subAt = (re, a, b) => { for (let i = a; i < b; i++) if (re.test(sub[i] || '')) return i; return -1; };
+  const sets = [];
+  if (roomC >= 0) sets.push({ room: '', ct: subAt(/CT/i, 0, cols), off: subAt(/^off$/i, 0, cols), hold: subAt(/hold/i, 0, cols) });
+  else {
+    for (let i = 0; i < cols; i++) {
+      const m = /linac\s*(\d+)/i.exec(top[i]);
+      if (!m) continue;
+      let j = i + 1;
+      while (j < cols && !top[j]) j++;
+      sets.push({ room: 'Linac ' + m[1], ct: subAt(/CT/i, i, j), off: subAt(/^off$/i, i, j), hold: subAt(/hold/i, i, j) });
+      i = j - 1;
+    }
+  }
+  const roomName = r => { const m = /linac\s*(\d+)/i.exec(r); return m && rooms[+m[1] - 1] ? rooms[+m[1] - 1] : r; };
+  const rows = [], bags = [];
+  for (let i = h + 2; i < v.length; i++) {
+    const r = v[i], nm = /^(\d+)\s*(?:\((.*)\))?$/.exec(String(r[noC] == null ? '' : r[noC]).trim());
+    if (!nm) continue;   // แถวว่างหรือหมายเหตุท้ายตาราง
+    const no = nm[1], type = String(nm[2] || '').trim();
+    bags.push({ no: no, type: type });
+    const hn = String(r[hnC] == null ? '' : r[hnC]).replace(/\.0$/, '').trim();
+    if (!hn) continue;
+    const at = (x, k) => (x && x[k] >= 0 ? vacDate_(r[x[k]], tz) : '');
+    const set = roomC >= 0 ? sets[0] : sets.filter(x => at(x, 'ct') || at(x, 'off'))[0] || null;
+    const room = roomC >= 0 ? String(r[roomC] == null ? '' : r[roomC]).trim() : set ? set.room : '';
+    rows.push({ no: no, type: type, hn: hn, room: roomName(room), ct: at(set, 'ct'), off: at(set, 'off'), hold: at(set, 'hold'), status: stC >= 0 ? String(r[stC] == null ? '' : r[stC]).trim() : '' });
+  }
+  return { rows: rows, bags: bags, layout: roomC >= 0 ? 'room' : 'linac' };
+}
+// ชีตเดิม: แท็บตาม gid ในลิงก์ · ไม่มี gid = แท็บแรกที่มีคอลัมน์ห้องฉาย (ไม่มี = แท็บแรกที่เป็นตาราง Vac-Lok)
+function vacImportRead_(cfg) {
+  const s = cfg.vac || {}, url = String(s.url || '').trim();
+  if (!url) throw new Error('ใส่ลิงก์ชีต Vac-Lok ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok แล้วบันทึกก่อน');
+  const book = extBook_(s, 'Vac-Lok'), tz = book.getSpreadsheetTimeZone(), rooms = Array.isArray(cfg.rooms) ? cfg.rooms : [];
+  const gid = /[#&?]gid=(\d+)/.exec(url), idOf = sh => (typeof sh.getSheetId === 'function' ? String(sh.getSheetId()) : '');
+  const parsed = book.getSheets().map(sh => ({ sh: sh, p: vacParse_(sh, tz, rooms) })).filter(x => x.p);
+  const pick = (gid && parsed.filter(x => idOf(x.sh) === gid[1])[0]) || parsed.filter(x => x.p.layout === 'room')[0] || parsed[0];
+  if (!pick) throw new Error('ไม่พบตาราง Vac-Lok (หัวตาราง Vac-Lok No. และ HN) ในชีต ' + book.getName());
+  return Object.assign(pick.p, { book: book, tab: pick.sh.getName() });
+}
+// จับคู่กับข้อมูลเดิม: แถวที่นำเข้าแล้ว (ที่มาเดียวกัน หรือเลขและ HN เดียวกัน) · รายการ CT-SIM ของ HN นี้วันเดียวกัน (±7 วัน) · ชื่อจาก CT-SIM / ลงทะเบียน / เคส
+function vacPlan_(ss, cfg, im) {
+  const have = readTable_(ss, 'vac'), cts = readTable_(ss, 'ctsim'), reg = regRows_(ss), cases = readTable_(ss, 'cases', cfg);
+  const nameOf = k => { const c = cts.filter(x => hnKey_(x.hn) === k && x.name)[0], g = reg.filter(x => hnKey_(x.hn) === k)[0], cs = cases.filter(x => hnKey_(x.hn) === k && x.name)[0];
+    return c ? c.name : g ? regName_(g) : cs ? cs.name : ''; };
+  const day = d => Date.parse(d + 'T00:00:00Z');
+  return im.rows.map(o => {
+    const k = hnKey_(o.hn), src = 'vac:' + o.no + '|' + k + '|' + o.ct;
+    const old = have.filter(x => x.src === src)[0] || have.filter(x => String(x.no) === o.no && hnKey_(x.hn) === k && (!x.ct || !o.ct || x.ct === o.ct))[0] || null;
+    const mine = cts.filter(x => hnKey_(x.hn) === k);
+    const ct = mine.filter(x => o.ct && x.date === o.ct)[0] || (o.ct ? mine.filter(x => Math.abs(day(x.date) - day(o.ct)) <= 7 * 864e5).sort((a, b) => Math.abs(day(a.date) - day(o.ct)) - Math.abs(day(b.date) - day(o.ct)))[0] : null) || null;
+    const name = nameOf(k);
+    return { o: o, src: src, old: old, ctId: ct ? ct.id : '', name: name, known: !!ct || !!name || cases.some(x => hnKey_(x.hn) === k) };
+  });
+}
+function vacImportSum_(im, plan) {
+  const dates = plan.map(x => x.o.ct).filter(Boolean).sort();
+  return { tab: im.tab, title: im.book.getName(), layout: im.layout, bags: im.bags.length, rows: plan.length, add: plan.filter(x => !x.old).length, update: plan.filter(x => x.old).length,
+    linked: plan.filter(x => x.ctId).length, known: plan.filter(x => x.known).length, busy: plan.filter(x => /ไม่ว่าง/.test(x.o.status)).length, first: dates[0] || '', last: dates[dates.length - 1] || '' };
+}
+function vacImportCheck(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('นำเข้า Vac-Lok ได้เฉพาะแอดมิน');
+  const ss = ss_(), cfg = readConfig_(ss) || {}, im = vacImportRead_(cfg);
+  return vacImportSum_(im, vacPlan_(ss, cfg, im));
+}
+function vacImport(token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('นำเข้า Vac-Lok ได้เฉพาะแอดมิน');
+  const ss = ss_(), im = vacImportRead_(readConfig_(ss) || {});
+  return withLock_(() => {
+    const cfg = readConfig_(ss) || {}, plan = vacPlan_(ss, cfg, im), sum = vacImportSum_(im, plan);
+    const sh = tableSheet_(ss, 'vac'), header = headerOf_(sh), idCol = header.indexOf('id') + 1, now = vacNow_();
+    let added = 0, updated = 0;
+    plan.forEach(x => {
+      const o = x.o;
+      if (x.old) {
+        // ชีตเดิมเป็นข้อมูลล่าสุดของวัน Off / Hold RT / ห้อง · ช่องที่ว่างอยู่เติมให้
+        const set = { updated: now };
+        ['room', 'ct', 'off', 'hold'].forEach(k => { if (o[k] && o[k] !== x.old[k]) set[k] = o[k]; });
+        if (!x.old.name && x.name) set.name = x.name;
+        if (!x.old.ctId && x.ctId) set.ctId = x.ctId;
+        if (!x.old.src || x.old.src === 'manual') set.src = x.src;
+        if (Object.keys(set).length > 1) { writeFields_(sh, findRow_(sh, idCol, x.old.id), header, TABLES.vac.fields.filter(f => f[0] in set), set); updated++; }
+        return;
+      }
+      const set = { id: Utilities.getUuid(), no: o.no, hn: o.hn, name: x.name, room: o.room, ct: o.ct, off: o.off, hold: o.hold, note: '', ctId: x.ctId, src: x.src, by: 'นำเข้า', created: now, updated: '' };
+      writeFields_(sh, sh.getLastRow() + 1, header, TABLES.vac.fields, set);
+      added++;
+    });
+    // รายการ Vac-Lok (เลขและชนิด) ใน ตั้งค่า: เพิ่มเลขที่ยังไม่มี · ชนิดที่ยังว่างใส่ให้
+    const vc = cfg.vac && typeof cfg.vac === 'object' ? cfg.vac : {}, bags = Array.isArray(vc.bags) ? vc.bags.slice() : [];
+    let bagsAdded = 0;
+    im.bags.forEach(b => {
+      const cur = bags.filter(x => x && String(x.no) === b.no)[0];
+      if (!cur) { bags.push({ no: b.no, type: b.type }); bagsAdded++; } else if (!cur.type && b.type) cur.type = b.type;
+    });
+    bags.sort((a, b) => (+a.no || 0) - (+b.no || 0));
+    cfg.vac = Object.assign({}, vc, { bags: bags });
+    writeConfig_(ss, cfg);
+    return Object.assign(sum, { added: added, updated: updated, bagsAdded: bagsAdded });
+  });
 }
 
 /**
