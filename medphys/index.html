@@ -427,6 +427,10 @@ button.duty-line:hover{border-color:var(--accent)}
 .vac-st.free{background:var(--ok-soft);color:var(--ok)}
 .vac-st.busy{background:var(--warn-soft);color:var(--warn)}
 .vac-st.hold{background:var(--late-soft);color:var(--late)}
+.vac-st.resv{background:var(--accent-soft);color:var(--accent)}   /* จองไว้ในนัด (ลงนัด) */
+.ord-vac{margin-top:10px}
+.vac-imp{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0}
+.vac-imp input{flex:1 1 320px;min-width:0}
 .vac-auto{color:var(--muted);font-size:11.5px}
 .vac-last{color:var(--faint);font-size:12px}
 .vac-hist{margin-top:18px}
@@ -2355,7 +2359,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="field dx-field" data-apf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="a-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="a-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="a-dx-list" role="listbox" hidden></ul></div></div>
       <div class="field" data-apf="exam"><span class="lbl">Examination Part</span><div class="ord-opts" id="a-exam"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-exam-other"><span>Other</span></label></div><input id="a-exam-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Examination Part อื่นๆ"></div></div>
       <div class="field" data-apf="pos"><span class="lbl">Position</span><div class="chips" id="a-pos" role="radiogroup" aria-label="Position"></div></div>
-      <div class="field" data-apf="immob"><span class="lbl">Immobilization</span><div class="chips" id="a-immob"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-immob-other"><span>Other</span></label></div><input id="a-immob-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Immobilization อื่นๆ"></div></div>
+      <div class="field" data-apf="immob"><span class="lbl">Immobilization</span><div class="chips" id="a-immob"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-immob-other"><span>Other</span></label></div><input id="a-immob-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Immobilization อื่นๆ"></div><div class="field ord-vac" id="a-vac-f" hidden><span class="lbl"><span>Vac-Lok No.</span><span class="sub-lbl" id="a-vac-hint"></span></span><div class="chips" id="a-vac" role="radiogroup" aria-label="Vac-Lok No."></div></div></div>
       <div class="field" data-apf="lab"><span class="lbl">Pre-procedural Lab (CT with contrast)</span><div class="ord-lab">
         <label><span>Date</span><input id="a-lab-date" maxlength="20" autocomplete="off"></label><label><span>Creatinine</span><input id="a-cr" maxlength="20" autocomplete="off"></label><label><span>CrCl</span><input id="a-crcl" maxlength="20" autocomplete="off"></label></div></div>
       <div class="field" data-apf="vol"><span class="lbl">Draw area <span class="sub-lbl">ลากบนรูปจากขอบบนถึงขอบล่างที่จะทำ CT</span></span>
@@ -3433,7 +3437,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.7';
+const PAGE_VERSION = '2026-11-03.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5236,6 +5240,7 @@ function openApForm(id, rg, rc) {
   const im = ordImmob();
   $('#a-immob').innerHTML = im.map(t => ordChip('immob', t, t, o)).join('') + ordLeft(o, 'immob', im);
   $('#a-immob-other').checked = (o.immob || []).includes('Other');
+  renderApVac(str(o.vac));
   $('#a-immob-other-t').value = fill['immob:Other'] || '';
   for (const [k, f] of [['lab-date', 'labDate'], ['cr', 'cr'], ['crcl', 'crcl']]) $('#a-' + k).value = o[f] || '';
   csoImages(apForm);
@@ -5324,6 +5329,8 @@ function readApOrder() {
     age: str($('#a-age').value), sex: chipValue($('#a-sex')), exam: [...apPicked('exam'), ...($('#a-exam-other').checked ? ['Other'] : [])], fill, pos: chipValue($('#a-pos')),
     ivMl: str($('#a-iv').value), flow: str($('#a-flow').value), labDate: str($('#a-lab-date').value), cr: str($('#a-cr').value), crcl: str($('#a-crcl').value),
     immob: [...apPicked('immob'), ...($('#a-immob-other').checked ? ['Other'] : [])], vol: apOrder.vol,
+    // Vac-Lok ที่จองไว้: ติ๊ก Vac-lok เท่านั้น (ช่องไม่แสดงเพราะ Code.gs เก่า/ยังไม่มีเลข = เลขเดิมคงไว้)
+    vac: !apPicked('immob').some(isVacImmob) ? '' : $('#a-vac-f').hidden ? str(apOrder.vac) : chipValue($('#a-vac')),
   };
   for (const k of Object.keys(o)) if (!o[k] || (Array.isArray(o[k]) && !o[k].length) || (k === 'fill' && !Object.keys(o[k]).length)) delete o[k];
   return Object.keys(o).length ? JSON.stringify(o) : '';
@@ -5394,6 +5401,7 @@ apForm.addEventListener('change', e => {
   siteChip(e); clearMissing(e);
   if (e.target.id === 'a-oncall-ct' && e.target.checked) $('#a-oncall').checked = true;
   if (e.target.id === 'a-oncall' || e.target.id === 'a-oncall-ct') syncApForm();
+  if (e.target.dataset.ord === 'immob') renderApVac(chipValue($('#a-vac')) || str(apOrder.vac));
 });
 // พิมพ์ในช่องเติมคำ = ติ๊กข้อนั้นให้ (NPO, Control Bladder, Other) · IV ml / Flow Rate = CT แบบ CM (ถ้ายังไม่ได้เลือก)
 apForm.addEventListener('input', e => {
@@ -8999,7 +9007,7 @@ const vacBags = () => state.config.vac.bags;
 const vacType = no => (vacBags().find(b => b.no === str(no)) || {}).type || '';
 const vacLabel = no => (vacType(no) ? `${no} (${vacType(no)})` : str(no));
 const vacNos = () => [...new Set([...vacBags().map(b => b.no), ...state.vac.map(r => r.no)])].filter(Boolean).sort((a, b) => (+a || 0) - (+b || 0) || a.localeCompare(b));
-const VAC_ST = { free: 'ว่าง', busy: 'ใช้อยู่', hold: 'Hold RT' };
+const VAC_ST = { free: 'ว่าง', busy: 'ใช้อยู่', hold: 'Hold RT', resv: 'จองแล้ว' };
 const vacSrc = r => (r.src === 'ctsim' ? 'CT-SIM' : /^vac:/.test(r.src) ? 'นำเข้า' : 'บันทึกเอง');
 // ข้อมูลเดิมของ HN: ชื่อ (บันทึกไว้ → ลงทะเบียน → CT-SIM → เคส)
 function vacName(r) {
@@ -9029,6 +9037,53 @@ function vacInfo(r) {
   const st = r.off ? (r.off <= td ? 'free' : hold ? 'hold' : 'busy') : co.end && co.end < td ? 'free' : hold ? 'hold' : co.end ? 'busy' : r.ct && r.ct < plusDays(td, -120) ? 'free' : 'busy';
   return { st, off, offAuto: !r.off && !!co.end, hold, holdAuto: !r.hold && !!co.hold, co };
 }
+// ลงนัด: Immobilization ที่เป็น Vac-lok → เลือกเลขที่ว่าง (จองไว้ · order.vac ในใบสั่ง) · ลง CT-SIM จากนัดนั้นแล้วเลขนี้เลือกให้ในฟอร์ม CT-SIM
+const isVacImmob = v => /vac/i.test(str(v));
+// เลขที่จองไว้ในนัดที่ยังรอลง CT-SIM (นัดเลยมาเกิน 14 วัน · on call เกิน 60 วัน = ไม่นับ) · except = นัดที่กำลังแก้
+function vacResv(except) {
+  const m = new Map(), td = today();
+  for (const a of state.appt) {
+    if (a.id === except || apState(a) !== 'wait') continue;
+    const no = str(parseOrder(a.order).vac);
+    if (!no || m.has(no) || (isDay(a.date) ? a.date < plusDays(td, -14) : str(a.created).slice(0, 10) < plusDays(td, -60))) continue;
+    m.set(no, a);
+  }
+  return m;
+}
+// เลขที่ไม่ว่าง: ใช้อยู่ / Hold RT (การใช้) + จองไว้ในนัด · { use } หรือ { ap }
+function vacHeld(except) {
+  const m = new Map();
+  for (const [k, x] of vacBusyMap()) m.set(k, { use: x });
+  for (const [k, a] of vacResv(except)) if (!m.has(k)) m.set(k, { ap: a });
+  return m;
+}
+const heldHn = h => (h.use ? h.use.r.hn : h.ap.hn);
+function renderApVac(cur) {
+  const on = vacOn() && vacNos().length > 0 && apPicked('immob').some(isVacImmob);
+  $('#a-vac-f').hidden = !on;
+  if (!on) return;
+  const hn = hnKey($('#a-hn').value), held = vacHeld(editingAp && editingAp.id), nos = vacNos();
+  const ok = nos.filter(n => !held.has(n) || n === cur || (hn && hnKey(heldHn(held.get(n))) === hn));
+  chipGroup($('#a-vac'), 'avac', ok, ok.includes(cur) ? cur : '');
+  $$('#a-vac label').forEach(l => { $('span', l).textContent = vacLabel($('input', l).value); });
+  $('#a-vac-hint').textContent = `ว่าง ${nos.filter(n => !held.has(n)).length} จาก ${nos.length} ใบ · เลือกแล้วเลขนี้จองไว้ให้ผู้ป่วยนี้`;
+}
+// แอดมิน (ชีตจริง): นำเข้าจากชีต Vac-Lok เดิมจากแถบนี้เลย · บันทึกลิงก์ในการตั้งค่าแล้วนำเข้า (เขียนแท็บ VacLok ในชีตของระบบ)
+async function vacQuickImport(btn) {
+  const url = str($('#vac-imp-url').value);
+  if (!url) { $('#vac-imp-url').focus(); return toast('วางลิงก์ชีต Vac-Lok เดิมก่อน', { err: true }); }
+  btn.disabled = true;
+  try {
+    if (url !== state.config.vac.url) { const next = mergeConfig({ ...state.config, vac: { ...state.config.vac, url } }); await store.saveConfig(next); state.config = next; }
+    const r = await store.vacImport();
+    state.vacImp = { ...r, check: false };
+    toast(`นำเข้า Vac-Lok ${r.added} รายการ · อัปเดต ${r.updated} · เลข Vac-Lok ที่เพิ่ม ${r.bagsAdded} (แท็บ VacLok ในชีตของระบบ)`);
+    await refresh(true);
+  } catch (e) { toast('นำเข้าไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; }
+}
+const vacImpBox = () => (state.user.isAdmin && store.mode === 'sheet' && vacOn()
+  ? `<div class="vac-imp"><input id="vac-imp-url" value="${esc(state.config.vac.url)}" placeholder="ลิงก์ชีต Vac-Lok เดิม (docs.google.com/spreadsheets/d/…/edit?gid=…)" autocomplete="off" aria-label="ลิงก์ชีต Vac-Lok เดิม"><button type="button" class="btn" data-vacquick="1">นำเข้าจากชีตเดิม</button></div>` : '');
 // การใช้ทั้งหมด (ล่าสุดก่อน) · เลขที่ใช้อยู่ = การใช้ล่าสุดที่ยังไม่ว่างของเลขนั้น
 const vacRows = () => state.vac.map(r => ({ r, i: vacInfo(r) })).sort((a, b) => (b.r.ct || b.r.created).localeCompare(a.r.ct || a.r.created));
 function vacBusyMap(rows = vacRows()) { const m = new Map(); for (const x of rows) if (x.i.st !== 'free' && !m.has(x.r.no)) m.set(x.r.no, x); return m; }
@@ -9036,20 +9091,23 @@ const vacText = x => [x.r.no, vacType(x.r.no), x.r.hn, vacName(x.r), x.r.room, x
 function renderVac() {
   const edit = canEdit() && vacOn(), words = tabWords('vac'), td = today();
   syncTabQ('vac');
-  $('#vac-add').hidden = !edit;
+  $('#vac-add').hidden = !edit || !vacNos().length;
   $('#vac-api').hidden = vacOn() || store.mode === 'local' || !canEdit();
-  const rows = vacRows(), busy = vacBusyMap(rows), nos = vacNos();
+  const rows = vacRows(), busy = vacBusyMap(rows), resv = vacResv(), nos = vacNos();
   if (!nos.length) {
-    $('#vac-body').innerHTML = `<p class="notice"><b>ยังไม่มีรายการ Vac-Lok</b><span>${state.user.isAdmin ? 'เพิ่มเลข Vac-Lok หรือนำเข้าจากชีตเดิมได้ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok' : 'แอดมินเพิ่มเลข Vac-Lok ได้ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok'}</span></p>`;
+    $('#vac-body').innerHTML = `<p class="notice"><b>ยังไม่มีรายการ Vac-Lok</b><span>${state.user.isAdmin ? 'นำเข้าจากชีต Vac-Lok เดิม (วางลิงก์ด้านล่าง) หรือเพิ่มเลข Vac-Lok ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok' : 'แอดมินเพิ่มเลข Vac-Lok ได้ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok'}</span></p>${vacImpBox()}`;
     return;
   }
   const date = (v, auto) => (v ? `${esc(fmtDayY(v))}${auto ? ' <span class="vac-auto">ตามการฉาย</span>' : ''}` : '');
-  const types = [...new Set(nos.map(vacType))], freeOf = ns => ns.filter(n => !busy.has(n)).length;
-  const sum = `<p class="vac-sum"><span>ว่าง <b>${freeOf(nos)}</b> / ${nos.length} ใบ</span>${types.length > 1 ? types.map(t => { const ns = nos.filter(n => vacType(n) === t); return `<span>${esc(t || 'ไม่ระบุชนิด')} ว่าง ${freeOf(ns)}/${ns.length}</span>`; }).join('') : ''}<span>ใช้อยู่ ${[...busy.values()].filter(x => x.i.st === 'busy').length} · Hold RT ${[...busy.values()].filter(x => x.i.st === 'hold').length}</span></p>`;
+  const types = [...new Set(nos.map(vacType))], freeOf = ns => ns.filter(n => !busy.has(n) && !resv.has(n)).length, nResv = nos.filter(n => !busy.has(n) && resv.has(n)).length;
+  const sum = `<p class="vac-sum"><span>ว่าง <b>${freeOf(nos)}</b> / ${nos.length} ใบ</span>${types.length > 1 ? types.map(t => { const ns = nos.filter(n => vacType(n) === t); return `<span>${esc(t || 'ไม่ระบุชนิด')} ว่าง ${freeOf(ns)}/${ns.length}</span>`; }).join('') : ''}<span>ใช้อยู่ ${[...busy.values()].filter(x => x.i.st === 'busy').length} · Hold RT ${[...busy.values()].filter(x => x.i.st === 'hold').length}${nResv ? ` · จองในนัด ${nResv}` : ''}</span></p>`;
   const hnCell = (r, co) => `<b class="hn" title="${esc(vacCourseText(co) || 'ยังไม่มีในตารางวันฉาย')}">${esc(r.hn)}</b>`;
-  const shown = nos.filter(no => { const x = busy.get(no); return !words.length || wordsIn(words, x ? vacText(x) : [no, vacType(no)].join(' ').toLowerCase()); });
+  const shown = nos.filter(no => { const x = busy.get(no), a = !x && resv.get(no); return !words.length || wordsIn(words, x ? vacText(x) : [no, vacType(no), a && a.hn, a && a.name].join(' ').toLowerCase()); });
   const bagRow = no => {
-    const x = busy.get(no), r = x && x.r, i = x && x.i, st = x ? i.st : 'free', last = !x && rows.find(y => y.r.no === no);
+    const x = busy.get(no), a = !x && resv.get(no);
+    if (a) return `<tr class="vac-resv"><td class="vac-no">${esc(no)}</td><td>${esc(vacType(no))}</td><td><span class="vac-st resv">${VAC_ST.resv}</span></td><td><b class="hn">${esc(a.hn)}</b></td><td>${esc(a.name || vacName(a))}</td><td>${esc(a.room)}</td>
+      <td>${a.date === 'on call' ? 'นัด CT on call' : `นัด CT ${esc(fmtDayY(a.date))}`}</td><td></td><td></td><td class="muted">จองในแถบ${esc(navLabel('appt'))}</td><td></td></tr>`;
+    const r = x && x.r, i = x && x.i, st = x ? i.st : 'free', last = !x && rows.find(y => y.r.no === no);
     const act = !edit ? '' : r ? `<button type="button" class="btn ghost sm" data-vacedit="${esc(r.id)}">แก้</button><button type="button" class="btn ghost sm" data-vacoff="${esc(r.id)}" title="ใส่ Off วันนี้ (Vac-Lok ว่าง)">คืน</button>` : `<button type="button" class="btn ghost sm" data-vacnew="${esc(no)}">+ ใช้</button>`;
     return `<tr class="vac-${st}"><td class="vac-no">${esc(no)}</td><td>${esc(vacType(no))}</td><td><span class="vac-st ${st}">${VAC_ST[st]}</span></td>
       <td>${r ? hnCell(r, i.co) : last ? `<span class="vac-last" title="ใช้ล่าสุด">ล่าสุด ${esc(last.r.hn)}</span>` : ''}</td><td>${r ? esc(vacName(r)) : ''}</td><td>${r ? esc(r.room) : ''}</td>
@@ -9063,18 +9121,21 @@ function renderVac() {
     <details class="vac-hist"${pref.get('vacHist', false) ? ' open' : ''}><summary>ประวัติการใช้ (${hist.length})</summary><div class="table-wrap ct-wrap"><table class="ct-tbl vac-tbl" id="vac-hist">
       <thead><tr><th>Vac-Lok</th><th>HN</th><th>Name</th><th>ห้องฉาย</th><th>วันทำ CT</th><th>Off</th><th>Hold RT</th><th>สถานะ</th><th>ที่มา</th><th></th></tr></thead>
       <tbody>${hist.map(histRow).join('') || '<tr><td colspan="10" class="empty-state">ยังไม่มีการใช้</td></tr>'}</tbody></table></div></details>
-    <p class="muted def-note" style="margin-top:10px">สถานะ: Off ที่บันทึก (ถึงวันนั้น = ว่าง) · ไม่ได้ใส่ Off = ตามการฉายของ HN นี้หลังวันทำ CT (จบ = ว่าง · Hold ที่ยังไม่กลับมา = Hold RT) · ไม่มีในตารางวันฉายและทำ CT เกิน 120 วัน = ว่าง · ชี้ที่ HN เห็นการฉาย</p>`;
+    ${vacImpBox() ? `<details class="vac-hist"><summary>นำเข้าจากชีต Vac-Lok เดิม (อัปเดตซ้ำได้)</summary>${vacImpBox()}</details>` : ''}
+    <p class="muted def-note" style="margin-top:10px">จองแล้ว = เลือกเลขไว้ตอนลงนัด (Immobilization Vac-lok) ยังไม่ลง CT-SIM · สถานะ: Off ที่บันทึก (ถึงวันนั้น = ว่าง) · ไม่ได้ใส่ Off = ตามการฉายของ HN นี้หลังวันทำ CT (จบ = ว่าง · Hold ที่ยังไม่กลับมา = Hold RT) · ไม่มีในตารางวันฉายและทำ CT เกิน 120 วัน = ว่าง · ชี้ที่ HN เห็นการฉาย</p>`;
   const det = $('#vac-body details.vac-hist');
   det.addEventListener('toggle', () => pref.set('vacHist', det.open));
 }
 // ฟอร์ม CT-SIM: ไม่ใช้ + เลขที่ว่าง + เลขของรายการนี้ (หรือที่ HN นี้ใช้อยู่)
 function ctVacOf(c) { return state.vac.find(v => v.ctId === c.id) || state.vac.find(v => !v.ctId && hnKey(v.hn) === hnKey(c.hn) && v.ct === c.date) || null; }
 function renderCtVac(c) {
-  const cur = ctVacOf(c), mine = cur ? cur.no : '', busy = vacBusyMap(), nos = vacNos();
-  const ok = nos.filter(n => !busy.has(n) || n === mine || hnKey(busy.get(n).r.hn) === hnKey(c.hn));
-  chipGroup($('#t-vac'), 'tvac', ['', ...ok], mine);
+  // รายการใหม่จากนัด (หรือ HN ที่จองไว้ในนัด): เลขที่จองไว้เลือกให้
+  const cur = ctVacOf(c), ap = !cur && !state.ct.some(x => x.id === c.id) ? (ctAppt && state.appt.find(x => x.id === ctAppt)) || [...vacResv().values()].find(a => hnKey(a.hn) === hnKey(c.hn)) : null;
+  const mine = cur ? cur.no : ap ? str(parseOrder(ap.order).vac) : '', held = vacHeld(), nos = vacNos();
+  const ok = nos.filter(n => !held.has(n) || n === mine || hnKey(heldHn(held.get(n))) === hnKey(c.hn));
+  chipGroup($('#t-vac'), 'tvac', ['', ...ok], ok.includes(mine) ? mine : '');
   $$('#t-vac label').forEach(l => { const v = $('input', l).value; $('span', l).textContent = v ? vacLabel(v) : 'ไม่ใช้'; });
-  $('#t-vac-hint').textContent = `ว่าง ${nos.filter(n => !busy.has(n)).length} จาก ${nos.length} ใบ · ดูการใช้ที่แถบ ${navLabel('jobs')} → Vac-Lok`;
+  $('#t-vac-hint').textContent = `ว่าง ${nos.filter(n => !held.has(n)).length} จาก ${nos.length} ใบ${ap && mine ? ` · ${vacLabel(mine)} จองไว้ในนัด` : ''} · ดูการใช้ที่แถบ ${navLabel('jobs')} → Vac-Lok`;
 }
 // หน้าต่างบันทึกการใช้ Vac-Lok
 const vacDlg = $('#vac-dlg'), vacForm = $('#vac-form');
@@ -9085,7 +9146,7 @@ function openVacForm(id, no) {
   if (!canEdit()) return toast(RO_MSG, { err: true });
   if (!vacOn()) return toast('Vac-Lok ต้องใช้ Code.gs รุ่น 2026-11-03.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
   editingVac = r ? clone(r) : normVac({ id: uid(), no: str(no), ct: today() });
-  const v = editingVac, busy = vacBusyMap(), nos = vacNos().filter(n => n === v.no || !busy.has(n));
+  const v = editingVac, held = vacHeld(), nos = vacNos().filter(n => n === v.no || !held.has(n));
   chipGroup($('#vl-no'), 'vno', nos, v.no);
   $$('#vl-no label').forEach(l => { $('span', l).textContent = vacLabel($('input', l).value); });
   for (const f of ['hn', 'name', 'ct', 'off', 'hold', 'note']) $('#vl-' + f).value = v[f] || '';
@@ -9177,7 +9238,7 @@ async function vacImportRun(btn, check) {
 const jobsTab = () => (pref.get('jobsTab', 'p4p') === 'vac' ? 'vac' : 'p4p');
 function renderJobs() {
   const jt = jobsTab(), nv = vacNos().length;
-  $('#jobs-tabs').innerHTML = [['p4p', 'P4P'], ['vac', 'Vac-Lok']].map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacBusyMap().size}</span>` : ''}</button>`).join('');
+  $('#jobs-tabs').innerHTML = [['p4p', 'P4P'], ['vac', 'Vac-Lok']].map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacHeld().size}</span>` : ''}</button>`).join('');
   $('#jobs-p4p').hidden = jt !== 'p4p';
   $('#jobs-vac').hidden = jt !== 'vac';
   if (jt === 'vac') return renderVac();
@@ -12475,6 +12536,7 @@ document.addEventListener('click', e => {
   if (ds.vacnew !== undefined) return openVacForm('', ds.vacnew);
   if (ds.vacoff) { const r = state.vac.find(x => x.id === ds.vacoff); if (r) openVacPin('vacsave', { ...r, off: today() }); return; }
   if (ds.vacimport) return vacImportRun(t, ds.vacimport === 'check');
+  if (ds.vacquick) return vacQuickImport(t);
   if (ds.aprect) return openApForm(null, null, ds.aprect);
   if (ds.rgap) { const r = state.reg.find(x => x.id === ds.rgap); return r && openApForm('', r); }
   if (ds.rgopen) return openRgForm(ds.rgopen);
