@@ -411,6 +411,11 @@ button.duty-line:hover{border-color:var(--accent)}
 .ct-pull-main{flex:1 1 220px;min-width:0}
 .ct-pull-main small{display:block;color:var(--muted);font-size:12.5px}
 .ct-pull-acts{display:flex;gap:6px;margin-left:auto}
+.ap-rect{margin:0 0 14px;padding:10px 12px 12px;border:1px solid var(--warn);border-radius:var(--r);background:var(--warn-soft)}   /* แถบลงนัด: รอลงนัด CT จาก Re-CT */
+.ap-rect>h3{margin:0;font-size:14px;font-weight:600}
+.ap-rect>h3 small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
+.ap-rect .ct-pull{margin-top:8px}
+.ap-rect .ct-pull li{background:var(--surface)}
 .ct-skipped{margin-top:12px}
 .jobs-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:0 0 10px}
 .jobs-head h2{margin:0;font-size:17px}
@@ -1808,6 +1813,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </div>
     <p class="muted" id="ap-help" style="margin:-4px 0 10px;font-size:13px"></p>
     <p class="notice" id="ap-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <div class="ap-rect" id="ap-rect" hidden></div>
     <div class="table-wrap ct-wrap"><table class="ct-tbl ap-tbl" id="ap-tbl"></table></div>
   </section>
   <section id="view-bq" hidden>
@@ -3343,7 +3349,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.3';
+const PAGE_VERSION = '2026-11-03.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4507,6 +4513,7 @@ function render() {
   applyBoxes();
   if (caseDlg.open && editingCase) syncCaseStamps();
   renderPendBadge();
+  renderApBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
   const ro = !!state.view && state.view !== 'settings' && accessOf(state.view) === 'view';
@@ -4900,11 +4907,64 @@ const apVal = (r, k) => (k === 'dose' ? doseText(r) : k === 'sim' ? apSimText(r)
 const apText = r => [r.hn, r.name, r.cm, r.special, apExamText(r), doseText(r), r.doc, ctDocText(r.doc), r.room, ctLabel(r.ct), dxValue(r), r.note].join(' ').toLowerCase();
 // เดือนที่แสดงนัด: วันนัด CT · On Call (ไม่มีวันนัด) = เดือนที่ลงนัด และเดือนนี้ถ้ายังรอลง CT-SIM
 const apInMonth = (r, ym) => (isDay(r.date) ? r.date.slice(0, 7) === ym : str(r.created).slice(0, 7) === ym || (apState(r) === 'wait' && ym === thisMonth()));
+// Re-CT ในแถบห้องฉาย → รอลงนัด CT ในแถบลงนัด (ผู้ป่วยละรายการ: Re-CT ล่าสุดของ HN) · ลงนัดจากรายการได้ ข้อมูลจากเคสใส่ให้
+// ออกจากรายการเมื่อ: มีนัด CT ของ HN นี้ตั้งแต่วัน Re-CT (วันนัด CT · on call = วันที่ลงนัด · ไม่นับนัดที่ไม่มาทำ CT) · ลง CT-SIM ตั้งแต่วันนั้น ·
+// Complete course / Cancel RT / Off RT · ล้างหรือเปลี่ยนสถานะ · ใส่วันกลับมาฉายไว้และถึงวันนั้นแล้ว · Re-CT เกิน 60 วัน
+const isReCt = e => e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)));
+const localDay = v => { const t = Date.parse(str(v)); return Number.isFinite(t) ? iso(new Date(t)) : ''; };
+function reCtWaiting() {
+  if (!apptOn()) return [];
+  const td = today(), from = plusDays(td, -60), by = new Map();
+  for (const c of state.cases) {
+    if (!c.hn || c.rt || !str(c.fxlog).includes('skip')) continue;
+    const evs = parseFx(c), e = evs.filter(isReCt).pop();
+    if (!e || e.date < from || (e.back && e.back <= td) || evs.some(x => x.act === 'off' && x.date >= e.date)) continue;
+    const k = hnKey(c.hn), cur = by.get(k);
+    if (!cur || e.date > cur.e.date) by.set(k, { k, c, e });
+  }
+  const out = [];
+  for (const x of by.values()) {
+    const at = localDay(x.e.at), since = at && at < x.e.date ? at : x.e.date;
+    if (state.appt.some(a => hnKey(a.hn) === x.k && apState(a) !== 'skip' && (isDay(a.date) ? a.date >= since : localDay(a.created) >= since))) continue;
+    if (state.ct.some(r => hnKey(r.hn) === x.k && isDay(r.date) && r.date >= since)) continue;
+    out.push({ ...x, hn: x.c.hn, name: x.c.name, rx: replanRx(x.c, x.e.date) });
+  }
+  return out.sort((a, b) => a.e.date.localeCompare(b.e.date));
+}
+// ฟอร์มลงนัดจากรายการ Re-CT: HN ชื่อ แพทย์ ห้องฉาย Diag prescription ที่เหลือ (แบบงานวางแผนใหม่) · อายุ เพศ จากแถบลงทะเบียน · Note = Re-CT (เหตุผล)
+function reCtToAp(x) {
+  const rg = state.reg.find(g => hnKey(g.hn) === x.k), c = x.c;
+  return { ...(rg ? regToAp(rg) : {}), hn: c.hn, name: c.name || (rg ? regName(rg) : ''), doc: c.doc || (rg ? rg.doc : ''), room: c.room,
+    icd: c.icd || (rg ? rg.icd : ''), dx: c.dx || (rg ? rg.dx : ''), dpf: x.rx.dpf || '', fx: x.rx.fx || '', freq: c.freq,
+    note: [`${x.e.label}${x.e.reason ? ` (${x.e.reason})` : ''}`, x.e.note].filter(Boolean).join(' · ') };
+}
+const reCtText = x => [x.hn, x.name, x.c.doc, ctDocText(x.c.doc), x.c.room, x.e.label, x.e.reason, x.e.note].join(' ').toLowerCase();
+function renderReCt(edit) {
+  const box = $('#ap-rect'), words = tabWords('appt'), all = reCtWaiting(), list = words.length ? all.filter(x => wordsIn(words, reCtText(x))) : all;
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  const row = x => `<li data-rect="${esc(x.c.id)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} · <b>${esc(x.e.label)}</b> ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · เหลือ ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
+    <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP ${x.c.mp}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-aprect="${esc(x.c.id)}">ลงนัด</button></span>` : ''}</li>`;
+  box.innerHTML = `<h3>รอลงนัด CT (Re-CT) · ${list.length} คน<small>บันทึกสถานะ Re-CT ในแถบ${esc(navLabel('course'))} · ลงนัดแล้วออกจากรายการเอง</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
+}
+// วงกลมบนแถบลงนัด: จำนวนผู้ป่วยรอลงนัด CT (Re-CT)
+function renderApBadge() {
+  const b = $('.nav [data-view="appt"]');
+  if (!b) return;
+  let dot = $('.nav-dot', b);
+  const n = (state.loaded || store.mode === 'local') && navOn('appt') ? reCtWaiting().length : 0;
+  if (!n) { if (dot) dot.remove(); b.removeAttribute('title'); return; }
+  if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
+  dot.className = 'nav-dot warn';
+  dot.textContent = n;
+  b.title = `รอลงนัด CT (Re-CT) ${n} คน`;
+}
 function renderAppt() {
   const ym = state.month, edit = canEdit() && apptOn();
   $('#ap-add').hidden = !edit;
   $('#ap-api').hidden = apptOn() || !canEdit();
   syncTabQ('appt');
+  renderReCt(edit);
   const dk = r => (isDay(r.date) ? r.date : '0');   // On Call ก่อน
   const words = tabWords('appt'), all = state.appt.filter(r => apInMonth(r, ym)).sort((a, b) => dk(a).localeCompare(dk(b)) || a.created.localeCompare(b.created));
   const list = words.length ? all.filter(r => wordsIn(words, apText(r))) : all;
@@ -5004,16 +5064,18 @@ function ordExamHtml(o) {
   const left = ordLeft(o, 'exam', keys);
   return html + (left ? `<div class="ord-row"><div></div><div class="chips">${left}</div></div>` : '');
 }
-// rg = ผู้ป่วยจากแถบลงทะเบียน (ปุ่มลงนัด): นัดใหม่พร้อม HN ชื่อ อายุ เพศ แพทย์ Diag
-function openApForm(id, rg) {
+// rg = ผู้ป่วยจากแถบลงทะเบียน (ปุ่มลงนัด): นัดใหม่พร้อม HN ชื่อ อายุ เพศ แพทย์ Diag · rc = id เคสในรายการรอลงนัด CT (Re-CT)
+function openApForm(id, rg, rc) {
   const r = id ? state.appt.find(x => x.id === id) : null;
   if (id && !r) return;
   if (accessOf('appt') !== 'edit') return toast(RO_MSG, { err: true });
   if (!apptOn()) return toast(AP_OLD, { err: true });
   const cfg = state.config, ap = cfg.appt;
-  editingAp = r ? clone(r) : normAppt({ id: uid(), ...(rg ? regToAp(rg) : {}), doc: (rg && rg.doc) || (apMode('doc') !== 'off' ? myDoctor() : '') });
+  const re = !r && rc ? reCtWaiting().find(x => x.c.id === rc) : null;
+  if (rc && !r && !re) return toast('ผู้ป่วยนี้ไม่อยู่ในรายการรอลงนัด CT แล้ว', { err: true });
+  editingAp = r ? clone(r) : normAppt({ id: uid(), ...(rg ? regToAp(rg) : re ? reCtToAp(re) : {}), doc: (rg && rg.doc) || (re && reCtToAp(re).doc) || (apMode('doc') !== 'off' ? myDoctor() : '') });
   const a = editingAp, o = apOrder = parseOrder(a.order), fill = o.fill || {};
-  $('#ap-title').textContent = r ? `แก้ไขนัด ${r.hn}` : 'ลงนัด';
+  $('#ap-title').textContent = r ? `แก้ไขนัด ${r.hn}` : re ? `ลงนัด CT · ${re.e.label} ${re.hn}` : 'ลงนัด';
   for (const f of ['hn', 'name', 'note']) $('#a-' + f).value = a[f] || '';
   $('#a-date').value = isDay(a.date) ? a.date : '';
   $('#a-oncall-ct').checked = a.date === 'on call';
@@ -6941,7 +7003,8 @@ function syncFx() {
   let lastOff = ev.back ? plusDays(ev.back, -1) : '';   // วันทำการสุดท้ายที่ไม่ได้ฉาย
   while (lastOff > ctx.date && !isWorkday(lastOff, hol)) lastOff = plusDays(lastOff, -1);
   const backTxt = ev.back ? `ไม่ได้ฉาย ${esc(fmtDay(ctx.date))}${lastOff > ctx.date ? `–${esc(fmtDay(lastOff))}` : ''} กลับมาฉาย <b>${esc(fmtDay(ev.back))}</b>` : `ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> จนกว่าจะกลับมา`;
-  prev.innerHTML = `${backTxt}${n0 ? hit ? ` · Fx ${n0} เลื่อนไป <b>${esc(fmtDay(hit[0]))}</b>` : ` · Fx ${n0} เป็นต้นไปรอไว้ (เหลือ ${sc ? sc.pending : '?'} fx)` : ''}${end}${td > ctx.date ? ' · ย้อนหลัง' : ''}`;
+  const toAp = apptOn() && isReCt({ act: t.act, type: t.id, label: t.label }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
+  prev.innerHTML = `${backTxt}${n0 ? hit ? ` · Fx ${n0} เลื่อนไป <b>${esc(fmtDay(hit[0]))}</b>` : ` · Fx ${n0} เป็นต้นไปรอไว้ (เหลือ ${sc ? sc.pending : '?'} fx)` : ''}${end}${td > ctx.date ? ' · ย้อนหลัง' : ''}${toAp}`;
 }
 // Mosaiq Time หน้า HN: Enter หรือออกจากช่อง (ค่าเปลี่ยน) → ยืนยันด้วยรหัส PIN · บันทึกให้ทุกเคสของผู้ป่วยนี้ · ช่องว่าง = ล้าง
 function saveMq(el, enter) {
@@ -12065,6 +12128,7 @@ document.addEventListener('click', e => {
   }
   const ds = t.dataset;
   if (ds.appdf) return exportApPdf(t, ds.appdf);
+  if (ds.aprect) return openApForm(null, null, ds.aprect);
   if (ds.rgap) { const r = state.reg.find(x => x.id === ds.rgap); return r && openApForm('', r); }
   if (ds.rgopen) return openRgForm(ds.rgopen);
   if (ds.bqv) { state.bqView = ds.bqv; pref.set('bqView', ds.bqv); state.bqPt = ''; return renderBq(); }
