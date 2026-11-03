@@ -3353,7 +3353,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.5';
+const PAGE_VERSION = '2026-11-03.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6576,10 +6576,11 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
       // รอ Plan complete: นับในจำนวนทั้งหมดของวันที่มี fraction (ห้องที่เลือก) แยกจากฉายแล้ว/Hold/ค้างบันทึก
       if (!g.ready) { if (sc.fx.has(d) && (!room || fxRooms(sc.fx.get(d)).includes(room))) { st.all++; st.p++; if (g.main.c.apId) st.a++; } continue; }
       const e = fxEventAt(sc.evs, d);
-      // เลือกห้องไว้: วันที่ผู้ป่วยฉายห้องอื่นไม่นับ · ย้ายออกจากห้องนี้ = นับเป็นสถานะอื่น (เหลือง)
-      if (sc.fx.has(d) && room && !fxRooms(sc.fx.get(d)).includes(room)) { const l = sc.fx.get(d); if (l.some(x => x.mv) && fxBase(l).includes(room)) { st.all++; st.y++; } continue; }
+      // เลือกห้องไว้: นับเฉพาะผู้ป่วยที่ฉายห้องนี้วันนั้น · ย้ายไปฉายห้องอื่น (วันนั้นหรือตลอดไป) ไม่นับ
+      // Hold, HV ฯลฯ (วันนั้นไม่มี fraction) นับในห้องที่ฉายครั้งก่อน (ยังไม่เคยฉาย = ห้องที่จะฉาย)
+      if (sc.fx.has(d) && room && !fxRooms(sc.fx.get(d)).includes(room)) continue;
       if (sc.fx.has(d)) { st.all++; if (e && e.date === d && FX_MARKS.includes(e.act)) st.g++; else st.r++; }
-      else if (e && e.act === 'skip') { st.all++; st.y++; }
+      else if (e && e.act === 'skip' && (!room || skipRooms(sc, d, g.main.c).includes(room))) { st.all++; st.y++; }
     }
     return st;
   };
@@ -10375,6 +10376,13 @@ const roomOf = c => c.room || NO_ROOM;
 // ห้องทั้งหมดของเคส (บริเวณที่ 1 + บริเวณเพิ่มเติมที่ย้ายห้อง) · ห้องที่ฉายในวันหนึ่ง (จากรายการ fraction ของวันนั้นใน caseSchedule)
 const roomsOf = c => [...new Set([roomOf(c), ...parseSites(c).map(x => x.room).filter(Boolean), ...parseMoves(c).map(m => m.room)])];
 const fxRooms = list => [...new Set((list || []).map(e => e.room || NO_ROOM))];
+// ห้องของผู้ป่วยในวันที่ไม่มี fraction (Hold, HV ฯลฯ): ห้องที่ฉายครั้งก่อน · ยังไม่เคยฉาย = ครั้งถัดไป · ไม่มีเลย = ห้องของเคส
+function skipRooms(sc, d, c) {
+  let prev = null, next = null;
+  for (const [k, l] of sc.fx) { if (k < d) { if (!prev || k > prev[0]) prev = [k, l]; } else if (k > d && (!next || k < next[0])) next = [k, l]; }
+  const l = (prev || next || [])[1];
+  return l ? fxRooms(l) : [roomOf(c) || NO_ROOM];
+}
 const fxBase = list => [...new Set((list || []).map(e => ('base' in e ? e.base : e.room) || NO_ROOM))];   // ห้องก่อนย้าย
 const roomLabel = r => (r === NO_ROOM ? 'ไม่ระบุห้อง' : r);
 const WD_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'short' });
