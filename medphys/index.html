@@ -2932,8 +2932,9 @@ const DEFAULT_CONFIG = {
     { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false },
     { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false },
     { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true, replan: true },
-    // CP (Change plan): ทำ CT ใหม่ = เหมือน Re-CT (รอลงนัด CT + งานวางแผนใหม่) · ไม่ทำ CT ใหม่ = งานวางแผนใหม่ให้ MP คนเดิม (CT-Sim เดิม)
-    { id: 'cp', label: 'CP', title: 'Change plan', act: 'skip', reasons: ['ทำ CT ใหม่', 'ไม่ทำ CT ใหม่'], need: true, replan: true },
+    // CP (Change plan): ฉายวันนั้นได้ (เปลี่ยนแผน ลดโดส ฯลฯ ไม่เลื่อน fraction) · ทำ CT ใหม่ = รอลงนัด CT + งานวางแผนใหม่ (เหมือน Re-CT แต่ไม่หยุดฉาย)
+    // ไม่ทำ CT ใหม่ = งานวางแผนใหม่ให้ MP คนเดิม (CT-Sim เดิม) · Start RT ของงาน = วันนั้น
+    { id: 'cp', label: 'CP', title: 'Change plan', act: 'treat', reasons: ['ทำ CT ใหม่', 'ไม่ทำ CT ใหม่'], need: true, replan: true },
     { id: 'off', label: 'Off RT', title: 'หยุดฉาย เคสออกจากตาราง', act: 'off', reasons: [], need: false, replan: false },
   ],
   // replan (ต่อสถานะ) / moveReplan (ย้ายห้อง): บันทึกแล้วส่งงานวางแผนใหม่ให้ MP คนเดิม (prescription = fraction ที่เหลือ) แสดงในงานรอ
@@ -3275,6 +3276,8 @@ function mergeConfig(c) {
     d.fxTypes.forEach((t, i) => { if (!known.includes(t.id) && !out.fxTypes.some(x => x.id === t.id)) out.fxTypes.splice(Math.min(i, out.fxTypes.length), 0, clone(t)); });
   }
   out.fxSeen = d.fxTypes.map(t => t.id);
+  if (!c.cpTreat) { const cp = out.fxTypes.find(x => x.id === 'cp'); if (cp && cp.act === 'skip') cp.act = 'treat'; }   // CP รุ่นแรก (ไม่ได้ฉาย) → ฉายวันนั้น
+  out.cpTreat = true;
   out.moveReplan = c.moveReplan !== undefined ? !!c.moveReplan : d.moveReplan;
   out.pin = Object.fromEntries(PIN_GROUPS.map(([k]) => [k, !(c.pin && c.pin[k] === false)]));
   out.qColors = Object.fromEntries(Q_IDS.map(id => [id, hexOf(c.qColors && c.qColors[id])]));
@@ -3439,7 +3442,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.9';
+const PAGE_VERSION = '2026-11-03.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5050,13 +5053,13 @@ const apInMonth = (r, ym) => (isDay(r.date) ? r.date.slice(0, 7) === ym : str(r.
 // Complete course / Cancel RT / Off RT · ล้างหรือเปลี่ยนสถานะ · ใส่วันกลับมาฉายไว้และถึงวันนั้นแล้ว · Re-CT เกิน 60 วัน
 const newCtReason = r => /ทำ\s*CT\s*ใหม่/i.test(str(r)) && !/ไม่ทำ/.test(str(r));   // CP: ทำ CT ใหม่
 const noNewCt = r => /ไม่ทำ\s*CT/i.test(str(r));   // CP: ไม่ทำ CT ใหม่ = งานวางแผนใหม่ใช้ CT-Sim เดิม
-const isReCt = e => e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)) || newCtReason(e.reason));
+const isReCt = e => (e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)))) || (['skip', 'treat'].includes(e.act) && newCtReason(e.reason));
 const localDay = v => { const t = Date.parse(str(v)); return Number.isFinite(t) ? iso(new Date(t)) : ''; };
 function reCtWaiting() {
   if (!apptOn()) return [];
   const td = today(), from = plusDays(td, -60), by = new Map();
   for (const c of state.cases) {
-    if (!c.hn || c.rt || !str(c.fxlog).includes('skip')) continue;
+    if (!c.hn || c.rt || !str(c.fxlog)) continue;
     const evs = parseFx(c), e = evs.filter(isReCt).pop();
     if (!e || e.date < from || (e.back && e.back <= td) || evs.some(x => x.act === 'off' && x.date >= e.date)) continue;
     const k = hnKey(c.hn), cur = by.get(k);
@@ -7145,12 +7148,12 @@ function syncFx() {
   }
   if (t.act === 'off' && courseOn()) { prev.textContent = 'เลือก Complete course หรือ Cancel RT'; return; }
   if (t.act === 'off') { prev.innerHTML = `หยุดฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${fxGiven(sc, ctx.date)}/${sc ? sc.planned : '?'} fx · เคสย้ายไปแถบ Off RT`; return; }
-  if (t.act === 'treat') { prev.innerHTML = `ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}`; return; }
+  const toAp = apptOn() && isReCt({ act: t.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
+  if (t.act === 'treat') { prev.innerHTML = `ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}${toAp}`; return; }
   const n0 = ctx.n0, hit = n0 && sc ? [...sc.fx].find(([d, l]) => d >= ctx.date && l.some(v => (v.site === 0 || v.boost) && v.from <= n0 && n0 <= v.to)) : null;
   let lastOff = ev.back ? plusDays(ev.back, -1) : '';   // วันทำการสุดท้ายที่ไม่ได้ฉาย
   while (lastOff > ctx.date && !isWorkday(lastOff, hol)) lastOff = plusDays(lastOff, -1);
   const backTxt = ev.back ? `ไม่ได้ฉาย ${esc(fmtDay(ctx.date))}${lastOff > ctx.date ? `–${esc(fmtDay(lastOff))}` : ''} กลับมาฉาย <b>${esc(fmtDay(ev.back))}</b>` : `ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> จนกว่าจะกลับมา`;
-  const toAp = apptOn() && isReCt({ act: t.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
   prev.innerHTML = `${backTxt}${n0 ? hit ? ` · Fx ${n0} เลื่อนไป <b>${esc(fmtDay(hit[0]))}</b>` : ` · Fx ${n0} เป็นต้นไปรอไว้ (เหลือ ${sc ? sc.pending : '?'} fx)` : ''}${end}${td > ctx.date ? ' · ย้อนหลัง' : ''}${toAp}`;
 }
 // Mosaiq Time หน้า HN: Enter หรือออกจากช่อง (ค่าเปลี่ยน) → ยืนยันด้วยรหัส PIN · บันทึกให้ทุกเคสของผู้ป่วยนี้ · ช่องว่าง = ล้าง
@@ -12292,7 +12295,7 @@ async function submitPin(e, clear) {
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
       const rpTo = t && t.replan && t.act !== 'off' ? rpTarget(ctx, ctx.date) : null;
-      const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: noNewCt(ev.reason) ? '' : ctx.date, mp: rpTo } : null;
+      const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || (t.act === 'treat' ? ctx.date : ''), ct: noNewCt(ev.reason) ? '' : ctx.date, mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
