@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-02.4';
-const API_LEVEL = 46;
+const CODE_VERSION = '2026-11-03.1';
+const API_LEVEL = 47;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1163,8 +1163,9 @@ function timeCase(id, time, pin, token) {
 }
 
 /**
- * แถบห้องฉาย: เพิ่มหรือแก้ผู้ป่วยที่บันทึกเข้าตารางวันฉายโดยตรง (RTT, RA, MP ที่บันทึกในแถบห้องฉายได้) ยืนยันด้วยรหัส PIN
- * ไม่แจกงานให้ MP: how = 'direct' · mp ว่าง · ไม่อยู่ในงาน งานรอ ตารางแจกเคส และสถิติการวางแผน · แก้ได้เฉพาะเคสที่เพิ่มทางนี้
+ * แถบห้องฉาย: เพิ่มหรือแก้ผู้ป่วยที่บันทึกเข้าตารางวันฉายโดยตรง · แก้ข้อมูลผู้ป่วยของเคสที่แจกงานแล้วได้ด้วย (API 47:
+ * เขียนเฉพาะช่องของผู้ป่วย ไม่แตะส่วนของ MP เช่น MP หมวด จำนวนครั้ง ขั้นตอน In วิธีแจก) · (RTT, RA, MP ที่บันทึกในแถบห้องฉายได้) ยืนยันด้วยรหัส PIN
+ * ไม่แจกงานให้ MP: how = 'direct' · mp ว่าง · ไม่อยู่ในงาน งานรอ ตารางแจกเคส และสถิติการวางแผน (ผู้ป่วยที่เพิ่มใหม่)
  * rec = ช่องใน DIRECT_FIELDS และหัวข้อเพิ่มเติม (x_…) · id ที่ยังไม่มี = เพิ่มใหม่ · สถานะ fraction ฯลฯ บันทึกผ่านฟังก์ชันของช่องนั้น · คืนเคสหลังบันทึก
  */
 const DIRECT_FIELDS = ['cat', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'ct', 'sim', 'note'];
@@ -1183,11 +1184,10 @@ function courseAdd(rec, pin, token) {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
-    if (row && String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct') {
-      throw new Error('แก้ได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย · เคสที่แจกงานแก้ที่หน้าแก้ไขเคส');
-    }
+    const planned = !!row && String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct';
     const set = {};
     DIRECT_FIELDS.concat(fields.map(f => f[0]).filter(k => /^x_/.test(k))).forEach(k => { set[k] = cut(rec[k], k === 'sites' ? 5000 : k === 'dx' || k === 'note' ? 2000 : 200); });
+    if (planned) delete set.cat;   // เคสที่แจกงาน: หมวดเป็นส่วนของ MP (แต้มและคิว)
     set.sim = sim;
     const now = new Date().toISOString();
     if (row) set.updated = now;

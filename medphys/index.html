@@ -2058,6 +2058,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <label class="field pt-must"><span class="lbl" id="f-cat-lbl">หมวด</span><select id="f-cat"></select></label>
         <div class="field pt-hide"><span class="lbl"><span>MP</span><span class="hint" id="f-mp-hint"></span></span><div class="chips people" id="f-mp" role="radiogroup" aria-label="MP"></div></div>
       </div>
+      <p class="hint" id="f-plan-note" hidden></p>
       <label class="field n-field pt-hide" id="f-n-field"><span class="lbl">จำนวนครั้ง</span><input type="number" id="f-n" min="1" max="20" step="1" inputmode="numeric"></label>
       <div class="row2">
         <div class="field pt-must"><span class="lbl"><label for="f-hn">HN</label></span><div class="combo"><input id="f-hn" inputmode="numeric" required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-hn-list"><ul class="combo-list" id="f-hn-list" role="listbox" hidden></ul></div></div>
@@ -2714,6 +2715,9 @@ const pinCfgOn = () => serverHas(PIN_CFG_API);
 // Code.gs ที่เพิ่มผู้ป่วยในแถบห้องฉาย (courseAdd) และบันทึกผู้ปฏิบัติงานประจำวัน (dutyDay) ได้
 const DIRECT_API = 31;
 const directOn = () => serverHas(DIRECT_API);
+// Code.gs ที่ให้คนที่บันทึกในแถบห้องฉายได้ (RTT, RA ฯลฯ) แก้ข้อมูลผู้ป่วยของเคสที่แจกงานแล้ว (courseAdd: ไม่แตะส่วนของ MP)
+const PT_EDIT_API = 47;
+const ptEditOn = () => serverHas(PT_EDIT_API);
 const CT_API = 32;   // Code.gs ที่มีแถบ CT-SIM (ctSave, ctRemove, ctMark) และผูกเคสที่แจกกับรายการ CT
 const ctOn = () => serverHas(CT_API);
 const MEMBER_EMAIL_API = 33;   // Code.gs ที่ส่งอีเมลของสมาชิก LPCH มากับรายชื่อ (lpchMembers)
@@ -3349,7 +3353,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.4';
+const PAGE_VERSION = '2026-11-03.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3632,9 +3636,9 @@ function localStore() {
       if (!str(rec.cat)) throw new Error('เลือกเทคนิค');
       demoCheckPin(pin);
       const old = rec.id && db.cases.find(x => x.id === rec.id);
-      if (old && old.how !== 'direct') throw new Error('แก้ได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย · เคสที่แจกงานแก้ที่หน้าแก้ไขเคส');
       const set = {};
       for (const k of DIRECT_KEYS) set[k] = str(rec[k]);
+      if (old && old.how !== 'direct') delete set.cat;   // เคสที่แจกงาน: แก้ข้อมูลผู้ป่วย ไม่แตะส่วนของ MP (MP หมวด จำนวนครั้ง ขั้นตอน In)
       for (const k of Object.keys(rec)) if (/^x_[\w-]+$/.test(k)) set[k] = str(rec[k]);
       if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return clone(old); }
       const c = { ...set, id: rec.id || uid(), how: 'direct', mp: '', in: today(), created: nowISO(), updated: '' };
@@ -6486,7 +6490,9 @@ const dutyText = du => [du.rtt.length && `RTT ${du.rtt.join(', ')}`, du.ra.lengt
 // ห้องที่เลือกผู้ปฏิบัติงานแยกกัน: ห้องที่เลือกอยู่ หรือทุกห้องในตั้งค่า (ไม่มีห้อง = ไม่แยกห้อง)
 const dutyRooms = room => (room && room !== NO_ROOM ? [room] : state.config.rooms.length ? state.config.rooms.slice() : ['']);
 // แก้ไขจาก HN: เคสที่แจกงาน = สิทธิ์แก้ไขเคส · ผู้ป่วยที่เพิ่มในแถบห้องฉาย = บันทึกในแถบห้องฉายได้
-const hnCanEdit = c => (isDirect(c) ? accessOf('course') === 'edit' && directOn() : canEditCases());
+// กด HN ได้: เคสที่แจกงาน = แก้ทั้งเคส (บันทึกในแถบงานได้) หรือแก้ข้อมูลผู้ป่วย (บันทึกในแถบห้องฉายได้ · ไม่แตะส่วนของ MP)
+const ptPlanCan = () => accessOf('course') === 'edit' && ptEditOn();
+const hnCanEdit = c => (isDirect(c) ? accessOf('course') === 'edit' && directOn() : canEditCases() || ptPlanCan());
 // fraction ที่ฉายแล้ว (ก่อนวันนี้) นับทุกบริเวณ
 const fxGiven = (sc, td) => { let n = 0; if (sc) for (const [d, l] of sc.fx) if (d < td) for (const v of l) n += Math.max(0, v.to - v.from + 1); return n; };
 function renderCourse() {
@@ -10895,8 +10901,10 @@ function openCase(id) {
   const c = state.cases.find(x => x.id === id);
   if (!c) return;
   if (isDirect(c)) return openPatient(id);
-  if (!canEditCases()) return toast(RO_MSG, { err: true });
-  ptMode = false;
+  if (!canEditCases()) return ptPlanCan() ? openPatient(id) : toast(RO_MSG, { err: true });
+  ptMode = ptPlan = false;
+  $('#f-cat').disabled = false;
+  $('#f-plan-note').hidden = true;
   $('#case-del').hidden = false;
   $('#f-cat-lbl').textContent = 'หมวด';
   editingCase = clone(c);
@@ -10972,30 +10980,38 @@ async function deleteCase(btn) {
 }
 /* ---------- เพิ่มผู้ป่วยในแถบห้องฉาย (ไม่แจกงานให้ MP) ---------- */
 // ใช้หน้าแก้ไขเคสเป็นฟอร์ม: ซ่อน MP จำนวนครั้ง ขั้นตอน In และช่องที่แอดมินตั้ง "ไม่แสดง" (ตั้งค่า → ตารางวันฉาย · data-ptf)
-let ptMode = false;
+// ptPlan = แก้ข้อมูลผู้ป่วยของเคสที่แจกงานแล้ว (คนที่บันทึกในแถบห้องฉายได้แต่ไม่ได้บันทึกในแถบงาน): ฟอร์มเดียวกัน
+// ส่วนของ MP (MP จำนวนครั้ง ขั้นตอน In แต้ม) ซ่อน · หมวดล็อก · ไม่มีปุ่มลบ · ทุกช่องของผู้ป่วยแสดง (ไม่ใช้ตั้งค่าฟอร์มเพิ่มผู้ป่วย)
+let ptMode = false, ptPlan = false;
 function ptSync() {
   caseForm.classList.toggle('pt', ptMode);
   const f = state.config.ptForm;
   for (const el of $$('[data-ptf]', caseForm)) {
-    const v = ptMode ? f[el.dataset.ptf] : 'show';
+    const v = ptMode && !ptPlan ? f[el.dataset.ptf] : 'show';
     el.classList.toggle('pt-off', v === 'off');
     if (el.classList.contains('field')) el.classList.toggle('pt-req', v === 'req');
   }
-  for (const id of ['#f-dpf', '#f-fx']) $(id).closest('.field').classList.toggle('pt-req', ptMode && f.dose === 'req');
+  for (const id of ['#f-dpf', '#f-fx']) $(id).closest('.field').classList.toggle('pt-req', ptMode && !ptPlan && f.dose === 'req');
 }
 function openPatient(id) {
   const c = id ? state.cases.find(x => x.id === id) : null;
   if (id && !c) return;
   if (accessOf('course') !== 'edit') return toast(RO_MSG, { err: true });
+  if (c && !isDirect(c) && !ptEditOn()) return toast('การแก้ข้อมูลผู้ป่วยของเคสที่แจกงานในแถบห้องฉายต้องใช้ Code.gs รุ่น 2026-11-03.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
   if (!directOn()) return toast('การเพิ่มผู้ป่วยในแถบห้องฉายต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
   ptMode = true;
-  $('#f-cat-lbl').textContent = 'เทคนิค';
+  ptPlan = !!c && !isDirect(c);
+  $('#f-cat-lbl').textContent = ptPlan ? 'หมวด' : 'เทคนิค';
   const room = pref.get('courseRoom', '');
   editingCase = c ? clone(c) : normCase({ id: uid(), how: 'direct', in: today(), room: state.config.rooms.includes(room) ? room : '' });
   fillCaseSelects(editingCase);
-  const cats = state.config.cats.filter(k => k.kind !== 'simple' && (k.on || k.id === editingCase.cat));
+  const cats = ptPlan ? [catOf(editingCase.cat)] : state.config.cats.filter(k => k.kind !== 'simple' && (k.on || k.id === editingCase.cat));
   $('#f-cat').innerHTML = (c ? '' : opt('', 'เลือกเทคนิค', '')) + cats.map(k => opt(k.id, k.label, editingCase.cat)).join('');
-  $('#case-title').textContent = c ? `แก้ไขผู้ป่วย ${c.hn || ''}`.trim() : 'เพิ่มผู้ป่วยในตารางวันฉาย';
+  $('#f-cat').disabled = ptPlan;
+  $('#f-plan-note').hidden = !ptPlan;
+  $('#f-pt-note').hidden = ptPlan;   // "อยู่ในตารางวันฉายอย่างเดียว ไม่แจกงานให้ MP" = ผู้ป่วยที่เพิ่มในแถบห้องฉาย
+  $('#f-plan-note').textContent = ptPlan ? `แก้ข้อมูลผู้ป่วย · ส่วนของ MP (MP ${editingCase.mp || '—'}, หมวด, จำนวนครั้ง, ขั้นตอน Finish – Plan complete) แก้ที่แถบ${navLabel('work')}` : '';
+  $('#case-title').textContent = ptPlan ? `แก้ไขข้อมูลผู้ป่วย ${c.hn || ''}`.trim() : c ? `แก้ไขผู้ป่วย ${c.hn || ''}`.trim() : 'เพิ่มผู้ป่วยในตารางวันฉาย';
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#f-' + f).value = editingCase[f] || '';
   $('#f-n').value = 1;
   $('#f-oncall').checked = editingCase.sim === 'on call';
@@ -11006,7 +11022,7 @@ function openPatient(id) {
   renderExtra('f', editingCase);
   renderSites('f', parseSites(editingCase));
   const del = $('#case-del');
-  del.hidden = !c;
+  del.hidden = !c || ptPlan;
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
   caseDlg.showModal();
@@ -11020,12 +11036,12 @@ const PT_FILLED = {
   extra: () => true, note: () => str($('#f-note').value),
 };
 function submitPatient() {
-  const hn = str($('#f-hn').value), k = catOf($('#f-cat').value);
+  const hn = str($('#f-hn').value), k = catOf(ptPlan ? editingCase.cat : $('#f-cat').value);
   if (!hn) { $('#f-hn').focus(); return toast('กรอก HN ก่อนบันทึก', { err: true }); }
-  if (!$('#f-cat').value) { $('#f-cat').focus(); return toast('เลือกเทคนิค', { err: true }); }
+  if (!ptPlan && !$('#f-cat').value) { $('#f-cat').focus(); return toast('เลือกเทคนิค', { err: true }); }
   const inputErr = checkDose('f') || checkArea('f') || checkSites('f');
   if (inputErr) return toast(inputErr, { err: true });
-  const f = state.config.ptForm, miss = PT_FIELDS.find(([key]) => f[key] === 'req' && !PT_FILLED[key]());
+  const f = state.config.ptForm, miss = !ptPlan && PT_FIELDS.find(([key]) => f[key] === 'req' && !PT_FILLED[key]());
   if (miss) {
     const box = miss[0] === 'dose' ? $(str($('#f-dpf').value) ? '#f-fx' : '#f-dpf').closest('.field') : $(`[data-ptf="${miss[0]}"]`, caseForm);
     if (box.classList.contains('field')) box.classList.add('missing');
@@ -11034,7 +11050,7 @@ function submitPatient() {
     return toast(`${['doc', 'type', 'aim', 'room', 'tech', 'area'].includes(miss[0]) ? 'เลือก' : 'กรอก'} ${miss[0] === 'dose' ? 'Dose/fx และ Fx' : miss[1]} ก่อนบันทึก (ช่องบังคับ)`, { err: true });
   }
   const rec = normCase({
-    ...editingCase, cat: k.id, how: 'direct', mp: '', hn, name: $('#f-name').value, note: $('#f-note').value, ct: $('#f-ct').value,
+    ...editingCase, cat: k.id, how: ptPlan ? editingCase.how : 'direct', mp: ptPlan ? editingCase.mp : '', hn, name: $('#f-name').value, note: $('#f-note').value, ct: $('#f-ct').value,
     sim: $('#f-oncall').checked ? 'on call' : $('#f-sim').value,
     doc: chipValue($('#f-doc')), type: chipValue($('#f-type')), aim: chipValue($('#f-aim')), tech: k.tech ? chipValue($('#f-tech')) : '',
     ...readDose('f'), ...readDx('f'), area: readArea('f'), ...readExtra('f'), updated: nowISO(),
