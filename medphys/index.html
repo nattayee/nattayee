@@ -2932,6 +2932,8 @@ const DEFAULT_CONFIG = {
     { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false },
     { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false },
     { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true, replan: true },
+    // CP (Change plan): ทำ CT ใหม่ = เหมือน Re-CT (รอลงนัด CT + งานวางแผนใหม่) · ไม่ทำ CT ใหม่ = งานวางแผนใหม่ให้ MP คนเดิม (CT-Sim เดิม)
+    { id: 'cp', label: 'CP', title: 'Change plan', act: 'skip', reasons: ['ทำ CT ใหม่', 'ไม่ทำ CT ใหม่'], need: true, replan: true },
     { id: 'off', label: 'Off RT', title: 'หยุดฉาย เคสออกจากตาราง', act: 'off', reasons: [], need: false, replan: false },
   ],
   // replan (ต่อสถานะ) / moveReplan (ย้ายห้อง): บันทึกแล้วส่งงานวางแผนใหม่ให้ MP คนเดิม (prescription = fraction ที่เหลือ) แสดงในงานรอ
@@ -3437,7 +3439,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.8';
+const PAGE_VERSION = '2026-11-03.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5046,7 +5048,9 @@ const apInMonth = (r, ym) => (isDay(r.date) ? r.date.slice(0, 7) === ym : str(r.
 // Re-CT ในแถบห้องฉาย → รอลงนัด CT ในแถบลงนัด (ผู้ป่วยละรายการ: Re-CT ล่าสุดของ HN) · ลงนัดจากรายการได้ ข้อมูลจากเคสใส่ให้
 // ออกจากรายการเมื่อ: มีนัด CT ของ HN นี้ตั้งแต่วัน Re-CT (วันนัด CT · on call = วันที่ลงนัด · ไม่นับนัดที่ไม่มาทำ CT) · ลง CT-SIM ตั้งแต่วันนั้น ·
 // Complete course / Cancel RT / Off RT · ล้างหรือเปลี่ยนสถานะ · ใส่วันกลับมาฉายไว้และถึงวันนั้นแล้ว · Re-CT เกิน 60 วัน
-const isReCt = e => e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)));
+const newCtReason = r => /ทำ\s*CT\s*ใหม่/i.test(str(r)) && !/ไม่ทำ/.test(str(r));   // CP: ทำ CT ใหม่
+const noNewCt = r => /ไม่ทำ\s*CT/i.test(str(r));   // CP: ไม่ทำ CT ใหม่ = งานวางแผนใหม่ใช้ CT-Sim เดิม
+const isReCt = e => e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)) || newCtReason(e.reason));
 const localDay = v => { const t = Date.parse(str(v)); return Number.isFinite(t) ? iso(new Date(t)) : ''; };
 function reCtWaiting() {
   if (!apptOn()) return [];
@@ -5081,7 +5085,7 @@ function renderReCt(edit) {
   if (!list.length) { box.innerHTML = ''; return; }
   const row = x => `<li data-rect="${esc(x.c.id)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} · <b>${esc(x.e.label)}</b> ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · เหลือ ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
     <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP ${x.c.mp}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-aprect="${esc(x.c.id)}">ลงนัด</button></span>` : ''}</li>`;
-  box.innerHTML = `<h3>รอลงนัด CT (Re-CT) · ${list.length} คน<small>บันทึกสถานะ Re-CT ในแถบ${esc(navLabel('course'))} · ลงนัดแล้วออกจากรายการเอง</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
+  box.innerHTML = `<h3>รอลงนัด CT (Re-CT / CP) · ${list.length} คน<small>บันทึกสถานะ Re-CT หรือ CP (ทำ CT ใหม่) ในแถบ${esc(navLabel('course'))} · ลงนัดแล้วออกจากรายการเอง</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
 }
 // วงกลมบนแถบลงนัด: จำนวนผู้ป่วยรอลงนัด CT (Re-CT)
 function renderApBadge() {
@@ -5093,7 +5097,7 @@ function renderApBadge() {
   if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
   dot.className = 'nav-dot warn';
   dot.textContent = n;
-  b.title = `รอลงนัด CT (Re-CT) ${n} คน`;
+  b.title = `รอลงนัด CT (Re-CT / CP) ${n} คน`;
 }
 function renderAppt() {
   const ym = state.month, edit = canEdit() && apptOn();
@@ -7146,7 +7150,7 @@ function syncFx() {
   let lastOff = ev.back ? plusDays(ev.back, -1) : '';   // วันทำการสุดท้ายที่ไม่ได้ฉาย
   while (lastOff > ctx.date && !isWorkday(lastOff, hol)) lastOff = plusDays(lastOff, -1);
   const backTxt = ev.back ? `ไม่ได้ฉาย ${esc(fmtDay(ctx.date))}${lastOff > ctx.date ? `–${esc(fmtDay(lastOff))}` : ''} กลับมาฉาย <b>${esc(fmtDay(ev.back))}</b>` : `ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> จนกว่าจะกลับมา`;
-  const toAp = apptOn() && isReCt({ act: t.act, type: t.id, label: t.label }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
+  const toAp = apptOn() && isReCt({ act: t.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
   prev.innerHTML = `${backTxt}${n0 ? hit ? ` · Fx ${n0} เลื่อนไป <b>${esc(fmtDay(hit[0]))}</b>` : ` · Fx ${n0} เป็นต้นไปรอไว้ (เหลือ ${sc ? sc.pending : '?'} fx)` : ''}${end}${td > ctx.date ? ' · ย้อนหลัง' : ''}${toAp}`;
 }
 // Mosaiq Time หน้า HN: Enter หรือออกจากช่อง (ค่าเปลี่ยน) → ยืนยันด้วยรหัส PIN · บันทึกให้ทุกเคสของผู้ป่วยนี้ · ช่องว่าง = ล้าง
@@ -12288,7 +12292,7 @@ async function submitPin(e, clear) {
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
       const rpTo = t && t.replan && t.act !== 'off' ? rpTarget(ctx, ctx.date) : null;
-      const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: ctx.date, mp: rpTo } : null;
+      const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || '', ct: noNewCt(ev.reason) ? '' : ctx.date, mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
