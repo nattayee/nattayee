@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.3';
-const API_LEVEL = 51;
+const CODE_VERSION = '2026-11-04.4';
+const API_LEVEL = 52;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -420,7 +420,7 @@ function addCases(recs, token) {
         rec.mp = pickNext_({
           staff: staff, leaves: leaves, date: date, byDay: byDay,
           cases: cases.filter(c => c.cat === rec.cat),
-          pointer: (cfg.queue || {})[rec.cat] || null, skips: catSkips_(cfg, rec.cat),
+          pointer: (cfg.queue || {})[rec.cat] || null, skips: catSkips_(cfg, rec.cat), manualFrom: manualFrom_(cfg),
         });
       }
       if (!rec.mp) throw new Error((cat ? cat.label + ': ' : '') + 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
@@ -445,6 +445,13 @@ function addCases(recs, token) {
   });
 }
 
+// เคสเลือกเองนับในคิวเฉพาะวัน In ตั้งแต่ config.manualFrom (API 52 · ไม่เคยตั้ง = 2026-11-01 ตามหน้าเว็บ · ว่าง = ทุกเคส)
+const MANUAL_FROM_DEFAULT = '2026-11-01';
+function manualFrom_(cfg) {
+  if (!cfg || !('manualFrom' in cfg)) return MANUAL_FROM_DEFAULT;
+  const v = String(cfg.manualFrom || '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+}
 // หักคิวรายเดือนของเทคนิคนี้ { 'YYYY-MM': { code: n } } จาก config.skips { 'YYYY-MM': { cat: { code: n } } }
 function catSkips_(cfg, cat) {
   const all = cfg && cfg.skips && typeof cfg.skips === 'object' ? cfg.skips : {}, out = {};
@@ -496,6 +503,7 @@ function pickNext_(o, trace) {
     if (j < 0) return;
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+    if (o.manualFrom && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < o.manualFrom) return;   // เลือกเองก่อนเริ่มนับ: ไม่ข้ามคนนั้น
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
     if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
     const trial = Object.assign({}, credit);

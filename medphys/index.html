@@ -2735,6 +2735,10 @@ const EDIT_PIN_API = 14;   // Code.gs ที่ตรวจรหัส PIN ต�
 const STAMPS_API = 15;   // Code.gs ที่บันทึกหลายค่าพร้อมกัน (stampSteps) · รุ่นเก่าบันทึกทีละค่า
 const NOTE_API = 16;   // Code.gs ที่เก็บหมายเหตุของค่า (Dose check หมายเหตุ ฯลฯ) · รุ่นเก่าไม่มีช่องหมายเหตุ
 const SKIP_API = 17;   // Code.gs ที่ใช้หักคิวรายเดือน (config.skips) ตอนแจกเคส
+const MANUAL_FROM_API = 52;   // Code.gs ที่ไม่นับเคสเลือกเองก่อน config.manualFrom ในคิว (รุ่นเก่า = นับทุกเคส · หน้าเว็บนับตามให้ตรงกัน)
+const manualFromOn = () => serverHas(MANUAL_FROM_API);
+// เคสเลือกเองที่ไม่นับในคิว (วัน In ก่อน manualFrom)
+const manualOld = (c, from) => !!from && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < from;   // เหมือนใน pickNext / pickNext_
 const LOG_PIN_API = 18;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขกิจกรรม (editLog, removeLog)
 const COURSE_API = 19;   // Code.gs ที่บันทึก Complete course / Cancel RT (courseCase)
 const STAMP_AT_API = 20;   // Code.gs ที่ให้เลือกวันเวลาของปุ่มขั้นตอนเองได้ (stampCaseAt, stampStepsAt)
@@ -2974,6 +2978,7 @@ const DEFAULT_CONFIG = {
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
   nav: ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
+  manualFrom: '2026-11-01',   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
   qa: { mu: { dir: '', ok: '', warn: '' }, d0: { dir: '', ok: '', warn: '' }, d4: { dir: 'high', ok: 95, warn: 90 }, mc: { dir: 'high', ok: 95, warn: 90 } },
@@ -3309,6 +3314,7 @@ function mergeConfig(c) {
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
+  out.manualFrom = 'manualFrom' in c ? (/^\d{4}-\d{2}-\d{2}$/.test(str(c.manualFrom)) ? str(c.manualFrom) : '') : d.manualFrom;
   // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } · เก็บเฉพาะจำนวนเต็ม 1–20
   out.skips = {};
   for (const [ym, cats] of Object.entries(c.skips && typeof c.skips === 'object' ? c.skips : {})) {
@@ -3504,7 +3510,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.3';
+const PAGE_VERSION = '2026-11-04.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4208,6 +4214,7 @@ function pickNext(o, trace) {
     if (j < 0) return;
     // จำนวนครั้ง k: ได้คิวนี้ไปแล้ว k คิว (เคสเลือกเอง/เทคนิคถัดไปหัก k ครั้ง เคสตามคิวหักเพิ่ม k - 1 ครั้ง)
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+    if (o.manualFrom && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < o.manualFrom) return;   // เลือกเองก่อนเริ่มนับ: ไม่ข้ามคนนั้น
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
     if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
     const trial = Object.assign({}, credit);
@@ -4226,7 +4233,7 @@ const onLeave = (code, date) => state.leaves.some(l => l.mp === code && l.from <
 function queueInput(catId, date, ignoreLeave) {
   return {
     staff: state.config.staff, leaves: ignoreLeave ? [] : state.leaves,
-    cases: planCases().filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId),
+    cases: planCases().filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId), manualFrom: manualFromOn() ? state.config.manualFrom : '',
     byDay: catOf(catId).rotate === 'day', date: date || today(),
   };
 }
@@ -4280,6 +4287,7 @@ function queueSlots(catId) {
     const j = idx(c.mp);
     if (j < 0) return;
     const k = Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
+    if (manualOld(c, o.manualFrom)) return;   // เลือกเองก่อนเริ่มนับ: ไม่อยู่ในตารางแจกเคส
     if (c.how === 'manual' || c.how === 'follow') { give(c.mp, k, { kind: c.how, c }); return; }
     if (c.how === 'replan') return;   // งานวางแผนใหม่: ไม่อยู่ในตารางแจกเคส
     if (o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp) rows.push({ type: 'case', code: c.mp, date: c.in, c, same: true });   // วันเดียวกันคนเดิม (รอบคิวรายวัน)
@@ -10386,9 +10394,12 @@ function renderSettings() {
       <ul class="rules">
         <li>แจกอัตโนมัติวนตามลำดับทีมด้านบน แยกคิวตามเทคนิค</li>
         <li>ถึงคิวคนที่ลาในวัน In ของเคส หรือปิด "ปฏิบัติงาน" ไว้ ระบบข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> จนกว่าจะกลับมาทำงาน ไม่ชดเชยภายหลัง</li>
-        <li>เคสที่เลือกเอง และเทคนิคถัดไปที่แจกพร้อมเทคนิคแรก ไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
+        <li>เคสที่เลือกเอง (วัน In ตั้งแต่วันที่ตั้งไว้ด้านล่าง) และเทคนิคถัดไปที่แจกพร้อมเทคนิคแรก ไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
       </ul>
       <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (ได้นอกคิว)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div>
+      <h3 class="sub-h">เคสเลือกเองที่นับในคิว</h3>
+      <p class="muted def-note" style="margin:0 0 10px">เคสเลือกเองที่วัน In ก่อนวันที่นี้ไม่ข้ามคนนั้น และไม่อยู่ในตารางแจกเคส (ช่วงก่อนใช้ระบบเต็ม ใช้หักคิวรายเดือนแทน) · ตั้งแต่วันที่นี้นับตามปกติ · ว่าง = นับทุกเคส${manualFromOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-11-04.4 ขึ้นไป'}</p>
+      <label class="field" style="max-width:260px;margin-bottom:14px"><span class="lbl">นับตั้งแต่วันที่</span><input type="date" data-k="manualFrom" value="${esc(d.manualFrom)}" aria-label="นับเคสเลือกเองในคิวตั้งแต่วันที่"></label>
       <h3 class="sub-h">หักคิวรายเดือน</h3>
       <p class="muted def-note" style="margin:0 0 10px">ใส่จำนวนครั้งที่ให้ข้ามคนนั้นในคิวของเทคนิคนั้น (เหมือนได้เคสนอกคิวไปแล้ว) · เริ่มนับตั้งแต่ต้นเดือนที่ตั้ง ใช้ไม่หมดยกไปเดือนถัดไป · ยอดที่ยังค้างดูได้ที่ "รอหักคิว" ด้านบน</p>
       ${skipsOn() ? `<div class="skip-nav"><button type="button" class="icon-btn" data-skipmonth="-1" aria-label="เดือนก่อน">‹</button><b>${esc(fmtMonth(skipMonth()))}</b><button type="button" class="icon-btn" data-skipmonth="1" aria-label="เดือนถัดไป">›</button></div>
