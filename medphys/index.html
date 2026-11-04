@@ -901,6 +901,7 @@ button.who:hover .nm{text-decoration:underline}
 .checks.boost-checks>.boost-tag{align-self:flex-start;margin-top:5px}
 .boost-tag.plan{background:var(--sunken);color:var(--muted)}
 .rp-tag{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;background:var(--late-soft);color:var(--late);font-size:11.5px;font-weight:600;line-height:19px;white-space:nowrap;vertical-align:1px}
+.rp-tag.site{background:var(--accent-soft);color:var(--accent)}
 .case-tbl tbody tr:hover td{background:var(--hover)}
 .case-tbl tr.fresh td{background:var(--accent-soft)}
 .case-tbl .cut{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
@@ -3673,7 +3674,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.12';
+const PAGE_VERSION = '2026-11-04.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3811,7 +3812,8 @@ function localStore() {
       for (const rec of recs) {
         const follow = rec.how === 'follow' && out.length > 0;
         const how = rec.how === 'manual' || follow ? rec.how : 'auto';
-        const r = { ...rec, how, mp: how === 'manual' ? rec.mp : follow ? out[0].mp : nextFor(rec.cat, rec.in), created: nowISO() };
+        const qi = queueInput(rec.cat, rec.in), auto = () => pickNext({ ...qi, cases: [...qi.cases, ...out.filter(x => x.cat === rec.cat)] });
+        const r = { ...rec, how, mp: how === 'manual' ? rec.mp : follow ? out[0].mp : auto(), created: nowISO() };
         if (!r.mp) throw new Error(`${catOf(rec.cat).label}: ${NOBODY}`);
         delete r.ctFrom;
         out.push(r);
@@ -4557,7 +4559,7 @@ function renderQueue() {
     if (r.type === 'pointer') return `<tr class="q-ptr"><td></td><td colspan="13">ตั้งคิวเองให้เริ่มที่ ${esc(r.code)} · ${esc(fmtDay(r.date))}</td></tr>`;
     const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
     if (r.type === 'case') {
-      const how = r.same ? 'วันเดียวกัน' : unitsOf(r.c) > 1 ? `×${unitsOf(r.c)}` : '';
+      const sj = rpOf(r.c), how = r.same ? 'วันเดียวกัน' : sj && sj.kind === 'site' ? sj.label : unitsOf(r.c) > 1 ? `×${unitsOf(r.c)}` : '';
       return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`;
     }
     if (r.type === 'credit') {
@@ -6918,7 +6920,49 @@ function apCourseRows() {
 const preRow = c => !!(c.ctId || c.apId);
 // งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
 const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
-const rpTag = c => { const m = rpOf(c); return m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
+// บริเวณที่ฉายเพิ่มเติมที่ไม่ใช่ Sequential boost และเป็นคนละบริเวณ (ไม่ซ้ำบริเวณที่ 1 และบริเวณก่อนหน้า) = งานวางแผนอีกงาน
+// เก็บเป็นเคสแยก { replan: { of: เคสเดิม, kind: 'site', sid, label } } แจกตามคิว (how auto) · ไม่อยู่ในตารางวันฉาย (วันฉายนับที่เคสเดิม)
+const areaKey = v => splitList(v).map(x => x.toLowerCase()).sort().join('|');
+function siteJobSites(c) {
+  const seen = new Set([areaKey(c.area)]), out = [];
+  parseSites(c).forEach((x, i) => {
+    const k = areaKey(x.area), fresh = !!k && !seen.has(k);
+    if (k) seen.add(k);
+    if (fresh && x.start !== 'boost') out.push({ ...x, i });
+  });
+  return out;
+}
+// วันเริ่มฉายของบริเวณนั้น (ตามตารางของเคสเดิม) · ยังคำนวณไม่ได้ = Start RT ของเคสเดิม
+function siteStart(c, i) {
+  const sc = isDay(c.sim) ? caseSchedule(c, holidayMap()) : null;
+  const d = sc ? [...sc.fx.entries()].filter(([, l]) => l.some(v => v.site === i + 1)).map(([x]) => x).sort()[0] : '';
+  return d || c.sim;
+}
+// งานของบริเวณเพิ่มเติมที่ยังไม่ได้แจก (ไม่รวมเทคนิคนับครั้ง ผู้ป่วยที่เพิ่มในแถบห้องฉาย และงานวางแผนใหม่)
+function siteJobRecs(parent, inDate) {
+  if (!parent || !parent.id || isDirect(parent) || parent.replan || catOf(parent.cat).kind === 'simple') return [];
+  const have = new Set(state.cases.map(rpOf).filter(m => m && m.kind === 'site' && m.of === parent.id).map(m => m.sid));
+  return siteJobSites(parent).filter(x => x.sid && !have.has(x.sid)).map(x => {
+    const extra = Object.fromEntries(Object.keys(parent).filter(k => /^x_[\w-]+$/.test(k)).map(k => [k, parent[k]]));
+    return normCase({ ...extra, id: uid(), cat: parent.cat, how: 'auto', mp: '', n: '', hn: parent.hn, name: parent.name, icd: parent.icd, dx: parent.dx, doc: parent.doc, type: parent.type, aim: parent.aim,
+      tech: parent.tech, ct: parent.ct, in: inDate, sim: parent.sim === 'on call' ? 'on call' : siteStart(parent, x.i), room: x.room || parent.room, area: x.area, dpf: x.dpf, fx: x.fx, rx: x.rx, freq: x.freq || parent.freq,
+      sites: '', note: '', batch: '', updated: nowISO(), replan: JSON.stringify({ of: parent.id, date: '', kind: 'site', sid: x.sid, label: `บริเวณที่ ${x.i + 2} · ${x.area}`, reason: startText(x) }) });
+  });
+}
+// แก้ไขเคสแล้วมีบริเวณเพิ่มเติมคนละบริเวณที่ยังไม่มีงาน: แจกงานให้นักฟิสิกส์ตามคิว
+async function addSiteJobs(parent) {
+  const recs = accessOf('work') === 'edit' ? siteJobRecs(parent, workdayFrom(today())) : [];
+  if (!recs.length) return;
+  try {
+    const saved = (await store.addCases(recs)).map(normCase);
+    state.cases.push(...saved);
+    state.fresh = saved.map(x => x.id);
+    render();
+    toast(`บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิว: ${saved.map(x => `${(rpOf(x) || {}).label} → ${x.mp}`).join(' · ')}`);
+  } catch (e) { toast('แจกงานของบริเวณเพิ่มเติมไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+const rpTag = c => { const m = rpOf(c); return m && m.kind === 'site' ? `<span class="rp-tag site" title="${esc(`งานวางแผนของ${m.label}${m.reason ? ` (${m.reason})` : ''} · บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิว · วันฉายนับที่เคสเดิม`)}">＋ ${esc(m.label)}</span>`
+  : m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
 // prescription ของงานวางแผนใหม่ = fraction ที่ยังไม่ได้ฉายตั้งแต่วันนั้น แยกตามบริเวณ (นับจากตารางที่ไม่มีสถานะ/การย้ายของวันนั้น)
 function replanRx(c, date) {
   const sc = caseSchedule({ ...c, fxlog: JSON.stringify(parseFx(c).filter(e => e.date !== date)), rmove: JSON.stringify(parseMoves(c).filter(m => m.date !== date)) }, holidayMap());
@@ -8364,7 +8408,7 @@ function syncStart(pre, focus) {
   }
   syncBoost(baseOf(pre));
 }
-const readSites = base => sitePres(base).map(pre => { const st = readStart(pre); return { area: readArea(pre), ...readDose(pre), ...st, room: readSiteRoom(pre), ...(st.start === 'boost' ? { sid: $(`[data-site="${pre}"]`).dataset.sid } : {}) }; })
+const readSites = base => sitePres(base).map(pre => { const st = readStart(pre); return { area: readArea(pre), ...readDose(pre), ...st, room: readSiteRoom(pre), sid: $(`[data-site="${pre}"]`).dataset.sid }; })
   .filter(x => x.area || x.dpf || x.fx || x.rx || x.freq).map(x => { if (!x.room) delete x.room; return x; });
 // แผน Sequential boost ของเคส (เรียงตามบริเวณ) และขั้นตอนที่บันทึกของแต่ละแผน { sid: { fin, finBy, mu, muVal, ... } }
 const boostList = c => sitesOf(c).filter(x => x.start === 'boost' && x.sid).map((x, i) => ({ ...x, n: i + 1 }));
@@ -11926,7 +11970,7 @@ function syncCaseForm() {
   const mp = chipValue($('#f-mp')), day = $('#f-in').value || today();
   const hint = $('#f-mp-hint');
   const changed = mp && editingCase.mp && mp !== editingCase.mp;
-  const rp = rpOf(editingCase);
+  const rp0 = rpOf(editingCase), rp = rp0 && rp0.kind !== 'site' ? rp0 : null;
   hint.textContent = mp && onLeave(mp, day) ? `${mp} ลาในวัน ${fmtDay(day)}` : rp ? `งานวางแผนใหม่จาก ${rp.label} · เปลี่ยนผู้รับได้ ไม่กระทบคิว` : changed ? `นับเป็นเคสเลือกเอง: คิวกลับไปที่ ${editingCase.mp} และข้าม ${mp} 1 ครั้ง` : '';
   hint.className = mp && onLeave(mp, day) ? 'hint warn' : 'hint';
   const times = countsOn() ? clampN($('#f-n').value) : 1, x = times > 1 ? ` × ${times} ครั้ง` : '';
@@ -12588,6 +12632,8 @@ async function submitIntake(e) {
   });
   const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : '';
   if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
+  const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิวต่อ
+  recs.push(...siteJobs);
   const btn = $('#i-save');
   btn.disabled = true;
   try {
@@ -12600,8 +12646,9 @@ async function submitIntake(e) {
     resetIntake();
     render();
     $('#i-hn').focus();
-    const summary = `${saved.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${saved[0].mp}`;
-    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (เทคนิคถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
+    const main = saved.filter(x => !rpOf(x)), jobs = saved.filter(x => rpOf(x));
+    const summary = `${main.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${main[0].mp}${jobs.map(x => ` · ${rpOf(x).label} → ${x.mp}`).join('')}`;
+    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : main.length > 1 ? ' (เทคนิคถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
@@ -12828,7 +12875,7 @@ async function submitPin(e, clear) {
       renderAcct();
     }
     if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
-    if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); return; }
+    if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); await addSiteJobs(ctx.rec); return; }
     if (ctx.mode === 'del') { await store.removeCase(ctx.id, pin); caseDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'ptadd') { const rec = normCase(await store.courseAdd(ctx.rec, pin)); patientSaved(rec, ctx.isNew); pinDlg.close(); return; }
     if (ctx.mode === 'ptdel') { await store.courseRemove(ctx.id, pin); caseDeleted(ctx.id, `ลบ ${ctx.rec.hn || 'ผู้ป่วย'} ออกจากตารางวันฉายแล้ว`); pinDlg.close(); return; }
