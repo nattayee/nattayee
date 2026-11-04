@@ -3504,7 +3504,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.2';
+const PAGE_VERSION = '2026-11-04.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3633,7 +3633,7 @@ function localStore() {
   };
   return {
     mode: 'local',
-    load: async () => clone(db),
+    load: async () => { const n = clearAdvance(db.cases); if (n) persist(); return { ...clone(db), advanceCleared: n }; },
     save: async (table, rec) => { upsert(db[table], clone(rec)); persist(); return rec; },
     addCases: async recs => {
       const out = [];
@@ -3681,6 +3681,7 @@ function localStore() {
     editLog: async (rec, pin) => { demoCheckPin(pin); upsert(db.logs, clone(rec)); persist(); return rec; },
     course: async (id, status, date, note, pin) => {
       if (status === 'cancel' && !str(note)) throw new Error('กรอกสาเหตุที่ Cancel RT');
+      if (status && date > today()) throw new Error(advMsg(date, status === 'cancel' ? 'Cancel RT' : 'Complete course'));
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
       if (!c) throw new Error('ไม่พบเคสนี้');
@@ -3692,7 +3693,7 @@ function localStore() {
     fraction: async (id, date, ev, pin) => {
       if (!isDay(date)) throw new Error('วันที่ไม่ถูกต้อง');
       if (ev && ev.back && ev.act === 'skip' && !(isDay(ev.back) && ev.back > date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
-      if (ev && ev.act === 'given' && date > today()) throw new Error(`ยังไม่ถึงวันที่ ${date} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
+      if (ev && FX_NOW_ACTS.includes(ev.act) && date > today()) throw new Error(advMsg(date, ev.act === 'given' ? 'ฉายแล้ว' : ev.label));
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
       if (!c) throw new Error('ไม่พบเคสนี้');
@@ -5818,6 +5819,19 @@ const BQ_OLD = 'แถบนัดคิวใส่แร่ต้องใช�
 // ไม่มา (Code.gs API 50) = ผู้ป่วยไม่มาตามนัด: ไม่นับเคส ไม่นับคะแนนทุกส่วน (MP, RC, RTT, แพทย์) เหมือนยกเลิก แต่ไม่ขีดฆ่า · ตารางวันฉายยังถือเป็นวันใส่แร่ (ไม่เลื่อนแผนย้อนหลัง)
 const BQ_ST = { booked: 'นัดแล้ว', done: 'มาตามนัด', noshow: 'ไม่มา', cancel: 'ยกเลิก' };
 const BQ_NS_API = 50;
+// บันทึกล่วงหน้าไม่ได้ (Code.gs API 51 ตรวจด้วย): ฉายแล้ว · Off RT · Complete course / Cancel RT ของวันหลังวันนี้ (Hold, Port film ฯลฯ ยังบันทึกล่วงหน้าได้)
+const FX_NOW_ACTS = ['given', 'off'];
+const advMsg = (d, what) => `ยังไม่ถึง ${fmtDay(d)} บันทึก ${what} ล่วงหน้าไม่ได้ (บันทึกได้ตั้งแต่วันนั้น)`;
+// ล้างที่บันทึกล่วงหน้าไว้แล้ว (เหมือน clearAdvance_ ใน Code.gs · ใช้ในโหมดตัวอย่าง) · คืนจำนวนรายการที่ล้าง
+function clearAdvance(cases, td = today()) {
+  let n = 0;
+  for (const c of cases) {
+    const all = parseFx(c), keep = all.filter(x => !(FX_NOW_ACTS.includes(x.act) && x.date > td));
+    if (keep.length !== all.length) { c.fxlog = keep.length ? JSON.stringify(keep) : ''; n += all.length - keep.length; }
+    if (c.rt && str(c.rtDate) > td) { Object.assign(c, { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' }); n++; }
+  }
+  return n;
+}
 const bqNsOn = () => serverHas(BQ_NS_API);
 const BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'note', 'status', 'rtt', 'mp', 'rc', 'hist', 'src', 'by', 'created', 'editedBy', 'updated', 'ct', 'ctRoom', 'us'];
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
@@ -7200,6 +7214,7 @@ const fxAdding = () => !!pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).a
 const fxOffMode = () => (pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'off' ? (courseOn() && chipValue($('#pin-fx-off'))) || 'off' : '');
 // สถานะที่เลือกหยุดฉายได้ (CP): ฉายวันนี้ = ตามสถานะ (ฉายตามปกติ) · เลือกวันกลับมา / จนกว่าจะกลับมา = ไม่ได้ฉาย (skip)
 const fxPausable = t => !!t && !!t.pause && t.act === 'treat';
+const fxAdvWhat = t => (t.act === 'off' ? { complete: 'Complete course', cancel: 'Cancel RT' }[fxOffMode()] || 'Off RT' : t.label);
 const fxAct = t => (t && fxPausable(t) && pinCtx && pinCtx.fxPause ? 'skip' : t && t.act);
 function fxDraft() {
   const t = fxSelType(), act = fxAct(t);
@@ -7269,6 +7284,7 @@ function syncFx() {
       : `บันทึกว่า <b>${ctx.num ? `Fx ${esc(ctx.num)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(ctx.date))}${ctx.auto && state.user.hasPin && pinNeed('fx') ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
     return;
   }
+  if (ctx.date > today() && t.act === 'off') { prev.textContent = advMsg(ctx.date, fxAdvWhat(t)); return; }   // Off RT (Complete course / Cancel RT) ล่วงหน้าไม่ได้
   const ev = fxDraft(), evs = parseFx(c).filter(e => e.date !== ctx.date);
   evs.push({ date: ctx.date, ...ev });
   const sc = caseSchedule({ ...c, fxlog: JSON.stringify(evs) }, hol), td = today();
@@ -12273,6 +12289,7 @@ async function submitPin(e, clear) {
     if (t.need && t.reasons.length && !chipValue($('#pin-fx-reason'))) { $('#pin-fx-reason input').focus(); return pinErr(`เลือกเหตุผลของ ${t.label}`); }
     if (fxAct(t) === 'skip' && back && !(isDay(back) && back > ctx.date)) { $('#pin-fx-back').focus(); return pinErr(`วันกลับมาฉายต้องหลัง ${fmtDay(ctx.date)}`); }
     if (t.act === 'given' && ctx.date > today()) return pinErr(`ยังไม่ถึง ${fmtDay(ctx.date)} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
+    if (ctx.date > today() && t.act === 'off') return pinErr(advMsg(ctx.date, fxAdvWhat(t)));
     if (fxOffMode() === 'off' && courseOn()) { $('#pin-fx-off input').focus(); return pinErr('เลือก Complete course หรือ Cancel RT'); }
     if (fxOffMode() === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-scope'))) { $('#pin-fx-scope input').focus(); return pinErr('เลือก ย้าย (เฉพาะ fraction นี้) หรือ ย้ายตลอดไป'); }
@@ -12308,6 +12325,7 @@ async function submitPin(e, clear) {
   }
   if (ctx.mode === 'course' && !clear) {
     if (!isDay($('#pin-date').value)) { $('#pin-date').focus(); return pinErr('ใส่วันที่'); }
+    if ($('#pin-date').value > today()) { $('#pin-date').focus(); return pinErr(advMsg($('#pin-date').value, ctx.status === 'cancel' ? 'Cancel RT' : 'Complete course')); }
     if (ctx.status === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
   }
   btn.disabled = true;
@@ -13573,6 +13591,7 @@ $('#gate-form').addEventListener('submit', async e => {
 });
 let movedOnce = false;
 async function refresh(quiet) {
+  let advCleared = 0;
   try {
     const d = await store.load();
     state.config = mergeConfig(d.config);
@@ -13596,6 +13615,7 @@ async function refresh(quiet) {
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;
     state.codeVersion = d.codeVersion || '';
+    advCleared = +d.advanceCleared || 0;   // Code.gs API 51 ล้างการบันทึกล่วงหน้าตอนโหลด
     state.gate = null;
     state.sheetUrl = d.sheetUrl || '';
     state.demo = !!d.demo;
@@ -13610,6 +13630,7 @@ async function refresh(quiet) {
     if (quiet) return;
     state.error = errMsg(e);
   }
+  if (advCleared) toast(`ล้างการบันทึกล่วงหน้า ${advCleared} รายการ (ฉายแล้ว / Off RT / Complete course / Cancel RT ของวันหลังวันนี้)`);
   // หน้าตั้งค่า: ไม่วาดใหม่ระหว่างแก้ · ยังไม่ได้แก้และไม่ได้อยู่ในช่องกรอก = วาดใหม่ให้เห็นค่าล่าสุด
   maybePullBrachy();
   if (quiet && state.view === 'settings') { if (!draft && !settingsEl.contains(document.activeElement)) renderSettings(); return; }

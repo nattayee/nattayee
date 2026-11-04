@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.2';
-const API_LEVEL = 50;
+const CODE_VERSION = '2026-11-04.3';
+const API_LEVEL = 51;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -299,12 +299,14 @@ function getData(token) {
   const user = who_(token, ss, config);
   user.hasPin = !!pinRecord_(user);
   const need = guestNeeds_(user, config);
+  const cases = need.cases ? readTable_(ss, 'cases', config) : [], fixed = need.cases ? clearAdvance_(ss, config, cases) : 0;
   return {
     user: user,
     api: API_LEVEL,
     codeVersion: CODE_VERSION,
     homeUrl: lpchUrl_(),
-    cases: need.cases ? readTable_(ss, 'cases', config) : [],
+    cases: cases,
+    advanceCleared: fixed,
     logs: need.logs ? readTable_(ss, 'logs') : [],
     leaves: need.leaves ? readTable_(ss, 'leaves') : [],
     duty: need.duty ? recentDuty_(ss) : [],
@@ -909,6 +911,36 @@ function stampBoost(id, sid, steps, pin, at, token) {
   });
 }
 
+// วันนี้ตามเขตเวลาของชีต (yyyy-MM-dd)
+function today_(ss) { return Utilities.formatDate(new Date(), (ss || ss_()).getSpreadsheetTimeZone(), 'yyyy-MM-dd'); }
+// บันทึกล่วงหน้าไม่ได้ (API 51): ฉายแล้ว · Off RT · Complete course / Cancel RT ของวันหลังวันนี้ (Hold, Port film ฯลฯ ยังบันทึกล่วงหน้าได้)
+const FX_NOW_ACTS = ['given', 'off'];
+// ล้างที่บันทึกล่วงหน้าไว้ก่อนมีกติกานี้ (ตอนโหลดข้อมูล): รายการสถานะ fraction ข้างบนที่วันที่หลังวันนี้ · สถานะการฉาย (Complete course / Cancel RT) ที่วันที่หลังวันนี้
+// แก้ cases ที่ส่งมาให้ตรงกับชีต · คืนจำนวนรายการที่ล้าง
+function clearAdvance_(ss, cfg, cases) {
+  const td = today_(ss);
+  const fxOf = c => { const l = jsonList_(c.fxlog); return { all: l, keep: l.filter(x => !(x && FX_NOW_ACTS.indexOf(String(x.act)) >= 0 && String(x.date).slice(0, 10) > td)) }; };
+  const bad = cases.filter(c => (c.rt && String(c.rtDate) > td) || fxOf(c).keep.length !== fxOf(c).all.length);
+  if (!bad.length) return 0;
+  let n = 0;
+  try {
+    withLock_(() => {
+      const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
+      bad.forEach(c => {
+        const row = findRow_(sh, header.indexOf('id') + 1, c.id);
+        if (!row) return;
+        const f = fxOf(c), set = {};
+        if (f.keep.length !== f.all.length) { set.fxlog = f.keep.length ? JSON.stringify(f.keep) : ''; n += f.all.length - f.keep.length; }
+        if (c.rt && String(c.rtDate) > td) { Object.assign(set, { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' }); n++; }
+        writeFields_(sh, row, header, TABLES.cases.fields.filter(x => x[0] in set), set);
+        Object.assign(c, set);
+        console.log('clearAdvance_ ' + c.id + ' ' + JSON.stringify(Object.keys(set)));
+      });
+    });
+  } catch (e) { return 0; }   // มีคนบันทึกอยู่: ล้างรอบหน้า
+  return n;
+}
+
 /**
  * แถบ Complete: จบการฉายของเคส ยืนยันด้วยรหัส PIN · status = 'complete' (Complete course) หรือ 'cancel' (Cancel RT ต้องมีสาเหตุ)
  * date = วันที่ฉายครั้งสุดท้าย / วันที่หยุดฉาย (yyyy-MM-dd) · status = '' ล้างกลับเป็นกำลังฉาย · คืนเคสหลังบันทึก
@@ -921,6 +953,7 @@ function courseCase(id, status, date, note, pin, token) {
   note = String(note == null ? '' : note).trim().slice(0, 300);
   if (status && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('ใส่วันที่');
   if (status === 'cancel' && !note) throw new Error('กรอกสาเหตุที่ Cancel RT');
+  if (status && date > today_()) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึก ' + (status === 'cancel' ? 'Cancel RT' : 'Complete course') + ' ล่วงหน้าไม่ได้');
   const c0 = caseOf_(id);
   pinChange_(u, pin, !status || !c0 || has_(c0.rt));
   return withLock_(() => {
@@ -961,7 +994,7 @@ function fractionCase(id, date, ev, pin, token) {
   pinChange_(u, pin, !ev || jsonList_((caseOf_(id) || {}).fxlog).some(x => x && String(x.date).slice(0, 10) === date));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
-    if (rec && rec.act === 'given' && date > Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd')) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึกฉายแล้วล่วงหน้าไม่ได้');
+    if (rec && FX_NOW_ACTS.indexOf(rec.act) >= 0 && date > today_(ss)) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึก' + (rec.act === 'given' ? 'ฉายแล้ว' : ' ' + rec.label + ' ') + 'ล่วงหน้าไม่ได้');
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
     const row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
