@@ -3674,7 +3674,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.13';
+const PAGE_VERSION = '2026-11-04.14';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4563,7 +4563,7 @@ function renderQueue() {
       return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`;
     }
     if (r.type === 'credit') {
-      const t = r.token, label = TOKEN_LABEL[t.kind] || 'หักคิว';
+      const t = r.token, sj = t.c && rpOf(t.c), label = sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[t.kind] || 'หักคิว';
       if (t.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(แจก ${esc(fmtDay(t.c.in))})</span></td></tr>`;
       if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>`;
       return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(label)} ${esc(t.ym ? fmtMonth(t.ym) : '')} · ข้าม ${esc(fmtDay(r.date))}</td></tr>`;
@@ -4576,7 +4576,7 @@ function renderQueue() {
     if (r.type === 'next') return `<tr class="q-next">${mp}<td colspan="11"><b>คิวถัดไป</b>${r.same ? ' (วันนี้คนเดิม รอบคิวรายวัน)' : ''}</td><td class="q-how">◀ ตอนนี้อยู่ที่นี่</td></tr>`;
     if (r.type === 'later') return `<tr class="q-later">${mp}${blank}<td></td></tr>`;
     if (r.type === 'credit' && r.token.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(r.token.c)}<td class="q-how">ได้ก่อนถึงคิว <span class="muted">(แจก ${esc(fmtDay(r.token.c.in))})</span></td></tr>`;
-    if (r.type === 'credit') return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`;
+    if (r.type === 'credit') { const sj = r.token.c && rpOf(r.token.c); return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`; }
     return `<tr class="q-later q-skip">${mp}${blank}<td class="q-how">จะข้าม · ${r.why === 'off' ? 'ปิดปฏิบัติงาน' : 'ลาวันนี้'}</td></tr>`;
   }).join('') : '';
   const shown = words.length ? inMonth.filter(r => hitCase(r.type === 'case' ? r.c : r.type === 'credit' ? r.token.c : null)) : inMonth;
@@ -6939,29 +6939,30 @@ function siteStart(c, i) {
   return d || c.sim;
 }
 // งานของบริเวณเพิ่มเติมที่ยังไม่ได้แจก (ไม่รวมเทคนิคนับครั้ง ผู้ป่วยที่เพิ่มในแถบห้องฉาย และงานวางแผนใหม่)
-function siteJobRecs(parent, inDate) {
-  if (!parent || !parent.id || isDirect(parent) || parent.replan || catOf(parent.cat).kind === 'simple') return [];
+function siteJobRecs(parent, inDate, batch) {
+  if (!parent || !parent.id || isDirect(parent) || parent.replan || catOf(parent.cat).kind === 'simple' || (!batch && !parent.mp)) return [];
   const have = new Set(state.cases.map(rpOf).filter(m => m && m.kind === 'site' && m.of === parent.id).map(m => m.sid));
   return siteJobSites(parent).filter(x => x.sid && !have.has(x.sid)).map(x => {
     const extra = Object.fromEntries(Object.keys(parent).filter(k => /^x_[\w-]+$/.test(k)).map(k => [k, parent[k]]));
-    return normCase({ ...extra, id: uid(), cat: parent.cat, how: 'auto', mp: '', n: '', hn: parent.hn, name: parent.name, icd: parent.icd, dx: parent.dx, doc: parent.doc, type: parent.type, aim: parent.aim,
+    // MP คนเดิมของบริเวณที่ 1: แจกพร้อมเคส = follow (Code.gs ใช้คนเดียวกับเคสแรกของชุด) · เคสเดิม = manual (ระบุ MP)
+    return normCase({ ...extra, id: uid(), cat: x.cat || siteCatGuess(x.area, parent.cat) || parent.cat, how: batch ? 'follow' : 'manual', mp: batch ? '' : parent.mp, n: '', hn: parent.hn, name: parent.name, icd: parent.icd, dx: parent.dx, doc: parent.doc, type: parent.type, aim: parent.aim,
       tech: parent.tech, ct: parent.ct, in: inDate, sim: parent.sim === 'on call' ? 'on call' : siteStart(parent, x.i), room: x.room || parent.room, area: x.area, dpf: x.dpf, fx: x.fx, rx: x.rx, freq: x.freq || parent.freq,
       sites: '', note: '', batch: '', updated: nowISO(), replan: JSON.stringify({ of: parent.id, date: '', kind: 'site', sid: x.sid, label: `บริเวณที่ ${x.i + 2} · ${x.area}`, reason: startText(x) }) });
   });
 }
 // แก้ไขเคสแล้วมีบริเวณเพิ่มเติมคนละบริเวณที่ยังไม่มีงาน: แจกงานให้นักฟิสิกส์ตามคิว
 async function addSiteJobs(parent) {
-  const recs = accessOf('work') === 'edit' ? siteJobRecs(parent, workdayFrom(today())) : [];
+  const recs = accessOf('work') === 'edit' ? siteJobRecs(parent, workdayFrom(today()), false) : [];
   if (!recs.length) return;
   try {
     const saved = (await store.addCases(recs)).map(normCase);
     state.cases.push(...saved);
     state.fresh = saved.map(x => x.id);
     render();
-    toast(`บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิว: ${saved.map(x => `${(rpOf(x) || {}).label} → ${x.mp}`).join(' · ')}`);
+    toast(`บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดิม: ${saved.map(x => `${(rpOf(x) || {}).label} (${catOf(x.cat).label}) → ${x.mp}`).join(' · ')}`);
   } catch (e) { toast('แจกงานของบริเวณเพิ่มเติมไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-const rpTag = c => { const m = rpOf(c); return m && m.kind === 'site' ? `<span class="rp-tag site" title="${esc(`งานวางแผนของ${m.label}${m.reason ? ` (${m.reason})` : ''} · บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิว · วันฉายนับที่เคสเดิม`)}">＋ ${esc(m.label)}</span>`
+const rpTag = c => { const m = rpOf(c); return m && m.kind === 'site' ? `<span class="rp-tag site" title="${esc(`งานวางแผนของ${m.label}${m.reason ? ` (${m.reason})` : ''} · บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดิม (หักคิวเมื่อวนมาถึง) · วันฉายนับที่เคสเดิม`)}">＋ ${esc(m.label)}</span>`
   : m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
 // prescription ของงานวางแผนใหม่ = fraction ที่ยังไม่ได้ฉายตั้งแต่วันนั้น แยกตามบริเวณ (นับจากตารางที่ไม่มีสถานะ/การย้ายของวันนั้น)
 function replanRx(c, date) {
@@ -8287,7 +8288,7 @@ function parseSites(c) {
   let a = [];
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
   // sid = รหัสของบริเวณ Sequential boost (ผูกกับขั้นตอนของแผน boost) · boost เดิมที่ยังไม่มีรหัสใช้ i<ลำดับ>
-  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map((x, i) => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room),
+  return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map((x, i) => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room), cat: str(x.cat),
     sid: str(x.sid) || (str(x.start) === 'boost' ? 'i' + (i + 1) : '') })) : [];
 }
 // เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1 · Sequential boost
@@ -8317,7 +8318,7 @@ let siteSeq = 0;
 // ใช้ฟังก์ชันเดียวกับบริเวณแรก (renderArea, fillDose, readDose ฯลฯ) ด้วย pre ของแต่ละบริเวณ เช่น is1, fs2
 function addSite(base, x = {}) {
   const pre = `${base}s${++siteSeq}`;
-  $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}" data-sid="${esc(x.sid || 'b' + Math.random().toString(36).slice(2, 9))}">
+  $(`#${base}-sites`).insertAdjacentHTML('beforeend', `<div class="site" data-site="${pre}" data-sid="${esc(x.sid || 'b' + Math.random().toString(36).slice(2, 9))}" data-cat="${esc(x.cat || '')}" data-catset="${x.cat ? '1' : ''}">
     <div class="site-head"><b></b><button type="button" class="icon-btn" data-rmsite="${pre}" aria-label="ลบบริเวณนี้">×</button></div>
     <div class="field"><span class="lbl">เริ่มฉายเทียบกับบริเวณที่ 1</span><div class="start-row">
       <div class="chips" id="${pre}-start" role="radiogroup" aria-label="เริ่มฉายเทียบกับบริเวณที่ 1">${SITE_STARTS.map(v => `<label title="${v.title}"><input type="radio" name="${pre}start" value="${v.key}"${x.start === v.key ? ' checked' : ''}><span>${v.label}</span></label>`).join('')}</div>
@@ -8325,6 +8326,7 @@ function addSite(base, x = {}) {
     </div></div>
     <div class="field site-room" id="${pre}-room-field"><span class="lbl">ห้องฉาย <span class="sub-lbl" id="${pre}-room-note"></span></span><div class="chips" id="${pre}-room" role="radiogroup" aria-label="ห้องฉาย (บริเวณเพิ่มเติม)"></div></div>
     <div class="field with-other"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="${pre}-area" aria-label="บริเวณที่ฉาย (เพิ่มเติม)"></div><input id="${pre}-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค เช่น Spine, Whole brain" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+    <div class="field site-cat" id="${pre}-cat-f" hidden><span class="lbl">เทคนิค <span class="sub-lbl">คนละบริเวณ = อีกงาน ให้ MP คนเดิม</span></span><div class="chips" id="${pre}-cat" role="radiogroup" aria-label="เทคนิคของบริเวณนี้"></div></div>
     <div class="dose-row">
       <label class="field"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="${pre}-dpf" min="0" step="any" inputmode="decimal" placeholder="800"></label>
       <label class="field"><span class="lbl">Fx</span><input type="number" id="${pre}-fx" min="1" step="1" inputmode="numeric" placeholder="1"></label>
@@ -8390,6 +8392,36 @@ function syncBoost(base) {
       r > 0 && rx1 > 0 ? `Prescription รวม <b>${cGyText(rx + r)}</b> (${num(rx * 100, 2)} + ${num(r * 100, 2)})` : r > 0 ? '' : 'กรอก Prescription และ Fx ของ boost'].filter(Boolean).join(' · ');
     fx += n; rx += r; prev = i + 2;
   });
+  syncSiteCats(base);
+}
+// เทคนิคของงานบริเวณเพิ่มเติม (คนละบริเวณ ไม่ใช่ boost): เดาจากบริเวณที่ฉาย ในตระกูลเดียวกับเทคนิคของบริเวณที่ 1 (VM / 3D ฯลฯ) · เลือกเองได้
+const SITE_CAT_RE = [[/breast/i, /breast/i], [/h&n|neck/i, /h&n/i], [/chest|lung|thorax/i, /chest/i], [/head|brain/i, /brain/i], [/abdomen|pelvis|extremity|spine|body|bone/i, /body|abdomen|pelvis|etc/i]];
+function siteCatGuess(area, parentCat) {
+  const cats = state.config.cats.filter(c => c.on && c.kind !== 'simple'), p = catOf(parentCat);
+  const fam = x => str(x.label).split(/\s+/)[0].toLowerCase(), a = splitList(area).join(' ');
+  for (const [are, cre] of SITE_CAT_RE) {
+    if (!are.test(a)) continue;
+    const hit = cats.find(c => fam(c) === fam(p) && cre.test(`${c.label} ${c.p4p}`));
+    if (hit) return hit.id;
+  }
+  return cats.some(c => c.id === p.id) ? p.id : '';
+}
+function syncSiteCats(base) {
+  if (!$(`#${base}-sites`)) return;
+  const parentCat = base === 'f' ? $('#f-cat').value : (selectedCats().find(id => catOf(id).kind !== 'simple') || '');
+  const cats = state.config.cats.filter(c => c.on && c.kind !== 'simple').map(c => c.id), seen = new Set([areaKey(readArea(base))]);
+  sitePres(base).forEach(pre => {
+    const k = areaKey(readArea(pre)), fresh = !!k && !seen.has(k), job = fresh && chipValue($(`#${pre}-start`)) !== 'boost', el = $(`[data-site="${pre}"]`), box = $(`#${pre}-cat`);
+    if (k) seen.add(k);
+    $(`#${pre}-cat-f`).hidden = !job;
+    if (!job) return;
+    const own = el.dataset.catset ? chipValue(box) || el.dataset.cat : '', want = own || siteCatGuess(readArea(pre), parentCat) || parentCat;
+    const list = want && !cats.includes(want) ? [...cats, want] : cats;
+    if (box.dataset.sig !== list.join() || chipValue(box) !== want) {
+      box.innerHTML = list.map(id => `<label><input type="radio" name="${pre}cat" value="${esc(id)}"${id === want ? ' checked' : ''}><span>${esc(catOf(id).label)}</span></label>`).join('');
+      box.dataset.sig = list.join();
+    }
+  });
 }
 function readStart(pre) {
   const start = chipValue($(`#${pre}-start`));
@@ -8408,7 +8440,7 @@ function syncStart(pre, focus) {
   }
   syncBoost(baseOf(pre));
 }
-const readSites = base => sitePres(base).map(pre => { const st = readStart(pre); return { area: readArea(pre), ...readDose(pre), ...st, room: readSiteRoom(pre), sid: $(`[data-site="${pre}"]`).dataset.sid }; })
+const readSites = base => sitePres(base).map(pre => { const st = readStart(pre), cat = $(`#${pre}-cat-f`).hidden ? '' : chipValue($(`#${pre}-cat`)); return { area: readArea(pre), ...readDose(pre), ...st, room: readSiteRoom(pre), sid: $(`[data-site="${pre}"]`).dataset.sid, ...(cat ? { cat } : {}) }; })
   .filter(x => x.area || x.dpf || x.fx || x.rx || x.freq).map(x => { if (!x.room) delete x.room; return x; });
 // แผน Sequential boost ของเคส (เรียงตามบริเวณ) และขั้นตอนที่บันทึกของแต่ละแผน { sid: { fin, finBy, mu, muVal, ... } }
 const boostList = c => sitesOf(c).filter(x => x.start === 'boost' && x.sid).map((x, i) => ({ ...x, n: i + 1 }));
@@ -12632,7 +12664,7 @@ async function submitIntake(e) {
   });
   const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : '';
   if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
-  const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน แจกตามคิวต่อ
+  const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in, true);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดียวกับเคสแรก
   recs.push(...siteJobs);
   const btn = $('#i-save');
   btn.disabled = true;
@@ -12647,8 +12679,8 @@ async function submitIntake(e) {
     render();
     $('#i-hn').focus();
     const main = saved.filter(x => !rpOf(x)), jobs = saved.filter(x => rpOf(x));
-    const summary = `${main.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${main[0].mp}${jobs.map(x => ` · ${rpOf(x).label} → ${x.mp}`).join('')}`;
-    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : main.length > 1 ? ' (เทคนิคถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
+    const summary = `${main.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${main[0].mp}${jobs.map(x => ` · ${rpOf(x).label} (${catOf(x.cat).label}) → ${x.mp}`).join('')}`;
+    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (งานถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
@@ -13793,13 +13825,15 @@ $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; s
 function siteChip(e) {
   const box = e.target.closest('.chips');
   if (box && (box.id === 'i-room' || box.id === 'f-room')) syncSiteRooms(box.id[0]);
+  const sc = box && /^(.+s\d+)-cat$/.exec(box.id);
+  if (sc) { const el = $(`[data-site="${sc[1]}"]`); el.dataset.catset = '1'; el.dataset.cat = e.target.value; return true; }   // เลือกเทคนิคของบริเวณเอง
   const r = box && /^(.+s\d+)-room$/.exec(box.id);
   if (r) { $(`[data-site="${r[1]}"]`).dataset.follow = e.target.value === mainRoom(baseOf(r[1])) ? '1' : ''; syncSiteRoomNote(r[1]); return true; }
   const m = box && /^(.+)-(area|freq|start)$/.exec(box.id);
   if (!m) return false;
   if (m[2] === 'freq') onFreqChange(m[1], e.target);
   else if (m[2] === 'start') syncStart(m[1], e.target.checked);
-  else syncArea(m[1], e.target.value === OTHER);
+  else { syncArea(m[1], e.target.value === OTHER); syncSiteCats(baseOf(m[1])); }
   return true;
 }
 function doseInput(e) { const m = /^(.+)-(dpf|fx|rx)$/.exec(e.target.id || ''); if (m) { markManual(m[1], m[2]); syncDose(m[1]); syncBoost(baseOf(m[1])); } }
@@ -13808,6 +13842,7 @@ caseForm.addEventListener('change', e => {
   if (siteChip(e)) return;
   if (e.target.id === 'f-in') mpChips($('#f-mp'), 'fmp', chipValue($('#f-mp')), e.target.value || today());
   if (['f-cat', 'f-oncall', 'f-in'].includes(e.target.id) || e.target.name === 'fmp') syncCaseForm();
+  if (e.target.closest && e.target.closest('#f-cat')) syncSiteCats('f');
 });
 setupCombo('i');
 setupCombo('f');
@@ -13830,6 +13865,7 @@ intake.addEventListener('change', e => {
   if (siteChip(e)) return;
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); else delete catCount[e.target.value]; }
   if (e.target.name === 'icat' || e.target.name === 'itech' || e.target.name === 'itype' || e.target.id === 'i-dx') applyRules();
+  if (e.target.name === 'icat') syncSiteCats('i');
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
 });
 intake.addEventListener('input', e => {
