@@ -1122,6 +1122,7 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .queue-table tr.q-skip td{background:var(--sunken)}
 .queue-table tr.q-skip .q-how{color:var(--warn)}
 .queue-table tr.q-credit .q-how{color:var(--accent)}
+.queue-table tr.q-early .q-how{color:var(--accent)}
 .queue-table tr.q-ptr td{background:var(--accent-soft);color:var(--accent);font-size:12.5px}
 .queue-table tr.q-next td{background:var(--accent-soft)}
 .queue-table tr.q-next .q-how{color:var(--accent);font-weight:600}
@@ -2778,6 +2779,7 @@ const NOTE_API = 16;   // Code.gs ที่เก็บหมายเหตุ�
 const SKIP_API = 17;   // Code.gs ที่ใช้หักคิวรายเดือน (config.skips) ตอนแจกเคส
 const MANUAL_FROM_API = 52;   // Code.gs ที่ไม่นับเคสเลือกเองก่อน config.manualFrom ในคิว (รุ่นเก่า = นับทุกเคส · หน้าเว็บนับตามให้ตรงกัน)
 const manualFromOn = () => serverHas(MANUAL_FROM_API);
+const FAIR_API = 54;   // Code.gs ที่แจกเคสไม่ตรงคิวแล้วคิวไม่ขยับ (ตั้งแต่ manualFrom) · รุ่นเก่า = คิวไปต่อจากคนที่ได้เคส
 // เคสเลือกเองที่ไม่นับในคิว (วัน In ก่อน manualFrom)
 const manualOld = (c, from) => !!from && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < from;   // เหมือนใน pickNext / pickNext_
 const LOG_PIN_API = 18;   // Code.gs ที่ตรวจรหัส PIN ตอนบันทึกหรือลบในหน้าแก้ไขกิจกรรม (editLog, removeLog)
@@ -3293,7 +3295,8 @@ function cleanRenames(src) {
 }
 // ข้อมูลหนึ่งรายการ: ค่าที่เป็นชื่อเดิมเปลี่ยนเป็นชื่อใหม่ (ตอนโหลด และหลังบันทึกการตั้งค่า) · บันทึกครั้งถัดไปเก็บชื่อใหม่
 function renRec(table, rec) {
-  const all = state.config && state.config.renames;
+  let all = null;
+  try { all = state.config && state.config.renames; } catch (e) { return rec; }   // ย้ายข้อมูลเก่าตอนเริ่ม (ก่อนมี state): ยังไม่แปลง · โหลดข้อมูลแล้วแปลงอีกรอบ
   if (!all) return rec;
   for (const rk of Object.keys(all)) {
     const m = all[rk], one = v => (hasOwn(m, v) ? m[v] : v);
@@ -3666,7 +3669,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.10';
+const PAGE_VERSION = '2026-11-04.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4403,8 +4406,10 @@ function pickNext(o, trace) {
     if (o.manualFrom && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < o.manualFrom) return;   // เลือกเองก่อนเริ่มนับ: ไม่ข้ามคนนั้น
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
     if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
-    const trial = Object.assign({}, credit);
-    if (select(p, c.in, trial) === j) Object.assign(credit, trial);
+    const trial = Object.assign({}, credit), hit = select(p, c.in, trial) === j;
+    // ไม่ตรงคิว ตั้งแต่วันเริ่มใช้ระบบเต็ม (o.fairFrom): คิวไม่ขยับ คนที่ถึงคิวยังได้เคสตามลำดับ · คนที่ได้ไปถูกข้ามเมื่อคิววนมาถึง (เหมือนเคสเลือกเอง)
+    if (!hit && o.fairFrom && String(c.in || String(c.created || '').slice(0, 10)) >= o.fairFrom && !(o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp)) { credit[c.mp] = (credit[c.mp] || 0) + k; lastAuto = c; return; }
+    if (hit) Object.assign(credit, trial);
     p = (j + 1) % n;
     if (k > 1) credit[c.mp] = (credit[c.mp] || 0) + k - 1;
     lastAuto = c;
@@ -4420,6 +4425,7 @@ function queueInput(catId, date, ignoreLeave) {
   return {
     staff: state.config.staff, leaves: ignoreLeave ? [] : state.leaves,
     cases: planCases().filter(c => c.cat === catId), pointer: state.config.queue[catId] || null, skips: catSkips(catId), manualFrom: manualFromOn() ? state.config.manualFrom : '',
+    fairFrom: manualFromOn() && serverHas(FAIR_API) ? state.config.manualFrom : '',
     byDay: catOf(catId).rotate === 'day', date: date || today(),
   };
 }
@@ -4478,8 +4484,10 @@ function queueSlots(catId) {
     if (c.how === 'replan') return;   // งานวางแผนใหม่: ไม่อยู่ในตารางแจกเคส
     if (o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp) rows.push({ type: 'case', code: c.mp, date: c.in, c, same: true });   // วันเดียวกันคนเดิม (รอบคิวรายวัน)
     else {
-      const trial = Object.assign({}, credit), tt = cloneTok(tok), rec = [];
-      if (walk(p, c.in, trial, tt, rec) === j) { credit = trial; tok = tt; rows.push(...rec); }
+      const trial = Object.assign({}, credit), tt = cloneTok(tok), rec = [], hit = walk(p, c.in, trial, tt, rec) === j;
+      // ไม่ตรงคิวตั้งแต่วันเริ่มใช้ระบบเต็ม: ช่องนี้ยังเป็นของคนที่ถึงคิว · เคสนี้ไปอยู่ช่องของคนที่ได้ เมื่อคิววนมาถึง
+      if (!hit && o.fairFrom && String(c.in || dateStr(c.created)) >= o.fairFrom) { give(c.mp, k, { kind: 'early', c }); lastAuto = c; return; }
+      if (hit) { credit = trial; tok = tt; rows.push(...rec); }
       // ไม่ตรงคิว (เช่นเคสก่อนใช้ระบบเต็ม หรือแก้ผู้รับภายหลัง): ไม่แสดงช่อง "ข้ามคิว" (คนนั้นยังไม่ได้เคสจริง) · คิวเริ่มใหม่ต่อจากคนที่ได้เคส
       rows.push({ type: 'case', code: c.mp, date: c.in, c });
     }
@@ -4495,14 +4503,23 @@ function queueSlots(catId) {
   if (o.byDay && lastAuto && lastAuto.in === td && free(idx(lastAuto.mp), td)) next.push({ type: 'next', code: lastAuto.mp, same: true });
   else {
     const got = walk(p, td, cr, tt, next);
-    if (got >= 0) { next.push({ type: 'next', code: staff[got].code }); for (let x = 1; x < n; x++) next.push({ type: 'later', code: staff[(got + x) % n].code }); }
+    if (got >= 0) {
+      next.push({ type: 'next', code: staff[got].code });
+      // ช่องถัดไป: ครบรอบนี้ และต่อจนเคสที่ได้ก่อนถึงคิวแสดงที่ช่องของคนนั้นครบ (ไม่เกิน 4 รอบ)
+      const cr2 = Object.assign({}, cr), tt2 = cloneTok(tt), early = () => Object.keys(tt2).some(code => cr2[code] > 0 && tt2[code].some(t => t.kind === 'early'));
+      for (let x = 1; x < n || (early() && x < n * 4); x++) {
+        const code = staff[(got + x) % n].code;
+        if (cr2[code] > 0 && tt2[code] && tt2[code][0] && tt2[code][0].kind === 'early') { cr2[code]--; next.push({ type: 'credit', code, token: tt2[code].shift() }); }
+        else next.push({ type: 'later', code });
+      }
+    }
   }
   next.forEach(r => { if (!r.same) r.slot = ++slot; });
   const pending = {};
   Object.keys(tt).forEach(code => { if (tt[code].length) pending[code] = tt[code]; });
   return { rows, next, pending };
 }
-const TOKEN_LABEL = { manual: 'เลือกเอง', follow: 'ตามเทคนิคแรก', extra: 'จำนวนครั้ง', skip: 'หักคิวรายเดือน' };
+const TOKEN_LABEL = { manual: 'เลือกเอง', follow: 'ตามเทคนิคแรก', extra: 'จำนวนครั้ง', skip: 'หักคิวรายเดือน', early: 'ได้ก่อนถึงคิว' };
 function renderQueue() {
   const used = new Set(planCases().map(c => c.cat));
   const cats = state.config.cats.filter(k => k.on || used.has(k.id));
@@ -4521,7 +4538,8 @@ function renderQueue() {
   $('#queue-note').textContent = `${k.label} · ลำดับ ${state.config.staff.map(x => x.code).join(' → ')}${k.rotate === 'day' ? ' · รอบคิวรายวัน' : ''}`;
   // จำนวนเคสของแต่ละคนในเดือนนี้ (รวมเคสนอกคิว)
   const count = {};
-  for (const r of inMonth) if (r.type === 'case' || (r.type === 'credit' && r.token.c)) count[r.code] = (count[r.code] || 0) + 1;
+  for (const r of inMonth) if (r.type === 'case' || (r.type === 'credit' && r.token.c && r.token.kind !== 'early')) count[r.code] = (count[r.code] || 0) + 1;
+  for (const r of [...rows, ...next]) if (r.type === 'credit' && r.token.kind === 'early' && str(r.token.c.in).slice(0, 7) === ym) count[r.code] = (count[r.code] || 0) + 1;
   $('#queue-sum').innerHTML = state.config.staff.map(x => `<span class="qs">${av(x.code)}<b>${count[x.code] || 0}</b>${pending[x.code] ? `<small title="ถูกข้ามเมื่อคิววนมาถึง">รอหักคิว ${pending[x.code].length}</small>` : ''}</span>`).join('')
     + `<span class="muted qs-note">เคสใน${esc(fmtMonth(ym))}</span>`;
   const cell = v => `<td>${v || ''}</td>`;
@@ -4536,6 +4554,7 @@ function renderQueue() {
     }
     if (r.type === 'credit') {
       const t = r.token, label = TOKEN_LABEL[t.kind] || 'หักคิว';
+      if (t.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(แจก ${esc(fmtDay(t.c.in))})</span></td></tr>`;
       if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>`;
       return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(label)} ${esc(t.ym ? fmtMonth(t.ym) : '')} · ข้าม ${esc(fmtDay(r.date))}</td></tr>`;
     }
@@ -4546,6 +4565,7 @@ function renderQueue() {
     const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
     if (r.type === 'next') return `<tr class="q-next">${mp}<td colspan="11"><b>คิวถัดไป</b>${r.same ? ' (วันนี้คนเดิม รอบคิวรายวัน)' : ''}</td><td class="q-how">◀ ตอนนี้อยู่ที่นี่</td></tr>`;
     if (r.type === 'later') return `<tr class="q-later">${mp}${blank}<td></td></tr>`;
+    if (r.type === 'credit' && r.token.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(r.token.c)}<td class="q-how">ได้ก่อนถึงคิว <span class="muted">(แจก ${esc(fmtDay(r.token.c.in))})</span></td></tr>`;
     if (r.type === 'credit') return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`;
     return `<tr class="q-later q-skip">${mp}${blank}<td class="q-how">จะข้าม · ${r.why === 'off' ? 'ปิดปฏิบัติงาน' : 'ลาวันนี้'}</td></tr>`;
   }).join('') : '';
@@ -10661,6 +10681,7 @@ function renderSettings() {
       <ul class="rules">
         <li>แจกอัตโนมัติวนตามลำดับทีมด้านบน แยกคิวตามเทคนิค</li>
         <li>ถึงคิวคนที่ลาในวัน In ของเคส หรือปิด "ปฏิบัติงาน" ไว้ ระบบข้ามไปคนถัดไป และ<b>เสียคิวนั้นไปเลย</b> จนกว่าจะกลับมาทำงาน ไม่ชดเชยภายหลัง</li>
+        <li>ตั้งแต่วันที่ตั้งไว้ด้านล่าง เคสที่แจกไม่ตรงคิว (เช่น แก้ผู้รับภายหลัง) ไม่ทำให้ใครเสียคิว: คิวไม่ขยับ คนที่ถึงคิวได้เคสถัดไปตามลำดับ · คนที่ได้ไปก่อนถูกข้ามเมื่อคิววนมาถึง (ตารางแจกเคสแสดงเคสนั้นที่ช่องของเขา "ได้ก่อนถึงคิว")</li>
         <li>เคสที่เลือกเอง (วัน In ตั้งแต่วันที่ตั้งไว้ด้านล่าง) และเทคนิคถัดไปที่แจกพร้อมเทคนิคแรก ไม่ขยับคิว แต่ข้ามคนนั้น 1 ครั้งเมื่อคิววนมาถึงตอนที่เขาทำงานอยู่ (คอลัมน์ "รอหักคิว")</li>
       </ul>
       <div class="table-wrap"><table><thead><tr><th>เทคนิค</th><th style="text-align:left">คิวอยู่ที่</th><th style="text-align:left">รอหักคิว (ได้นอกคิว)</th><th style="text-align:left">รอบคิว</th></tr></thead><tbody>${queueRows}</tbody></table></div>

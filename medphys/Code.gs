@@ -430,7 +430,7 @@ function addCases(recs, token) {
         rec.mp = pickNext_({
           staff: staff, leaves: leaves, date: date, byDay: byDay,
           cases: cases.filter(c => c.cat === rec.cat),
-          pointer: (cfg.queue || {})[rec.cat] || null, skips: catSkips_(cfg, rec.cat), manualFrom: manualFrom_(cfg),
+          pointer: (cfg.queue || {})[rec.cat] || null, skips: catSkips_(cfg, rec.cat), manualFrom: manualFrom_(cfg), fairFrom: manualFrom_(cfg),
         });
       }
       if (!rec.mp) throw new Error((cat ? cat.label + ': ' : '') + 'ไม่มีนักฟิสิกส์ที่รับเคสได้ในวันนั้น (ลาหรือปิดการปฏิบัติงานทุกคน)');
@@ -516,8 +516,10 @@ function pickNext_(o, trace) {
     if (o.manualFrom && c.how === 'manual' && String(c.in || String(c.created || '').slice(0, 10)) < o.manualFrom) return;   // เลือกเองก่อนเริ่มนับ: ไม่ข้ามคนนั้น
     if (c.how === 'manual' || c.how === 'follow') { credit[c.mp] = (credit[c.mp] || 0) + k; return; }
     if (c.how === 'replan') return;   // งานวางแผนใหม่ให้ MP คนเดิม: ไม่เกี่ยวกับคิว
-    const trial = Object.assign({}, credit);
-    if (select(p, c.in, trial) === j) Object.assign(credit, trial);
+    const trial = Object.assign({}, credit), hit = select(p, c.in, trial) === j;
+    // ไม่ตรงคิว ตั้งแต่วันเริ่มใช้ระบบเต็ม (o.fairFrom): คิวไม่ขยับ คนที่ถึงคิวยังได้เคสตามลำดับ · คนที่ได้ไปถูกข้ามเมื่อคิววนมาถึง (เหมือนเคสเลือกเอง)
+    if (!hit && o.fairFrom && String(c.in || String(c.created || '').slice(0, 10)) >= o.fairFrom && !(o.byDay && lastAuto && lastAuto.in === c.in && lastAuto.mp === c.mp)) { credit[c.mp] = (credit[c.mp] || 0) + k; lastAuto = c; return; }
+    if (hit) Object.assign(credit, trial);
     p = (j + 1) % n;
     if (k > 1) credit[c.mp] = (credit[c.mp] || 0) + k - 1;
     lastAuto = c;
