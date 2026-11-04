@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.4';
-const API_LEVEL = 52;
+const CODE_VERSION = '2026-11-04.5';
+const API_LEVEL = 53;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -313,7 +313,7 @@ function getData(token) {
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
     reg: need.reg ? regRows_(ss) : [],
-    bq: need.bq ? recentBq_(ss) : [],
+    bq: need.bq ? recentBq_(ss, config) : [],
     jobs: need.jobs ? jobsFor_(ss, user, config) : [],
     vac: need.vac ? readTable_(ss, 'vac') : [],
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
@@ -1397,7 +1397,7 @@ const BQ_BOOKED = 'นัดแล้ว';
 const BQ_NOSHOW = 'ไม่มา';   // API 50 · ผู้ป่วยไม่มาตามนัด = ไม่นับเคส ไม่นับคะแนน (MP, RC และอื่น ๆ) เหมือนยกเลิก
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
 // CT ของนัดใส่แร่ (API 46): ct = CT / Re-CT · ctRoom = รหัสเครื่อง CT ที่ทำ (นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · us = US (Ultrasound)
-const BQ_CT = ['', 'CT', 'Re-CT'];
+const BQ_CT = ['', 'CT', 'Re-CT1', 'Re-CT2', 'Re-CT'];   // API 53: CT / Re-CT1 / Re-CT2 (Re-CT = นัดที่บันทึกก่อนหน้า)
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
@@ -1443,7 +1443,7 @@ function bqEdit(id, ch, pin, token) {
   if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
   if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BQ_NOSHOW, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
-  if ('ct' in set && BQ_CT.indexOf(set.ct) < 0) throw new Error('CT ต้องเป็น CT หรือ Re-CT');
+  if ('ct' in set && BQ_CT.indexOf(set.ct) < 0) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
   if ('ct' in set && !set.ct) set.ctRoom = '';   // ไม่ได้ทำ CT = ไม่มีห้อง
   if ('ctRoom' in set && set.ctRoom && !/^[\w-]{1,20}$/.test(set.ctRoom)) throw new Error('ห้อง CT ไม่ถูกต้อง');
   if ('us' in set && ['', 'US'].indexOf(set.us) < 0) throw new Error('Ultrasound ไม่ถูกต้อง');
@@ -1531,9 +1531,19 @@ function bqCancel(id, scope, pin, token) {
   return res;
 }
 // นัดที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
-function recentBq_(ss) {
+function recentBq_(ss, cfg) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-  return readTable_(ss, 'bq').filter(x => String(x.date) >= from);
+  const rows = readTable_(ss, 'bq').filter(x => String(x.date) >= from);
+  // API 53: ห้องฉายรังสีภายนอกของผู้ป่วย (rtRoom) = เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนัด (ไม่มี = เคสแรก) · ตำแหน่งที่ไม่ได้รับข้อมูลเคสก็เห็นห้อง
+  const byHn = {};
+  readTable_(ss, 'cases', cfg).forEach(c => { const k = hnKey_(c.hn); if (k && c.room) (byHn[k] = byHn[k] || []).push(c); });
+  rows.forEach(r => {
+    const cs = (byHn[hnKey_(r.hn)] || []).slice().sort((a, b) => String(a.sim).localeCompare(String(b.sim)));
+    const before = cs.filter(c => /^\d{4}-\d{2}-\d{2}$/.test(String(c.sim)) && String(c.sim) <= String(r.date));
+    const c = before.length ? before[before.length - 1] : cs[0];
+    r.rtRoom = c ? String(c.room) : '';
+  });
+  return rows;
 }
 // สถิติ Brachytherapy จากแถบนี้ (ตั้งค่า → Brachytherapy: ที่มา = แถบนัดคิวใส่แร่): อัปเดตกิจกรรม MP / RC ทันทีหลังแก้นัด
 function bqStats_() {
