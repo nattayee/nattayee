@@ -1417,6 +1417,10 @@ dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
 .opt-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 2px 2px 10px;border-radius:999px;background:var(--sunken);font-size:13.5px}
 .opt-chip button{width:22px;height:22px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);font-size:14px;line-height:1}
 .opt-chip button:hover{background:var(--line);color:var(--fg)}
+.opt-chip .opt-name{width:auto;height:auto;padding:0 2px;border-radius:4px;color:inherit;font:inherit;line-height:inherit;cursor:text}
+.opt-chip .opt-name:hover{background:var(--line);text-decoration:underline dotted}
+.ro-wrap[disabled] .opt-chip .opt-name{display:inline;cursor:default;text-decoration:none;background:none}
+.opt-ren{height:24px;padding:0 6px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--fg);font:inherit;min-width:6ch}
 .opt-new{flex:1 1 80px;min-width:80px;width:auto;min-height:28px;padding:2px 6px;border:0;background:none}
 .opt-new:focus{box-shadow:none}
 .rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
@@ -2996,6 +3000,7 @@ const DEFAULT_CONFIG = {
   nav: ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   manualFrom: '2026-11-01',
+  renames: {},   // แก้ชื่อตัวเลือก (ตั้งค่า): { รายการ: { ชื่อเดิม: ชื่อใหม่ } } ข้อมูลที่บันทึกชื่อเดิมแสดงและนับเป็นชื่อใหม่
   fxgParts: FXG_PARTS.map(([k, , on]) => ({ k, on })),   // ข้อมูลในคอลัมน์ผู้ป่วยของตารางวันฉาย (ลำดับเริ่มต้น)   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
@@ -3192,6 +3197,68 @@ function stampStr(v) {
   const m = str(v).match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
   return m ? `${m[1]}-${pad(m[2])}-${pad(m[3])} ${pad(m[4])}:${m[5]}` : dateStr(v);
 }
+// แก้ชื่อตัวเลือก: รายการในตั้งค่า → ช่องของข้อมูลที่เก็บค่านั้น [ตาราง, ช่อง, หลายค่าคั่น ", ", คีย์ใน JSON]
+// หัวข้อเพิ่มเติม = 'x.' + id (เคส x_id · CT-SIM extra.x_id) · ห้องฉาย / แอดมิน / IGRT แก้ชื่อไม่ได้ (เป็นรหัสที่ใช้อ้างอิง)
+const RENAME_TARGETS = {
+  techniques: [['cases', 'tech'], ['ct', 'tech']],
+  types: [['cases', 'type'], ['ct', 'type']],
+  aims: [['cases', 'aim'], ['ct', 'aim']],
+  freqs: [['cases', 'freq'], ['ct', 'freq'], ['appt', 'freq']],
+  areas: [['cases', 'area', 1], ['ct', 'area', 1], ['cases', 'sites', 1, 'area']],
+  ptags: [['cases', 'ptags', 1]],
+  mobility: [['cases', 'ptags', 1]],
+  'appt.cms': [['appt', 'cm'], ['ct', 'ctcm']],
+  'appt.specials': [['appt', 'special', 1], ['ct', 'special', 1]],
+  'ct.organs': [['ct', 'organ']], 'ct.masks': [['ct', 'mask']], 'ct.cms': [['ct', 'cm']], 'ct.pstats': [['ct', 'pstat']], 'ct.hdrs': [['ct', 'hdr']],
+  'reg.titles': [['reg', 'title']], 'reg.rights': [['reg', 'right']],
+  'order.genders': [['reg', 'sex'], ['appt', 'order', 0, 'sex']], 'order.positions': [['appt', 'order', 0, 'pos']],
+  'bq.techs': [['bq', 'tech']],
+};
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const renTargets = rk => RENAME_TARGETS[rk] || (/^x\./.test(rk) ? [['cases', 'x_' + rk.slice(2), 1], ['ct', 'extra', 1, 'x_' + rk.slice(2)]] : []);
+function cleanRenames(src) {
+  const out = {};
+  if (!src || typeof src !== 'object' || Array.isArray(src)) return out;
+  for (const rk of Object.keys(src)) {
+    const m = src[rk];
+    if ((!RENAME_TARGETS[rk] && !/^x\.[\w-]{1,40}$/.test(rk)) || !m || typeof m !== 'object' || Array.isArray(m)) continue;
+    const o = {};
+    for (const k of Object.keys(m)) { const a = str(k).slice(0, 200), b = str(m[k]).slice(0, 200); if (a && b && a !== b) o[a] = b; }
+    if (Object.keys(o).length) out[rk] = o;
+  }
+  return out;
+}
+// ข้อมูลหนึ่งรายการ: ค่าที่เป็นชื่อเดิมเปลี่ยนเป็นชื่อใหม่ (ตอนโหลด และหลังบันทึกการตั้งค่า) · บันทึกครั้งถัดไปเก็บชื่อใหม่
+function renRec(table, rec) {
+  const all = state.config && state.config.renames;
+  if (!all) return rec;
+  for (const rk of Object.keys(all)) {
+    const m = all[rk], one = v => (hasOwn(m, v) ? m[v] : v);
+    const fix = (v, multi) => {
+      if (!multi) return one(v);
+      const a = splitList(v), b = a.map(one);
+      return b.some((x, i) => x !== a[i]) ? [...new Set(b)].join(', ') : v;
+    };
+    for (const [t, f, multi, jk] of renTargets(rk)) {
+      if (t !== table || !rec[f]) continue;
+      if (!jk) { rec[f] = fix(str(rec[f]), multi); continue; }
+      let o = null, ch = false;
+      try { o = JSON.parse(rec[f]); } catch (e) { o = null; }
+      if (!o || typeof o !== 'object') continue;
+      for (const x of Array.isArray(o) ? o : [o]) {
+        if (!x || typeof x[jk] !== 'string' || !x[jk]) continue;
+        const y = fix(x[jk], multi);
+        if (y !== x[jk]) { x[jk] = y; ch = true; }
+      }
+      if (ch) rec[f] = JSON.stringify(o);
+    }
+  }
+  return rec;
+}
+function renameAll() {
+  if (!Object.keys(state.config.renames || {}).length) return;
+  for (const [t, list] of [['cases', state.cases], ['ct', state.ct], ['appt', state.appt], ['reg', state.reg], ['bq', state.bq]]) for (const r of list) renRec(t, r);
+}
 function normCase(o) {
   const c = {};
   for (const f of CASE_FIELDS) c[f] = str(o[f]);
@@ -3209,7 +3276,7 @@ function normCase(o) {
   c.n = unitsOf(c) > 1 ? String(unitsOf(c)) : '';
   c.id = c.id || uid();
   c.created = c.created || nowISO();
-  return c;
+  return renRec('cases', c);
 }
 function normLog(o) {
   const l = {};
@@ -3232,7 +3299,7 @@ function normCt(o) {
   c.doc = c.doc.toUpperCase();
   c.id = c.id || uid();
   c.created = c.created || nowISO();
-  return c;
+  return renRec('ct', c);
 }
 // แถบลงนัด: นัดทำ CT-Sim (ช่องเดียวกับ TABLES.appt ใน Code.gs) · took = id ของรายการ CT-SIM ที่ลงจากนัดนี้ หรือ skip = ไม่มาทำ CT · order = ใบสั่ง CT Sim (JSON)
 const APPT_KEYS = ['id', 'date', 'hn', 'name', 'cm', 'special', 'dpf', 'fx', 'rx', 'freq', 'sim', 'ct', 'room', 'doc', 'icd', 'dx', 'note', 'order', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'];
@@ -3244,7 +3311,7 @@ function normAppt(o) {
   a.doc = a.doc.toUpperCase();
   a.id = a.id || uid();
   a.created = a.created || nowISO();
-  return a;
+  return renRec('appt', a);
 }
 // การใช้ Vac-Lok { id, no, hn, name, room, ct (วันทำ CT), off, hold (Hold RT), note, ctId (รายการ CT-SIM), src, by, created, updated }
 const VAC_KEYS = ['id', 'no', 'hn', 'name', 'room', 'ct', 'off', 'hold', 'note', 'ctId', 'src', 'by', 'created', 'updated'];
@@ -3338,6 +3405,7 @@ function mergeConfig(c) {
     for (const x of Array.isArray(c.fxgParts) ? c.fxgParts : []) { const k = str(x && x.k); if (!FXG_PARTS.some(p => p[0] === k) || seen.has(k)) continue; seen.add(k); out.fxgParts.push({ k, on: k === 'hn' || !!x.on }); }
     for (const [k, , on] of FXG_PARTS) if (!seen.has(k)) out.fxgParts.push({ k, on });   // ข้อมูลใหม่ที่ยังไม่เคยตั้ง: ค่าเริ่มต้นต่อท้าย
   }
+  out.renames = cleanRenames(c.renames);
   out.manualFrom = 'manualFrom' in c ? (/^\d{4}-\d{2}-\d{2}$/.test(str(c.manualFrom)) ? str(c.manualFrom) : '') : d.manualFrom;
   // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } · เก็บเฉพาะจำนวนเต็ม 1–20
   out.skips = {};
@@ -3534,7 +3602,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.8';
+const PAGE_VERSION = '2026-11-04.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5551,7 +5619,7 @@ function normReg(o) {
   r.birth = isDay(r.birth) ? r.birth : '';
   r.doc = r.doc.toUpperCase();
   r.id = r.id || uid();
-  return r;
+  return renRec('reg', r);
 }
 const hnKey = v => str(v).replace(/\s+/g, '').toUpperCase();
 const regByHn = hn => (hnKey(hn) ? state.reg.find(r => hnKey(r.hn) === hnKey(hn)) : null);
@@ -5907,7 +5975,7 @@ function normBq(o) {
   r.date = isDay(r.date) ? r.date.slice(0, 10) : '';
   if (!Object.values(BQ_ST).includes(r.status)) r.status = BQ_ST.booked;
   r.id = r.id || uid();
-  return r;
+  return renRec('bq', r);
 }
 const bqLive = a => a.status !== BQ_ST.cancel && a.status !== BQ_ST.noshow;   // นับเป็นเคส (ไม่ยกเลิก · ไม่ใช่ไม่มา)
 const bqMax = () => state.config.bq.max;
@@ -10417,7 +10485,7 @@ function renderSettings() {
       <td><input data-k="icdExtra.${i}.th" value="${esc(x.th)}" placeholder="ชื่อย่อภาษาไทย" aria-label="ชื่อไทย"></td>
       <td><button type="button" class="icon-btn" data-del="icdExtra.${i}" aria-label="ลบรหัส ${esc(x.code)}">×</button></td>
     </tr>`).join('');
-  const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${getPath(d, key).map((v, i) => `<span class="opt-chip" ${dragAttr(`${key}.${i}`)}>${esc(v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
+  const optEditor = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="opt-edit">${getPath(d, key).map((v, i) => `<span class="opt-chip" ${dragAttr(`${key}.${i}`)}>${optName(key, i, v)}<button type="button" data-rmopt="${key}.${i}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="${key}" placeholder="+ เพิ่ม" aria-label="เพิ่ม ${label}"></div></div>`;
   const fieldCards = d.fields.map((f, i) => `<div class="cat-card field-card" data-drag="fields.${i}">
       <div class="fld-l1">
         <label class="field"><span class="lbl">ชื่อหัวข้อ</span><input data-k="fields.${i}.label" value="${esc(f.label)}" placeholder="เช่น Bolus, 4D-CT, Protocol"></label>
@@ -10425,7 +10493,7 @@ function renderSettings() {
         <label class="check"><input type="checkbox" data-k="fields.${i}.req"${f.req ? ' checked' : ''}> บังคับกรอก</label>
         <span class="btns">${DRAG_H}<button type="button" class="icon-btn" data-up="fields.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fields.${i}" aria-label="ลบหัวข้อ ${esc(f.label)}">×</button></span>
       </div>
-      ${f.type === 'pick' || f.type === 'multi' ? `<div class="opt-edit">${f.options.map((v, j) => `<span class="opt-chip" ${dragAttr(`fields.${i}.options.${j}`)}>${esc(v)}<button type="button" data-rmopt="fields.${i}.options.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fields.${i}.options" placeholder="+ เพิ่มตัวเลือก" aria-label="เพิ่มตัวเลือกของ ${esc(f.label)}"></div>` : ''}
+      ${f.type === 'pick' || f.type === 'multi' ? `<div class="opt-edit">${f.options.map((v, j) => `<span class="opt-chip" ${dragAttr(`fields.${i}.options.${j}`)}>${optName(`fields.${i}.options`, j, v)}<button type="button" data-rmopt="fields.${i}.options.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fields.${i}.options" placeholder="+ เพิ่มตัวเลือก" aria-label="เพิ่มตัวเลือกของ ${esc(f.label)}"></div>` : ''}
       <div class="fld-def"><span class="lbl">ค่าเริ่มต้นในฟอร์มแจกเคส</span>${defField(f, d)}</div>
       ${f.col && f.col !== str(f.label) ? `<span class="unit">คอลัมน์ในแท็บ Cases: ${esc(f.col)}</span>` : ''}
     </div>`).join('');
@@ -10506,7 +10574,7 @@ function renderSettings() {
     <div class="sec"><div class="sec-head"><h2>กิจกรรมนับครั้ง</h2><p>กิจกรรมใหม่จะเป็นตัวเลือกในหน้า "RC และกิจกรรม" และนับแต้มในสรุป P4P · กิจกรรมที่ใส่แถบเดียวกันจะรวมอยู่ในแถบเดียวกัน (เช่น Brachytherapy, Hyperthermia) ไม่ใส่ = มีแถบของตัวเอง · ติ๊ก HN เพื่อบันทึก HN และชื่อผู้ป่วย</p></div>
       <div class="table-wrap set-table"><table><thead><tr><th>กิจกรรม</th><th style="text-align:left">แถบ</th><th style="text-align:left">กลุ่มในแบบ P4P</th><th>เวลา (นาที)</th><th>น้ำหนัก</th><th>แต้ม/ครั้ง</th><th>HN</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="act">+ เพิ่มกิจกรรม</button></div></div>
-    <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ</p></div>
+    <div class="sec"><div class="sec-head"><h2>ตัวเลือกในฟอร์ม</h2><p>พิมพ์แล้วกด Enter เพื่อเพิ่ม · กด × เพื่อลบ · กดชื่อตัวเลือกเพื่อแก้ชื่อ (ข้อมูลที่บันทึกชื่อเดิมไว้แล้วเปลี่ยนเป็นชื่อใหม่ด้วย ลำดับเดิม)</p></div>
       <div class="form-grid">${optEditor('types', 'Type')}${optEditor('aims', 'Aim')}${optEditor('techniques', 'Technique')}${optEditor('freqs', 'ความถี่ในการฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('areas', 'บริเวณที่ฉาย (มี "อื่นๆ" ให้กรอกเองเสมอ)')}${optEditor('rooms', 'ห้องฉาย')}</div>
       ${roomSitesOn() ? '' : '<p class="notice" style="margin:12px 0 0"><b>ต้องอัปเดต Code.gs</b><span>ห้องฉายและปุ่มเพิ่มบริเวณที่ฉายจะแสดงในฟอร์มเมื่อวาง Code.gs รุ่นใหม่และ Deploy เวอร์ชันใหม่แล้ว</span></p>'}</div>
     <div class="sec"><div class="sec-head"><h2>หัวข้อเพิ่มเติมในฟอร์มแจกเคส</h2><p>เพิ่มหัวข้อที่อยากเก็บ เช่น Bolus, 4D-CT, Protocol · แสดงต่อจากช่องวันที่ในฟอร์มแจกเคส ในหน้าแก้ไขเคส และในรายการเคส (ค้นหาได้) · เก็บเป็นคอลัมน์ของตัวเองในแท็บ Cases · ลบหัวข้อแล้วข้อมูลเดิมยังอยู่ในชีต</p></div>
@@ -10792,6 +10860,7 @@ async function saveSettings() {
   try {
     await store.saveConfig(next);
     state.config = next; draft = null;
+    renameAll();
     render();
     toast('บันทึกการตั้งค่าแล้ว');
   } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
@@ -12945,6 +13014,7 @@ document.addEventListener('click', e => {
     renderSettings(); $$('[data-k^="acts."][data-k$=".label"]').pop().select(); return;
   }
   if (ds.delact) { const acts = { ...draft.acts }; delete acts[ds.delact]; draft.acts = acts; return renderSettings(); }
+  if (ds.renopt) return startRename(t);
   if (ds.rmopt) { const j = ds.rmopt.lastIndexOf('.'); getPath(draft, ds.rmopt.slice(0, j)).splice(+ds.rmopt.slice(j + 1), 1); return renderSettings(); }
   if (ds.add === 'queue') {   // ใช้ช่องที่ยังไม่เคยใช้ก่อน (ผู้ป่วยที่บันทึกคิวที่ลบไปแล้วไม่ย้ายมาคิวใหม่)
     const free = Q_IDS.filter(x => !draft.queues.some(q => q.id === x)), id = free.find(x => !queues().some(q => q.id === x)) || free[0];
@@ -13566,6 +13636,76 @@ async function pickLogo(el) {
     toast('ได้รูปโลโก้แล้ว กด "บันทึก" ด้านล่างเพื่อใช้');
   } catch (e) { toast(errMsg(e), { err: true }); }
 }
+// แก้ชื่อตัวเลือก: รายการที่ข้อมูลเปลี่ยนตาม (RENAME_TARGETS และหัวข้อเพิ่มเติม) · ชื่อเป็นปุ่ม กดแล้วเป็นช่องพิมพ์
+function renKey(key) {
+  if (RENAME_TARGETS[key]) return key;
+  const m = /^fields\.(\d+)\.options$/.exec(key), f = m && draft && draft.fields[+m[1]];
+  return f && f.id ? 'x.' + f.id : '';
+}
+const optName = (key, i, v) => (renKey(key) ? `<button type="button" class="opt-name" data-renopt="${esc(key)}.${i}" title="กดเพื่อแก้ชื่อ · ข้อมูลที่บันทึก “${esc(v)}” ไว้แล้วเปลี่ยนเป็นชื่อใหม่ด้วย">${esc(v)}</button>` : esc(v));
+function startRename(btn) {
+  const ref = btn.dataset.renopt, j = ref.lastIndexOf('.'), v = str(getPath(draft, ref.slice(0, j))[+ref.slice(j + 1)]);
+  const inp = document.createElement('input');
+  inp.className = 'opt-ren';
+  inp.value = v;
+  inp.dataset.renin = ref;
+  inp.size = Math.max(6, v.length + 2);
+  inp.setAttribute('aria-label', `แก้ชื่อตัวเลือก ${v}`);
+  const chip = btn.closest('.opt-chip');
+  if (chip) chip.draggable = false;
+  btn.replaceWith(inp);
+  inp.focus();
+  inp.select();
+}
+// ชื่อเดิม → ชื่อใหม่ (ต่อจากที่เคยแก้: A → B แล้ว B → C = A → C · แก้กลับเป็นชื่อเดิมได้)
+function addRename(rk, from, to) {
+  const m = { ...((draft.renames || {})[rk] || {}) };
+  for (const k of Object.keys(m)) if (m[k] === from) m[k] = to;
+  m[from] = to;
+  for (const k of Object.keys(m)) if (k === m[k]) delete m[k];
+  draft.renames = { ...(draft.renames || {}), [rk]: m };
+  if (!Object.keys(m).length) delete draft.renames[rk];
+}
+// การตั้งค่าที่อ้างชื่อตัวเลือก (ค่าเริ่มต้น กฎค่าเริ่มต้น เทคนิคใน RTT/RA Jobs เปลนั่ง/เปลนอน) เปลี่ยนตาม
+function renameRefs(rk, from, to) {
+  const d = draft, df = d.defaults, rules = df.rules || [], sw = v => (v === from ? to : v);
+  const many = v => [...new Set(splitList(v).map(sw))].join(', ');
+  const one = k => { if (df[k] === from) df[k] = to; };
+  if (rk === 'techniques') {
+    one('tech');
+    rules.forEach(r => { if (r.on === 'tech' && r.match === from) r.match = to; });
+    const tt = d.jobs.techTech;
+    if (hasOwn(tt, from)) { tt[to] = tt[from]; delete tt[from]; }
+  }
+  if (rk === 'types') { one('type'); rules.forEach(r => { if (r.on === 'type' && r.match === from) r.match = to; }); }
+  if (rk === 'aims') { one('aim'); rules.forEach(r => { if (r.aim === from) r.aim = to; }); }
+  if (rk === 'freqs') { one('freq'); rules.forEach(r => { if (r.freq === from) r.freq = to; }); }
+  if (rk === 'areas') { if (df.area) df.area = many(df.area); rules.forEach(r => { if (r.area) r.area = many(r.area); }); }
+  if (rk === 'ptags' || rk === 'mobility' || rk === 'ct.pstats') for (const k of ['sit', 'lie']) d.jobs[k] = [...new Set(d.jobs[k].map(sw))];
+  if (/^x\./.test(rk)) { const k = 'x_' + rk.slice(2); if (df[k]) df[k] = many(df[k]); }
+}
+function commitRename(inp, how) {
+  if (inp.dataset.done) return;
+  inp.dataset.done = '1';
+  const ref = inp.dataset.renin, j = ref.lastIndexOf('.'), key = ref.slice(0, j), i = +ref.slice(j + 1);
+  const list = getPath(draft, key), from = str(list[i]), to = str(inp.value), rk = renKey(key);
+  if (how === 'cancel' || !to || to === from) return renderSettings();
+  const m = (draft.renames || {})[rk] || {};
+  const bad = to.includes(',') ? 'ชื่อตัวเลือกใส่จุลภาค (,) ไม่ได้'
+    : list.some((x, k) => k !== i && str(x).toLowerCase() === to.toLowerCase()) ? `มีตัวเลือก “${to}” อยู่แล้ว`
+    : hasOwn(m, to) && m[to] !== from ? `“${to}” เป็นชื่อเดิมที่เปลี่ยนเป็น “${m[to]}” แล้ว (ข้อมูลเดิมแสดงเป็น “${m[to]}”) · ใช้ชื่ออื่น` : '';
+  if (bad) {
+    toast(bad, { err: true });
+    if (how === 'blur') return renderSettings();
+    delete inp.dataset.done;
+    return;
+  }
+  list[i] = to;
+  if (rk) { addRename(rk, from, to); renameRefs(rk, from, to); }
+  renderSettings();
+  updateSaveBar();
+  toast(`แก้ชื่อ “${from}” เป็น “${to}” · กดบันทึกการตั้งค่า แล้วข้อมูลที่บันทึก “${from}” ไว้จะแสดงเป็น “${to}”`);
+}
 // เพิ่มตัวเลือกในฟอร์ม: กด Enter หรือออกจากช่อง
 function addOption(el) {
   const key = el.dataset.addopt;
@@ -13573,6 +13713,11 @@ function addOption(el) {
   if (key === 'admins' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) && !/^[a-z0-9._-]{3,30}$/.test(v)) { toast('ใส่ชื่อผู้ใช้ LPCH (a-z 0-9 . _ -) หรืออีเมล', { err: true }); return; }
   if ((key.endsWith('.options') || key.startsWith('ct.') || key.startsWith('igrt.') || key === 'mobility' || key === 'ptags') && v.includes(',')) { toast('ตัวเลือกใส่จุลภาค (,) ไม่ได้ เพิ่มทีละตัวเลือก', { err: true }); return; }
   if (key === 'igrt.types' && /\s/.test(v)) { toast('ชนิด IGRT ต้องเป็นคำเดียว (ไม่มีช่องว่าง) เช่น CBCT, Planar, kV-kV', { err: true }); return; }
+  const rk = renKey(key), rm = rk && draft.renames && draft.renames[rk];
+  if (v && rm && hasOwn(rm, v)) {
+    if (getPath(draft, key).includes(rm[v])) { toast(`“${v}” เปลี่ยนชื่อเป็น “${rm[v]}” แล้ว (ข้อมูลเดิมแสดงเป็น “${rm[v]}”) · ใช้ชื่ออื่น หรือกดชื่อ “${rm[v]}” เพื่อแก้กลับ`, { err: true }); return; }
+    delete rm[v];
+  }
   el.value = ''; // ล้างก่อนวาดใหม่ กันไม่ให้ช่องที่ถูกแทนที่ส่ง change ซ้ำ
   if (!v) return;
   const list = getPath(draft, key);
@@ -13585,7 +13730,9 @@ function addOption(el) {
 }
 settingsEl.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.dataset.addopt) { e.preventDefault(); addOption(e.target); }
+  if (e.target.dataset.renin && (e.key === 'Enter' || e.key === 'Escape')) { e.preventDefault(); e.stopPropagation(); commitRename(e.target, e.key === 'Enter' ? 'enter' : 'cancel'); }
 });
+settingsEl.addEventListener('focusout', e => { if (e.target.dataset && e.target.dataset.renin) commitRename(e.target, 'blur'); });
 settingsEl.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.navacc !== undefined) {   // สิทธิ์ของแถบต่อตำแหน่ง
