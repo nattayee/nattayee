@@ -1267,6 +1267,14 @@ dialog::backdrop{background:var(--scrim, rgb(8 20 20 / .42))}
 .dlg-body{display:grid;gap:14px;padding:16px 18px;overflow-y:auto}
 .dlg-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* หน้าต่างฟอร์มยาว (CT-SIM, ลงนัด): กว้างเกือบเต็มจอ · จอกว้างแบ่ง 2 คอลัมน์ (ข้อมูลผู้ป่วย / ห้อง CT หรือข้อมูลใบสั่ง) เลื่อนลงน้อยลง */
+dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
+.dlg-cols,.dlg-col{display:grid;gap:14px;align-content:start;min-width:0}
+@media (min-width:1000px){
+  .dlg-wide .dlg-cols{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;align-items:start}
+  .dlg-wide .dlg-col+.dlg-col{padding-left:28px;border-left:1px solid var(--line)}
+  .dlg-wide .dlg-col>.ct-sub:first-child{margin-top:0;padding-top:0;border-top:0}
+}
 .dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .lbl{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:20px;font-size:12.5px;color:var(--muted)}
@@ -2165,53 +2173,61 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
 </dialog>
 
 <!-- CT-SIM: เพิ่ม/แก้ผู้ป่วย (ช่องตาม ตั้งค่า → CT-SIM · data-ctf) -->
-<dialog id="ct-dlg" aria-labelledby="ct-title">
+<dialog id="ct-dlg" class="dlg-wide" aria-labelledby="ct-title">
   <form class="dlg ct-form" id="ct-form" novalidate autocomplete="off">
     <header class="dlg-head"><h2 id="ct-title">เพิ่มผู้ป่วย CT-SIM</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <p class="ct-from" id="t-appt" hidden></p>
-      <div class="row2">
-        <div class="field ctf-must"><span class="lbl">เครื่อง CT</span><div class="chips" id="t-machine" role="radiogroup" aria-label="เครื่อง CT"></div></div>
-        <label class="field ctf-must"><span class="lbl">วันที่ทำ CT</span><input type="date" id="t-date"></label>
+      <div class="dlg-cols">
+        <div class="dlg-col">
+          <div class="row2">
+            <div class="field ctf-must"><span class="lbl">เครื่อง CT</span><div class="chips" id="t-machine" role="radiogroup" aria-label="เครื่อง CT"></div></div>
+            <label class="field ctf-must"><span class="lbl">วันที่ทำ CT</span><input type="date" id="t-date"></label>
+          </div>
+          <div class="row2">
+            <div class="field ctf-must"><span class="lbl"><label for="t-hn">HN</label></span><div class="combo"><input id="t-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="t-hn-list"><ul class="combo-list" id="t-hn-list" role="listbox" hidden></ul></div></div>
+            <label class="field" data-ctf="name"><span class="lbl">Name</span><input id="t-name" autocomplete="off"></label>
+          </div>
+          <div class="field" data-ctf="ctcm"><span class="lbl">CT <span class="sub-lbl">CM / Non-CM</span></span><div class="chips" id="t-ctcm" role="radiogroup" aria-label="CT (CM / Non-CM)"></div></div>
+          <div class="field" data-ctf="special"><span class="lbl">เทคนิคพิเศษ <span class="sub-lbl">เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ</span></span><div class="chips sp-chips" id="t-special" aria-label="เทคนิคพิเศษ"></div></div>
+          <div class="dose-row" data-ctf="dose">
+            <label class="field"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="t-dpf" min="0" step="any" inputmode="decimal" placeholder="200"></label>
+            <label class="field"><span class="lbl">Fx</span><input type="number" id="t-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+            <label class="field rx-field"><span class="lbl"><span>Prescription (cGy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="t-rx" min="0" step="any" inputmode="decimal" placeholder="5000"></label>
+            <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="t-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="t-freq-other" autocomplete="off" placeholder="ความถี่อื่น" aria-label="ความถี่อื่น" hidden></div>
+          </div>
+          <div class="field" data-ctf="sim"><span class="lbl"><label for="t-sim">Start RT</label><label class="oncall"><input type="checkbox" id="t-oncall"> on call</label></span><input type="date" id="t-sim"></div>
+          <div class="field" data-ctf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="t-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
+          <div class="field" data-ctf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="t-doc" role="radiogroup" aria-label="แพทย์"></div></div>
+          <div class="field dx-field" data-ctf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="t-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="t-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="t-dx-list" role="listbox" hidden></ul></div></div>
+          <div class="field" data-ctf="cats"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง · MP ใช้ตอนแจกเคส</span></span><div class="chips cats" id="t-cats" aria-label="เทคนิค"></div></div>
+          <div class="field" data-ctf="type"><span class="lbl">Type</span><div class="chips" id="t-type" role="radiogroup" aria-label="Type"></div></div>
+          <div class="field" data-ctf="aim"><span class="lbl">Aim</span><div class="chips" id="t-aim" role="radiogroup" aria-label="Aim"></div></div>
+          <div class="field" data-ctf="tech"><span class="lbl">Technique</span><div class="chips" id="t-tech" role="radiogroup" aria-label="Technique"></div></div>
+          <div class="field with-other" data-ctf="area"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="t-area" aria-label="บริเวณที่ฉาย"></div><input id="t-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
+          <div class="extra-grid" id="t-extra" data-ctf="extra" hidden></div>
+        </div>
+        <div class="dlg-col">
+          <h3 class="ct-sub">ห้อง CT</h3>
+          <div class="field" data-ctf="organ"><span class="lbl">Organ</span><div class="chips" id="t-organ" role="radiogroup" aria-label="Organ"></div></div>
+          <div class="field" data-ctf="mask"><span class="lbl">Mask</span><div class="chips" id="t-mask" role="radiogroup" aria-label="Mask"></div></div>
+          <div class="field" data-ctf="cm"><span class="lbl">CM (สารทึบรังสี)</span><div class="chips" id="t-cm" role="radiogroup" aria-label="CM"></div></div>
+          <div class="ct-counts" id="t-counts"></div>
+          <div class="row2">
+            <div class="field" data-ctf="pstat"><span class="lbl">สถานะ</span><div class="chips" id="t-pstat" role="radiogroup" aria-label="สถานะ"></div></div>
+            <div class="field" data-ctf="hdr"><span class="lbl">HDR</span><div class="chips" id="t-hdr" role="radiogroup" aria-label="HDR"></div></div>
+          </div>
+          <div class="ct-checks">
+            <label class="check" data-ctf="bite"><input type="checkbox" id="t-bite"> Bitelock</label>
+            <label class="check" data-ctf="crad"><input type="checkbox" id="t-crad"> C-RAD</label>
+            <label class="check" data-ctf="research"><input type="checkbox" id="t-research"> เคสวิจัย</label>
+          </div>
+          <div class="field" data-ctf="vac" id="t-vac-f"><span class="lbl"><span>Vac-Lok</span><span class="sub-lbl" id="t-vac-hint"></span></span><div class="chips" id="t-vac" role="radiogroup" aria-label="Vac-Lok"></div></div>
+          <label class="field" data-ctf="note"><span class="lbl">Note</span><input id="t-note" autocomplete="off" placeholder="เช่น vaclock, BD protocol"></label>
+          <label class="check ct-send"><input type="checkbox" id="t-send"> <span><b>ส่งไปแถบงาน</b> · MP ดึงข้อมูลนี้ไปแจกเคสได้</span></label>
+          <p class="ct-took" id="t-took" hidden></p>
+        </div>
       </div>
-      <div class="row2">
-        <div class="field ctf-must"><span class="lbl"><label for="t-hn">HN</label></span><div class="combo"><input id="t-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="t-hn-list"><ul class="combo-list" id="t-hn-list" role="listbox" hidden></ul></div></div>
-        <label class="field" data-ctf="name"><span class="lbl">Name</span><input id="t-name" autocomplete="off"></label>
-      </div>
-      <div class="field dx-field" data-ctf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="t-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="t-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="t-dx-list" role="listbox" hidden></ul></div></div>
-      <div class="field" data-ctf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="t-doc" role="radiogroup" aria-label="แพทย์"></div></div>
-      <div class="field" data-ctf="cats"><span class="lbl">เทคนิค <span class="sub-lbl">เลือกได้หลายอย่าง · MP ใช้ตอนแจกเคส</span></span><div class="chips cats" id="t-cats" aria-label="เทคนิค"></div></div>
-      <div class="field" data-ctf="type"><span class="lbl">Type</span><div class="chips" id="t-type" role="radiogroup" aria-label="Type"></div></div>
-      <div class="field" data-ctf="aim"><span class="lbl">Aim</span><div class="chips" id="t-aim" role="radiogroup" aria-label="Aim"></div></div>
-      <div class="field" data-ctf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="t-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
-      <div class="field" data-ctf="tech"><span class="lbl">Technique</span><div class="chips" id="t-tech" role="radiogroup" aria-label="Technique"></div></div>
-      <div class="field with-other" data-ctf="area"><span class="lbl">บริเวณที่ฉาย <span class="sub-lbl">เลือกได้หลายอย่าง</span></span><div class="chips" id="t-area" aria-label="บริเวณที่ฉาย"></div><input id="t-area-other" autocomplete="off" placeholder="กรอกเอง คั่นด้วยจุลภาค" aria-label="บริเวณที่ฉาย (กรอกเอง)" hidden></div>
-      <div class="dose-row" data-ctf="dose">
-        <label class="field"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="t-dpf" min="0" step="any" inputmode="decimal" placeholder="200"></label>
-        <label class="field"><span class="lbl">Fx</span><input type="number" id="t-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
-        <label class="field rx-field"><span class="lbl"><span>Prescription (cGy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="t-rx" min="0" step="any" inputmode="decimal" placeholder="5000"></label>
-        <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="t-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="t-freq-other" autocomplete="off" placeholder="ความถี่อื่น" aria-label="ความถี่อื่น" hidden></div>
-      </div>
-      <div class="field" data-ctf="sim"><span class="lbl"><label for="t-sim">Start RT</label><label class="oncall"><input type="checkbox" id="t-oncall"> on call</label></span><input type="date" id="t-sim"></div>
-      <div class="extra-grid" id="t-extra" data-ctf="extra" hidden></div>
-      <h3 class="ct-sub">ห้อง CT</h3>
-      <div class="field" data-ctf="organ"><span class="lbl">Organ</span><div class="chips" id="t-organ" role="radiogroup" aria-label="Organ"></div></div>
-      <div class="field" data-ctf="mask"><span class="lbl">Mask</span><div class="chips" id="t-mask" role="radiogroup" aria-label="Mask"></div></div>
-      <div class="field" data-ctf="cm"><span class="lbl">CM (สารทึบรังสี)</span><div class="chips" id="t-cm" role="radiogroup" aria-label="CM"></div></div>
-      <div class="ct-counts" id="t-counts"></div>
-      <div class="row2">
-        <div class="field" data-ctf="pstat"><span class="lbl">สถานะ</span><div class="chips" id="t-pstat" role="radiogroup" aria-label="สถานะ"></div></div>
-        <div class="field" data-ctf="hdr"><span class="lbl">HDR</span><div class="chips" id="t-hdr" role="radiogroup" aria-label="HDR"></div></div>
-      </div>
-      <div class="ct-checks">
-        <label class="check" data-ctf="bite"><input type="checkbox" id="t-bite"> Bitelock</label>
-        <label class="check" data-ctf="crad"><input type="checkbox" id="t-crad"> C-RAD</label>
-        <label class="check" data-ctf="research"><input type="checkbox" id="t-research"> เคสวิจัย</label>
-      </div>
-      <div class="field" data-ctf="vac" id="t-vac-f"><span class="lbl"><span>Vac-Lok</span><span class="sub-lbl" id="t-vac-hint"></span></span><div class="chips" id="t-vac" role="radiogroup" aria-label="Vac-Lok"></div></div>
-      <label class="field" data-ctf="note"><span class="lbl">Note</span><input id="t-note" autocomplete="off" placeholder="เช่น vaclock, BD protocol"></label>
-      <label class="check ct-send"><input type="checkbox" id="t-send"> <span><b>ส่งไปแถบงาน</b> · MP ดึงข้อมูลนี้ไปแจกเคสได้</span></label>
-      <p class="ct-took" id="t-took" hidden></p>
     </div>
     <footer class="dlg-foot">
       <button type="button" class="btn ghost danger" id="ct-del">ลบ</button>
@@ -2347,49 +2363,55 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </footer>
   </form>
 </dialog>
-<dialog id="ap-dlg" aria-labelledby="ap-title">
+<dialog id="ap-dlg" class="dlg-wide" aria-labelledby="ap-title">
   <form class="dlg ct-form" id="ap-form" novalidate autocomplete="off">
     <header class="dlg-head"><h2 id="ap-title">ลงนัด</h2><button type="button" class="btn ghost sm" id="ap-pdf" title="ใบสั่ง CT Simulation (หน้าตาตามไฟล์ใบสั่ง) จากข้อมูลที่กรอกอยู่ เป็นไฟล์ PDF">ใบสั่ง PDF</button><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <p class="notice" id="a-api" hidden><b>ต้องอัปเดต Code.gs</b><span>Draw area ช่องเพิ่มเติมของใบสั่ง และนัด CT แบบ on call บันทึกได้เมื่อใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป · ตอนนี้บันทึกเฉพาะช่องเดิม</span></p>
-      <div class="row2">
-        <div class="field ctf-must"><span class="lbl"><label for="a-hn">HN</label><span class="sub-lbl">พิมพ์ HN หรือชื่อ = เลือกจากแถบลงทะเบียน</span></span><div class="combo"><input id="a-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="a-hn-list"><ul class="combo-list" id="a-hn-list" role="listbox" hidden></ul></div></div>
-        <label class="field" data-apf="name"><span class="lbl">Name</span><input id="a-name" autocomplete="off"></label>
+      <div class="dlg-cols">
+        <div class="dlg-col">
+          <div class="row2">
+            <div class="field ctf-must"><span class="lbl"><label for="a-hn">HN</label><span class="sub-lbl">พิมพ์ HN หรือชื่อ = เลือกจากแถบลงทะเบียน</span></span><div class="combo"><input id="a-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="a-hn-list"><ul class="combo-list" id="a-hn-list" role="listbox" hidden></ul></div></div>
+            <label class="field" data-apf="name"><span class="lbl">Name</span><input id="a-name" autocomplete="off"></label>
+          </div>
+          <p class="ap-reg" id="a-reg" hidden></p>
+          <div class="row2">
+            <label class="field" data-apf="age"><span class="lbl">Age</span><input id="a-age" inputmode="numeric" maxlength="20" autocomplete="off"></label>
+            <div class="field" data-apf="sex"><span class="lbl">Gender</span><div class="chips" id="a-sex" role="radiogroup" aria-label="Gender"></div></div>
+          </div>
+          <div class="field" data-apf="cm"><span class="lbl">CT</span><div class="chips" id="a-cm" role="radiogroup" aria-label="CT"></div></div>
+          <div class="row2" data-apf="iv">
+            <label class="field"><span class="lbl">IV (ml)</span><input id="a-iv" inputmode="decimal" maxlength="12" autocomplete="off"></label>
+            <label class="field"><span class="lbl">Flow Rate (ml/sec)</span><input id="a-flow" inputmode="decimal" maxlength="12" autocomplete="off"></label>
+          </div>
+          <div class="field" data-apf="special"><span class="lbl">เทคนิคพิเศษ <span class="sub-lbl">เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ</span></span><div class="chips sp-chips" id="a-special" aria-label="เทคนิคพิเศษ"></div></div>
+          <div class="dose-row" data-apf="dose">
+            <label class="field"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="a-dpf" min="0" step="any" inputmode="decimal" placeholder="200"></label>
+            <label class="field"><span class="lbl">Fx</span><input type="number" id="a-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
+            <label class="field rx-field"><span class="lbl"><span>Prescription (cGy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="a-rx" min="0" step="any" inputmode="decimal" placeholder="5000"></label>
+            <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="a-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="a-freq-other" autocomplete="off" placeholder="ความถี่อื่น" aria-label="ความถี่อื่น" hidden></div>
+          </div>
+          <div class="row2">
+            <div class="field ctf-must"><span class="lbl"><label for="a-date">ลงนัดวันทำ CT-Sim</label><label class="oncall" title="No appointment (SIM + RT: On Call)"><input type="checkbox" id="a-oncall-ct"> on call</label></span><input type="date" id="a-date"></div>
+            <div class="field" data-apf="ct"><span class="lbl">เครื่อง CT</span><div class="chips" id="a-machine" role="radiogroup" aria-label="เครื่อง CT"></div></div>
+          </div>
+          <div class="field" data-apf="sim"><span class="lbl"><label for="a-sim">Start RT</label><label class="oncall"><input type="checkbox" id="a-oncall"> on call</label></span><input type="date" id="a-sim"></div>
+        </div>
+        <div class="dlg-col">
+          <div class="field" data-apf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="a-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
+          <div class="field" data-apf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="a-doc" role="radiogroup" aria-label="แพทย์"></div></div>
+          <div class="field dx-field" data-apf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="a-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="a-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="a-dx-list" role="listbox" hidden></ul></div></div>
+          <div class="field" data-apf="exam"><span class="lbl">Examination Part</span><div class="ord-opts" id="a-exam"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-exam-other"><span>Other</span></label></div><input id="a-exam-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Examination Part อื่นๆ"></div></div>
+          <div class="field" data-apf="pos"><span class="lbl">Position</span><div class="chips" id="a-pos" role="radiogroup" aria-label="Position"></div></div>
+          <div class="field" data-apf="immob"><span class="lbl">Immobilization</span><div class="chips" id="a-immob"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-immob-other"><span>Other</span></label></div><input id="a-immob-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Immobilization อื่นๆ"></div><div class="field ord-vac" id="a-vac-f" hidden><span class="lbl"><span>Vac-Lok No.</span><span class="sub-lbl" id="a-vac-hint"></span></span><div class="chips" id="a-vac" role="radiogroup" aria-label="Vac-Lok No."></div></div></div>
+          <div class="field" data-apf="lab"><span class="lbl">Pre-procedural Lab (CT with contrast)</span><div class="ord-lab">
+            <label><span>Date</span><input id="a-lab-date" maxlength="20" autocomplete="off"></label><label><span>Creatinine</span><input id="a-cr" maxlength="20" autocomplete="off"></label><label><span>CrCl</span><input id="a-crcl" maxlength="20" autocomplete="off"></label></div></div>
+          <div class="field" data-apf="vol"><span class="lbl">Draw area <span class="sub-lbl">ลากบนรูปจากขอบบนถึงขอบล่างที่จะทำ CT</span></span>
+            <div class="ord-vol"><div class="cso-skel" id="a-vol" title="ลากบนรูปจากขอบบนถึงขอบล่างที่จะทำ CT · ลากเส้นแดงเพื่อปรับ · ลากในแถบเพื่อเลื่อน"><img data-cso="skel" alt="รูปโครงกระดูกสำหรับระบุขอบเขตการทำ CT" draggable="false"><div class="cso-band" id="a-vol-band" hidden><b class="cso-ln t"></b><b class="cso-ln b"></b></div></div><button type="button" class="btn ghost sm" id="a-vol-clr" hidden>ล้างขอบเขต</button></div></div>
+          <label class="field" data-apf="note"><span class="lbl">Note <span class="sub-lbl">= Special Instruction ในใบสั่ง</span></span><input id="a-note" autocomplete="off"></label>
+          <p class="ct-took" id="a-took" hidden></p>
+        </div>
       </div>
-      <p class="ap-reg" id="a-reg" hidden></p>
-      <div class="row2">
-        <label class="field" data-apf="age"><span class="lbl">Age</span><input id="a-age" inputmode="numeric" maxlength="20" autocomplete="off"></label>
-        <div class="field" data-apf="sex"><span class="lbl">Gender</span><div class="chips" id="a-sex" role="radiogroup" aria-label="Gender"></div></div>
-      </div>
-      <div class="field" data-apf="cm"><span class="lbl">CT</span><div class="chips" id="a-cm" role="radiogroup" aria-label="CT"></div></div>
-      <div class="row2" data-apf="iv">
-        <label class="field"><span class="lbl">IV (ml)</span><input id="a-iv" inputmode="decimal" maxlength="12" autocomplete="off"></label>
-        <label class="field"><span class="lbl">Flow Rate (ml/sec)</span><input id="a-flow" inputmode="decimal" maxlength="12" autocomplete="off"></label>
-      </div>
-      <div class="field" data-apf="special"><span class="lbl">เทคนิคพิเศษ <span class="sub-lbl">เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ</span></span><div class="chips sp-chips" id="a-special" aria-label="เทคนิคพิเศษ"></div></div>
-      <div class="dose-row" data-apf="dose">
-        <label class="field"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="a-dpf" min="0" step="any" inputmode="decimal" placeholder="200"></label>
-        <label class="field"><span class="lbl">Fx</span><input type="number" id="a-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
-        <label class="field rx-field"><span class="lbl"><span>Prescription (cGy)</span><span class="calc-note">คำนวณ</span></span><input type="number" id="a-rx" min="0" step="any" inputmode="decimal" placeholder="5000"></label>
-        <div class="field freq-field"><span class="lbl">ความถี่ในการฉาย</span><div class="chips" id="a-freq" role="radiogroup" aria-label="ความถี่ในการฉาย"></div><input id="a-freq-other" autocomplete="off" placeholder="ความถี่อื่น" aria-label="ความถี่อื่น" hidden></div>
-      </div>
-      <div class="row2">
-        <div class="field ctf-must"><span class="lbl"><label for="a-date">ลงนัดวันทำ CT-Sim</label><label class="oncall" title="No appointment (SIM + RT: On Call)"><input type="checkbox" id="a-oncall-ct"> on call</label></span><input type="date" id="a-date"></div>
-        <div class="field" data-apf="ct"><span class="lbl">เครื่อง CT</span><div class="chips" id="a-machine" role="radiogroup" aria-label="เครื่อง CT"></div></div>
-      </div>
-      <div class="field" data-apf="sim"><span class="lbl"><label for="a-sim">Start RT</label><label class="oncall"><input type="checkbox" id="a-oncall"> on call</label></span><input type="date" id="a-sim"></div>
-      <div class="field" data-apf="room"><span class="lbl">ห้องฉาย</span><div class="chips" id="a-room" role="radiogroup" aria-label="ห้องฉาย"></div></div>
-      <div class="field" data-apf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="a-doc" role="radiogroup" aria-label="แพทย์"></div></div>
-      <div class="field dx-field" data-apf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="a-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="a-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="a-dx-list" role="listbox" hidden></ul></div></div>
-      <div class="field" data-apf="exam"><span class="lbl">Examination Part</span><div class="ord-opts" id="a-exam"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-exam-other"><span>Other</span></label></div><input id="a-exam-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Examination Part อื่นๆ"></div></div>
-      <div class="field" data-apf="pos"><span class="lbl">Position</span><div class="chips" id="a-pos" role="radiogroup" aria-label="Position"></div></div>
-      <div class="field" data-apf="immob"><span class="lbl">Immobilization</span><div class="chips" id="a-immob"></div><div class="ord-row ord-other"><div class="chips"><label><input type="checkbox" id="a-immob-other"><span>Other</span></label></div><input id="a-immob-other-t" maxlength="200" autocomplete="off" placeholder="ระบุ" aria-label="Immobilization อื่นๆ"></div><div class="field ord-vac" id="a-vac-f" hidden><span class="lbl"><span>Vac-Lok No.</span><span class="sub-lbl" id="a-vac-hint"></span></span><div class="chips" id="a-vac" role="radiogroup" aria-label="Vac-Lok No."></div></div></div>
-      <div class="field" data-apf="lab"><span class="lbl">Pre-procedural Lab (CT with contrast)</span><div class="ord-lab">
-        <label><span>Date</span><input id="a-lab-date" maxlength="20" autocomplete="off"></label><label><span>Creatinine</span><input id="a-cr" maxlength="20" autocomplete="off"></label><label><span>CrCl</span><input id="a-crcl" maxlength="20" autocomplete="off"></label></div></div>
-      <div class="field" data-apf="vol"><span class="lbl">Draw area <span class="sub-lbl">ลากบนรูปจากขอบบนถึงขอบล่างที่จะทำ CT</span></span>
-        <div class="ord-vol"><div class="cso-skel" id="a-vol" title="ลากบนรูปจากขอบบนถึงขอบล่างที่จะทำ CT · ลากเส้นแดงเพื่อปรับ · ลากในแถบเพื่อเลื่อน"><img data-cso="skel" alt="รูปโครงกระดูกสำหรับระบุขอบเขตการทำ CT" draggable="false"><div class="cso-band" id="a-vol-band" hidden><b class="cso-ln t"></b><b class="cso-ln b"></b></div></div><button type="button" class="btn ghost sm" id="a-vol-clr" hidden>ล้างขอบเขต</button></div></div>
-      <label class="field" data-apf="note"><span class="lbl">Note <span class="sub-lbl">= Special Instruction ในใบสั่ง</span></span><input id="a-note" autocomplete="off"></label>
-      <p class="ct-took" id="a-took" hidden></p>
     </div>
     <footer class="dlg-foot">
       <button type="button" class="btn ghost danger" id="ap-del">ลบ</button>
@@ -2810,6 +2832,8 @@ const PT_EDIT_API = 47;
 const ptEditOn = () => serverHas(PT_EDIT_API);
 // Vac-Lok (แถบ RTT/RA Jobs → Vac-Lok · ฟอร์ม CT-SIM): Code.gs ที่มีตาราง VacLok (vacSave, vacRemove, vacImport) และ ctSave ที่เลือก Vac-Lok
 const VAC_API = 48;
+const CTSP_API = 49;   // Code.gs ที่รายการ CT-SIM มี CT (CM / Non-CM) และเทคนิคพิเศษ (ctcm, special)
+const ctSpOn = () => serverHas(CTSP_API);
 const vacOn = () => serverHas(VAC_API);
 const CT_API = 32;   // Code.gs ที่มีแถบ CT-SIM (ctSave, ctRemove, ctMark) และผูกเคสที่แจกกับรายการ CT
 const ctOn = () => serverHas(CT_API);
@@ -2838,9 +2862,11 @@ const TDF_FIELDS = [['rc', 'คน Recheck (RC)'], ['calc', 'คนคำนว�
 const BRACHY_FIELDS = [['date', 'วันที่นัด', true], ['hn', 'HN', true], ['mp', 'MP (ผู้วางแผน)', true], ['rc', 'RC'], ['technique', 'เทคนิค / รูปแบบการใส่ (Interstitial needle = เสียบเข็ม)'], ['id', 'รหัสนัด (ไม่มี = ใช้ HN + วันที่ + Fx)'],
   ['name', 'ชื่อผู้ป่วย'], ['status', 'สถานะ'], ['fx', 'Fx'], ['totalFx', 'Fx ทั้งหมด']];
 // แถบ CT-SIM: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → CT-SIM: off ไม่แสดง · show แสดง · req บังคับกรอก) · HN วันที่ และเครื่อง CT บังคับเสมอ
+// ลำดับเดียวกับฟอร์มลงนัด: Name · CT (CM / Non-CM) · เทคนิคพิเศษ (ตัวเลือกตาม ตั้งค่า → ลงนัด · Code.gs API 49) · Prescription · Start RT · ห้องฉาย · แพทย์ · Diag แล้วข้อมูลแจกเคส
 const CT_FORM = [
-  ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'แพทย์ (Doc)', 'req'], ['cats', 'เทคนิค', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
-  ['room', 'ห้องฉาย', 'off'], ['tech', 'Technique', 'off'], ['area', 'บริเวณที่ฉาย', 'off'], ['dose', 'Dose/fx, Fx, Prescription, ความถี่', 'off'], ['sim', 'Start RT', 'off'], ['extra', 'หัวข้อเพิ่มเติม', 'off'],
+  ['name', 'Name', 'show'], ['ctcm', 'CT (CM / Non-CM)', 'show'], ['special', 'เทคนิคพิเศษ', 'show', false], ['dose', 'Dose/fx, Fx, Prescription, ความถี่', 'off'], ['sim', 'Start RT', 'off'],
+  ['room', 'ห้องฉาย', 'off'], ['doc', 'แพทย์ (Doc)', 'req'], ['dx', 'Diag (ICD-10)', 'off'], ['cats', 'เทคนิค', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
+  ['tech', 'Technique', 'off'], ['area', 'บริเวณที่ฉาย', 'off'], ['extra', 'หัวข้อเพิ่มเติม', 'off'],
   ['organ', 'Organ', 'req'], ['mask', 'Mask', 'show'], ['cm', 'CM (สารทึบรังสี)', 'show'],
   ['coil', 'Coil', 'show'], ['ydev', 'Y', 'show'], ['inj', 'Syring Injector', 'show'], ['nss', 'Normal Saline', 'show'], ['syr', 'Syring 50cc', 'show'],
   ['pstat', 'สถานะ (รถนอน)', 'show'], ['hdr', 'HDR', 'show'], ['bite', 'Bitelock', 'show', false], ['crad', 'C-RAD', 'show', false], ['research', 'เคสวิจัย', 'show', false], ['vac', 'Vac-Lok', 'show', false], ['note', 'Note', 'show'],
@@ -3170,7 +3196,7 @@ function normLog(o) {
 }
 // แถบ CT-SIM: ผู้ป่วยที่ทำ CT จำลองการฉาย (ช่องเดียวกับ CT_FIELDS ใน Code.gs + สถานะการแจกเคส)
 const CT_KEYS = ['id', 'ct', 'date', 'hn', 'name', 'organ', 'mask', 'bite', 'cm', 'coil', 'ydev', 'inj', 'nss', 'syr', 'doc', 'pstat', 'hdr', 'crad', 'note', 'research',
-  'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'send', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'];
+  'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'ctcm', 'special', 'send', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'];
 function normCt(o) {
   const c = {};
   for (const k of CT_KEYS) c[k] = str(o[k]);
@@ -3474,7 +3500,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-03.12';
+const PAGE_VERSION = '2026-11-04.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4810,7 +4836,7 @@ const ctCatLabels = r => splitList(r.cats).map(id => catOf(id).label).join(', ')
 const ctDocText = code => (code ? docName(code) || code : '');
 // คอลัมน์ในตาราง (ตามไฟล์เดิม) · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์
 const CT_COLS = [
-  ['hn', 'HN'], ['name', 'Name'], ['organ', 'Organ'], ['mask', 'Mask'], ['bite', 'bitelock'], ['cm', 'CM'], ['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'],
+  ['hn', 'HN'], ['name', 'Name'], ['ctcm', 'CT'], ['special', 'เทคนิคพิเศษ'], ['organ', 'Organ'], ['mask', 'Mask'], ['bite', 'bitelock'], ['cm', 'CM'], ['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'],
   ['syr', 'Syring 50cc'], ['doc', 'แพทย์'], ['pstat', 'สถานะ'], ['hdr', 'HDR'], ['crad', 'C-RAD'], ['note', 'Note'], ['research', 'เคสวิจัย'], ['cats', 'เทคนิค'],
 ];
 const ctOfMonth = (room, ym) => state.ct.filter(r => r.ct === room && r.date.slice(0, 7) === ym).sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created));
@@ -4825,8 +4851,8 @@ function renderCt() {
   // ลำดับ (No.) และลำดับในวัน (N/D) นับเหมือนไฟล์ส่งออก (ทั้งเดือน ก่อนค้นหา)
   const no = new Map(), nd = new Map();
   all.forEach((r, i) => { no.set(r.id, i + 1); nd.set(r.id, all.filter((x, j) => j <= i && x.date === r.date).length); });
-  const list = words.length ? all.filter(r => wordsIn(words, [r.hn, r.name, r.doc, ctDocText(r.doc), r.organ, r.note, r.mask, r.cm, ctCatLabels(r)].join(' ').toLowerCase())) : all;
-  const cols = CT_COLS.filter(([k]) => k === 'hn' || ctMode(k) !== 'off');
+  const list = words.length ? all.filter(r => wordsIn(words, [r.hn, r.name, r.doc, ctDocText(r.doc), r.organ, r.note, r.mask, r.cm, r.ctcm, r.special, ctCatLabels(r)].join(' ').toLowerCase())) : all;
+  const cols = CT_COLS.filter(([k]) => k === 'hn' || (ctMode(k) !== 'off' && (ctSpOn() || !['ctcm', 'special'].includes(k))));
   const td = today(), days = [...new Set([...list.map(r => r.date), ...state.duty.filter(x => x.room === 'CT:' + room && x.date.slice(0, 7) === ym && !words.length).map(x => x.date), ...(td.slice(0, 7) === ym && !words.length ? [td] : [])])].sort().reverse();
   const nWait = all.filter(r => ctState(r) === 'wait').length;
   $('#ct-help').textContent = `${ctLabel(room)} · ${fmtMonth(ym)} · ${all.length} คน${nWait ? ` · รอ MP แจก ${nWait}` : ''}${edit ? ' · กดแถวเพื่อแก้ · "ผู้ปฏิบัติงาน" ใต้วันที่ = RTT, RA, Daily QC ของวันนั้น' : ''}`;
@@ -4834,6 +4860,7 @@ function renderCt() {
   const head = `<thead><tr><th>No.</th><th>N/D</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>แถบงาน</th></tr></thead>`;
   const cell = (r, k) => {
     const v = k === 'doc' ? ctDocText(r.doc) : k === 'cats' ? ctCatLabels(r) : r[k];
+    if (k === 'special') return `<td class="ct-sp">${spTags(splitList(r.special))}</td>`;
     return `<td class="ct-${k}">${k === 'hn' ? `<b class="hn">${esc(v || '—')}</b>` : esc(v)}</td>`;
   };
   const body = days.map(d => {
@@ -4858,13 +4885,17 @@ function openCtForm(id, ap) {
   const cfg = state.config, ct = cfg.ct;
   ctAppt = !r && ap ? ap.id : '';
   editingCt = r ? clone(r) : normCt({ id: uid(), ct: ap && ctRooms().some(x => x.id === ap.ct) ? ap.ct : ctRoomSel(), date: ap && isDay(ap.date) ? ap.date : today(), send: 'yes', ...(ap ? apToCt(ap) : {}) });
-  const c = editingCt;
+  const c = editingCt, lap = r && state.appt.find(a => a.took === r.id);
+  if (lap && !c.ctcm && !c.special) Object.assign(c, { ctcm: lap.cm, special: lap.special });   // รายการเดิมที่ลงจากนัด (ก่อนมีช่องนี้): ใช้ของนัด
   $('#ct-title').textContent = r ? `แก้ไขผู้ป่วย CT-SIM ${r.hn}` : 'เพิ่มผู้ป่วย CT-SIM';
   chipGroup($('#t-machine'), 'tmachine', ctRooms().map(x => x.id), c.ct, ctLabel);
   $$('#t-machine label').forEach(l => { $('span', l).textContent = ctLabel($('input', l).value); });
   for (const f of ['date', 'hn', 'name', 'note']) $('#t-' + f).value = c[f] || '';
   ctChips('#t-doc', 'tdoc', docCodes(), c.doc);
   $$('#t-doc label').forEach(l => { const v = $('input', l).value; if (docName(v)) l.title = docName(v); });
+  ctChips('#t-ctcm', 'tctcm', cfg.appt.cms, c.ctcm);
+  const sp = splitList(c.special), sps = cfg.appt.specials;
+  $('#t-special').innerHTML = [...sps, ...sp.filter(x => !sps.includes(x))].map(v => `<label><input type="checkbox" name="tspecial" value="${esc(v)}"${sp.includes(v) ? ' checked' : ''}><span>${esc(v)}</span></label>`).join('');
   const picked = splitList(c.cats);
   $('#t-cats').innerHTML = cfg.cats.filter(k => k.kind !== 'simple' && (k.on || picked.includes(k.id))).map(k => `<label><input type="checkbox" name="tcat" value="${esc(k.id)}"${picked.includes(k.id) ? ' checked' : ''}><span>${esc(k.label)}</span></label>`).join('');
   ctChips('#t-type', 'ttype', cfg.types, c.type);
@@ -4897,7 +4928,8 @@ function openCtForm(id, ap) {
   syncCtForm();
   syncCtAppt();
   if (!ctDlg.open) ctDlg.showModal();
-  if (!r) $(ap ? '#t-date' : '#t-hn').focus();
+  if (!r && ap) focusChips($('#t-machine'));   // จากนัด: ข้อมูลใส่ให้แล้ว (ไม่เปิดปฏิทินบังฟอร์ม) · ตรวจเครื่องและวันที่ทำ CT
+  else if (!r) $('#t-hn').focus();
 }
 function syncCtForm() {
   const f = state.config.ct.form;
@@ -4911,13 +4943,15 @@ function syncCtForm() {
   $('[data-ctf="tech"]', ctForm).classList.toggle('pt-off', f.tech === 'off' || (f.cats !== 'off' && !cats.some(k => k.tech)));
   $('[data-ctf="room"]', ctForm).classList.toggle('pt-off', f.room === 'off' || !roomSitesOn());
   $('[data-ctf="vac"]', ctForm).classList.toggle('pt-off', f.vac === 'off' || !vacOn() || !vacNos().length);
+  for (const k of ['ctcm', 'special']) $(`[data-ctf="${k}"]`, ctForm).classList.toggle('pt-off', f[k] === 'off' || !ctSpOn());
   $('#t-sim').disabled = $('#t-oncall').checked;
-  $('.ct-sub', ctForm).hidden = !CT_FORM.slice(12).some(([k]) => f[k] !== 'off');
+  $('.ct-sub', ctForm).hidden = !CT_FORM.slice(CT_FORM.findIndex(x => x[0] === 'organ')).some(([k]) => f[k] !== 'off');
   syncDose('t');
 }
 // ช่องที่กรอกแล้ว (ใช้ตรวจช่องบังคับกรอก)
 const CT_FILLED = {
   name: () => str($('#t-name').value), dx: () => str($('#t-dx').value), doc: () => chipValue($('#t-doc')), cats: () => chipValues($('#t-cats')).length,
+  ctcm: () => !ctSpOn() || chipValue($('#t-ctcm')),
   type: () => chipValue($('#t-type')), aim: () => chipValue($('#t-aim')), room: () => !roomSitesOn() || chipValue($('#t-room')),
   tech: () => !chipValues($('#t-cats')).map(catOf).some(k => k.tech) || chipValue($('#t-tech')), area: () => readArea('t'),
   dose: () => str($('#t-dpf').value) && str($('#t-fx').value), sim: () => $('#t-oncall').checked || $('#t-sim').value, extra: () => true,
@@ -4952,6 +4986,8 @@ function submitCt(e) {
     ...Object.fromEntries(['bite', 'crad', 'research'].map(k => [k, $('#t-' + k).checked ? 'YES' : ''])),
     send: $('#t-send').checked ? 'yes' : '',
   });
+  if (ctSpOn() && ctMode('ctcm') !== 'off') rec.ctcm = chipValue($('#t-ctcm'));
+  if (ctSpOn() && ctMode('special') !== 'off') rec.special = chipValues($('#t-special')).join(', ');
   if (ctAppt && !state.ct.some(x => x.id === rec.id)) rec.apptFrom = ctAppt;   // Code.gs บันทึกว่านัดนี้ลง CT-SIM แล้ว
   if (!$('[data-ctf="vac"]', ctForm).classList.contains('pt-off')) rec.vac = chipValue($('#t-vac'));   // Vac-Lok (ไม่แสดง = ไม่แตะ)
   openCtPin('ctsave', rec);
@@ -6477,8 +6513,10 @@ function apToCt(a) {
   // Organ จาก Examination Part ข้อแรกที่ติ๊ก (Brain, Head and Neck = Head) ถ้ามีในตัวเลือก Organ ของ CT-SIM
   const part = (o.exam || []).find(x => !x.includes(':')) || '', want = /brain|head/i.test(part) ? 'head' : low(part);
   const organ = want ? cfg.ct.organs.find(x => low(x) === want) || '' : '';
+  const own = ctSpOn();   // CT-SIM มีช่อง CT และเทคนิคพิเศษ
   return { hn: a.hn, name: a.name, doc: a.doc, icd: a.icd, dx: a.dx, dpf: a.dpf, fx: a.fx, rx: a.rx, freq: a.freq, sim: a.sim, room: a.room, tech, cats: cat ? cat.id : '', organ,
-    note: [sp.filter(x => !spParts(x).includes(low(tech))).join(', '), a.note].filter(Boolean).join(' · ') };
+    ...(own ? { ctcm: a.cm, special: a.special } : {}),
+    note: [own ? '' : sp.filter(x => !spParts(x).includes(low(tech))).join(', '), a.note].filter(Boolean).join(' · ') };
 }
 function useAp(id) {
   const a = state.appt.find(x => x.id === id);
@@ -6590,7 +6628,7 @@ function spLinks() {
   for (const r of state.ct) if (r.took && r.took !== 'skip') splitList(r.took).forEach(id => ctOf.set(id, r));
   return x => {
     const rec = x.ctId ? ctById.get(x.ctId) : ctOf.get(x.id), a = rec && apOf.get(rec.id);
-    return [...new Set([...spIn([x.tech, x.note, x.ptags].join(' ')), ...splitList(x.apSp), ...(a ? splitList(a.special) : [])])];
+    return [...new Set([...spIn([x.tech, x.note, x.ptags].join(' ')), ...splitList(x.apSp), ...(rec ? splitList(rec.special) : []), ...(a ? splitList(a.special) : [])])];
   };
 }
 // แถวผู้ป่วยของตารางวันฉาย (HN ละแถว · แถวใช้ตารางของเคสหลัก) · sp = เทคนิคพิเศษ (โควตา)
@@ -10418,7 +10456,7 @@ function renderSettings() {
       <div class="form-grid" style="margin-bottom:12px">${CT_LISTS.map(([k, l]) => optEditor('ct.' + k, l)).join('')}</div>
       <h3 class="sub-h">ฟอร์มเพิ่มผู้ป่วย CT-SIM</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN วันที่ และเครื่อง CT บังคับเสมอ · ช่องชุดบน (Name ถึงหัวข้อเพิ่มเติม) เหมือนฟอร์มแจกเคส MP ดึงไปใช้ในแถบงานได้ · ช่องห้อง CT ใช้ในไฟล์ส่งออก · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้</p>
-      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${CT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="ct.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT-SIM">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.ct.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${CT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'ctcm' || k === 'special' ? `<small class="muted"> · ตัวเลือกตั้งที่ ลงนัด${ctSpOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-11-04.1 ขึ้นไป'}</small>` : ''}</td><td><select data-k="ct.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT-SIM">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.ct.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="jobs"><div class="sec-head"><h2>RTT/RA Jobs (แถบ ${esc(navLabel('jobs'))})</h2><p>ภาระงานรายเดือนของ RTT / RA แบบฟอร์มเดียวกับไฟล์ Excel เดิม · งานห้องฉายรังสี Linac1–3 = ห้องฉาย 3 ห้องแรก (${esc(d.rooms.slice(0, 3).join(', ') || '—')}) · งานห้อง CT-sim 1–2 = เครื่อง CT (${esc(d.ct.rooms.slice(0, 2).map(r => r.label || r.id).join(', ') || '—')}) · ชื่อในแถบและในไฟล์ส่งออกใช้ชื่อจากตั้งค่านี้ · Daily QC = คนทำ Daily QC ในผู้ปฏิบัติงานประจำวัน</p></div>
       ${jobsOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบ RTT/RA Jobs ต้องใช้ Code.gs รุ่น 2026-10-28.6 ขึ้นไป</span></p>'}
       <h3 class="sub-h">ตำแหน่งเริ่มต้น (หัวไฟล์ Excel)</h3>
@@ -12961,7 +12999,7 @@ function calCounts(kind, skip) {
     const spIn = spFinder(), apOf = new Map(), ctOf = new Map();
     for (const a of state.appt) if (a.took && a.took !== 'skip') apOf.set(a.took, a);
     for (const r of state.ct) if (r.took && r.took !== 'skip') splitList(r.took).forEach(id => ctOf.set(id, r));
-    const spOf = (x, ctRec) => { const a = ctRec && apOf.get(ctRec.id); return [...new Set([...spIn([x.tech, x.note, x.ptags].join(' ')), ...(a ? splitList(a.special) : [])])]; };
+    const spOf = (x, ctRec) => { const a = ctRec && apOf.get(ctRec.id); return [...new Set([...spIn([x.tech, x.note, x.ptags].join(' ')), ...(ctRec ? splitList(ctRec.special) : []), ...(a ? splitList(a.special) : [])])]; };
     for (const c of cases) if (catOf(c.cat).kind !== 'simple' && !c.replan && !(c.rt === 'cancel' && c.rtDate && c.rtDate <= c.sim)) add(c.sim, c, roomOf(c), spOf(c, ctOf.get(c.id)));
     for (const r of recs) if (ctState(r) === 'wait') add(r.sim, r, r.room || NO_ROOM, spOf(r, r));
     for (const a of aps) add(a.sim, a, a.room || NO_ROOM, splitList(a.special));
@@ -13061,7 +13099,8 @@ function placeCal(fit) {
   const vw = document.documentElement.clientWidth, vh = window.innerHeight, field = calBox.closest('.field') || calBox;
   const dr = calPop.parentNode.tagName === 'DIALOG' ? calPop.parentNode.getBoundingClientRect() : null, ww = Math.min(CAL_MAX_W, vw - 16), wide = ww >= (dr ? 400 : 560);
   calPop.classList.toggle('dpk-wide', wide);
-  calPop.style.width = wide ? `${Math.round(Math.max(ww, dr ? Math.min(dr.width - 36, vw - 16) : 0))}px` : '';
+  calPop.style.width = wide ? `${Math.round(ww)}px` : '';
+  const col = dr && (calBox.closest('.dlg-col') || calPop.parentNode).getBoundingClientRect();   // คอลัมน์ของฟอร์มที่ช่องอยู่ (หรือทั้งหน้าต่าง)
   // ใต้ช่อง หรือเหนือทั้งช่อง (หัวข้อและ on call ยังกดได้)
   const room = () => { const r = calBox.getBoundingClientRect(), ft = field.getBoundingClientRect().top; return { r, ft, below: vh - 8 - (r.bottom + 4), above: ft - 12 }; };
   const fits = (x, h) => h <= x.below || h <= x.above;
@@ -13093,7 +13132,7 @@ function placeCal(fit) {
   else if (h <= vh - 16) top = m.below >= m.above ? vh - 8 - h : 8;
   else { top = 8; maxH = vh - 16; }
   calPop.style.maxHeight = maxH ? `${maxH}px` : '';
-  calPop.style.left = `${Math.max(8, Math.min(wide && dr ? dr.left + dr.width / 2 - w / 2 : r.left, vw - w - 8))}px`;
+  calPop.style.left = `${Math.max(8, Math.min(wide && col ? col.left + col.width / 2 - w / 2 : r.left, vw - w - 8))}px`;
   calPop.style.top = `${top}px`;
 }
 function openCal(el) {
