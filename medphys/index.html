@@ -1680,6 +1680,8 @@ dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
 .bq-st.done{border:0;background:var(--ok-soft);color:var(--ok)}
 .bq-st.cancel{background:var(--late-soft);color:var(--late);text-decoration:none}
 .bq-st.noshow{background:var(--warn-soft);color:var(--warn)}
+.bq-cts{display:inline-flex;flex-wrap:nowrap;gap:3px}
+.bq-ctb{padding:0 6px!important;white-space:nowrap}
 .bq-rtroom{display:inline-block;padding:0 7px;border:1px solid var(--line-strong);border-radius:999px;color:var(--muted);font-size:12px;line-height:20px;white-space:nowrap}
 .bq-row.noshow td:not(.bq-act){color:var(--muted)}
 .bq-act{white-space:nowrap}
@@ -2331,10 +2333,10 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <header class="dlg-head"><h2 id="bqi-title">CT</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <p class="bq-info" id="bqi-info"></p>
-      <div class="field"><span class="lbl">CT <span class="sub-lbl">นับคะแนนห้อง CT ที่ทำ (แถบ RTT/RA Jobs: ข้อเตรียมผู้ป่วย และข้อจัดท่าผู้ป่วยเปลนอน)</span></span><div class="chips" id="bi-ct" role="radiogroup" aria-label="CT"></div></div>
-      <div class="field" id="bi-ctroom-f"><span class="lbl">ห้อง CT ที่ทำ</span><div class="chips" id="bi-ctroom" role="radiogroup" aria-label="ห้อง CT"></div></div>
+      <div class="field" id="bi-ct-f"><span class="lbl">CT <span class="sub-lbl">นับคะแนนห้อง CT ที่ทำ (แถบ RTT/RA Jobs: ข้อเตรียมผู้ป่วย และข้อจัดท่าผู้ป่วยเปลนอน)</span></span><div class="chips" id="bi-ct" role="radiogroup" aria-label="CT"></div></div>
+      <div class="field" id="bi-ctroom-f"><span class="lbl">ห้อง CT ที่ทำ <span class="sub-lbl" id="bi-ctroom-sub"></span></span><div class="chips" id="bi-ctroom" role="radiogroup" aria-label="ห้อง CT"></div></div>
     </div>
-    <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ยกเลิก</button><button type="submit" class="btn primary" id="bqi-save">บันทึก</button></footer>
+    <footer class="dlg-foot"><button type="button" class="btn ghost danger" id="bqi-clear" hidden>ไม่ได้ทำ CT</button><span class="spacer"></span><button type="button" class="btn" data-close>ยกเลิก</button><button type="submit" class="btn primary" id="bqi-save">บันทึก</button></footer>
   </form>
 </dialog>
 <dialog id="bqe-dlg" aria-labelledby="bqe-title">
@@ -3510,7 +3512,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.6';
+const PAGE_VERSION = '2026-11-04.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6006,7 +6008,8 @@ function bqRowsHtml(rows, edit) {
     const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
     const ctT = a.ct ? `${a.ct}${a.ctRoom ? ' ' + ctShort(a.ctRoom) : ''}` : '', ctC = ctT ? `<span class="bq-imgc">${esc(ctT)}</span>` : '';
     const img = ctT ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" title="${esc(ctT + ' · กดเพื่อแก้')}">${ctC}</button>` : `<span class="bq-img" title="${esc(ctT)}">${ctC}</span>`)
-      : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqImgOn() ? '' : ' old'}" data-bqimg="${esc(a.id)}" title="${esc(bqImgOn() ? `บันทึก ${bqCts().join(' / ')} (เลือกห้อง CT) · นับคะแนนห้อง CT` : bqImgOld())}">+ CT</button>` : '';
+      : edit && bqLive(a) ? (bqImgOn() ? `<span class="bq-cts">${bqCts().map(t => `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับคะแนนห้อง CT (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`).join('')}</span>`
+        : `<button type="button" class="bq-sign old" data-bqimg="${esc(a.id)}" title="${esc(bqImgOld())}">+ CT</button>`) : '';
     const usC = '<span class="bq-imgc us">US</span>';
     const us = a.us ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqus="${esc(a.id)}" data-v="" title="Ultrasound · กดเพื่อเอาออก">${usC}</button>` : `<span class="bq-img" title="Ultrasound">${usC}</span>`)
       : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqImgOn() ? '' : ' old'}" data-bqus="${esc(a.id)}" data-v="US" title="${esc(bqImgOn() ? 'บันทึกว่าทำ Ultrasound' : bqImgOld())}">+ US</button>` : '';
@@ -6439,18 +6442,34 @@ function openBqSet(ids, k, date) {
 // หน้าต่าง CT / US ของนัดหนึ่ง (ปุ่ม + CT/US ในแถว)
 const bqiDlg = $('#bqi-dlg');
 let bqImgId = '';
-function openBqImg(id) {
+let bqImgPick = false;   // เปิดจากปุ่มชนิด CT ในตาราง: เลือกห้องแล้วบันทึกทันที
+function openBqImg(id, type) {
   if (accessOf('bq') !== 'edit') return toast(RO_MSG, { err: true });
   if (!bqImgOn()) return toast(bqImgOld(), { err: true });
   const a = state.bq.find(x => x.id === id);
   if (!a) return;
   bqImgId = id;
-  $('#bqi-title').textContent = `CT · ${a.hn} · Fx ${a.fx}/${a.total}`;
+  bqImgPick = !!type && !a.ct;
+  $('#bqi-title').textContent = `${bqImgPick ? type : 'CT'} · ${a.hn} · Fx ${a.fx}/${a.total}`;
   $('#bqi-info').textContent = `${bqDay(a.date)} · ${a.name}`;
-  bqImgFields('bi', a);
+  bqImgFields('bi', bqImgPick ? { ...a, ct: type, ctRoom: '' } : a);
+  const none = $('#bi-ct').querySelector(`input[value="${BQ_NOCT}"]`);
+  if (none) none.closest('label').remove();   // ไม่ได้ทำ = ปุ่ม "ไม่ได้ทำ CT" (บันทึกไว้แล้วเท่านั้น)
+  $('#bi-ct-f').hidden = bqImgPick;
+  $('#bi-ctroom-f').hidden = false;
+  $('#bi-ctroom-sub').textContent = bqImgPick ? 'กดห้องแล้วบันทึกเลย' : '';
+  if (bqImgPick) $$('#bi-ctroom input').forEach(i => { i.checked = false; });
+  $('#bqi-clear').hidden = !a.ct;
+  $('#bqi-save').hidden = bqImgPick;
   bqiDlg.showModal();
-  focusChips($('#bi-ct'));
+  focusChips($(bqImgPick ? '#bi-ctroom' : '#bi-ct'));
 }
+$('#bi-ctroom').addEventListener('change', () => { if (bqImgPick && bqiDlg.open) $('#bqi-form').requestSubmit(); });
+$('#bqi-clear').addEventListener('click', () => {
+  const a = state.bq.find(x => x.id === bqImgId);
+  if (!a || !a.ct) return bqiDlg.close();
+  openBqPin('bqedit', { id: a.id, row: a, ch: { ct: '', ctRoom: '' } });
+});
 $('#bqi-form').addEventListener('submit', e => {
   e.preventDefault();
   const a = state.bq.find(x => x.id === bqImgId);
@@ -12752,7 +12771,7 @@ document.addEventListener('click', e => {
   if (ds.bqnoshow) { const a = state.bq.find(x => x.id === ds.bqnoshow); return a && bqQuick(a, { status: BQ_ST.noshow }); }
   if (ds.bqus !== undefined) { const a = state.bq.find(x => x.id === ds.bqus); if (!a) return; if (!bqImgOn()) return toast(bqImgOld(), { err: true }); return bqQuick(a, { us: ds.v || '' }); }   // US แยกจาก CT
   if (ds.bqsign) return openBqSet([ds.bqsign], ds.bqk);
-  if (ds.bqimg) return openBqImg(ds.bqimg);
+  if (ds.bqimg) return openBqImg(ds.bqimg, ds.ct);
   if (ds.bqdayk) return openBqSet(state.bq.filter(a => a.date === ds.bqdate && bqLive(a)).map(a => a.id), ds.bqdayk, ds.bqdate);
   if (ds.bqlink) return bqLinkNow(t);
   if (ds.bqimport) return bqImportRun(t, ds.bqimport === 'check');
