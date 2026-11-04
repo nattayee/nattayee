@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.5';
-const API_LEVEL = 53;
+const CODE_VERSION = '2026-11-04.6';
+const API_LEVEL = 54;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -149,6 +149,15 @@ const TABLES = {
   },
   // Vac-Lok (API 48): การใช้ Vac-Lok หนึ่งแถวต่อครั้ง (no = เลข Vac-Lok · ผูกกับผู้ป่วยด้วย HN) · off = วัน Off (ว่าง = ตามการฉายของผู้ป่วย) · hold = Hold RT
   // ctId = รายการ CT-SIM ที่เลือก Vac-Lok (ฟอร์ม CT-SIM) · src = ctsim / manual / vac:<เลข>|<HN>|<วันทำ CT> (นำเข้าจากชีตเดิม) · เขียนผ่าน vacSave / vacRemove / vacImport / ctSave เท่านั้น
+  // คำขอแก้การตั้งค่าของแอดมินรอง: หนึ่งแถวต่อหนึ่งส่วน (คีย์ของ Config) · req = เลขคำขอ · status pending | approved | rejected | cancelled
+  // เขียนผ่าน cfgPropose / cfgDecide เท่านั้น · อนุมัติแล้วค่าในคำขอแทนส่วนนั้นของ Config ทั้งส่วน
+  cfgreq: {
+    sheet: 'ConfigRequests',
+    fields: [
+      ['id', 'id'], ['req', 'คำขอ'], ['key', 'ส่วน (คีย์)'], ['value', 'ค่าใหม่ (JSON)'], ['base', 'ค่าตอนส่ง (JSON)'], ['note', 'หมายเหตุ'],
+      ['by', 'ผู้ขอ'], ['byUser', 'บัญชีผู้ขอ'], ['at', 'เวลาที่ขอ'], ['status', 'สถานะ'], ['decBy', 'ผู้ตัดสิน'], ['decAt', 'เวลาที่ตัดสิน'], ['why', 'เหตุผล'],
+    ],
+  },
   vac: {
     sheet: 'VacLok',
     fields: [
@@ -319,6 +328,7 @@ function getData(token) {
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
+    cfgReqs: user.isAdmin || (user.sub && user.sub.length) ? cfgReqs_(ss, config || {}, user) : [],
     sheetUrl: ss.getUrl(),
   };
 }
@@ -566,6 +576,109 @@ function saveConfig(config, token) {
     writeConfig_(ss_(), config || {});
     try { CacheService.getScriptCache().remove('appName'); } catch (e) { /* แคชใช้ไม่ได้: ชื่อแท็บเปลี่ยนภายใน 6 ชั่วโมง */ }
     return true;
+  });
+}
+
+/* ---------- แอดมินรอง: แก้การตั้งค่าบางหมวด ทุกการแก้เป็นคำขอ มีผลเมื่อแอดมินหลักอนุมัติ ---------- */
+// หมวดในหน้าตั้งค่า → คีย์ของ Config (ตรงกับ CFG_TABS ในหน้าเว็บ) · คีย์ที่ไม่อยู่ในหมวดใด (admins, subAdmins ฯลฯ) = แอดมินหลักเท่านั้น
+const CFG_TABS = {
+  team: ['staff', 'doctors', 'crew'],
+  case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
+  p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
+  tabs: ['reg', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
+};
+const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
+const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
+
+// หมวดที่แอดมินรองคนนี้แก้ได้ (config.subAdmins [{ user: ชื่อผู้ใช้หรืออีเมล RO Workspace, tabs }])
+function subTabs_(cfg, p) {
+  const list = cfg && Array.isArray(cfg.subAdmins) ? cfg.subAdmins : [];
+  const me = [String(p.username || '').toLowerCase(), String(p.email || '').toLowerCase()].filter(Boolean);
+  const x = list.filter(s => s && me.indexOf(String(s.user || '').trim().toLowerCase()) >= 0)[0];
+  return x && Array.isArray(x.tabs) ? x.tabs.map(String).filter((t, i, a) => CFG_TABS[t] && a.indexOf(t) === i) : [];
+}
+function cfgTabOf_(key) {
+  for (const t in CFG_TABS) if (CFG_TABS[t].indexOf(key) >= 0) return t;
+  return '';
+}
+// คีย์ที่แก้นอกหมวดที่ได้รับสิทธิ์ · renames (แก้ชื่อตัวเลือก) ดูทีละรายการตามหมวดของรายการนั้น
+function cfgReqBad_(cfg, changes, tabs) {
+  const bad = [];
+  Object.keys(changes).forEach(k => {
+    if (k === 'renames') {
+      const a = cfg.renames && typeof cfg.renames === 'object' ? cfg.renames : {}, b = changes.renames && typeof changes.renames === 'object' ? changes.renames : {};
+      Object.keys(Object.assign({}, a, b)).forEach(rk => {
+        if (JSON.stringify(a[rk] || null) === JSON.stringify(b[rk] || null)) return;
+        if (tabs.indexOf(cfgTabOf_(/^x\./.test(rk) ? 'fields' : rk.split('.')[0])) < 0) bad.push('renames.' + rk);
+      });
+    } else if (tabs.indexOf(cfgTabOf_(k)) < 0) bad.push(k);
+  });
+  return bad;
+}
+// คำขอที่ผู้ใช้นี้เห็น: แอดมินหลัก = ทุกคำขอ · แอดมินรอง = ของตัวเอง · รออนุมัติ + ตัดสินแล้วไม่เกิน CFG_REQ_DAYS วัน
+// stale = ค่าปัจจุบันของส่วนนั้นเปลี่ยนหลังส่งคำขอ (อนุมัติแล้วค่าในคำขอแทนทั้งส่วน)
+function cfgReqs_(ss, cfg, u) {
+  const me = String(u.username || u.me || '').toLowerCase(), since = new Date(Date.now() - CFG_REQ_DAYS * 864e5).toISOString();
+  return readTable_(ss, 'cfgreq')
+    .filter(r => (u.isAdmin || String(r.byUser).toLowerCase() === me) && (r.status === 'pending' || r.decAt >= since))
+    .map(r => ({ id: r.id, req: r.req, key: r.key, value: r.value, note: r.note, by: r.by, byUser: r.byUser, at: r.at, status: r.status, decBy: r.decBy, decAt: r.decAt, why: r.why,
+      stale: r.status === 'pending' && JSON.stringify(cfg[r.key] === undefined ? null : cfg[r.key]) !== r.base }));
+}
+
+/**
+ * แอดมินรองส่งคำขอแก้การตั้งค่า: changes = { คีย์ของ Config: ค่าใหม่ทั้งส่วน } เฉพาะส่วนที่แก้
+ * ต้องอยู่ในหมวดที่แอดมินหลักให้สิทธิ์ (config.subAdmins) · ยังไม่มีผลจนกว่าแอดมินหลักอนุมัติ (cfgDecide) · คืนคำขอที่ผู้ใช้นี้เห็น
+ */
+function cfgPropose(changes, note, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (u.isAdmin) throw new Error('แอดมินหลักบันทึกการตั้งค่าได้เลย ไม่ต้องขออนุมัติ');
+  const tabs = u.sub || [];
+  if (!tabs.length) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมินหรือแอดมินรอง)' : ''));
+  changes = changes && typeof changes === 'object' && !Array.isArray(changes) ? changes : {};
+  const keys = Object.keys(changes);
+  if (!keys.length) throw new Error('ไม่มีการแก้ไข');
+  if (keys.some(k => !/^[A-Za-z]\w{0,40}$/.test(k))) throw new Error('ส่วนของการตั้งค่าไม่ถูกต้อง');
+  const bad = cfgReqBad_(cfg, changes, tabs);
+  if (bad.length) throw new Error('แก้ส่วนนี้ไม่ได้ (นอกหมวดที่แอดมินหลักให้สิทธิ์): ' + bad.join(', '));
+  const rows = keys.map(k => ({ key: k, value: JSON.stringify(changes[k] === undefined ? null : changes[k]), base: JSON.stringify(cfg[k] === undefined ? null : cfg[k]) }));
+  if (rows.some(r => r.value.length > CFG_REQ_MAX || r.base.length > CFG_REQ_MAX)) throw new Error('ข้อมูลบางส่วนยาวเกินไป');
+  const req = Utilities.getUuid(), now = new Date().toISOString();
+  const by = String(u.name || u.username || u.me || ''), byUser = String(u.username || u.me || ''), txt = String(note == null ? '' : note).trim().slice(0, 500);
+  return withLock_(() => {
+    const sh = tableSheet_(ss, 'cfgreq'), header = headerOf_(sh);
+    rows.forEach((r, i) => writeFields_(sh, sh.getLastRow() + 1, header, TABLES.cfgreq.fields,
+      { id: req + '-' + (i + 1), req: req, key: r.key, value: r.value, base: r.base, note: txt, by: by, byUser: byUser, at: now, status: 'pending', decBy: '', decAt: '', why: '' }));
+    return cfgReqs_(ss, cfg, u);
+  });
+}
+
+/**
+ * ตัดสินคำขอ: แอดมินหลัก ok = true อนุมัติ (ค่าในคำขอแทนส่วนนั้นของ Config) · false ไม่อนุมัติ
+ * แอดมินรองยกเลิกคำขอของตัวเองที่ยังรออนุมัติได้ (ok = false) · คืนคำขอที่ผู้ใช้นี้เห็น
+ */
+function cfgDecide(req, ok, why, token) {
+  const ss = ss_(), u = who_(token, ss, readConfig_(ss) || {});
+  req = String(req || '');
+  return withLock_(() => {
+    const rows = readTable_(ss, 'cfgreq').filter(r => r.req === req);
+    if (!req || !rows.length) throw new Error('ไม่พบคำขอนี้');
+    if (rows.some(r => r.status !== 'pending')) throw new Error('คำขอนี้ตัดสินไปแล้ว');
+    const mine = !!rows[0].byUser && String(rows[0].byUser).toLowerCase() === String(u.username || u.me || '').toLowerCase();
+    if (!u.isAdmin && !(mine && !ok)) throw new Error('อนุมัติคำขอได้เฉพาะแอดมินหลัก');
+    const status = ok ? 'approved' : u.isAdmin ? 'rejected' : 'cancelled', now = new Date().toISOString();
+    if (ok) {
+      const cfg = readConfig_(ss) || {};
+      rows.forEach(r => { cfg[r.key] = JSON.parse(r.value); });
+      writeConfig_(ss, cfg);
+      try { CacheService.getScriptCache().remove('appName'); } catch (e) { /* แคชใช้ไม่ได้: ชื่อแท็บเปลี่ยนภายใน 6 ชั่วโมง */ }
+    }
+    const sh = tableSheet_(ss, 'cfgreq'), header = headerOf_(sh), col = header.indexOf('id') + 1;
+    const dec = { status: status, decBy: String(u.name || u.username || u.me || ''), decAt: now, why: String(why == null ? '' : why).trim().slice(0, 500) };
+    const fields = TABLES.cfgreq.fields.filter(f => f[0] in dec);
+    rows.forEach(r => { const row = findRow_(sh, col, r.id); if (row) writeFields_(sh, row, header, fields, dec); });
+    return cfgReqs_(ss, readConfig_(ss) || {}, u);
   });
 }
 
@@ -2611,8 +2724,9 @@ function who_(token, ss, cfg) {
       const listed = (!!p.email && admins.indexOf(p.email) >= 0) || admins.indexOf(p.username) >= 0;
       // canEdit = บันทึกได้อย่างน้อยหนึ่งแถบ (ตั้งค่า → แถบเมนู) · แอดมินต้องเป็น MP (p.canEdit) และเป็นแอดมินของ LPCH หรืออยู่ในรายชื่อแอดมิน
       const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => navAccess_(cfg, v, p.role) === 'edit');
+      const isAdmin = p.canEdit && (p.lpchAdmin || listed);
       return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
-        canEdit: anyEdit, isAdmin: p.canEdit && (p.lpchAdmin || listed), lpchAdmin: p.lpchAdmin };
+        canEdit: anyEdit, isAdmin: isAdmin, lpchAdmin: p.lpchAdmin, sub: isAdmin ? [] : subTabs_(cfg, p) };
     }
     why = p.error;
   }

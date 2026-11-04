@@ -1417,6 +1417,30 @@ dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
 .opt-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 2px 2px 10px;border-radius:999px;background:var(--sunken);font-size:13.5px}
 .opt-chip button{width:22px;height:22px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);font-size:14px;line-height:1}
 .opt-chip button:hover{background:var(--line);color:var(--fg)}
+.cfgreq-box{margin:0 0 16px;padding:12px 16px;border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:10px;background:var(--surface)}
+.cfgreq-box h2{margin:0 0 4px;font-size:16px}
+.cfgreq-box h2 .n{margin-left:8px;font-size:13px;font-weight:500;color:var(--muted)}
+.cfgreq{padding:10px 0;border-top:1px solid var(--line)}
+.cfgreq-box > .cfgreq:first-of-type{border-top:0}
+.cfgreq-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;font-size:13.5px}
+.cfgreq-st{padding:1px 8px;border-radius:999px;font-size:12px;background:var(--sunken);color:var(--muted)}
+.cfgreq-st.pending{background:var(--warn-soft);color:var(--fg)}
+.cfgreq-st.approved{background:var(--ok-soft);color:var(--fg)}
+.cfgreq-st.rejected{background:var(--late-soft);color:var(--fg)}
+.cfgreq-note{margin:6px 0 0;font-size:13.5px}
+.cfgreq-keys{margin:6px 0 0;padding-left:18px;font-size:13.5px;display:grid;gap:4px}
+.cfgreq-diff{display:block;color:var(--muted);font:12.5px/1.45 var(--mono);overflow-wrap:anywhere}
+.cfgreq-stale{color:var(--late);font-size:12px}
+.cfgreq-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.cfgreq-done summary{cursor:pointer;margin-top:8px;font-size:13px;color:var(--muted)}
+.cfgreq-none{margin:4px 0 0;font-size:13.5px}
+.sec.sec-ro{opacity:.62}
+.sec.sec-ro .sec-head h2::after{content:" · ดูอย่างเดียว";font-size:12px;font-weight:400;color:var(--muted)}
+.sub-admins td{text-align:center}
+.sub-admins td:first-child{text-align:left;min-width:220px}
+.sub-admins input:not([type="checkbox"]){width:100%}
+.sub-who{display:block;font-size:12px}
+#sub-note{min-width:0;flex:1 1 200px;max-width:360px;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:13.5px}
 .opt-chip .opt-name{width:auto;height:auto;padding:0 2px;border-radius:4px;color:inherit;font:inherit;line-height:inherit;cursor:text}
 .opt-chip .opt-name:hover{background:var(--line);text-decoration:underline dotted}
 .ro-wrap[disabled] .opt-chip .opt-name{display:inline;cursor:default;text-decoration:none;background:none}
@@ -3000,6 +3024,7 @@ const DEFAULT_CONFIG = {
   nav: ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   manualFrom: '2026-11-01',
+  subAdmins: [],   // แอดมินรอง [{ user: ชื่อผู้ใช้หรืออีเมล RO Workspace, tabs: หมวดในหน้าตั้งค่าที่แก้ได้ }] · ทุกการแก้เป็นคำขอ มีผลเมื่อแอดมินหลักอนุมัติ
   renames: {},   // แก้ชื่อตัวเลือก (ตั้งค่า): { รายการ: { ชื่อเดิม: ชื่อใหม่ } } ข้อมูลที่บันทึกชื่อเดิมแสดงและนับเป็นชื่อใหม่
   fxgParts: FXG_PARTS.map(([k, , on]) => ({ k, on })),   // ข้อมูลในคอลัมน์ผู้ป่วยของตารางวันฉาย (ลำดับเริ่มต้น)   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
@@ -3215,6 +3240,44 @@ const RENAME_TARGETS = {
   'bq.techs': [['bq', 'tech']],
 };
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+// แอดมินรอง: หมวดในหน้าตั้งค่า → คีย์ของ Config (ตรงกับ CFG_TABS ใน Code.gs) · คีย์ที่ไม่อยู่ในหมวดใด (แอดมิน แอดมินรอง) = แอดมินหลักเท่านั้น
+const CFG_TABS = {
+  team: ['staff', 'doctors', 'crew'],
+  case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
+  p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
+  tabs: ['reg', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
+};
+const cfgTabOf = k => Object.keys(CFG_TABS).find(t => CFG_TABS[t].includes(k)) || '';
+const renTab = rk => cfgTabOf(/^x\./.test(rk) ? 'fields' : rk.split('.')[0]);
+// คีย์ที่แก้นอกหมวดที่ได้รับสิทธิ์ (แก้ชื่อตัวเลือกดูทีละรายการ) · เหมือน cfgReqBad_ ใน Code.gs
+function cfgReqBad(cur, changes, tabs) {
+  const bad = [];
+  for (const k of Object.keys(changes)) {
+    if (k !== 'renames') { if (!tabs.includes(cfgTabOf(k))) bad.push(k); continue; }
+    const a = cur.renames || {}, b = changes.renames || {};
+    for (const rk of new Set([...Object.keys(a), ...Object.keys(b)])) if (JSON.stringify(a[rk] || null) !== JSON.stringify(b[rk] || null) && !tabs.includes(renTab(rk))) bad.push('renames.' + rk);
+  }
+  return bad;
+}
+function cleanSubAdmins(v) {
+  const seen = new Set();
+  return (Array.isArray(v) ? v : []).filter(x => x && typeof x === 'object')
+    .map(x => ({ user: str(x.user).toLowerCase().slice(0, 120), tabs: [...new Set((Array.isArray(x.tabs) ? x.tabs : []).map(str))].filter(t => CFG_TABS[t]) }))
+    .filter(x => x.user && !seen.has(x.user) && seen.add(x.user));
+}
+// คำขอที่ผู้ใช้นี้เห็น (เหมือน cfgReqs_ ใน Code.gs): แอดมินหลัก = ทุกคำขอ · แอดมินรอง = ของตัวเอง · ตัดสินแล้วไม่เกิน 30 วัน
+// stale = ค่าปัจจุบันของส่วนนั้นเปลี่ยนหลังส่งคำขอ (โหมดตัวอย่างคิดจาก base · เซิร์ฟเวอร์ส่ง stale มาแล้ว)
+function cfgReqsFor(rows, u, raw) {
+  const me = str(u.username || u.me).toLowerCase(), since = new Date(Date.now() - 30 * 864e5).toISOString();
+  return (Array.isArray(rows) ? rows : []).filter(r => r && (u.isAdmin || str(r.byUser).toLowerCase() === me) && (r.status === 'pending' || str(r.decAt) >= since))
+    .map(r => {
+      const { base, ...x } = r;
+      x.stale = base === undefined ? !!r.stale : r.status === 'pending' && JSON.stringify(raw && hasOwn(raw, r.key) ? raw[r.key] : null) !== base;
+      return x;
+    });
+}
 const renTargets = rk => RENAME_TARGETS[rk] || (/^x\./.test(rk) ? [['cases', 'x_' + rk.slice(2), 1], ['ct', 'extra', 1, 'x_' + rk.slice(2)]] : []);
 function cleanRenames(src) {
   const out = {};
@@ -3406,6 +3469,7 @@ function mergeConfig(c) {
     for (const [k, , on] of FXG_PARTS) if (!seen.has(k)) out.fxgParts.push({ k, on });   // ข้อมูลใหม่ที่ยังไม่เคยตั้ง: ค่าเริ่มต้นต่อท้าย
   }
   out.renames = cleanRenames(c.renames);
+  out.subAdmins = cleanSubAdmins(c.subAdmins);
   out.manualFrom = 'manualFrom' in c ? (/^\d{4}-\d{2}-\d{2}$/.test(str(c.manualFrom)) ? str(c.manualFrom) : '') : d.manualFrom;
   // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } · เก็บเฉพาะจำนวนเต็ม 1–20
   out.skips = {};
@@ -3602,7 +3666,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.9';
+const PAGE_VERSION = '2026-11-04.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3634,6 +3698,8 @@ const sheetStore = {
   addCases: recs => call('addCases', recs),
   remove: (table, id) => call('deleteRecord', table, id),
   saveConfig: cfg => call('saveConfig', cfg),
+  cfgPropose: (changes, note) => call('cfgPropose', changes, note),
+  cfgDecide: (req, ok, why) => call('cfgDecide', req, ok, why),
   moveActCases: () => call('moveActCases'),
   stamp: (id, step, value, pin, at) => (at ? call('stampCaseAt', id, step, value, pin, at) : call('stampCase', id, step, value, pin)),
   stampMany: (id, values, pin, at) => (at ? call('stampStepsAt', id, values, pin, at) : call('stampSteps', id, values, pin)),
@@ -3750,6 +3816,34 @@ function localStore() {
     },
     remove: async (table, id) => { db[table] = db[table].filter(x => x.id !== id); persist(); return true; },
     saveConfig: async cfg => { db.config = clone(cfg); persist(); return true; },
+    // แอดมินรอง: กติกาเดียวกับ cfgPropose / cfgDecide ใน Code.gs
+    cfgPropose: async (changes, note) => {
+      const u = state.user, tabs = subTabs(), raw = db.config || {};
+      if (u.isAdmin) throw new Error('แอดมินหลักบันทึกการตั้งค่าได้เลย ไม่ต้องขออนุมัติ');
+      if (!tabs.length) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน');
+      const keys = Object.keys(changes || {});
+      if (!keys.length) throw new Error('ไม่มีการแก้ไข');
+      const bad = cfgReqBad(raw, changes, tabs);
+      if (bad.length) throw new Error('แก้ส่วนนี้ไม่ได้ (นอกหมวดที่แอดมินหลักให้สิทธิ์): ' + bad.join(', '));
+      const req = uid(), at = nowISO();
+      db.cfgreq = Array.isArray(db.cfgreq) ? db.cfgreq : [];
+      keys.forEach((k, i) => db.cfgreq.push({ id: `${req}-${i + 1}`, req, key: k, value: JSON.stringify(changes[k] === undefined ? null : changes[k]), base: JSON.stringify(hasOwn(raw, k) ? raw[k] : null),
+        note: str(note).slice(0, 500), by: u.name, byUser: u.username, at, status: 'pending', decBy: '', decAt: '', why: '' }));
+      persist();
+      return cfgReqsFor(db.cfgreq, u, raw);
+    },
+    cfgDecide: async (req, ok, why) => {
+      const u = state.user, rows = (db.cfgreq || []).filter(r => r.req === req);
+      if (!req || !rows.length) throw new Error('ไม่พบคำขอนี้');
+      if (rows.some(r => r.status !== 'pending')) throw new Error('คำขอนี้ตัดสินไปแล้ว');
+      const mine = !!rows[0].byUser && rows[0].byUser === u.username;
+      if (!u.isAdmin && !(mine && !ok)) throw new Error('อนุมัติคำขอได้เฉพาะแอดมินหลัก');
+      if (ok) { db.config = { ...(db.config || {}) }; rows.forEach(r => { db.config[r.key] = JSON.parse(r.value); }); }
+      const dec = { status: ok ? 'approved' : u.isAdmin ? 'rejected' : 'cancelled', decBy: u.name, decAt: nowISO(), why: str(why).slice(0, 500) };
+      rows.forEach(r => Object.assign(r, dec));
+      persist();
+      return cfgReqsFor(db.cfgreq, u, db.config || {});
+    },
     // โหมดตัวอย่าง: รหัส PIN เก็บแบบแฮชในเบราว์เซอร์นี้ แยกตามมุมมอง
     stamp: async (id, step, value, pin, at) => stampLocal(id, { [step]: value }, pin, at),
     stampMany: async (id, values, pin, at) => stampLocal(id, values, pin, at),
@@ -4228,7 +4322,7 @@ function demoDb() {
 /* ---------- สถานะ ---------- */
 const state = {
   srcChk: {},   // ผลตรวจชีตของระบบอื่น (ตั้งค่า) { brachy, tdf }
-  config: mergeConfig(null), cases: [], logs: [], leaves: [], duty: [], ct: [], appt: [], reg: [], bq: [], jobs: [], vac: [], vacImp: null, loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
+  config: mergeConfig(null), cfgReqs: [], cases: [], logs: [], leaves: [], duty: [], ct: [], appt: [], reg: [], bq: [], jobs: [], vac: [], vacImp: null, loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
   month: thisMonth(), logKind: '', sheetUrl: '', demo: false, who: '', allRows: false,
@@ -4812,6 +4906,7 @@ function render() {
   applyBoxes();
   if (caseDlg.open && editingCase) syncCaseStamps();
   renderPendBadge();
+  renderCfgBadge();
   renderApBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
@@ -10514,25 +10609,38 @@ function renderSettings() {
     ? `<p class="muted" style="margin:0 0 10px;font-size:14px">ข้อมูลเก็บในแท็บ Cases, Logs และ Config ของ Google Sheet ที่ผูกกับระบบนี้ ทุกคนที่มีสิทธิ์แก้ไขชีตจะเห็นข้อมูลเดียวกัน</p>${state.sheetUrl ? `<a class="btn" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}`
     : `<p class="muted" style="margin:0 0 10px;font-size:14px">โหมดตัวอย่าง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ถ้าจะใช้งานจริงร่วมกันทั้งทีม ให้ติดตั้งกับ Google Sheet ตามคู่มือ README</p>
        <div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn" id="reset-demo">โหลดข้อมูลตัวอย่างใหม่</button><button type="button" class="btn danger" id="clear-all">ล้างเคสและกิจกรรมทั้งหมด</button></div>`;
-  const admin = state.user.isAdmin;
+  const admin = state.user.isAdmin, subT = subTabs(), subNote = subT.length ? `<p class="notice sub-note"><b>แอดมินรอง</b><span>แก้ได้เฉพาะหมวด ${esc(subT.map(tabLabel).join(', '))} · กด "ส่งขออนุมัติ" แล้วมีผลเมื่อแอดมินหลักอนุมัติ · หมวดอื่นดูได้อย่างเดียว</span></p>` : '';
   const roleBar = store.mode === 'local'
     ? (() => {
       const r = pref.get('demoRole', 'admin');
       const b = (v, l) => `<button type="button" data-viewas="${v}" aria-pressed="${r === v}">${l}</button>`;
-      return `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini">${b('admin', 'MP · แอดมิน')}${b('user', 'MP')}${b('viewer', 'ตำแหน่งอื่น (RTT)')}</span><span>${admin ? 'แก้ไขการตั้งค่าได้' : state.user.role === 'MP' ? 'บันทึกงานได้ การตั้งค่าแก้ได้เฉพาะแอดมิน' : 'ดูหรือบันทึกได้ตามสิทธิ์ของตำแหน่ง RTT ใน ตั้งค่า → แถบเมนู'}</span></div>`;
+      return `<div class="notice role-bar"><b>มุมมอง</b><span class="seg-mini">${b('admin', 'MP · แอดมิน')}${b('sub', 'แอดมินรอง')}${b('user', 'MP')}${b('viewer', 'ตำแหน่งอื่น (RTT)')}</span><span>${admin ? 'แก้ไขการตั้งค่าได้' : r === 'sub' ? (subT.length ? 'แอดมินรอง: แก้หมวดที่ได้รับสิทธิ์ แล้วส่งขออนุมัติ' : 'ยังไม่มีแอดมินรอง: สลับเป็น MP · แอดมิน แล้วเพิ่มที่ หมวดทีมงาน → แอดมิน') : state.user.role === 'MP' ? 'บันทึกงานได้ การตั้งค่าแก้ได้เฉพาะแอดมิน' : 'ดูหรือบันทึกได้ตามสิทธิ์ของตำแหน่ง RTT ใน ตั้งค่า → แถบเมนู'}</span></div>`;
     })()
+    : subT.length ? ''
     : admin
       ? `<p class="muted" style="margin:0 0 16px;font-size:13px">คุณเป็นแอดมิน · ${esc(state.user.via === 'lpch' ? `${state.user.name} (${state.user.username})` : state.user.me || '')}</p>`
       : `<p class="notice"><b>ดูได้อย่างเดียว</b><span>การตั้งค่าแก้ได้เฉพาะแอดมิน · คุณเข้าสู่ระบบเป็น ${esc(state.user.via === 'lpch' ? `${state.user.name} (${state.user.role})` : state.user.me || 'ไม่ทราบอีเมล')}</span></p>`;
-  const adminSec = `<div class="sec"><div class="sec-head"><h2>แอดมิน</h2><p>เฉพาะแอดมินแก้การตั้งค่าได้ · MP คนอื่นแจกเคส บันทึก RC และวันลาได้ตามปกติ · ตำแหน่งอื่นดูได้อย่างเดียว เฉพาะแถบที่แอดมินเลือก</p></div>
+  const subUsers = new Map();   // บัญชี RO Workspace ที่รู้จัก: สมาชิกที่ดึงมา + บัญชีที่เชื่อมในรายชื่อ
+  for (const u of state.lpchDir ? state.lpchDir.users : []) subUsers.set(u.username, `${u.name}${u.role ? ' · ' + u.role : ''}`);
+  for (const l of ['staff', 'doctors', 'crew']) for (const x of d[l]) if (str(x.user) && !subUsers.has(x.user)) subUsers.set(x.user, str(x.name) || str(x.code));
+  const subRows = d.subAdmins.map((x, i) => `<tr><td><input data-k="subAdmins.${i}.user" value="${esc(x.user)}" list="sub-users" placeholder="ชื่อผู้ใช้ RO Workspace" aria-label="บัญชี RO Workspace ของแอดมินรอง ${i + 1}" autocomplete="off"><small class="muted sub-who">${esc(subUsers.get(str(x.user).toLowerCase()) || subUsers.get(x.user) || '')}</small></td>
+      ${SUB_TABS.map(([t, l]) => `<td><input type="checkbox" data-subtab="${i}" value="${t}"${x.tabs.includes(t) ? ' checked' : ''} aria-label="${esc(`${x.user || 'แอดมินรอง ' + (i + 1)} · ${l}`)}"></td>`).join('')}
+      <td><button type="button" class="icon-btn" data-del="subAdmins.${i}" aria-label="ลบแอดมินรอง ${esc(x.user)}">×</button></td></tr>`).join('');
+  const subSec = `<h3 class="sub-h">แอดมินรอง</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ผู้ใช้ LPCH RO Workspace (ทุกตำแหน่ง) แก้การตั้งค่าได้เฉพาะหมวดที่ติ๊ก · ทุกการแก้เป็นคำขอ มีผลเมื่อแอดมินหลักอนุมัติ (กล่อง "คำขอแก้ไขการตั้งค่า" บนสุดของหน้านี้ · ป้ายตัวเลขบนแถบตั้งค่า) · หัวข้อแอดมินแก้ได้เฉพาะแอดมินหลัก${serverHas(SUB_API) ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-11-04.6 ขึ้นไป'}</p>
+      ${d.subAdmins.length ? `<div class="table-wrap set-table sub-admins"><table><thead><tr><th style="text-align:left">บัญชี RO Workspace</th>${SUB_TABS.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th></th></tr></thead><tbody>${subRows}</tbody></table></div>` : ''}
+      <datalist id="sub-users">${[...subUsers].map(([u, n]) => `<option value="${esc(u)}">${esc(n)}</option>`).join('')}</datalist>
+      <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="subadmin">+ เพิ่มแอดมินรอง</button></div>`;
+  const adminSec = `<div class="sec" data-main><div class="sec-head"><h2>แอดมิน</h2><p>เฉพาะแอดมินแก้การตั้งค่าได้ · MP คนอื่นแจกเคส บันทึก RC และวันลาได้ตามปกติ · ตำแหน่งอื่นดูได้อย่างเดียว เฉพาะแถบที่แอดมินเลือก</p></div>
       <p class="muted" style="margin:0 0 10px;font-size:13.5px">${store.mode === 'sheet'
         ? `แอดมินของ LPCH RO Workspace ที่เป็น MP เป็นแอดมินที่นี่ด้วย · เจ้าของไฟล์ Google Sheet${state.user.owner ? ` (${esc(state.user.owner)})` : ''} เป็นแอดมินเสมอเมื่อเปิดด้วยบัญชี Google · เพิ่มชื่อผู้ใช้หรืออีเมล LPCH ของ MP ที่ให้เป็นแอดมินด้านล่าง`
         : 'โหมดตัวอย่างไม่มีการเข้าสู่ระบบ ใช้ปุ่มมุมมองด้านบนเพื่อดูหน้าจอของแต่ละสิทธิ์ · ตอนใช้งานจริงเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace'}</p>
-      ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}</div>`;
-  el.innerHTML = `${roleBar}<div class="set-tabs" id="set-tabs"><div role="tablist" aria-label="หมวดการตั้งค่า">${SET_TABS.map(([k, l]) => `<button type="button" role="tab" data-settab="${k}" aria-selected="false">${esc(l)}<small></small></button>`).join('')}</div>
+      ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}
+      ${subSec}</div>`;
+  el.innerHTML = `${roleBar}${subNote}${cfgReqHtml()}<div class="set-tabs" id="set-tabs"><div role="tablist" aria-label="หมวดการตั้งค่า">${SET_TABS.map(([k, l]) => `<button type="button" role="tab" data-settab="${k}" aria-selected="false">${esc(l)}<small></small></button>`).join('')}</div>
     <input type="search" id="set-q" value="${esc(setQ)}" placeholder="ค้นหาการตั้งค่า เช่น PIN, IGRT, วันหยุด" aria-label="ค้นหาการตั้งค่า" autocomplete="off"></div>
     <p class="set-empty" id="set-empty" hidden>ไม่พบการตั้งค่าที่มีคำนี้</p>
-    <fieldset class="ro-wrap"${admin ? '' : ' disabled'}>
+    <fieldset class="ro-wrap"${admin || subT.length ? '' : ' disabled'}>
     <div class="sec"><div class="sec-head"><h2>ทีมนักฟิสิกส์การแพทย์</h2><p>ลำดับในรายการคือลำดับคิวหมุนเวียน · สีของป้ายรหัสเลือกเองได้ (× = กลับเป็นสีอัตโนมัติ) · เลือกตำแหน่งได้รายคน · ลารายวันใช้ปุ่ม "วันลา" ในหน้างาน · ปิด "ปฏิบัติงาน" สำหรับคนที่ย้ายหรือลายาว</p></div>
       ${acctBar('staff')}
       <div class="set-list">${staffRows}</div>
@@ -10735,8 +10843,10 @@ function renderSettings() {
     ${adminSec}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     </fieldset>
-    <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span><button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">บันทึกการตั้งค่า</button></div>`;
+    <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span>${subT.length ? '<input id="sub-note" maxlength="500" placeholder="หมายเหตุถึงแอดมินหลัก (ไม่บังคับ)" aria-label="หมายเหตุถึงแอดมินหลัก">' : ''}<button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">${subT.length ? 'ส่งขออนุมัติ' : 'บันทึกการตั้งค่า'}</button></div>`;
   applySetTabs();
+  // แอดมินรอง: หมวดที่ไม่ได้รับสิทธิ์ (และหัวข้อแอดมิน) ดูได้อย่างเดียว
+  if (subT.length) for (const sec of $$('#view-settings .ro-wrap > .sec')) { const ro = !subT.includes(secTab(sec)) || sec.hasAttribute('data-main'); sec.inert = ro; sec.classList.toggle('sec-ro', ro); }
   updateSaveBar();
 }
 // ตั้งค่าแบ่งเป็นแถบย่อยตามหมวด (จำไว้ในเบราว์เซอร์) · ทั้งหมด = ทุกหัวข้อในหน้าเดียว · ค้นหา = หัวข้อที่มีคำนั้นจากทุกหมวด (รวมค่าในช่อง)
@@ -10745,13 +10855,110 @@ const SET_TABS = [['team', 'ทีมงาน'], ['case', 'แจกเคส']
 const SET_RULES = [['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
   ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs)/]];
 let setQ = '';
+const secTab = sec => { if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; } return sec.dataset.stab; };
+const SUB_TABS = SET_TABS.filter(([k]) => k !== 'all');
+// ชื่อส่วนของการตั้งค่า (แสดงในคำขอของแอดมินรอง)
+const CFG_KEY_LABEL = { staff: 'ทีมนักฟิสิกส์', doctors: 'แพทย์', crew: 'RTT, RA และบุคลากรอื่น', skips: 'หักคิวรายเดือน', manualFrom: 'นับเคสเลือกเองตั้งแต่', rate: 'แต้มมาตรฐาน', p4pGroup: 'กลุ่มที่ (P4P)',
+  cats: 'เทคนิคและน้ำหนัก P4P', types: 'Type', aims: 'Aim', techniques: 'Technique', freqs: 'ความถี่', areas: 'บริเวณที่ฉาย', rooms: 'ห้องฉาย', fields: 'หัวข้อเพิ่มเติม', required: 'ช่องบังคับกรอก',
+  defaults: 'ค่าเริ่มต้น', icdExtra: 'ICD-10 ที่เพิ่มเอง', qa: 'ค่า QA', qaSee: 'ตำแหน่งที่เห็นค่า QA', caseView: 'รายการเคส', positions: 'ตำแหน่งและแต้ม', guarantee: 'แต้มประกัน', acts: 'กิจกรรมนับครั้ง',
+  brachySync: 'Brachytherapy จากระบบนัด', tdfSync: 'RC จาก TDF', ptags: 'รายละเอียดผู้ป่วย', mobility: 'สถานะผู้ป่วย', igrt: 'IGRT', qColors: 'สีคิว', queues: 'ช่วงคิวฉาย', fxTypes: 'สถานะ fraction',
+  moveReplan: 'ย้ายห้องแล้วส่งงานวางแผนใหม่', fxgParts: 'ข้อมูลในคอลัมน์ผู้ป่วย', quota: 'โควตาต่อผู้ป่วย', dayMax: 'จำนวนผู้ป่วยต่อวันที่เป็นสีแดง', dutyRoles: 'ตำแหน่ง RTT / RA ประจำวัน',
+  ptForm: 'ฟอร์มเพิ่มผู้ป่วย (ห้องฉาย)', reg: 'ลงทะเบียน', appt: 'ลงนัด', order: 'ใบสั่ง CT', bq: 'นัดคิวใส่แร่', ct: 'CT-SIM', jobs: 'RTT/RA Jobs', vac: 'Vac-Lok', pin: 'รหัส PIN', holidays: 'วันหยุด',
+  appName: 'ชื่อระบบ', appSub: 'บรรทัดรอง', logo: 'โลโก้', nav: 'แถบเมนู', roles: 'ตำแหน่ง', boxes: 'ลำดับกล่องในแถบ', renames: 'แก้ชื่อตัวเลือก', admins: 'แอดมิน', subAdmins: 'แอดมินรอง' };
+const cfgKeyLabel = k => CFG_KEY_LABEL[k] || k;
+const tabLabel = t => (SET_TABS.find(x => x[0] === t) || [t, t])[1];
+// ส่วนที่เปลี่ยน (ค่าปัจจุบัน → ค่าในคำขอ): รายการข้อความ = เพิ่ม/ลบ/เรียงใหม่ · อื่น ๆ = ทีละช่อง (รายการของออบเจกต์ใช้รหัส/ชื่อแทนลำดับ)
+const cfgShort = v => { const t = typeof v === 'string' ? v : JSON.stringify(v); return t === undefined ? '—' : t.length > 60 ? t.slice(0, 57) + '…' : t; };
+function cfgDiff(a, b) {
+  const prim = x => Array.isArray(x) && x.every(v => v === null || typeof v !== 'object');
+  if (prim(a) && prim(b)) {
+    const out = [...b.filter(v => !a.includes(v)).map(v => `+ ${cfgShort(v)}`), ...a.filter(v => !b.includes(v)).map(v => `− ${cfgShort(v)}`)];
+    if (!out.length && JSON.stringify(a) !== JSON.stringify(b)) out.push('เรียงลำดับใหม่');
+    return out;
+  }
+  const flat = (x, p, o) => {
+    if (!x || typeof x !== 'object') { o[p] = x; return o; }
+    const ks = Object.keys(x);
+    if (!ks.length && p) o[p] = Array.isArray(x) ? '[]' : '{}';
+    for (const k of ks) {
+      const v = x[k], name = Array.isArray(x) && v && typeof v === 'object' ? str(v.code || v.label || v.id || v.view || v.k || v.date || v.user) || k : k;
+      flat(v, p ? `${p} · ${name}` : name, o);
+    }
+    return o;
+  };
+  const fa = flat(a, '', {}), fb = flat(b, '', {}), out = [];
+  for (const k of new Set([...Object.keys(fa), ...Object.keys(fb)])) {
+    if (JSON.stringify(fa[k]) === JSON.stringify(fb[k])) continue;
+    const n = k || 'ค่า';
+    out.push(!hasOwn(fa, k) ? `+ ${n}: ${cfgShort(fb[k])}` : !hasOwn(fb, k) ? `− ${n}: ${cfgShort(fa[k])}` : `${n}: ${cfgShort(fa[k])} → ${cfgShort(fb[k])}`);
+  }
+  return out;
+}
+// กล่องคำขอแก้ไขการตั้งค่า (บนสุดของหน้าตั้งค่า): แอดมินหลักอนุมัติ / ไม่อนุมัติ · แอดมินรองเห็นคำขอของตัวเอง ยกเลิกได้
+const CFG_ST = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', cancelled: 'ยกเลิกแล้ว' };
+function cfgReqGroups() {
+  const m = new Map();
+  for (const r of state.cfgReqs || []) {
+    if (!m.has(r.req)) m.set(r.req, { req: r.req, by: r.by, byUser: r.byUser, at: r.at, note: r.note, status: r.status, decBy: r.decBy, decAt: r.decAt, why: r.why, rows: [] });
+    m.get(r.req).rows.push(r);
+  }
+  return [...m.values()].sort((a, b) => str(b.at).localeCompare(str(a.at)));
+}
+function cfgReqHtml() {
+  const admin = state.user.isAdmin, sub = subTabs().length > 0;
+  if (!admin && !sub) return '';
+  const groups = cfgReqGroups(), pend = groups.filter(g => g.status === 'pending'), done = groups.filter(g => g.status !== 'pending');
+  if (admin && !groups.length) return '';
+  const card = g => {
+    const lines = r => {
+      let v;
+      try { v = JSON.parse(r.value); } catch (e) { return []; }
+      const cur = state.config[r.key] || {};
+      const all = r.key !== 'renames' ? cfgDiff(state.config[r.key], v)   // แก้ชื่อตัวเลือก: รายการ: ชื่อเดิม → ชื่อใหม่
+        : Object.keys(v || {}).flatMap(rk => Object.keys(v[rk] || {}).filter(o => (cur[rk] || {})[o] !== v[rk][o]).map(o => `${cfgKeyLabel(/^x\./.test(rk) ? 'fields' : rk)}: ${o} → ${v[rk][o]}`));
+      return all.length > 12 ? [...all.slice(0, 12), `และอีก ${all.length - 12} รายการ`] : all;
+    };
+    const tabs = [...new Set(g.rows.map(r => (r.key === 'renames' ? '' : tabLabel(cfgTabOf(r.key)))).filter(Boolean))];
+    return `<div class="cfgreq ${esc(g.status)}" data-req="${esc(g.req)}">
+      <div class="cfgreq-h"><b>${esc(g.by || g.byUser)}</b>${g.byUser && g.byUser !== g.by ? `<span class="muted">${esc(g.byUser)}</span>` : ''}<span class="muted">${esc(stampText(g.at))}</span><span class="cfgreq-st ${esc(g.status)}">${esc(CFG_ST[g.status] || g.status)}</span>${tabs.length ? `<span class="muted">หมวด ${esc(tabs.join(', '))}</span>` : ''}${g.status !== 'pending' && g.decBy ? `<span class="muted">โดย ${esc(g.decBy)} ${esc(stampText(g.decAt))}</span>` : ''}</div>
+      ${g.note ? `<p class="cfgreq-note">${esc(g.note)}</p>` : ''}
+      <ul class="cfgreq-keys">${g.rows.map(r => `<li><b>${esc(cfgKeyLabel(r.key))}</b>${r.stale ? ' <span class="cfgreq-stale" title="มีการแก้ส่วนนี้หลังส่งคำขอ · อนุมัติแล้วค่าในคำขอแทนทั้งส่วน">ค่าปัจจุบันเปลี่ยนหลังส่งคำขอ</span>' : ''}${g.status === 'pending' ? `<span class="cfgreq-diff">${lines(r).map(esc).join('<br>') || 'ไม่ต่างจากค่าปัจจุบัน'}</span>` : ''}</li>`).join('')}</ul>
+      ${g.status !== 'pending' ? '' : admin ? `<div class="cfgreq-act"><button type="button" class="btn primary" data-cfgok="${esc(g.req)}">อนุมัติ</button><button type="button" class="btn ghost danger" data-cfgno="${esc(g.req)}">ไม่อนุมัติ</button></div>`
+        : `<div class="cfgreq-act"><button type="button" class="btn ghost" data-cfgno="${esc(g.req)}">ยกเลิกคำขอ</button></div>`}
+    </div>`;
+  };
+  return `<div class="cfgreq-box" id="cfgreq-box"><h2>คำขอแก้ไขการตั้งค่า${admin ? 'จากแอดมินรอง' : 'ของคุณ'}<span class="n">รออนุมัติ ${pend.length}</span></h2>
+    ${pend.length ? pend.map(card).join('') : `<p class="muted cfgreq-none">${admin ? 'ไม่มีคำขอที่รออนุมัติ' : 'ไม่มีคำขอที่รออนุมัติ · แก้หมวดที่ได้รับสิทธิ์แล้วกด "ส่งขออนุมัติ"'}</p>`}
+    ${done.length ? `<details class="cfgreq-done"><summary>ตัดสินแล้ว 30 วันล่าสุด (${done.length})</summary>${done.map(card).join('')}</details>` : ''}</div>`;
+}
+async function cfgDecideUi(req, ok, btn) {
+  if (state.user.isAdmin && settingsDirty()) return toast('บันทึกหรือยกเลิกการแก้ไขของคุณก่อน แล้วค่อยตัดสินคำขอ', { err: true });
+  btn.disabled = true;
+  try {
+    const rows = await store.cfgDecide(req, ok, '');
+    if (ok) { draft = null; await refresh(true); render(); } else { state.cfgReqs = cfgReqsFor(rows, state.user, null); render(); }
+    toast(ok ? 'อนุมัติแล้ว · การตั้งค่ามีผลแล้ว' : state.user.isAdmin ? 'ไม่อนุมัติคำขอนี้' : 'ยกเลิกคำขอแล้ว');
+  } catch (e) { if (btn.isConnected) btn.disabled = false; toast('ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+// ป้ายบนแถบตั้งค่า: คำขอที่รอแอดมินหลักอนุมัติ
+function renderCfgBadge() {
+  const b = $('.nav [data-view="settings"]');
+  if (!b) return;
+  let dot = $('.nav-dot', b);
+  const n = state.user.isAdmin ? new Set((state.cfgReqs || []).filter(r => r.status === 'pending').map(r => r.req)).size : 0;
+  if (!n) { if (dot) { dot.remove(); b.removeAttribute('title'); } return; }
+  if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
+  dot.className = 'nav-dot warn';
+  dot.textContent = n;
+  b.title = `คำขอแก้ไขการตั้งค่าจากแอดมินรอง รออนุมัติ ${n} คำขอ`;
+}
 const setTab = () => { const t = pref.get('setTab', 'team'); return SET_TABS.some(x => x[0] === t) ? t : 'team'; };
 function applySetTabs() {
   const secs = $$('#view-settings .ro-wrap > .sec'), q = setQ.trim().toLowerCase(), cur = setTab(), n = { all: secs.length };
   const hits = sec => sec.textContent.toLowerCase().includes(q) || $$('input:not([type="color"]), select, textarea', sec).some(i => str(i.value).toLowerCase().includes(q));
   let shown = 0;
   for (const sec of secs) {
-    if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; }
+    secTab(sec);
     n[sec.dataset.stab] = (n[sec.dataset.stab] || 0) + 1;
     sec.hidden = q ? !hits(sec) : cur !== 'all' && sec.dataset.stab !== cur;
     if (!sec.hidden) shown++;
@@ -10856,6 +11063,7 @@ async function saveSettings() {
   if (badRule) return toast(str(badRule.match) ? `รหัส ICD-10 "${str(badRule.match)}" ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ใช้ไม่ได้ ใส่แบบ C61 หรือ C50.9` : 'ใส่รหัส ICD-10 ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ให้ครบ', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
   const btn = $('#save-settings');
+  if (!state.user.isAdmin) return proposeSettings(next, btn);
   btn.disabled = true;
   try {
     await store.saveConfig(next);
@@ -10864,6 +11072,25 @@ async function saveSettings() {
     render();
     toast('บันทึกการตั้งค่าแล้ว');
   } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn.isConnected) btn.disabled = false; }
+}
+// แอดมินรอง: ส่งเฉพาะส่วนที่แก้เป็นคำขอ (ยังไม่มีผล) · ส่วนนอกหมวดที่ได้รับสิทธิ์ส่งไม่ได้
+async function proposeSettings(next, btn) {
+  const tabs = subTabs();
+  if (!tabs.length) return toast('แก้การตั้งค่าได้เฉพาะแอดมิน', { err: true });
+  const changes = {};
+  for (const k of new Set([...Object.keys(next), ...Object.keys(state.config)])) if (k !== 'queue' && k !== 'carry' && JSON.stringify(next[k]) !== JSON.stringify(state.config[k])) changes[k] = next[k];
+  if (!Object.keys(changes).length) { draft = null; render(); return toast('ไม่มีการแก้ไข'); }
+  const bad = cfgReqBad(state.config, changes, tabs);
+  if (bad.length) return toast(`แก้ส่วนนี้ไม่ได้ (นอกหมวดที่ได้รับสิทธิ์): ${bad.map(k => cfgKeyLabel(k.replace(/^renames\./, ''))).join(', ')}`, { err: true });
+  btn.disabled = true;
+  try {
+    const rows = await store.cfgPropose(changes, str(($('#sub-note') || {}).value));
+    state.cfgReqs = cfgReqsFor(rows, state.user, null);
+    draft = null;
+    render();
+    toast(`ส่งคำขอแล้ว (${Object.keys(changes).map(cfgKeyLabel).join(', ')}) · มีผลเมื่อแอดมินหลักอนุมัติ`);
+  } catch (e) { toast('ส่งคำขอไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { if (btn.isConnected) btn.disabled = false; }
 }
 let cfgTimer = null;
@@ -12923,7 +13150,7 @@ document.addEventListener('click', e => {
   if (ds.fxsday !== undefined) { const t0 = today(), cur = fxGrid.statDay || t0, nx = +ds.fxsday ? shiftWeekdays(cur, +ds.fxsday) : ''; fxGrid.statDay = nx === t0 ? '' : nx; render(); return; }   // สถิติรายวัน: เปลี่ยนวัน
   if (ds.fxnav !== undefined) { const home = weekdayFrom(today()); fxGrid.from = +ds.fxnav ? shiftWeekdays(fxGrid.from || home, 5 * +ds.fxnav) : ''; if (fxGrid.from === home) fxGrid.from = ''; return renderCourse(); }
   if (ds.fxback !== undefined) { pinCtx.fxPause = ds.fxback !== 'today'; $('#pin-fx-back').value = ds.fxback === 'today' ? '' : ds.fxback; return syncFx(); }
-  if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; return render(); }
+  if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; render(); return refresh(true).then(() => render()); }   // โหลดใหม่: คำขอของแอดมินรองตามมุมมอง
   if (t.id === 'logout') return logout();
   if (t.id === 'theme-btn') return toggleTheme();
   if (ds.lookfs) return lookSet({ fs: ds.lookfs });
@@ -13016,6 +13243,8 @@ document.addEventListener('click', e => {
   if (ds.delact) { const acts = { ...draft.acts }; delete acts[ds.delact]; draft.acts = acts; return renderSettings(); }
   if (ds.renopt) return startRename(t);
   if (ds.rmopt) { const j = ds.rmopt.lastIndexOf('.'); getPath(draft, ds.rmopt.slice(0, j)).splice(+ds.rmopt.slice(j + 1), 1); return renderSettings(); }
+  if (ds.cfgok || ds.cfgno) return cfgDecideUi(ds.cfgok || ds.cfgno, !!ds.cfgok, t);
+  if (ds.add === 'subadmin') { draft.subAdmins.push({ user: '', tabs: [] }); renderSettings(); $$('[data-k^="subAdmins."][data-k$=".user"]').pop().focus(); return; }
   if (ds.add === 'queue') {   // ใช้ช่องที่ยังไม่เคยใช้ก่อน (ผู้ป่วยที่บันทึกคิวที่ลบไปแล้วไม่ย้ายมาคิวใหม่)
     const free = Q_IDS.filter(x => !draft.queues.some(q => q.id === x)), id = free.find(x => !queues().some(q => q.id === x)) || free[0];
     if (!id) return; draft.queues.push({ id, label: '' }); renderSettings(); $$('[data-k^="queues."][data-k$=".label"]').pop().focus(); return; }
@@ -13735,6 +13964,12 @@ settingsEl.addEventListener('keydown', e => {
 settingsEl.addEventListener('focusout', e => { if (e.target.dataset && e.target.dataset.renin) commitRename(e.target, 'blur'); });
 settingsEl.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.subtab !== undefined) {   // หมวดที่แอดมินรองแก้ได้
+    const x = draft.subAdmins[+el.dataset.subtab];
+    if (x) x.tabs = SUB_TABS.map(([k]) => k).filter(k => (k === el.value ? el.checked : x.tabs.includes(k)));
+    updateSaveBar();
+    return;
+  }
   if (el.dataset.navacc !== undefined) {   // สิทธิ์ของแถบต่อตำแหน่ง
     const x = draft.nav[+el.dataset.navacc];
     x.access = { ...x.access, [el.dataset.accrole]: el.value };
@@ -13802,11 +14037,15 @@ $('#p4p-table').addEventListener('change', e => {
 /* ---------- เริ่มต้น ---------- */
 // โหมดตัวอย่าง: สลับมุมมองแอดมิน / MP / ตำแหน่งอื่น (ดูอย่างเดียว) ได้ที่หน้าตั้งค่า
 function demoUser() {
-  const r = pref.get('demoRole', 'admin');
-  return { via: 'demo', name: 'ผู้ใช้ตัวอย่าง', username: '', role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true, hasPin: !!demoPin.get() };   // canEdit ของจริงคิดรายแถบที่ accessOf
+  const r = pref.get('demoRole', 'admin'), sa = r === 'sub' ? state.config.subAdmins[0] : null;
+  return { via: 'demo', name: r === 'sub' ? 'แอดมินรอง ตัวอย่าง' : 'ผู้ใช้ตัวอย่าง', username: r === 'sub' ? (sa ? sa.user : 'demo.sub') : '', sub: sa ? sa.tabs.slice() : [],
+    role: r === 'viewer' ? 'RTT' : 'MP', me: '', owner: '', canEdit: r !== 'viewer', isAdmin: r === 'admin', demo: true, hasPin: !!demoPin.get() };   // canEdit ของจริงคิดรายแถบที่ accessOf
 }
 // บันทึกได้ในแถบที่เปิดอยู่ (ปุ่มและช่องกรอกของแต่ละแถบใช้ค่านี้)
 const canEdit = () => accessOf(state.view) === 'edit';
+// แอดมินรอง: หมวดในหน้าตั้งค่าที่แก้ได้ (แอดมินหลัก = ไม่ใช่แอดมินรอง)
+const subTabs = () => (state.user.isAdmin || !Array.isArray(state.user.sub) ? [] : state.user.sub.filter(t => CFG_TABS[t]));
+const SUB_API = 54;   // Code.gs ที่มีแอดมินรอง (cfgPropose / cfgDecide)
 // Code.gs บนเซิร์ฟเวอร์เก่ากว่าที่หน้าเว็บนี้ต้องการ (เช่นยังไม่ได้ Deploy เวอร์ชันใหม่)
 const oldServer = () => store.mode === 'sheet' && state.loaded && (state.api || 0) < NEEDS_API;
 const RO_MSG = 'ตำแหน่งของคุณบันทึกในแถบนี้ไม่ได้ (แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู)';
@@ -13865,6 +14104,7 @@ async function refresh(quiet) {
     state.brachy = d.brachy || null;
     state.tdf = d.tdf || null;
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
+    state.cfgReqs = cfgReqsFor(d.cfgReqs || d.cfgreq || [], state.user, d.config || {});
     applyLook();   // ขนาดตัวอักษรและสีของบัญชีนี้
     if (store.mode === 'sheet' && d.homeUrl !== undefined) state.homeUrl = d.homeUrl;
     state.api = +d.api || 0;
