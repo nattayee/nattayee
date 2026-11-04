@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.1';
-const API_LEVEL = 49;
+const CODE_VERSION = '2026-11-04.2';
+const API_LEVEL = 50;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1353,14 +1353,17 @@ function recentCt_(ss) {
  * จำนวนเคสต่อวันและ HN ซ้ำวันเดียวกัน หน้าเว็บเตือนก่อนลงนัด (ลงต่อได้เหมือนระบบนัดคิวใส่แร่เดิม)
  */
 const BQ_BOOKED = 'นัดแล้ว';
+const BQ_NOSHOW = 'ไม่มา';   // API 50 · ผู้ป่วยไม่มาตามนัด = ไม่นับเคส ไม่นับคะแนน (MP, RC และอื่น ๆ) เหมือนยกเลิก
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
 // CT ของนัดใส่แร่ (API 46): ct = CT / Re-CT · ctRoom = รหัสเครื่อง CT ที่ทำ (นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · us = US (Ultrasound)
 const BQ_CT = ['', 'CT', 'Re-CT'];
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
+// ลงชื่อ MP / RC ได้: บัญชี Google ของเจ้าของชีต หรือผู้ใช้ตำแหน่ง MP / RTT ใน LPCH (API 50: RTT บันทึกแทนได้)
 function bqCanSign_(u) {
-  return !!u && (u.via === 'google' || String(u.role || '').toUpperCase() === 'MP');
+  const r = String((u && u.role) || '').toUpperCase();
+  return !!u && (u.via === 'google' || r === 'MP' || r === 'RTT');
 }
 // เขียนหลายแถวต่อท้ายชีตในครั้งเดียว (ข้อความล้วน)
 function bqAppend_(sh, header, recs) {
@@ -1397,7 +1400,7 @@ function bqEdit(id, ch, pin, token) {
   const set = {};
   BQ_EDIT.forEach(k => { if (k in ch) set[k] = bqCut_(ch[k], k === 'note' ? 2000 : 200); });
   if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
-  if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+  if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BQ_NOSHOW, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
   if ('ct' in set && BQ_CT.indexOf(set.ct) < 0) throw new Error('CT ต้องเป็น CT หรือ Re-CT');
   if ('ct' in set && !set.ct) set.ctRoom = '';   // ไม่ได้ทำ CT = ไม่มีห้อง
@@ -1406,14 +1409,14 @@ function bqEdit(id, ch, pin, token) {
   const cfg = readConfig_(ss_()) || {};
   const cur0 = readTable_(ss_(), 'bq').filter(x => x.id === id)[0] || {};
   if (('ct' in set ? set.ct : cur0.ct) && !('ctRoom' in set ? set.ctRoom : cur0.ctRoom)) throw new Error('เลือกห้อง CT ที่ทำ');
-  pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && set.status === BRACHY_ST_DONE) : has_(cur0[k]))));
+  pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && (set.status === BRACHY_ST_DONE || set.status === BQ_NOSHOW)) : has_(cur0[k]))));
   const rec = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const cur = readTable_(ss, 'bq').filter(x => x.id === id)[0];
     const diff = Object.keys(set).filter(k => String(cur[k] || '') !== set[k]);
     if (!diff.length) return cur;
-    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP');
+    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
     const mp = 'mp' in set ? set.mp : cur.mp, rc = 'rc' in set ? set.rc : cur.rc;
     if (rc && rc === mp) throw new Error('RC ต้องไม่ใช่คนเดียวกับ MP');
     const out = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, diff.map(k => ({ f: k, from: String(cur[k] || ''), to: set[k] }))) };
@@ -1435,14 +1438,14 @@ function bqEditDay(ids, ch, pin, token) {
   ids = (Array.isArray(ids) ? ids : []).map(String).slice(0, 60);
   if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
   const cfg = readConfig_(ss_()) || {};
-  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP');
+  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
   const all0 = readTable_(ss_(), 'bq');
   pinChange_(u, pin, ids.some(id => { const x = all0.filter(r => r.id === id)[0]; return x && has_(x[k]) && String(x[k]) !== v; }));
   const out = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), recs = [];
     ids.forEach(id => {
       const cur = all.filter(x => x.id === id)[0];
-      if (!cur || cur.status === BRACHY_ST_CANCEL) return;
+      if (!cur || cur.status === BRACHY_ST_CANCEL || cur.status === BQ_NOSHOW) return;
       if (v && ((k === 'rc' && cur.mp === v) || (k === 'mp' && cur.rc === v))) return;
       if (String(cur[k] || '') === v) { recs.push(cur); return; }
       const row = findRow_(sh, header.indexOf('id') + 1, id);
@@ -1533,7 +1536,7 @@ function bqImportRead_(cfg) {
   const docs = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && x.code);
   const docOf = v => { const t = String(v || '').trim(), hit = t && docs.filter(x => String(x.code).toUpperCase() === t.toUpperCase() || (x.name && docKey(x.name) === docKey(t)))[0]; return hit ? String(hit.code).toUpperCase() : t; };
   const staffOf = brachyStaff_(cfg), unknownDoc = {}, unknownStaff = {};
-  const stOf = v => (/ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
+  const stOf = v => (/ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /ไม่มา|no.?show/i.test(v) ? BQ_NOSHOW : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
   const now = new Date().toISOString();
   const rows = values.map(r => {
     const g = k => { const i = at(k); return i < 0 ? '' : cellText_(r[i], tz); };
@@ -2151,7 +2154,7 @@ function brachyWanted_(rows, s, cfg) {
   rows.forEach(r => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
     const st = String(r.status).trim();
-    if (st === BRACHY_ST_CANCEL || (s.count === 'done' && st !== BRACHY_ST_DONE)) return;
+    if (st === BRACHY_ST_CANCEL || st === BQ_NOSHOW || (s.count === 'done' && st !== BRACHY_ST_DONE)) return;   // ยกเลิก / ไม่มา ไม่นับ
     counted++;
     const mp = staffOf(r.mp), rc = staffOf(r.rc);
     if (r.mp && !mp) unknown[r.mp] = (unknown[r.mp] || 0) + 1;

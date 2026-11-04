@@ -1679,6 +1679,10 @@ dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
 .bq-st{border:0;padding:1px 9px;background:var(--accent-soft);color:var(--accent);font-weight:600}
 .bq-st.done{border:0;background:var(--ok-soft);color:var(--ok)}
 .bq-st.cancel{background:var(--late-soft);color:var(--late);text-decoration:none}
+.bq-st.noshow{background:var(--warn-soft);color:var(--warn)}
+.bq-row.noshow td:not(.bq-act){color:var(--muted)}
+.bq-act{white-space:nowrap}
+.bq-nob{color:var(--warn)}
 .bq-row.cancel .ct-name,.bq-row.cancel .hn{text-decoration:line-through}
 .bq-okb{color:var(--ok)}
 .bq-okb:hover{border-color:var(--ok);color:var(--ok)}
@@ -2893,7 +2897,7 @@ function pinFresh(mode, ctx) {
     case 'ptags': return !!c && emp(c.ptags);
     case 'mqt': return !!c && emp(c.mqt);
     case 'duty': return !(ctx.rooms || []).some(r => state.duty.some(v => v.date === ctx.date && v.room === r));
-    case 'bqedit': { const a = ctx.row || {}; return Object.entries(ctx.ch || {}).every(([k, v]) => (k === 'status' ? a.status === BQ_ST.booked && v === BQ_ST.done : emp(a[k]))); }
+    case 'bqedit': { const a = ctx.row || {}; return Object.entries(ctx.ch || {}).every(([k, v]) => (k === 'status' ? a.status === BQ_ST.booked && (v === BQ_ST.done || v === BQ_ST.noshow) : emp(a[k]))); }
     case 'bqday': { const k = Object.keys(ctx.ch || {})[0]; return (ctx.ids || []).every(id => { const a = state.bq.find(x => x.id === id); return a && emp(a[k]); }); }
     default: return false;   // แก้ไขเคส ลบ ยกเลิก แก้กิจกรรม ฯลฯ
   }
@@ -3500,7 +3504,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.1';
+const PAGE_VERSION = '2026-11-04.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3960,7 +3964,7 @@ function localStore() {
       for (const id of ids) {
         const k = Object.keys(ch)[0], v = str(ch[k]), a = db.bq.find(x => x.id === id);
         if (!['rtt', 'mp', 'rc'].includes(k)) throw new Error('แก้ได้เฉพาะ RTT / MP / RC');
-        if (!a || a.status === BQ_ST.cancel || (v && ((k === 'rc' && a.mp === v) || (k === 'mp' && a.rc === v)))) continue;
+        if (!a || !bqLive(a) || (v && ((k === 'rc' && a.mp === v) || (k === 'mp' && a.rc === v)))) continue;
         if (str(a[k]) === v) { out.push(clone(a)); continue; }
         const by = state.user.name || 'ผู้ใช้ตัวอย่าง', d = new Date();
         let hist = [];
@@ -5811,7 +5815,10 @@ const bqOn = () => serverHas(BQ_API);
 const BQ_IMPORT_API = 42;   // Code.gs ที่ตรวจก่อนนำเข้าได้ (bqImportCheck) และอ่านหัวคอลัมน์ของระบบเดิม (เลขนัด, Fraction ที่, จำนวน Fraction …)
 const bqImpOn = () => serverHas(BQ_IMPORT_API);
 const BQ_OLD = 'แถบนัดคิวใส่แร่ต้องใช้ Code.gs รุ่น 2026-10-30.3 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
-const BQ_ST = { booked: 'นัดแล้ว', done: 'มาตามนัด', cancel: 'ยกเลิก' };
+// ไม่มา (Code.gs API 50) = ผู้ป่วยไม่มาตามนัด: ไม่นับเคส ไม่นับคะแนนทุกส่วน (MP, RC, RTT, แพทย์) เหมือนยกเลิก แต่ไม่ขีดฆ่า · ตารางวันฉายยังถือเป็นวันใส่แร่ (ไม่เลื่อนแผนย้อนหลัง)
+const BQ_ST = { booked: 'นัดแล้ว', done: 'มาตามนัด', noshow: 'ไม่มา', cancel: 'ยกเลิก' };
+const BQ_NS_API = 50;
+const bqNsOn = () => serverHas(BQ_NS_API);
 const BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'note', 'status', 'rtt', 'mp', 'rc', 'hist', 'src', 'by', 'created', 'editedBy', 'updated', 'ct', 'ctRoom', 'us'];
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
 const BQ_FIELD = { date: 'วันที่', doc: 'แพทย์', tech: 'รูปแบบการใส่', note: 'หมายเหตุ', status: 'สถานะ', rtt: 'RTT', mp: 'MP', rc: 'RC', ct: 'CT', ctRoom: 'ห้อง CT', us: 'US' };
@@ -5844,7 +5851,7 @@ function normBq(o) {
   r.id = r.id || uid();
   return r;
 }
-const bqLive = a => a.status !== BQ_ST.cancel;
+const bqLive = a => a.status !== BQ_ST.cancel && a.status !== BQ_ST.noshow;   // นับเป็นเคส (ไม่ยกเลิก · ไม่ใช่ไม่มา)
 const bqMax = () => state.config.bq.max;
 const bqCount = d => state.bq.filter(a => a.date === d && bqLive(a)).length;
 const bqOrder = (a, b) => a.date.localeCompare(b.date) || bqLive(b) - bqLive(a) || a.created.localeCompare(b.created) || (+a.fx || 0) - (+b.fx || 0);   // วันเดียวกัน: ตามลำดับที่ลงนัด · ยกเลิกไว้ท้าย
@@ -5887,9 +5894,9 @@ function bqRttChips(id, name, v) {
   if (!dutyDir.loaded) { const p = loadDutyDir(); if (p) p.then(() => { if ($(id).isConnected) draw(); }); }
 }
 const bqRttVal = (box, other) => str($(other).value) || chipValue($(box));
-// ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตรงกับ bqCanSign_ ใน Code.gs) · รายชื่อให้เลือก = ทีมนักฟิสิกส์ (MP) ที่ปฏิบัติงาน
-const BQ_SIGN_MSG = 'ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP';
-function bqCanSign() { const u = state.user || {}; return u.via === 'google' || str(u.role).toUpperCase() === 'MP'; }
+// ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT (ตรงกับ bqCanSign_ ใน Code.gs · RTT ต้องใช้ API 50) · รายชื่อให้เลือก = ทีมนักฟิสิกส์ (MP) ที่ปฏิบัติงาน
+const BQ_SIGN_MSG = 'ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT';
+function bqCanSign() { const u = state.user || {}, r = str(u.role).toUpperCase(); return u.via === 'google' || r === 'MP' || (r === 'RTT' && bqNsOn()); }
 function bqMerge(recs) {
   for (const r of recs) { const i = state.bq.findIndex(x => x.id === r.id); if (i < 0) state.bq.push(r); else state.bq[i] = r; }
   bqVer++;
@@ -5960,7 +5967,7 @@ function bqRowsHtml(rows, edit) {
   let q = 0;
   const sign = edit && bqCanSign();
   return rows.map(a => {
-    const st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : '';
+    const st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : a.status === BQ_ST.noshow ? 'noshow' : '';
     const who = k => (a[k] ? av(a[k]) : sign && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="${k}" title="ลงชื่อ ${k.toUpperCase()}${bqLinked() ? (k === 'mp' ? ' · นับคะแนน Brachytherapy ของ MP' : ' · นับคะแนน RC') : ''}">+ ${k.toUpperCase()}</button>` : '');
     const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
     const il = bqImgList(a), ic = il.map(t => `<span class="bq-imgc${t === 'US' ? ' us' : ''}">${esc(t)}</span>`).join(''), iTip = il.length ? `${il.join(' · ')}` : '';
@@ -5969,7 +5976,7 @@ function bqRowsHtml(rows, edit) {
     return `<tr class="ct-row bq-row${st ? ' ' + st : ''}${edit ? ' click' : ''}"${edit ? ` data-bqedit="${esc(a.id)}" tabindex="0"` : ''}>
       <td class="num">${bqLive(a) ? ++q : '–'}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td>${bqDocHtml(a.doc)}</td>
       <td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td class="ct-note">${esc(a.note)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td>
-      <td>${rtt}</td><td>${img}</td><td>${who('mp')}</td><td>${who('rc')}</td><td class="bq-act">${edit && a.status === BQ_ST.booked ? `<button type="button" class="btn ghost sm bq-okb" data-bqdone="${esc(a.id)}" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>` : ''}</td></tr>`;
+      <td>${rtt}</td><td>${img}</td><td>${who('mp')}</td><td>${who('rc')}</td><td class="bq-act">${edit && a.status === BQ_ST.booked ? `<button type="button" class="btn ghost sm bq-okb" data-bqdone="${esc(a.id)}" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>${bqNsOn() ? `<button type="button" class="btn ghost sm bq-nob" data-bqnoshow="${esc(a.id)}" title="ผู้ป่วยไม่มาตามนัด · ไม่นับเคส ไม่นับคะแนน (MP, RC, RTT, แพทย์)">✗ ไม่มา</button>` : ''}` : ''}</td></tr>`;
   }).join('');
 }
 // แถวหัววัน: วันที่ จำนวนเคส · ใต้คอลัมน์ RTT / MP / RC = เลือกครั้งเดียวให้ทุกเคสของวันนั้น (ไม่นับที่ยกเลิก) · ทุกเคสเหมือนกัน = แสดงชื่อ · ต่างกัน = หลายคน
@@ -6050,7 +6057,7 @@ function bqCalHtml(ym, per, max, hol, td, sel) {
     cells.push(`<button type="button" class="cal-d${off ? ' off' : ''}${d === td ? ' today' : ''}${n > max ? ' over' : n === max ? ' full' : ''}" data-bqday="${d}" aria-pressed="${d === sel}" aria-label="${esc(bqDay(d))} ${n} เคส">
       <span class="cal-top"><span class="cal-n">${i}</span><span class="cal-wd">${esc(THAI_WD[parseISO(d).getDay()])}</span>${n ? `<span class="bq-cnt${n > max ? ' over' : n === max ? ' full' : ''}">${n > max ? '⚠️ ' : ''}${n} เคส</span>` : ''}</span>
       ${hol[d] ? `<span class="cal-hol">${esc(hol[d])}</span>` : ''}${Object.keys(letters).length ? `<span class="cal-ev">${Object.entries(letters).map(([k, c]) => bqTl(k, k + (c > 1 ? c : ''))).join('')}</span>` : ''}
-      ${rows.slice(0, 4).map(a => `<span class="bq-ln${bqLive(a) ? '' : ' cancel'}">${a.status === BQ_ST.done ? '✓ ' : ''}${esc(a.hn)} ${esc(a.name)}</span>`).join('')}${rows.length > 4 ? `<span class="bq-ln muted">+ อีก ${rows.length - 4} เคส</span>` : ''}</button>`);
+      ${rows.slice(0, 4).map(a => `<span class="bq-ln${bqLive(a) ? '' : ' cancel'}">${a.status === BQ_ST.done ? '✓ ' : a.status === BQ_ST.noshow ? '✗ ' : ''}${esc(a.hn)} ${esc(a.name)}</span>`).join('')}${rows.length > 4 ? `<span class="bq-ln muted">+ อีก ${rows.length - 4} เคส</span>` : ''}</button>`);
   }
   return `<div class="cal bq-cal">${THAI_WD.map(w => `<div class="cal-h">${esc(w)}</div>`).join('')}${cells.join('')}</div>`;
 }
@@ -6091,7 +6098,7 @@ function bqPatientHtml(pid) {
     <h3 style="margin:0 0 4px"><span class="hn">${esc(hn)}</span> ${esc(name)}</h3>
     <p class="bq-stats">${courses.length} คอร์ส · ${nx ? `นัดถัดไป <b>${esc(bqDay(nx.date))}</b>` : 'ไม่มีนัดที่จะถึง'}</p>
     ${courses.map((c, i) => { const n = s => c.filter(a => a.status === s).length; return `<div class="bq-course"><h4>คอร์สที่ ${i + 1} · ${bqTech(c[0].tech)} · ${c.length} Fx · ${bqDocHtml(c[0].doc)}</h4>
-      <p class="sum">นัดแล้ว ${n(BQ_ST.booked)} · มาตามนัด ${n(BQ_ST.done)} · ยกเลิก ${n(BQ_ST.cancel)}</p>
+      <p class="sum">นัดแล้ว ${n(BQ_ST.booked)} · มาตามนัด ${n(BQ_ST.done)}${n(BQ_ST.noshow) ? ` · ไม่มา ${n(BQ_ST.noshow)}` : ''} · ยกเลิก ${n(BQ_ST.cancel)}</p>
       <ol>${c.map(a => `<li class="${a === nx ? 'next' : bqLive(a) ? '' : 'cancel'}">Fx ${esc(a.fx)}/${esc(a.total)} · ${esc(bqDay(a.date))} · ${esc(a.status)}${a === nx ? ' · นัดถัดไป' : ''}${a.mp ? ` · MP ${esc(a.mp)}` : ''}${a.rc ? ` · RC ${esc(a.rc)}` : ''}</li>`).join('')}</ol></div>`; }).join('') || '<p class="empty-state">ไม่พบนัดของผู้ป่วยนี้</p>'}`;
 }
 async function bqCopy(pid) {
@@ -6316,7 +6323,7 @@ function openBqEdit(id, focus) {
   $('#e-info').textContent = [a.name, a.by && `ลงนัดโดย ${a.by}${a.created ? ` · ${fmtStamp(isoStamp(a.created))}` : ''}`, a.editedBy && `แก้ไขล่าสุดโดย ${a.editedBy}${a.updated ? ` · ${fmtStamp(isoStamp(a.updated))}` : ''}`].filter(Boolean).join(' · ');
   $('#e-date').value = a.date;
   $('#e-note').value = a.note;
-  chipGroup($('#e-status'), 'estatus', Object.values(BQ_ST), a.status);
+  chipGroup($('#e-status'), 'estatus', Object.values(BQ_ST).filter(v => v !== BQ_ST.noshow || bqNsOn() || a.status === v), a.status);
   docChipsTo('#e-doc', 'edoc', docCodeOf(a.doc) || a.doc);
   bqTechChips('#e-tech', 'etech', '#e-tech-other', a.tech);
   // กด + MP / + RC: เลือกตัวเองไว้ให้ (MP ที่เชื่อมบัญชี LPCH ใน ตั้งค่า → ทีมนักฟิสิกส์) · RC ต้องไม่ใช่ MP คนเดิม
@@ -9028,7 +9035,7 @@ function jobsStats(ym) {
   }
   // นัดใส่แร่ที่บันทึก CT / Re-CT: นับเป็นผู้ป่วย (ไม่ฉีดสารทึบรังสี) ของห้อง CT ที่ทำวันนั้น
   for (const a of state.bq) {
-    if (!a.ct || !a.ctRoom || a.status === BQ_ST.cancel || a.date < first || a.date > last || a.date > td) continue;
+    if (!a.ct || !a.ctRoom || !bqLive(a) || a.date < first || a.date > last || a.date > td) continue;   // ยกเลิก / ไม่มา ไม่นับ
     const b = cell(ct, a.ctRoom, a.date), k = str(a.hn) || a.id;
     b.pts.add(k);
     b.nocm.add(k);
@@ -10442,7 +10449,7 @@ function renderSettings() {
         <label class="field"><span class="lbl">RTT เริ่มต้น <span class="sub-lbl">ใส่ให้นัดใหม่ (แก้ในฟอร์มได้) · ปุ่ม + RTT เลือกคนนี้ไว้ก่อน · ว่าง = ไม่ใส่</span></span><input data-k="bq.rtt" list="bq-rtt-names" maxlength="60" value="${esc(d.bq.rtt)}" placeholder="ชื่อ RTT" autocomplete="off"><datalist id="bq-rtt-names">${bqRttNames().map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>
         <label class="field"><span class="lbl">วันนัดใส่แร่ในแถบ${esc(navLabel('course'))} <span class="sub-lbl">HN ตรงกับผู้ป่วยในตารางวันฉาย = วันนั้นไม่ฉาย เลื่อนไปวันทำการถัดไปอัตโนมัติ · บันทึกสถานะเองในวันนั้น = ใช้ที่บันทึก</span></span><select data-k="bq.hold">${opt('auto', `สถานะ ${bqHoldType('auto').label} อัตโนมัติ`, d.bq.hold)}${(d.fxTypes || []).filter(t => t.act === 'skip').map(t => opt(t.id, `สถานะ ${t.label}`, d.bq.hold)).join('')}${opt('off', 'ไม่ใช้ (ฉายตามตาราง)', d.bq.hold)}</select></label>
       </div>
-      <p class="muted def-note" style="margin:0 0 12px">ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
+      <p class="muted def-note" style="margin:0 0 12px">ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT (RTT ต้องใช้ Code.gs รุ่น 2026-11-04.2 ขึ้นไป) · ไม่มา = ไม่นับเคส ไม่นับคะแนน · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
       <h3 class="sub-h">นำเข้านัดจากระบบนัดคิวใส่แร่เดิม</h3>
       <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · กด ตรวจก่อนนำเข้า (ยังไม่เขียนอะไร) ดูจำนวนนัดและคอลัมน์ แล้วกด นำเข้า · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
       ${store.mode === 'sheet' && !bqImpOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การนำเข้าต้องใช้ Code.gs รุ่น 2026-11-01.1 ขึ้นไป (ตรวจก่อนนำเข้า และอ่านคอลัมน์ เลขนัด, Fraction ที่, จำนวน Fraction ของระบบเดิม)</span></p>' : ''}
@@ -10747,7 +10754,7 @@ function bqDatesOf(hn) {
   if (bqIdx.arr !== state.bq || bqIdx.ver !== bqVer) {
     const map = new Map();
     for (const a of state.bq) {
-      if (!bqLive(a) || !isDay(a.date) || !hnKey(a.hn)) continue;
+      if (a.status === BQ_ST.cancel || !isDay(a.date) || !hnKey(a.hn)) continue;   // ไม่มา: ยังเป็นวันใส่แร่ของตารางวันฉาย (ไม่เลื่อนแผนย้อนหลัง)
       const key = hnKey(a.hn);
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(a);
@@ -11299,7 +11306,7 @@ function renderDashCharts() {
   // Brachytherapy: จากแถบนัดคิวใส่แร่ ตามวันนัด · ไม่นับนัดที่ยกเลิก (ตั้งค่า → Brachytherapy นับเฉพาะ "มาตามนัด" = นับเฉพาะมาตามนัด)
   // ราย (เคส) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx) · แยกตามแพทย์ (ค่าเริ่มต้น) รูปแบบการใส่ หรือเดือน · ตาราง: รูปแบบการใส่ / แพทย์ เป็นคอลัมน์
   const brDone = (state.config.brachySync || {}).count === 'done';
-  const bqs = state.bq.filter(a => a.status !== BQ_ST.cancel && (!brDone || a.status === BQ_ST.done) && inBounds(a.date, b));
+  const bqs = state.bq.filter(a => bqLive(a) && (!brDone || a.status === BQ_ST.done) && inBounds(a.date, b));   // ไม่นับยกเลิก / ไม่มา
   const pts = rs => new Set(rs.map(a => str(a.hn) || 'id:' + a.id)).size;
   const NODOC = 'ไม่ระบุแพทย์', NOTECH = 'ไม่ระบุรูปแบบ', docK = a => str(a.doc) || NODOC, techK = a => str(a.tech) || NOTECH;
   const ordered = (base, keys, none) => { const have = new Set(keys); return [...base.filter(x => have.has(x)), ...[...have].filter(x => !base.includes(x) && x !== none).sort(), ...(have.has(none) ? [none] : [])]; };
@@ -12687,6 +12694,7 @@ document.addEventListener('click', e => {
   if (ds.bqback) { state.bqPt = ''; return renderBq(); }
   if (ds.bqcopy) return bqCopy(ds.bqcopy);
   if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); return a && bqQuick(a, { status: BQ_ST.done }); }
+  if (ds.bqnoshow) { const a = state.bq.find(x => x.id === ds.bqnoshow); return a && bqQuick(a, { status: BQ_ST.noshow }); }
   if (ds.bqsign) return openBqSet([ds.bqsign], ds.bqk);
   if (ds.bqimg) return openBqImg(ds.bqimg);
   if (ds.bqdayk) return openBqSet(state.bq.filter(a => a.date === ds.bqdate && bqLive(a)).map(a => a.id), ds.bqdayk, ds.bqdate);
