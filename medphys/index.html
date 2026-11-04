@@ -573,6 +573,17 @@ button.ptags:hover{box-shadow:inset 0 0 0 1px var(--line-strong)}
 .fxg-c0 input.mqt:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .fxg-c0 span.mqt{border-color:transparent;background:none}
 @media (max-width:700px){.fxg-c0 .mqt{width:54px;padding:1px 2px;font-size:16px;letter-spacing:-.5px}}   /* 16px: iPhone ไม่ซูมตอนกดช่อง */
+.fxg-name{flex:0 1 auto;min-width:0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fxg-meta{flex:0 1 auto;min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:11.5px}
+.fxg-f.ord{border-style:dashed}
+.cp-order{display:grid;gap:2px;margin:4px 0;padding:0 0 0 22px}
+.cp-order li{display:flex;align-items:center;gap:4px}
+.cp-order li span{flex:1}
+.cp-order button{min-width:26px;height:24px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);cursor:pointer}
+.cp-order button:disabled{opacity:.35;cursor:default}
+.cp-note{margin:4px 0 0;color:var(--faint);font-size:11.5px;line-height:1.4}
+.fxg-parts{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 0;padding:0;list-style:none}
+.fxg-parts li{display:inline-flex;align-items:center;gap:2px}
 .fx-prog{flex:none;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .fx-warn{color:var(--warn);font-weight:600}
 .fx-prog.fx-pend{padding:0 6px;border:1px dashed var(--line-strong);border-radius:999px;font-size:11.5px;line-height:18px;white-space:nowrap}
@@ -616,7 +627,7 @@ button.fx-prog{padding:0;border:0;background:none;font-family:inherit;cursor:poi
 button.fxc{cursor:pointer}
 button.fxc:hover{box-shadow:inset 0 0 0 2px var(--line-strong)}
 button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-@media (max-width:700px){.fxg-c0{gap:4px;padding:4px 6px}.fxg-legend,.fx-prog,.fxg-stat,.fxg-row .fxg-c0 .av,.fxg-row .doc-chip,.fxg-row .bd-time{display:none}.fxc b{font-size:13px}}
+@media (max-width:700px){.fxg-c0{gap:4px;padding:4px 6px}.fxg-legend,.fx-prog,.fxg-stat,.fxg-row .fxg-c0 .av,.fxg-row .doc-chip,.fxg-row .bd-time,.fxg-row .fxg-name,.fxg-row .fxg-meta{display:none}.fxc b{font-size:13px}}
 /* หน้าต่างบันทึกสถานะ fraction */
 .fx-box{display:grid;gap:12px}
 .fx-back{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
@@ -2853,6 +2864,10 @@ const TDF_API = 35;   // Code.gs ที่ดึง RC จาก TDF Dose Calcul
 const APPT_API = 36;   // Code.gs ที่มีแถบลงนัด (apptSave, apptRemove, apptMark) และลง CT-SIM จากนัด (ctSave apptFrom)
 const apptOn = () => serverHas(APPT_API);
 // แถบลงนัด: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → ลงนัด) · HN และวันนัด CT-Sim บังคับเสมอ
+// คอลัมน์ผู้ป่วยของตารางวันฉาย (คอลัมน์แรก): ข้อมูลที่แสดง = แอดมินเลือก (ตั้งค่า → ตารางวันฉาย) · ลำดับ = ผู้ใช้จัดเอง (ปุ่ม ⇅ เรียงข้อมูล · จำไว้ในเบราว์เซอร์)
+const FXG_PARTS = [['mqt', 'Mosaiq Time', true], ['hn', 'HN', true], ['name', 'ชื่อผู้ป่วย', true], ['doc', 'แพทย์', true], ['mp', 'ฟิสิกส์ (MP)', true], ['bd', 'เวลา BD protocol', true],
+  ['tags', 'รายละเอียดผู้ป่วย', true], ['stat', 'เดิน/รถนอน · IGRT', true], ['tech', 'เทคนิค', false], ['dx', 'Diag', false], ['dose', 'Prescription', false], ['start', 'Start RT → ครบ', false], ['prog', 'ฉายแล้ว/ทั้งหมด · สถานะ', true]];
+const fxgPartLabel = k => (FXG_PARTS.find(p => p[0] === k) || [k, k])[1];
 const APPT_FORM = [
   ['name', 'Name', 'off'], ['age', 'Age (ใบสั่ง)', 'off'], ['sex', 'Gender (ใบสั่ง)', 'off'], ['cm', 'CT (CM / Non-CM)', 'req'], ['iv', 'IV ml, Flow Rate (ใบสั่ง)', 'off', false],
   ['special', 'เทคนิคพิเศษ', 'show', false], ['dose', 'Prescription (Dose/fx, Fx, Prescription, ความถี่)', 'show'], ['ct', 'เครื่อง CT', 'off'], ['sim', 'Start RT', 'show'], ['room', 'ห้องฉาย', 'off'],
@@ -2980,7 +2995,8 @@ const DEFAULT_CONFIG = {
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
   nav: ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'].map(view => ({ view, on: true, guest: true })),
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
-  manualFrom: '2026-11-01',   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
+  manualFrom: '2026-11-01',
+  fxgParts: FXG_PARTS.map(([k, , on]) => ({ k, on })),   // ข้อมูลในคอลัมน์ผู้ป่วยของตารางวันฉาย (ลำดับเริ่มต้น)   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
   qa: { mu: { dir: '', ok: '', warn: '' }, d0: { dir: '', ok: '', warn: '' }, d4: { dir: 'high', ok: 95, warn: 90 }, mc: { dir: 'high', ok: 95, warn: 90 } },
@@ -3316,6 +3332,12 @@ function mergeConfig(c) {
     out.acts = acts;
   }
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
+  {
+    const seen = new Set();
+    out.fxgParts = [];
+    for (const x of Array.isArray(c.fxgParts) ? c.fxgParts : []) { const k = str(x && x.k); if (!FXG_PARTS.some(p => p[0] === k) || seen.has(k)) continue; seen.add(k); out.fxgParts.push({ k, on: k === 'hn' || !!x.on }); }
+    for (const [k, , on] of FXG_PARTS) if (!seen.has(k)) out.fxgParts.push({ k, on });   // ข้อมูลใหม่ที่ยังไม่เคยตั้ง: ค่าเริ่มต้นต่อท้าย
+  }
   out.manualFrom = 'manualFrom' in c ? (/^\d{4}-\d{2}-\d{2}$/.test(str(c.manualFrom)) ? str(c.manualFrom) : '') : d.manualFrom;
   // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } · เก็บเฉพาะจำนวนเต็ม 1–20
   out.skips = {};
@@ -3512,7 +3534,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.7';
+const PAGE_VERSION = '2026-11-04.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6803,6 +6825,11 @@ let mqRedraw = false, mqSaving = false;   // mqSaving: กำลังบัน�
 // ตัวกรองตารางวันฉาย (ปุ่มที่หัวคอลัมน์ผู้ป่วย ใช้ช่องเลือกค่าแบบเดียวกับตาราง) · จำไว้จนกว่าจะโหลดหน้าใหม่
 // ผู้ป่วยที่มีหลายเคสมีได้หลายค่า: แสดงเมื่อมีค่าใดค่าหนึ่งที่เลือก · หลายตัวกรอง = ต้องตรงทุกตัว · จำนวนใต้วันที่นับตามที่กรองแล้ว
 // Mosaiq Time · คิว · เวลา BD protocol: ช่องเลือกมีปุ่มเรียงด้วย (ค่าที่เรียง: FXG_SORT · ยังไม่มีค่าอยู่ท้ายเสมอ)
+function fxgPartOrder() {
+  const on = state.config.fxgParts.filter(x => x.on).map(x => x.k), mine = pref.get('fxgOrder', []);
+  const pos = k => { const i = Array.isArray(mine) ? mine.indexOf(k) : -1; return i < 0 ? 1000 + on.indexOf(k) : i; };
+  return on.slice().sort((a, b) => pos(a) - pos(b));
+}
 const FXG_FILTERS = { mqt: 'Mosaiq Time', q: 'คิว', bd: 'BD', doc: 'แพทย์', mp: 'ฟิสิกส์', cat: 'เทคนิค', tag: 'รายละเอียด', mob: 'เดิน/รถนอน', igrt: 'IGRT', st: 'สถานะ' };
 const FXG_HEAD = { bd: 'เวลา BD protocol' };   // หัวช่องเลือก (ถ้าต่างจากชื่อปุ่ม)
 const FXG_SORT = {
@@ -6899,10 +6926,12 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   const w = box.getBoundingClientRect().width || Math.min(document.documentElement.clientWidth - 32, 1728);
   // คอลัมน์ผู้ป่วย: ค่าเริ่มต้นตามความกว้างจอ + ที่ผู้ใช้ลากปรับไว้ (จำไว้ในเบราว์เซอร์) · เหลือวันอย่างน้อย 5 วัน
   const cw = w < 700 ? 40 : 46, c0base = w < 700 ? 150 : w < 1300 ? 420 : 480;
-  const c0 = w < 700 ? c0base : Math.round(Math.max(FXG_C0_MIN, Math.min(c0base + (+pref.get('fxgW', 0) || 0), w - 5 * cw - 2, FXG_C0_MAX)));
-  // 4 สัปดาห์ (20 วันทำการ) · จอกว้างพอ: ที่ของสัปดาห์ที่ 5 เป็นสถิติรายวัน · ไม่พอ: วันเท่าที่พอดีจอ สถิติพับไว้เหนือตาราง
-  const fit = Math.floor((w - c0 - 2) / cw), side = w >= 700 && fit >= FXG_DAYS + 5;
-  const n = side ? FXG_DAYS : Math.max(5, Math.min(FXG_DAYS, fit));
+  // จอกว้างพอ (อย่างน้อย 5 วัน + สถิติ): สถิติรายวันอยู่ด้านขวาเสมอ · ขยายคอลัมน์ผู้ป่วยได้ถึงเหลือ 5 วัน (วันลดลง สถิติไม่หลุด) · จอแคบ: สถิติพับไว้เหนือตาราง
+  const sideOk = w >= 700 && Math.floor((w - c0base - 2) / cw) >= 5 + FXG_STAT_COLS, c0max = Math.max(FXG_C0_MIN, Math.min(w - (sideOk ? 5 + FXG_STAT_COLS : 5) * cw - 2, FXG_C0_MAX));
+  const c0 = w < 700 ? c0base : Math.round(Math.max(FXG_C0_MIN, Math.min(c0base + (+pref.get('fxgW', 0) || 0), c0max)));
+  // 3 สัปดาห์ (15 วันทำการ)
+  const fit = Math.floor((w - c0 - 2) / cw), side = sideOk && fit >= 5 + FXG_STAT_COLS;
+  const n = Math.max(5, Math.min(FXG_DAYS, side ? fit - FXG_STAT_COLS : fit));
   const home = weekdayFrom(td), start = fxGrid.from || home, days = [];
   for (let d = start; days.length < n; d = nextDate(d)) if (isWeekday(d)) days.push(d);
   const edit = fxCanEdit();
@@ -6923,7 +6952,7 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
   }).join('');
   box.style.setProperty('--fx-c0', `${c0}px`);
   box.dataset.c0base = c0base;
-  box.dataset.c0max = Math.max(FXG_C0_MIN, Math.min(w - 5 * cw - 2, FXG_C0_MAX));
+  box.dataset.c0max = c0max;
   box.style.setProperty('--fx-cw', `${cw}px`);
   box.style.setProperty('--fx-n', n);
   const moved = groups.some(g => g.items.some(x => roomsOf(x.c).length > 1));
@@ -6943,7 +6972,8 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
     const tip = [f[k] && `${l}: ${f[k].map(v => fxgLabel(k, v)).join(', ')}`, sk === k && `เรียง ${fs.dir > 0 ? 'เช้า→เย็น' : 'เย็น→เช้า'}`].filter(Boolean).join(' · ') || (k in FXG_SORT ? `เรียงหรือเลือก${FXG_HEAD[k] || l}ที่แสดง` : `เลือก${l}ที่แสดง`);
     return `<button type="button" class="fxg-f${f[k] || sk === k ? ' on' : ''}" data-lfilter="${k}" data-list="fxg" title="${esc(tip)}">${FUNNEL_SVG}${l}${sk === k ? `<i aria-hidden="true">${fs.dir > 0 ? '▲' : '▼'}</i>` : ''}${f[k] ? `<b>${f[k].length}</b>` : ''}</button>`;
   }).join('')
-    + (Object.keys(f).length || sk ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด เรียงตาม Start RT">ล้าง</button>' : '');
+    + (Object.keys(f).length || sk ? '<button type="button" class="fxg-f clr" data-fxclear title="แสดงผู้ป่วยทั้งหมด เรียงตาม Start RT">ล้าง</button>' : '')
+    + `<button type="button" class="fxg-f ord${Array.isArray(pref.get('fxgOrder', null)) ? ' on' : ''}" data-lfilter="order" data-list="fxg" title="จัดลำดับข้อมูลในคอลัมน์ผู้ป่วย (ของคุณเอง)">⇅ เรียงข้อมูล</button>`;
   const typing = (document.activeElement || {}).dataset || {};   // กำลังพิมพ์ Mosaiq Time: วาดใหม่แล้วกลับไปที่ช่องเดิม
   mqRedraw = true;
   const sDay = fxGrid.statDay || td, stats = fxStatsHtml(groups, sDay, td, hol, room);
@@ -6960,7 +6990,8 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
 }
 // สถิติรายวัน (แบบไฟล์ Excel ของห้องฉาย): ผู้ป่วยที่มี fraction วันนั้น (ห้องที่เลือก · ไม่นับรอ Plan complete / Hold / HV)
 // ตามช่วงคิวฉาย · ตามช่วงฉาย เช้า / บ่าย / เย็น (คิว หรือ Mosaiq Time) แยก CBCT / Port Film ตาม IGRT · เคสดื่มน้ำ = BD protocol
-const FXG_DAYS = 20;
+const FXG_DAYS = 15;   // 3 สัปดาห์ (15 วันทำการ)
+const FXG_STAT_COLS = 5;   // ที่ของสถิติรายวันด้านขวา (เท่า 5 ช่องวัน) · ขยายคอลัมน์ผู้ป่วยแล้วสถิติยังอยู่ (วันลดลงแทน)
 function fxSession(ti, mq) {
   const l = ti.q ? ti.q.label : '';
   if (/^เช้า/.test(l)) return 'm';
@@ -7071,7 +7102,13 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     : c.rt === 'complete' ? `<span class="fx-prog fx-done" title="${esc(`Complete course ${fmtDay(c.rtDate)} · ฉายแล้ว ${fxGiven(sc, nextDate(c.rtDate))}/${sc.planned || '?'} fx · ย้ายไปแถบ Complete course วันถัดไป`)}">✓ Complete</span>`
     : sc.hold ? `<span class="fx-prog fx-warn" title="${esc(`${fxTip(sc.hold)} · เหลือ ${sc.pending} fx`)}">${esc(sc.hold.label)}</span>`
     : `<span class="fx-prog" title="${esc(`ผ่านมาแล้ว ${given} จาก ${sc.planned || '?'} fx${sc.end ? ` · ครบ ${fmtDay(sc.end)}` : ''}`)}">${given}/${sc.planned || '?'}</span>`;
-  const mps = docs.map(docChip).join('') + [...new Set(cs.map(x => x.mp).filter(Boolean))].map(m => av(m)).join('');   // แพทย์ก่อนนักฟิสิกส์
+  const meta = (cls, v, t) => (v ? `<span class="fxg-meta ${cls}" title="${esc(t || v)}">${esc(v)}</span>` : '');
+  const parts = {
+    mqt: mqBox, hn, name: c.name ? `<span class="fxg-name" title="${esc(c.name)}">${esc(c.name)}</span>` : '', doc: docs.map(docChip).join(''),
+    mp: [...new Set(cs.map(x => x.mp).filter(Boolean))].map(m => av(m)).join(''), bd: bdChip, tags: ptags, stat, prog,
+    tech: meta('tech', [...new Set(cs.map(x => catOf(x.cat).label))].join(' + ')), dx: meta('dx', dxShort(c), dxValue(c)), dose: meta('dose', doseText(c)),
+    start: meta('start', sc ? `${fmtDay(sc.start)} → ${sc.end ? fmtDay(sc.end) : '—'}` : '', sc ? `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}` : ''),
+  };
   const cells = days.map(d => {
     const h = hol[d], e = fxEventAt(evs, d), list = sc && sc.fx.get(d), num = list ? fxNum(list) : '';
     const cls = ['fxc'], dayTxt = LONG_DAY_FMT.format(parseISO(d));
@@ -7116,7 +7153,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
     return `<span class="${cls.join(' ')}" role="cell"${tip ? ` title="${esc(tip)}"` : h ? ` title="${esc(h)}"` : ''}>${body}</span>`;
   }).join('');
-  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${mqBox}${hn}${mps}${bdChip}${ptags}${stat}${prog}</div>${cells}</div>`;
+  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${fxgPartOrder().map(k => parts[k] || '').join('')}</div>${cells}</div>`;
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
@@ -8238,6 +8275,13 @@ function closeColPop() {
   if (btn && inPop) btn.focus();   // ปิดด้วย Esc / ปุ่มปิด: โฟกัสกลับที่ปุ่มกรวย · กดข้างนอก: ไม่ดึงโฟกัส
 }
 function renderColPop() {
+  if (colPop.id === 'fxg' && colPop.key === 'order') {
+    const ks = fxgPartOrder();
+    $('#col-pop').innerHTML = `<div class="cp-head">ลำดับข้อมูลในคอลัมน์ผู้ป่วย</div><ol class="cp-order">${ks.map((k, i) => `<li><span>${esc(fxgPartLabel(k))}</span><button type="button" data-fxord="${k}" data-dir="-1" aria-label="เลื่อน ${esc(fxgPartLabel(k))} ขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" data-fxord="${k}" data-dir="1" aria-label="เลื่อน ${esc(fxgPartLabel(k))} ลง"${i < ks.length - 1 ? '' : ' disabled'}>↓</button></li>`).join('')}</ol>
+      <p class="cp-note">ลำดับของคุณเอง (จำไว้ในเบราว์เซอร์นี้) · ข้อมูลที่แสดง แอดมินตั้งที่ ตั้งค่า → ตารางวันฉาย</p>
+      <div class="cp-foot"><button type="button" class="cp-all" data-fxordreset>ค่าเริ่มต้น</button><button type="button" class="cp-all" data-cpclose>ปิด</button></div>`;
+    return;
+  }
   const { id, key } = colPop, st = lineState(id), base = lineBase[id] || [], rcs = rcIndex(), fx = id === 'fxg';
   const counts = new Map();
   if (fx) for (const g of base) for (const v of fxgVals(g, key)) counts.set(v, (counts.get(v) || 0) + 1);   // นับเป็นจำนวนผู้ป่วย
@@ -9241,11 +9285,13 @@ function vacCourse(r) {
   return out;
 }
 const vacCourseText = co => (co.hold ? `Hold ตั้งแต่ ${fmtDay(co.hold)}` : co.end ? `${co.rt === 'complete' ? 'Complete course' : co.rt === 'cancel' ? 'Cancel RT' : co.rt === 'off' ? 'Off RT' : co.end >= today() ? 'กำลังฉาย ครบ' : 'ฉายครบ'} ${fmtDay(co.end)}` : co.any ? 'กำลังฉาย / รอฉาย' : '');
-// สถานะ: Off ที่บันทึก (ถึงวันนั้นแล้ว = ว่าง) → การฉายจบแล้ว = ว่าง → Hold RT → ฉายอยู่ = ใช้อยู่ · ไม่รู้วันจบ: วันทำ CT เกิน 120 วัน = ว่าง
+// วัน Off = วันครบแสงของเคส (Complete course / Cancel RT / Off RT หรือ fraction สุดท้ายตามตาราง) · ไม่มีข้อมูลเคส = วันที่บันทึกไว้
+// สถานะ: คืนแล้ว (บันทึก Off ถึงวันนั้นแล้ว) = ว่าง → บันทึก Off RT / Complete course / Cancel RT ในแถบห้องฉายแล้ว = ว่างทันที (กลับมาให้เลือกในฟอร์ม CT-SIM)
+// → ครบแสงแล้ว = ว่าง → Hold RT → ฉายอยู่ = ใช้อยู่ · ไม่รู้วันจบ: วันทำ CT เกิน 120 วัน = ว่าง
 function vacInfo(r) {
-  const td = today(), co = vacCourse(r), hold = r.hold || co.hold, off = r.off || co.end;
-  const st = r.off ? (r.off <= td ? 'free' : hold ? 'hold' : 'busy') : co.end && co.end < td ? 'free' : hold ? 'hold' : co.end ? 'busy' : r.ct && r.ct < plusDays(td, -120) ? 'free' : 'busy';
-  return { st, off, offAuto: !r.off && !!co.end, hold, holdAuto: !r.hold && !!co.hold, co };
+  const td = today(), co = vacCourse(r), hold = r.hold || co.hold, back = !!r.off && r.off <= td, off = back ? r.off : co.end || r.off;
+  const st = back || co.rt || (co.end && co.end < td) ? 'free' : hold ? 'hold' : co.end || r.off ? 'busy' : r.ct && r.ct < plusDays(td, -120) ? 'free' : 'busy';
+  return { st, off, offAuto: !back && !!co.end, hold, holdAuto: !r.hold && !!co.hold, co };
 }
 // ลงนัด: Immobilization ที่เป็น Vac-lok → เลือกเลขที่ว่าง (จองไว้ · order.vac ในใบสั่ง) · ลง CT-SIM จากนัดนั้นแล้วเลขนี้เลือกให้ในฟอร์ม CT-SIM
 const isVacImmob = v => /vac/i.test(str(v));
@@ -10482,6 +10528,8 @@ function renderSettings() {
       <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
     <div class="sec" data-sec="grid"><div class="sec-head"><h2>ตารางวันฉาย (แถบ ${esc(navLabel('course'))})</h2><p>จำนวนผู้ป่วยใต้วันที่ที่เกินกำหนดเป็นสีแดง · ผู้ปฏิบัติงานประจำวัน (RTT / RA) เลือกจากสมาชิก LPCH RO Workspace ตามตำแหน่งที่ติ๊ก · ฟอร์ม "+ เพิ่มผู้ป่วย" บันทึกผู้ป่วยเข้าตารางวันฉายโดยไม่แจกงานให้ MP (ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู)</p></div>
       ${directOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวันต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป (สีแดงเมื่อเกินจำนวนใช้ได้เลย)</span></p>'}
+      <div class="field fxg-parts-set"><span class="lbl">ข้อมูลในคอลัมน์ผู้ป่วย (คอลัมน์แรกของตารางวันฉาย) <span class="sub-lbl">ติ๊ก = แสดง · ↑ = ลำดับเริ่มต้น · ผู้ใช้แต่ละคนจัดลำดับเองได้ที่ปุ่ม ⇅ เรียงข้อมูล</span></span>
+        <ol class="fxg-parts">${d.fxgParts.map((x, i) => `<li><label class="check"><input type="checkbox" data-k="fxgParts.${i}.on"${x.on ? ' checked' : ''}${x.k === 'hn' ? ' disabled' : ''}> ${esc(fxgPartLabel(x.k))}</label><button type="button" class="icon-btn" data-up="fxgParts.${i}" aria-label="เลื่อน ${esc(fxgPartLabel(x.k))} ขึ้น"${i ? '' : ' disabled'}>↑</button></li>`).join('')}</ol></div>
       <div class="field"><span class="lbl">โควตาต่อผู้ป่วย <span class="sub-lbl">หัววันที่ในตารางวันฉาย (Q) และปฏิทิน Start RT · เทคนิคพิเศษตาม ตั้งค่า → ลงนัด</span></span>
         <div class="day-max"><label class="mini">เทคนิคพิเศษ <input type="number" class="num" min="0" max="10" step="0.5" data-k="quota.sp" value="${esc(d.quota.sp)}" aria-label="โควตาเทคนิคพิเศษ"></label><label class="mini">เทคนิคอื่นๆ <input type="number" class="num" min="0" max="10" step="0.5" data-k="quota.other" value="${esc(d.quota.other)}" aria-label="โควตาเทคนิคอื่นๆ"></label></div></div>
       <div class="field"><span class="lbl">โควตาเกินเท่าไรต่อวันให้เป็นสีแดง <span class="sub-lbl">เทียบกับโควตารวมของวัน (Q) · ว่าง = ไม่ใช้สี · ห้องที่ว่างใช้ค่าทุกห้อง</span></span>
@@ -12796,6 +12844,8 @@ document.addEventListener('click', e => {
   if (ds.cpsort) { const st = lineState(colPop.id), dir = +ds.cpsort; st.sort = st.sort && st.sort.key === colPop.key && st.sort.dir === dir ? null : { key: colPop.key, dir }; return lineChanged(); }
   if (ds.cpall !== undefined) { delete lineState(colPop.id).filter[colPop.key]; return lineChanged(); }
   if (ds.cpclose !== undefined) return closeColPop();
+  if (ds.fxord) { const ks = fxgPartOrder(), i = ks.indexOf(ds.fxord), j = i + +ds.dir; if (i < 0 || j < 0 || j >= ks.length) return; [ks[i], ks[j]] = [ks[j], ks[i]]; pref.set('fxgOrder', ks); lineChanged(); const b = $(`#col-pop [data-fxord="${ds.fxord}"][data-dir="${ds.dir}"]`); if (b && !b.disabled) b.focus(); return; }
+  if (ds.fxordreset !== undefined) { pref.set('fxgOrder', null); return lineChanged(); }
   if (t.id === 'search-btn') return openSearch();
   if (ds.sopen) return openSearchHit(ds.sopen);
   if (ds.ctab) { state.courseTab = ds.ctab; return renderCourse(); }
