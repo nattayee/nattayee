@@ -3510,7 +3510,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.4';
+const PAGE_VERSION = '2026-11-04.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4254,7 +4254,7 @@ function queueInfo(catId, date) {
  * ตารางแจกเคส: ช่องคิวตามลำดับทีม (เหมือนคอลัมน์ MP ที่เติมไว้ในไฟล์เดิม) แต่ละช่องคือเคสที่ได้ หรือเหตุที่ข้าม
  * เดินคิวแบบเดียวกับ pickNext: แจกอัตโนมัติ = ช่องของคนนั้น · ข้ามเพราะลา/ปิดปฏิบัติงาน = ช่องว่าง (เสียคิว)
  * ข้ามเพราะหักคิว = ช่องนั้นเป็นเคสที่ได้นอกคิว (เลือกเอง / ตามเทคนิคแรก / จำนวนครั้ง) หรือหักคิวรายเดือน
- * คืน { rows, next, pending } · rows: { type: case | credit | away | pass | pointer, code, date, c, token, slot }
+ * คืน { rows, next, pending } · rows: { type: case | credit | away | pointer, code, date, c, token, slot }
  */
 function queueSlots(catId) {
   // หักคิวรายเดือนนับถึงเดือนของเคสล่าสุด (เคสที่ In ล่วงหน้า) หรือเดือนนี้
@@ -4294,7 +4294,7 @@ function queueSlots(catId) {
     else {
       const trial = Object.assign({}, credit), tt = cloneTok(tok), rec = [];
       if (walk(p, c.in, trial, tt, rec) === j) { credit = trial; tok = tt; rows.push(...rec); }
-      else if (rows.some(r => r.type === 'case' && r.code)) for (let i = p; i !== j; i = (i + 1) % n) rows.push({ type: 'pass', code: staff[i].code, date: c.in });   // ไม่ตรงคิว (เช่นแก้ผู้รับภายหลัง) · เคสแรกสุด = จุดเริ่มคิว
+      // ไม่ตรงคิว (เช่นเคสก่อนใช้ระบบเต็ม หรือแก้ผู้รับภายหลัง): ไม่แสดงช่อง "ข้ามคิว" (คนนั้นยังไม่ได้เคสจริง) · คิวเริ่มใหม่ต่อจากคนที่ได้เคส
       rows.push({ type: 'case', code: c.mp, date: c.in, c });
     }
     p = (j + 1) % n;
@@ -4353,7 +4353,7 @@ function renderQueue() {
       if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>`;
       return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(label)} ${esc(t.ym ? fmtMonth(t.ym) : '')} · ข้าม ${esc(fmtDay(r.date))}</td></tr>`;
     }
-    const why = r.type === 'away' ? (r.why === 'off' ? 'ปิดปฏิบัติงาน · เสียคิว' : 'ลา · เสียคิว') : 'ข้ามคิว';
+    const why = r.why === 'off' ? 'ปิดปฏิบัติงาน · เสียคิว' : 'ลา · เสียคิว';
     return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(why)} ${esc(fmtDay(r.date))}</td></tr>`;
   };
   const upcoming = isNow ? next.map(r => {
