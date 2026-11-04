@@ -1721,6 +1721,10 @@ dialog.dlg-wide{width:min(1240px,calc(100vw - 20px))}
 .bq-st.cancel{background:var(--late-soft);color:var(--late);text-decoration:none}
 .bq-st.noshow{background:var(--warn-soft);color:var(--warn)}
 .bq-cts{display:inline-flex;flex-wrap:nowrap;gap:3px}
+.bq-cts .bq-img{white-space:nowrap}
+.bq-ctlines{display:grid;gap:6px}
+.bq-ctline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.bq-ctline .check{min-width:84px}
 .bq-ctb{padding:0 6px!important;white-space:nowrap}
 .bq-rtroom{display:inline-block;padding:0 7px;border:1px solid var(--line-strong);border-radius:999px;color:var(--muted);font-size:12px;line-height:20px;white-space:nowrap}
 .bq-row.noshow td:not(.bq-act){color:var(--muted)}
@@ -2392,7 +2396,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="field"><span class="lbl">รูปแบบการใส่</span><div class="chips" id="e-tech" role="radiogroup" aria-label="รูปแบบการใส่"></div><input id="e-tech-other" maxlength="100" autocomplete="off" placeholder="ระบุรูปแบบการใส่" aria-label="รูปแบบการใส่อื่น" hidden></div>
       <label class="field"><span class="lbl">หมายเหตุ</span><input id="e-note" maxlength="2000" autocomplete="off"></label>
       <div class="field" id="e-rtt-f"><span class="lbl">RTT</span><div class="chips" id="e-rtt" role="radiogroup" aria-label="RTT"></div><input id="e-rtt-other" maxlength="60" autocomplete="off" placeholder="หรือพิมพ์ชื่อ RTT" aria-label="ชื่อ RTT อื่น"></div>
-      <div class="field" id="e-ct-f"><span class="lbl">CT <span class="sub-lbl">นับคะแนนห้อง CT ที่ทำ (แถบ RTT/RA Jobs)</span></span><div class="chips" id="e-ct" role="radiogroup" aria-label="CT"></div></div>
+      <div class="field" id="e-ct-f"><span class="lbl">CT <span class="sub-lbl">นับคะแนนห้อง CT ที่ทำ (แถบ RTT/RA Jobs)</span></span><div class="chips" id="e-ct" role="radiogroup" aria-label="CT"></div><div class="bq-ctlines" id="e-cts" hidden></div></div>
       <div class="field" id="e-ctroom-f"><span class="lbl">ห้อง CT ที่ทำ</span><div class="chips" id="e-ctroom" role="radiogroup" aria-label="ห้อง CT"></div></div>
       <div class="field" id="e-us-f"><span class="lbl">Ultrasound</span><div class="chips" id="e-us" aria-label="Ultrasound"></div></div>
       <div class="field" id="e-mp-f"><span class="lbl">MP (ผู้วางแผน)</span><div class="chips" id="e-mp" role="radiogroup" aria-label="MP"></div></div>
@@ -2948,7 +2952,7 @@ function pinFresh(mode, ctx) {
     case 'ptags': return !!c && emp(c.ptags);
     case 'mqt': return !!c && emp(c.mqt);
     case 'duty': return !(ctx.rooms || []).some(r => state.duty.some(v => v.date === ctx.date && v.room === r));
-    case 'bqedit': { const a = ctx.row || {}; return Object.entries(ctx.ch || {}).every(([k, v]) => (k === 'status' ? a.status === BQ_ST.booked && (v === BQ_ST.done || v === BQ_ST.noshow) : emp(a[k]))); }
+    case 'bqedit': { const a = ctx.row || {}, kept = bqCtKept(a, { ...a, ...(ctx.ch || {}) }); return Object.entries(ctx.ch || {}).every(([k, v]) => (k === 'status' ? a.status === BQ_ST.booked && (v === BQ_ST.done || v === BQ_ST.noshow) : k === 'ct' || k === 'ctRoom' ? kept : emp(a[k]))); }
     case 'bqday': { const k = Object.keys(ctx.ch || {})[0]; return (ctx.ids || []).every(id => { const a = state.bq.find(x => x.id === id); return a && emp(a[k]); }); }
     default: return false;   // แก้ไขเคส ลบ ยกเลิก แก้กิจกรรม ฯลฯ
   }
@@ -3669,7 +3673,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.11';
+const PAGE_VERSION = '2026-11-04.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4135,11 +4139,15 @@ function localStore() {
       if ('date' in set && !isDay(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
       if ('status' in set && !Object.values(BQ_ST).includes(set.status)) throw new Error('สถานะไม่ถูกต้อง');
       if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
-      if ('ct' in set && !['', 'CT', 'Re-CT', 'Re-CT1', 'Re-CT2'].includes(set.ct)) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
-      if ('ct' in set && !set.ct) set.ctRoom = '';
-      demoCheckPin(pin);
       const a = db.bq.find(x => x.id === id);
-      if (a && ('ct' in set ? set.ct : a.ct) && !('ctRoom' in set ? set.ctRoom : a.ctRoom)) throw new Error('เลือกห้อง CT ที่ทำ');
+      if ('ct' in set || 'ctRoom' in set) {   // CT หลายรอบ: เหมือน bqEdit ใน Code.gs
+        const pairs = bqCtPairs({ ct: 'ct' in set ? set.ct : (a || {}).ct, ctRoom: 'ctRoom' in set ? set.ctRoom : (a || {}).ctRoom });
+        if (pairs.some(p => !['CT', 'Re-CT', 'Re-CT1', 'Re-CT2'].includes(p.t))) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
+        if (pairs.some((p, i) => pairs.findIndex(q => q.t === p.t) !== i)) throw new Error('CT ชนิดเดียวกันซ้ำในนัดเดียวกัน');
+        if (pairs.some(p => !p.room)) throw new Error('เลือกห้อง CT ที่ทำ');
+        Object.assign(set, { ct: pairs.map(p => p.t).join(', '), ctRoom: pairs.map(p => p.room).join(', ') });
+      }
+      demoCheckPin(pin);
       if (!a) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
       const diff = Object.keys(set).filter(k => str(a[k]) !== set[k]);
       if (!diff.length) return clone(a);
@@ -6055,6 +6063,15 @@ const BQ_FIELD = { date: 'วันที่', doc: 'แพทย์', tech: '�
 const BQ_IMG_API = 46, BQ_NOCT = 'ไม่ทำ';
 const BQ_CT2_API = 53;   // Code.gs ที่รับ CT / Re-CT1 / Re-CT2 (รุ่นเก่า: CT / Re-CT) และส่งห้องฉายของผู้ป่วย (rtRoom) มากับนัด
 const bqCts = () => (serverHas(BQ_CT2_API) ? ['CT', 'Re-CT1', 'Re-CT2'] : ['CT', 'Re-CT']);
+const BQ_MULTI_API = 55;   // Code.gs ที่บันทึก CT ได้หลายรอบต่อนัด (CT, Re-CT1, Re-CT2 แต่ละรอบมีห้องของตัวเอง · +1 ต่อรอบ)
+const bqMultiOn = () => serverHas(BQ_MULTI_API);
+// CT ที่บันทึกในนัด: [{ t: ชนิด, room: ห้อง }] · ct และ ctRoom คั่นด้วย , ตามลำดับเดียวกัน (นัดเดิม = ค่าเดียว)
+const bqCtPairs = a => { const r = str(a.ctRoom).split(',').map(str); return splitList(a.ct).map((t, i) => ({ t, room: r[i] || '' })); };
+const bqCtRank = t => { const i = ['CT', 'Re-CT', 'Re-CT1', 'Re-CT2'].indexOf(t); return i < 0 ? 9 : i; };
+const bqCtCh = pairs => { const p = pairs.slice().sort((x, y) => bqCtRank(x.t) - bqCtRank(y.t)); return { ct: p.map(x => x.t).join(', '), ctRoom: p.map(x => x.room).join(', ') }; };
+const bqCtLabel = p => `${p.t}${p.room ? ' ' + ctShort(p.room) : ''}`;
+// เพิ่มรอบ CT ใหม่ = บันทึกใหม่ · รอบที่บันทึกไว้ยังอยู่ครบ (ชนิดและห้องเดิม)
+const bqCtKept = (a, now) => bqCtPairs(a).every(p => bqCtPairs(now).some(q => q.t === p.t && q.room === p.room));
 // ห้องฉายรังสีภายนอกของผู้ป่วย (วันนัดใส่แร่): เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนั้น (ย้ายห้องตลอดไปแล้ว = ห้องใหม่) · ไม่มีข้อมูลเคส = ที่ Code.gs ส่งมา
 function bqRoomOf(a) {
   const k = hnKey(a.hn);
@@ -6078,6 +6095,19 @@ function bqImgFields(pre, a) {
   if ($(`#${pre}-us`)) $(`#${pre}-us`).innerHTML = `<label><input type="checkbox" value="US"${a.us ? ' checked' : ''}><span>US (Ultrasound)</span></label>`;
   $(`#${pre}-ctroom-f`).hidden = !a.ct;
 }
+// แก้ไขนัด (CT หลายรอบ): ติ๊กชนิด CT ที่ทำ แต่ละรอบเลือกห้องของตัวเอง
+function bqCtLines(a) {
+  const pairs = bqCtPairs(a), types = [...bqCts(), ...pairs.map(p => p.t).filter(t => !bqCts().includes(t))];
+  const last = pref.get('bqCtRoom', ''), def = ctRooms().some(r => r.id === last) ? last : (ctRooms()[0] || {}).id || '';
+  $('#e-cts').innerHTML = types.map((t, i) => {
+    const p = pairs.find(x => x.t === t), room = p ? p.room : def, rooms = [...ctRooms().map(r => r.id), ...(p && p.room && !ctRooms().some(r => r.id === p.room) ? [p.room] : [])];
+    return `<div class="bq-ctline"><label class="check"><input type="checkbox" data-ectt="${esc(t)}"${p ? ' checked' : ''}> ${esc(t)}</label>
+      <span class="chips" data-ectroom="${esc(t)}" role="radiogroup" aria-label="ห้อง CT ของ ${esc(t)}"${p ? '' : ' hidden'}>${rooms.map(id => `<label><input type="radio" name="ectroom${i}" value="${esc(id)}"${id === room ? ' checked' : ''}><span>${esc(ctLabel(id))}</span></label>`).join('')}</span></div>`;
+  }).join('');
+}
+$('#e-cts').addEventListener('change', e => { const t = e.target.dataset.ectt; if (t !== undefined) $(`#e-cts [data-ectroom="${t}"]`).hidden = !e.target.checked; });
+const bqCtLineVals = () => bqCtCh($$('#e-cts [data-ectt]').filter(i => i.checked).map(i => ({ t: i.dataset.ectt, room: chipValue($(`#e-cts [data-ectroom="${i.dataset.ectt}"]`)) })));
+const bqImgValsE = () => (bqMultiOn() ? { ...bqCtLineVals(), us: $('#e-us input') && $('#e-us input').checked ? 'US' : '' } : bqImgVals('e'));
 const bqImgVals = pre => { const v = chipValue($(`#${pre}-ct`)), ct = v === BQ_NOCT ? '' : v; return { ct, ctRoom: ct ? chipValue($(`#${pre}-ctroom`)) : '', ...($(`#${pre}-us`) ? { us: $(`#${pre}-us input`).checked ? 'US' : '' } : {}) }; };
 for (const pre of ['bi', 'e']) $(`#${pre}-ct`).addEventListener('change', () => { $(`#${pre}-ctroom-f`).hidden = chipValue($(`#${pre}-ct`)) === BQ_NOCT; });
 const BQ_RTT_API = 43;   // Code.gs ที่มีคอลัมน์ RTT ในแถบนัดคิวใส่แร่
@@ -6211,8 +6241,13 @@ function bqRowsHtml(rows, edit) {
     const st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : a.status === BQ_ST.noshow ? 'noshow' : '';
     const who = k => (a[k] ? av(a[k]) : sign && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="${k}" title="ลงชื่อ ${k.toUpperCase()}${bqLinked() ? (k === 'mp' ? ' · นับคะแนน Brachytherapy ของ MP' : ' · นับคะแนน RC') : ''}">+ ${k.toUpperCase()}</button>` : '');
     const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
-    const ctT = a.ct ? `${a.ct}${a.ctRoom ? ' ' + ctShort(a.ctRoom) : ''}` : '', ctC = ctT ? `<span class="bq-imgc">${esc(ctT)}</span>` : '';
-    const img = ctT ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" title="${esc(ctT + ' · กดเพื่อแก้')}">${ctC}</button>` : `<span class="bq-img" title="${esc(ctT)}">${ctC}</span>`)
+    const pairs = bqCtPairs(a), ctT = pairs.map(bqCtLabel).join(', '), ctC = ctT ? `<span class="bq-imgc">${esc(ctT)}</span>` : '';
+    const img = edit && bqLive(a) && bqMultiOn() ? `<span class="bq-cts">${[...bqCts(), ...pairs.map(p => p.t).filter(t => !bqCts().includes(t))].map(t => {
+      const p = pairs.find(x => x.t === t);
+      return p ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`${t} ${ctLabel(p.room)} · กดเพื่อเปลี่ยนห้องหรือเอาออก`)}"><span class="bq-imgc">${esc(bqCtLabel(p))}</span></button>`
+        : `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับ +1 คะแนนห้อง CT ต่อรอบ (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`;
+    }).join('')}</span>`
+      : ctT ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" title="${esc(ctT + ' · กดเพื่อแก้')}">${ctC}</button>` : `<span class="bq-img" title="${esc(ctT)}">${ctC}</span>`)
       : edit && bqLive(a) ? (bqImgOn() ? `<span class="bq-cts">${bqCts().map(t => `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับคะแนนห้อง CT (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`).join('')}</span>`
         : `<button type="button" class="bq-sign old" data-bqimg="${esc(a.id)}" title="${esc(bqImgOld())}">+ CT</button>`) : '';
     const usC = '<span class="bq-imgc us">US</span>';
@@ -6581,6 +6616,9 @@ function openBqEdit(id, focus) {
   for (const f of ['#e-ct-f', '#e-us-f']) $(f).hidden = !bqImgOn();
   bqImgFields('e', a);
   if (!bqImgOn()) $('#e-ctroom-f').hidden = true;
+  $('#e-ct').hidden = bqMultiOn();
+  $('#e-cts').hidden = !bqMultiOn();
+  if (bqMultiOn()) { bqCtLines(a); $('#e-ctroom-f').hidden = true; }
   const me = myCrew(), meRtt = me && me.active && crewGroup(me.role) === 'rtt' ? me.name : '';
   bqRttChips('#e-rtt', 'ertt', a.rtt || (focus === 'rtt' ? meRtt || state.config.bq.rtt : ''));   // กด + RTT: RTT ที่เข้าสู่ระบบ = ตัวเอง · อื่น ๆ = RTT เริ่มต้น
   const sign = bqCanSign();
@@ -6601,14 +6639,14 @@ function openBqEdit(id, focus) {
 function submitBqEdit(e) {
   e.preventDefault();
   const a = editingBq, ch = {};
-  const tech = bqTechVal('#e-tech', '#e-tech-other'), now = { date: $('#e-date').value, doc: chipValue($('#e-doc')), tech, note: str($('#e-note').value), status: chipValue($('#e-status')) || a.status, mp: chipValue($('#e-mp')), rc: chipValue($('#e-rc')), ...(bqRttOn() ? { rtt: bqRttVal('#e-rtt', '#e-rtt-other') } : {}), ...(bqImgOn() ? bqImgVals('e') : {}) };
+  const tech = bqTechVal('#e-tech', '#e-tech-other'), now = { date: $('#e-date').value, doc: chipValue($('#e-doc')), tech, note: str($('#e-note').value), status: chipValue($('#e-status')) || a.status, mp: chipValue($('#e-mp')), rc: chipValue($('#e-rc')), ...(bqRttOn() ? { rtt: bqRttVal('#e-rtt', '#e-rtt-other') } : {}), ...(bqImgOn() ? bqImgValsE() : {}) };
   for (const k of BQ_EDIT) if (k in now && str(now[k]) !== str(k === 'doc' ? docCodeOf(a.doc) || a.doc : a[k])) ch[k] = now[k];
   if (!Object.keys(ch).length) return toast('ไม่มีการเปลี่ยนแปลง');
   if ('date' in ch && !isDay(ch.date)) { $('#e-date').focus(); return toast('ใส่วันที่นัด', { err: true }); }
   if ('tech' in ch && !ch.tech) return toast(chipValue($('#e-tech')) === OTHER ? 'ระบุรูปแบบการใส่ในช่อง "อื่นๆ"' : 'เลือกรูปแบบการใส่', { err: true });
   if (now.rc && now.rc === now.mp) return toast('RC ต้องไม่ใช่คนเดียวกับ MP', { err: true });
-  if (now.ct && !now.ctRoom) return toast('เลือกห้อง CT ที่ทำ', { err: true });
-  if (now.ctRoom) pref.set('bqCtRoom', now.ctRoom);
+  if (bqCtPairs(now).some(p => !p.room)) return toast('เลือกห้อง CT ที่ทำ', { err: true });
+  if (now.ctRoom) pref.set('bqCtRoom', str(now.ctRoom).split(',').map(str).pop());
   openBqPin('bqedit', { id: a.id, row: a, ch });
 }
 bqeForm.addEventListener('submit', submitBqEdit);
@@ -6618,7 +6656,7 @@ for (const [box, other] of [['#e-rtt', '#e-rtt-other'], ['#q-rtt', '#q-rtt-other
   $(box).addEventListener('change', () => { $(other).value = ''; });
 }
 bqeForm.addEventListener('change', e => { if (e.target.name === 'etech') { $('#e-tech-other').hidden = e.target.value !== OTHER; if (e.target.value === OTHER) setTimeout(() => $('#e-tech-other').focus()); } });
-const bqChText = ch => Object.entries(ch).map(([k, v]) => `${BQ_FIELD[k] || k} → ${k === 'date' ? fmtDay(v) : k === 'ctRoom' && v ? ctLabel(v) : v || 'ว่าง'}`).join(' · ');
+const bqChText = ch => Object.entries(ch).map(([k, v]) => `${BQ_FIELD[k] || k} → ${k === 'date' ? fmtDay(v) : k === 'ctRoom' && v ? str(v).split(',').map(x => ctLabel(str(x))).join(', ') : v || 'ว่าง'}`).join(' · ');
 // ยืนยันด้วยรหัส PIN (ตั้งค่า → รหัส PIN: นัดคิวใส่แร่) · bqnew = ลงนัด · bqedit = แก้ / มาแล้ว / ลงชื่อ · bqcancel = ยกเลิก (Fx หรือทั้งคอร์ส)
 // เลือกชื่อ RTT / MP / RC อย่างเดียว (ไม่แสดงข้อมูลผู้ป่วย): ปุ่ม + ในแถว = นัดนั้น · ปุ่มในแถวหัววัน = ทุกเคสของวันนั้น
 const BQ_DAY_API = 44;   // Code.gs ที่บันทึกหลายนัดในครั้งเดียว (bqEditDay)
@@ -6648,12 +6686,32 @@ function openBqSet(ids, k, date) {
 const bqiDlg = $('#bqi-dlg');
 let bqImgId = '';
 let bqImgPick = false;   // เปิดจากปุ่มชนิด CT ในตาราง: เลือกห้องแล้วบันทึกทันที
+let bqImgType = '';   // CT หลายรอบ: ชนิดที่กำลังเลือกห้อง
 function openBqImg(id, type) {
   if (accessOf('bq') !== 'edit') return toast(RO_MSG, { err: true });
   if (!bqImgOn()) return toast(bqImgOld(), { err: true });
   const a = state.bq.find(x => x.id === id);
   if (!a) return;
   bqImgId = id;
+  bqImgType = bqMultiOn() && type ? type : '';
+  if (bqImgType) {
+    const cur = bqCtPairs(a).find(p => p.t === type);
+    bqImgPick = true;
+    $('#bqi-title').textContent = `${type} · ${a.hn} · Fx ${a.fx}/${a.total}`;
+    $('#bqi-info').textContent = `${bqDay(a.date)} · ${a.name}`;
+    bqImgFields('bi', { ...a, ct: type, ctRoom: cur ? cur.room : '' });
+    if (!cur) $$('#bi-ctroom input').forEach(i => { i.checked = false; });
+    $('#bi-ct-f').hidden = true;
+    $('#bi-ctroom-f').hidden = false;
+    $('#bi-ctroom-sub').textContent = cur ? 'กดห้องอื่นเพื่อเปลี่ยน' : 'กดห้องแล้วบันทึกเลย';
+    $('#bqi-clear').hidden = !cur;
+    $('#bqi-clear').textContent = `ไม่ได้ทำ ${type}`;
+    $('#bqi-save').hidden = true;
+    bqiDlg.showModal();
+    focusChips($('#bi-ctroom'));
+    return;
+  }
+  $('#bqi-clear').textContent = 'ไม่ได้ทำ CT';
   bqImgPick = !!type && !a.ct;
   $('#bqi-title').textContent = `${bqImgPick ? type : 'CT'} · ${a.hn} · Fx ${a.fx}/${a.total}`;
   $('#bqi-info').textContent = `${bqDay(a.date)} · ${a.name}`;
@@ -6673,12 +6731,21 @@ $('#bi-ctroom').addEventListener('change', () => { if (bqImgPick && bqiDlg.open)
 $('#bqi-clear').addEventListener('click', () => {
   const a = state.bq.find(x => x.id === bqImgId);
   if (!a || !a.ct) return bqiDlg.close();
+  if (bqImgType) return openBqPin('bqedit', { id: a.id, row: a, ch: bqCtCh(bqCtPairs(a).filter(p => p.t !== bqImgType)) });   // เอาเฉพาะรอบนี้ออก
   openBqPin('bqedit', { id: a.id, row: a, ch: { ct: '', ctRoom: '' } });
 });
 $('#bqi-form').addEventListener('submit', e => {
   e.preventDefault();
   const a = state.bq.find(x => x.id === bqImgId);
   if (!a) return bqiDlg.close();
+  if (bqImgType) {   // CT หลายรอบ: เพิ่มรอบนี้ / เปลี่ยนห้องของรอบนี้ (รอบอื่นคงเดิม)
+    const room = chipValue($('#bi-ctroom'));
+    if (!room) return toast('เลือกห้อง CT ที่ทำ', { err: true });
+    const chT = Object.fromEntries(Object.entries(bqCtCh([...bqCtPairs(a).filter(p => p.t !== bqImgType), { t: bqImgType, room }])).filter(([k, x]) => str(a[k]) !== x));
+    if (!Object.keys(chT).length) return bqiDlg.close();
+    pref.set('bqCtRoom', room);
+    return openBqPin('bqedit', { id: a.id, row: a, ch: chT });
+  }
   const v = bqImgVals('bi'), ch = Object.fromEntries(Object.entries(v).filter(([k, x]) => str(a[k]) !== x));
   if (v.ct && !v.ctRoom) return toast('เลือกห้อง CT ที่ทำ', { err: true });
   if (!Object.keys(ch).length) return toast('ไม่มีการเปลี่ยนแปลง');
@@ -9324,9 +9391,12 @@ function jobsStats(ym) {
   // นัดใส่แร่ที่บันทึก CT / Re-CT: ผู้ป่วยของห้อง CT ที่ทำวันนั้น (ข้อเตรียมผู้ป่วย) + จัดท่าผู้ป่วยเปลนอน
   for (const a of state.bq) {
     if (!a.ct || !a.ctRoom || !bqLive(a) || a.date < first || a.date > last || a.date > td) continue;   // ยกเลิก / ไม่มา ไม่นับ
-    const b = cell(ct, a.ctRoom, a.date), k = str(a.hn) || a.id;
-    b.pts.add(k);
-    posRank(b, k, 4);
+    for (const p of bqCtPairs(a)) {   // CT แต่ละรอบ (CT, Re-CT1, Re-CT2) นับ +1 ที่ห้องของรอบนั้น
+      if (!p.room) continue;
+      const b = cell(ct, p.room, a.date), k = `${str(a.hn) || a.id}:${p.t}`;
+      b.pts.add(k);
+      posRank(b, k, 4);
+    }
   }
   for (const r of state.ct) {
     if (r.date < first || r.date > last || r.date > td) continue;

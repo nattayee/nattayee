@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.6';
-const API_LEVEL = 54;
+const CODE_VERSION = '2026-11-04.7';
+const API_LEVEL = 55;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1513,6 +1513,11 @@ const BQ_NOSHOW = 'ไม่มา';   // API 50 · ผู้ป่วยไม�
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
 // CT ของนัดใส่แร่ (API 46): ct = CT / Re-CT · ctRoom = รหัสเครื่อง CT ที่ทำ (นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · us = US (Ultrasound)
 const BQ_CT = ['', 'CT', 'Re-CT1', 'Re-CT2', 'Re-CT'];   // API 53: CT / Re-CT1 / Re-CT2 (Re-CT = นัดที่บันทึกก่อนหน้า)
+// API 55: CT หลายรอบในนัดเดียว (แต่ละรอบ +1 คะแนนห้อง CT) · ct = "CT, Re-CT1" · ctRoom = ห้องตามลำดับเดียวกัน "ct1, ct2" (นัดเดิม = ค่าเดียว)
+function bqCtPairs_(ct, room) {
+  const r = String(room == null ? '' : room).split(',').map(x => x.trim());
+  return String(ct == null ? '' : ct).split(',').map(x => x.trim()).filter(Boolean).map((t, i) => ({ t: t, room: r[i] || '' }));
+}
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
@@ -1558,14 +1563,21 @@ function bqEdit(id, ch, pin, token) {
   if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
   if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BQ_NOSHOW, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
-  if ('ct' in set && BQ_CT.indexOf(set.ct) < 0) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
-  if ('ct' in set && !set.ct) set.ctRoom = '';   // ไม่ได้ทำ CT = ไม่มีห้อง
-  if ('ctRoom' in set && set.ctRoom && !/^[\w-]{1,20}$/.test(set.ctRoom)) throw new Error('ห้อง CT ไม่ถูกต้อง');
   if ('us' in set && ['', 'US'].indexOf(set.us) < 0) throw new Error('Ultrasound ไม่ถูกต้อง');
   const cfg = readConfig_(ss_()) || {};
   const cur0 = readTable_(ss_(), 'bq').filter(x => x.id === id)[0] || {};
-  if (('ct' in set ? set.ct : cur0.ct) && !('ctRoom' in set ? set.ctRoom : cur0.ctRoom)) throw new Error('เลือกห้อง CT ที่ทำ');
-  pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && (set.status === BRACHY_ST_DONE || set.status === BQ_NOSHOW)) : has_(cur0[k]))));
+  if ('ct' in set || 'ctRoom' in set) {   // CT แต่ละรอบต้องมีห้อง · ไม่ซ้ำชนิด · ไม่ได้ทำ CT (ว่าง) = ไม่มีห้อง
+    const pairs = bqCtPairs_('ct' in set ? set.ct : cur0.ct, 'ctRoom' in set ? set.ctRoom : cur0.ctRoom);
+    if (pairs.some(p => BQ_CT.indexOf(p.t) < 1)) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
+    if (pairs.some((p, i) => pairs.findIndex(q => q.t === p.t) !== i)) throw new Error('CT ชนิดเดียวกันซ้ำในนัดเดียวกัน');
+    if (pairs.some(p => !p.room)) throw new Error('เลือกห้อง CT ที่ทำ');
+    if (pairs.some(p => !/^[\w-]{1,20}$/.test(p.room))) throw new Error('ห้อง CT ไม่ถูกต้อง');
+    set.ct = pairs.map(p => p.t).join(', ');
+    set.ctRoom = pairs.map(p => p.room).join(', ');
+  }
+  // CT: เพิ่มรอบใหม่ = บันทึกใหม่ (ไม่ต้องใส่ PIN) · เอารอบที่บันทึกไว้ออกหรือเปลี่ยนห้อง = แก้
+  const ctKept = () => { const now = bqCtPairs_(set.ct, set.ctRoom); return bqCtPairs_(cur0.ct, cur0.ctRoom).every(p => now.some(q => q.t === p.t && q.room === p.room)); };
+  pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && (set.status === BRACHY_ST_DONE || set.status === BQ_NOSHOW)) : k === 'ct' || k === 'ctRoom' ? !ctKept() : has_(cur0[k]))));
   const rec = withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
