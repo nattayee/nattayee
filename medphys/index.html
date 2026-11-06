@@ -1124,6 +1124,8 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .queue-table tr.q-skip .q-how{color:var(--warn)}
 .queue-table tr.q-credit .q-how{color:var(--accent)}
 .queue-table tr.q-early .q-how{color:var(--accent)}
+.queue-table tr.q-sub td{border-top:0;padding-top:0}
+.queue-table tr.q-sub .q-how{color:var(--accent)}
 .queue-table tr.q-ptr td{background:var(--accent-soft);color:var(--accent);font-size:12.5px}
 .queue-table tr.q-next td{background:var(--accent-soft)}
 .queue-table tr.q-next .q-how{color:var(--accent);font-weight:600}
@@ -3674,7 +3676,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-04.14';
+const PAGE_VERSION = '2026-11-06.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4516,10 +4518,11 @@ function queueSlots(catId) {
     if (got >= 0) {
       next.push({ type: 'next', code: staff[got].code });
       // ช่องถัดไป: ครบรอบนี้ และต่อจนเคสที่ได้ก่อนถึงคิวแสดงที่ช่องของคนนั้นครบ (ไม่เกิน 4 รอบ)
-      const cr2 = Object.assign({}, cr), tt2 = cloneTok(tt), early = () => Object.keys(tt2).some(code => cr2[code] > 0 && tt2[code].some(t => t.kind === 'early'));
+      // ช่องถัดไป: ครบรอบนี้ และต่อจนเคสที่ได้ไปแล้ว (ได้ก่อนถึงคิว เลือกเอง งานของบริเวณเพิ่มเติม ฯลฯ) แสดงที่ช่องของคนนั้นครบ (ไม่เกิน 4 รอบ)
+      const cr2 = Object.assign({}, cr), tt2 = cloneTok(tt), early = () => Object.keys(tt2).some(code => cr2[code] > 0 && (tt2[code] || []).some(t => t.c));
       for (let x = 1; x < n || (early() && x < n * 4); x++) {
         const code = staff[(got + x) % n].code;
-        if (cr2[code] > 0 && tt2[code] && tt2[code][0] && tt2[code][0].kind === 'early') { cr2[code]--; next.push({ type: 'credit', code, token: tt2[code].shift() }); }
+        if (cr2[code] > 0) { cr2[code]--; next.push({ type: 'credit', code, token: (tt2[code] || []).shift() || { kind: 'manual' } }); }
         else next.push({ type: 'later', code });
       }
     }
@@ -4560,7 +4563,10 @@ function renderQueue() {
     const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
     if (r.type === 'case') {
       const sj = rpOf(r.c), how = r.same ? 'วันเดียวกัน' : sj && sj.kind === 'site' ? sj.label : unitsOf(r.c) > 1 ? `×${unitsOf(r.c)}` : '';
-      return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`;
+      // งานของบริเวณเพิ่มเติม (คนละเทคนิค) ของเคสนี้: แถวย่อยต่อจากเคส · MP คนเดียวกันได้ทั้งสองบริเวณ (เทคนิคเดียวกันแสดงที่ช่องของคนนั้นแทน)
+      const subs = planCases().filter(x => { const m = rpOf(x); return m && m.kind === 'site' && m.of === r.c.id && x.cat !== cat; });
+      return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`
+        + subs.map(x => `<tr class="q-case q-sub"><td class="q-num"></td><td>${av(x.mp)}</td>${caseCells(x)}<td class="q-how">↳ ${esc(rpOf(x).label)} · ${esc(catOf(x.cat).label)}</td></tr>`).join('');
     }
     if (r.type === 'credit') {
       const t = r.token, sj = t.c && rpOf(t.c), label = sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[t.kind] || 'หักคิว';
