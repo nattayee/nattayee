@@ -3769,7 +3769,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.8';
+const PAGE_VERSION = '2026-11-08.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5447,7 +5447,7 @@ const apMode = k => {
 const AP_PRIO = ['Normal', 'Emergency'];
 // ลิมิตในตั้งค่า → ลงนัด: [ที่เก็บ, ชื่อ, คำอธิบาย]
 const AP_LIMS = [['limits.day', 'CT-Sim ต่อวัน', 'ทุกเครื่อง CT รวมกัน'], ['limits.doc', 'CT-Sim ต่อแพทย์ต่อวัน', 'แพทย์แต่ละคน (เริ่มต้น 4)'],
-  ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'ผู้ป่วยที่ฉายอยู่ต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยทั้งหมดของแพทย์คนนั้นที่ฉายในห้องนั้นวันนั้น (ใหม่ + ฉายต่อเนื่อง) ทุกวันที่ผู้ป่วยใหม่จะฉาย (เริ่มต้น 16)']];
+  ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'ผู้ป่วยต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยทั้งหมดของแพทย์คนนั้นที่ฉายในห้องนั้นวันนั้น (ใหม่ + ฉายต่อเนื่อง) ทุกวันที่ผู้ป่วยใหม่จะฉาย (เริ่มต้น 16)']];
 const isOnV = v => v === true || v === 'on';
 // ข้อมูลในช่องวันของปฏิทิน (ตั้งค่า → ลงนัด)
 const AP_CAL = [['simNew', 'ผู้ป่วยใหม่ที่เริ่มฉาย (เทคนิคพิเศษ/เทคนิคอื่นๆ)'], ['simQ', 'โควตารวมของวัน (Q)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
@@ -5818,7 +5818,7 @@ function simFullErr(rec) {
   const v = calCounts('sim', { c: '', r: '', a: rec.id }).get(rec.sim), k = str(rec.hn), rn = v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0;
   if (l.room && rn >= l.room) return `Start RT ${fmtDay(rec.sim)} ห้อง ${roomLabel(room)} เต็มแล้ว (ผู้ป่วยใหม่ ${rn}/${l.room} คน) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
   const o = l.doc && doc ? simDocOver({ ...rec, room, doc }, roomLoad(rec.id)) : null;
-  if (o) return `แพทย์ ${doc} จะมีผู้ป่วยฉายอยู่ในห้อง ${roomLabel(room)} ${o.n + 1} คน วันที่ ${fmtDay(o.d)} (สูงสุด ${l.doc}) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
+  if (o) return `แพทย์ ${doc} จะมีผู้ป่วยในห้อง ${roomLabel(room)} ${o.n + 1} คน วันที่ ${fmtDay(o.d)} (สูงสุด ${l.doc}) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
   return '';
 }
 function ctFullErr(rec) {
@@ -11203,12 +11203,12 @@ function renderSettings() {
       <h3 class="sub-h">ข้อมูลในช่องวันของปฏิทิน</h3>
       <div class="form-grid cal-show" style="margin-bottom:12px">
         <div class="field"><span class="lbl">ปฏิทิน Start RT</span>${AP_CAL.filter(([k]) => k.startsWith('sim') && k !== 'simDoc').map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
-          <label class="field" style="margin-top:6px"><span class="lbl">ป้ายแพทย์: ผู้ป่วยที่ฉายอยู่ของแพทย์ในห้อง <span class="sub-lbl">บรรทัดล่างใต้ชื่อเครื่องฉาย</span></span><select data-k="appt.cal.simDoc" aria-label="ป้ายแพทย์ในปฏิทิน Start RT">${[['pick', 'เมื่อเลือกห้องในปฏิทิน หรือเต็มจอ'], ['always', 'แสดงเสมอ'], ['off', 'ไม่แสดง']].map(([v, t]) => opt(v, t, d.appt.cal.simDoc)).join('')}</select></label></div>
+          <label class="field" style="margin-top:6px"><span class="lbl">ป้ายแพทย์: ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง) <span class="sub-lbl">บรรทัดล่างใต้ชื่อเครื่องฉาย</span></span><select data-k="appt.cal.simDoc" aria-label="ป้ายแพทย์ในปฏิทิน Start RT">${[['pick', 'เมื่อเลือกห้องในปฏิทิน หรือเต็มจอ'], ['always', 'แสดงเสมอ'], ['off', 'ไม่แสดง']].map(([v, t]) => opt(v, t, d.appt.cal.simDoc)).join('')}</select></label></div>
         <div class="field"><span class="lbl">ปฏิทิน CT-Sim</span>${AP_CAL.filter(([k]) => k.startsWith('ct')).map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>
       </div>
       <p class="muted def-note" style="margin:-4px 0 12px">ใช้กับปฏิทินทุกฟอร์ม (แจกเคส แก้ไขเคส CT-SIM ลงนัด) · ช่องที่ปิดยังดูได้ในบรรทัดใต้ปฏิทินเมื่อชี้หรือเลือกวัน · ลายขีดแดง (วันเต็ม) แสดงเสมอ</p>
       <label class="check" style="margin:10px 0 4px"><input type="checkbox" data-k="appt.emergOver"${isOnV(d.appt.emergOver) ? ' checked' : ''}> เคส <b>Emergency</b> ลงเกินลิมิตได้ (แจ้งเตือนแต่ไม่ห้าม)</label>
-      <p class="muted def-note" style="margin:0 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยที่ฉายอยู่ของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
+      <p class="muted def-note" style="margin:0 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
       <h3 class="sub-h">ฟอร์มลงนัด</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN และวันนัด CT-Sim บังคับเสมอ (ติ๊ก on call = ยังไม่มีวันนัด · ใบสั่งเป็น No appointment) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ช่องที่มีคำว่า (ใบสั่ง) ใช้ในใบสั่ง CT Simulation (เริ่มต้นไม่แสดง · ช่องที่ไม่ได้กรอกเว้นว่างในใบสั่งให้เขียนเอง) · Draw area = ลากขอบเขตที่จะทำ CT บนรูปในใบสั่ง · ห้องฉาย: เลือกห้องในปฏิทิน Start RT แล้วกดวันที่ = ตั้งห้องให้ด้วย · ลงข้อมูล CT-SIM จากนัด: ใส่ HN ชื่อ แพทย์ Diag Prescription Start RT ห้องฉาย และเทคนิคพิเศษที่ตรงกับ Technique ให้ (ที่เหลือต่อหน้า Note)</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${APPT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'doc' && d.appt.limits.doc ? '<small class="muted"> · แสดงเสมอเมื่อมีลิมิต CT-Sim ต่อแพทย์</small>' : ''}</td><td><select data-k="appt.form.${k}" aria-label="${esc(l)} ในฟอร์มลงนัด">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -14048,7 +14048,7 @@ function calRoomRows(raw, d, mineRoom, mineDoc) {
     if (!cal.simRoom && !(ld && ld.size)) return '';
     const lim = r !== NO_ROOM && l.room, full = lim && n >= l.room, k = t => (calFull ? `<small class="dpk-k">${t}</small>` : '');
     const head = `<span class="dpk-rm${full && cal.simRoom ? ' full' : ''}${r === mineRoom ? ' mine' : ''}"><s>${esc(roomShort(r))}</s>${cal.simRoom ? `${k('ใหม่')}<em>${n}${lim ? `<small>/${lim}</small>` : ''}</em>` : ''}</span>`;
-    return `<span class="dpk-rb">${head}${ld && ld.size ? `<span class="dpk-rdocs">${k('ฉายอยู่')}${calDocChips(ld, mineDoc, l.doc)}</span>` : ''}</span>`;
+    return `<span class="dpk-rb">${head}${ld && ld.size ? `<span class="dpk-rdocs">${calDocChips(ld, mineDoc, l.doc)}</span>` : ''}</span>`;
   }).filter(Boolean);
   return rows.length ? `<span class="dpk-rms">${rows.join('')}</span>` : '';
 }
@@ -14067,14 +14067,14 @@ function calSimLoad(raw, d, mineRoom, mineDoc) {
     const n = raw ? raw.by.get(r) || 0 : 0, lim = r !== NO_ROOM && l.room, ld = r !== NO_ROOM ? L.at(r, d).doc : new Map();
     if (!n && !ld.size) return '';
     const dd = calDocList(ld).map(([c, m]) => `${c} ${m}${l.doc ? '/' + l.doc : ''}`).join(' ');
-    return `${esc(roomLabel(r))} ใหม่ <b${lim && n >= lim ? ' class="over"' : ''}>${n}${lim ? '/' + lim : ''}</b>${dd ? ` (ฉายอยู่ ${esc(dd)})` : ''}`;
+    return `${esc(roomLabel(r))} ใหม่ <b${lim && n >= lim ? ' class="over"' : ''}>${n}${lim ? '/' + lim : ''}</b>${dd ? ` (แพทย์ ${esc(dd)})` : ''}`;
   }).filter(Boolean);
   let me = '';
   if (mineRoom && mineRoom !== NO_ROOM && (l.room || l.doc)) {
     const n = raw ? raw.by.get(mineRoom) || 0 : 0, dn = mineDoc ? L.at(mineRoom, d).doc.get(mineDoc) || 0 : 0;
     const o = mineDoc && l.doc && calData.apRec ? simDocOver({ ...calData.apRec, sim: d, room: mineRoom, doc: mineDoc }, L) : null;
     me = `ห้อง ${esc(roomLabel(mineRoom))} (ในฟอร์ม)${l.room ? ` ใหม่ <b${n >= l.room ? ' class="over"' : ''}>${n}/${l.room}</b>${n >= l.room ? ' เต็ม' : ` ว่าง ${l.room - n}`}` : ''}`
-      + (mineDoc && l.doc ? ` · แพทย์ ${esc(mineDoc)} ฉายอยู่ในห้องนี้ <b${dn >= l.doc || o ? ' class="over"' : ''}>${dn}/${l.doc}</b>${o ? ` · เริ่มวันนี้จะเกินวันที่ ${esc(fmtDay(o.d))} (${o.n + 1} คน)` : dn >= l.doc ? ' เต็ม' : ''}` : '');
+      + (mineDoc && l.doc ? ` · แพทย์ ${esc(mineDoc)} ในห้องนี้ <b${dn >= l.doc || o ? ' class="over"' : ''}>${dn}/${l.doc}</b>${o ? ` · เริ่มวันนี้จะเกินวันที่ ${esc(fmtDay(o.d))} (${o.n + 1} คน)` : dn >= l.doc ? ' เต็ม' : ''}` : '');
   }
   return (parts.length ? `<div class="dpk-load">${parts.join(' · ')}</div>` : '') + (me ? `<div class="dpk-load">${me}</div>` : '');
 }
@@ -14131,7 +14131,7 @@ function renderCal() {
   const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-dpknav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-dpknav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}<button type="button" class="dpk-max" data-calfull aria-pressed="${calFull}" title="${calFull ? 'ย่อปฏิทิน' : 'ขยายปฏิทินเต็มจอ'}">${calFull ? '⤡ ย่อ' : '⤢ เต็มจอ'}</button></div>
-    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน) · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${state.config.appt.cal.simDoc === 'always' || (state.config.appt.cal.simDoc === 'pick' && (calRoom || calFull)) ? ` · ป้ายแพทย์ (ใต้ชื่อเครื่อง) = ผู้ป่วยที่ฉายอยู่ของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง${simLim().doc ? ` · สูงสุด ${simLim().doc}` : ''})` : state.config.appt.cal.simDoc === 'pick' ? ' · เลือกห้องหรือเต็มจอเพื่อดูผู้ป่วยที่ฉายอยู่ของแพทย์' : ''}`}</p>${roomBar}${hint}
+    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน) · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${state.config.appt.cal.simDoc === 'always' || (state.config.appt.cal.simDoc === 'pick' && (calRoom || calFull)) ? ` · ป้ายแพทย์ (ใต้ชื่อเครื่อง) = ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง${simLim().doc ? ` · สูงสุด ${simLim().doc}` : ''})` : state.config.appt.cal.simDoc === 'pick' ? ' · เลือกห้องหรือเต็มจอเพื่อดูผู้ป่วยของแพทย์' : ''}`}</p>${roomBar}${hint}
     <div class="dpk-grid">${CAL_WD.map(x => `<span class="dpk-wd">${x}</span>`).join('')}${cells}</div>
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
     <div class="dpk-foot"><span>ทั้งเดือน ${total} คน${kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
