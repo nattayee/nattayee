@@ -1125,6 +1125,7 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .queue-table tr.q-credit .q-how{color:var(--accent)}
 .queue-table tr.q-early .q-how{color:var(--accent)}
 .queue-table tr.q-sub td{border-top:0;padding-top:0}
+.sitejob-note{margin:0 0 12px}
 .queue-table tr.q-sub .q-how{color:var(--accent)}
 .queue-table tr.q-ptr td{background:var(--accent-soft);color:var(--accent);font-size:12.5px}
 .queue-table tr.q-next td{background:var(--accent-soft)}
@@ -2096,6 +2097,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </div>
     <div class="tabs" role="tablist" id="queue-tabs"></div>
     <div class="queue-sum" id="queue-sum"></div>
+    <p class="notice sitejob-note" id="queue-sitejobs" hidden></p>
     <div class="table-wrap queue-table" id="queue-table"></div>
   </section>
 
@@ -3676,7 +3678,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-06.1';
+const PAGE_VERSION = '2026-11-08.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4546,6 +4548,9 @@ function renderQueue() {
   const box = $('#queue-table');
   if (!cat) { box.innerHTML = '<p class="empty-state">ยังไม่มีเทคนิค</p>'; $('#queue-sum').innerHTML = ''; return; }
   const { rows, next, pending } = queueSlots(cat), ym = state.month, isNow = ym === thisMonth();
+  const miss = siteJobsMissing(), sjBox = $('#queue-sitejobs');
+  sjBox.hidden = !miss.length;
+  sjBox.innerHTML = miss.length ? `<b>บริเวณเพิ่มเติมคนละบริเวณที่ยังไม่ได้แจกงาน ${miss.length} เคส</b><span>${miss.map(c => `${esc(c.hn)} ${esc(c.mp)} · ${esc(siteJobRecs(c, c.in, false).map(x => `${rpOf(x).label} (${catOf(x.cat).label})`).join(', '))}`).join(' · ')} · ให้ MP คนเดิมของบริเวณที่ 1 และหักคิวของคนนั้นเมื่อวนมาถึง</span><button type="button" class="btn sm primary" data-sitejobs>แจกให้ MP คนเดิม</button>` : '';
   const inMonth = rows.filter(r => r.date && r.date.slice(0, 7) === ym);
   const k = catOf(cat);
   $('#queue-note').textContent = `${k.label} · ลำดับ ${state.config.staff.map(x => x.code).join(' → ')}${k.rotate === 'day' ? ' · รอบคิวรายวัน' : ''}`;
@@ -4558,20 +4563,20 @@ function renderQueue() {
   const cell = v => `<td>${v || ''}</td>`;
   const caseCells = c => [fmtDay(c.ct), fmtDay(c.in), c.sim === 'on call' ? 'on call' : fmtDay(c.sim), c.fin ? fmtDay(c.fin.slice(0, 10)) : '', c.eval ? fmtDay(c.eval.slice(0, 10)) : '', c.type, `<span class="hn">${esc(c.hn || '')}</span>`, c.name, c.doc, c.aim, c.note].map((v, i) => (i === 6 ? `<td>${v}</td>` : cell(esc(v || '')))).join('');
   const blank = '<td></td>'.repeat(11);
+  // งานของบริเวณเพิ่มเติม (คนละเทคนิค) ของเคสที่แสดง: แถวย่อยต่อจากเคส · MP คนเดียวกันได้ทั้งสองบริเวณ (เทคนิคเดียวกันแสดงที่ช่องของคนนั้นแทน)
+  const subRows = c => planCases().filter(x => { const m = rpOf(x); return m && m.kind === 'site' && m.of === c.id && x.cat !== cat; })
+    .map(x => `<tr class="q-case q-sub"><td class="q-num"></td><td>${av(x.mp)}</td>${caseCells(x)}<td class="q-how">↳ ${esc(rpOf(x).label)} · ${esc(catOf(x.cat).label)}</td></tr>`).join('');
   const row = r => {
     if (r.type === 'pointer') return `<tr class="q-ptr"><td></td><td colspan="13">ตั้งคิวเองให้เริ่มที่ ${esc(r.code)} · ${esc(fmtDay(r.date))}</td></tr>`;
     const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
     if (r.type === 'case') {
       const sj = rpOf(r.c), how = r.same ? 'วันเดียวกัน' : sj && sj.kind === 'site' ? sj.label : unitsOf(r.c) > 1 ? `×${unitsOf(r.c)}` : '';
-      // งานของบริเวณเพิ่มเติม (คนละเทคนิค) ของเคสนี้: แถวย่อยต่อจากเคส · MP คนเดียวกันได้ทั้งสองบริเวณ (เทคนิคเดียวกันแสดงที่ช่องของคนนั้นแทน)
-      const subs = planCases().filter(x => { const m = rpOf(x); return m && m.kind === 'site' && m.of === r.c.id && x.cat !== cat; });
-      return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>`
-        + subs.map(x => `<tr class="q-case q-sub"><td class="q-num"></td><td>${av(x.mp)}</td>${caseCells(x)}<td class="q-how">↳ ${esc(rpOf(x).label)} · ${esc(catOf(x.cat).label)}</td></tr>`).join('');
+      return `<tr class="q-case${state.fresh.includes(r.c.id) ? ' fresh' : ''}">${mp}${caseCells(r.c)}<td class="q-how">${esc(how)}</td></tr>${subRows(r.c)}`;
     }
     if (r.type === 'credit') {
       const t = r.token, sj = t.c && rpOf(t.c), label = sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[t.kind] || 'หักคิว';
-      if (t.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(แจก ${esc(fmtDay(t.c.in))})</span></td></tr>`;
-      if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>`;
+      if (t.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(แจก ${esc(fmtDay(t.c.in))})</span></td></tr>${subRows(t.c)}`;
+      if (t.c) return `<tr class="q-credit">${mp}${caseCells(t.c)}<td class="q-how">${esc(label)} <span class="muted">(หักคิว ${esc(fmtDay(r.date))})</span></td></tr>${subRows(t.c)}`;
       return `<tr class="q-skip">${mp}${blank}<td class="q-how">${esc(label)} ${esc(t.ym ? fmtMonth(t.ym) : '')} · ข้าม ${esc(fmtDay(r.date))}</td></tr>`;
     }
     const why = r.why === 'off' ? 'ปิดปฏิบัติงาน · เสียคิว' : 'ลา · เสียคิว';
@@ -4581,8 +4586,8 @@ function renderQueue() {
     const num = r.same ? '' : r.slot, mp = `<td class="q-num">${num}</td><td>${av(r.code)}</td>`;
     if (r.type === 'next') return `<tr class="q-next">${mp}<td colspan="11"><b>คิวถัดไป</b>${r.same ? ' (วันนี้คนเดิม รอบคิวรายวัน)' : ''}</td><td class="q-how">◀ ตอนนี้อยู่ที่นี่</td></tr>`;
     if (r.type === 'later') return `<tr class="q-later">${mp}${blank}<td></td></tr>`;
-    if (r.type === 'credit' && r.token.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(r.token.c)}<td class="q-how">ได้ก่อนถึงคิว <span class="muted">(แจก ${esc(fmtDay(r.token.c.in))})</span></td></tr>`;
-    if (r.type === 'credit') { const sj = r.token.c && rpOf(r.token.c); return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>`; }
+    if (r.type === 'credit' && r.token.kind === 'early') return `<tr class="q-case q-early">${mp}${caseCells(r.token.c)}<td class="q-how">ได้ก่อนถึงคิว <span class="muted">(แจก ${esc(fmtDay(r.token.c.in))})</span></td></tr>${subRows(r.token.c)}`;
+    if (r.type === 'credit') { const sj = r.token.c && rpOf(r.token.c); return `<tr class="q-later q-skip">${mp}${r.token.c ? caseCells(r.token.c) : blank}<td class="q-how">จะข้าม · ${esc(sj && sj.kind === 'site' ? sj.label : TOKEN_LABEL[r.token.kind] || 'หักคิว')}</td></tr>${r.token.c ? subRows(r.token.c) : ''}`; }
     return `<tr class="q-later q-skip">${mp}${blank}<td class="q-how">จะข้าม · ${r.why === 'off' ? 'ปิดปฏิบัติงาน' : 'ลาวันนี้'}</td></tr>`;
   }).join('') : '';
   const shown = words.length ? inMonth.filter(r => hitCase(r.type === 'case' ? r.c : r.type === 'credit' ? r.token.c : null)) : inMonth;
@@ -6956,6 +6961,22 @@ function siteJobRecs(parent, inDate, batch) {
       sites: '', note: '', batch: '', updated: nowISO(), replan: JSON.stringify({ of: parent.id, date: '', kind: 'site', sid: x.sid, label: `บริเวณที่ ${x.i + 2} · ${x.area}`, reason: startText(x) }) });
   });
 }
+// เคสที่มีบริเวณเพิ่มเติมคนละบริเวณแต่ยังไม่มีงาน (วัน In ตั้งแต่วันเริ่มใช้ระบบเต็ม เช่นเคสที่แจกก่อนมีกติกานี้): แจกให้ MP คนเดิมในครั้งเดียว
+const siteJobFrom = () => state.config.manualFrom || '2026-11-01';
+const siteJobsMissing = () => (accessOf('work') !== 'edit' ? [] : planCases().filter(c => str(c.in) >= siteJobFrom() && siteJobRecs(c, c.in, false).length));
+async function addMissingSiteJobs(btn) {
+  btn.disabled = true;
+  try {
+    if (store.mode === 'sheet') await refresh(true);   // ข้อมูลล่าสุดก่อน (คนอื่นอาจแจกไปแล้ว) กันแจกซ้ำ
+    const recs = siteJobsMissing().flatMap(c => siteJobRecs(c, c.in, false));
+    if (!recs.length) { render(); toast('ไม่มีงานของบริเวณเพิ่มเติมที่ต้องแจก'); return; }
+    const saved = (await store.addCases(recs)).map(normCase);
+    state.cases.push(...saved);
+    state.fresh = saved.map(x => x.id);
+    render();
+    toast(`แจกงานของบริเวณเพิ่มเติม ${saved.length} งาน ให้ MP คนเดิม (หักคิวเมื่อวนมาถึง): ${saved.map(x => `${x.hn} ${(rpOf(x) || {}).label} (${catOf(x.cat).label}) → ${x.mp}`).join(' · ')}`);
+  } catch (e) { if (btn.isConnected) btn.disabled = false; toast('แจกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
 // แก้ไขเคสแล้วมีบริเวณเพิ่มเติมคนละบริเวณที่ยังไม่มีงาน: แจกงานให้นักฟิสิกส์ตามคิว
 async function addSiteJobs(parent) {
   const recs = accessOf('work') === 'edit' ? siteJobRecs(parent, workdayFrom(today()), false) : [];
@@ -8295,7 +8316,7 @@ function parseSites(c) {
   try { a = JSON.parse(c.sites || '[]'); } catch (e) { a = []; }
   // sid = รหัสของบริเวณ Sequential boost (ผูกกับขั้นตอนของแผน boost) · boost เดิมที่ยังไม่มีรหัสใช้ i<ลำดับ>
   return Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map((x, i) => ({ area: str(x.area), dpf: str(x.dpf), fx: str(x.fx), rx: str(x.rx), freq: str(x.freq), start: str(x.start), startFx: str(x.startFx), room: str(x.room), cat: str(x.cat),
-    sid: str(x.sid) || (str(x.start) === 'boost' ? 'i' + (i + 1) : '') })) : [];
+    sid: str(x.sid) || (str(x.start) === 'boost' ? 'i' + (i + 1) : 'n' + (i + 1)) })) : [];   // บริเวณที่บันทึกก่อนมีรหัส: ตามลำดับ (ผูกกับงานของบริเวณ)
 }
 // เริ่มฉายบริเวณที่ 2 ขึ้นไปเทียบกับบริเวณที่ 1: พร้อมกัน · หลังบริเวณที่ 1 ฉายครบ · หลัง Fx ที่กำหนดของบริเวณที่ 1 · Sequential boost
 const SITE_STARTS = [
@@ -13420,6 +13441,7 @@ document.addEventListener('click', e => {
   if (ds.renopt) return startRename(t);
   if (ds.rmopt) { const j = ds.rmopt.lastIndexOf('.'); getPath(draft, ds.rmopt.slice(0, j)).splice(+ds.rmopt.slice(j + 1), 1); return renderSettings(); }
   if (ds.cfgok || ds.cfgno) return cfgDecideUi(ds.cfgok || ds.cfgno, !!ds.cfgok, t);
+  if (ds.sitejobs !== undefined) return addMissingSiteJobs(t);
   if (ds.add === 'subadmin') { draft.subAdmins.push({ user: '', tabs: [] }); renderSettings(); $$('[data-k^="subAdmins."][data-k$=".user"]').pop().focus(); return; }
   if (ds.add === 'queue') {   // ใช้ช่องที่ยังไม่เคยใช้ก่อน (ผู้ป่วยที่บันทึกคิวที่ลบไปแล้วไม่ย้ายมาคิวใหม่)
     const free = Q_IDS.filter(x => !draft.queues.some(q => q.id === x)), id = free.find(x => !queues().some(q => q.id === x)) || free[0];
