@@ -3693,7 +3693,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.4';
+const PAGE_VERSION = '2026-11-08.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5821,7 +5821,7 @@ function renderReg() {
   const cell = (r, k) => {
     if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b></td>`;
     if (k === 'name') return `<td class="ct-name">${esc(regName(r))}</td>`;
-    const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? dxShort(r) : r[k];
+    const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? dxShort(r) || r.icd : r[k];
     return `<td class="ct-${k}"${k === 'birth' && r.birth ? ` title="เกิด ${esc(apDate(r.birth))}"` : ''}>${esc(v)}</td>`;
   };
   const apCell = r => {
@@ -10703,7 +10703,8 @@ async function srcPullNow(key, btn) {
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (ตั้งค่า → ลงทะเบียน)
 const minText = m => (m % 1440 === 0 ? `${m / 1440} วัน` : m % 60 === 0 ? `${m / 60} ชั่วโมง` : `${m} นาที`);
 // HN ที่มีในระบบแล้ว (ไม่ดึง) · inSys = มีในแถบอื่น (เคส CT-SIM นัด ฯลฯ) แต่ยังไม่ได้ลงทะเบียน
-const rdSkipText = st => `HN มีในระบบแล้ว (ไม่ดึง) ${st.skipped || 0}${st.inSys ? ` (ในแถบอื่น ${st.inSys})` : ''}`;
+const rdSkipText = st => `HN มีในระบบแล้ว (ไม่ดึง) ${st.skipped || 0}${st.inSys ? ` (ในแถบอื่น ${st.inSys})` : ''}`
+  + (st.removed ? ` · ลบรายการที่ดึงไว้ก่อนแต่ HN มีในระบบอยู่แล้ว ${st.removed}` : '') + (st.docFix ? ` · ใส่รหัสแพทย์ให้รายการที่ดึงไว้ ${st.docFix}` : '');
 function rdStatusHtml(st) {
   if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
   return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
@@ -10728,8 +10729,8 @@ function regDriveSec(d) {
     : `<p class="br-preview">พบ ${chk.nFiles} ไฟล์: ${chk.files.slice(0, 6).map(f => `${esc(f.name)} <span class="muted">(แก้ล่าสุด ${esc(stampText(f.at))})</span>`).join(' · ')}${chk.nFiles > 6 ? ' …' : ''}<br>ไฟล์ล่าสุด: ${chk.headRow ? `หัวตารางแถวที่ ${chk.headRow} · ข้อมูล ${chk.rows} แถว` : '<span class="acct-warn">ไม่พบคอลัมน์ HN · เลือกคอลัมน์ HN ด้านล่าง</span>'}</p>`;
   const ready = !local && api && !!saved.url;
   return `<h3 class="sub-h" id="rd-sec">ดึงผู้ป่วยจาก Google Drive</h3>
-      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่มีในระบบแล้วไม่ดึง</b> (ลงทะเบียนแล้ว หรือมีในแถบอื่น: เคส CT-SIM ลงนัด นัดคิวใส่แร่ กิจกรรม Vac-Lok · ไม่ทับข้อมูลเดิม) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
-        · คำนำหน้าแยกจากชื่อให้เอง (น.ส. = นางสาว · ด.ช. ด.ญ. · ยศ / คำย่ออื่นใช้ตามไฟล์) และเลือกเพศจากคำนำหน้า · แพทย์จับคู่กับ ทีม → แพทย์ ด้วยชื่อ-สกุล · สิทธิจับคู่กับตัวเลือกด้านบน (ถ้วนหน้า → บัตรทอง, ประกันสังคม, ข้าราชการ, ชำระเงินเอง · ไม่ตรง = ข้อความในไฟล์) · ICD-10 ใช้รหัสแรก</p>
+      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่มีในระบบแล้วไม่ดึง</b> (ลงทะเบียนแล้ว หรือมีในแถบอื่น: เคส CT-SIM ลงนัด นัดคิวใส่แร่ กิจกรรม Vac-Lok · ไม่ทับข้อมูลเดิม · รายการที่ดึงไว้ก่อนแล้วยังไม่มีใครแก้ แต่ HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบให้ตอนดึงครั้งถัดไป) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
+        · คำนำหน้าแยกจากชื่อให้เอง (น.ส. = นางสาว · ด.ช. ด.ญ. · ยศ / คำย่ออื่นใช้ตามไฟล์) และเลือกเพศจากคำนำหน้า · แพทย์จับคู่กับ ทีม → แพทย์ ด้วยชื่อ-สกุล (หรือชื่อต้นที่ตรงคนเดียว · ใส่ชื่อแพทย์ทีหลัง = ดึงครั้งถัดไปใส่รหัสแพทย์ให้รายการที่ดึงไว้) · สิทธิจับคู่กับตัวเลือกด้านบน (ถ้วนหน้า → บัตรทอง, ประกันสังคม, ข้าราชการ, ชำระเงินเอง · ไม่ตรง = ข้อความในไฟล์) · ICD-10 ใช้รหัสมะเร็ง (C, D) ตัวแรก ไม่มี = รหัสแรก</p>
       ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก Google Drive ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก Google Drive ต้องใช้ Code.gs รุ่น 2026-11-08.2 ขึ้นไป · วาง Code.gs ใหม่ กด Run ฟังก์ชัน regDriveTick หนึ่งครั้งเพื่ออนุญาตให้อ่าน Google Drive แล้ว Deploy เวอร์ชันใหม่</span></p>' : ''}
       <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="reg.drive.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
       <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์โฟลเดอร์ Google Drive <span class="sub-lbl">drive.google.com/drive/folders/… · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดโฟลเดอร์ได้</span></span>
@@ -14533,7 +14534,7 @@ function maybePullBrachy() {
       const prev = state.regDrive;
       if (!st) return;
       state.regDrive = st;
-      if ((!prev || st.at !== prev.at) && st.added > 0) { toast(`ดึงผู้ป่วยจาก Google Drive ${st.added} คน (แถบ${navLabel('reg')})`); refresh(true); }
+      if ((!prev || st.at !== prev.at) && st.added + (st.removed || 0) + (st.docFix || 0) > 0) { toast(`ดึงจาก Google Drive (แถบ${navLabel('reg')}): ${st.added ? `เพิ่มผู้ป่วย ${st.added} คน` : 'ไม่มีผู้ป่วยใหม่'}${st.removed ? ` · ลบที่ HN มีในระบบอยู่แล้ว ${st.removed}` : ''}${st.docFix ? ` · ใส่รหัสแพทย์ ${st.docFix}` : ''}`); refresh(true); }
       else if (state.view === 'reg') renderReg();
       else if (state.view === 'settings' && $('#rd-status')) $('#rd-status').innerHTML = rdStatusHtml(st);
     }).catch(() => { /* ดึงไม่ได้ ลองใหม่รอบหน้า */ });

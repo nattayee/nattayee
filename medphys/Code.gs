@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-08.4';
+const CODE_VERSION = '2026-11-08.5';
 const API_LEVEL = 57;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -2076,8 +2076,13 @@ const docKey_ = v => String(v == null ? '' : v).trim().replace(/^(?:[ก-๙]{1,
 function regDocCode_(raw, cfg) {
   const k = docKey_(raw);
   if (!k) return '';
-  const d = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && (docKey_(x.name) === k || String(x.code || '').toUpperCase() === String(raw).trim().toUpperCase()))[0];
-  return d ? String(d.code).toUpperCase() : '';
+  const list = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && x.code);
+  const d = list.filter(x => docKey_(x.name) === k || String(x.code).toUpperCase() === String(raw).trim().toUpperCase())[0];
+  if (d) return String(d.code).toUpperCase();
+  // ชื่อต้นตรงกันคนเดียว (ตั้งค่าใส่แค่ชื่อ หรือสกุลสะกดต่างกัน)
+  const first = v => String(v == null ? '' : v).trim().replace(/^(?:[ก-๙]{1,3}\.){1,3}\s*/, '').split(/\s+/)[0].toLowerCase();
+  const f = first(raw), hit = f ? list.filter(x => first(x.name) === f) : [];
+  return hit.length === 1 ? String(hit[0].code).toUpperCase() : '';
 }
 // สิทธิการรักษา → ตัวเลือกใน ตั้งค่า → ลงทะเบียน (ตรงกัน หรือกลุ่มเดียวกัน) · ไม่ตรง = ข้อความเดิม
 function regRightOf_(raw, cfg) {
@@ -2107,22 +2112,74 @@ function regDriveRecs_(rows, cfg, d) {
     const hn = cell(r, 'hn').replace(/\s+/g, '');
     if (!hn || hn === String(map.hn).trim()) return;   // แถวว่าง / หัวตารางซ้ำ
     if (fc >= 0 && fv.length && fv.indexOf(String(r[fc] || '').trim()) < 0) { filtered++; return; }
-    const nm = regSplitName_(cell(r, 'name')), docRaw = cell(r, 'doc'), doc = regDocCode_(docRaw, cfg), icd = (/[A-Z]\d{2}(?:\.\d{1,2})?/i.exec(cell(r, 'icd')) || [''])[0].toUpperCase();
+    const nm = regSplitName_(cell(r, 'name')), docRaw = cell(r, 'doc'), doc = regDocCode_(docRaw, cfg), icds = cell(r, 'icd').toUpperCase().match(/[A-Z]\d{2}(?:\.\d{1,2})?/g) || [], icd = icds.filter(x => /^[CD]/.test(x))[0] || icds[0] || '';
     const note = [cell(r, 'note'), docRaw && !doc ? 'แพทย์: ' + docRaw : ''].filter(Boolean).join(' · ');
     out.push({ hn: hn.slice(0, 40), title: nm.title.slice(0, 40), name: nm.name.slice(0, 200), sex: regSexOf_(nm.title, cfg), birth: '', phone: '', right: regRightOf_(cell(r, 'right'), cfg).slice(0, 200), doc: doc, icd: icd, dx: cell(r, 'dx').slice(0, 2000), note: note.slice(0, 2000) });
   });
   return { recs: out, filtered: filtered, err: '' };
 }
-// HN ที่มีในระบบแล้ว → ตารางแรกที่พบ (ลงทะเบียนก่อน แล้วเคส กิจกรรม CT-SIM นัด นัดใส่แร่ Vac-Lok) · อ่านเฉพาะคอลัมน์ HN ของแต่ละชีต
-function knownHns_(ss) {
+// HN สำหรับเทียบว่ามีในระบบแล้ว: ไม่สนช่องว่าง ขีด จุด ตัวพิมพ์ และเลข 0 นำหน้า (HN ตัวเลขล้วน)
+const hnLoose_ = v => { const t = String(v == null ? '' : v).replace(/[\s\-\/.]/g, '').toUpperCase(); return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, '') : t; };
+const timeOf_ = v => (Object.prototype.toString.call(v) === '[object Date]' ? (isNaN(v) ? '' : v.toISOString()) : String(v == null ? '' : v).trim());
+// HN ที่มีในระบบแล้ว → { t: ตารางแรกที่พบ (ลงทะเบียนก่อน แล้วเคส กิจกรรม CT-SIM นัด นัดใส่แร่ Vac-Lok),
+//   at: เวลาแรกสุดที่พบในแถบอื่นที่ไม่ใช่ลงทะเบียน (Created หรือวันที่ของรายการ · ไม่มีทั้งคู่ = '' = เก่าสุด · ไม่พบในแถบอื่น = null) }
+// อ่านเฉพาะคอลัมน์ HN, Created และวันที่ของแต่ละชีต
+function hnSeen_(ss) {
   const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg'));
   order.forEach(t => {
-    const f = TABLES[t].fields.filter(x => x[0] === 'hn')[0], sh = f ? ss.getSheetByName(TABLES[t].sheet) : null;
+    const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
+    const sh = head('hn') ? ss.getSheetByName(def.sheet) : null;
     if (!sh || sh.getLastRow() < 2) return;
-    const col = headerOf_(sh).indexOf(f[1]);
-    if (col < 0) return;
-    sh.getRange(2, col + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnKey_(r[0]); if (k && !out[k]) out[k] = t; });
+    const hdr = headerOf_(sh), n = sh.getLastRow() - 1, colOf = k => (head(k) ? hdr.indexOf(head(k)) : -1), read = c => (c < 0 ? null : sh.getRange(2, c + 1, n, 1).getValues());
+    const hn = read(colOf('hn'));
+    if (!hn) return;
+    const cr = t === 'reg' ? null : read(colOf('created')), dt = t === 'reg' ? null : read(colOf('date') >= 0 ? colOf('date') : colOf('in'));
+    hn.forEach((r, i) => {
+      const k = hnLoose_(r[0]);
+      if (!k) return;
+      const x = out[k] || (out[k] = { t: t, at: null });
+      if (t === 'reg') return;
+      const at = timeOf_(cr && cr[i][0]) || timeOf_(dt && dt[i][0]);
+      if (x.at === null || at < x.at) x.at = at;
+    });
   });
+  return out;
+}
+function knownHns_(ss) { const seen = hnSeen_(ss), o = {}; Object.keys(seen).forEach(k => { o[k] = seen[k].t; }); return o; }
+// รายการที่ดึงจาก Google Drive และยังไม่มีใครแก้ (Updated ว่าง) · ทำทุกครั้งที่ดึง:
+// · HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบ (ดึงด้วย Code.gs รุ่นก่อน 2026-11-08.4 ที่ตรวจเฉพาะแถบลงทะเบียน) · HN ที่เพิ่งมีในแถบอื่นหลังดึง (เช่นลงนัดต่อ) ไม่ลบ
+// · แพทย์ที่เคยจับคู่ไม่ได้ (Note "แพทย์: …") ตรงกับ ทีม → แพทย์ แล้ว = ใส่รหัสแพทย์ และเอาออกจาก Note
+function regDriveTidy_(ss, cfg, seen) {
+  const sh = ss.getSheetByName(TABLES.reg.sheet), out = { removed: 0, docs: 0, gone: [] };
+  if (!sh || sh.getLastRow() < 2) return out;
+  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), hdr = values[0].map(v => String(v).trim()), c = {};
+  ['hn', 'by', 'created', 'updated', 'doc', 'note'].forEach(k => { c[k] = hdr.indexOf(TABLES.reg.fields.filter(f => f[0] === k)[0][1]); });
+  if (Object.keys(c).some(k => c[k] < 0)) return out;
+  const del = [], docs = [], notes = [];
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    docs.push([r[c.doc]]);
+    notes.push([r[c.note]]);
+    if (String(r[c.by]).indexOf('Google Drive') !== 0 || timeOf_(r[c.updated])) continue;
+    const x = seen[hnLoose_(r[c.hn])], made = timeOf_(r[c.created]);
+    if (x && x.at !== null && made && x.at < made) { del.push(i + 1); out.gone.push(hnLoose_(r[c.hn])); continue; }
+    const note = String(r[c.note] == null ? '' : r[c.note]), m = /(?:^| · )แพทย์: ([^·]+?)\s*$/.exec(note);
+    if (m && !String(r[c.doc] == null ? '' : r[c.doc]).trim()) {
+      const code = regDocCode_(m[1], cfg);
+      if (code) { docs[i - 1] = [code]; notes[i - 1] = [note.slice(0, m.index)]; out.docs++; }
+    }
+  }
+  if (out.docs) {
+    sh.getRange(2, c.doc + 1, docs.length, 1).setNumberFormat('@').setValues(docs);
+    sh.getRange(2, c.note + 1, notes.length, 1).setNumberFormat('@').setValues(notes);
+  }
+  for (let j = del.length - 1; j >= 0;) {   // ลบจากล่างขึ้นบน ทีละช่วงที่ติดกัน
+    let k = j;
+    while (k > 0 && del[k - 1] === del[k] - 1) k--;
+    sh.deleteRows(del[k], j - k + 1);
+    j = k - 1;
+  }
+  out.removed = del.length;
   return out;
 }
 function regDriveStatus_() {
@@ -2172,7 +2229,9 @@ function regDriveSync_(ss, cfg, force, by) {
     // เปลี่ยนโฟลเดอร์ คอลัมน์ หรือตัวกรอง = อ่านทุกไฟล์ใหม่ (แถวที่เคยไม่ตรงตัวกรองอาจตรงแล้ว)
     const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : st.files || {};
     try {
-      const files = regDriveFiles_(regDriveFolder_(d.url)), have = knownHns_(ss), add = [], errs = [];
+      const files = regDriveFiles_(regDriveFolder_(d.url)), seenHn = hnSeen_(ss), tidy = regDriveTidy_(ss, cfg, seenHn), have = {}, add = [], errs = [];
+      Object.keys(seenHn).forEach(k => { have[k] = seenHn[k].t; });
+      tidy.gone.forEach(k => { have[k] = 'other'; });   // เพิ่งลบออกจากแถบลงทะเบียน: ยังมีในแถบอื่น
       let skipped = 0, inSys = 0, filtered = 0, read = 0;
       files.forEach(f => {
         const id = f.getId(), mod = f.getLastUpdated().toISOString();
@@ -2183,7 +2242,7 @@ function regDriveSync_(ss, cfg, force, by) {
         if (got.err) { errs.push(f.getName() + ': ' + got.err); return; }
         filtered += got.filtered;
         got.recs.forEach(r => {
-          const k = hnKey_(r.hn);
+          const k = hnLoose_(r.hn);
           if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
           have[k] = 'drive';
           add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + f.getName()).slice(0, 120), created: now, updated: '' }));
@@ -2193,7 +2252,7 @@ function regDriveSync_(ss, cfg, force, by) {
       if (add.length) appendNew_(ss, 'reg', add);
       const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
       files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
-      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
     } catch (e) {
       st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
     }
