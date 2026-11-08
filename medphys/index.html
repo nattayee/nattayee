@@ -3861,7 +3861,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.5';
+const PAGE_VERSION = '2026-11-09.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14370,7 +14370,7 @@ function renderCal() {
   // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
   const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
   const monthOf = (r, sp) => inMonth.reduce((a, x) => a + (sp ? (r ? x.spBy.get(r) || 0 : x.sp) : r ? x.by.get(r) || 0 : x.n), 0);
-  const roomBar = rooms.length > 1 || (rooms.length && calRoom) ? `<div class="dpk-rooms" role="group" aria-label="ห้องฉาย">${['', ...rooms].map(r => `<button type="button" data-calroom="${esc(r)}" aria-pressed="${calRoom === r}">${r ? esc(roomLabel(r)) : 'ทุกห้อง'}<small>${calNum(kind, monthOf(r), monthOf(r, true))}</small></button>`).join('')}</div>` : '';
+  const roomBar = rooms.length > 1 || (rooms.length && calRoom) ? `<div class="dpk-rooms" role="group" aria-label="ห้องฉาย">${rooms.map(r => `<button type="button" data-calroom="${esc(r)}" aria-pressed="${calRoom === r}" title="${calRoom === r ? 'กดอีกครั้ง = ดูทุกห้องรวมกัน' : `ดูเฉพาะห้อง ${esc(roomLabel(r))}`}">${esc(roomLabel(r))}<small>${calNum(kind, monthOf(r), monthOf(r, true))}</small></button>`).join('')}</div>` : '';
   const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-dpknav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-dpknav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}<button type="button" class="dpk-max" data-calfull aria-pressed="${calFull}" title="${calFull ? 'ย่อปฏิทิน' : 'ขยายปฏิทินเต็มจอ'}">${calFull ? '⤡ ย่อ' : '⤢ เต็มจอ'}</button></div>
@@ -14480,7 +14480,7 @@ calPop.addEventListener('click', e => {
   if (!b || !calBox) return;
   if (b.dataset.dpknav) { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + +b.dataset.dpknav, 1); calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
   else if ('calnow' in b.dataset) calMonth = today().slice(0, 7);
-  else if ('calroom' in b.dataset) calRoom = b.dataset.calroom;
+  else if ('calroom' in b.dataset) calRoom = calRoom === b.dataset.calroom ? '' : b.dataset.calroom;   // ไม่มีปุ่มทุกห้อง: กดห้องที่เลือกอยู่อีกครั้ง = ดูทุกห้อง
   else if ('calfull' in b.dataset) { calFull = !calFull; pref.set('calFull', calFull); }
   else if (b.dataset.calday) return Date.now() - calAt < 400 ? undefined : pickCal(b.dataset.calday);
   else if ('calclear' in b.dataset) return pickCal('');
