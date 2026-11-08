@@ -3895,7 +3895,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.7';
+const PAGE_VERSION = '2026-11-09.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14460,7 +14460,8 @@ function calSimBadge(c) {
   const l = simLim().room, one = calRoom && calRoom !== NO_ROOM, lim = !l ? 0 : one ? l : l * state.config.rooms.length;
   return { html: lim ? `${c.n}<small>/${lim}</small>` : `${c.n}`, full: !!lim && c.n >= lim };
 }
-const calSpText = (kind, v) => (kind === 'sim' && v ? ` · เทคนิคพิเศษ ${v.sp} · เทคนิคอื่นๆ ${v.n - v.sp}${v.cb ? ` · รวมวันทำ CBCT ${v.cb}` : ''}` : '');
+const calSpText = (kind, v) => (kind === 'sim' && v ? ` · เทคนิคพิเศษ ${v.sp} · เทคนิคอื่นๆ ${v.n - v.sp}` : '');
+const calCbText = (kind, v) => (kind === 'sim' && v && v.cb ? ` · รวมวันทำ CBCT ${v.cb} คน` : '');   // ผู้ป่วยเทคนิคพิเศษที่นับเพราะวันทำ CBCT (อยู่ในจำนวนแล้ว)
 const calGrp = (g, kind) => (kind === 'sim' ? roomLabel(g) : g);   // Start RT แยกตามห้อง (เก็บเป็นชื่อห้อง) · CT แยกตามเครื่อง
 // ตัวเลขของวัน: ทุกห้อง หรือเฉพาะห้องที่เลือกในปฏิทิน { n, all, by, who }
 function calOf(v) {
@@ -14491,14 +14492,14 @@ const calDocOf = el => { const b = CAL_DOC_BOX[el.id] && $('#' + CAL_DOC_BOX[el.
 function calTip(d, raw, h, kind) {
   const v = calOf(raw), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
   const l = ctLim(), lim = kind === 'ct' ? `${l.day ? ` (สูงสุด ${l.day}${v && v.n >= l.day ? ' เต็ม' : ''})` : ''}${v && v.doc.size ? ` · แพทย์ ${calDocText(v.doc)}` : ''}` : '';
-  return `${LONG_DAY_FMT.format(parseISO(d))}${h ? ' · ' + h : ''} · ${calWhatIn(kind)} ${v ? v.n : 0} คน${lim}${calSpText(kind, v)}${v ? calBy(v, kind) : rest}`;
+  return `${LONG_DAY_FMT.format(parseISO(d))}${h ? ' · ' + h : ''} · ${calWhatIn(kind)} ${v ? v.n : 0} คน${lim}${calSpText(kind, v)}${v ? calBy(v, kind) : rest}${calCbText(kind, v)}`;
 }
 function calInfo(d) {
   const { counts, hol, kind } = calData;
   if (!d) return `<span>เลือกวัน · ชี้ที่วันเพื่อดูรายชื่อ</span>`;
   const raw = counts.get(d), v = calOf(raw), dt = parseISO(d), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
   const ld = kind === 'sim' && calData.load && !hol[d] && isWeekday(d) ? calData.load(d) : null, lq = ld && ld.all ? `<div class="dpk-load">โควตารวมวันนั้น <b${calData.lim && ld.q > calData.lim ? ' class="over"' : ''}>${ld.q}</b> (ผู้ป่วยทั้งหมด ${ld.all} คน · เทคนิคพิเศษ ${ld.sp})${calData.lim && ld.q > calData.lim ? ` · เกิน ${calData.lim}` : ''}</div>` : '';
-  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${kind === 'sim' && v ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${v.sp}</span> · เทคนิคอื่นๆ ${v.n - v.sp}${v.cb ? ` · <span class="dpk-cb">รวมวันทำ CBCT ${v.cb}</span>` : ''}` : ''}${esc(v ? calBy(v, kind) : rest)}`
+  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${kind === 'sim' && v ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${v.sp}</span> · เทคนิคอื่นๆ ${v.n - v.sp}` : ''}${esc(v ? calBy(v, kind) : rest)}${kind === 'sim' && v && v.cb ? ` · <span class="dpk-cb">รวมวันทำ CBCT ${v.cb} คน</span>` : ''}`
     + (v ? `<div class="dpk-who" title="${esc(v.who.join(', '))}">${esc(v.who.slice(0, 6).join(', '))}${v.who.length > 6 ? ` และอีก ${v.who.length - 6} คน` : ''}</div>` : '') + lq + (kind === 'ct' ? calCtLoad(v, calData.doc) : !hol[d] && isWeekday(d) ? calSimLoad(raw, d, calData.room, calData.doc) : '');
 }
 // CT: ลิมิตของวัน + แพทย์แต่ละคน (แพทย์ที่เลือกในฟอร์ม: ยังลงได้ไหม)
