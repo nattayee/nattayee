@@ -537,6 +537,15 @@ button.duty-line:hover{border-color:var(--accent)}
 .dpk-wide .dpk-dc{padding:0 4px;font-size:11px;line-height:16px}
 .dpk-rooms small em{color:var(--late);font-style:normal}
 .dpk-sp{color:var(--late);font-weight:600}
+.dpk-cb{color:var(--accent);font-weight:600}
+/* ฟอร์มลงนัด: CBCT ระหว่างฉาย (เทคนิคพิเศษ) */
+.ap-cbct{margin-top:10px;padding:8px 10px;border:1px dashed color-mix(in srgb,var(--late) 45%,transparent);border-radius:10px;background:color-mix(in srgb,var(--late) 5%,var(--surface))}
+.ap-cbct-row{display:flex;flex-wrap:wrap;gap:8px}
+.ap-cbct-row select{flex:1 1 220px;min-width:0}
+.ap-cbct-row input{flex:1 1 180px;min-width:0}
+.ap-cbct-days{margin:6px 0 0;color:var(--muted);font-size:12.5px;line-height:1.6}
+.cb-day{white-space:nowrap}
+.cb-day.over{color:var(--late);font-weight:700}
 .ct-skipped summary{cursor:pointer;color:var(--muted);font-size:13px}
 .ct-rooms-set{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .ct-room-set{display:inline-flex;align-items:center;gap:4px}
@@ -2558,7 +2567,10 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
             <label class="field"><span class="lbl">IV (ml)</span><input id="a-iv" inputmode="decimal" maxlength="12" autocomplete="off"></label>
             <label class="field"><span class="lbl">Flow Rate (ml/sec)</span><input id="a-flow" inputmode="decimal" maxlength="12" autocomplete="off"></label>
           </div>
-          <div class="field" data-apf="special"><span class="lbl">เทคนิคพิเศษ <span class="sub-lbl">เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ</span></span><div class="chips sp-chips" id="a-special" aria-label="เทคนิคพิเศษ"></div></div>
+          <div class="field" data-apf="special"><span class="lbl">เทคนิคพิเศษ <span class="sub-lbl">เลือกได้หลายอย่าง · ไม่เลือก = เทคนิคอื่นๆ</span></span><div class="chips sp-chips" id="a-special" aria-label="เทคนิคพิเศษ"></div>
+            <div class="ap-cbct" id="a-cbct-f" hidden><span class="lbl"><label for="a-cbct">CBCT ระหว่างฉาย</label> <span class="sub-lbl">วันทำ CBCT นับเป็นผู้ป่วยใหม่ 1 คนในปฏิทิน Start RT</span></span>
+              <div class="ap-cbct-row"><select id="a-cbct" aria-label="รูปแบบ CBCT ระหว่างฉาย"></select><input id="a-cbfx" autocomplete="off" maxlength="200" inputmode="numeric" placeholder="Fx ที่ทำ CBCT เช่น 1, 2, 3, 8" aria-label="Fx ที่ทำ CBCT" hidden></div>
+              <p class="ap-cbct-days" id="a-cbct-days" aria-live="polite"></p></div></div>
           <div class="dose-row" data-apf="dose">
             <label class="field" data-apf="dpf"><span class="lbl">Dose/fx (cGy)</span><input type="number" id="a-dpf" min="0" step="any" inputmode="decimal" placeholder="200"></label>
             <label class="field" data-apf="fx"><span class="lbl">Fx</span><input type="number" id="a-fx" min="1" step="1" inputmode="numeric" placeholder="25"></label>
@@ -3050,6 +3062,16 @@ const APPT_FORM = [
   ['lab', 'Pre-procedural Lab (ใบสั่ง)', 'off', false], ['vol', 'Draw area (ขอบเขตที่จะทำ CT)', 'show'], ['note', 'Note', 'show'],
 ];
 const APPT_LISTS = [['cms', 'CT'], ['specials', 'เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยก)']];
+// เทคนิคพิเศษ: CBCT ระหว่างฉาย (รูปแบบเดียวกับระบบนัดคิวเทคนิคพิเศษ) · วันทำ CBCT = ผู้ป่วยใหม่ 1 คนในปฏิทิน Start RT ของห้องนั้น (วันเริ่มฉายนับอยู่แล้ว)
+const CBCT_PATS = [['first3_weekly', '3 ครั้งแรก แล้วสัปดาห์ละครั้ง'], ['dibh', 'Fx 1, 2, 3, 6, 11 (Breast DIBH)'], ['weekly', 'สัปดาห์ละครั้ง'], ['daily', 'ทุกครั้ง'],
+  ['first', 'เฉพาะครั้งแรก'], ['none', 'ไม่ทำ CBCT ระหว่างฉาย'], ['custom', 'กำหนดเอง (ระบุ Fx)']];
+const CBCT_RANK = ['daily', 'first3_weekly', 'dibh', 'weekly', 'first', 'none'];   // หลายเทคนิค = ใช้รูปแบบที่ทำ CBCT บ่อยกว่า
+const cbctPatOk = p => CBCT_PATS.some(([k]) => k === p);
+// รูปแบบเริ่มต้นของเทคนิค (ตั้งค่า → ลงนัด แก้ได้): SRS SRT SBRT = ทุกครั้ง · DIBH = Fx 1, 2, 3, 6, 11 · อื่นๆ = 3 ครั้งแรก แล้วสัปดาห์ละครั้ง
+const cbctTechDef = x => { const p = str(x).split('/').map(v => v.trim().toLowerCase()); return p.some(v => ['srs', 'srt', 'sbrt'].includes(v)) ? 'daily' : p.includes('dibh') ? 'dibh' : 'first3_weekly'; };
+// นำเข้านัดจากระบบนัดคิวเทคนิคพิเศษ (Code.gs spqCheck, spqPull · แท็บ SpecialQueue · เฉพาะ HN ที่มีในระบบ) · ตั้งค่า → ลงนัด
+const SPQ_API = 59;
+const spqOn = () => serverHas(SPQ_API);
 const REG_API = 40;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove) แบบชื่อ-สกุลช่องเดียว และ HN คำนำหน้า ชื่อ-สกุล บังคับตามตั้งค่า
 const regOn = () => serverHas(REG_API);
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (regDriveCheck, regDrivePull, regDriveTick) · ตั้งค่า → ลงทะเบียน
@@ -3231,6 +3253,7 @@ const DEFAULT_CONFIG = {
   // แถบลงนัด: ตัวเลือกของช่อง CT · เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยกจากเทคนิคอื่นๆ) · ช่องในฟอร์ม
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4, dayOn: true, docOn: true },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (On = จำกัด)
     simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true,
+    cbct: { on: true, def: {} }, spq: { on: false, url: '' },   // cbct: วันทำ CBCT ของเทคนิคพิเศษนับเป็นผู้ป่วยใหม่ · def = รูปแบบเริ่มต้นของแต่ละเทคนิค · spq = นำเข้าจากระบบนัดคิวเทคนิคพิเศษ
     cal: { simNew: true, simBadge: 'lim', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
@@ -3538,6 +3561,13 @@ function normAppt(o) {
 }
 // การใช้ Vac-Lok { id, no, hn, name, room, ct (วันทำ CT), off, hold (Hold RT), note, ctId (รายการ CT-SIM), src, by, created, updated }
 const VAC_KEYS = ['id', 'no', 'hn', 'name', 'room', 'ct', 'off', 'hold', 'note', 'ctId', 'src', 'by', 'created', 'updated'];
+// นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ (แท็บ SpecialQueue · Code.gs API 59) { id, hn, tech, site, fx, freq, start, end, cbct: [วันทำ CBCT รวมวัน CBCT ก่อนเริ่มฉาย], pattern }
+function normSpq(o) {
+  const days = v => [...new Set((Array.isArray(v) ? v : str(v).split(/[,\s]+/)).map(x => str(x).slice(0, 10)).filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+  const b = { id: str(o.id), hn: str(o.hn), tech: str(o.tech) || 'เทคนิคพิเศษ', site: str(o.site), fx: str(o.fx), freq: str(o.freq), start: dateStr(o.start), end: dateStr(o.end), cbct: days(o.cbct), pattern: str(o.pattern) };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.end) || b.end < b.start) b.end = b.start;
+  return b;
+}
 function normVac(o) {
   const v = {};
   for (const k of VAC_KEYS) v[k] = str(o[k]);
@@ -3719,6 +3749,10 @@ function mergeConfig(c) {
   out.appt.limits = limOf(al, d.appt.limits);
   out.appt.simLim = limOf(ap.simLim, d.appt.simLim);
   out.appt.emergOver = ap.emergOver == null ? d.appt.emergOver : ap.emergOver === true || ap.emergOver === 'on';
+  const acb = ap.cbct && typeof ap.cbct === 'object' ? ap.cbct : {}, adef = acb.def && typeof acb.def === 'object' ? acb.def : {};
+  out.appt.cbct = { on: acb.on == null ? true : acb.on === true || acb.on === 'on', def: Object.fromEntries(out.appt.specials.map(x => [x, cbctPatOk(adef[x]) && adef[x] !== 'custom' ? adef[x] : cbctTechDef(x)])) };
+  const asq = ap.spq && typeof ap.spq === 'object' ? ap.spq : {};
+  out.appt.spq = { on: !!asq.on, url: str(asq.url).trim() };
   const acal = ap.cal && typeof ap.cal === 'object' ? ap.cal : {};
   const CAL_PICK = { simDoc: ['pick', 'always', 'off'], simBadge: ['lim', 'sp'] };
   out.appt.cal = Object.fromEntries(Object.entries(d.appt.cal).map(([k, v]) => [k, CAL_PICK[k] ? (CAL_PICK[k].includes(acal[k]) ? acal[k] : v) : typeof acal[k] === 'boolean' ? acal[k] : v]));
@@ -3861,7 +3895,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.6';
+const PAGE_VERSION = '2026-11-09.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3943,6 +3977,8 @@ const sheetStore = {
   tdfPull: force => call('tdfPull', !!force),
   regDriveCheck: set => call('regDriveCheck', set),
   regDrivePull: force => call('regDrivePull', !!force),
+  spqCheck: set => call('spqCheck', set),
+  spqPull: force => call('spqPull', !!force),
 };
 function localStore() {
   const KEY = 'medphys-dispatch:v1';
@@ -3957,6 +3993,7 @@ function localStore() {
   if (!Array.isArray(db.reg)) db.reg = [];
   if (!Array.isArray(db.bq)) db.bq = [];
   if (!Array.isArray(db.vac)) db.vac = [];
+  if (!Array.isArray(db.spq)) db.spq = demoDb().spq;   // ข้อมูลตัวอย่างที่เก็บไว้ก่อนมีนัดที่นำเข้า
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* โหมดส่วนตัว: เก็บในหน่วยความจำ */ } };
   const old = db.cases.filter(c => c && MOVED_CATS.includes(c.cat));
   if (old.length) {
@@ -4124,6 +4161,8 @@ function localStore() {
     tdfPull: async () => null,
     regDriveCheck: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     regDrivePull: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    spqCheck: async () => { throw new Error('นำเข้าจากระบบนัดคิวเทคนิคพิเศษใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    spqPull: async () => { throw new Error('นำเข้าจากระบบนัดคิวเทคนิคพิเศษใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
@@ -4523,7 +4562,10 @@ function demoDb() {
   const cx = bq.find(a => a.id === 'demo-q2-5'), busy = wdays(2, 1, 1)[0];
   if (cx) cx.status = 'ยกเลิก';
   for (let i = 7; bq.filter(a => a.date === busy && a.status !== 'ยกเลิก').length < 7; i++) bc(i, ['SC', 'TA'][i % 2], ['Full', 'Mould'][i % 2], [busy]);
-  return { cases, logs, leaves, appt, duty, reg, bq, config: null, demo: true };
+  // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ (สมมติ): นัด 999000302 ในแถบลงนัดไม่ได้เลือกเทคนิคพิเศษ · ระบบนัดลง DIBH CBCT Fx 1, 2, 3, 6, 11
+  const sq = wdays(11, 25, 1);
+  const spq = [{ id: 'demo-s1', hn: '999000302', tech: 'DIBH', site: 'Lt Breast', fx: '25', freq: 'Daily', start: sq[0], end: sq[24], cbct: [0, 1, 2, 5, 10].map(i => sq[i]).join(', '), pattern: 'dibh' }];
+  return { cases, logs, leaves, appt, duty, reg, bq, spq, config: null, demo: true };
 }
 
 /* ---------- สถานะ ---------- */
@@ -4531,6 +4573,7 @@ const state = {
   srcChk: {},   // ผลตรวจชีตของระบบอื่น (ตั้งค่า) { brachy, tdf }
   rdChk: null,   // ผลตรวจโฟลเดอร์ Google Drive ของแถบลงทะเบียน (ตั้งค่า)
   regDrive: null,   // ผลดึงจาก Google Drive ครั้งล่าสุด { at, by, added, skipped, filtered, read, nFiles, err }
+  spq: [], spqSync: null, spqChk: null,   // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ · ผลดึงครั้งล่าสุด · ผลตรวจชีต (ตั้งค่า)
   config: mergeConfig(null), cfgReqs: [], cases: [], logs: [], leaves: [], duty: [], ct: [], appt: [], reg: [], bq: [], jobs: [], vac: [], vacImp: null, loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
@@ -5836,6 +5879,7 @@ function openApForm(id, rg, rc) {
   $('.sub-lbl', $('#a-hn').closest('.field')).hidden = !state.reg.length;   // ยังไม่มีผู้ป่วยลงทะเบียน: ไม่ต้องบอกวิธีเลือก
   apRegNote();
   syncApForm();
+  syncApCbct(true);
   apDlg.showModal();
   if (!r) $('#a-hn').focus();
 }
@@ -5911,11 +5955,56 @@ function readApOrder() {
     age: str($('#a-age').value), sex: chipValue($('#a-sex')), exam: [...apPicked('exam'), ...($('#a-exam-other').checked ? ['Other'] : [])], fill, pos: chipValue($('#a-pos')),
     ivMl: str($('#a-iv').value), flow: str($('#a-flow').value), labDate: str($('#a-lab-date').value), cr: str($('#a-cr').value), crcl: str($('#a-crcl').value),
     immob: [...apPicked('immob'), ...($('#a-immob-other').checked ? ['Other'] : [])], vol: apOrder.vol,
+    // CBCT ระหว่างฉาย: เก็บเมื่อเลือกเอง (ไม่ได้เลือก = รูปแบบเริ่มต้นของเทคนิคตามตั้งค่า) · กำหนดเอง = Fx ที่ทำ CBCT
+    ...apCbctPick(),
     // Vac-Lok ที่จองไว้: ติ๊ก Vac-lok เท่านั้น (ช่องไม่แสดงเพราะ Code.gs เก่า/ยังไม่มีเลข = เลขเดิมคงไว้)
     vac: !apPicked('immob').some(isVacImmob) ? '' : $('#a-vac-f').hidden ? str(apOrder.vac) : chipValue($('#a-vac')),
   };
   for (const k of Object.keys(o)) if (!o[k] || (Array.isArray(o[k]) && !o[k].length) || (k === 'fill' && !Object.keys(o[k]).length)) delete o[k];
   return Object.keys(o).length ? JSON.stringify(o) : '';
+}
+// รูปแบบ CBCT ที่เลือกเองในฟอร์ม (ไม่มีเทคนิคพิเศษ หรือยังไม่ได้เลือก = ไม่เก็บ)
+function apCbctPick() {
+  const sel = $('#a-cbct');
+  if (!chipValues($('#a-special')).length || sel.dataset.auto || !cbctPatOk(sel.value)) return {};
+  return sel.value === 'custom' ? { cbct: 'custom', cbctFx: cbctFxList($('#a-cbfx').value).join(', ') } : { cbct: sel.value };
+}
+// ฟอร์มลงนัด: CBCT ระหว่างฉาย (แสดงเมื่อเลือกเทคนิคพิเศษ) · ยังไม่ได้เลือกเอง = รูปแบบเริ่มต้นของเทคนิค เปลี่ยนตามเทคนิคที่ติ๊ก
+// ใต้ช่อง: วันทำ CBCT ตาม Start RT, Fx, ความถี่ · วันที่ห้องในฟอร์มรับผู้ป่วยใหม่ครบแล้ว = สีแดง · นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ (HN ตรง) ใช้วันของระบบนัด
+function syncApCbct(init) {
+  const box = $('#a-cbct-f'), sel = $('#a-cbct'), sp = chipValues($('#a-special'));
+  if (init) {
+    const o = apOrder || {};
+    sel.innerHTML = CBCT_PATS.map(([k, l]) => opt(k, l, '')).join('');
+    sel.dataset.auto = cbctPatOk(o.cbct) ? '' : '1';
+    sel.value = cbctPatOk(o.cbct) ? o.cbct : cbctDefault(sp);
+    $('#a-cbfx').value = str(o.cbctFx);
+  }
+  const rec = readApForm(), b = spqMatch(spqIndex(), rec.hn, rec.sim), on = sp.length > 0 || !!b;
+  box.hidden = !on;
+  if (!on) return;
+  if (sel.dataset.auto && sp.length) sel.value = cbctDefault(sp);
+  $('#a-cbfx').hidden = sel.value !== 'custom' || !!b;
+  sel.disabled = !!b;
+  const out = $('#a-cbct-days'), room = rec.room;
+  if (b) {
+    out.innerHTML = `ระบบนัดคิวเทคนิคพิเศษมีนัด HN นี้ (${spTags([b.tech])} เริ่ม ${esc(fmtDay(b.start))}) · ใช้วันทำ CBCT ของระบบนัด: ${cbctDayList(b.cbct, rec)}`;
+    return;
+  }
+  if (!state.config.appt.cbct.on) { out.textContent = 'ตั้งค่า → ลงนัด ปิดการนับวันทำ CBCT ในปฏิทินอยู่'; return; }
+  if (!isDay(rec.sim)) { out.textContent = 'ใส่ Start RT (และ Fx, ความถี่) เพื่อดูวันทำ CBCT'; return; }
+  if (sel.value === 'none') { out.textContent = 'ไม่ทำ CBCT ระหว่างฉาย: นับเฉพาะวันเริ่มฉาย'; return; }
+  if (sel.value === 'custom' && !cbctFxList($('#a-cbfx').value).length) { out.textContent = 'ใส่ Fx ที่ทำ CBCT คั่นด้วย , เช่น 1, 2, 3, 8'; return; }
+  const days = apCbctDays(rec, holidayMap(), null);
+  out.innerHTML = `CBCT ${days.length} วัน${str(rec.fx) ? '' : ' (ยังไม่ใส่ Fx: เฉพาะวันเริ่มฉาย)'}: ${cbctDayList(days, rec)}${room ? '' : ' · เลือกห้องฉายเพื่อตรวจลิมิตของห้อง'}`;
+}
+// วันทำ CBCT (วันในสัปดาห์ + วันที่) · ห้องในฟอร์มรับผู้ป่วยใหม่ครบแล้ว (ลิมิตต่อห้อง) = สีแดง "เต็ม"
+function cbctDayList(days, rec) {
+  const l = simLim().room, room = str(rec.room), k = str(rec.hn), counts = l && room && room !== NO_ROOM && days.length ? calCounts('sim', { c: '', r: '', a: rec.id, hn: rec.hn }) : null;
+  return days.map(d => {
+    const v = counts && d !== rec.sim ? counts.get(d) : null, n = v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0, full = !!counts && d !== rec.sim && n >= l;
+    return `<span class="cb-day${full ? ' over' : ''}"${full ? ` title="ห้อง ${esc(roomLabel(room))} ผู้ป่วยใหม่ ${n}/${l} คนแล้ว"` : ''}>${esc(WD_FMT.format(parseISO(d)))} ${esc(fmtDay(d))}${full ? ' เต็ม' : ''}</span>`;
+  }).join(' · ');
 }
 // ข้อมูลนัดจากฟอร์ม (ยังไม่ตรวจ) · นัด CT แบบ on call = Start RT on call ด้วย
 function readApForm() {
@@ -5943,6 +6032,7 @@ function submitAp(e) {
     return toast(`${verb} ${miss[1]} ก่อนบันทึก (ช่องบังคับ)`, { err: true });
   }
   const rec = readApForm();
+  if (chipValues($('#a-special')).length && $('#a-cbct').value === 'custom' && !$('#a-cbct').disabled && !cbctFxList($('#a-cbfx').value).length) { $('#a-cbfx').focus(); return toast('ใส่ Fx ที่ทำ CBCT (คั่นด้วย , เช่น 1, 2, 3, 8) หรือเลือกรูปแบบ CBCT อื่น', { err: true }); }
   if (rec.order && !orderOn()) rec.order = '';   // Code.gs รุ่นเก่ายังไม่มีช่องใบสั่ง (เก็บเฉพาะช่องเดิม)
   const sl = simLim();
   if ((sl.room || sl.doc) && isDay(rec.sim) && !rec.room) { $('[data-apf="room"]', apForm).classList.add('missing'); return toast('เลือกห้องฉาย (ใช้ตรวจจำนวนผู้ป่วยใหม่เริ่มฉายของห้องในวัน Start RT)', { err: true }); }
@@ -5958,11 +6048,17 @@ function apFullErr(rec) {
   return ct ? { msg: ct, ct: true } : rt ? { msg: rt, ct: false } : null;
 }
 // Start RT เต็ม: ผู้ป่วยใหม่ของห้องนั้น (ลิมิตต่อห้อง) หรือของแพทย์คนนั้นในห้องนั้น (ลิมิตต่อแพทย์ต่อห้อง) · นับเหมือนปฏิทิน · นัดเดิมที่ไม่ได้เปลี่ยนวัน ห้อง แพทย์ บันทึกได้เสมอ
+// เทคนิคพิเศษ: วันทำ CBCT (นับเป็นผู้ป่วยใหม่) ห้องนั้นต้องยังไม่ครบลิมิตด้วย
 function simFullErr(rec) {
-  const l = simLim(), old = state.appt.find(x => x.id === rec.id), doc = str(rec.doc).toUpperCase(), room = str(rec.room);
-  if (!isDay(rec.sim) || !room || (!l.room && !l.doc) || (old && old.sim === rec.sim && old.room === room && str(old.doc).toUpperCase() === doc)) return '';
-  const v = calCounts('sim', { c: '', r: '', a: rec.id }).get(rec.sim), k = str(rec.hn), rn = v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0;
+  const l = simLim(), old = state.appt.find(x => x.id === rec.id), doc = str(rec.doc).toUpperCase(), room = str(rec.room), hol = holidayMap();
+  if (!isDay(rec.sim) || !room || (!l.room && !l.doc)) return '';
+  const cbs = l.room ? simCbDays(rec, hol).filter(d => d !== rec.sim) : [];
+  if (old && old.sim === rec.sim && old.room === room && str(old.doc).toUpperCase() === doc && (!l.room || simCbDays(old, hol).filter(d => d !== old.sim).join() === cbs.join())) return '';
+  const counts = calCounts('sim', { c: '', r: '', a: rec.id, hn: rec.hn }), k = str(rec.hn);
+  const rnOf = d => { const v = counts.get(d); return v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0; }, rn = rnOf(rec.sim);
   if (l.room && rn >= l.room) return `Start RT ${fmtDay(rec.sim)} ห้อง ${roomLabel(room)} เต็มแล้ว (ผู้ป่วยใหม่ ${rn}/${l.room} คน) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
+  const cbFull = cbs.find(d => rnOf(d) >= l.room);
+  if (cbFull) return `วันทำ CBCT ${fmtDay(cbFull)} ห้อง ${roomLabel(room)} เต็มแล้ว (ผู้ป่วยใหม่ ${rnOf(cbFull)}/${l.room} คน · วันทำ CBCT นับเป็นผู้ป่วยใหม่) · เลือกวัน Start RT หรือห้องอื่น หรือเปลี่ยนรูปแบบ CBCT`;
   const o = l.doc && doc ? simDocOver({ ...rec, room, doc }, roomLoad(rec.id)) : null;
   if (o) return `แพทย์ ${doc} จะมีผู้ป่วยในห้อง ${roomLabel(room)} ${o.n + 1} คน วันที่ ${fmtDay(o.d)} (สูงสุด ${l.doc}) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
   return '';
@@ -6016,11 +6112,14 @@ apForm.addEventListener('change', e => {
   if (e.target.id === 'a-oncall-ct' && e.target.checked) $('#a-oncall').checked = true;
   if (e.target.id === 'a-oncall' || e.target.id === 'a-oncall-ct') syncApForm();
   if (e.target.dataset.ord === 'immob') renderApVac(chipValue($('#a-vac')) || str(apOrder.vac));
+  if (e.target.id === 'a-cbct') $('#a-cbct').dataset.auto = '';   // เลือกรูปแบบ CBCT เอง
+  syncApCbct();
 });
 // พิมพ์ในช่องเติมคำ = ติ๊กข้อนั้นให้ (NPO, Control Bladder, Other) · IV ml / Flow Rate = CT แบบ CM (ถ้ายังไม่ได้เลือก)
 apForm.addEventListener('input', e => {
   doseInput(e); clearMissing(e);
   const el = e.target;
+  if (['a-hn', 'a-fx', 'a-sim', 'a-cbfx'].includes(el.id)) syncApCbct();
   if (!str(el.value)) return;
   const box = el.matches('.ord-fill[data-fill]') ? $('input[type="checkbox"]', el.closest('label')) : el.id === 'a-exam-other-t' ? $('#a-exam-other') : el.id === 'a-immob-other-t' ? $('#a-immob-other') : null;
   if (box) box.checked = true;
@@ -11084,6 +11183,56 @@ async function srcPullNow(key, btn) {
     renderSettings();
   } catch (e) { btn.disabled = false; toast('ดึงไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
+// ตั้งค่า → ลงนัด: CBCT ระหว่างฉายของเทคนิคพิเศษ (นับวันทำ CBCT เป็นผู้ป่วยใหม่ · รูปแบบเริ่มต้นของแต่ละเทคนิค)
+function cbctSec(d) {
+  const c = d.appt.cbct, pats = CBCT_PATS.filter(([k]) => k !== 'custom');
+  return `<h3 class="sub-h" id="cbct-sec">เทคนิคพิเศษ: CBCT ระหว่างฉาย</h3>
+      <label class="check" style="margin:0 0 8px"><input type="checkbox" data-k="appt.cbct.on"${c.on ? ' checked' : ''}> นับวันทำ CBCT เป็นผู้ป่วยใหม่ 1 คนในปฏิทิน Start RT (ห้องที่ฉายวันนั้น · ลิมิตผู้ป่วยใหม่ต่อห้องนับด้วย)</label>
+      <div class="table-wrap set-table"><table><thead><tr><th style="text-align:left">เทคนิคพิเศษ</th><th style="text-align:left">รูปแบบ CBCT เริ่มต้น</th></tr></thead><tbody>${d.appt.specials.map(x => `<tr><td style="text-align:left">${spTags([x])}</td><td style="text-align:left"><select data-cbdef="${esc(x)}" aria-label="รูปแบบ CBCT เริ่มต้นของ ${esc(x)}">${pats.map(([k, l]) => opt(k, l, c.def[x] || cbctTechDef(x))).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <p class="muted def-note" style="margin:6px 0 12px">ฟอร์มลงนัด: เลือกเทคนิคพิเศษแล้วมีช่อง CBCT ระหว่างฉาย (เริ่มต้นตามตารางนี้ · เลือกรูปแบบอื่นหรือกำหนด Fx เองได้) และเห็นวันทำ CBCT ตาม Start RT, Fx, ความถี่ · เลือกหลายเทคนิค = รูปแบบที่ทำ CBCT บ่อยกว่า · สัปดาห์ละครั้ง = Fx แรกของแต่ละสัปดาห์ (เหมือนระบบนัดคิวเทคนิคพิเศษ) · วันเริ่มฉายนับเป็นผู้ป่วยใหม่อยู่แล้ว ไม่นับซ้ำ · รายการ CT-SIM และเคสใช้รูปแบบของนัดที่ผูกกัน ไม่มีนัด = รูปแบบเริ่มต้นของเทคนิค (Technique, Note) · เทคนิคที่เพิ่มใหม่: กดบันทึกการตั้งค่าแล้วจึงตั้งรูปแบบได้</p>`;
+}
+// ตั้งค่า → ลงนัด: นำเข้านัดจากระบบนัดคิวเทคนิคพิเศษ (Code.gs spqCheck / spqPull)
+function spqStatusHtml(st) {
+  if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
+  if (!st.ok) return `<span class="acct-warn">ดึงล่าสุด ${esc(stampText(st.at))} ไม่สำเร็จ: ${esc(st.error)}</span>`;
+  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.why ? ` (${esc(st.why)})` : ''} · แท็บ ${esc(st.tab)} · นัดในระบบนัด ${st.rows || 0} · <b>HN ตรงกับในระบบ ${st.matched || 0} (นำเข้า)</b> · ไม่พบ HN ในระบบ ${st.unmatched || 0} (ไม่นำเข้า)${st.old ? ` · ฉายจบเกิน 120 วัน ${st.old} (ไม่นำเข้า)` : ''}`;
+}
+function spqSec(d) {
+  const b = d.appt.spq, saved = state.config.appt.spq, chk = state.spqChk, local = store.mode === 'local', api = local || spqOn(), pv = chk && chk.preview;
+  const ready = !local && api && !!saved.url;
+  const chkHtml = pv ? `<p class="br-preview">ชีต <b>${esc(chk.title)}</b> · แท็บ ${esc(chk.tab)} · นัด ${pv.rows} รายการ${pv.first ? ` (เริ่มฉาย ${esc(fmtDayY(pv.first))} – ${esc(fmtDayY(pv.last))})` : ''} · <b>HN ตรงกับในระบบ ${pv.matched}</b> · ไม่พบ HN ในระบบ ${pv.unmatched}${pv.old ? ` · ฉายจบเกิน 120 วัน ${pv.old}` : ''}${pv.techs ? `<br>เทคนิค: ${esc(Object.entries(pv.techs).map(([k, n]) => `${k} ${n}`).join(', '))}` : ''} · วันทำ CBCT ของนัดที่นำเข้า ${pv.cbct || 0} วัน</p>`
+    : chk && chk.missing && chk.missing.length ? `<p class="br-preview acct-warn">แท็บ ${esc(chk.tab)} ไม่มีคอลัมน์ ${esc(chk.missing.join(', '))} · ต้องเป็นชีตของระบบนัดคิวเทคนิคพิเศษ (แท็บ นัดเทคนิคพิเศษ)</p>`
+    : '<p class="muted">กด "ตรวจชีต" เพื่อดูจำนวนนัดและ HN ที่ตรงกับในระบบ (ยังไม่นำเข้า)</p>';
+  return `<h3 class="sub-h" id="spq-sec">นำเข้านัดจากระบบนัดคิวเทคนิคพิเศษ</h3>
+      <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบนัดคิวเทคนิคพิเศษ (แท็บ นัดเทคนิคพิเศษ) แล้ว<b>นำเข้าเฉพาะนัดที่ HN มีในระบบนี้แล้ว</b> (ลงทะเบียน ลงนัด CT-SIM เคส ฯลฯ) มาไว้ที่แท็บ SpecialQueue · ไม่แก้ข้อมูลเดิม: ปฏิทิน Start RT จับคู่ด้วย HN และช่วงวันฉาย → นับเป็นเทคนิคพิเศษ และวันทำ CBCT ตามระบบนัด (รวมวันทำ CBCT ก่อนเริ่มฉาย) นับเป็นผู้ป่วยใหม่ของห้องนั้น · นัดที่ไม่ตรงกับนัดหรือเคสไหน นับที่ "ไม่ระบุห้อง" · ระบบนัดแก้หรือลบนัด = ดึงครั้งถัดไปแก้ตาม · ดึงเองทุก 10 นาทีเมื่อมีคนเปิดหน้าเว็บ (และตัวตั้งเวลา brachyTick ถ้าตั้งไว้)</p>
+      ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>มีนัดที่นำเข้าสมมติ 1 รายการ (HN 999000302 · DIBH) · ดึงจริงได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>นำเข้านัดเทคนิคพิเศษต้องใช้ Code.gs รุ่น 2026-11-09.3 ขึ้นไป</span></p>' : ''}
+      <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="appt.spq.on"${b.on ? ' checked' : ''}> นำเข้าอัตโนมัติ</label>
+      <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์ Google Sheet ของระบบนัดคิวเทคนิคพิเศษ <span class="sub-lbl">docs.google.com/spreadsheets/d/… · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดชีตนั้นได้ (แชร์ให้อย่างน้อยดูได้)</span></span>
+        <span class="br-url" style="display:flex;gap:8px"><input data-k="appt.spq.url" value="${esc(b.url)}" placeholder="docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์ชีตระบบนัดคิวเทคนิคพิเศษ"><button type="button" class="btn ghost" data-spqchk${local || !api ? ' disabled' : ''}>ตรวจชีต</button></span></div>
+      <div id="spq-chk">${chkHtml}</div>
+      <p class="br-status" id="spq-status">${spqStatusHtml(state.spqSync)}</p>
+      <div class="mem-bar"><button type="button" class="btn ghost" data-spqpull${ready ? '' : ' disabled'}>ดึงตอนนี้</button><span class="muted">${!saved.url ? 'ใส่ลิงก์ชีตแล้วกดบันทึกการตั้งค่าก่อน' : saved.on ? 'ดึงเองทุก 10 นาทีเมื่อมีคนเปิดหน้าเว็บ · ปุ่มนี้ดึงทันที' : 'ยังไม่เปิดนำเข้าอัตโนมัติ: กดปุ่มนี้เพื่อดึงครั้งเดียว'}</span></div>`;
+}
+async function spqCheckRun(btn) {
+  btn.disabled = true;
+  try {
+    state.spqChk = await store.spqCheck(clone(draft.appt.spq));
+    renderSettings();
+    updateSaveBar();
+  } catch (e) { btn.disabled = false; toast('ตรวจชีตไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+const spqDoneMsg = st => (st.ok ? `นำเข้านัดเทคนิคพิเศษแล้ว · HN ตรงกับในระบบ ${st.matched} นัด · ไม่พบ HN ในระบบ ${st.unmatched}` : `นำเข้านัดเทคนิคพิเศษไม่สำเร็จ: ${st.error}`);
+async function spqPullNow(btn) {
+  btn.disabled = true;
+  try {
+    const st = await store.spqPull(true);
+    state.spqSync = st;
+    toast(spqDoneMsg(st), st.ok ? undefined : { err: true });
+    await refresh(true);
+    if (state.view === 'settings') renderSettings();
+  } catch (e) { toast('นำเข้านัดเทคนิคพิเศษไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  btn.disabled = false;
+}
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (ตั้งค่า → ลงทะเบียน)
 const minText = m => (m % 1440 === 0 ? `${m / 1440} วัน` : m % 60 === 0 ? `${m / 60} ชั่วโมง` : `${m} นาที`);
 // HN ที่มีในระบบแล้ว (ไม่ดึง) · inSys = มีในแถบอื่น (เคส CT-SIM นัด ฯลฯ) แต่ยังไม่ได้ลงทะเบียน
@@ -11428,7 +11577,9 @@ function renderSettings() {
       </div>
       <p class="muted def-note" style="margin:-4px 0 12px">ใช้กับปฏิทินทุกฟอร์ม (แจกเคส แก้ไขเคส CT-SIM ลงนัด) · ช่องที่ปิดยังดูได้ในบรรทัดใต้ปฏิทินเมื่อชี้หรือเลือกวัน · ลายขีดแดง (วันเต็ม) แสดงเสมอ</p>
       <label class="check" style="margin:10px 0 4px"><input type="checkbox" data-k="appt.emergOver"${isOnV(d.appt.emergOver) ? ' checked' : ''}> เคส <b>Emergency</b> ลงเกินลิมิตได้ (แจ้งเตือนแต่ไม่ห้าม)</label>
-      <p class="muted def-note" style="margin:0 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
+      ${cbctSec(d)}
+      ${spqSec(d)}
+      <p class="muted def-note" style="margin:12px 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
       <h3 class="sub-h">ฟอร์มลงนัด</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN และวันนัด CT-Sim บังคับเสมอ (ติ๊ก on call = ยังไม่มีวันนัด · ใบสั่งเป็น No appointment) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ช่องที่มีคำว่า (ใบสั่ง) ใช้ในใบสั่ง CT Simulation (เริ่มต้นไม่แสดง · ช่องที่ไม่ได้กรอกเว้นว่างในใบสั่งให้เขียนเอง) · Draw area = ลากขอบเขตที่จะทำ CT บนรูปในใบสั่ง · ห้องฉาย: เลือกห้องในปฏิทิน Start RT แล้วกดวันที่ = ตั้งห้องให้ด้วย · ลงข้อมูล CT-SIM จากนัด: ใส่ HN ชื่อ แพทย์ Diag Prescription Start RT ห้องฉาย และเทคนิคพิเศษที่ตรงกับ Technique ให้ (ที่เหลือต่อหน้า Note)</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${APPT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'doc' && d.appt.limits.doc ? '<small class="muted"> · แสดงเสมอเมื่อมีลิมิต CT-Sim ต่อแพทย์</small>' : ''}</td><td><select data-k="appt.form.${k}" aria-label="${esc(l)} ในฟอร์มลงนัด">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -14045,6 +14196,8 @@ document.addEventListener('click', e => {
   if (ds.srcpull) return srcPullNow(ds.srcpull, t);
   if (ds.rdchk !== undefined) return rdCheckRun(t);
   if (ds.rdpull !== undefined) return rdPullNow(t);
+  if (ds.spqchk !== undefined) return spqCheckRun(t);
+  if (ds.spqpull !== undefined) return spqPullNow(t);
   if (ds.add === 'crew') { draft.crew.push({ name: '', role: draft.dutyRoles.rtt[0] || 'RTT', active: true, user: '', email: '' }); renderSettings(); $$('[data-k^="crew."][data-k$=".name"]').pop().focus(); return; }
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
@@ -14165,7 +14318,7 @@ let calBox = null, calMonth = '', calData = null, calAt = 0, calRoom = '', calFu
 for (const id of Object.keys(CAL_BOXES)) { const el = $('#' + id); el.classList.add('dpk-box'); if (coarse) el.readOnly = true; }
 // รายการที่กำลังแก้: หน้าแก้ไขเคส = เคสนั้น · ฟอร์ม CT-SIM = รายการนั้น (และนัดที่ใส่มา) · ฟอร์มลงนัด = นัดนั้น · ฟอร์มแจกเคส = รายการ CT ที่ดึงมาใส่
 const calSkip = el => (el.id[0] === 'f' ? { c: editingCase && editingCase.id, r: '', a: '' } : el.id[0] === 't' ? { c: '', r: editingCt && editingCt.id, a: ctAppt }
-  : el.id[0] === 'a' ? { c: '', r: '', a: editingAp && editingAp.id } : { c: '', r: intakeCt, a: '' });
+  : el.id[0] === 'a' ? { c: '', r: '', a: editingAp && editingAp.id, hn: str($('#a-hn').value) } : { c: '', r: intakeCt, a: '' });
 // เทคนิคพิเศษที่อยู่ในข้อความ (Technique, Note, รายละเอียดผู้ป่วย): ตรงทั้งคำ ไม่สนตัวพิมพ์ · ชื่อที่มีเว้นวรรคหรือเครื่องหมาย = มีข้อความนั้น
 function spFinder() {
   const list = state.config.appt.specials;
@@ -14175,16 +14328,65 @@ function spFinder() {
     return list.filter(x => spParts(x).some(v => (/^[a-z0-9]+$/.test(v) ? words.has(v.toUpperCase()) : t.includes(v.toUpperCase()))));
   };
 }
+/* ---------- เทคนิคพิเศษ: CBCT ระหว่างฉาย (ปฏิทิน Start RT นับวันทำ CBCT เป็นผู้ป่วยใหม่ 1 คนของห้องนั้น) ---------- */
+// รูปแบบเริ่มต้นของเทคนิคพิเศษที่เลือก (ตั้งค่า → ลงนัด) · หลายเทคนิค = รูปแบบที่ทำ CBCT บ่อยกว่า
+function cbctDefault(sp) {
+  const def = state.config.appt.cbct.def, ps = sp.map(x => def[x] || cbctTechDef(x));
+  return CBCT_RANK.find(p => ps.includes(p)) || 'first3_weekly';
+}
+const weekOf = d => plusDays(d, -parseISO(d).getDay());   // สัปดาห์เริ่มวันอาทิตย์ (เหมือนระบบนัดคิวเทคนิคพิเศษ)
+const cbctFxList = t => [...new Set(str(t).split(/[^0-9]+/).filter(Boolean).map(Number).filter(n => n >= 1 && n <= 200))].sort((a, b) => a - b);
+// วันทำ CBCT จากวันฉาย (เรียงตามวัน · Fx ที่ = ลำดับวันฉาย) ตามรูปแบบ · สัปดาห์ละครั้ง = Fx แรกของแต่ละสัปดาห์
+function cbctDays(pat, days, fxText) {
+  const n = days.length, all = days.map((_, i) => i + 1);
+  let fx = pat === 'daily' ? all : pat === 'first' ? [1] : pat === 'dibh' ? [1, 2, 3, 6, 11] : pat === 'custom' ? cbctFxList(fxText) : [];
+  if (pat === 'weekly' || pat === 'first3_weekly') {
+    fx = pat === 'first3_weekly' ? [1, 2, 3].filter(f => f <= n) : [];
+    const wk = new Set(fx.map(f => weekOf(days[f - 1])));
+    for (const f of all) { const w = weekOf(days[f - 1]); if (!wk.has(w)) { wk.add(w); fx.push(f); } }
+  }
+  return [...new Set(fx.filter(f => f >= 1 && f <= n).map(f => days[f - 1]))].sort();
+}
+// รูปแบบของนัด: ที่เลือกในฟอร์ม (เก็บในใบสั่ง) · ไม่ได้เลือก = รูปแบบเริ่มต้นของเทคนิคพิเศษ
+const apCbPat = (a, sp) => { const o = a ? parseOrder(a.order) : {}; return cbctPatOk(o.cbct) ? { pat: o.cbct, fx: str(o.cbctFx) } : { pat: cbctDefault(sp), fx: '' }; };
+// นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ ตาม HN (ไม่สนช่องว่าง ขีด และเลข 0 นำหน้า) · คอร์สเดียวกัน = Start RT อยู่ในช่วงวันฉายของนัดนั้น หรือห่างจากวันเริ่มไม่เกิน 30 วัน
+const hnLoose = v => { const t = str(v).replace(/[\s\-\/.]/g, '').toUpperCase(); return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, '') : t; };
+function spqIndex() {
+  const m = new Map();
+  for (const b of state.spq) { const k = hnLoose(b.hn); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }
+  return m;
+}
+const dayGap = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 864e5);
+const spqMatch = (idx, hn, start) => { const l = isDay(start) && hnLoose(hn) && idx.get(hnLoose(hn)); return l ? l.find(b => (start >= b.start && start <= b.end) || Math.abs(dayGap(b.start, start)) <= 30) || null : null; };
+// วันทำ CBCT ของนัด (รวมวันเริ่มฉาย) · b = นัดที่นำเข้าที่ตรงกัน: วันของระบบนัด
+function apCbctDays(a, hol, b) {
+  if (b) return b.cbct.slice();
+  const sp = splitList(a.special);
+  if (!sp.length || !isDay(a.sim)) return [];
+  const p = apCbPat(a, sp);
+  return p.pat === 'none' ? [] : cbctDays(p.pat, apFxDays(a, hol), p.fx);
+}
+// วันทำ CBCT ของนัดที่จะลง (ใช้ตรวจลิมิตต่อห้อง) · ปิดการนับในตั้งค่า = ไม่มี
+const simCbDays = (rec, hol) => (state.config.appt.cbct.on && isDay(rec.sim) ? apCbctDays(rec, hol, spqMatch(spqIndex(), rec.hn, rec.sim)) : []);
+// วันฉายของรายการ CT-SIM ที่รอแจก (Start RT, Fx, ความถี่ · เหมือนแถว "รอ Plan complete" ในตารางวันฉาย)
+function ctFxDays(r, hol) {
+  try {
+    const v = ctToIntake(r), c = normCase({ ...v, id: 'ct:tmp', cat: v.cats[0] || '', in: r.date, created: r.created }), sc = isDay(c.sim) ? courseSched(c, hol) : null;
+    const days = sc ? [...sc.fx.keys()].filter(d => d >= r.sim).sort() : [];
+    return days.length ? days : [r.sim];
+  } catch (e) { return [r.sim]; }
+}
 function calCounts(kind, skip) {
   const m = new Map(), recs = ctOn() ? state.ct.filter(r => r.id !== skip.r) : [], aps = apWaiting().filter(a => a.id !== skip.a);
-  const add = (d, x, grp, sp, doc) => {
+  const add = (d, x, grp, sp, doc, cb) => {   // cb = วันทำ CBCT (ไม่ใช่วันเริ่มฉาย)
     if (!isDay(d)) return;
     const k = str(x.hn) || 'id:' + x.id;
     let v = m.get(d);
-    if (!v) m.set(d, v = { n: 0, sp: 0, keys: new Set(), by: new Map(), spBy: new Map(), doc: new Map(), rd: new Map(), who: [] });
+    if (!v) m.set(d, v = { n: 0, sp: 0, cb: 0, keys: new Set(), by: new Map(), spBy: new Map(), cbBy: new Map(), doc: new Map(), rd: new Map(), who: [] });
     if (v.keys.has(k)) return;
     v.keys.add(k); v.n++;
     v.by.set(grp, (v.by.get(grp) || 0) + 1);
+    if (cb) { v.cb++; v.cbBy.set(grp, (v.cbBy.get(grp) || 0) + 1); }
     if (doc) {   // จำนวนคนของแพทย์แต่ละคน (ทั้งวัน และแยกตามห้อง / เครื่อง)
       v.doc.set(doc, (v.doc.get(doc) || 0) + 1);
       let rm = v.rd.get(grp);
@@ -14192,7 +14394,7 @@ function calCounts(kind, skip) {
       rm.set(doc, (rm.get(doc) || 0) + 1);
     }
     if (sp && sp.length) { v.sp++; v.spBy.set(grp, (v.spBy.get(grp) || 0) + 1); }
-    v.who.push([grp, ([x.hn, x.name].filter(Boolean).join(' ') || '—') + (sp && sp.length ? ` (${sp.join(', ')})` : '')]);
+    v.who.push([grp, ([x.hn, x.name].filter(Boolean).join(' ') || '—') + (sp && sp.length ? ` (${sp.join(', ')}${cb ? ' · CBCT' : ''})` : '')]);
   };
   const cases = state.cases.filter(c => c.id !== skip.c), dk = x => str(x.doc).toUpperCase();
   if (kind === 'ct') {
@@ -14202,13 +14404,47 @@ function calCounts(kind, skip) {
   } else {
     // เคสใหม่: ไม่นับงานวางแผนใหม่ (Re-CT, ย้ายห้อง) งานแบบไม่วางแผน และเคสที่ Cancel RT ก่อนเริ่มฉาย · รวมรายการ CT-SIM ที่รอ MP แจก และนัดที่ยังไม่ลง CT-SIM
     // เทคนิคพิเศษ: นัด = ที่เลือกไว้ · รายการ CT และเคส = Technique, Note (รายละเอียดผู้ป่วยของเคส) และนัดที่ผูกกัน (นัด → CT → เคส)
-    const spIn = spFinder(), apOf = new Map(), ctOf = new Map();
+    // CBCT (ตั้งค่า → ลงนัด): ผู้ป่วยเทคนิคพิเศษนับเป็นผู้ป่วยใหม่อีกในวันทำ CBCT (นอกจากวันเริ่มฉาย) ห้องที่ฉายวันนั้น · รูปแบบจากนัด (นัด → CT → เคส) หรือรูปแบบเริ่มต้นของเทคนิค
+    // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ (HN และช่วงวันตรงกัน): นับเป็นเทคนิคพิเศษ · วัน CBCT ตามระบบนัด · ไม่ตรงกับนัด / รายการ CT / เคสไหน = นับที่ "ไม่ระบุห้อง"
+    const spIn = spFinder(), apOf = new Map(), ctOf = new Map(), hol = holidayMap(), cbOn = state.config.appt.cbct.on, idx = spqIndex(), used = new Set(), old = plusDays(today(), -120);
     for (const a of state.appt) if (a.took && a.took !== 'skip') apOf.set(a.took, a);
     for (const r of state.ct) if (r.took && r.took !== 'skip') splitList(r.took).forEach(id => ctOf.set(id, r));
     const spOf = (x, ctRec) => { const a = ctRec && apOf.get(ctRec.id); return [...new Set([...spIn([x.tech, x.note, x.ptags].join(' ')), ...(ctRec ? splitList(ctRec.special) : []), ...(a ? splitList(a.special) : [])])]; };
-    for (const c of cases) if (catOf(c.cat).kind !== 'simple' && !c.replan && !(c.rt === 'cancel' && c.rtDate && c.rtDate <= c.sim)) add(c.sim, c, roomOf(c), spOf(c, ctOf.get(c.id)), dk(c));
-    for (const r of recs) if (ctState(r) === 'wait') add(r.sim, r, r.room || NO_ROOM, spOf(r, r), dk(r));
-    for (const a of aps) add(a.sim, a, a.room || NO_ROOM, splitList(a.special), dk(a));
+    const withB = (sp, b) => (b ? [...new Set([...sp, b.tech])] : sp);
+    const cbAdd = (x, start, days, roomAt, sp, doc) => { if (cbOn && sp.length) for (const d of days) if (d !== start) add(d, x, roomAt(d), sp, doc, true); };
+    for (const c of cases) {
+      if (catOf(c.cat).kind === 'simple' || c.replan || (c.rt === 'cancel' && c.rtDate && c.rtDate <= c.sim)) continue;
+      const ctRec = ctOf.get(c.id), b = spqMatch(idx, c.hn, c.sim), sp = withB(spOf(c, ctRec), b);
+      if (b) used.add(b);
+      add(c.sim, c, roomOf(c), sp, dk(c));
+      if (!cbOn || !sp.length || !isDay(c.sim) || c.sim < old) continue;
+      if (b) { cbAdd(c, c.sim, b.cbct, () => roomOf(c), sp, dk(c)); continue; }
+      const p = apCbPat(ctRec && apOf.get(ctRec.id), sp), sc = p.pat === 'none' ? null : courseSched(c, hol);
+      if (sc) cbAdd(c, c.sim, cbctDays(p.pat, [...sc.fx.keys()].filter(d => d >= c.sim).sort(), p.fx), d => fxRooms(sc.fx.get(d))[0] || roomOf(c), sp, dk(c));
+    }
+    for (const r of recs) {
+      if (ctState(r) !== 'wait') continue;
+      const b = spqMatch(idx, r.hn, r.sim), sp = withB(spOf(r, r), b), room = r.room || NO_ROOM;
+      if (b) used.add(b);
+      add(r.sim, r, room, sp, dk(r));
+      if (!cbOn || !sp.length || !isDay(r.sim)) continue;
+      const p = b ? null : apCbPat(apOf.get(r.id), sp);
+      cbAdd(r, r.sim, b ? b.cbct : p.pat === 'none' ? [] : cbctDays(p.pat, ctFxDays(r, hol), p.fx), () => room, sp, dk(r));
+    }
+    for (const a of aps) {
+      const b = spqMatch(idx, a.hn, a.sim), sp = withB(splitList(a.special), b), room = a.room || NO_ROOM;
+      if (b) used.add(b);
+      add(a.sim, a, room, sp, dk(a));
+      if (cbOn && isDay(a.sim)) cbAdd(a, a.sim, apCbctDays(a, hol, b), () => room, sp, dk(a));
+    }
+    // นัดที่นำเข้าที่ไม่ตรงกับนัด / รายการ CT / เคสไหน (HN มีในระบบ เช่น ลงทะเบียนแล้ว) = ผู้ป่วยใหม่วันเริ่มฉาย + วันทำ CBCT ที่ "ไม่ระบุห้อง" · HN ที่กำลังลงนัดในฟอร์มไม่นับ
+    const skipK = skip.hn ? hnLoose(skip.hn) : '';
+    for (const b of state.spq) {
+      if (used.has(b) || b.end < old || (skipK && hnLoose(b.hn) === skipK)) continue;
+      const rg = state.reg.find(r => hnLoose(r.hn) === hnLoose(b.hn)), x = { id: 'spq:' + b.id, hn: b.hn, name: rg ? rg.name : '' };
+      add(b.start, x, NO_ROOM, [b.tech], '');
+      cbAdd(x, b.start, b.cbct, () => NO_ROOM, [b.tech], '');
+    }
   }
   return m;
 }
@@ -14224,14 +14460,14 @@ function calSimBadge(c) {
   const l = simLim().room, one = calRoom && calRoom !== NO_ROOM, lim = !l ? 0 : one ? l : l * state.config.rooms.length;
   return { html: lim ? `${c.n}<small>/${lim}</small>` : `${c.n}`, full: !!lim && c.n >= lim };
 }
-const calSpText = (kind, v) => (kind === 'sim' && v ? ` · เทคนิคพิเศษ ${v.sp} · เทคนิคอื่นๆ ${v.n - v.sp}` : '');
+const calSpText = (kind, v) => (kind === 'sim' && v ? ` · เทคนิคพิเศษ ${v.sp} · เทคนิคอื่นๆ ${v.n - v.sp}${v.cb ? ` · รวมวันทำ CBCT ${v.cb}` : ''}` : '');
 const calGrp = (g, kind) => (kind === 'sim' ? roomLabel(g) : g);   // Start RT แยกตามห้อง (เก็บเป็นชื่อห้อง) · CT แยกตามเครื่อง
 // ตัวเลขของวัน: ทุกห้อง หรือเฉพาะห้องที่เลือกในปฏิทิน { n, all, by, who }
 function calOf(v) {
   if (!v) return null;
-  if (!calRoom) return { n: v.n, sp: v.sp, all: v.n, by: v.by, doc: v.doc, who: v.who.map(w => w[1]) };
+  if (!calRoom) return { n: v.n, sp: v.sp, cb: v.cb, all: v.n, by: v.by, doc: v.doc, who: v.who.map(w => w[1]) };
   const n = v.by.get(calRoom) || 0;
-  return n ? { n, sp: v.spBy.get(calRoom) || 0, all: v.n, by: new Map([[calRoom, n]]), doc: v.rd.get(calRoom) || new Map(), who: v.who.filter(w => w[0] === calRoom).map(w => w[1]) } : null;
+  return n ? { n, sp: v.spBy.get(calRoom) || 0, cb: v.cbBy.get(calRoom) || 0, all: v.n, by: new Map([[calRoom, n]]), doc: v.rd.get(calRoom) || new Map(), who: v.who.filter(w => w[0] === calRoom).map(w => w[1]) } : null;
 }
 const calBy = (v, kind) => (calRoom ? (v.all > v.n ? ` (ทุกห้อง ${v.all})` : '') : v.by.size > 1 ? ` (${[...v.by].map(([g, n]) => `${calGrp(g, kind)} ${n}`).join(' · ')})` : ` (${calGrp([...v.by.keys()][0], kind)})`);
 const calWhatIn = kind => calWhat(kind) + (calRoom ? ` ห้อง ${roomLabel(calRoom)}` : '');
@@ -14262,7 +14498,7 @@ function calInfo(d) {
   if (!d) return `<span>เลือกวัน · ชี้ที่วันเพื่อดูรายชื่อ</span>`;
   const raw = counts.get(d), v = calOf(raw), dt = parseISO(d), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
   const ld = kind === 'sim' && calData.load && !hol[d] && isWeekday(d) ? calData.load(d) : null, lq = ld && ld.all ? `<div class="dpk-load">โควตารวมวันนั้น <b${calData.lim && ld.q > calData.lim ? ' class="over"' : ''}>${ld.q}</b> (ผู้ป่วยทั้งหมด ${ld.all} คน · เทคนิคพิเศษ ${ld.sp})${calData.lim && ld.q > calData.lim ? ` · เกิน ${calData.lim}` : ''}</div>` : '';
-  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${kind === 'sim' && v ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${v.sp}</span> · เทคนิคอื่นๆ ${v.n - v.sp}` : ''}${esc(v ? calBy(v, kind) : rest)}`
+  return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${kind === 'sim' && v ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${v.sp}</span> · เทคนิคอื่นๆ ${v.n - v.sp}${v.cb ? ` · <span class="dpk-cb">รวมวันทำ CBCT ${v.cb}</span>` : ''}` : ''}${esc(v ? calBy(v, kind) : rest)}`
     + (v ? `<div class="dpk-who" title="${esc(v.who.join(', '))}">${esc(v.who.slice(0, 6).join(', '))}${v.who.length > 6 ? ` และอีก ${v.who.length - 6} คน` : ''}</div>` : '') + lq + (kind === 'ct' ? calCtLoad(v, calData.doc) : !hol[d] && isWeekday(d) ? calSimLoad(raw, d, calData.room, calData.doc) : '');
 }
 // CT: ลิมิตของวัน + แพทย์แต่ละคน (แพทย์ที่เลือกในฟอร์ม: ยังลงได้ไหม)
@@ -14299,8 +14535,20 @@ function simFullDay(raw, d, room, doc) {
   const l = simLim();
   if (!room) return false;
   if (l.room && room !== NO_ROOM && raw && (raw.by.get(room) || 0) >= l.room) return true;
+  if (l.room && room !== NO_ROOM && calData.apRec && simCbFull(calData.apRec, d, room)) return true;   // วันทำ CBCT ของนัดนี้เต็ม
   if (!doc || !l.doc || room === NO_ROOM) return false;
   return calData.apRec ? !!simDocOver({ ...calData.apRec, sim: d, room, doc }, calData.L) : (calData.L.at(room, d).doc.get(doc) || 0) >= l.doc;
+}
+// ฟอร์มลงนัด (เทคนิคพิเศษ): เริ่มวัน d แล้ววันทำ CBCT วันแรกที่ห้องนั้นรับผู้ป่วยใหม่ครบแล้ว { d, n } · ไม่มี = null
+function simCbFull(rec, d, room) {
+  const l = simLim().room, k = str(rec.hn);
+  if (!l || !room || room === NO_ROOM) return null;
+  for (const x of simCbDays({ ...rec, sim: d, room }, calData.hol)) {
+    if (x === d) continue;
+    const v = calData.counts.get(x), n = v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0;
+    if (n >= l) return { d: x, n };
+  }
+  return null;
 }
 // รายละเอียดใต้ปฏิทิน: ทุกห้อง (ผู้ป่วยใหม่/ลิมิต · ผู้ป่วยที่ฉายอยู่ของแพทย์/ลิมิต) + ห้องและแพทย์ที่เลือกในฟอร์ม
 function calSimLoad(raw, d, mineRoom, mineDoc) {
@@ -14318,7 +14566,11 @@ function calSimLoad(raw, d, mineRoom, mineDoc) {
     me = `ห้อง ${esc(roomLabel(mineRoom))} (ในฟอร์ม)${l.room ? ` ใหม่ <b${n >= l.room ? ' class="over"' : ''}>${n}/${l.room}</b>${n >= l.room ? ' เต็ม' : ` ว่าง ${l.room - n}`}` : ''}`
       + (mineDoc && l.doc ? ` · แพทย์ ${esc(mineDoc)} ในห้องนี้ <b${dn >= l.doc || o ? ' class="over"' : ''}>${dn}/${l.doc}</b>${o ? ` · เริ่มวันนี้จะเกินวันที่ ${esc(fmtDay(o.d))} (${o.n + 1} คน)` : dn >= l.doc ? ' เต็ม' : ''}` : '');
   }
-  return (parts.length ? `<div class="dpk-load">${parts.join(' · ')}</div>` : '') + (me ? `<div class="dpk-load">${me}</div>` : '');
+  // ฟอร์มลงนัด (เทคนิคพิเศษ): เริ่มวันนี้แล้วทำ CBCT วันไหน · วันที่ห้องในฟอร์มเต็มแล้ว
+  const ar = calData.apRec, cbs = ar ? simCbDays({ ...ar, sim: d, room: mineRoom || ar.room }, calData.hol).filter(x => x !== d) : [];
+  const cf = cbs.length && mineRoom ? simCbFull(ar, d, mineRoom) : null;
+  const cbLine = cbs.length ? `<div class="dpk-load">เริ่มวันนี้ ทำ CBCT อีก ${cbs.length} วัน: ${esc(cbs.slice(0, 8).map(fmtDay).join(', '))}${cbs.length > 8 ? ' …' : ''}${cf ? ` · <b class="over">${esc(fmtDay(cf.d))} ห้อง ${esc(roomLabel(mineRoom))} เต็ม (${cf.n}/${simLim().room})</b>` : ''}</div>` : '';
+  return (parts.length ? `<div class="dpk-load">${parts.join(' · ')}</div>` : '') + (me ? `<div class="dpk-load">${me}</div>` : '') + cbLine;
 }
 // ผู้ป่วยที่ฉายอยู่ในห้องแต่ละวัน (นับเหมือนผู้ป่วยทั้งหมดในตารางวันฉาย: ใหม่ + ฉายต่อเนื่อง · แต่ละบริเวณ / รอบ BID = 1 · รวมนัดที่รอ CT-Sim และรายการ CT-SIM ที่รอแจก)
 // ใช้กับลิมิตต่อแพทย์ต่อห้อง · skipAp = นัดที่กำลังแก้ (ไม่นับตัวเอง) · จำผลรายห้องรายวันไว้
@@ -14675,6 +14927,8 @@ function settingsEdit(el) {
     draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.lines) {   // ตัวเลือกในใบสั่ง CT Simulation: หนึ่งบรรทัดต่อหนึ่งแถว
     setPath(draft, el.dataset.lines, el.value.split('\n').map(x => x.replace(/\s+$/, '')).filter(x => x.trim()));
+  } else if (el.dataset.cbdef !== undefined) {   // รูปแบบ CBCT เริ่มต้นของเทคนิคพิเศษ
+    draft.appt.cbct.def[el.dataset.cbdef] = el.value;
   } else if (el.dataset.fxadjrole !== undefined) {   // ตำแหน่งที่เพิ่ม / ลบ fraction ได้
     draft.fxAdj.roles = $$('[data-fxadjrole]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.rdval !== undefined) {   // ดึงจาก Google Drive: ค่าของคอลัมน์ตัวกรองที่ดึง
@@ -14987,6 +15241,8 @@ async function refresh(quiet) {
     state.brachy = d.brachy || null;
     state.tdf = d.tdf || null;
     state.regDrive = d.regDrive || null;
+    state.spq = (d.spq || []).map(normSpq).filter(b => b.hn && isDay(b.start));
+    state.spqSync = d.spqSync || null;
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     state.cfgReqs = cfgReqsFor(d.cfgReqs || d.cfgreq || [], state.user, d.config || {});
     applyLook();   // ขนาดตัวอักษรและสีของบัญชีนี้
@@ -15030,6 +15286,18 @@ function maybePullBrachy() {
       if ((!prev || st.at !== prev.at) && st.added + st.updated + st.removed > 0) refresh(true);
       else if (state.view === 'settings' && $(`#src-status-${key}`)) $(`#src-status-${key}`).innerHTML = srcStatusHtml(key, st);
     }).catch(() => { /* ดึงไม่ได้ (เช่นเน็ต) ลองใหม่รอบหน้า */ });
+  }
+  // นัดจากระบบนัดคิวเทคนิคพิเศษ (ตั้งค่า → ลงนัด): ดึงครั้งล่าสุดเกิน 10 นาที · นัดที่นำเข้าเปลี่ยน = โหลดข้อมูลใหม่
+  const sq = state.config.appt.spq, sqLast = state.spqSync && Date.parse(state.spqSync.at);
+  if (sq.on && sq.url && spqOn() && !(sqLast && Date.now() - sqLast < 10 * 60000) && Date.now() - (srcAsk.spq || 0) >= 5 * 60000) {
+    srcAsk.spq = Date.now();
+    store.spqPull(false).then(st => {
+      const prev = state.spqSync;
+      if (!st) return;
+      state.spqSync = st;
+      if ((!prev || st.at !== prev.at) && st.ok && st.sig !== (prev && prev.sig)) refresh(true);
+      else if (state.view === 'settings' && $('#spq-status')) $('#spq-status').innerHTML = spqStatusHtml(st);
+    }).catch(() => { /* ดึงไม่ได้ ลองใหม่รอบหน้า */ });
   }
   // ผู้ป่วยจากโฟลเดอร์ Google Drive (แถบลงทะเบียน): คนที่บันทึกในแถบนั้นได้เปิดหน้าเว็บ และดึงครั้งล่าสุดเกินรอบที่ตั้ง
   const rd = state.config.reg.drive, rdLast = state.regDrive && Date.parse(state.regDrive.at);

@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.2';
-const API_LEVEL = 58;
+const CODE_VERSION = '2026-11-09.3';
+const API_LEVEL = 59;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -156,6 +156,15 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['req', 'คำขอ'], ['key', 'ส่วน (คีย์)'], ['value', 'ค่าใหม่ (JSON)'], ['base', 'ค่าตอนส่ง (JSON)'], ['note', 'หมายเหตุ'],
       ['by', 'ผู้ขอ'], ['byUser', 'บัญชีผู้ขอ'], ['at', 'เวลาที่ขอ'], ['status', 'สถานะ'], ['decBy', 'ผู้ตัดสิน'], ['decAt', 'เวลาที่ตัดสิน'], ['why', 'เหตุผล'],
+    ],
+  },
+  // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ (API 59 · ตั้งค่า → ลงนัด): เฉพาะนัดที่ HN มีในระบบนี้ · เขียนผ่าน spqSync_ เท่านั้น (เขียนทับทั้งแท็บเมื่อข้อมูลเปลี่ยน)
+  // cbct = วันทำ CBCT (ระหว่างฉาย + ก่อนเริ่มฉาย) คั่นด้วยจุลภาค · ปฏิทิน Start RT จับคู่กับนัด / เคสด้วย HN และช่วงวันฉาย แล้วนับวันทำ CBCT เป็นผู้ป่วยใหม่
+  spq: {
+    sheet: 'SpecialQueue',
+    fields: [
+      ['id', 'id'], ['hn', 'HN'], ['tech', 'เทคนิค'], ['site', 'ตำแหน่งที่ฉาย'], ['fx', 'จำนวนครั้ง'], ['freq', 'ความถี่'],
+      ['start', 'วันเริ่มฉาย'], ['end', 'วันสิ้นสุดการฉาย'], ['cbct', 'วันทำ CBCT'], ['pattern', 'รูปแบบ CBCT'],
     ],
   },
   vac: {
@@ -326,6 +335,8 @@ function getData(token) {
     bq: need.bq ? recentBq_(ss, config) : [],
     jobs: need.jobs ? jobsFor_(ss, user, config) : [],
     vac: need.vac ? readTable_(ss, 'vac') : [],
+    spq: need.appt || need.ctsim || need.cases ? readTable_(ss, 'spq') : [],   // นัดเทคนิคพิเศษที่นำเข้า (ปฏิทิน Start RT)
+    spqSync: config && config.appt && config.appt.spq && (config.appt.spq.on || user.isAdmin) ? spqStatus_() : null,
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
@@ -370,7 +381,7 @@ function navAccess_(config, view, role) {
 const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -2128,7 +2139,7 @@ const timeOf_ = v => (Object.prototype.toString.call(v) === '[object Date]' ? (i
 //   at: เวลาแรกสุดที่พบในแถบอื่นที่ไม่ใช่ลงทะเบียน (Created หรือวันที่ของรายการ · ไม่มีทั้งคู่ = '' = เก่าสุด · ไม่พบในแถบอื่น = null) }
 // อ่านเฉพาะคอลัมน์ HN, Created และวันที่ของแต่ละชีต
 function hnSeen_(ss) {
-  const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg'));
+  const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg' && t !== 'spq'));   // นัดเทคนิคพิเศษที่นำเข้าไม่นับ (นำเข้าเพราะ HN มีในแถบอื่นอยู่แล้ว)
   order.forEach(t => {
     const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
     const sh = head('hn') ? ss.getSheetByName(def.sheet) : null;
@@ -2733,11 +2744,125 @@ function brachyTick() {
   const ss = ss_(), cfg = readConfig_(ss) || {};
   Object.keys(EXT).forEach(k => { if (cfg[EXT[k].cfg] && cfg[EXT[k].cfg].on) extSync_(ss, cfg, k, 'ตั้งเวลา'); });
   if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');   // ผู้ป่วยจากโฟลเดอร์ Google Drive (ตามรอบที่ตั้ง)
+  if (cfg.appt && cfg.appt.spq && cfg.appt.spq.on && cfg.appt.spq.url) spqSync_(ss, cfg, 'ตั้งเวลา');   // นัดจากระบบนัดคิวเทคนิคพิเศษ
 }
 // ตัวตั้งเวลาเฉพาะการดึงผู้ป่วยจากโฟลเดอร์ Google Drive (ไม่ได้ตั้ง brachyTick ไว้) · Triggers → Add Trigger → regDriveTick → Time-driven
 function regDriveTick() {
   const ss = ss_(), cfg = readConfig_(ss) || {};
   if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');
+}
+
+/* ---------- นำเข้านัดจากระบบนัดคิวเทคนิคพิเศษ (ตั้งค่า → ลงนัด: config.appt.spq = { on, url }) ---------- */
+// อ่านแท็บ "นัดเทคนิคพิเศษ" ของระบบนั้น (หัวคอลัมน์ภาษาไทยตายตัว) → แท็บ SpecialQueue ของระบบนี้ เฉพาะนัดที่ HN มีในระบบแล้ว (ลงทะเบียน นัด CT-SIM เคส ฯลฯ)
+// ไม่แก้ข้อมูลเดิม: หน้าเว็บจับคู่กับนัด / รายการ CT-SIM / เคสด้วย HN และช่วงวันฉาย · นับเป็นเทคนิคพิเศษ และวันทำ CBCT นับเป็นผู้ป่วยใหม่ในปฏิทิน Start RT
+const SPQ_KEYS = {
+  id: ['id'],
+  hn: ['hn'],
+  tech: ['เทคนิค', 'technique'],
+  other: ['เทคนิคอื่นๆ', 'techniqueother'],
+  site: ['ตำแหน่งที่ฉาย', 'site'],
+  fx: ['จำนวนครั้ง', 'fractions'],
+  freq: ['ความถี่ในการฉาย', 'frequency'],
+  start: ['วันเริ่มฉายรังสี', 'startdate'],
+  end: ['วันสิ้นสุดการฉาย', 'enddate'],
+  dates: ['วันฉายทั้งหมด', 'treatmentdates'],
+  cbct: ['วัน CBCT ระหว่างฉาย', 'cbctdates'],
+  verify: ['วันทำ CBCT ก่อนเริ่มฉาย', 'verifydate'],
+  pattern: ['รูปแบบ CBCT ระหว่างฉาย', 'cbctpattern'],
+};
+const SPQ_NEED = ['hn', 'start'];
+const SPQ_LABEL = { hn: 'HN', start: 'วันเริ่มฉายรังสี' };
+const SPQ_TAB = 'นัดเทคนิคพิเศษ';
+const SPQ_PROP = 'SPQ_SYNC';
+const SPQ_KEEP_DAYS = 120;   // นัดที่ฉายจบนานกว่านี้ไม่นำเข้า
+const strHash_ = t => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0; return h.toString(36) + '.' + t.length; };
+const spqBook_ = s => extBook_(s, 'ระบบนัดคิวเทคนิคพิเศษ');
+
+// นัดทั้งหมดของแท็บ [{ id, hn, tech, site, fx, freq, start, end, cbct: [วัน], pattern }] · soft = ตรวจชีต (คอลัมน์ไม่ครบคืน missing)
+function spqRead_(book, soft) {
+  const tabs = brachyTabs_(book), tab = tabs.filter(t => t.name === SPQ_TAB)[0] || brachyPick_(tabs, null, SPQ_KEYS, g => SPQ_NEED.every(k => g[k]));
+  if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัดคิวเทคนิคพิเศษ');
+  const map = brachyGuess_(tab.headers, SPQ_KEYS), miss = SPQ_NEED.filter(k => !map[k]);
+  if (miss.length && soft) return { tab: tab, tabs: tabs, map: map, rows: [], missing: miss.map(k => SPQ_LABEL[k]) };
+  if (miss.length) throw new Error('แท็บ ' + tab.name + ' ไม่มีคอลัมน์ ' + miss.map(k => SPQ_LABEL[k]).join(', ') + ' · ต้องเป็นชีตของระบบนัดคิวเทคนิคพิเศษ');
+  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone(), last = sh.getLastRow(), width = sh.getLastColumn();
+  const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
+  const header = (values.shift() || []).map(v => String(v).trim()), col = {};
+  Object.keys(SPQ_KEYS).forEach(k => { col[k] = map[k] ? header.indexOf(map[k]) : -1; });
+  const isDay = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const list = v => String(v || '').split(/[,\s]+/).map(brachyDate_).filter(isDay);
+  const uniq = a => a.filter((x, i) => a.indexOf(x) === i).sort();
+  const rows = values.map(r => {
+    const g = k => (col[k] < 0 ? '' : cellText_(r[col[k]], tz));
+    const dates = uniq(list(g('dates'))), start = isDay(brachyDate_(g('start'))) ? brachyDate_(g('start')) : dates[0] || '';
+    const end0 = isDay(brachyDate_(g('end'))) ? brachyDate_(g('end')) : dates[dates.length - 1] || start;
+    const tech = String(g('tech')).trim(), other = String(g('other')).trim(), hn = String(g('hn')).replace(/\.0$/, '').trim();
+    return { id: String(g('id')).trim() || hn + '|' + start, hn: hn, tech: tech === 'อื่นๆ' && other ? other : tech, site: g('site'), fx: g('fx'), freq: g('freq'),
+      start: start, end: end0 < start ? start : end0, cbct: uniq(list(g('cbct')).concat(list(g('verify')))), pattern: g('pattern') };
+  }).filter(o => o.hn && isDay(o.start));
+  return { tab: tab, tabs: tabs, map: map, rows: rows, missing: [] };
+}
+// นัดที่นำเข้า: HN มีในระบบ (seen = hnSeen_) และยังฉายไม่จบเกิน SPQ_KEEP_DAYS วัน · รหัสซ้ำ = ต่อท้าย +
+function spqWanted_(rows, seen) {
+  const from = new Date(Date.now() - SPQ_KEEP_DAYS * 864e5).toISOString().slice(0, 10), keep = [], ids = {};
+  let unmatched = 0, old = 0;
+  rows.forEach(r => {
+    if (r.end < from) { old++; return; }
+    if (!seen[hnLoose_(r.hn)]) { unmatched++; return; }
+    let id = r.id;
+    while (ids[id]) id += '+';
+    ids[id] = true;
+    keep.push({ id: id, hn: r.hn, tech: r.tech, site: r.site, fx: r.fx, freq: r.freq, start: r.start, end: r.end, cbct: r.cbct.join(', '), pattern: r.pattern });
+  });
+  return { keep: keep, unmatched: unmatched, old: old };
+}
+function spqStatus_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(SPQ_PROP) || 'null'); } catch (e) { return null; }
+}
+// ดึงและเขียนแท็บ SpecialQueue (เขียนเมื่อข้อมูลเปลี่ยน) · คืนสรุป { at, why, ok, rows, matched, unmatched, old, tab, sig, error } (เก็บใน Script property SPQ_SYNC)
+function spqSync_(ss, cfg, why) {
+  const s = (cfg && cfg.appt && cfg.appt.spq) || {}, prev = spqStatus_() || {};
+  const res = { at: new Date().toISOString(), why: why || '', ok: false, rows: 0, matched: 0, unmatched: 0, old: 0, tab: '', sig: prev.sig || '', error: '' };
+  try {
+    const got = spqRead_(spqBook_(s), false), w = spqWanted_(got.rows, hnSeen_(ss)), sig = strHash_(JSON.stringify(w.keep));
+    Object.assign(res, { tab: got.tab.name, rows: got.rows.length, matched: w.keep.length, unmatched: w.unmatched, old: w.old, sig: sig });
+    if (sig !== prev.sig || !ss.getSheetByName(TABLES.spq.sheet)) {
+      withLock_(() => {
+        const sh = tableSheet_(ss, 'spq'), header = headerOf_(sh), fields = TABLES.spq.fields, cols = header.map(h => fields.filter(f => f[1] === h)[0]), last = sh.getLastRow();
+        if (last > 1) sh.getRange(2, 1, last - 1, header.length).clearContent();
+        if (w.keep.length) sh.getRange(2, 1, w.keep.length, header.length).setNumberFormat('@').setValues(w.keep.map(r => cols.map(f => (f ? safeText_(r[f[0]]) : ''))));
+      });
+    }
+    res.ok = true;
+  } catch (e) { res.error = String(e.message || e).slice(0, 400); }
+  try { PropertiesService.getScriptProperties().setProperty(SPQ_PROP, JSON.stringify(res)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
+  return res;
+}
+// แอดมิน (หรือแอดมินรองหมวดแถบ): ตรวจชีตด้วยค่าที่กำลังตั้ง (ยังไม่บันทึก) · ไม่เขียนอะไร · ไม่ส่ง HN หรือชื่อผู้ป่วย
+function spqCheck(s, token) {
+  const u = who_(token);
+  if (!u.isAdmin && !(u.sub && u.sub.indexOf('tabs') >= 0)) throw new Error('ตั้งค่าการนำเข้านัดเทคนิคพิเศษได้เฉพาะแอดมิน');
+  s = s && typeof s === 'object' ? s : {};
+  const book = spqBook_(s), got = spqRead_(book, true), out = { title: book.getName(), tab: got.tab.name, missing: got.missing, preview: null };
+  if (got.missing.length) return out;
+  const w = spqWanted_(got.rows, hnSeen_(ss_())), techs = {}, starts = got.rows.map(r => r.start).sort();
+  got.rows.forEach(r => { const t = r.tech || '(ว่าง)'; techs[t] = (techs[t] || 0) + 1; });
+  out.preview = { rows: got.rows.length, matched: w.keep.length, unmatched: w.unmatched, old: w.old, techs: techs, first: starts[0] || '', last: starts[starts.length - 1] || '',
+    cbct: w.keep.reduce((n, r) => n + (r.cbct ? r.cbct.split(', ').length : 0), 0) };
+  return out;
+}
+// หน้าเว็บเรียกตอนเปิด: ดึงเมื่อครั้งล่าสุดเกิน 10 นาที · force = ปุ่มดึงตอนนี้ (แอดมิน / แอดมินรองหมวดแถบ) · คืนสรุปล่าสุด
+function spqPull(force, token) {
+  const u = who_(token);
+  if (force && !u.isAdmin && !(u.sub && u.sub.indexOf('tabs') >= 0)) throw new Error('ดึงตอนนี้ได้เฉพาะแอดมิน');
+  const ss = ss_(), cfg = readConfig_(ss) || {}, s = (cfg.appt && cfg.appt.spq) || {};
+  if (!s.url) { if (force) throw new Error('ยังไม่ได้ใส่ลิงก์ชีตของระบบนัดคิวเทคนิคพิเศษ (ตั้งค่า → ลงนัด) · ใส่ลิงก์แล้วกดบันทึกการตั้งค่าก่อน'); return spqStatus_(); }
+  const last = spqStatus_();
+  if (!force && (!s.on || (last && Date.now() - new Date(last.at).getTime() < BRACHY_EVERY_MIN * 60000))) return last;
+  const cache = CacheService.getScriptCache();
+  if (!force && cache.get('spq_busy')) return last;
+  cache.put('spq_busy', '1', 120);
+  try { return spqSync_(ss, cfg, force ? 'ดึงตอนนี้ (' + (u.name || u.username || u.me || '') + ')' : 'เปิดหน้าเว็บ'); } finally { cache.remove('spq_busy'); }
 }
 
 /* ---------- RC จาก TDF Dose Calculator (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */
