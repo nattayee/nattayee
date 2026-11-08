@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-04.7';
-const API_LEVEL = 55;
+const CODE_VERSION = '2026-11-08.1';
+const API_LEVEL = 56;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1106,15 +1106,23 @@ function fractionCase(id, date, ev, pin, token) {
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   date = cut(date, 10);
   if (!isDate(date)) throw new Error('วันที่ไม่ถูกต้อง');
+  // API 56: แถวย่อยในตารางวันฉาย (บริเวณ / รอบของ BID) · lane = "บริเวณ" หรือ "บริเวณ.รอบ" เช่น "1", "0.2" · บันทึกได้เฉพาะ ฉายแล้ว
+  // ev = { lane, clear: true } = ล้างฉายแล้วของแถวนั้น · ไม่มี lane = ทั้งผู้ป่วย (แทนทุกแถวของวันนั้น)
+  const lane = ev && ev.lane != null && ev.lane !== '' ? cut(ev.lane, 8) : '';
+  if (lane && !/^\d{1,2}(\.\d)?$/.test(lane)) throw new Error('แถวของบริเวณไม่ถูกต้อง');
+  if (ev && ev.clear) ev = null;
   let rec = null;
   if (ev) {
     rec = { date: date, type: cut(ev.type, 40), label: cut(ev.label, 40), act: String(ev.act || ''), back: cut(ev.back, 10), reason: cut(ev.reason, 80), note: cut(ev.note, 200) };
+    if (lane && rec.act !== 'given') throw new Error('บันทึกแยกบริเวณได้เฉพาะ ฉายแล้ว (สถานะอื่นใช้กับทุกบริเวณ)');
+    if (lane) rec.lane = lane;
     if (!rec.type || !rec.label) throw new Error('เลือกสถานะ');
     if (FX_ACTS.indexOf(rec.act) < 0) throw new Error('สถานะนี้ไม่ถูกต้อง');
     if (rec.act !== 'skip') rec.back = '';
     if (rec.back && (!isDate(rec.back) || rec.back <= date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
   }
-  pinChange_(u, pin, !ev || jsonList_((caseOf_(id) || {}).fxlog).some(x => x && String(x.date).slice(0, 10) === date));
+  const same = x => x && String(x.date).slice(0, 10) === date && (!lane || String(x.lane || '') === lane);
+  pinChange_(u, pin, !ev || jsonList_((caseOf_(id) || {}).fxlog).some(same));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     if (rec && FX_NOW_ACTS.indexOf(rec.act) >= 0 && date > today_(ss)) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึก' + (rec.act === 'given' ? 'ฉายแล้ว' : ' ' + rec.label + ' ') + 'ล่วงหน้าไม่ได้');
@@ -1125,9 +1133,9 @@ function fractionCase(id, date, ev, pin, token) {
     let list = [];
     try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
     if (!Array.isArray(list)) list = [];
-    list = list.filter(x => x && x.date !== date);
+    list = list.filter(x => x && !same(x));   // ทั้งผู้ป่วย = ทุกรายการของวันนั้น (รวมแถวย่อย) · แถวย่อย = เฉพาะแถวนั้น
     if (rec) {
-      const inside = list.filter(x => x.act === 'skip' && x.date < date && (!x.back || date < x.back))[0];
+      const inside = list.filter(x => !x.lane && x.act === 'skip' && x.date < date && (!x.back || date < x.back))[0];
       if (inside) throw new Error('วันที่ ' + date + ' อยู่ในช่วง ' + inside.label + ' ตั้งแต่ ' + inside.date + ' แก้ที่รายการนั้นแทน');
       if (rec.act === 'off') list = list.filter(x => x.act !== 'off');
       rec.by = String(u.name || u.username || u.me || '');

@@ -1125,6 +1125,9 @@ button.lchk:hover{border-color:var(--accent);color:var(--accent)}
 .queue-table tr.q-credit .q-how{color:var(--accent)}
 .queue-table tr.q-early .q-how{color:var(--accent)}
 .queue-table tr.q-sub td{border-top:0;padding-top:0}
+.fxg-lane{display:inline-block;margin-left:4px;padding:0 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11.5px;font-weight:600;line-height:19px;white-space:nowrap}
+.fxg-row.lane-sub .fxg-c0{justify-content:flex-end;color:var(--muted)}
+.fxg-row.lanes,.fxg-row.lane-sub:not(:last-child){border-bottom-style:dashed}
 .sitejob-note{margin:0 0 12px}
 .queue-table tr.q-sub .q-how{color:var(--accent)}
 .queue-table tr.q-ptr td{background:var(--accent-soft);color:var(--accent);font-size:12.5px}
@@ -3678,7 +3681,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.1';
+const PAGE_VERSION = '2026-11-08.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3897,17 +3900,20 @@ function localStore() {
     // สถานะ fraction: กติกาเดียวกับ fractionCase ใน Code.gs (หนึ่งรายการต่อวัน · Off RT มีได้รายการเดียว · ev = null ล้าง)
     fraction: async (id, date, ev, pin) => {
       if (!isDay(date)) throw new Error('วันที่ไม่ถูกต้อง');
+      const lane = ev && ev.lane ? str(ev.lane) : '';
+      if (ev && ev.clear) ev = null;
+      if (lane && ev && ev.act !== 'given') throw new Error('บันทึกแยกบริเวณได้เฉพาะ ฉายแล้ว (สถานะอื่นใช้กับทุกบริเวณ)');
       if (ev && ev.back && ev.act === 'skip' && !(isDay(ev.back) && ev.back > date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
       if (ev && FX_NOW_ACTS.includes(ev.act) && date > today()) throw new Error(advMsg(date, ev.act === 'given' ? 'ฉายแล้ว' : ev.label));
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
       if (!c) throw new Error('ไม่พบเคสนี้');
-      let list = parseFx(c).filter(x => x.date !== date);
+      let list = parseFx(c, true).filter(x => !(x.date === date && (!lane || x.lane === lane)));
       if (ev) {
-        const inside = list.find(x => x.act === 'skip' && x.date < date && (!x.back || date < x.back));
+        const inside = list.find(x => !x.lane && x.act === 'skip' && x.date < date && (!x.back || date < x.back));
         if (inside) throw new Error(`วันที่ ${date} อยู่ในช่วง ${inside.label} ตั้งแต่ ${inside.date} แก้ที่รายการนั้นแทน`);
         if (ev.act === 'off') list = list.filter(x => x.act !== 'off');
-        list.push({ date, type: str(ev.type), label: str(ev.label), act: ev.act, back: ev.act === 'skip' ? str(ev.back) : '', reason: str(ev.reason), note: str(ev.note), by: state.user.name, at: nowStamp() });
+        list.push({ date, type: str(ev.type), label: str(ev.label), act: ev.act, back: ev.act === 'skip' ? str(ev.back) : '', reason: str(ev.reason), note: str(ev.note), by: state.user.name, at: nowStamp(), ...(lane ? { lane } : {}) });
       }
       list.sort((a, b) => a.date.localeCompare(b.date));
       c.fxlog = list.length ? JSON.stringify(list) : '';
@@ -6062,7 +6068,7 @@ const advMsg = (d, what) => `ยังไม่ถึง ${fmtDay(d)} บัน�
 function clearAdvance(cases, td = today()) {
   let n = 0;
   for (const c of cases) {
-    const all = parseFx(c), keep = all.filter(x => !(FX_NOW_ACTS.includes(x.act) && x.date > td));
+    const all = parseFx(c, true), keep = all.filter(x => !(FX_NOW_ACTS.includes(x.act) && x.date > td));
     if (keep.length !== all.length) { c.fxlog = keep.length ? JSON.stringify(keep) : ''; n += all.length - keep.length; }
     if (c.rt && str(c.rtDate) > td) { Object.assign(c, { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' }); n++; }
   }
@@ -7069,12 +7075,16 @@ function fxDayStat(groups, d, room, hol) {
     const sc = g.main.sc, c = g.main.c;
     if (!sc) continue;
     // รอ Plan complete: นับในจำนวนทั้งหมดของวันที่มี fraction (ห้องที่เลือก) แยกจากฉายแล้ว/Hold/ค้างบันทึก
-    if (!g.ready) { if (sc.fx.has(d) && (!room || fxRooms(sc.fx.get(d)).includes(room))) { count(g); st.p++; if (c.apId) st.a++; } continue; }
+    const slots = !sc.fx.has(d) ? [] : lanesOn() ? fxLaneSlots(sc, d).filter(x => !room || x.room === room) : [null];   // แต่ละบริเวณ / รอบ BID = 1
+    if (!g.ready) { if (sc.fx.has(d) && (!room || fxRooms(sc.fx.get(d)).includes(room))) for (const x of slots) { count(g); st.p++; if (c.apId) st.a++; } continue; }
     const e = fxEventAt(sc.evs, d);
     // เลือกห้องไว้: นับเฉพาะผู้ป่วยที่ฉายห้องนี้วันนั้น · ย้ายไปฉายห้องอื่น (วันนั้นหรือตลอดไป) ไม่นับ
     // Hold, HV ฯลฯ (วันนั้นไม่มี fraction) นับในห้องที่ฉายครั้งก่อน (ยังไม่เคยฉาย = ห้องที่จะฉาย)
     if (sc.fx.has(d) && room && !fxRooms(sc.fx.get(d)).includes(room)) continue;
-    if (sc.fx.has(d)) { count(g); if ((e && e.date === d && FX_MARKS.includes(e.act)) || (c.rt === 'complete' && c.rtDate === d)) st.g++; else st.r++; }
+    if (sc.fx.has(d)) {
+      const mark = (e && e.date === d && FX_MARKS.includes(e.act)) || (c.rt === 'complete' && c.rtDate === d), lev = slots.some(Boolean) ? laneEvs(c) : [];
+      for (const x of slots) { count(g); if (mark || (x && lev.some(v => v.date === d && v.lane === x.lane))) st.g++; else st.r++; }
+    }
     else if (e && e.act === 'skip' && !c.rt && (!room || skipRooms(sc, d, c).includes(room))) { count(g); st.y++; }
   }
   return st;
@@ -7331,11 +7341,12 @@ function fxDayStats(groups, d, room) {
     const rooms = fxRooms(sc.fx.get(d));
     if (room && !rooms.includes(room)) continue;
     const cs = g.items.map(x => x.c), ti = tagInfo(groupTags(cs)), s = ses[fxSession(ti, groupMq(cs))];
-    total++; q += quotaOf(g); if (g.sp) sp++;
-    if (ti.q && ti.q.id in byQ) byQ[ti.q.id]++; else noQ++;
-    s[0]++;
+    const n = lanesOn() ? Math.max(1, fxLaneSlots(sc, d).filter(x => !room || x.room === room).length) : 1;   // แต่ละบริเวณ / รอบ BID = 1
+    total += n; q += quotaOf(g) * n; if (g.sp) sp += n;
+    if (ti.q && ti.q.id in byQ) byQ[ti.q.id] += n; else noQ += n;
+    s[0] += n;
     const ig = ptStatus(ti, room || rooms[0] || roomOf(g.main.c)).ig;
-    if (ig && !/^(none|no|ไม่ทำ|-)$/i.test(ig.type)) s[/cbct|cone/i.test(ig.type) ? 1 : 2]++;
+    if (ig && !/^(none|no|ไม่ทำ|-)$/i.test(ig.type)) s[/cbct|cone/i.test(ig.type) ? 1 : 2] += n;
     if (ti.bd) bd++;
   }
   return { total, noQ, bd, ses, q, sp, byQ: qs.map(x => ({ q: x, n: byQ[x.id] })) };
@@ -7431,8 +7442,10 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     tech: meta('tech', [...new Set(cs.map(x => catOf(x.cat).label))].join(' + ')), dx: meta('dx', dxShort(c), dxValue(c)), dose: meta('dose', doseText(c)),
     start: meta('start', sc ? `${fmtDay(sc.start)} → ${sc.end ? fmtDay(sc.end) : '—'}` : '', sc ? `Start RT ${fmtDay(sc.start)} → ครบ ${sc.end ? fmtDay(sc.end) : '—'}` : ''),
   };
-  const cells = days.map(d => {
-    const h = hol[d], e = fxEventAt(evs, d), list = sc && sc.fx.get(d), num = list ? fxNum(list) : '';
+  const lanes = lanesOn() && g.ready && sc ? fxLanes(sc) : [], lev = lanes.length > 1 ? laneEvs(c) : [];
+  const cellsFor = lane => days.map(d => {
+    const h = hol[d], e = fxEventAt(evs, d), all0 = sc && sc.fx.get(d), list = lane ? laneList(all0, lane) : all0, num = list ? fxNum(list) : '';
+    const le = lane && lev.find(v => v.date === d && v.lane === lane);
     const cls = ['fxc'], dayTxt = LONG_DAY_FMT.format(parseISO(d));
     let body = '', tip = '', away = false;
     if (e && e.date === d && (!FX_MARKS.includes(e.act) || !num)) {
@@ -7449,7 +7462,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
       away = true;
     }
     else if (num) {
-      const gv = (!!e && e.date === d && e.act === 'given') || (c.rt === 'complete' && c.rtDate === d);   // Complete course วันนั้น = ฉายครั้งสุดท้ายแล้ว
+      const gv = (!!e && e.date === d && e.act === 'given') || !!le || (c.rt === 'complete' && c.rtDate === d);   // Complete course วันนั้น = ฉายครั้งสุดท้ายแล้ว · แถวย่อย = ฉายแล้วของแถวนั้น
       cls.push('fx', gv ? 'given' : d < td ? 'done' : d === td ? 'today' : 'next');
       if (pend) cls.push('pend');
       if (sc.boost.has(d)) cls.push('boost');
@@ -7459,23 +7472,27 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
       if (list.some(v => v.added)) { cls.push('added'); tip += ' · fraction ที่เพิ่ม'; }
       const ad = adds.find(a => a.date === d);
       if (ad) { cls.push('has-add'); body += `<i class="fx-addmark" aria-hidden="true">+${ad.n}</i>`; tip += ' · ' + addTip(ad); }
-      if (list.length > 1) { body += `<i class="fx-more">+${list.length - 1}</i>`; tip += ' · ' + list.map(v => `บริเวณที่ ${v.site + 1} Fx ${v.to < v.from ? '?' : v.from === v.to ? v.to : v.from + '–' + v.to}`).join(', '); }
+      if (!lane && list.length > 1) { body += `<i class="fx-more">+${list.length - 1}</i>`; tip += ' · ' + list.map(v => `บริเวณที่ ${v.site + 1} Fx ${v.to < v.from ? '?' : v.from === v.to ? v.to : v.from + '–' + v.to}`).join(', '); }
       // ย้ายห้อง: วันที่ฉายห้องอื่นจากห้องของบริเวณที่ 1 มีจุดมุมซ้ายบน · เลือกห้องไว้แล้ววันนั้นฉายห้องอื่น = จาง
       const rs = fxRooms(list), mv = (list.find(v => v.mv) || {}).mv;
       if (rs.some(r => r !== roomOf(c))) { cls.push('rm'); tip += ` · ห้อง ${rs.map(roomLabel).join(', ')}`; }
       if (mv) tip += ` · ${mv.scope === 'on' ? `ย้ายมาจาก ${mv.from || 'ห้องเดิม'} ตั้งแต่ ${fmtDay(mv.date)}` : `ย้ายมาจาก ${mv.from || 'ห้องเดิม'} เฉพาะวันนี้`}`;
       if (room && !rs.includes(room)) cls.push('oroom');
-      if (gv) { body += '<i class="fx-ok" aria-hidden="true">✓</i>'; tip += ' · ' + (e && e.date === d && e.act === 'given' ? fxTip(e) : `Complete course (ฉายครั้งสุดท้าย) · ย้ายไปแถบ Complete course วันถัดไป`); }
+      if (gv) { body += '<i class="fx-ok" aria-hidden="true">✓</i>'; tip += ' · ' + (le ? `${fxTip(le)} (เฉพาะแถวนี้)` : e && e.date === d && e.act === 'given' ? fxTip(e) : `Complete course (ฉายครั้งสุดท้าย) · ย้ายไปแถบ Complete course วันถัดไป`); }
       else if (e && e.date === d) { cls.push('noted'); body += `<span class="fxl">${esc(e.label)}</span>`; tip += ' · ' + fxTip(e); }
       const rb = backAt.get(d), rl = rounds.filter(r => r.date < d).pop();
       if (rb) { cls.push('reback'); body += `<span class="fxl rct">${esc(roundName(rb))}</span>`; tip += ` · กลับมาฉายหลัง ${rb.label} ครั้งที่ ${rb.n} (แผนใหม่)`; }
       else if (rl) tip += ` · หลัง ${rl.label} ครั้งที่ ${rl.n}`;
     } else cls.push(h ? 'hol' : 'empty');
     if (d === td) cls.push('col-today');
-    if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
+    if (tip && edit) return `<button type="button" class="${cls.join(' ')}" data-fxc="${esc(c.id)}" data-day="${d}"${lane ? ` data-lane="${lane}"` : ''}${away ? ' data-fxmv="1"' : ''} role="cell" title="${esc(tip + (away ? ' · กดเพื่อแก้หรือล้างการย้ายห้อง' : ' · กดเพื่อบันทึกสถานะ'))}">${body}</button>`;
     return `<span class="${cls.join(' ')}" role="cell"${tip ? ` title="${esc(tip)}"` : h ? ` title="${esc(h)}"` : ''}>${body}</span>`;
   }).join('');
-  return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${fxgPartOrder().map(k => parts[k] || '').join('')}</div>${cells}</div>`;
+  if (lanes.length < 2) return `<div class="fxg-row" role="row"><div class="fxg-c0" role="rowheader">${fxgPartOrder().map(k => parts[k] || '').join('')}</div>${cellsFor('')}</div>`;
+  // ฉายหลายบริเวณ / BID: แถวละบริเวณ (หรือรอบ) กดบันทึก ฉายแล้ว แยกกัน · แถวแรกมีข้อมูลผู้ป่วย
+  const tag = l => `<span class="fxg-lane" title="${esc(`${fxLaneLabel(c, sc, l)} · กดช่องของแถวนี้เพื่อบันทึก ฉายแล้ว เฉพาะแถวนี้ (สถานะอื่นใช้กับทุกแถวของผู้ป่วย)`)}">${esc(fxLaneLabel(c, sc, l))}</span>`;
+  return `<div class="fxg-row lanes" role="row"><div class="fxg-c0" role="rowheader">${fxgPartOrder().map(k => parts[k] || '').join('')}${tag(lanes[0])}</div>${cellsFor(lanes[0])}</div>`
+    + lanes.slice(1).map(l => `<div class="fxg-row lane-sub" role="row"><div class="fxg-c0" role="rowheader">↳ ${tag(l)}</div>${cellsFor(l)}</div>`).join('');
 }
 // แถบวันฉายของเคสที่จบแล้ว (Complete course · Cancel RT · Off RT): วันที่ + เลข fraction · วันที่บันทึกสถานะแสดงชื่อสถานะ
 function courseRow(c, sc, td) {
@@ -7544,13 +7561,16 @@ function openCourse(id, status) {
 // กดช่องในตารางวันฉาย: บันทึกสถานะของ fraction วันนั้น (Hold, HV, Re-CT, Off RT หรือสถานะที่แอดมินเพิ่ม) ยืนยันด้วยรหัส PIN
 // ช่องที่อยู่ในช่วง Hold (ยังไม่กลับมา) = แก้รายการ Hold นั้น เช่นใส่วันกลับมาฉาย · Hold/HV/Re-CT เลื่อน fraction ออกไปให้เอง
 // ย้ายห้อง (away = กดช่อง "ย้าย" ในห้องเดิม): ย้ายเฉพาะ fraction นี้ หรือตั้งแต่ fraction นี้ · ห้องเดิม = ห้องของวันนั้นเมื่อไม่นับการย้ายของวันนี้
-function openFx(id, day, away) {
+function openFx(id, day, away, lane = '') {
   const c = state.cases.find(x => x.id === id);
   if (!c) return;
-  const evs = parseFx(c), cur = fxEventAt(evs, day), date = cur ? cur.date : day, moves = parseMoves(c), mvCur = moveAt(moves, day);
+  if (!lanesOn()) lane = '';
+  // แถวย่อย: ฉายแล้วของแถวนั้น (ถ้ามี) ก่อนสถานะของทั้งผู้ป่วย
+  const lcur = lane ? laneEvs(c).find(e => e.lane === lane && e.date === day) || null : null;
+  const evs = parseFx(c), cur = lcur || fxEventAt(evs, day), date = cur ? cur.date : day, moves = parseMoves(c), mvCur = moveAt(moves, day);
   // เลข fraction ของวันนั้นตามตารางที่ไม่มีรายการนี้ (แก้ Hold เดิม = fraction ที่ถูกเลื่อนออกไป)
   const sc = caseSchedule({ ...c, noAuto: date, fxlog: JSON.stringify(evs.filter(e => e.date !== date)), rmove: JSON.stringify(moves.filter(m => m.date !== day)) }, holidayMap());
-  const list = sc && sc.fx.get(date), num = list ? fxNum(list) : '';
+  const list0 = sc && sc.fx.get(date), list = lane ? laneList(list0, lane) : list0, num = list ? fxNum(list) : '', laneLbl = lane && sc ? fxLaneLabel(c, caseSchedule(c, holidayMap()) || sc, lane) : '';
   const r0 = list && list.length ? fxRooms(list)[0] : roomOf(c), fromRoom = r0 === NO_ROOM ? '' : r0;
   const mvDay = mvCur && mvCur.date === day ? mvCur : null;
   // เพิ่ม fraction: ที่ fraction สุดท้ายของคอร์ส (หรือวันที่เคยบันทึกเพิ่มไว้ = แก้/ล้าง) · บันทึกให้เคสของผู้ป่วยนี้ที่จบวันเดียวกัน
@@ -7558,14 +7578,15 @@ function openFx(id, day, away) {
   const hdr = !cur && sc0 ? sc0.evs.find(e => e.auto && e.date === day) || null : null;   // วันนัดใส่แร่: สถานะ HDR อัตโนมัติ
   const lastOf = x => { const s = caseSchedule(x, hol); return s && !s.pending ? s.last : ''; };
   const addIds = hnGroup(c).filter(x => planReady(x) && (x.id === id || lastOf(x) === day || parseAdds(x).some(a => a.date === day))).map(x => x.id);
-  pinCtx = { mode: 'fx', id, ids: hnGroup(c).filter(planReady).map(x => x.id), date, day, cur, num, forgot: false, auto: false, n0: list ? (list.find(v => v.site === 0 || v.boost) || list[0]).from : 0, mvCur, mvDay, fromRoom, addCur, addIds, last: sc0 ? sc0.planned : 0 };
-  $('#pin-title').textContent = `${num ? `Fx ${num} · ` : ''}${fmtDay(date)} · ${c.hn || ''}`;
+  pinCtx = { mode: 'fx', id, ids: hnGroup(c).filter(planReady).map(x => x.id), date, day, cur, num, lane, laneLbl, forgot: false, auto: false, n0: list ? (list.find(v => v.site === 0 || v.boost) || list[0]).from : 0, mvCur, mvDay, fromRoom, addCur, addIds, last: sc0 ? sc0.planned : 0 };
+  $('#pin-title').textContent = `${num ? `Fx ${num} · ` : ''}${laneLbl ? laneLbl + ' · ' : ''}${fmtDay(date)} · ${c.hn || ''}`;
   $('#pin-what').innerHTML = cur
     ? `บันทึกแล้ว <b>${esc(cur.label)}</b>${cur.reason ? ` (${esc(cur.reason)})` : ''} ${esc(LONG_DAY_FMT.format(parseISO(cur.date)))} โดย <b>${esc(cur.by || '—')}</b> ${esc(fmtStamp(cur.at) || '')}<br>แก้แล้วบันทึกใหม่ หรือกด "ล้างสถานะ" ให้ fraction กลับมาตามเดิม`
     : `${esc(LONG_DAY_FMT.format(parseISO(date)))}${num ? ` · <b>Fx ${esc(num)}${sc.planned ? '/' + sc.planned : ''}</b>` : ''} · ${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''}`;
   if (hdr) $('#pin-what').innerHTML += `<br><span class="fx-auto">${esc(hdr.note)} · สถานะ <b>${esc(hdr.label)}</b> อัตโนมัติ: วันนี้ไม่ฉาย เลื่อนไป ${esc(fmtDay(hdr.back))} · บันทึกสถานะอื่นของวันนี้ = ใช้ที่บันทึกแทน</span>`;
   if (mvCur) $('#pin-what').innerHTML += `<br>${esc(moveTip(mvCur))}`;
   if (addCur) $('#pin-what').innerHTML += `<br>${esc(addTip(addCur))}`;
+  if (lane) $('#pin-what').innerHTML += `<br><b>ฉายแล้ว</b> บันทึกเฉพาะแถวนี้${laneLbl ? ` (${esc(laneLbl)})` : ''} · สถานะอื่น (Hold, Off RT ฯลฯ) ใช้กับทุกแถวของผู้ป่วย`;
   if (pinCtx.ids.length > 1) $('#pin-what').innerHTML += `<br>บันทึกให้ทุกเทคนิคของผู้ป่วยนี้ (${pinCtx.ids.length} เคส)`;
   $('#pin-val-field').hidden = true;
   const types = (state.config.fxTypes || []).filter(t => t.act !== 'given' || fx2On());   // Code.gs รุ่นเก่ายังเก็บ "ฉายแล้ว" ไม่ได้
@@ -11340,15 +11361,53 @@ function treatDays(start, fx, freq, hol, block) {
 }
 // สถานะของ fraction รายวัน (คอลัมน์ "สถานะ fraction" JSON): act skip = ไม่ได้ฉาย (Hold, HV, Re-CT) ตั้งแต่ date ถึงก่อน back (back ว่าง = จนกว่าจะกลับมา)
 // treat = ฉายตามปกติ บันทึกไว้ · off = Off RT หยุดฉายตั้งแต่วันนั้น
-function parseFx(c) {
+// lane = แถวย่อยในตารางวันฉาย (บริเวณ หรือ บริเวณ.รอบ ของ BID) บันทึกได้เฉพาะ ฉายแล้ว · parseFx(c) = รายการของทั้งผู้ป่วย (ใช้คำนวณตาราง) · all = รวมแถวย่อย
+function parseFx(c, all) {
   let a = [];
   try { a = JSON.parse(c.fxlog || '[]'); } catch (e) { a = []; }
   if (!Array.isArray(a)) return [];
   const acts = FX_ACTS.map(x => x[0]);
-  return a.filter(x => x && isDay(x.date)).map(x => {
-    const date = str(x.date).slice(0, 10), act = acts.includes(x.act) ? x.act : 'treat', back = act === 'skip' && isDay(x.back) ? str(x.back).slice(0, 10) : '';
-    return { date, type: str(x.type), label: str(x.label) || str(x.type) || '?', act, back: back > date ? back : '', reason: str(x.reason), note: str(x.note), by: str(x.by), at: str(x.at) };
+  return a.filter(x => x && isDay(x.date) && (all || !str(x.lane))).map(x => {
+    const date = str(x.date).slice(0, 10), act = acts.includes(x.act) ? x.act : 'treat', back = act === 'skip' && isDay(x.back) ? str(x.back).slice(0, 10) : '', lane = str(x.lane);
+    return { date, type: str(x.type), label: str(x.label) || str(x.type) || '?', act, back: back > date ? back : '', reason: str(x.reason), note: str(x.note), by: str(x.by), at: str(x.at), ...(lane ? { lane } : {}) };
   }).sort((a, b) => a.date.localeCompare(b.date));
+}
+const laneEvs = c => parseFx(c, true).filter(e => e.lane);
+// แถวย่อยของผู้ป่วย: บริเวณละแถว (Sequential boost ต่อในแถวบริเวณที่ 1) · BID / TID = รอบละแถว · ["0"] = แถวเดียว
+const FXLANE_API = 56;   // Code.gs ที่บันทึก ฉายแล้ว แยกแถว (lane)
+const lanesOn = () => serverHas(FXLANE_API);
+const fxLaneSite = v => (v.boost ? 0 : v.site);
+const fxSess = v => Math.max(1, v.to - v.from + 1);
+const laneCache = new WeakMap();
+function fxLanes(sc) {
+  if (!sc) return [];
+  if (laneCache.has(sc)) return laneCache.get(sc);
+  const m = new Map();
+  for (const l of sc.fx.values()) for (const v of l) { const k = fxLaneSite(v); m.set(k, Math.max(m.get(k) || 1, fxSess(v))); }
+  const out = [...m.keys()].sort((a, b) => a - b).flatMap(k => (m.get(k) > 1 ? Array.from({ length: m.get(k) }, (_, i) => `${k}.${i + 1}`) : [String(k)]));
+  laneCache.set(sc, out);
+  return out;
+}
+// fraction ของแถวนั้นในวันนั้น (รอบ k = fraction ที่ k ของวัน)
+function laneList(list, lane) {
+  const [k, r] = lane.split('.');
+  const out = (list || []).filter(v => String(fxLaneSite(v)) === k).flatMap(v => {
+    if (!r) return [v];
+    const n = v.from + +r - 1;
+    return v.to >= v.from && n <= v.to ? [{ ...v, from: n, to: n }] : [];
+  });
+  return out.length ? out : null;
+}
+// แถวที่มี fraction วันนั้น (นับแต่ละบริเวณ / รอบเป็น 1) [{ lane, room }]
+function fxLaneSlots(sc, d) {
+  const list = sc && sc.fx.get(d);
+  if (!list) return [];
+  return fxLanes(sc).map(l => { const x = laneList(list, l); return x ? { lane: l, room: x[0].room || NO_ROOM } : null; }).filter(Boolean);
+}
+function fxLaneLabel(c, sc, lane) {
+  const lanes = fxLanes(sc), multi = new Set(lanes.map(l => l.split('.')[0])).size > 1, [k, r] = lane.split('.');
+  const area = +k === 0 ? c.area : (parseSites(c)[+k - 1] || {}).area;
+  return [multi && `บริเวณที่ ${+k + 1}${area ? ' · ' + area : ''}`, r && `รอบ ${r}`].filter(Boolean).join(' · ');
 }
 // นัดใส่แร่ → สถานะ fraction ที่ใช้ { id, label } ตาม ตั้งค่า → นัดคิวใส่แร่ (hold): auto = สถานะชื่อ HDR (ไม่มี = HDR) · off = ไม่ใช้
 function bqHoldType(hold = state.config.bq.hold, types = state.config.fxTypes || []) {
@@ -13045,6 +13104,15 @@ async function submitPin(e, clear) {
     }
     if (ctx.mode === 'fx' || ctx.mode === 'ptags') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
       const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '', ids = ctx.ids || [ctx.id];
+      if (ctx.mode === 'fx' && ctx.lane && (clear ? !!(ctx.cur && ctx.cur.lane) : !!ev && ev.act === 'given')) {   // แถวย่อย: ฉายแล้ว / ล้าง เฉพาะแถวนั้น
+        const r1 = normCase(await store.fraction(ctx.id, ctx.date, clear ? { lane: ctx.lane, clear: true } : { ...ev, lane: ctx.lane }, pin));
+        const i = state.cases.findIndex(c => c.id === r1.id);
+        if (i >= 0) state.cases[i] = r1; else state.cases.push(r1);
+        render();
+        pinDlg.close();
+        toast(`${r1.hn} · ${clear ? 'ล้าง ' + ctx.cur.label : ev.label}${ctx.laneLbl ? ` · ${ctx.laneLbl}` : ''} ${fmtDay(ctx.date)}`);
+        return;
+      }
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
       const rpTo = t && t.replan && t.act !== 'off' ? rpTarget(ctx, ctx.date) : null;
@@ -13379,7 +13447,7 @@ document.addEventListener('click', e => {
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp, ds.sid || '');
   if (ds.course) return openCourse(ds.id, ds.course);
-  if (ds.fxc) return fxStatusOn() ? openFx(ds.fxc, ds.day, ds.fxmv === '1') : toast('การบันทึกสถานะ fraction ต้องใช้ Code.gs รุ่น 2026-10-17.1 ขึ้นไป', { err: true });
+  if (ds.fxc) return fxStatusOn() ? openFx(ds.fxc, ds.day, ds.fxmv === '1', ds.lane || '') : toast('การบันทึกสถานะ fraction ต้องใช้ Code.gs รุ่น 2026-10-17.1 ขึ้นไป', { err: true });
   if (ds.ptags) return fx2On() ? openTags(ds.ptags) : toast('รายละเอียดผู้ป่วยต้องใช้ Code.gs รุ่น 2026-10-18.1 ขึ้นไป', { err: true });
   if (t.id === 'br-add') { brRows.push(brRow()); renderBrRows(); $(`[data-br="${brRows.length - 1}"][data-f="hn"]`).focus(); return; }
   if (ds.brdel) { brRows.splice(+ds.brdel, 1); renderBrRows(); syncLogForm(); return; }
