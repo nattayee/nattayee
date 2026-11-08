@@ -339,6 +339,8 @@ details.fxg-stats-box .fs-head,details.fxg-stats-box .fs-note{grid-column:1/-1}
 .fxg-d.today .fxg-n{background:var(--accent-fg);color:var(--accent)}
 .fxg-st{min-height:15px;margin-top:2px;padding:0 3px;border-radius:6px;color:var(--faint);font-size:10px;font-weight:600;line-height:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .fxg-st:empty{visibility:hidden}
+.fxg-st{display:flex;flex-wrap:wrap;justify-content:center;max-width:100%;white-space:normal;letter-spacing:-.2px}
+.fxg-st3{white-space:nowrap}
 .fxg-d.today .fxg-st{background:var(--surface)}
 .fxg-st i,.fxg-key i{font-style:normal}
 .fxg-st .z{color:var(--faint);font-weight:400}
@@ -415,6 +417,17 @@ button.duty-line:hover{border-color:var(--accent)}
 .ct-pull-main{flex:1 1 220px;min-width:0}
 .ct-pull-main small{display:block;color:var(--muted);font-size:12.5px}
 .appull-q{width:100%;margin-top:4px}
+.appull-wrap{margin-top:10px}
+.appull-tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.appull-tbl th{padding:6px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600;text-align:left;white-space:nowrap}
+.appull-tbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+.appull-tbl th,.appull-tbl td{text-align:left}
+.appull-tbl td small{display:block;margin-top:2px;color:var(--muted);font-size:12px}
+.appull-tbl .ap-grp th{padding:14px 10px 4px;border-bottom:0;color:var(--fg);font-size:13px}
+.appull-tbl tbody tr:not(.ap-grp):hover td{background:var(--hover)}
+.appull-tbl .ap-note{max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.appull-tbl td.acts{width:1%;text-align:right}
+.appull-tbl .acts .ct-pull-acts{justify-content:flex-end;margin:0}
 #appull-dlg .ct-pull{grid-template-columns:minmax(0,1fr)}
 #appull-dlg .ct-pull li{min-width:0}
 #appull-dlg .ap-l1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -2591,8 +2604,8 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <div class="dlg-body">
       <p class="muted" style="margin:0;font-size:13px">นัดจากแถบลงนัดที่ยังไม่ได้ลง CT-SIM · "ลงข้อมูล CT-SIM" = เปิดฟอร์มเพิ่มผู้ป่วย CT-SIM พร้อมข้อมูลนัด บันทึกแล้วนัดนี้ผูกกับรายการ CT · "ไม่มาทำ CT" = เอาออกจากรายการ</p>
       <input type="search" id="appull-q" class="appull-q" placeholder="ค้นหา HN, ชื่อ, แพทย์, ห้องฉาย, เทคนิค" autocomplete="off" aria-label="ค้นหานัดรอลง CT-SIM">
-      <ul class="ct-pull" id="appull-list"></ul>
-      <details class="ct-skipped" id="appull-skip-box" hidden><summary>ไม่มาทำ CT (<span id="appull-skip-n"></span>)</summary><ul class="ct-pull" id="appull-skip"></ul></details>
+      <div class="table-wrap appull-wrap"><table class="appull-tbl" id="appull-list"></table></div>
+      <details class="ct-skipped" id="appull-skip-box" hidden><summary>ไม่มาทำ CT (<span id="appull-skip-n"></span>)</summary><div class="table-wrap appull-wrap"><table class="appull-tbl" id="appull-skip"></table></div></details>
     </div>
     <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ปิด</button></footer>
   </div>
@@ -2999,6 +3012,9 @@ const apptOn = () => serverHas(APPT_API);
 // คอลัมน์ผู้ป่วยของตารางวันฉาย (คอลัมน์แรก): ข้อมูลที่แสดง = แอดมินเลือก (ตั้งค่า → ตารางวันฉาย) · ลำดับ = ผู้ใช้จัดเอง (ปุ่ม ⇅ เรียงข้อมูล · จำไว้ในเบราว์เซอร์)
 const FXG_PARTS = [['mqt', 'Mosaiq Time', true], ['hn', 'HN', true], ['name', 'ชื่อผู้ป่วย', true], ['doc', 'แพทย์', true], ['mp', 'ฟิสิกส์ (MP)', true], ['bd', 'เวลา BD protocol', true],
   ['tags', 'รายละเอียดผู้ป่วย', true], ['stat', 'เดิน/รถนอน · IGRT', true], ['tech', 'เทคนิค', false], ['dx', 'Diag', false], ['dose', 'Prescription', false], ['start', 'Start RT → ครบ', false], ['prog', 'ฉายแล้ว/ทั้งหมด · สถานะ', true]];
+// หัวตารางวันฉาย (ใต้วันที่): [คีย์, ชื่อ, คำอธิบาย]
+const FXG_HD = [['wd', 'วันในสัปดาห์', 'จันทร์ อังคาร …'], ['mon', 'เดือน', 'พ.ย.'], ['all', 'ผู้ป่วยทั้งหมดของวัน', 'วงกลมตัวเลข'], ['q', 'โควตารวม (Q)', 'แดง = เกินที่ตั้ง'],
+  ['st', 'ฉายแล้ว / Hold / ค้างบันทึก', 'เขียว / เหลือง / แดง'], ['p', 'รอ Plan complete / รอ CT-Sim', '+ จำนวน'], ['duty', 'RTT / RA ประจำวัน', 'ปุ่ม + เลือกผู้ปฏิบัติงาน']];
 const fxgPartLabel = k => (FXG_PARTS.find(p => p[0] === k) || [k, k])[1];
 const APPT_FORM = [
   ['name', 'Name', 'off'], ['prio', 'ประเภทเคส (Normal / Emergency)', 'show', false], ['age', 'Age (ใบสั่ง)', 'off'], ['sex', 'Gender (ใบสั่ง)', 'off'], ['cm', 'CT (CM / Non-CM)', 'req'], ['iv', 'IV ml, Flow Rate (ใบสั่ง)', 'off', false],
@@ -3135,6 +3151,7 @@ const DEFAULT_CONFIG = {
   manualFrom: '2026-11-01',
   subAdmins: [],   // แอดมินรอง [{ user: ชื่อผู้ใช้หรืออีเมล RO Workspace, tabs: หมวดในหน้าตั้งค่าที่แก้ได้ }] · ทุกการแก้เป็นคำขอ มีผลเมื่อแอดมินหลักอนุมัติ
   renames: {},   // แก้ชื่อตัวเลือก (ตั้งค่า): { รายการ: { ชื่อเดิม: ชื่อใหม่ } } ข้อมูลที่บันทึกชื่อเดิมแสดงและนับเป็นชื่อใหม่
+  fxgHead: Object.fromEntries(FXG_HD.map(([k]) => [k, true])),   // หัวตารางวันฉาย: ข้อมูลใต้วันที่ที่แสดง
   fxgParts: FXG_PARTS.map(([k, , on]) => ({ k, on })),   // ข้อมูลในคอลัมน์ผู้ป่วยของตารางวันฉาย (ลำดับเริ่มต้น)   // เคสเลือกเองนับในคิว (ข้ามคนนั้น) เฉพาะวัน In ตั้งแต่วันนี้ · ก่อนหน้า = ช่วงที่ยังไม่ได้ใช้ระบบเต็ม (หักคิวรายเดือนแทน) · ว่าง = ทุกเคส
   // สีของค่า QA (แอดมินตั้ง): dir high = ยิ่งมากยิ่งดี (≥ ok เขียว · ≥ warn เหลือง · น้อยกว่านั้นแดง)
   // low = ยิ่งใกล้ 0 ยิ่งดี (ค่าสัมบูรณ์ ≤ ok เขียว · ≤ warn เหลือง · มากกว่านั้นแดง) · '' = ไม่ใช้สี
@@ -3359,7 +3376,7 @@ const CFG_TABS = {
   team: ['staff', 'doctors', 'crew'],
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
-  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
   tabs: ['reg', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
 };
@@ -3579,6 +3596,8 @@ function mergeConfig(c) {
   out.queue = c.queue && typeof c.queue === 'object' ? c.queue : {};
   {
     const seen = new Set();
+    const fh = c.fxgHead && typeof c.fxgHead === 'object' ? c.fxgHead : {};
+    out.fxgHead = Object.fromEntries(FXG_HD.map(([k]) => [k, typeof fh[k] === 'boolean' ? fh[k] : true]));
     out.fxgParts = [];
     for (const x of Array.isArray(c.fxgParts) ? c.fxgParts : []) { const k = str(x && x.k); if (!FXG_PARTS.some(p => p[0] === k) || seen.has(k)) continue; seen.add(k); out.fxgParts.push({ k, on: k === 'hn' || !!x.on }); }
     for (const [k, , on] of FXG_PARTS) if (!seen.has(k)) out.fxgParts.push({ k, on });   // ข้อมูลใหม่ที่ยังไม่เคยตั้ง: ค่าเริ่มต้นต่อท้าย
@@ -3804,7 +3823,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.1';
+const PAGE_VERSION = '2026-11-09.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7019,18 +7038,28 @@ function renderApPullBtn() {
   b.hidden = !apptOn() || !canEdit() || !(n || state.appt.length);
   b.innerHTML = `นัดรอลง CT${n ? ` <span class="n">${n}</span>` : ''}`;
 }
-// สองบรรทัดต่อคน: บรรทัดบน = ผู้ป่วยและนัด (ยาวเกิน = ตัดท้าย ชี้ดูทั้งหมด) · บรรทัดล่าง = ห้องฉายและแพทย์
-const apPullRow = (r, skip) => `<li title="${esc([r.ct && ctLabel(r.ct), dxShort(r), r.note].filter(Boolean).join(' · '))}"><div class="ct-pull-main"><div class="ap-l1">${apSummary(r)}</div><small>${[r.room ? `ห้อง ${r.room}` : 'ยังไม่ระบุห้องฉาย', ctDocText(r.doc) || 'ยังไม่ระบุแพทย์'].map(esc).join(' · ')}</small></div>
-  <span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-apunskip="${esc(r.id)}">คืนกลับรอ</button>` : `<button type="button" class="btn ghost sm danger" data-apdel="${esc(r.id)}" title="ลบนัดนี้ (ยืนยันด้วยรหัส PIN)">ลบนัด</button><button type="button" class="btn ghost sm" data-apskip="${esc(r.id)}">ไม่มาทำ CT</button><button type="button" class="btn primary sm" data-apuse="${esc(r.id)}">ลงข้อมูล CT-SIM</button>`}</span></li>`;
+// ตารางนัดรอลง CT-SIM: คอลัมน์ตรงกันทุกแถว · คนละ 2 บรรทัด (HN / ห้องฉาย · ชื่อ / แพทย์) · Note ยาวตัดท้าย (ชี้ดูทั้งหมด)
+const AP_PULL_HEAD = ['HN / ห้องฉาย', 'ชื่อ / แพทย์', 'นัด CT', 'CT', 'เทคนิคพิเศษ', 'Prescription', 'Start RT', 'Note', ''];
+const apPullHead = () => `<thead><tr>${AP_PULL_HEAD.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>`;
+const apPullRow = (r, skip) => `<tr title="${esc([r.ct && `เครื่อง ${ctLabel(r.ct)}`, dxShort(r), r.note].filter(Boolean).join(' · '))}">
+  <td><b class="hn">${esc(r.hn || '—')}</b>${emergTag(r)}<small>${esc(r.room ? r.room : 'ยังไม่ระบุห้อง')}</small></td>
+  <td>${esc(r.name || '—')}<small>${esc(ctDocText(r.doc) || 'ยังไม่ระบุแพทย์')}</small></td>
+  <td>${esc(r.date === 'on call' ? 'On Call' : fmtDay(r.date))}${r.ct ? `<small>${esc(ctLabel(r.ct))}</small>` : ''}</td>
+  <td><b>${esc(r.cm || '')}</b></td>
+  <td>${spTags(splitList(r.special))}</td>
+  <td>${esc(doseText(r))}</td>
+  <td>${esc(apSimText(r))}</td>
+  <td class="ap-note">${esc(r.note || '')}</td>
+  <td class="acts"><span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-apunskip="${esc(r.id)}">คืนกลับรอ</button>` : `<button type="button" class="btn ghost sm danger" data-apdel="${esc(r.id)}" title="ลบนัดนี้ (ยืนยันด้วยรหัส PIN)">ลบนัด</button><button type="button" class="btn ghost sm" data-apskip="${esc(r.id)}">ไม่มาทำ CT</button><button type="button" class="btn primary sm" data-apuse="${esc(r.id)}">ลงข้อมูล CT-SIM</button>`}</span></td></tr>`;
 function openApPull() {
   if (!appullDlg.open) $('#appull-q').value = '';
   const td = today(), words = str($('#appull-q').value).toLowerCase().split(/\s+/).filter(Boolean), hit = r => wordsIn(words, apText(r)), list = apWaiting().filter(hit);
   const groups = [['วันนี้', list.filter(r => r.date === td)], ['เลยวันนัด', list.filter(r => r.date < td).sort((a, b) => b.date.localeCompare(a.date))], ['นัดถัดไป', list.filter(r => r.date > td).sort((a, b) => a.date.localeCompare(b.date))]];
   const from = plusDays(td, -60), skipped = state.appt.filter(r => apState(r) === 'skip' && r.date >= from && hit(r)).sort((a, b) => b.date.localeCompare(a.date));
-  $('#appull-list').innerHTML = list.length ? groups.filter(g => g[1].length).map(([l, rs]) => `<li class="ct-pull-day">${esc(l)} (${rs.length})</li>${rs.map(r => apPullRow(r)).join('')}`).join('') : `<li class="empty-state">${words.length ? 'ไม่พบนัดที่ตรงกับคำค้น' : 'ไม่มีนัดรอลง CT-SIM'}</li>`;
+  $('#appull-list').innerHTML = apPullHead() + `<tbody>${list.length ? groups.filter(g => g[1].length).map(([l, rs]) => `<tr class="ap-grp"><th colspan="${AP_PULL_HEAD.length}">${esc(l)} (${rs.length})</th></tr>${rs.map(r => apPullRow(r)).join('')}`).join('') : `<tr><td colspan="${AP_PULL_HEAD.length}" class="empty-state">${words.length ? 'ไม่พบนัดที่ตรงกับคำค้น' : 'ไม่มีนัดรอลง CT-SIM'}</td></tr>`}</tbody>`;
   $('#appull-skip-box').hidden = !skipped.length;
   $('#appull-skip-n').textContent = skipped.length;
-  $('#appull-skip').innerHTML = skipped.map(r => apPullRow(r, true)).join('');
+  $('#appull-skip').innerHTML = apPullHead() + `<tbody>${skipped.map(r => apPullRow(r, true)).join('')}</tbody>`;
   if (!appullDlg.open) appullDlg.showModal();
 }
 // นัด → ค่าในฟอร์ม CT-SIM · เทคนิคพิเศษที่ตรงกับ Technique ใน ตั้งค่า เลือก Technique (และเทคนิคที่มี Technique) ให้ ที่เหลือต่อหน้า Note
@@ -7454,7 +7483,8 @@ function renderFxGrid(groups, hol, td, total = groups.length, room = '') {
     const dBody = has ? `<i class="t">RTT ${du.rtt.length}</i><i class="a">RA ${du.ra.length}</i>` : d === td ? '+ RTT/RA' : '+';
     const duty = h ? '' : dutyEdit ? `<button type="button" class="fxg-duty${has ? '' : ' none'}" data-duty="${d}" title="${esc(`${dTip} · กดเพื่อเลือกผู้ปฏิบัติงาน`)}">${dBody}</button>`
       : has ? `<span class="fxg-duty" title="${esc(dTip)}">${dBody}</span>` : '';
-    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" data-hd="${d}" title="${esc(tip)}"><small>${esc(WD_FMT.format(dt))}</small><b>${dt.getDate()}</b><small>${esc(MON_FMT.format(dt))}</small><span class="fxg-n${st.all ? '' : ' zero'}">${st.all}</span><span class="fxg-q${st.q ? '' : ' zero'}${over ? ' over' : ''}">Q${st.q}</span><span class="fxg-st">${st.all ? `${num0(st.g, 'g')}/${num0(st.y, 'y')}/${num0(st.r, 'r')}${st.p ? `<i class="p">+${st.p}</i>` : ''}` : ''}</span>${duty}</div>`;
+    const H = state.config.fxgHead, stTxt = (H.st && st.all ? `<span class="fxg-st3">${num0(st.g, 'g')}/${num0(st.y, 'y')}/${num0(st.r, 'r')}</span>` : '') + (H.p && st.p ? `<i class="p">+${st.p}</i>` : '');
+    return `<div class="fxg-d${d === td ? ' today' : ''}${h ? ' hol' : ''}${i && dt.getDay() === 1 ? ' mon' : ''}" role="columnheader" data-hd="${d}" title="${esc(tip)}">${H.wd ? `<small>${esc(WD_FMT.format(dt))}</small>` : ''}<b>${dt.getDate()}</b>${H.mon ? `<small>${esc(MON_FMT.format(dt))}</small>` : ''}${H.all ? `<span class="fxg-n${st.all ? '' : ' zero'}">${st.all}</span>` : ''}${H.q ? `<span class="fxg-q${st.q ? '' : ' zero'}${over ? ' over' : ''}">Q${st.q}</span>` : ''}${H.st || H.p ? `<span class="fxg-st">${stTxt}</span>` : ''}${H.duty ? duty : ''}</div>`;
   }).join('');
   box.style.setProperty('--fx-c0', `${c0}px`);
   box.dataset.c0base = c0base;
@@ -11269,6 +11299,8 @@ function renderSettings() {
       <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
     <div class="sec" data-sec="grid"><div class="sec-head"><h2>ตารางวันฉาย (แถบ ${esc(navLabel('course'))})</h2><p>จำนวนผู้ป่วยใต้วันที่ที่เกินกำหนดเป็นสีแดง · ผู้ปฏิบัติงานประจำวัน (RTT / RA) เลือกจากสมาชิก LPCH RO Workspace ตามตำแหน่งที่ติ๊ก · ฟอร์ม "+ เพิ่มผู้ป่วย" บันทึกผู้ป่วยเข้าตารางวันฉายโดยไม่แจกงานให้ MP (ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู)</p></div>
       ${directOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวันต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป (สีแดงเมื่อเกินจำนวนใช้ได้เลย)</span></p>'}
+      <div class="field fxg-head-set" style="margin-bottom:12px"><span class="lbl">หัวตาราง (ใต้วันที่) <span class="sub-lbl">ติ๊ก = แสดง · วันที่แสดงเสมอ · ชี้ที่หัววันดูรายละเอียดครบทุกอย่าง</span></span>
+        <div class="chips">${FXG_HD.map(([k, l, sub]) => `<label title="${esc(sub)}"><input type="checkbox" data-k="fxgHead.${k}"${d.fxgHead[k] !== false ? ' checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div></div>
       <div class="field fxg-parts-set"><span class="lbl">ข้อมูลในคอลัมน์ผู้ป่วย (คอลัมน์แรกของตารางวันฉาย) <span class="sub-lbl">ติ๊ก = แสดง · ↑ = ลำดับเริ่มต้น · ผู้ใช้แต่ละคนจัดลำดับเองได้ที่ปุ่ม ⇅ เรียงข้อมูล</span></span>
         <ol class="fxg-parts">${d.fxgParts.map((x, i) => `<li><label class="check"><input type="checkbox" data-k="fxgParts.${i}.on"${x.on ? ' checked' : ''}${x.k === 'hn' ? ' disabled' : ''}> ${esc(fxgPartLabel(x.k))}</label><button type="button" class="icon-btn" data-up="fxgParts.${i}" aria-label="เลื่อน ${esc(fxgPartLabel(x.k))} ขึ้น"${i ? '' : ' disabled'}>↑</button></li>`).join('')}</ol></div>
       <div class="field"><span class="lbl">โควตาต่อผู้ป่วย <span class="sub-lbl">หัววันที่ในตารางวันฉาย (Q) และปฏิทิน Start RT · เทคนิคพิเศษตาม ตั้งค่า → ลงนัด</span></span>
