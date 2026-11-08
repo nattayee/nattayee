@@ -1046,6 +1046,21 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-rm.full em small{color:inherit}
 .dpk-rm.mine s{color:var(--fg);font-weight:600;text-decoration:underline}
 .dpk-rm .dpk-k{color:var(--faint);font-size:.8em}
+.dpk-d{position:relative}
+.dpk-corner{position:absolute;top:3px;left:5px;max-width:calc(100% - 26px);overflow:hidden;color:var(--muted);font-size:9.5px;font-weight:600;line-height:12px;text-align:left;text-overflow:ellipsis;white-space:nowrap}
+.dpk-corner.mine{color:var(--fg);text-decoration:underline}
+.dpk-wide .dpk-corner{font-size:10.5px;line-height:13px}
+.dpk-full .dpk-corner{top:5px;left:7px;font-size:12px;line-height:15px}
+.dpk-d.sel .dpk-corner{color:var(--accent-fg)}
+.dpk-d i.dpk-lim small{font-size:.78em;font-weight:600;opacity:.75}
+.dpk-wide .dpk-d i.dpk-lim{font-size:15.5px;line-height:23px;padding:0 9px}
+.dpk-full .dpk-d i.dpk-lim{font-size:18px;line-height:27px;padding:0 12px}
+/* ป้ายแพทย์ในปฏิทิน: สีจาง (พื้นอ่อน ขอบสีแพทย์) */
+.dpk-dc.painted{border-color:color-mix(in srgb,var(--cs) 55%,transparent);background:color-mix(in srgb,var(--cs) 16%,var(--surface));color:var(--fg)}
+.dpk-dc.painted em{background:color-mix(in srgb,var(--cs) 10%,var(--surface))}
+.dpk-dc.full{border-color:var(--late);box-shadow:0 0 0 1px var(--late)}
+.dpk-info{height:7.9em;overflow-y:auto;overscroll-behavior:contain}
+.dpk-wide.dpk-short .dpk-info{height:5.9em}
 .dpk-rb{display:flex;flex-direction:column;align-items:center;gap:2px}
 .dpk-rdocs{display:flex;flex-wrap:wrap;justify-content:center;gap:3px}
 .dpk-full .dpk-rdocs{gap:4px}
@@ -3216,7 +3231,7 @@ const DEFAULT_CONFIG = {
   // แถบลงนัด: ตัวเลือกของช่อง CT · เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยกจากเทคนิคอื่นๆ) · ช่องในฟอร์ม
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4, dayOn: true, docOn: true },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (On = จำกัด)
     simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true,
-    cal: { simNew: true, simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
+    cal: { simNew: true, simBadge: 'lim', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
     drive: { on: false, url: '', every: 60, map: {}, filter: { col: '', vals: [] } } },   // ดึงจาก Google Drive: map ไม่มีคีย์ = เดาจากหัวคอลัมน์ · filter.col '-' = ทุกแถว
@@ -3705,7 +3720,8 @@ function mergeConfig(c) {
   out.appt.simLim = limOf(ap.simLim, d.appt.simLim);
   out.appt.emergOver = ap.emergOver == null ? d.appt.emergOver : ap.emergOver === true || ap.emergOver === 'on';
   const acal = ap.cal && typeof ap.cal === 'object' ? ap.cal : {};
-  out.appt.cal = Object.fromEntries(Object.entries(d.appt.cal).map(([k, v]) => [k, k === 'simDoc' ? (['pick', 'always', 'off'].includes(acal[k]) ? acal[k] : v) : typeof acal[k] === 'boolean' ? acal[k] : v]));
+  const CAL_PICK = { simDoc: ['pick', 'always', 'off'], simBadge: ['lim', 'sp'] };
+  out.appt.cal = Object.fromEntries(Object.entries(d.appt.cal).map(([k, v]) => [k, CAL_PICK[k] ? (CAL_PICK[k].includes(acal[k]) ? acal[k] : v) : typeof acal[k] === 'boolean' ? acal[k] : v]));
   const rg = c.reg && typeof c.reg === 'object' ? c.reg : {};
   out.reg = { form: Object.fromEntries(REG_FORM.map(([k, , v, keep]) => { const x = rg.form && rg.form[k]; return [k, [...(keep ? [] : ['off']), 'show', 'req'].includes(x) ? x : v]; })) };
   const rdv = rg.drive && typeof rg.drive === 'object' ? rg.drive : {}, rdm = rdv.map && typeof rdv.map === 'object' ? rdv.map : {}, rdf = rdv.filter && typeof rdv.filter === 'object' ? rdv.filter : {};
@@ -3845,7 +3861,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.4';
+const PAGE_VERSION = '2026-11-09.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5580,7 +5596,7 @@ const AP_LIMS = [['limits.day', 'CT-Sim ต่อวัน', 'ทุกเคร
   ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'ผู้ป่วยต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยทั้งหมดของแพทย์คนนั้นที่ฉายในห้องนั้นวันนั้น (ใหม่ + ฉายต่อเนื่อง) ทุกวันที่ผู้ป่วยใหม่จะฉาย (เริ่มต้น 16)']];
 const isOnV = v => v === true || v === 'on';
 // ข้อมูลในช่องวันของปฏิทิน (ตั้งค่า → ลงนัด)
-const AP_CAL = [['simNew', 'ผู้ป่วยใหม่ที่เริ่มฉาย (เทคนิคพิเศษ/เทคนิคอื่นๆ)'], ['simQ', 'โควตารวมของวัน (Q)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
+const AP_CAL = [['simNew', 'ตัวเลขผู้ป่วยใหม่ที่เริ่มฉาย'], ['simBadge', 'แบบตัวเลขผู้ป่วยใหม่'], ['simQ', 'โควตารวมของวัน (Q)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
   ['ctN', 'จำนวน CT ที่นัด'], ['ctDoc', 'ป้ายแพทย์ (จำนวนของแพทย์แต่ละคน)']];
 const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
@@ -11404,7 +11420,9 @@ function renderSettings() {
       <div class="table-wrap set-table lim-table"><table><thead><tr><th style="text-align:left">ลิมิต (นับเป็นคนต่อวัน)</th><th>1. จำกัด / 2. ไม่จำกัด</th><th>สูงสุด (คน)</th></tr></thead><tbody>${AP_LIMS.map(([path, l, sub]) => { const [g, k] = path.split('.'), on = isOnV(d.appt[g][k + 'On']); return `<tr><td style="text-align:left">${esc(l)}<br><span class="muted" style="font-size:12px">${esc(sub)}</span></td><td><select data-k="appt.${g}.${k}On" aria-label="${esc(l)}: จำกัดไหม">${opt('on', '1. จำกัด', on ? 'on' : 'off')}${opt('off', '2. ไม่จำกัด', on ? 'on' : 'off')}</select></td><td><input type="number" min="1" max="200" step="1" class="num" data-k="appt.${g}.${k}" value="${esc(d.appt[g][k])}"${on ? '' : ' disabled'} aria-label="${esc(l)}: สูงสุด"></td></tr>`; }).join('')}</tbody></table></div>
       <h3 class="sub-h">ข้อมูลในช่องวันของปฏิทิน</h3>
       <div class="form-grid cal-show" style="margin-bottom:12px">
-        <div class="field"><span class="lbl">ปฏิทิน Start RT</span>${AP_CAL.filter(([k]) => k.startsWith('sim') && k !== 'simDoc').map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
+        <div class="field"><span class="lbl">ปฏิทิน Start RT</span>
+          <label class="field" style="margin:0 0 6px"><span class="lbl">ตัวเลขผู้ป่วยใหม่แสดงเป็น</span><select data-k="appt.cal.simBadge" aria-label="ตัวเลขผู้ป่วยใหม่ในปฏิทิน Start RT">${opt('lim', 'ผู้ป่วยใหม่/ลิมิต (เลือกห้อง = ลิมิตห้อง · ทุกห้อง = รวมทุกห้อง)', d.appt.cal.simBadge)}${opt('sp', 'เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)', d.appt.cal.simBadge)}</select></label>
+          ${AP_CAL.filter(([k]) => k.startsWith('sim') && k !== 'simDoc' && k !== 'simBadge').map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
           <label class="field" style="margin-top:6px"><span class="lbl">ป้ายแพทย์: ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง) <span class="sub-lbl">บรรทัดล่างใต้ชื่อเครื่องฉาย</span></span><select data-k="appt.cal.simDoc" aria-label="ป้ายแพทย์ในปฏิทิน Start RT">${[['pick', 'เมื่อเลือกห้องในปฏิทิน หรือเต็มจอ'], ['always', 'แสดงเสมอ'], ['off', 'ไม่แสดง']].map(([v, t]) => opt(v, t, d.appt.cal.simDoc)).join('')}</select></label></div>
         <div class="field"><span class="lbl">ปฏิทิน CT-Sim</span>${AP_CAL.filter(([k]) => k.startsWith('ct')).map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>
       </div>
@@ -14196,7 +14214,16 @@ function calCounts(kind, skip) {
 }
 const calWhat = kind => (kind === 'ct' ? 'CT ที่นัด' : 'ผู้ป่วยใหม่เริ่มฉาย');
 // Start RT: เทคนิคพิเศษ/เทคนิคอื่นๆ (เทคนิคพิเศษสีแดง · 0 จาง)
-const calNum = (kind, n, sp) => (kind === 'sim' ? `<em${sp ? '' : ' class="z"'}>${sp}</em>/${n - sp}` : `${n}`);
+const calNum = (kind, n, sp) => (kind === 'sim' && state.config.appt.cal.simBadge === 'sp' ? `<em${sp ? '' : ' class="z"'}>${sp}</em>/${n - sp}` : `${n}`);
+// คำอธิบายตัวเลขของปฏิทิน Start RT (บรรทัดใต้ชื่อเดือน)
+const calSimHead = () => (state.config.appt.cal.simBadge === 'sp'
+  ? `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน)`
+  : `ผู้ป่วยใหม่ที่เริ่มฉาย${simLim().room ? '/ลิมิต' : ''} (${calRoom && calRoom !== NO_ROOM ? `ห้อง ${esc(roomLabel(calRoom))}${simLim().room ? ` สูงสุด ${simLim().room} คน` : ''}` : `รวมทุกห้อง${simLim().room ? ` สูงสุด ${simLim().room * state.config.rooms.length} คน` : ''}`})`);
+// Start RT แบบ ใหม่/ลิมิต: เลือกห้องในปฏิทิน = ลิมิตของห้อง · ทุกห้อง = ลิมิต × จำนวนห้อง · ไม่จำกัด = จำนวนอย่างเดียว
+function calSimBadge(c) {
+  const l = simLim().room, one = calRoom && calRoom !== NO_ROOM, lim = !l ? 0 : one ? l : l * state.config.rooms.length;
+  return { html: lim ? `${c.n}<small>/${lim}</small>` : `${c.n}`, full: !!lim && c.n >= lim };
+}
 const calSpText = (kind, v) => (kind === 'sim' && v ? ` · เทคนิคพิเศษ ${v.sp} · เทคนิคอื่นๆ ${v.n - v.sp}` : '');
 const calGrp = (g, kind) => (kind === 'sim' ? roomLabel(g) : g);   // Start RT แยกตามห้อง (เก็บเป็นชื่อห้อง) · CT แยกตามเครื่อง
 // ตัวเลขของวัน: ทุกห้อง หรือเฉพาะห้องที่เลือกในปฏิทิน { n, all, by, who }
@@ -14260,7 +14287,9 @@ function calRoomRows(raw, d, mineRoom, mineDoc) {
     if (!n && !(ld && ld.size)) return '';
     if (!cal.simRoom && !(ld && ld.size)) return '';
     const lim = r !== NO_ROOM && l.room, full = lim && n >= l.room, k = t => (calFull ? `<small class="dpk-k">${t}</small>` : '');
-    const head = `<span class="dpk-rm${full && cal.simRoom ? ' full' : ''}${r === mineRoom ? ' mine' : ''}"><s>${esc(roomShort(r))}</s>${cal.simRoom ? `${k('ใหม่')}<em>${n}${lim ? `<small>/${lim}</small>` : ''}</em>` : ''}</span>`;
+    const single = !!calRoom && calRoom !== NO_ROOM && cal.simBadge !== 'sp';   // ชื่อเครื่องอยู่ที่มุม · ใหม่/ลิมิตอยู่ที่ตัวเลขใหญ่
+    const head = single ? '' : `<span class="dpk-rm${full && cal.simRoom ? ' full' : ''}${r === mineRoom ? ' mine' : ''}"><s>${esc(roomShort(r))}</s>${cal.simRoom ? `${k('ใหม่')}<em>${n}${lim ? `<small>/${lim}</small>` : ''}</em>` : ''}</span>`;
+    if (single && !(ld && ld.size)) return '';
     return `<span class="dpk-rb">${head}${ld && ld.size ? `<span class="dpk-rdocs">${calDocChips(ld, mineDoc, l.doc)}</span>` : ''}</span>`;
   }).filter(Boolean);
   return rows.length ? `<span class="dpk-rms">${rows.join('')}</span>` : '';
@@ -14334,8 +14363,9 @@ function renderCal() {
     if (c) { total += c.n; totalSp += c.sp; }
     const full = !we && !h && (kind === 'ct' ? ctFull(c, calData.doc) : simFullDay(raw, d, calData.room, calData.doc));   // ลงนัดวันนั้นไม่ได้แล้ว: CT (ทั้งวัน / แพทย์) · Start RT (ห้อง / แพทย์ในห้อง ตามฟอร์ม)
     const cls = ['dpk-d', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel', full && 'full'].filter(Boolean).join(' ');
+    const rr = kind === 'sim' && !we && !h ? calRoomRows(raw, d, calData.room, calData.doc) : '';   // แถวห้อง / ป้ายแพทย์ของวันนั้น
     const cal = state.config.appt.cal, ld = kind === 'sim' && !we && !h && cal.simQ ? calData.load(d) : null, lq = ld && ld.all ? `<u class="${calData.lim && ld.q > calData.lim ? 'over' : ''}">Q${ld.q}</u>` : '';
-    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}"><b>${i}</b>${c && (kind === 'sim' ? cal.simNew : cal.ctN) ? `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>` : ''}${lq}${kind === 'ct' && cal.ctDoc && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${kind === 'sim' && !we && !h ? calRoomRows(raw, d, calData.room, calData.doc) : ''}</button>`;
+    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}">${kind === 'sim' && !we && !h && calRoom && calRoom !== NO_ROOM && (c || rr) ? `<span class="dpk-corner${calRoom === calData.room ? ' mine' : ''}">${esc(roomLabel(calRoom))}</span>` : ''}<b>${i}</b>${c && (kind === 'sim' ? cal.simNew : cal.ctN) ? (kind === 'sim' && cal.simBadge !== 'sp' ? (bd => `<i class="dpk-lim${bd.full ? ' over' : ''}">${bd.html}</i>`)(calSimBadge(c)) : `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>`) : ''}${lq}${kind === 'ct' && cal.ctDoc && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${rr}</button>`;
   }
   // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
   const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
@@ -14344,7 +14374,7 @@ function renderCal() {
   const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-dpknav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-dpknav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}<button type="button" class="dpk-max" data-calfull aria-pressed="${calFull}" title="${calFull ? 'ย่อปฏิทิน' : 'ขยายปฏิทินเต็มจอ'}">${calFull ? '⤡ ย่อ' : '⤢ เต็มจอ'}</button></div>
-    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน) · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${state.config.appt.cal.simDoc === 'always' || (state.config.appt.cal.simDoc === 'pick' && (calRoom || calFull)) ? ` · ป้ายแพทย์ (ใต้ชื่อเครื่อง) = ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง${simLim().doc ? ` · สูงสุด ${simLim().doc}` : ''})` : state.config.appt.cal.simDoc === 'pick' ? ' · เลือกห้องหรือเต็มจอเพื่อดูผู้ป่วยของแพทย์' : ''}`}</p>${roomBar}${hint}
+    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `${calSimHead()} · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${state.config.appt.cal.simDoc === 'always' || (state.config.appt.cal.simDoc === 'pick' && (calRoom || calFull)) ? ` · ป้ายแพทย์ (ใต้ชื่อเครื่อง) = ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง${simLim().doc ? ` · สูงสุด ${simLim().doc}` : ''})` : state.config.appt.cal.simDoc === 'pick' ? ' · เลือกห้องหรือเต็มจอเพื่อดูผู้ป่วยของแพทย์' : ''}`}</p>${roomBar}${hint}
     <div class="dpk-grid">${CAL_WD.map(x => `<span class="dpk-wd">${x}</span>`).join('')}${cells}</div>
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
     <div class="dpk-foot"><span>ทั้งเดือน ${total} คน${kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
