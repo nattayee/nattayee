@@ -2628,6 +2628,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <header class="dlg-head"><h2 id="ctpull-title">ดึงจาก CT-SIM</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
       <p class="muted" style="margin:0;font-size:13px">ผู้ป่วยที่ห้อง CT ส่งมา (ยังไม่แจก) · "ใช้ข้อมูลนี้" = ใส่ข้อมูลลงฟอร์มแจกเคส แจกแล้วรายการนี้ผูกกับเคส · "ไม่ต้องแจก" = เอาออกจากรายการ</p>
+      <input type="search" id="ctpull-q" class="appull-q" placeholder="ค้นหา HN, ชื่อ, แพทย์, เครื่อง CT, Organ, เทคนิค, Note" autocomplete="off" aria-label="ค้นหาผู้ป่วยจาก CT-SIM">
       <ul class="ct-pull" id="ctpull-list"></ul>
       <details class="ct-skipped" id="ctpull-skip-box" hidden><summary>ไม่ต้องแจก (<span id="ctpull-skip-n"></span>)</summary><ul class="ct-pull" id="ctpull-skip"></ul></details>
     </div>
@@ -3844,7 +3845,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.3';
+const PAGE_VERSION = '2026-11-09.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5514,9 +5515,13 @@ function renderCtPullBtn() {
 }
 const ctPullRow = (r, skip) => `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b> ${esc(r.name)}<small>${[ctLabel(r.ct), fmtDay(r.date), ctDocText(r.doc), r.organ, ctCatLabels(r), r.note].filter(Boolean).map(esc).join(' · ')}</small></div>
   <span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-ctunskip="${esc(r.id)}">คืนกลับรอแจก</button>` : `<button type="button" class="btn ghost sm" data-ctskip="${esc(r.id)}">ไม่ต้องแจก</button><button type="button" class="btn primary sm" data-ctuse="${esc(r.id)}">ใช้ข้อมูลนี้</button>`}</span></li>`;
+// ข้อความที่ค้นได้: HN ชื่อ แพทย์ (รหัส / ชื่อ) เครื่อง CT วันทำ CT Organ เทคนิค Note
+const ctPullText = r => [r.hn, r.name, r.doc, ctDocText(r.doc), ctLabel(r.ct), fmtDay(r.date), r.organ, ctCatLabels(r), r.tech, r.special, r.note].join(' ').toLowerCase();
 function openCtPull() {
-  const list = ctPulled(), from = plusDays(today(), -60), skipped = state.ct.filter(r => ctState(r) === 'skip' && r.date >= from).sort((a, b) => b.date.localeCompare(a.date));
-  $('#ctpull-list').innerHTML = list.length ? list.map(r => ctPullRow(r)).join('') : '<li class="empty-state">ไม่มีผู้ป่วยรอแจกจาก CT-SIM</li>';
+  if (!ctpullDlg.open) $('#ctpull-q').value = '';
+  const words = str($('#ctpull-q').value).toLowerCase().split(/\s+/).filter(Boolean), hit = r => wordsIn(words, ctPullText(r));
+  const all = ctPulled(), list = all.filter(hit), from = plusDays(today(), -60), skipped = state.ct.filter(r => ctState(r) === 'skip' && r.date >= from && hit(r)).sort((a, b) => b.date.localeCompare(a.date));
+  $('#ctpull-list').innerHTML = (words.length && list.length ? `<li class="ct-pull-day">พบ ${list.length} จาก ${all.length} คน</li>` : '') + (list.length ? list.map(r => ctPullRow(r)).join('') : `<li class="empty-state">${words.length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้น' : 'ไม่มีผู้ป่วยรอแจกจาก CT-SIM'}</li>`);
   $('#ctpull-skip-box').hidden = !skipped.length;
   $('#ctpull-skip-n').textContent = skipped.length;
   $('#ctpull-skip').innerHTML = skipped.map(r => ctPullRow(r, true)).join('');
@@ -7147,6 +7152,7 @@ function apToCt(a) {
     note: [own ? '' : sp.filter(x => !spParts(x).includes(low(tech))).join(', '), a.note].filter(Boolean).join(' · ') };
 }
 $('#appull-q').addEventListener('input', () => openApPull());   // ค้นหาในนัดรอลง CT-SIM
+$('#ctpull-q').addEventListener('input', () => openCtPull());   // ค้นหาในดึงจาก CT-SIM
 function useAp(id) {
   const a = state.appt.find(x => x.id === id);
   if (!a) return;
