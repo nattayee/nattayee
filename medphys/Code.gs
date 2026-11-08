@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-08.2';
+const CODE_VERSION = '2026-11-08.3';
 const API_LEVEL = 57;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -2029,13 +2029,28 @@ const REG_DRIVE_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsh
 function regDriveFiles_(folder) {
   const out = [], it = folder.getFiles();
   while (it.hasNext()) { const f = it.next(); if (REG_DRIVE_TYPES.indexOf(f.getMimeType()) >= 0 || /\.(xlsx|csv)$/i.test(f.getName())) out.push(f); }
-  return out.sort((a, b) => b.getLastUpdated() - a.getLastUpdated());
+  // ไฟล์ .xlsx / .csv ที่บันทึกเป็น Google ชีต (ชื่อเดียวกันไม่มีนามสกุล) ไว้ในโฟลเดอร์แล้ว = อ่าน Google ชีตแทน
+  const gs = {};
+  out.forEach(f => { if (f.getMimeType() === REG_DRIVE_TYPES[1]) gs[String(f.getName()).trim()] = true; });
+  return out.filter(f => f.getMimeType() === REG_DRIVE_TYPES[1] || !gs[String(f.getName()).replace(/\.(xlsx|csv)$/i, '').trim()])
+    .sort((a, b) => b.getLastUpdated() - a.getLastUpdated());
+}
+// เนื้อไฟล์: DriveApp getBlob · ไม่ได้ (เช่น Access denied: DriveApp ทั้งที่เป็นเจ้าของไฟล์) = ดาวน์โหลดผ่าน Drive API ด้วยสิทธิ์เดียวกันของสคริปต์
+function regDriveBlob_(f) {
+  let first;
+  try { return f.getBlob(); } catch (e) { first = e; }
+  const res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(f.getId()) + '?alt=media&supportsAllDrives=true',
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() === 200) return res.getBlob();
+  let why = '';
+  try { const j = JSON.parse(res.getContentText()); why = (j.error && j.error.message) || ''; } catch (x) { why = String(res.getContentText()).slice(0, 120); }
+  throw new Error(String(first && first.message || first) + ' · Drive API ' + res.getResponseCode() + (why ? ': ' + why : '') + ' · แก้ได้: เปิดไฟล์ใน Google Drive → ไฟล์ → บันทึกเป็น Google ชีต (ไว้ในโฟลเดอร์เดียวกัน)');
 }
 function regDriveRows_(f) {
   const t = f.getMimeType();
   if (t === 'application/vnd.google-apps.spreadsheet') return SpreadsheetApp.openById(f.getId()).getSheets()[0].getDataRange().getDisplayValues().map(r => r.map(v => String(v).trim()));
-  if (t === 'text/csv' || /\.csv$/i.test(f.getName())) return Utilities.parseCsv(f.getBlob().getDataAsString('UTF-8')).map(r => r.map(v => String(v).trim()));
-  return xlsxRows_(f.getBlob());
+  if (t === 'text/csv' || /\.csv$/i.test(f.getName())) return Utilities.parseCsv(regDriveBlob_(f).getDataAsString('UTF-8')).map(r => r.map(v => String(v).trim()));
+  return xlsxRows_(regDriveBlob_(f));
 }
 // หัวตาราง: แถวแรกที่มีหัวคอลัมน์ของ HN (ไม่ได้ตั้ง = คำว่า HN) ใน 15 แถวแรก
 function regDriveHead_(rows, hnCol) {
@@ -2108,7 +2123,9 @@ function regDriveCheck(set, token) {
   set = set && typeof set === 'object' ? set : {};
   const files = regDriveFiles_(regDriveFolder_(set.url));
   if (!files.length) return { files: [], headers: [], guess: {}, filterVals: [], msg: 'ไม่พบไฟล์ .xlsx / Google Sheets / .csv ในโฟลเดอร์นี้' };
-  const rows = regDriveRows_(files[0]), map = set.map && typeof set.map === 'object' ? set.map : {}, hi = regDriveHead_(rows, map.hn);
+  let rows;
+  try { rows = regDriveRows_(files[0]); } catch (e) { throw new Error('อ่านไฟล์ ' + files[0].getName() + ' ไม่ได้: ' + e.message); }
+  const map = set.map && typeof set.map === 'object' ? set.map : {}, hi = regDriveHead_(rows, map.hn);
   const head = hi < 0 ? (rows[0] || []) : rows[hi], guess = regDriveGuess_(head);
   const fcPick = String((set.filter && set.filter.col) || ''), fcName = fcPick === '-' ? '' : fcPick || guess.filterCol || '', fc = head.indexOf(fcName), mapped = k => String((k in map ? map[k] : guess[k]) || '');
   const privacy = ['hn', 'name'].some(k => mapped(k) === fcName);   // ไม่ส่งค่าของคอลัมน์ HN / ชื่อ
