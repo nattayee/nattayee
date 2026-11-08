@@ -1005,6 +1005,7 @@ button.who:hover .nm{text-decoration:underline}
 .dpk-rm.full em{padding:0 4px;border-radius:5px;background:var(--late);color:var(--surface)}
 .dpk-rm.full em small{color:inherit}
 .dpk-rm.mine s{color:var(--fg);font-weight:600;text-decoration:underline}
+.dpk-rm .dpk-k{color:var(--faint);font-size:.8em}
 .dpk-d.sel .dpk-rm,.dpk-d.sel .dpk-rm em,.dpk-d.sel .dpk-rm em small,.dpk-d.sel .dpk-rm s{color:var(--accent-fg)}
 .dpk-pop:not(.dpk-wide) .dpk-rms{display:none}
 .dpk-wide .dpk-rm{font-size:12px;line-height:17px}
@@ -3762,7 +3763,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.6';
+const PAGE_VERSION = '2026-11-08.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5440,7 +5441,7 @@ const apMode = k => {
 const AP_PRIO = ['Normal', 'Emergency'];
 // ลิมิตในตั้งค่า → ลงนัด: [ที่เก็บ, ชื่อ, คำอธิบาย]
 const AP_LIMS = [['limits.day', 'CT-Sim ต่อวัน', 'ทุกเครื่อง CT รวมกัน'], ['limits.doc', 'CT-Sim ต่อแพทย์ต่อวัน', 'แพทย์แต่ละคน (เริ่มต้น 4)'],
-  ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'Start RT ต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยใหม่ของแพทย์คนนั้นในห้องนั้น (เริ่มต้น 16)']];
+  ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'ผู้ป่วยที่ฉายอยู่ต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยทั้งหมดของแพทย์คนนั้นที่ฉายในห้องนั้นวันนั้น (ใหม่ + ฉายต่อเนื่อง) ทุกวันที่ผู้ป่วยใหม่จะฉาย (เริ่มต้น 16)']];
 const isOnV = v => v === true || v === 'on';
 const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
@@ -5805,11 +5806,10 @@ function apFullErr(rec) {
 function simFullErr(rec) {
   const l = simLim(), old = state.appt.find(x => x.id === rec.id), doc = str(rec.doc).toUpperCase(), room = str(rec.room);
   if (!isDay(rec.sim) || !room || (!l.room && !l.doc) || (old && old.sim === rec.sim && old.room === room && str(old.doc).toUpperCase() === doc)) return '';
-  const v = calCounts('sim', { c: '', r: '', a: rec.id }).get(rec.sim), k = str(rec.hn);
-  if (!v || (k && v.keys.has(k))) return '';
-  const rn = v.by.get(room) || 0, dn = doc ? (v.rd.get(room) || new Map()).get(doc) || 0 : 0;
+  const v = calCounts('sim', { c: '', r: '', a: rec.id }).get(rec.sim), k = str(rec.hn), rn = v && !(k && v.keys.has(k)) ? v.by.get(room) || 0 : 0;
   if (l.room && rn >= l.room) return `Start RT ${fmtDay(rec.sim)} ห้อง ${roomLabel(room)} เต็มแล้ว (ผู้ป่วยใหม่ ${rn}/${l.room} คน) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
-  if (l.doc && doc && dn >= l.doc) return `แพทย์ ${doc} มีผู้ป่วยใหม่เริ่มฉายห้อง ${roomLabel(room)} ${fmtDay(rec.sim)} ครบ ${l.doc} คนแล้ว · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
+  const o = l.doc && doc ? simDocOver({ ...rec, room, doc }, roomLoad(rec.id)) : null;
+  if (o) return `แพทย์ ${doc} จะมีผู้ป่วยฉายอยู่ในห้อง ${roomLabel(room)} ${o.n + 1} คน วันที่ ${fmtDay(o.d)} (สูงสุด ${l.doc}) · เลือกวันหรือห้องอื่น (ลิมิตตั้งที่ ตั้งค่า → ลงนัด)`;
   return '';
 }
 function ctFullErr(rec) {
@@ -7184,17 +7184,17 @@ function fxGroupsOf(list) {
   return groups;
 }
 // ผู้ป่วยในแถบกำลังฉาย / รอฉาย ของห้อง (ว่าง = ทุกห้อง) · ใช้กับปฏิทิน Start RT (โควตารวมของวัน)
-function courseGroups(room, hol = holidayMap()) {
-  const all = [...state.cases.filter(inCourse), ...ctCourseRows(), ...apCourseRows()];
+function courseGroups(room, hol = holidayMap(), skipAp = '') {
+  const all = [...state.cases.filter(inCourse), ...ctCourseRows(), ...apCourseRows().filter(c => !skipAp || c.apId !== skipAp)];
   return fxGroupsOf(all.filter(c => courseTabOf(c) === 'on' && (!room || roomsOf(c).includes(room))).map(c => ({ c, sc: courseSched(c, hol) })));
 }
 const quotaOf = g => (g.sp ? state.config.quota.sp : state.config.quota.other);
 // หัววันที่: all = ผู้ป่วยทั้งหมดของวันนั้น (มี fraction หรืออยู่ในช่วง Hold ฯลฯ) · q = โควตารวม (เทคนิคพิเศษ × quota.sp + อื่นๆ × quota.other) · sp = จำนวนเทคนิคพิเศษ
 // g = ฉายแล้ว (บันทึก / สถานะแบบฉายตามปกติ / วันที่ Complete course) · y = Hold, HV, Re-CT ฯลฯ · r = ค้างบันทึก · p = รอ Plan complete (a = จากนัด)
 function fxDayStat(groups, d, room, hol) {
-  const st = { all: 0, g: 0, y: 0, r: 0, p: 0, a: 0, q: 0, sp: 0 };
+  const st = { all: 0, g: 0, y: 0, r: 0, p: 0, a: 0, q: 0, sp: 0, doc: new Map() };   // doc = จำนวนของแพทย์แต่ละคน (ลิมิตต่อแพทย์ต่อห้องของปฏิทิน Start RT)
   if (hol[d]) return st;
-  const count = g => { st.all++; st.q += quotaOf(g); if (g.sp) st.sp++; };
+  const count = g => { st.all++; st.q += quotaOf(g); if (g.sp) st.sp++; const dk = str(g.main.c.doc).toUpperCase(); if (dk) st.doc.set(dk, (st.doc.get(dk) || 0) + 1); };
   for (const g of groups) {
     const sc = g.main.sc, c = g.main.c;
     if (!sc) continue;
@@ -11192,7 +11192,7 @@ function renderSettings() {
       <h3 class="sub-h">ลิมิตของปฏิทิน CT-Sim และ Start RT</h3>
       <div class="table-wrap set-table lim-table"><table><thead><tr><th style="text-align:left">ลิมิต (นับเป็นคนต่อวัน)</th><th>1. จำกัด / 2. ไม่จำกัด</th><th>สูงสุด (คน)</th></tr></thead><tbody>${AP_LIMS.map(([path, l, sub]) => { const [g, k] = path.split('.'), on = isOnV(d.appt[g][k + 'On']); return `<tr><td style="text-align:left">${esc(l)}<br><span class="muted" style="font-size:12px">${esc(sub)}</span></td><td><select data-k="appt.${g}.${k}On" aria-label="${esc(l)}: จำกัดไหม">${opt('on', '1. จำกัด', on ? 'on' : 'off')}${opt('off', '2. ไม่จำกัด', on ? 'on' : 'off')}</select></td><td><input type="number" min="1" max="200" step="1" class="num" data-k="appt.${g}.${k}" value="${esc(d.appt[g][k])}"${on ? '' : ' disabled'} aria-label="${esc(l)}: สูงสุด"></td></tr>`; }).join('')}</tbody></table></div>
       <label class="check" style="margin:10px 0 4px"><input type="checkbox" data-k="appt.emergOver"${isOnV(d.appt.emergOver) ? ' checked' : ''}> เคส <b>Emergency</b> ลงเกินลิมิตได้ (แจ้งเตือนแต่ไม่ห้าม)</label>
-      <p class="muted def-note" style="margin:0 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และของแพทย์แต่ละคนในห้อง (เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
+      <p class="muted def-note" style="margin:0 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยที่ฉายอยู่ของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
       <h3 class="sub-h">ฟอร์มลงนัด</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN และวันนัด CT-Sim บังคับเสมอ (ติ๊ก on call = ยังไม่มีวันนัด · ใบสั่งเป็น No appointment) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ช่องที่มีคำว่า (ใบสั่ง) ใช้ในใบสั่ง CT Simulation (เริ่มต้นไม่แสดง · ช่องที่ไม่ได้กรอกเว้นว่างในใบสั่งให้เขียนเอง) · Draw area = ลากขอบเขตที่จะทำ CT บนรูปในใบสั่ง · ห้องฉาย: เลือกห้องในปฏิทิน Start RT แล้วกดวันที่ = ตั้งห้องให้ด้วย · ลงข้อมูล CT-SIM จากนัด: ใส่ HN ชื่อ แพทย์ Diag Prescription Start RT ห้องฉาย และเทคนิคพิเศษที่ตรงกับ Technique ให้ (ที่เหลือต่อหน้า Note)</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${APPT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'doc' && d.appt.limits.doc ? '<small class="muted"> · แสดงเสมอเมื่อมีลิมิต CT-Sim ต่อแพทย์</small>' : ''}</td><td><select data-k="appt.form.${k}" aria-label="${esc(l)} ในฟอร์มลงนัด">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -14007,7 +14007,7 @@ function calInfo(d) {
   const raw = counts.get(d), v = calOf(raw), dt = parseISO(d), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
   const ld = kind === 'sim' && calData.load && !hol[d] && isWeekday(d) ? calData.load(d) : null, lq = ld && ld.all ? `<div class="dpk-load">โควตารวมวันนั้น <b${calData.lim && ld.q > calData.lim ? ' class="over"' : ''}>${ld.q}</b> (ผู้ป่วยทั้งหมด ${ld.all} คน · เทคนิคพิเศษ ${ld.sp})${calData.lim && ld.q > calData.lim ? ` · เกิน ${calData.lim}` : ''}</div>` : '';
   return `<b>${esc(WD_FMT.format(dt))} ${esc(fmtDay(d))}</b>${hol[d] ? ` · ${esc(hol[d])}` : ''} · ${esc(calWhatIn(kind))} <b>${v ? v.n : 0}</b> คน${kind === 'sim' && v ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${v.sp}</span> · เทคนิคอื่นๆ ${v.n - v.sp}` : ''}${esc(v ? calBy(v, kind) : rest)}`
-    + (v ? `<div class="dpk-who" title="${esc(v.who.join(', '))}">${esc(v.who.slice(0, 6).join(', '))}${v.who.length > 6 ? ` และอีก ${v.who.length - 6} คน` : ''}</div>` : '') + lq + (kind === 'ct' ? calCtLoad(v, calData.doc) : !hol[d] && isWeekday(d) ? calSimLoad(raw, calData.room, calData.doc) : '');
+    + (v ? `<div class="dpk-who" title="${esc(v.who.join(', '))}">${esc(v.who.slice(0, 6).join(', '))}${v.who.length > 6 ? ` และอีก ${v.who.length - 6} คน` : ''}</div>` : '') + lq + (kind === 'ct' ? calCtLoad(v, calData.doc) : !hol[d] && isWeekday(d) ? calSimLoad(raw, d, calData.room, calData.doc) : '');
 }
 // CT: ลิมิตของวัน + แพทย์แต่ละคน (แพทย์ที่เลือกในฟอร์ม: ยังลงได้ไหม)
 function calCtLoad(v, mine) {
@@ -14021,30 +14021,67 @@ function calCtLoad(v, mine) {
 // Start RT: ห้องเรียงตามตั้งค่า (ไม่ระบุห้องท้ายสุด) · ชื่อย่อ = คำแรกของชื่อห้อง (เต็มจอ = ชื่อเต็ม)
 const roomCmp = (a, b) => ((state.config.rooms.indexOf(a) + 1 || 999) - (state.config.rooms.indexOf(b) + 1 || 999)) || String(a).localeCompare(String(b));
 const roomShort = r => (r === NO_ROOM ? 'ไม่ระบุ' : calFull ? r : str(r).split(/[\s-]+/)[0] || r);
-// แถวต่อห้องในช่องวัน: ผู้ป่วยใหม่/ลิมิตต่อห้อง · ป้ายแพทย์ในห้อง (เห็นเมื่อเลือกห้องในปฏิทิน หรือเต็มจอ)
-function calRoomRows(raw, mineRoom, mineDoc) {
-  const l = simLim(), rooms = (calRoom ? [calRoom] : [...raw.by.keys()]).filter(r => raw.by.get(r)).sort(roomCmp), docs = calRoom || calFull;
-  if (!rooms.length) return '';
-  return `<span class="dpk-rms">${rooms.map(r => {
-    const n = raw.by.get(r) || 0, lim = r !== NO_ROOM && l.room, full = lim && n >= l.room;
-    return `<span class="dpk-rm${full ? ' full' : ''}${r === mineRoom ? ' mine' : ''}"><s>${esc(roomShort(r))}</s><em>${n}${lim ? `<small>/${lim}</small>` : ''}</em>${docs ? calDocChips(raw.rd.get(r) || new Map(), mineDoc, l.doc) : ''}</span>`;
-  }).join('')}</span>`;
+// แถวต่อห้องในช่องวัน: ผู้ป่วยใหม่/ลิมิตต่อห้อง · ป้ายแพทย์ = ผู้ป่วยที่ฉายอยู่ของแพทย์ในห้อง/ลิมิต (เห็นเมื่อเลือกห้องในปฏิทิน หรือเต็มจอ)
+function calRoomRows(raw, d, mineRoom, mineDoc) {
+  const l = simLim(), docs = !!(calRoom || calFull), L = calData.L;
+  const cand = calRoom ? [calRoom] : docs ? [...new Set([...state.config.rooms, ...(raw ? raw.by.keys() : [])])] : raw ? [...raw.by.keys()] : [];
+  const rows = cand.sort(roomCmp).map(r => {
+    const n = raw ? raw.by.get(r) || 0 : 0, ld = docs && r !== NO_ROOM ? L.at(r, d).doc : null;
+    if (!n && !(ld && ld.size)) return '';
+    const lim = r !== NO_ROOM && l.room, full = lim && n >= l.room, k = t => (calFull ? `<small class="dpk-k">${t}</small>` : '');
+    return `<span class="dpk-rm${full ? ' full' : ''}${r === mineRoom ? ' mine' : ''}"><s>${esc(roomShort(r))}</s>${k('ใหม่')}<em>${n}${lim ? `<small>/${lim}</small>` : ''}</em>${ld && ld.size ? k('ฉายอยู่') + calDocChips(ld, mineDoc, l.doc) : ''}</span>`;
+  }).filter(Boolean);
+  return rows.length ? `<span class="dpk-rms">${rows.join('')}</span>` : '';
 }
-const simFullDay = (raw, room, doc) => { const l = simLim(); return !!raw && !!room && ((l.room && (raw.by.get(room) || 0) >= l.room) || (!!doc && l.doc && ((raw.rd.get(room) || new Map()).get(doc) || 0) >= l.doc)); };
-// รายละเอียดใต้ปฏิทิน: ทุกห้อง (จำนวน/ลิมิต · แพทย์) + ห้องและแพทย์ที่เลือกในฟอร์ม
-function calSimLoad(raw, mineRoom, mineDoc) {
-  const l = simLim(), rooms = raw ? [...raw.by.keys()].sort(roomCmp) : [];
+// วันที่ลง Start RT ไม่ได้ (ลายขีดแดง): ห้องในฟอร์มรับผู้ป่วยใหม่ครบ หรือแพทย์ในฟอร์มจะมีผู้ป่วยฉายอยู่ในห้องเกินลิมิต (ฟอร์มลงนัด: ทุกวันที่จะฉาย · ฟอร์มอื่น: วันเริ่ม)
+function simFullDay(raw, d, room, doc) {
+  const l = simLim();
+  if (!room) return false;
+  if (l.room && room !== NO_ROOM && raw && (raw.by.get(room) || 0) >= l.room) return true;
+  if (!doc || !l.doc || room === NO_ROOM) return false;
+  return calData.apRec ? !!simDocOver({ ...calData.apRec, sim: d, room, doc }, calData.L) : (calData.L.at(room, d).doc.get(doc) || 0) >= l.doc;
+}
+// รายละเอียดใต้ปฏิทิน: ทุกห้อง (ผู้ป่วยใหม่/ลิมิต · ผู้ป่วยที่ฉายอยู่ของแพทย์/ลิมิต) + ห้องและแพทย์ที่เลือกในฟอร์ม
+function calSimLoad(raw, d, mineRoom, mineDoc) {
+  const l = simLim(), L = calData.L, rooms = [...new Set([...state.config.rooms, ...(raw ? raw.by.keys() : [])])].sort(roomCmp);
   const parts = rooms.map(r => {
-    const n = raw.by.get(r) || 0, lim = r !== NO_ROOM && l.room, d = calDocList(raw.rd.get(r) || new Map()).map(([c, m]) => `${c} ${m}${l.doc ? '/' + l.doc : ''}`).join(' ');
-    return `${esc(roomLabel(r))} <b${lim && n >= lim ? ' class="over"' : ''}>${n}${lim ? '/' + lim : ''}</b>${d ? ` (แพทย์ ${esc(d)})` : ''}`;
-  });
+    const n = raw ? raw.by.get(r) || 0 : 0, lim = r !== NO_ROOM && l.room, ld = r !== NO_ROOM ? L.at(r, d).doc : new Map();
+    if (!n && !ld.size) return '';
+    const dd = calDocList(ld).map(([c, m]) => `${c} ${m}${l.doc ? '/' + l.doc : ''}`).join(' ');
+    return `${esc(roomLabel(r))} ใหม่ <b${lim && n >= lim ? ' class="over"' : ''}>${n}${lim ? '/' + lim : ''}</b>${dd ? ` (ฉายอยู่ ${esc(dd)})` : ''}`;
+  }).filter(Boolean);
   let me = '';
-  if (mineRoom && (l.room || l.doc)) {
-    const n = raw ? raw.by.get(mineRoom) || 0 : 0, dn = raw && mineDoc ? (raw.rd.get(mineRoom) || new Map()).get(mineDoc) || 0 : 0;
-    me = `ห้อง ${esc(roomLabel(mineRoom))} (ในฟอร์ม)${l.room ? ` <b${n >= l.room ? ' class="over"' : ''}>${n}/${l.room}</b>${n >= l.room ? ' เต็ม' : ` ว่าง ${l.room - n}`}` : ''}`
-      + (mineDoc && l.doc ? ` · แพทย์ ${esc(mineDoc)} ในห้องนี้ <b${dn >= l.doc ? ' class="over"' : ''}>${dn}/${l.doc}</b>${dn >= l.doc ? ' เต็ม' : ''}` : '');
+  if (mineRoom && mineRoom !== NO_ROOM && (l.room || l.doc)) {
+    const n = raw ? raw.by.get(mineRoom) || 0 : 0, dn = mineDoc ? L.at(mineRoom, d).doc.get(mineDoc) || 0 : 0;
+    const o = mineDoc && l.doc && calData.apRec ? simDocOver({ ...calData.apRec, sim: d, room: mineRoom, doc: mineDoc }, L) : null;
+    me = `ห้อง ${esc(roomLabel(mineRoom))} (ในฟอร์ม)${l.room ? ` ใหม่ <b${n >= l.room ? ' class="over"' : ''}>${n}/${l.room}</b>${n >= l.room ? ' เต็ม' : ` ว่าง ${l.room - n}`}` : ''}`
+      + (mineDoc && l.doc ? ` · แพทย์ ${esc(mineDoc)} ฉายอยู่ในห้องนี้ <b${dn >= l.doc || o ? ' class="over"' : ''}>${dn}/${l.doc}</b>${o ? ` · เริ่มวันนี้จะเกินวันที่ ${esc(fmtDay(o.d))} (${o.n + 1} คน)` : dn >= l.doc ? ' เต็ม' : ''}` : '');
   }
   return (parts.length ? `<div class="dpk-load">${parts.join(' · ')}</div>` : '') + (me ? `<div class="dpk-load">${me}</div>` : '');
+}
+// ผู้ป่วยที่ฉายอยู่ในห้องแต่ละวัน (นับเหมือนผู้ป่วยทั้งหมดในตารางวันฉาย: ใหม่ + ฉายต่อเนื่อง · แต่ละบริเวณ / รอบ BID = 1 · รวมนัดที่รอ CT-Sim และรายการ CT-SIM ที่รอแจก)
+// ใช้กับลิมิตต่อแพทย์ต่อห้อง · skipAp = นัดที่กำลังแก้ (ไม่นับตัวเอง) · จำผลรายห้องรายวันไว้
+function roomLoad(skipAp) {
+  const hol = holidayMap(), gs = new Map(), memo = new Map();
+  const groups = room => { if (!gs.has(room)) gs.set(room, courseGroups(room, hol, skipAp)); return gs.get(room); };
+  const at = (room, d) => { const k = room + '|' + d; if (!memo.has(k)) memo.set(k, fxDayStat(groups(room), d, room, hol)); return memo.get(k); };
+  return { hol, groups, at };
+}
+// วันฉายของนัด (Start RT, Fx, ความถี่ · เหมือนแถว "รอ CT-Sim" ในตารางวันฉาย) · ไม่มี Fx = เฉพาะวัน Start RT
+function apFxDays(rec, hol) {
+  try {
+    const v = apToCt(rec), c = normCase({ ...v, id: 'ap:tmp', cat: v.cats, ct: rec.date, in: rec.date, created: nowISO() }), sc = isDay(c.sim) ? courseSched(c, hol) : null;
+    const days = sc ? [...sc.fx.keys()].filter(d => d >= rec.sim).sort() : [];
+    return days.length ? days : [rec.sim];
+  } catch (e) { return [rec.sim]; }
+}
+// เพิ่มผู้ป่วยนี้แล้ว แพทย์คนนั้นมีผู้ป่วยฉายอยู่ในห้องเกินลิมิตวันไหน (วันแรก) · ผู้ป่วยที่มีแถวในห้องนั้นอยู่แล้ว (HN เดียวกัน) ไม่เพิ่ม
+function simDocOver(rec, L) {
+  const l = simLim().doc, doc = str(rec.doc).toUpperCase(), room = str(rec.room), k = hnKey(rec.hn);
+  if (!l || !doc || !room || room === NO_ROOM || !isDay(rec.sim)) return null;
+  if (k && L.groups(room).some(g => hnKey(g.main.c.hn) === k)) return null;
+  for (const d of apFxDays({ ...rec, room }, L.hol)) { const n = L.at(room, d).doc.get(doc) || 0; if (n >= l) return { d, n }; }
+  return null;
 }
 // ชิปห้องฉายของฟอร์ม (ช่อง Start RT ที่มีห้องฉายให้เลือกและแสดงอยู่)
 const calRoomBox = el => { const b = CAL_ROOM_BOX[el.id] && $('#' + CAL_ROOM_BOX[el.id]); return b && b.getClientRects().length ? b : null; };
@@ -14052,6 +14089,7 @@ function renderCal() {
   const el = calBox, kind = CAL_BOXES[el.id], v = isDay(el.value) ? el.value : '', td = today(), work = isWorkdayBox(el);
   const rb0 = kind === 'sim' && calRoomBox(el);
   calData = { counts: calCounts(kind, calSkip(el)), hol: holidayMap(), kind, doc: calDocOf(el), room: kind !== 'sim' ? '' : calRoom && calRoom !== NO_ROOM ? calRoom : rb0 ? chipValue(rb0) : '' };
+  if (kind === 'sim') { calData.L = roomLoad(calSkip(el).a); calData.apRec = el.id === 'a-sim' && editingAp ? readApForm() : null; }   // ผู้ป่วยที่ฉายอยู่ต่อห้อง · ฟอร์มลงนัด: Fx และความถี่ของนัดนี้
   // Start RT: โควตารวมของวัน (ผู้ป่วยทั้งหมดในแถบกำลังฉาย / รอฉาย ของห้องที่เลือก) ใต้ตัวเลขผู้ป่วยใหม่
   if (kind === 'sim') { const gs = courseGroups(calRoom === NO_ROOM ? '' : calRoom, calData.hol); calData.load = d => fxDayStat(gs, d, calRoom === NO_ROOM ? '' : calRoom, calData.hol); calData.lim = dayLimit(calRoom === NO_ROOM ? '' : calRoom); }
   const { counts, hol } = calData, [y, mo] = calMonth.split('-').map(Number);
@@ -14062,10 +14100,10 @@ function renderCal() {
   for (let i = 1; i <= last; i++) {
     const d = `${y}-${pad(mo)}-${pad(i)}`, raw = counts.get(d), c = calOf(raw), w = parseISO(d).getDay(), we = w === 0 || w === 6, h = hol[d];
     if (c) { total += c.n; totalSp += c.sp; }
-    const full = !we && !h && (kind === 'ct' ? ctFull(c, calData.doc) : simFullDay(raw, calData.room, calData.doc));   // ลงนัดวันนั้นไม่ได้แล้ว: CT (ทั้งวัน / แพทย์) · Start RT (ห้อง / แพทย์ในห้อง ตามฟอร์ม)
+    const full = !we && !h && (kind === 'ct' ? ctFull(c, calData.doc) : simFullDay(raw, d, calData.room, calData.doc));   // ลงนัดวันนั้นไม่ได้แล้ว: CT (ทั้งวัน / แพทย์) · Start RT (ห้อง / แพทย์ในห้อง ตามฟอร์ม)
     const cls = ['dpk-d', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel', full && 'full'].filter(Boolean).join(' ');
     const ld = kind === 'sim' && !we && !h ? calData.load(d) : null, lq = ld && ld.all ? `<u class="${calData.lim && ld.q > calData.lim ? 'over' : ''}">Q${ld.q}</u>` : '';
-    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}"><b>${i}</b>${c ? `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>` : ''}${lq}${kind === 'ct' && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${kind === 'sim' && c ? calRoomRows(raw, calData.room, calData.doc) : ''}</button>`;
+    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}"><b>${i}</b>${c ? `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>` : ''}${lq}${kind === 'ct' && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${kind === 'sim' && !we && !h ? calRoomRows(raw, d, calData.room, calData.doc) : ''}</button>`;
   }
   // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
   const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
@@ -14074,7 +14112,7 @@ function renderCal() {
   const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-dpknav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-dpknav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}<button type="button" class="dpk-max" data-calfull aria-pressed="${calFull}" title="${calFull ? 'ย่อปฏิทิน' : 'ขยายปฏิทินเต็มจอ'}">${calFull ? '⤡ ย่อ' : '⤢ เต็มจอ'}</button></div>
-    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน) · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${calRoom || calFull ? ` · ป้ายแพทย์ = จำนวนของแพทย์ในห้อง${simLim().doc ? ` (สูงสุด ${simLim().doc})` : ''}` : ' · เลือกห้องหรือเต็มจอเพื่อดูแพทย์'}`}</p>${roomBar}${hint}
+    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : `ผู้ป่วยใหม่ที่เริ่มฉาย${calRoom ? ` ห้อง ${esc(roomLabel(calRoom))}` : ''} <span class="dpk-sp">เทคนิคพิเศษ</span>/เทคนิคอื่นๆ (คน) · แถวห้อง = ผู้ป่วยใหม่ของห้อง${simLim().room ? `/สูงสุด ${simLim().room}` : ''}${calRoom || calFull ? ` · ป้ายแพทย์ = ผู้ป่วยที่ฉายอยู่ของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง${simLim().doc ? ` · สูงสุด ${simLim().doc}` : ''})` : ' · เลือกห้องหรือเต็มจอเพื่อดูผู้ป่วยที่ฉายอยู่ของแพทย์'}`}</p>${roomBar}${hint}
     <div class="dpk-grid">${CAL_WD.map(x => `<span class="dpk-wd">${x}</span>`).join('')}${cells}</div>
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
     <div class="dpk-foot"><span>ทั้งเดือน ${total} คน${kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
@@ -14148,7 +14186,7 @@ function pickCal(d) {
     toast(`ห้องฉาย ${roomLabel(calRoom)} ตามที่เลือกในปฏิทิน`);
   }
   const ap = d && editingAp ? { id: editingAp.id, hn: str($('#a-hn').value), doc: calData.doc } : null;
-  const warn = !ap ? '' : el.id === 'a-date' ? ctFullErr({ ...ap, date: d }) : el.id === 'a-sim' ? simFullErr({ ...ap, sim: d, room: chipValue($('#a-room')) }) : '';
+  const warn = !ap ? '' : el.id === 'a-date' ? ctFullErr({ ...ap, date: d }) : el.id === 'a-sim' ? simFullErr({ ...readApForm(), sim: d, room: chipValue($('#a-room')) }) : '';
   const emerg = warn && chipValue($('#a-prio')) === 'Emergency' && state.config.appt.emergOver;
   delete el.dataset.typed;
   el.value = d;
