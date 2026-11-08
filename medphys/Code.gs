@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-08.5';
-const API_LEVEL = 57;
+const CODE_VERSION = '2026-11-09.1';
+const API_LEVEL = 58;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -588,7 +588,7 @@ const CFG_TABS = {
   team: ['staff', 'doctors', 'crew'],
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
-  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
   tabs: ['reg', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
 };
@@ -1286,10 +1286,13 @@ function addFxCase(id, date, add, pin, token) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
   let rec = null;
   if (add) {
-    rec = { date: date, n: Math.floor(+add.n), reason: cut(add.reason, 200) };
-    if (!(rec.n >= 1 && rec.n <= 30)) throw new Error('จำนวน fraction ที่เพิ่มต้องเป็น 1–30');
-    if (!rec.reason) throw new Error('ใส่เหตุผลที่เพิ่ม fraction');
+    // API 58: ลบ fraction = ค่าติดลบ (−30 ถึง −1) · ตำแหน่งที่ทำได้ตาม config.fxAdj.roles (เริ่มต้น MP · แอดมินทำได้เสมอ)
+    rec = { date: date, n: Math.trunc(+add.n), reason: cut(add.reason, 200) };
+    if (!(rec.n >= -30 && rec.n <= 30 && rec.n)) throw new Error('จำนวน fraction ที่เพิ่ม / ลบต้องเป็น 1–30');
+    if (!rec.reason) throw new Error('ใส่เหตุผลที่เพิ่ม / ลบ fraction');
   }
+  const fa = (readConfig_(ss_()) || {}).fxAdj, roles = fa && Array.isArray(fa.roles) ? fa.roles.map(String) : ['MP'];
+  if (u.via === 'lpch' && !u.isAdmin && roles.indexOf(String(u.role || '')) < 0) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' เพิ่ม / ลบ fraction ไม่ได้ (ตั้งค่า → สถานะ fraction)');
   pinChange_(u, pin, !add || jsonList_((caseOf_(id) || {}).fxadd).some(x => x && String(x.date).slice(0, 10) === date));
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
