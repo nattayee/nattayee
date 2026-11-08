@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-08.1';
-const API_LEVEL = 56;
+const CODE_VERSION = '2026-11-08.2';
+const API_LEVEL = 57;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -322,6 +322,7 @@ function getData(token) {
     ctsim: need.ctsim ? recentCt_(ss) : [],
     appt: need.appt ? recentAppt_(ss) : [],
     reg: need.reg ? regRows_(ss) : [],
+    regDrive: need.reg ? regDriveStatus_() : null,
     bq: need.bq ? recentBq_(ss, config) : [],
     jobs: need.jobs ? jobsFor_(ss, user, config) : [],
     vac: need.vac ? readTable_(ss, 'vac') : [],
@@ -1992,6 +1993,187 @@ function regRows_(ss) {
   rows.forEach(r => { if (!r.name) r.name = old[r.id] || ''; });
   return rows;
 }
+/* ---------- แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (API 57) ---------- */
+// config.reg.drive = { on, url (ลิงก์โฟลเดอร์), every (นาที), map: { hn, name, doc, icd, dx, right, note } (ชื่อหัวคอลัมน์ · ไม่มีคีย์ = เดาจากหัวคอลัมน์ · '' = ไม่ใช้), filter: { col, vals } (เฉพาะแถวที่คอลัมน์ col เป็นค่าใน vals)
+// ไฟล์ .xlsx · Google Sheets · .csv ในโฟลเดอร์ (ไม่รวมโฟลเดอร์ย่อย) แผ่นแรก · หัวตาราง = แถวแรก (ใน 15 แถว) ที่มีหัวคอลัมน์ของ HN
+// ไม่ดึงซ้ำ: ไฟล์ที่ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อนข้ามทั้งไฟล์ · HN ที่ลงทะเบียนแล้วข้าม (ไม่ทับข้อมูลเดิม) · สถานะเก็บใน Script property regDrive
+const REG_DRIVE_PROP = 'regDrive';
+function regDriveFolder_(url) {
+  const v = String(url == null ? '' : url).trim();
+  const m = /folders\/([\w-]{10,})/.exec(v) || /[?&]id=([\w-]{10,})/.exec(v) || /^([\w-]{20,})$/.exec(v);
+  if (!m) throw new Error('ใส่ลิงก์โฟลเดอร์ Google Drive (https://drive.google.com/drive/folders/…)');
+  try { return DriveApp.getFolderById(m[1]); } catch (e) { throw new Error('เปิดโฟลเดอร์ไม่ได้: บัญชีที่ Deploy Code.gs ต้องมีสิทธิ์ดูโฟลเดอร์นี้ (' + e.message + ')'); }
+}
+const xmlText_ = v => String(v).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCharCode(parseInt(h, 16))).replace(/&#(\d+);/g, (m, d) => String.fromCharCode(+d)).replace(/&amp;/g, '&');
+const xmlTs_ = x => (String(x).replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').match(/<t(?:\s[^>]*)?>[\s\S]*?<\/t>/g) || []).map(t => xmlText_(t.replace(/^<t[^>]*>|<\/t>$/g, ''))).join('');
+// .xlsx = zip ของ XML: ข้อความใช้ร่วม (sharedStrings) + แผ่นแรก · คืนแถวเป็นข้อความ
+function xlsxRows_(blob) {
+  const files = Utilities.unzip(blob.setContentType('application/zip')), get = n => files.filter(f => f.getName() === n)[0];
+  const shared = [], ssx = get('xl/sharedStrings.xml');
+  if (ssx) (ssx.getDataAsString('UTF-8').match(/<si>[\s\S]*?<\/si>|<si\/>/g) || []).forEach(si => shared.push(xmlTs_(si)));
+  const sheet = get('xl/worksheets/sheet1.xml') || files.filter(f => /^xl\/worksheets\/sheet\d+\.xml$/.test(f.getName()))[0];
+  if (!sheet) return [];
+  return (sheet.getDataAsString('UTF-8').match(/<row\b[^>]*\/>|<row\b[\s\S]*?<\/row>/g) || []).map(rw => {
+    const r = [];
+    (rw.match(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g) || []).forEach(c => {
+      const open = /^<c\b[^>]*/.exec(c)[0], ref = (/\br="([A-Z]+)\d+"/.exec(open) || [])[1], t = (/\bt="(\w+)"/.exec(open) || [])[1] || '', v = (/<v>([\s\S]*?)<\/v>/.exec(c) || [])[1];
+      const val = t === 's' ? shared[+v] || '' : t === 'inlineStr' ? xmlTs_(c) : v == null ? '' : xmlText_(v);
+      const col = ref ? ref.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1 : r.length;
+      r[col] = String(val).trim();
+    });
+    return Array.from(r, v => v || '');
+  });
+}
+const REG_DRIVE_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.google-apps.spreadsheet', 'text/csv'];
+function regDriveFiles_(folder) {
+  const out = [], it = folder.getFiles();
+  while (it.hasNext()) { const f = it.next(); if (REG_DRIVE_TYPES.indexOf(f.getMimeType()) >= 0 || /\.(xlsx|csv)$/i.test(f.getName())) out.push(f); }
+  return out.sort((a, b) => b.getLastUpdated() - a.getLastUpdated());
+}
+function regDriveRows_(f) {
+  const t = f.getMimeType();
+  if (t === 'application/vnd.google-apps.spreadsheet') return SpreadsheetApp.openById(f.getId()).getSheets()[0].getDataRange().getDisplayValues().map(r => r.map(v => String(v).trim()));
+  if (t === 'text/csv' || /\.csv$/i.test(f.getName())) return Utilities.parseCsv(f.getBlob().getDataAsString('UTF-8')).map(r => r.map(v => String(v).trim()));
+  return xlsxRows_(f.getBlob());
+}
+// หัวตาราง: แถวแรกที่มีหัวคอลัมน์ของ HN (ไม่ได้ตั้ง = คำว่า HN) ใน 15 แถวแรก
+function regDriveHead_(rows, hnCol) {
+  const want = String(hnCol || '').trim();
+  for (let i = 0; i < Math.min(15, rows.length); i++) if (rows[i].some(v => (want ? v === want : /^hn$/i.test(v)))) return i;
+  return -1;
+}
+// เดาหัวคอลัมน์ของแต่ละช่องจากชื่อหัวคอลัมน์
+function regDriveGuess_(head) {
+  const find = re => head.filter(h => re.test(h))[0] || '';
+  return { hn: find(/^hn$/i), name: find(/ชื่อ.*(สกุล|คนไข้|ผู้ป่วย)|^ชื่อ$/), doc: find(/แพทย์|doctor/i), icd: find(/icd\s*-?10/i), dx: find(/^dx\b|diag/i), right: find(/^mc$|สิทธิ/i), note: '', filterCol: find(/คลินิกที่มารับบริการ/) || find(/คลินิก|clinic/i) };
+}
+// ชื่อพร้อมคำนำหน้า → { title, name } · น.ส. = นางสาว · เด็กชาย = ด.ช. · ยศ / คำย่ออื่น (ร.ต.อ., พญ.) เป็นคำนำหน้าตามเดิม
+const REG_TITLES_ = [['นางสาว', 'นางสาว'], ['น.ส.', 'นางสาว'], ['นาง', 'นาง'], ['นาย', 'นาย'], ['เด็กชาย', 'ด.ช.'], ['ด.ช.', 'ด.ช.'], ['เด็กหญิง', 'ด.ญ.'], ['ด.ญ.', 'ด.ญ.']];
+function regSplitName_(raw) {
+  const s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < REG_TITLES_.length; i++) if (s.indexOf(REG_TITLES_[i][0]) === 0 && s.length > REG_TITLES_[i][0].length) return { title: REG_TITLES_[i][1], name: s.slice(REG_TITLES_[i][0].length).trim() };
+  const m = /^((?:[ก-๙]{1,4}\.){1,4})\s*(\S[\s\S]*)$/.exec(s);
+  return m ? { title: m[1], name: m[2] } : { title: '', name: s };
+}
+// แพทย์ → รหัสใน ตั้งค่า → แพทย์ (ชื่อตรงกัน ไม่สนคำนำหน้า นพ. / พญ. และช่องว่าง)
+const docKey_ = v => String(v == null ? '' : v).trim().replace(/^(?:[ก-๙]{1,3}\.){1,3}\s*/, '').replace(/\s+/g, '').toLowerCase();
+function regDocCode_(raw, cfg) {
+  const k = docKey_(raw);
+  if (!k) return '';
+  const d = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && (docKey_(x.name) === k || String(x.code || '').toUpperCase() === String(raw).trim().toUpperCase()))[0];
+  return d ? String(d.code).toUpperCase() : '';
+}
+// สิทธิการรักษา → ตัวเลือกใน ตั้งค่า → ลงทะเบียน (ตรงกัน หรือกลุ่มเดียวกัน) · ไม่ตรง = ข้อความเดิม
+function regRightOf_(raw, cfg) {
+  const v = String(raw == null ? '' : raw).trim(), opts = (cfg.reg && Array.isArray(cfg.reg.rights) ? cfg.reg.rights : []).map(String);
+  if (!v || opts.indexOf(v) >= 0) return v;
+  const groups = [[/ถ้วนหน้า|บัตรทอง|\bUC\b/, /บัตรทอง|UC|ถ้วนหน้า/], [/ประกันสังคม/, /ประกันสังคม/], [/รัฐวิสาหกิจ/, /รัฐวิสาหกิจ/], [/ข้าราชการ|บำนาญ|อปท/, /ข้าราชการ/], [/ชำระเงินเอง|เงินสด/, /ชำระเงิน|เงินสด/]];
+  for (let i = 0; i < groups.length; i++) if (groups[i][0].test(v)) { const o = opts.filter(x => groups[i][1].test(x))[0]; if (o) return o; }
+  return v;
+}
+function regSexOf_(title, cfg) {
+  const g = cfg.order && Array.isArray(cfg.order.genders) ? cfg.order.genders : ['Male', 'Female'];
+  const f = /^(นาง|นางสาว|ด\.ญ\.)$/.test(title), m = /^(นาย|ด\.ช\.)$/.test(title);
+  return (f || m) ? g.filter(x => (f ? /^(female|หญิง)/i : /^(male|ชาย)/i).test(x))[0] || '' : '';
+}
+// แถวในไฟล์ → รายการลงทะเบียน (ไม่ตรงตัวกรองคลินิก / ไม่มี HN = ข้าม)
+function regDriveRecs_(rows, cfg, d) {
+  const set = d.map || {}, hi = regDriveHead_(rows, set.hn);
+  if (hi < 0) return { recs: [], filtered: 0, err: 'ไม่พบหัวคอลัมน์ ' + (set.hn || 'HN') };
+  const head = rows[hi], g = regDriveGuess_(head), map = {};
+  ['hn', 'name', 'doc', 'icd', 'dx', 'right', 'note'].forEach(k => { map[k] = String((k in set ? set[k] : g[k]) || '').trim(); });
+  if (!map.hn || !map.name) return { recs: [], filtered: 0, err: 'ยังไม่ได้เลือกคอลัมน์ ' + (map.hn ? 'ชื่อ-สกุล' : 'HN') };
+  const col = k => (map[k] ? head.indexOf(map[k]) : -1), cell = (r, k) => { const i = col(k); return i < 0 ? '' : String(r[i] || '').trim(); };
+  const flt = d.filter || {}, fc = flt.col && flt.col !== '-' ? head.indexOf(String(flt.col).trim()) : -1, fv = Array.isArray(flt.vals) ? flt.vals.map(String) : [];
+  const out = [];
+  let filtered = 0;
+  rows.slice(hi + 1).forEach(r => {
+    const hn = cell(r, 'hn').replace(/\s+/g, '');
+    if (!hn || hn === String(map.hn).trim()) return;   // แถวว่าง / หัวตารางซ้ำ
+    if (fc >= 0 && fv.length && fv.indexOf(String(r[fc] || '').trim()) < 0) { filtered++; return; }
+    const nm = regSplitName_(cell(r, 'name')), docRaw = cell(r, 'doc'), doc = regDocCode_(docRaw, cfg), icd = (/[A-Z]\d{2}(?:\.\d{1,2})?/i.exec(cell(r, 'icd')) || [''])[0].toUpperCase();
+    const note = [cell(r, 'note'), docRaw && !doc ? 'แพทย์: ' + docRaw : ''].filter(Boolean).join(' · ');
+    out.push({ hn: hn.slice(0, 40), title: nm.title.slice(0, 40), name: nm.name.slice(0, 200), sex: regSexOf_(nm.title, cfg), birth: '', phone: '', right: regRightOf_(cell(r, 'right'), cfg).slice(0, 200), doc: doc, icd: icd, dx: cell(r, 'dx').slice(0, 2000), note: note.slice(0, 2000) });
+  });
+  return { recs: out, filtered: filtered, err: '' };
+}
+function regDriveStatus_() {
+  try { const v = JSON.parse(PropertiesService.getScriptProperties().getProperty(REG_DRIVE_PROP) || 'null'); if (v) { delete v.files; delete v.sig; } return v; } catch (e) { return null; }
+}
+// แอดมิน: ตรวจโฟลเดอร์ก่อนบันทึกการตั้งค่า · คืนรายชื่อไฟล์ หัวคอลัมน์ของไฟล์ล่าสุด ช่องที่เดาให้ และค่าของคอลัมน์ตัวกรอง (ไม่ส่งข้อมูลผู้ป่วย)
+function regDriveCheck(set, token) {
+  const u = who_(token);
+  if (!u.isAdmin && !(u.sub && u.sub.indexOf('tabs') >= 0)) throw new Error('ตั้งค่าการดึงจาก Google Drive ได้เฉพาะแอดมิน');
+  set = set && typeof set === 'object' ? set : {};
+  const files = regDriveFiles_(regDriveFolder_(set.url));
+  if (!files.length) return { files: [], headers: [], guess: {}, filterVals: [], msg: 'ไม่พบไฟล์ .xlsx / Google Sheets / .csv ในโฟลเดอร์นี้' };
+  const rows = regDriveRows_(files[0]), map = set.map && typeof set.map === 'object' ? set.map : {}, hi = regDriveHead_(rows, map.hn);
+  const head = hi < 0 ? (rows[0] || []) : rows[hi], guess = regDriveGuess_(head);
+  const fcPick = String((set.filter && set.filter.col) || ''), fcName = fcPick === '-' ? '' : fcPick || guess.filterCol || '', fc = head.indexOf(fcName), mapped = k => String((k in map ? map[k] : guess[k]) || '');
+  const privacy = ['hn', 'name'].some(k => mapped(k) === fcName);   // ไม่ส่งค่าของคอลัมน์ HN / ชื่อ
+  const vals = {};
+  if (fc >= 0 && !privacy) rows.slice(hi + 1).forEach(r => { const v = String(r[fc] || '').trim(); if (v) vals[v] = (vals[v] || 0) + 1; });
+  const filterVals = Object.keys(vals).length <= 40 ? Object.keys(vals).sort((a, b) => vals[b] - vals[a]).map(v => ({ v: v, n: vals[v] })) : [];
+  // แพทย์ในไฟล์ (ไม่ใช่ข้อมูลผู้ป่วย) กับรหัสที่จับคู่ได้ใน ตั้งค่า → แพทย์ · ไม่ตรง = ลงทะเบียนโดยไม่มีแพทย์ (ชื่อแพทย์ไปอยู่ใน Note)
+  const dc = head.indexOf(mapped('doc')), docs = {}, cfg = readConfig_(ss_()) || {};
+  if (dc >= 0 && [mapped('hn'), mapped('name')].indexOf(head[dc]) < 0) rows.slice(hi + 1).forEach(r => { const v = String(r[dc] || '').trim(); if (v) docs[v] = (docs[v] || 0) + 1; });
+  const docList = Object.keys(docs).length <= 60 ? Object.keys(docs).sort((a, b) => docs[b] - docs[a]).map(v => ({ v: v, n: docs[v], code: regDocCode_(v, cfg) })) : [];
+  return { files: files.slice(0, 30).map(f => ({ name: f.getName(), at: f.getLastUpdated().toISOString() })), nFiles: files.length, headers: head.filter(Boolean), headRow: hi + 1, rows: Math.max(0, rows.length - hi - 1), guess: guess,
+    filterCol: fcName, filterVals: filterVals, filterMany: Object.keys(vals).length > 40, filterPrivate: privacy, docs: docList };
+}
+/**
+ * ดึงผู้ป่วยจากโฟลเดอร์ (ผู้ที่บันทึกในแถบลงทะเบียนได้) · force = กดปุ่ม "ดึงตอนนี้" (ไม่ต้องเปิดดึงอัตโนมัติ · อ่านไฟล์ที่ดึงแล้วอีกรอบด้วย)
+ * ไม่ force: ดึงเมื่อเปิดดึงอัตโนมัติ และดึงครั้งก่อนเกินรอบที่ตั้ง (every นาที) · คืน { at, added, skipped, filtered, read, nFiles, err }
+ */
+function regDrivePull(force, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.reg), ss = ss_();
+  return regDriveSync_(ss, readConfig_(ss) || {}, !!force, String(u.name || u.username || u.me || ''));
+}
+function regDriveSync_(ss, cfg, force, by) {
+  const d = (cfg.reg && cfg.reg.drive) || {}, props = PropertiesService.getScriptProperties();
+  const load = () => { try { return JSON.parse(props.getProperty(REG_DRIVE_PROP) || 'null') || { files: {} }; } catch (e) { return { files: {} }; } };
+  const out = x => { const y = JSON.parse(JSON.stringify(x)); delete y.files; delete y.sig; return y; };
+  if (!d.url) { if (force) throw new Error('ยังไม่ได้ตั้งลิงก์โฟลเดอร์ (ตั้งค่า → ลงทะเบียน → ดึงจาก Google Drive)'); return out(load()); }
+  const due = st => force || (d.on && !(st.at && Date.now() - Date.parse(st.at) < Math.max(5, +d.every || 60) * 60000 - 30000));
+  if (!due(load())) return out(load());
+  return withLock_(() => {
+    let st = load();
+    if (!due(st)) return out(st);   // อีกคนเพิ่งดึงระหว่างรอล็อก
+    // เปลี่ยนโฟลเดอร์ คอลัมน์ หรือตัวกรอง = อ่านทุกไฟล์ใหม่ (แถวที่เคยไม่ตรงตัวกรองอาจตรงแล้ว)
+    const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : st.files || {};
+    try {
+      const files = regDriveFiles_(regDriveFolder_(d.url)), have = {}, add = [], errs = [];
+      regRows_(ss).forEach(r => { if (hnKey_(r.hn)) have[hnKey_(r.hn)] = true; });
+      let skipped = 0, filtered = 0, read = 0;
+      files.forEach(f => {
+        const id = f.getId(), mod = f.getLastUpdated().toISOString();
+        if (!all && seen[id] === mod) return;   // ไฟล์ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อน
+        read++;
+        let got;
+        try { got = regDriveRecs_(regDriveRows_(f), cfg, d); } catch (e) { errs.push(f.getName() + ': อ่านไฟล์ไม่ได้ (' + e.message + ')'); return; }
+        if (got.err) { errs.push(f.getName() + ': ' + got.err); return; }
+        filtered += got.filtered;
+        got.recs.forEach(r => {
+          const k = hnKey_(r.hn);
+          if (have[k]) { skipped++; return; }
+          have[k] = true;
+          add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + f.getName()).slice(0, 120), created: now, updated: '' }));
+        });
+        seen[id] = mod;
+      });
+      if (add.length) appendNew_(ss, 'reg', add);
+      const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
+      files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
+      st = { at: now, by: by, added: add.length, skipped: skipped, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+    } catch (e) {
+      st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
+    }
+    props.setProperty(REG_DRIVE_PROP, JSON.stringify(st));
+    return out(st);
+  });
+}
+
 function regSave(rec, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.reg);
   rec = rec && typeof rec === 'object' ? rec : {};
@@ -2460,6 +2642,12 @@ function extPull_(key, force, token) {
 function brachyTick() {
   const ss = ss_(), cfg = readConfig_(ss) || {};
   Object.keys(EXT).forEach(k => { if (cfg[EXT[k].cfg] && cfg[EXT[k].cfg].on) extSync_(ss, cfg, k, 'ตั้งเวลา'); });
+  if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');   // ผู้ป่วยจากโฟลเดอร์ Google Drive (ตามรอบที่ตั้ง)
+}
+// ตัวตั้งเวลาเฉพาะการดึงผู้ป่วยจากโฟลเดอร์ Google Drive (ไม่ได้ตั้ง brachyTick ไว้) · Triggers → Add Trigger → regDriveTick → Time-driven
+function regDriveTick() {
+  const ss = ss_(), cfg = readConfig_(ss) || {};
+  if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');
 }
 
 /* ---------- RC จาก TDF Dose Calculator (อ่าน Google Sheet ของระบบนั้นโดยตรง) ---------- */

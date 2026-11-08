@@ -947,6 +947,7 @@ button.who:hover .nm{text-decoration:underline}
 .br-map select{width:100%}
 .br-status{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.6}
 .br-preview{margin:8px 0 0;padding:8px 12px;border-radius:10px;background:var(--sunken);font-size:12.5px;line-height:1.6}
+.rd-vals{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 8px}
 .dpk-rooms{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin:0 0 6px}
 .dpk-rooms button{padding:0 6px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:11.5px;line-height:22px;cursor:pointer}
 .dpk-rooms button:hover{border-color:var(--line-strong);color:var(--fg)}
@@ -1912,6 +1913,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <input type="search" class="tab-q" data-tq="reg" placeholder="ค้นหา HN, ชื่อ, สกุล (ทุกเดือน)" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="rg-drive" hidden title="ดึงผู้ป่วยใหม่จากไฟล์ในโฟลเดอร์ Google Drive (HN ที่ลงทะเบียนแล้วไม่ดึงซ้ำ)">ดึงจาก Google Drive</button>
       <button type="button" class="btn primary" id="rg-add" hidden>+ ลงทะเบียน</button>
     </div>
     <p class="muted" id="rg-help" style="margin:-4px 0 10px;font-size:13px"></p>
@@ -2919,6 +2921,11 @@ const APPT_FORM = [
 const APPT_LISTS = [['cms', 'CT'], ['specials', 'เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยก)']];
 const REG_API = 40;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove) แบบชื่อ-สกุลช่องเดียว และ HN คำนำหน้า ชื่อ-สกุล บังคับตามตั้งค่า
 const regOn = () => serverHas(REG_API);
+// แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (regDriveCheck, regDrivePull, regDriveTick) · ตั้งค่า → ลงทะเบียน
+const REG_DRIVE_API = 57;
+const regDriveOn = () => serverHas(REG_DRIVE_API);
+const REG_DRIVE_FIELDS = [['hn', 'HN', true], ['name', 'ชื่อ-สกุล (มีคำนำหน้าได้)', true], ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['right', 'สิทธิการรักษา'], ['note', 'Note']];
+const REG_DRIVE_EVERY = [[15, 'ทุก 15 นาที'], [30, 'ทุก 30 นาที'], [60, 'ทุก 1 ชั่วโมง'], [180, 'ทุก 3 ชั่วโมง'], [360, 'ทุก 6 ชั่วโมง'], [1440, 'วันละครั้ง']];
 // แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, ซ่อนไม่ได้] (ตั้งค่า → ลงทะเบียน) · HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมี HN หรือชื่อ-สกุลอย่างน้อยหนึ่งช่อง
 const REG_FORM = [['hn', 'HN', 'req', true], ['title', 'คำนำหน้า', 'req'], ['name', 'ชื่อ-สกุล', 'req', true], ['sex', 'เพศ', 'show'], ['birth', 'วันเกิด (อายุ)', 'show'], ['phone', 'เบอร์โทร', 'off'], ['right', 'สิทธิการรักษา', 'off'], ['doc', 'แพทย์ (Doc)', 'show'], ['dx', 'Diag (ICD-10)', 'show'], ['note', 'Note', 'show']];
 const REG_LISTS = [['titles', 'คำนำหน้า'], ['rights', 'สิทธิการรักษา']];
@@ -3092,7 +3099,8 @@ const DEFAULT_CONFIG = {
   // แถบลงนัด: ตัวเลือกของช่อง CT · เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยกจากเทคนิคอื่นๆ) · ช่องในฟอร์ม
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4 } },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (0 = ไม่จำกัด)
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
-  reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])) },
+  reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
+    drive: { on: false, url: '', every: 60, map: {}, filter: { col: '', vals: [] } } },   // ดึงจาก Google Drive: map ไม่มีคีย์ = เดาจากหัวคอลัมน์ · filter.col '-' = ทุกแถว
   // แถบนัดคิวใส่แร่: จำนวนเคสสูงสุดต่อวัน (เกิน = สีแดง เตือนตอนลงนัด) · รูปแบบการใส่ · ผู้ลงชื่อ MP / RC ได้ (ตำแหน่ง / ชื่อผู้ใช้ LPCH)
   // นัดคิวใส่แร่: docShow = แสดงแพทย์ chip (สัญลักษณ์สีของแพทย์) | name (ชื่อ-สกุล) | both · rtt = RTT เริ่มต้นของนัดใหม่
   // hold = วันที่มีนัดใส่แร่ในแถบห้องฉาย: auto (สถานะชื่อ HDR · ไม่มี = HDR) | id สถานะ fraction | off (ไม่ใช้)
@@ -3558,6 +3566,10 @@ function mergeConfig(c) {
   out.appt.limits = { day: an(al.day, d.appt.limits.day), doc: an(al.doc, d.appt.limits.doc) };
   const rg = c.reg && typeof c.reg === 'object' ? c.reg : {};
   out.reg = { form: Object.fromEntries(REG_FORM.map(([k, , v, keep]) => { const x = rg.form && rg.form[k]; return [k, [...(keep ? [] : ['off']), 'show', 'req'].includes(x) ? x : v]; })) };
+  const rdv = rg.drive && typeof rg.drive === 'object' ? rg.drive : {}, rdm = rdv.map && typeof rdv.map === 'object' ? rdv.map : {}, rdf = rdv.filter && typeof rdv.filter === 'object' ? rdv.filter : {};
+  out.reg.drive = { on: !!rdv.on, url: str(rdv.url), every: REG_DRIVE_EVERY.some(([m]) => m === +rdv.every) ? +rdv.every : d.reg.drive.every,
+    map: Object.fromEntries(REG_DRIVE_FIELDS.filter(([k]) => k in rdm).map(([k]) => [k, str(rdm[k])])),
+    filter: { col: str(rdf.col), vals: Array.isArray(rdf.vals) ? [...new Set(rdf.vals.map(str).filter(Boolean))] : [] } };
   for (const [k] of REG_LISTS) out.reg[k] = Array.isArray(rg[k]) ? [...new Set(rg[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.reg[k].slice();   // ค่าเริ่มต้นของรุ่น 2026-10-29.3 (SRS/SRT ช่องเดียว) → กลับเป็นแยก SRS, SRT
   const bq = c.bq && typeof c.bq === 'object' ? c.bq : {};
   out.bq = { max: Math.min(50, Math.max(1, Math.floor(+bq.max) || d.bq.max)), techs: Array.isArray(bq.techs) ? [...new Set(bq.techs.map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.bq.techs.slice(),
@@ -3681,7 +3693,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.2';
+const PAGE_VERSION = '2026-11-08.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3761,6 +3773,8 @@ const sheetStore = {
   brachyPull: force => call('brachyPull', !!force),
   tdfCheck: set => call('tdfCheck', set),
   tdfPull: force => call('tdfPull', !!force),
+  regDriveCheck: set => call('regDriveCheck', set),
+  regDrivePull: force => call('regDrivePull', !!force),
 };
 function localStore() {
   const KEY = 'medphys-dispatch:v1';
@@ -3940,6 +3954,8 @@ function localStore() {
     brachyPull: async () => null,
     tdfCheck: async () => { throw new Error('ดึงจาก TDF Dose Calculator ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     tdfPull: async () => null,
+    regDriveCheck: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    regDrivePull: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
       const c = db.cases.find(x => x.id === id);
@@ -4345,6 +4361,8 @@ function demoDb() {
 /* ---------- สถานะ ---------- */
 const state = {
   srcChk: {},   // ผลตรวจชีตของระบบอื่น (ตั้งค่า) { brachy, tdf }
+  rdChk: null,   // ผลตรวจโฟลเดอร์ Google Drive ของแถบลงทะเบียน (ตั้งค่า)
+  regDrive: null,   // ผลดึงจาก Google Drive ครั้งล่าสุด { at, by, added, skipped, filtered, read, nFiles, err }
   config: mergeConfig(null), cfgReqs: [], cases: [], logs: [], leaves: [], duty: [], ct: [], appt: [], reg: [], bq: [], jobs: [], vac: [], vacImp: null, loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
@@ -5787,6 +5805,8 @@ const RG_COLS = [['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['sex', '�
 function renderReg() {
   const ym = state.month, edit = canEdit() && regOn(), apEdit = accessOf('appt') === 'edit' && apptOn();
   $('#rg-add').hidden = !edit;
+  const rdOk = edit && store.mode === 'sheet' && regDriveOn() && !!state.config.reg.drive.url, rdSt = state.regDrive;
+  $('#rg-drive').hidden = !rdOk;
   $('#rg-api').hidden = regOn() || !canEdit();
   syncTabQ('reg');
   const words = tabWords('reg'), latest = (a, b) => b.created.localeCompare(a.created);
@@ -5794,7 +5814,8 @@ function renderReg() {
   const cols = RG_COLS.filter(([k]) => k === 'hn' || k === 'name' || rgMode(k) !== 'off');
   const nMonth = state.reg.filter(r => rgDay(r).slice(0, 7) === ym).length;
   $('#rg-help').textContent = words.length ? `ค้นทุกเดือน: พบ ${list.length} คน จากทั้งหมด ${state.reg.length} คน`
-    : `${fmtMonth(ym)} · ลงทะเบียน ${nMonth} คน · ทั้งหมด ${state.reg.length} คน${edit ? ' · กดแถวเพื่อแก้' : ''}`;
+    : `${fmtMonth(ym)} · ลงทะเบียน ${nMonth} คน · ทั้งหมด ${state.reg.length} คน${edit ? ' · กดแถวเพื่อแก้' : ''}`
+      + (rdOk && rdSt && rdSt.at ? ` · ดึงจาก Google Drive ล่าสุด ${stampText(rdSt.at)}: เพิ่ม ${rdSt.added || 0} คน${rdSt.err ? ' (มีข้อผิดพลาด ดูที่ ตั้งค่า → ลงทะเบียน)' : ''}` : '');
   const span = cols.length + 2;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>นัด</th></tr></thead>`;
   const cell = (r, k) => {
@@ -10679,6 +10700,70 @@ async function srcPullNow(key, btn) {
     renderSettings();
   } catch (e) { btn.disabled = false; toast('ดึงไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
+// แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (ตั้งค่า → ลงทะเบียน)
+const minText = m => (m % 1440 === 0 ? `${m / 1440} วัน` : m % 60 === 0 ? `${m / 60} ชั่วโมง` : `${m} นาที`);
+function rdStatusHtml(st) {
+  if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
+  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ลงทะเบียนแล้ว (ไม่ดึงซ้ำ) ${st.skipped || 0}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
+    + (st.err ? `<br><span class="acct-warn">${esc(st.err)}</span>` : '');
+}
+function regDriveSec(d) {
+  const b = d.reg.drive, saved = state.config.reg.drive, chk = state.rdChk, local = store.mode === 'local', api = local || regDriveOn();
+  const heads = chk ? chk.headers : [], pick = k => (k in b.map ? b.map[k] : (chk && chk.guess[k]) || '');
+  const mapRows = chk ? REG_DRIVE_FIELDS.map(([k, l, need]) => `<tr><td style="text-align:left">${esc(l)}${need ? ' <b class="req">*</b>' : ''}</td><td><select data-k="reg.drive.map.${k}" aria-label="คอลัมน์ ${esc(l)}">${opt('', '— ไม่ใช้ —', pick(k))}${heads.map(h => opt(h, h, pick(k))).join('')}</select></td></tr>`).join('') : '';
+  let filt = '';
+  if (chk) {
+    const all = [...chk.filterVals, ...b.filter.vals.filter(v => !chk.filterVals.some(x => x.v === v)).map(v => ({ v, n: 0 }))];
+    const vals = !b.filter.col || b.filter.col === '-' ? '' : chk.filterPrivate ? '<p class="br-preview acct-warn">คอลัมน์นี้เป็น HN หรือชื่อผู้ป่วย ใช้กรองไม่ได้ · เลือกคอลัมน์อื่น</p>'
+      : chk.filterMany ? `<label class="field" style="max-width:560px"><span class="lbl">ค่าที่ดึง <span class="sub-lbl">คอลัมน์นี้มีค่ามากกว่า 40 แบบ · พิมพ์ค่าให้ตรงกับในไฟล์ คั่นด้วย ,</span></span><input data-rdvals value="${esc(b.filter.vals.join(', '))}" aria-label="ค่าที่ดึง"></label>`
+      : all.length ? `<div class="rd-vals">${all.map(x => `<label class="check"><input type="checkbox" data-rdval value="${esc(x.v)}"${b.filter.vals.includes(x.v) ? ' checked' : ''}> ${esc(x.v)} <span class="muted">${x.n ? `${x.n} แถว` : 'ไม่พบในไฟล์ล่าสุด'}</span></label>`).join('')}</div>`
+      : '<p class="muted">คอลัมน์นี้ไม่มีค่าในไฟล์ล่าสุด</p>';
+    const none = b.filter.col && b.filter.col !== '-' && !b.filter.vals.length ? '<p class="br-preview acct-warn">ยังไม่ได้เลือกค่า = ดึงทุกแถว (ทุกคลินิก)</p>' : '';
+    filt = `<label class="field" style="max-width:360px;margin:12px 0 8px"><span class="lbl">ดึงเฉพาะแถวที่คอลัมน์</span><select data-k="reg.drive.filter.col" aria-label="คอลัมน์ที่ใช้กรอง">${opt('-', '— ทุกแถว (ไม่กรอง) —', b.filter.col || chk.filterCol || '-')}${heads.map(h => opt(h, h, b.filter.col || chk.filterCol)).join('')}</select></label>${vals}${none}`;
+  }
+  const docs = chk && chk.docs && chk.docs.length ? `<p class="br-preview">แพทย์ในไฟล์ล่าสุด: ${chk.docs.map(x => x.code ? `${esc(x.v)} → <b>${esc(x.code)}</b>` : `<span class="acct-warn">${esc(x.v)} (ไม่ตรงกับ ตั้งค่า → แพทย์)</span>`).join(' · ')}${chk.docs.some(x => !x.code) ? '<br>แพทย์ที่ไม่ตรง: ลงทะเบียนโดยไม่มีแพทย์ และใส่ชื่อแพทย์ใน Note · ใส่ชื่อ-สกุลของแพทย์ที่ ทีม → แพทย์ ให้ตรงกับในไฟล์ (ไม่ต้องมี นพ. / พญ.) แล้วกดบันทึกการตั้งค่า' : ''}</p>` : '';
+  const files = !chk ? '' : !chk.files.length ? `<p class="br-preview acct-warn">${esc(chk.msg || 'ไม่พบไฟล์ในโฟลเดอร์')}</p>`
+    : `<p class="br-preview">พบ ${chk.nFiles} ไฟล์: ${chk.files.slice(0, 6).map(f => `${esc(f.name)} <span class="muted">(แก้ล่าสุด ${esc(stampText(f.at))})</span>`).join(' · ')}${chk.nFiles > 6 ? ' …' : ''}<br>ไฟล์ล่าสุด: ${chk.headRow ? `หัวตารางแถวที่ ${chk.headRow} · ข้อมูล ${chk.rows} แถว` : '<span class="acct-warn">ไม่พบคอลัมน์ HN · เลือกคอลัมน์ HN ด้านล่าง</span>'}</p>`;
+  const ready = !local && api && !!saved.url;
+  return `<h3 class="sub-h" id="rd-sec">ดึงผู้ป่วยจาก Google Drive</h3>
+      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่ลงทะเบียนแล้วไม่ดึงซ้ำ</b> (ไม่ทับข้อมูลที่แก้ไว้) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
+        · คำนำหน้าแยกจากชื่อให้เอง (น.ส. = นางสาว · ด.ช. ด.ญ. · ยศ / คำย่ออื่นใช้ตามไฟล์) และเลือกเพศจากคำนำหน้า · แพทย์จับคู่กับ ทีม → แพทย์ ด้วยชื่อ-สกุล · สิทธิจับคู่กับตัวเลือกด้านบน (ถ้วนหน้า → บัตรทอง, ประกันสังคม, ข้าราชการ, ชำระเงินเอง · ไม่ตรง = ข้อความในไฟล์) · ICD-10 ใช้รหัสแรก</p>
+      ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก Google Drive ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก Google Drive ต้องใช้ Code.gs รุ่น 2026-11-08.2 ขึ้นไป · วาง Code.gs ใหม่ กด Run ฟังก์ชัน regDriveTick หนึ่งครั้งเพื่ออนุญาตให้อ่าน Google Drive แล้ว Deploy เวอร์ชันใหม่</span></p>' : ''}
+      <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="reg.drive.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
+      <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์โฟลเดอร์ Google Drive <span class="sub-lbl">drive.google.com/drive/folders/… · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดโฟลเดอร์ได้</span></span>
+        <span class="br-url" style="display:flex;gap:8px"><input data-k="reg.drive.url" value="${esc(b.url)}" placeholder="drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์โฟลเดอร์ Google Drive"><button type="button" class="btn ghost" data-rdchk${local || !api ? ' disabled' : ''}>ตรวจโฟลเดอร์</button></span></div>
+      <label class="field" style="max-width:260px;margin-bottom:6px"><span class="lbl">ดึงอัตโนมัติทุก</span><select data-k="reg.drive.every" aria-label="รอบการดึงจาก Google Drive">${REG_DRIVE_EVERY.map(([m, l]) => opt(String(m), l, String(b.every))).join('')}</select></label>
+      <div id="rd-chk">${chk ? `${files}<h3 class="sub-h">คอลัมน์ในไฟล์</h3><div class="table-wrap set-table br-map"><table><thead><tr><th style="text-align:left">ข้อมูล</th><th>คอลัมน์ในไฟล์</th></tr></thead><tbody>${mapRows}</tbody></table></div>${filt}${docs}` : '<p class="muted">กด "ตรวจโฟลเดอร์" เพื่อดูไฟล์ เลือกคอลัมน์ และเลือกคลินิกที่ดึง (ไม่ตรวจ = ใช้คอลัมน์ที่เดาจากหัวตาราง และดึงทุกแถว)</p>'}</div>
+      <p class="br-status" id="rd-status">${rdStatusHtml(state.regDrive)}</p>
+      <div class="mem-bar"><button type="button" class="btn ghost" data-rdpull${ready ? '' : ' disabled'}>ดึงตอนนี้</button><span class="muted">${!saved.url ? 'ใส่ลิงก์โฟลเดอร์แล้วกดบันทึกการตั้งค่าก่อน' : saved.on ? `ดึงเองทุก ${minText(saved.every)} เมื่อมีคนที่บันทึกในแถบ${esc(navLabel('reg'))}ได้เปิดหน้าเว็บ · ปุ่มนี้อ่านทุกไฟล์อีกรอบ (HN ที่มีแล้วยังไม่ดึงซ้ำ)` : 'ยังไม่เปิดดึงอัตโนมัติ: กดปุ่มนี้หรือปุ่ม "ดึงจาก Google Drive" ในแถบลงทะเบียน'}</span></div>
+      <p class="muted def-note" style="margin:8px 0 0">ให้ดึงแม้ไม่มีใครเปิดหน้าเว็บ: เจ้าของเปิด Apps Script ของระบบนี้ → Triggers (รูปนาฬิกา) → Add Trigger → ฟังก์ชัน <code>regDriveTick</code> · Time-driven · Hour timer · Every hour (ตั้ง <code>brachyTick</code> ไว้แล้วไม่ต้องเพิ่ม: ดึงให้ด้วยตามรอบที่ตั้งด้านบน)</p>`;
+}
+async function rdCheckRun(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const chk = await store.regDriveCheck(clone(draft.reg.drive)), f = draft.reg.drive.filter;
+    state.rdChk = chk;
+    // ตั้งครั้งแรก: กรองคลินิกที่เดาได้ และเลือกคลินิกรังสีรักษาให้ (แก้ได้ · ยังไม่บันทึกจนกดบันทึกการตั้งค่า)
+    if (!f.col && chk.filterCol) {
+      f.col = chk.filterCol;
+      if (!f.vals.length) f.vals = chk.filterVals.filter(x => /รังสีรักษา/.test(x.v)).map(x => x.v);
+    }
+    renderSettings();
+    updateSaveBar();
+  } catch (e) { if (btn) btn.disabled = false; toast('ตรวจโฟลเดอร์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+const rdDoneMsg = st => (st.err && !st.added ? `ดึงจาก Google Drive ไม่สำเร็จ: ${st.err}` : `ดึงจาก Google Drive แล้ว · เพิ่มผู้ป่วย ${st.added} คน · ลงทะเบียนแล้ว (ไม่ดึงซ้ำ) ${st.skipped}${st.err ? ` · ${st.err}` : ''}`);
+async function rdPullNow(btn) {
+  btn.disabled = true;
+  try {
+    const st = await store.regDrivePull(true);
+    state.regDrive = st;
+    toast(rdDoneMsg(st), st.err ? { err: true } : undefined);
+    await refresh(true);
+    if (state.view === 'settings') renderSettings();
+  } catch (e) { toast('ดึงจาก Google Drive ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  btn.disabled = false;
+}
 // สีในหน้าตั้งค่า: ช่องเลือกสี + ตัวอย่างป้าย + × (ไม่ใช้สี / กลับเป็นสีอัตโนมัติ)
 function colorPreview(path) {
   const q = /^qColors\.(q\d)$/.exec(path);
@@ -10935,7 +11020,8 @@ function renderSettings() {
       <div class="form-grid" style="margin-bottom:12px">${REG_LISTS.map(([k, l]) => optEditor('reg.' + k, l)).join('')}</div>
       <h3 class="sub-h">ฟอร์มลงทะเบียน</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN คำนำหน้า ชื่อ-สกุล เริ่มต้นบังคับกรอก (HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมีอย่างน้อยหนึ่งช่อง) · HN ซ้ำกับผู้ป่วยที่ลงทะเบียนแล้วไม่ได้ (ไม่กรอก HN ไม่ตรวจซ้ำ) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · เพศเลือกให้จากคำนำหน้า (นาย, ด.ช. · นาง, นางสาว, ด.ญ.) ตัวเลือกของเพศ = Gender ใน ตัวเลือกในใบสั่ง CT Simulation (ด้านล่าง)</p>
-      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${REG_FORM.map(([k, l, , keep]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="reg.form.${k}" aria-label="${esc(l)} ในฟอร์มลงทะเบียน">${PT_OPTS.filter(([v]) => !keep || v !== 'off').map(([v, t]) => opt(v, t, d.reg.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${REG_FORM.map(([k, l, , keep]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="reg.form.${k}" aria-label="${esc(l)} ในฟอร์มลงทะเบียน">${PT_OPTS.filter(([v]) => !keep || v !== 'off').map(([v, t]) => opt(v, t, d.reg.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      ${regDriveSec(d)}</div>
     <div class="sec" data-sec="appt"><div class="sec-head"><h2>ลงนัด (แถบ ${esc(navLabel('appt'))})</h2><p>ตัวเลือกของช่อง CT และเทคนิคพิเศษ ช่องในฟอร์มลงนัด และตัวเลือกของใบสั่ง CT Simulation · ข้อมูลนัดใส่ลงใบสั่ง CT Simulation (PDF หน้าตาตามไฟล์ CT Simulation Order Form version2) ให้เอง: ปุ่ม ใบสั่ง PDF ในฟอร์ม และปุ่ม PDF ในตาราง · เทคนิคพิเศษเป็นสีแดงในแถบลงนัด และปฏิทิน Start RT นับแยกเป็น เทคนิคพิเศษ/เทคนิคอื่นๆ (เคสและรายการ CT ดูจาก Technique, Note และนัดที่ผูกกัน) · นัดที่ยังไม่ลง CT-SIM รอในแถบ ${esc(navLabel('ctsim'))} (ปุ่ม "นัดรอลง CT") · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู</p></div>
       ${apptOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป</span></p>'}
       ${apptOn() && !orderOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>Draw area ช่องของใบสั่ง และนัด CT แบบ on call บันทึกได้เมื่อใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป</span></p>' : ''}
@@ -11237,6 +11323,8 @@ async function saveSettings() {
   for (const x of [...draft.staff, ...draft.doctors, ...draft.crew]) Object.assign(x, acctOf(x));
   const badSrc = SRC_KEYS.find(k => draft[SRC[k].cfg].on && !(k === 'brachy' && draft.brachySync.src === 'internal') && !/\/d\/[\w-]{20,}|^[\w-]{20,}$/.test(str(draft[SRC[k].cfg].url).trim()));
   if (badSrc) return toast(`ใส่ลิงก์ Google Sheet ของ${sp(SRC[badSrc].sys)} (ไม่ใช่ลิงก์หน้าเว็บ …/exec) หรือปิด "ดึงอัตโนมัติ"`, { err: true });
+  const rdUrl = str(draft.reg.drive.url);
+  if ((draft.reg.drive.on || rdUrl) && !/folders\/[\w-]{10,}|[?&]id=[\w-]{10,}|^[\w-]{20,}$/.test(rdUrl)) return toast('ใส่ลิงก์โฟลเดอร์ Google Drive (drive.google.com/drive/folders/…) หรือปิด "ดึงอัตโนมัติ" ของแถบลงทะเบียน', { err: true });
   const badMail = [...draft.staff, ...draft.doctors, ...draft.crew].find(x => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
   if (badMail) return toast(`อีเมลของ ${str(badMail.code || badMail.name)} ไม่ถูกต้อง: ${badMail.email}`, { err: true });
   if (draft.cats.some(k => !str(k.label))) return toast('กรอกชื่อหมวดให้ครบ', { err: true });
@@ -11286,6 +11374,7 @@ async function saveSettings() {
     renameAll();
     render();
     toast('บันทึกการตั้งค่าแล้ว');
+    maybePullBrachy();   // เพิ่งเปิดดึงอัตโนมัติ (ระบบอื่น / Google Drive) = ดึงเลย ไม่ต้องรอรีเฟรชรอบหน้า
   } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { if (btn.isConnected) btn.disabled = false; }
 }
@@ -13542,6 +13631,8 @@ document.addEventListener('click', e => {
   if (ds.lpchadd) return lpchAdd(ds.lpchadd === 'all' ? ['staff', 'doctors', 'crew'] : [ds.lpchadd]);
   if (ds.srcchk) return srcCheckRun(ds.srcchk, t);
   if (ds.srcpull) return srcPullNow(ds.srcpull, t);
+  if (ds.rdchk !== undefined) return rdCheckRun(t);
+  if (ds.rdpull !== undefined) return rdPullNow(t);
   if (ds.add === 'crew') { draft.crew.push({ name: '', role: draft.dutyRoles.rtt[0] || 'RTT', active: true, user: '', email: '' }); renderSettings(); $$('[data-k^="crew."][data-k$=".name"]').pop().focus(); return; }
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
   switch (t.id) {
@@ -13563,6 +13654,7 @@ document.addEventListener('click', e => {
     case 'ct-apull': return apWaiting().length || state.appt.some(r => apState(r) === 'skip') ? openApPull() : toast('ไม่มีนัดรอลง CT-SIM');
     case 'ap-add': return openApForm('');
     case 'rg-add': return openRgForm('');
+    case 'rg-drive': return rdPullNow(t);
     case 'bq-add': return openBqForm();
     case 'bqe-one': return editingBq && openBqPin('bqcancel', { id: editingBq.id, row: editingBq, scope: 'one' });
     case 'bqe-course': return editingBq && openBqPin('bqcancel', { id: editingBq.id, row: editingBq, scope: 'course' });
@@ -14079,6 +14171,10 @@ function settingsEdit(el) {
     draft.defaults[el.dataset.defmulti] = $$('input:checked', el.closest('.chips')).map(i => i.value).join(', ');
   } else if (el.dataset.lines) {   // ตัวเลือกในใบสั่ง CT Simulation: หนึ่งบรรทัดต่อหนึ่งแถว
     setPath(draft, el.dataset.lines, el.value.split('\n').map(x => x.replace(/\s+$/, '')).filter(x => x.trim()));
+  } else if (el.dataset.rdval !== undefined) {   // ดึงจาก Google Drive: ค่าของคอลัมน์ตัวกรองที่ดึง
+    draft.reg.drive.filter.vals = $$('[data-rdval]:checked', settingsEl).map(x => x.value);
+  } else if (el.dataset.rdvals !== undefined) {
+    draft.reg.drive.filter.vals = [...new Set(el.value.split(',').map(str).filter(Boolean))];
   } else if (el.dataset.bqroles) {
     draft.bq.signRoles = $$('[data-bqroles]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.bqusers) {
@@ -14250,6 +14346,15 @@ settingsEl.addEventListener('change', e => {
   if (el.id === 'logo-file') { pickLogo(el); return; }
   if (el.dataset.acct) { pickAcct(el.dataset.acct, el.value); return; }
   if (el.dataset.k === 'brachySync.src') { settingsEdit(el); renderSettings(); return; }   // ที่มาของนัด: แสดงคำอธิบายตามที่มา
+  const rdK = /^reg\.drive\.(url|map\.hn|filter\.col)$/.exec(el.dataset.k || '');
+  if (rdK) {
+    settingsEdit(el);
+    const rd = draft.reg.drive;
+    if (rdK[1] === 'url') { state.rdChk = null; rd.map = {}; rd.filter = { col: '', vals: [] }; $('#rd-chk').innerHTML = '<p class="muted">เปลี่ยนลิงก์แล้ว · กด "ตรวจโฟลเดอร์" เพื่อดูไฟล์และเลือกคอลัมน์</p>'; updateSaveBar(); return; }
+    if (rdK[1] === 'filter.col') rd.filter.vals = [];
+    if (state.rdChk) rdCheckRun(null); else renderSettings();
+    return;
+  }
   const srcK = /^(brachySync|tdfSync)\.(sheet|map\.|count|from|url)/.exec(el.dataset.k || '');
   if (srcK) {
     const key = SRC_KEYS.find(k => SRC[k].cfg === srcK[1]), cfgd = draft[srcK[1]];
@@ -14373,6 +14478,7 @@ async function refresh(quiet) {
     state.vac = (d.vac || []).map(normVac).filter(x => x.no && x.hn);
     state.brachy = d.brachy || null;
     state.tdf = d.tdf || null;
+    state.regDrive = d.regDrive || null;
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     state.cfgReqs = cfgReqsFor(d.cfgReqs || d.cfgreq || [], state.user, d.config || {});
     applyLook();   // ขนาดตัวอักษรและสีของบัญชีนี้
@@ -14416,6 +14522,19 @@ function maybePullBrachy() {
       if ((!prev || st.at !== prev.at) && st.added + st.updated + st.removed > 0) refresh(true);
       else if (state.view === 'settings' && $(`#src-status-${key}`)) $(`#src-status-${key}`).innerHTML = srcStatusHtml(key, st);
     }).catch(() => { /* ดึงไม่ได้ (เช่นเน็ต) ลองใหม่รอบหน้า */ });
+  }
+  // ผู้ป่วยจากโฟลเดอร์ Google Drive (แถบลงทะเบียน): คนที่บันทึกในแถบนั้นได้เปิดหน้าเว็บ และดึงครั้งล่าสุดเกินรอบที่ตั้ง
+  const rd = state.config.reg.drive, rdLast = state.regDrive && Date.parse(state.regDrive.at);
+  if (rd.on && rd.url && regDriveOn() && accessOf('reg') === 'edit' && !(rdLast && Date.now() - rdLast < rd.every * 60000) && Date.now() - (srcAsk.regDrive || 0) >= 5 * 60000) {
+    srcAsk.regDrive = Date.now();
+    store.regDrivePull(false).then(st => {
+      const prev = state.regDrive;
+      if (!st) return;
+      state.regDrive = st;
+      if ((!prev || st.at !== prev.at) && st.added > 0) { toast(`ดึงผู้ป่วยจาก Google Drive ${st.added} คน (แถบ${navLabel('reg')})`); refresh(true); }
+      else if (state.view === 'reg') renderReg();
+      else if (state.view === 'settings' && $('#rd-status')) $('#rd-status').innerHTML = rdStatusHtml(st);
+    }).catch(() => { /* ดึงไม่ได้ ลองใหม่รอบหน้า */ });
   }
 }
 if (!VIEWS.includes(state.view)) state.view = 'work';
