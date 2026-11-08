@@ -668,6 +668,17 @@ div.c-main,div.lrow{cursor:default}
 .nav{display:flex;gap:2px;background:var(--sunken);padding:3px;border-radius:999px;max-width:100%;overflow-x:auto}
 .nav button{border:0;background:none;padding:6px 9px;border-radius:999px;color:var(--muted);font-size:14px;white-space:nowrap}
 .nav button[aria-current="page"]{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
+/* แถบย่อย: ปุ่ม ▾ ต่อจากแถบหลัก · เมนูลอย (popover) */
+.nav button.has-kids{padding-right:4px}
+.nav .nav-caret{display:inline-flex;align-items:center;gap:4px;padding:6px 9px 6px 3px}
+.nav .nav-caret .nav-arrow{font-size:11px;opacity:.8}
+.nav .nav-caret .nav-dot{margin-left:2px}
+.nav .nav-caret[aria-current="page"] .nav-cur{font-weight:600}
+.nav-drop{position:fixed;inset:auto;margin:0;min-width:210px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
+.nav-drop:popover-open{display:flex;flex-direction:column;gap:2px}
+.nav .nav-drop button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 12px;border-radius:8px;text-align:left;font-size:14px}
+.nav .nav-drop button:hover{background:var(--hover);color:var(--fg)}
+.nav .nav-drop button[aria-current="page"]{background:var(--accent-soft);color:var(--accent);box-shadow:none}
 @media (max-width:1500px){.nav{gap:1px}.nav button{padding:6px 5.5px;font-size:13px}.top-right{column-gap:10px}}   /* 13 แถบ: ชื่อผู้ใช้และออกจากระบบยังอยู่บรรทัดเดียวกับเมนูที่จอ 1280–1500 */
 @media (max-width:1366px){.nav button{padding:6px 4px}.home-btn{padding:7px 9px}.home-btn span{display:none}}   /* จอ 1280: ปุ่ม Home เหลือแต่ไอคอน (ชี้ค้างเห็นคำอธิบาย) */
 .notice{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:13px;color:var(--muted);background:var(--sunken);border-radius:8px;padding:8px 12px;margin-bottom:22px}
@@ -3275,6 +3286,7 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
 const VIEWS = ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'];
+const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p'];   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
 const VIEW_LABEL = { reg: 'ลงทะเบียน', appt: 'ลงนัด', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
 const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
@@ -3756,8 +3768,17 @@ function mergeConfig(c) {
       if (x.view === 'settings') access[r] = r === 'MP' || access[r] ? 'view' : '';
     }
     const vals = Object.entries(access);
-    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && v), access };
+    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && v), access, parent: str(x.parent) };
   });
+  // รวมแถบ (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบย่อยอยู่ในเมนู ▾ ของแถบหลัก · ไม่ซ้อนเกิน 1 ชั้น · ตั้งค่า อยู่ใต้แถบอื่นไม่ได้และมีแถบย่อยไม่ได้
+  // ยังไม่เคยตั้ง (navGrouped): แจกงาน (งาน) ตารางแจกเคส RC และกิจกรรม สรุป P4P อยู่ใต้แถบ Planning (ชื่อที่ตั้ง หรือแถบงานรอ)
+  if (!c.navGrouped) {
+    const host = (out.nav.find(x => /planning/i.test(x.label)) || out.nav.find(x => x.view === 'pend') || {}).view;
+    if (host) for (const x of out.nav) if (NAV_GROUP0.includes(x.view) && x.view !== host) x.parent = host;
+  }
+  for (const x of out.nav) if (x.parent && (x.parent === x.view || x.view === 'settings' || x.parent === 'settings' || !VIEWS.includes(x.parent))) x.parent = '';
+  for (const x of out.nav) { const p = out.nav.find(n => n.view === x.parent); if (x.parent && (!p || p.parent)) x.parent = ''; }
+  out.navGrouped = true;
   out.qaSee = c.qaSee && typeof c.qaSee === 'object' && !Array.isArray(c.qaSee)
     ? Object.fromEntries(Object.entries(c.qaSee).filter(([r]) => ROLE_RE.test(r)).map(([r, v]) => [r, !!v])) : { ...d.qaSee };
   const qaNum = v => (v === '' || v == null || !isFinite(+v) ? '' : +v);
@@ -3823,7 +3844,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.2';
+const PAGE_VERSION = '2026-11-09.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4956,16 +4977,65 @@ function renderAcct() {
   $('#acct').innerHTML = who;   // ชื่อผู้ใช้และปุ่มออกจากระบบอยู่ขวาสุด
 }
 // แถบเมนูตามที่แอดมินตั้ง: ย้ายปุ่มเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
+// แถบย่อย (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบหลักที่แสดงอยู่ · แถบหลักที่ซ่อนจากตำแหน่งนี้ = แถบย่อยขึ้นมาเป็นแถบหลักแทน
+const navParent = x => (x.parent && (state.config.nav || []).some(p => p.view === x.parent && navOn(p.view)) ? x.parent : '');
+const navKids = view => (state.config.nav || []).filter(x => navParent(x) === view && navOn(x.view));
+function navDrop(nav, view) {
+  let d = $(`#nav-drop-${view}`);
+  if (!d) {
+    d = document.createElement('div');
+    d.id = `nav-drop-${view}`;
+    d.className = 'nav-drop';
+    d.setAttribute('popover', '');
+    d.setAttribute('role', 'menu');
+    d.addEventListener('toggle', e => { if (e.newState === 'open') navDropPlace(view); });
+    d.addEventListener('click', e => { if (e.target.closest('[data-view]')) d.hidePopover(); });
+    nav.appendChild(d);
+  }
+  return d;
+}
+function navDropPlace(view) {
+  const d = $(`#nav-drop-${view}`), c = $(`.nav [data-navkids="${view}"]`);
+  if (!d || !c) return;
+  const r = c.getBoundingClientRect(), w = d.offsetWidth, vw = document.documentElement.clientWidth;
+  d.style.left = `${Math.max(8, Math.min(r.left, vw - w - 8))}px`;
+  d.style.top = `${Math.round(r.bottom + 6)}px`;
+}
 function renderNav() {
-  const nav = $('.nav'), list = state.config.nav || [], sig = list.map(x => x.view + (navOn(x.view) ? '' : '-') + ':' + navLabel(x.view)).join(',');
+  const nav = $('.nav'), list = state.config.nav || [], sig = list.map(x => x.view + (navOn(x.view) ? '' : '-') + ':' + navLabel(x.view) + '>' + navParent(x)).join(',');
   if (nav.dataset.sig === sig) return;
   nav.dataset.sig = sig;
+  for (const d of $$('.nav-drop', nav)) if (d.matches(':popover-open')) d.hidePopover();
   for (const x of list) {
     const b = $(`[data-view="${x.view}"]`, nav);
     if (!b) continue;
     b.hidden = !navOn(x.view);
     if (b.firstChild && b.firstChild.nodeType === 3) b.firstChild.nodeValue = navLabel(x.view);   // ชื่อแถบที่แอดมินตั้ง (ป้ายจำนวนงานรอต่อท้ายคงเดิม)
+    const p = navParent(x);
+    if (p) { b.setAttribute('role', 'menuitem'); navDrop(nav, p).appendChild(b); continue; }
+    b.removeAttribute('role');
     nav.appendChild(b);
+    // แถบหลักที่มีแถบย่อย: ปุ่ม ▾ ต่อท้าย (เปิดเมนูแถบย่อย · กดชื่อแถบ = หน้าของแถบหลักเอง)
+    let k = $(`[data-navkids="${x.view}"]`, nav);
+    if (navKids(x.view).length) {
+      if (!k) { k = document.createElement('button'); k.type = 'button'; k.className = 'nav-caret'; k.dataset.navkids = x.view; k.setAttribute('aria-haspopup', 'menu'); }
+      k.setAttribute('popovertarget', navDrop(nav, x.view).id);
+      k.title = `${navKids(x.view).map(c => navLabel(c.view)).join(' · ')}`;
+      b.classList.add('has-kids');
+      nav.appendChild(k);
+    } else { if (k) k.remove(); b.classList.remove('has-kids'); }
+  }
+  for (const d of $$('.nav-drop', nav)) nav.appendChild(d);
+}
+// ปุ่ม ▾: แถบย่อยที่เปิดอยู่ = ชื่อแถบนั้น (ดูเป็นแถบที่เลือก) · ป้ายจำนวนของแถบย่อยรวมไว้ที่ปุ่ม
+function syncNavGroups() {
+  for (const k of $$('.nav [data-navkids]')) {
+    const kids = navKids(k.dataset.navkids), cur = kids.find(x => x.view === state.view);
+    const dots = kids.map(x => $(`.nav [data-view="${x.view}"] .nav-dot`)).filter(Boolean), n = dots.reduce((t, d) => t + (parseInt(d.textContent, 10) || 0), 0);
+    const cls = dots.some(d => !d.classList.contains('warn') && !d.classList.contains('calm')) ? '' : dots.some(d => d.classList.contains('warn')) ? ' warn' : ' calm';
+    k.innerHTML = `${cur ? `<span class="nav-cur">${esc(navLabel(cur.view))}</span>` : ''}<span class="nav-arrow" aria-hidden="true">▾</span>${dots.length ? `<span class="nav-dot${cls}">${n || '•'}</span>` : ''}`;
+    k.setAttribute('aria-label', `${cur ? navLabel(cur.view) + ' · ' : ''}แถบย่อยของ ${navLabel(k.dataset.navkids)}`);
+    k.setAttribute('aria-current', cur ? 'page' : 'false');
   }
 }
 // เรียงกล่องในแต่ละแถบตามที่แอดมินตั้ง · ย้ายเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ช่องที่กำลังพิมพ์หลุดโฟกัส)
@@ -5114,6 +5184,7 @@ function render() {
   // ตำแหน่งอื่นที่แอดมินยังไม่เปิดแถบใดให้ดู
   $('#noview-notice').hidden = !!state.view || (store.mode === 'sheet' && !state.loaded);
   $$('.nav [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'));
+  syncNavGroups();
   $('#demo-notice').hidden = store.mode !== 'local';
   $$('.month-label').forEach(el => { el.textContent = fmtMonth(state.month); });
   if (!intakeTouched && intakeSig !== defaultsSig()) resetIntake();
@@ -11431,13 +11502,14 @@ function renderSettings() {
       <div class="logo-set">${d.logo ? `<img class="logo-prev" src="${esc(d.logo)}" alt="โลโก้ที่ตั้งไว้">` : `<span class="logo-prev" title="ไอคอนเดิม">${$('#brand-mark').outerHTML.replace(/ id="brand-mark"| style="[^"]*"/g, '')}</span>`}
         <button type="button" class="btn ghost" data-logopick>${d.logo ? 'เปลี่ยนรูป…' : 'เลือกรูป…'}</button>${d.logo ? '<button type="button" class="btn ghost" data-logoclear>ใช้ไอคอนเดิม</button>' : ''}
         <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
-    <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับ ชื่อ และสิทธิ์ของแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · ชื่อที่แสดงว่าง = ชื่อเดิม
+    <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับ ชื่อ และสิทธิ์ของแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · <b>อยู่ใต้แถบ</b> = รวมไว้ในเมนู ▾ ของแถบนั้น (กดชื่อแถบหลัก = หน้าของแถบหลักเอง · แถบย่อยเรียงตามลำดับในตารางนี้ · ซ้อนได้ชั้นเดียว) · ชื่อที่แสดงว่าง = ชื่อเดิม
       · สิทธิ์ตามตำแหน่งใน LPCH RO Workspace: <b>ไม่เห็น</b> / <b>ดูได้</b> (ดูอย่างเดียว) / <b>บันทึกได้</b> (บันทึก แก้ไข ลบในแถบนั้น ยืนยันด้วยรหัส PIN)
       · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ</p></div>
       ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป (ที่ใช้อยู่: รุ่น ${esc(state.codeVersion || 'เก่า')}) แล้ว Deploy เวอร์ชันใหม่ · ระหว่างนี้ตำแหน่งอื่นที่ตั้ง "บันทึกได้" จะดูได้อย่างเดียว</span></p>` : ''}
-      <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
+      <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th><th style="text-align:left">อยู่ใต้แถบ</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
         <td class="idx">${i + 1}</td><td class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</td>
         <td><input class="nav-label" data-k="nav.${i}.label" value="${esc(x.label)}" maxlength="30" placeholder="${esc(VIEW_LABEL[x.view] || x.view)}" aria-label="ชื่อแถบ ${esc(VIEW_LABEL[x.view] || x.view)}"></td>
+        <td>${x.view === 'settings' ? '<span class="muted">แถบหลัก</span>' : `<select data-k="nav.${i}.parent" data-navparent aria-label="${esc(VIEW_LABEL[x.view] || x.view)} อยู่ใต้แถบ">${opt('', '— แถบหลัก —', x.parent || '')}${d.nav.filter(p => p.view !== x.view && p.view !== 'settings' && !p.parent).map(p => opt(p.view, `▾ ${str(p.label) || VIEW_LABEL[p.view] || p.view}`, x.parent || '')).join('')}</select>`}</td>
         ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}
         <td><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
       </tr>`).join('')}</tbody></table></div>
@@ -14745,6 +14817,7 @@ settingsEl.addEventListener('change', e => {
   if (el.dataset.acct) { pickAcct(el.dataset.acct, el.value); return; }
   if (el.dataset.k === 'brachySync.src') { settingsEdit(el); renderSettings(); return; }   // ที่มาของนัด: แสดงคำอธิบายตามที่มา
   if (/^appt\.(limits|simLim)\.\w+On$/.test(el.dataset.k || '')) { settingsEdit(el); renderSettings(); return; }
+  if (el.dataset.navparent !== undefined) { settingsEdit(el); for (const x of draft.nav) if (x.parent && draft.nav.some(n => n.view === x.parent && n.parent)) x.parent = ''; renderSettings(); return; }
   const rdK = /^reg\.drive\.(url|map\.hn|filter\.col)$/.exec(el.dataset.k || '');
   if (rdK) {
     settingsEdit(el);
