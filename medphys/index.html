@@ -1913,7 +1913,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <input type="search" class="tab-q" data-tq="reg" placeholder="ค้นหา HN, ชื่อ, สกุล (ทุกเดือน)" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
-      <button type="button" class="btn ghost" id="rg-drive" hidden title="ดึงผู้ป่วยใหม่จากไฟล์ในโฟลเดอร์ Google Drive (HN ที่ลงทะเบียนแล้วไม่ดึงซ้ำ)">ดึงจาก Google Drive</button>
+      <button type="button" class="btn ghost" id="rg-drive" hidden title="ดึงผู้ป่วยใหม่จากไฟล์ในโฟลเดอร์ Google Drive (HN ที่มีในระบบแล้วไม่ดึง)">ดึงจาก Google Drive</button>
       <button type="button" class="btn primary" id="rg-add" hidden>+ ลงทะเบียน</button>
     </div>
     <p class="muted" id="rg-help" style="margin:-4px 0 10px;font-size:13px"></p>
@@ -3693,7 +3693,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-08.3';
+const PAGE_VERSION = '2026-11-08.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10702,9 +10702,11 @@ async function srcPullNow(key, btn) {
 }
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (ตั้งค่า → ลงทะเบียน)
 const minText = m => (m % 1440 === 0 ? `${m / 1440} วัน` : m % 60 === 0 ? `${m / 60} ชั่วโมง` : `${m} นาที`);
+// HN ที่มีในระบบแล้ว (ไม่ดึง) · inSys = มีในแถบอื่น (เคส CT-SIM นัด ฯลฯ) แต่ยังไม่ได้ลงทะเบียน
+const rdSkipText = st => `HN มีในระบบแล้ว (ไม่ดึง) ${st.skipped || 0}${st.inSys ? ` (ในแถบอื่น ${st.inSys})` : ''}`;
 function rdStatusHtml(st) {
   if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
-  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ลงทะเบียนแล้ว (ไม่ดึงซ้ำ) ${st.skipped || 0}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
+  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
     + (st.err ? `<br><span class="acct-warn">${esc(st.err)}</span>` : '');
 }
 function regDriveSec(d) {
@@ -10726,7 +10728,7 @@ function regDriveSec(d) {
     : `<p class="br-preview">พบ ${chk.nFiles} ไฟล์: ${chk.files.slice(0, 6).map(f => `${esc(f.name)} <span class="muted">(แก้ล่าสุด ${esc(stampText(f.at))})</span>`).join(' · ')}${chk.nFiles > 6 ? ' …' : ''}<br>ไฟล์ล่าสุด: ${chk.headRow ? `หัวตารางแถวที่ ${chk.headRow} · ข้อมูล ${chk.rows} แถว` : '<span class="acct-warn">ไม่พบคอลัมน์ HN · เลือกคอลัมน์ HN ด้านล่าง</span>'}</p>`;
   const ready = !local && api && !!saved.url;
   return `<h3 class="sub-h" id="rd-sec">ดึงผู้ป่วยจาก Google Drive</h3>
-      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่ลงทะเบียนแล้วไม่ดึงซ้ำ</b> (ไม่ทับข้อมูลที่แก้ไว้) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
+      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่มีในระบบแล้วไม่ดึง</b> (ลงทะเบียนแล้ว หรือมีในแถบอื่น: เคส CT-SIM ลงนัด นัดคิวใส่แร่ กิจกรรม Vac-Lok · ไม่ทับข้อมูลเดิม) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
         · คำนำหน้าแยกจากชื่อให้เอง (น.ส. = นางสาว · ด.ช. ด.ญ. · ยศ / คำย่ออื่นใช้ตามไฟล์) และเลือกเพศจากคำนำหน้า · แพทย์จับคู่กับ ทีม → แพทย์ ด้วยชื่อ-สกุล · สิทธิจับคู่กับตัวเลือกด้านบน (ถ้วนหน้า → บัตรทอง, ประกันสังคม, ข้าราชการ, ชำระเงินเอง · ไม่ตรง = ข้อความในไฟล์) · ICD-10 ใช้รหัสแรก</p>
       ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก Google Drive ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก Google Drive ต้องใช้ Code.gs รุ่น 2026-11-08.2 ขึ้นไป · วาง Code.gs ใหม่ กด Run ฟังก์ชัน regDriveTick หนึ่งครั้งเพื่ออนุญาตให้อ่าน Google Drive แล้ว Deploy เวอร์ชันใหม่</span></p>' : ''}
       <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="reg.drive.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
@@ -10735,7 +10737,7 @@ function regDriveSec(d) {
       <label class="field" style="max-width:260px;margin-bottom:6px"><span class="lbl">ดึงอัตโนมัติทุก</span><select data-k="reg.drive.every" aria-label="รอบการดึงจาก Google Drive">${REG_DRIVE_EVERY.map(([m, l]) => opt(String(m), l, String(b.every))).join('')}</select></label>
       <div id="rd-chk">${chk ? `${files}<h3 class="sub-h">คอลัมน์ในไฟล์</h3><div class="table-wrap set-table br-map"><table><thead><tr><th style="text-align:left">ข้อมูล</th><th>คอลัมน์ในไฟล์</th></tr></thead><tbody>${mapRows}</tbody></table></div>${filt}${docs}` : '<p class="muted">กด "ตรวจโฟลเดอร์" เพื่อดูไฟล์ เลือกคอลัมน์ และเลือกคลินิกที่ดึง (ไม่ตรวจ = ใช้คอลัมน์ที่เดาจากหัวตาราง และดึงทุกแถว)</p>'}</div>
       <p class="br-status" id="rd-status">${rdStatusHtml(state.regDrive)}</p>
-      <div class="mem-bar"><button type="button" class="btn ghost" data-rdpull${ready ? '' : ' disabled'}>ดึงตอนนี้</button><span class="muted">${!saved.url ? 'ใส่ลิงก์โฟลเดอร์แล้วกดบันทึกการตั้งค่าก่อน' : saved.on ? `ดึงเองทุก ${minText(saved.every)} เมื่อมีคนที่บันทึกในแถบ${esc(navLabel('reg'))}ได้เปิดหน้าเว็บ · ปุ่มนี้อ่านทุกไฟล์อีกรอบ (HN ที่มีแล้วยังไม่ดึงซ้ำ)` : 'ยังไม่เปิดดึงอัตโนมัติ: กดปุ่มนี้หรือปุ่ม "ดึงจาก Google Drive" ในแถบลงทะเบียน'}</span></div>
+      <div class="mem-bar"><button type="button" class="btn ghost" data-rdpull${ready ? '' : ' disabled'}>ดึงตอนนี้</button><span class="muted">${!saved.url ? 'ใส่ลิงก์โฟลเดอร์แล้วกดบันทึกการตั้งค่าก่อน' : saved.on ? `ดึงเองทุก ${minText(saved.every)} เมื่อมีคนที่บันทึกในแถบ${esc(navLabel('reg'))}ได้เปิดหน้าเว็บ · ปุ่มนี้อ่านทุกไฟล์อีกรอบ (HN ที่มีในระบบแล้วยังไม่ดึง)` : 'ยังไม่เปิดดึงอัตโนมัติ: กดปุ่มนี้หรือปุ่ม "ดึงจาก Google Drive" ในแถบลงทะเบียน'}</span></div>
       <p class="muted def-note" style="margin:8px 0 0">ให้ดึงแม้ไม่มีใครเปิดหน้าเว็บ: เจ้าของเปิด Apps Script ของระบบนี้ → Triggers (รูปนาฬิกา) → Add Trigger → ฟังก์ชัน <code>regDriveTick</code> · Time-driven · Hour timer · Every hour (ตั้ง <code>brachyTick</code> ไว้แล้วไม่ต้องเพิ่ม: ดึงให้ด้วยตามรอบที่ตั้งด้านบน)</p>`;
 }
 async function rdCheckRun(btn) {
@@ -10752,7 +10754,7 @@ async function rdCheckRun(btn) {
     updateSaveBar();
   } catch (e) { if (btn) btn.disabled = false; toast('ตรวจโฟลเดอร์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-const rdDoneMsg = st => (st.err && !st.added ? `ดึงจาก Google Drive ไม่สำเร็จ: ${st.err}` : `ดึงจาก Google Drive แล้ว · เพิ่มผู้ป่วย ${st.added} คน · ลงทะเบียนแล้ว (ไม่ดึงซ้ำ) ${st.skipped}${st.err ? ` · ${st.err}` : ''}`);
+const rdDoneMsg = st => (st.err && !st.added ? `ดึงจาก Google Drive ไม่สำเร็จ: ${st.err}` : `ดึงจาก Google Drive แล้ว · เพิ่มผู้ป่วย ${st.added} คน · ${rdSkipText(st)}${st.err ? ` · ${st.err}` : ''}`);
 async function rdPullNow(btn) {
   btn.disabled = true;
   try {

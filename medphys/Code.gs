@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-08.3';
+const CODE_VERSION = '2026-11-08.4';
 const API_LEVEL = 57;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1996,7 +1996,7 @@ function regRows_(ss) {
 /* ---------- แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (API 57) ---------- */
 // config.reg.drive = { on, url (ลิงก์โฟลเดอร์), every (นาที), map: { hn, name, doc, icd, dx, right, note } (ชื่อหัวคอลัมน์ · ไม่มีคีย์ = เดาจากหัวคอลัมน์ · '' = ไม่ใช้), filter: { col, vals } (เฉพาะแถวที่คอลัมน์ col เป็นค่าใน vals)
 // ไฟล์ .xlsx · Google Sheets · .csv ในโฟลเดอร์ (ไม่รวมโฟลเดอร์ย่อย) แผ่นแรก · หัวตาราง = แถวแรก (ใน 15 แถว) ที่มีหัวคอลัมน์ของ HN
-// ไม่ดึงซ้ำ: ไฟล์ที่ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อนข้ามทั้งไฟล์ · HN ที่ลงทะเบียนแล้วข้าม (ไม่ทับข้อมูลเดิม) · สถานะเก็บใน Script property regDrive
+// ไม่ดึงซ้ำ: ไฟล์ที่ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อนข้ามทั้งไฟล์ · HN ที่มีในระบบแล้ว (ทุกแถบที่เก็บ HN) ข้าม (ไม่ทับข้อมูลเดิม) · สถานะเก็บใน Script property regDrive
 const REG_DRIVE_PROP = 'regDrive';
 function regDriveFolder_(url) {
   const v = String(url == null ? '' : url).trim();
@@ -2113,6 +2113,18 @@ function regDriveRecs_(rows, cfg, d) {
   });
   return { recs: out, filtered: filtered, err: '' };
 }
+// HN ที่มีในระบบแล้ว → ตารางแรกที่พบ (ลงทะเบียนก่อน แล้วเคส กิจกรรม CT-SIM นัด นัดใส่แร่ Vac-Lok) · อ่านเฉพาะคอลัมน์ HN ของแต่ละชีต
+function knownHns_(ss) {
+  const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg'));
+  order.forEach(t => {
+    const f = TABLES[t].fields.filter(x => x[0] === 'hn')[0], sh = f ? ss.getSheetByName(TABLES[t].sheet) : null;
+    if (!sh || sh.getLastRow() < 2) return;
+    const col = headerOf_(sh).indexOf(f[1]);
+    if (col < 0) return;
+    sh.getRange(2, col + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnKey_(r[0]); if (k && !out[k]) out[k] = t; });
+  });
+  return out;
+}
 function regDriveStatus_() {
   try { const v = JSON.parse(PropertiesService.getScriptProperties().getProperty(REG_DRIVE_PROP) || 'null'); if (v) { delete v.files; delete v.sig; } return v; } catch (e) { return null; }
 }
@@ -2160,9 +2172,8 @@ function regDriveSync_(ss, cfg, force, by) {
     // เปลี่ยนโฟลเดอร์ คอลัมน์ หรือตัวกรอง = อ่านทุกไฟล์ใหม่ (แถวที่เคยไม่ตรงตัวกรองอาจตรงแล้ว)
     const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : st.files || {};
     try {
-      const files = regDriveFiles_(regDriveFolder_(d.url)), have = {}, add = [], errs = [];
-      regRows_(ss).forEach(r => { if (hnKey_(r.hn)) have[hnKey_(r.hn)] = true; });
-      let skipped = 0, filtered = 0, read = 0;
+      const files = regDriveFiles_(regDriveFolder_(d.url)), have = knownHns_(ss), add = [], errs = [];
+      let skipped = 0, inSys = 0, filtered = 0, read = 0;
       files.forEach(f => {
         const id = f.getId(), mod = f.getLastUpdated().toISOString();
         if (!all && seen[id] === mod) return;   // ไฟล์ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อน
@@ -2173,8 +2184,8 @@ function regDriveSync_(ss, cfg, force, by) {
         filtered += got.filtered;
         got.recs.forEach(r => {
           const k = hnKey_(r.hn);
-          if (have[k]) { skipped++; return; }
-          have[k] = true;
+          if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
+          have[k] = 'drive';
           add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + f.getName()).slice(0, 120), created: now, updated: '' }));
         });
         seen[id] = mod;
@@ -2182,7 +2193,7 @@ function regDriveSync_(ss, cfg, force, by) {
       if (add.length) appendNew_(ss, 'reg', add);
       const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
       files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
-      st = { at: now, by: by, added: add.length, skipped: skipped, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
     } catch (e) {
       st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
     }
