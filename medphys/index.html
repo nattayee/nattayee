@@ -3908,7 +3908,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.13';
+const PAGE_VERSION = '2026-11-09.14';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6479,7 +6479,7 @@ function regSearch(q, skipReg) {
   const k = hnKey(q), words = str(q).toLowerCase().split(/\s+/).filter(Boolean);
   if (!k) return [];
   const all = ptIndex().filter(p => !skipReg || !p.src.includes('reg'));
-  const byHn = all.filter(r => r.hn && hnKey(r.hn).startsWith(k)).sort((a, b) => (b.src[0] === 'reg') - (a.src[0] === 'reg') || hnKey(a.hn).localeCompare(hnKey(b.hn)));   // ลงทะเบียนแล้วก่อน แล้วเรียง HN
+  const byHn = all.filter(r => r.hn && hnKey(r.hn).startsWith(k)).sort((a, b) => (hnKey(b.hn) === k) - (hnKey(a.hn) === k) || (b.src[0] === 'reg') - (a.src[0] === 'reg') || hnKey(a.hn).localeCompare(hnKey(b.hn)));   // HN ตรงพอดีก่อน   // ลงทะเบียนแล้วก่อน แล้วเรียง HN
   const byName = all.filter(r => !byHn.includes(r) && words.every(w => `${regName(r)} ${r.name}`.toLowerCase().includes(w)));
   return [...byHn, ...byName].slice(0, 8);
 }
@@ -6507,7 +6507,7 @@ function setupRegCombo(pre, pick, typed, skipReg) {
     items = regSearch(input.value, skipReg);
     if (archFor === q) items = [...items, ...archHits.filter(a => !items.some(x => hnKey(x.hn) === hnKey(a.hn)))].slice(0, 8);
     else if (items.length < 3) archAsk(q);
-    if (!items.length || (items.length === 1 && hnKey(items[0].hn) === hnKey(input.value) && !(items[0].src || []).includes('arch'))) return close();   // ที่เก็บถาวร: แสดงให้เลือก (พิมพ์ตรงแล้วออกจากช่องไม่เลือกให้เอง)
+    if (!items.length) return close();   // พิมพ์ HN ตรงพอดีก็แสดงรายการพร้อมชื่อ (Enter = เลือกคนที่ HN ตรง · ออกจากช่อง = เลือกให้เหมือนเดิม)
     list.innerHTML = items.map((r, i) => { const age = ageOn(r.birth), sub = [age && `อายุ ${age} ปี`, r.sex, Object.keys(PT_SRC).filter(x => (r.src || []).includes(x)).map(x => PT_SRC[x]).join(', ')].filter(Boolean).join(' · '); return `<li role="option" id="${pre}-hn-o${i}" data-i="${i}" aria-selected="${i === active}"><span class="code">${esc(r.hn || 'ไม่มี HN')}</span><span>${esc(regName(r) || '(ไม่มีชื่อ)')}${sub ? `<small>${esc(sub)}</small>` : ''}</span></li>`; }).join('');
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
