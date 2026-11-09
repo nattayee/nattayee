@@ -235,9 +235,9 @@
       **ห้องฉาย แพทย์ Diag อยู่ใต้ Start RT** · ตั้งค่า → ลงนัด ตั้ง **Dose/fx · Fx · ความถี่ในการฉาย** แยกกันได้ (ไม่แสดง / แสดง / บังคับกรอก · การตั้งค่าเดิม "บังคับ" = Dose/fx และ Fx บังคับ)
     - หัวหน้าต่าง: **🖨 พิมพ์** (ปุ่มหลัก: เปิดหน้าต่างพิมพ์ของเครื่องนั้น เฉพาะใบสั่ง A4) · **ดูใบสั่ง** (ดูอย่างเดียว ยังไม่ดาวน์โหลด · ในนั้นมี พิมพ์ และ download PDF) · **download PDF** ·
       ปุ่ม **ใบสั่ง** ในตารางนัด = ดูใบสั่งของนัดที่บันทึกแล้ว
-    - **ใบสั่ง CT Simulation (PDF)**: ข้อมูลนัดใส่ลงใบสั่งให้เอง (หน้าตาเดียวกับไฟล์ CT Simulation Order Form version2 · A4 หน้าเดียว · ชื่อไฟล์ "CT-Sim-order HN วันนัด.pdf")
+    - **ใบสั่ง CT Simulation (PDF)**: ข้อมูลนัดใส่ลงใบสั่งให้เอง (หน้าตาเดียวกับไฟล์ CT Simulation Order Form version2_1 · A4 หน้าเดียว · ชื่อไฟล์ "CT-Sim-order HN วันนัด.pdf")
       ปุ่ม **ใบสั่ง PDF** บนหัวหน้าต่าง (ตามที่กรอกอยู่ ยังไม่ต้องบันทึก) และปุ่ม **PDF** ในคอลัมน์ ใบสั่ง ของตาราง (นัดที่บันทึกแล้ว)
-      - Name HN Diagnosis Oncologist CT Room Date of CT SIM (= SIM) · RT = Start RT · Room L1/L2/L3 = ห้องฉายตามลำดับในตั้งค่า (Infinity / Precise / VersaHD)
+      - Name HN Diagnosis Oncologist CT Room Date of CT SIM (วันนัด CT) · **SIM+RT = วัน Start RT** (version2_1 · เดิมแยก SIM / RT) · Start RT on call = ติ๊ก No appointment (SIM + RT: On Call) · ตารางข้อมูลผู้ป่วยมีเส้นทุกช่อง · Room L1/L2/L3 = ห้องฉายตามลำดับในตั้งค่า (Infinity / Precise / VersaHD)
       - Protocol: Conventional (ไม่มีเทคนิคพิเศษ) · SRS/SRT (เลือก SRS หรือ SRT) · SBRT · DIBH · Contrast None / IV = CT Non-CM / CM · Special Instruction = Note
       - M.D. to indicate scan volume = Draw area · Attending Oncologist Signature = แพทย์ (และผู้บันทึก วันเวลา) · ช่องที่ไม่ได้กรอกเว้นว่างไว้เขียนเอง
     - ลง CT-SIM จากนัด: Organ ได้จาก Examination Part ข้อแรก (Brain, Head and Neck = Head)

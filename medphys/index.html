@@ -1637,10 +1637,10 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .cso-dept{position:absolute;left:0;right:0;top:14.6mm;font:700 13pt/1 Arial,"Liberation Sans",Helvetica,sans-serif;text-align:center}
 .cso-logo{position:absolute;left:161.4mm;top:8.9mm;width:42.88mm;height:13.65mm}
 .cso-info{position:relative;width:180.81mm;border-collapse:collapse;table-layout:fixed;font:inherit}
-.cso-info th,.cso-info td{height:5.95mm;padding:0 1.9mm;border:0;color:#000;font:inherit;text-align:left;text-transform:none;letter-spacing:0;vertical-align:middle}
+.cso-info th,.cso-info td{height:5.95mm;padding:0 1.9mm;border:.5pt solid #000;color:#000;font:inherit;text-align:left;text-transform:none;letter-spacing:0;vertical-align:middle}
 .cso-info th,.cso-info td:not(.cso-title){font-size:7.9pt}   /* ช่องข้อมูลผู้ป่วยในไฟล์ตัวอักษรเล็กกว่าส่วนอื่น */
 .cso-info th{background:#f2f2f2}
-.cso-info td.cso-title{height:5.24mm;background:#c5e0b3;text-align:center}
+.cso-info td.cso-title{height:5.24mm;border:0;background:#c5e0b3;text-align:center}   /* version2_1: ช่องข้อมูลผู้ป่วยมีเส้นตารางทุกช่อง · แถบหัวเรื่องไม่มีเส้น */
 .cso-v{display:block;overflow:hidden;padding:0 .5mm;line-height:4.6mm;white-space:nowrap}
 .cso-blk{display:grid;grid-template-columns:88mm 92.68mm;width:180.68mm;border:.5pt solid #000}
 .cso-main{margin-top:1.63mm}
@@ -3908,7 +3908,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.14';
+const PAGE_VERSION = '2026-11-09.15';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10812,7 +10812,7 @@ function jpegPdf(jpeg, w, h) {
   put(`xref\n0 6\n0000000000 65535 f \n${offs.slice(1).map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: 'application/pdf' });
 }
-// ใบสั่งจากข้อมูลนัด (A4 ตามไฟล์ CT Simulation Order Form version2 · ขนาดเป็น mm ตามตารางในไฟล์): กล่องติ๊ก = ข้อที่เลือก · ช่องที่ไม่มีข้อมูลเว้นว่างไว้เขียนเอง
+// ใบสั่งจากข้อมูลนัด (A4 ตามไฟล์ CT Simulation Order Form version2_1 · ขนาดเป็น mm ตามตารางในไฟล์): กล่องติ๊ก = ข้อที่เลือก · ช่องที่ไม่มีข้อมูลเว้นว่างไว้เขียนเอง
 // Examination Part: ช่องย่อย 1 ข้อ = ทั้งแถว · 2 ข้อ (Look upward, Head tilt) · 4 ข้อ (4D, MIP, AIP, MINIP)
 const CSO_SLOTS = { 1: [67.5], 2: [32.5, 35], 3: [32.5, 15, 20], 4: [15, 17.5, 15, 20] };
 const CSO_IMMOB = [26.34, 28.84, 37.5];
@@ -10830,7 +10830,8 @@ function csoProtocols(a) {
 }
 const apDate = v => (isDay(v) ? new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(parseISO(v)) : '');
 function csoSheetHtml(a) {
-  const cfg = state.config, o = parseOrder(a.order), fill = o.fill || {}, has = (g, k) => (o[g] || []).includes(k), oncall = a.date === 'on call';
+  // Patient Appointment (version2_1): SIM+RT = วัน Start RT · No appointment (SIM + RT: On Call) = Start RT on call (นัด CT on call ก็ on call ด้วย)
+  const cfg = state.config, o = parseOrder(a.order), fill = o.fill || {}, has = (g, k) => (o[g] || []).includes(k), oncall = a.sim === 'on call' || a.date === 'on call';
   const bx = on => `<i class="cso-bx${on ? ' on' : ''}"></i>`, v = x => `<span class="cso-v">${esc(x || '')}</span>`;
   const ck = (on, text, width, key) => {
     const bits = text.split('{}'), fw = bits[0].length <= 6 ? 12 : 24;
@@ -10851,7 +10852,7 @@ function csoSheetHtml(a) {
   const pr = csoProtocols(a), pos = [...cfg.order.positions, ...(o.pos && !cfg.order.positions.includes(o.pos) ? [o.pos] : [])], [none, iv] = csoCmValues();
   const vol = o.vol && isFinite(o.vol.t) && isFinite(o.vol.b) && o.vol.b > o.vol.t ? o.vol : null;
   const rooms = [...cfg.rooms, ...(a.room && !cfg.rooms.includes(a.room) ? [a.room] : [])].map((r, i) => ck(a.room === r, i < cfg.rooms.length ? `L${i + 1}` : r, i < 2 ? 23.28 : 0)).join('');
-  const doc = a.doc ? docName(a.doc) || a.doc : '', simDay = oncall ? 'On Call' : apDate(a.date), rtDay = a.sim === 'on call' ? 'On Call' : apDate(a.sim);
+  const doc = a.doc ? docName(a.doc) || a.doc : '', rtDay = oncall ? '' : apDate(a.sim);
   const by = a.by ? `<small>บันทึกโดย ${esc(a.by)}${a.created ? ` · ${esc(fmtStamp(isoStamp(a.updated || a.created)))}` : ''}</small>` : '';
   return `<div class="cso-page">
   <div class="cso-banner"><img data-cso="banner" alt=""></div><div class="cso-dept">DEPARTMENT OF RADIATION ONCOLOGY</div><div class="cso-logo"><img data-cso="logo" alt=""></div>
@@ -10891,7 +10892,7 @@ function csoSheetHtml(a) {
       <div>${immob}</div>
       <div class="cso-row cso-hb2"><span class="cso-ck">${bx(has('immob', 'Other'))}Other</span><span class="cso-fill cso-grow">${esc(fill['immob:Other'] || '')}</span></div>
       <div class="cso-h cso-hl" style="background:#fff2cc">Patient Appointment</div>
-      <div class="cso-row"><span class="cso-cell" style="width:10.16mm">SIM</span><span class="cso-cell" style="width:36.4mm"><span class="cso-fill" style="width:100%">${esc(simDay)}</span></span><span class="cso-cell" style="width:8.6mm">RT</span><span class="cso-cell cso-grow"><span class="cso-fill" style="width:100%">${esc(rtDay)}</span></span></div>
+      <div class="cso-row"><span class="cso-cell" style="width:15.5mm">SIM+RT</span><span class="cso-cell" style="width:42mm"><span class="cso-fill" style="width:100%">${esc(rtDay)}</span></span></div>
       <div class="cso-row"><span class="cso-cell" style="width:23.27mm">Room</span><div class="cso-rooms">${rooms}</div></div>
       <div class="cso-row">${ck(oncall, 'No appointment (SIM + RT: On Call)', 0)}</div>
     </div>
