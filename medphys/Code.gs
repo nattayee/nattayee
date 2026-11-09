@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.5';
+const CODE_VERSION = '2026-11-09.6';
 const API_LEVEL = 61;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -2100,11 +2100,11 @@ const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name)
 function regRows_(ss) {
   const rows = readTable_(ss, 'reg'), sh = ss.getSheetByName(TABLES.reg.sheet);
   if (!sh || !rows.some(r => !r.name)) return rows;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), head = values.shift().map(v => String(v).trim());
-  const id = head.indexOf('id'), first = head.indexOf('ชื่อ'), last = head.indexOf('สกุล');
-  if (id < 0 || (first < 0 && last < 0)) return rows;
+  const head = headerOf_(sh), id = head.indexOf('id'), first = head.indexOf('ชื่อ'), last = head.indexOf('สกุล'), n = sh.getLastRow() - 1;
+  if (id < 0 || (first < 0 && last < 0) || n < 1) return rows;
+  const col = c => (c < 0 ? null : sh.getRange(2, c + 1, n, 1).getValues()), ids = col(id), fs = col(first), ls = col(last);   // อ่านเฉพาะ 3 คอลัมน์
   const old = {};
-  values.forEach(v => { old[String(v[id]).trim()] = [first < 0 ? '' : v[first], last < 0 ? '' : v[last]].map(x => String(x).trim()).filter(Boolean).join(' '); });
+  ids.forEach((v, i) => { old[String(v[0]).trim()] = [fs ? fs[i][0] : '', ls ? ls[i][0] : ''].map(x => String(x).trim()).filter(Boolean).join(' '); });
   rows.forEach(r => { if (!r.name) r.name = old[r.id] || ''; });
   return rows;
 }
@@ -2586,7 +2586,7 @@ function regSave(rec, pin, token) {
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
-    const key = hnKey_(cut(rec.hn, 40)), dup = key ? regRows_(ss).filter(x => hnKey_(x.hn) === key && (!row || x.id !== id))[0] : null;
+    const key = hnKey_(cut(rec.hn, 40)), dupRow = key ? regFindHn_(sh, header, key, row) : 0, dup = dupRow ? regRowAt_(ss, sh, header, dupRow) : null;
     if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + regName_(dup) + ')');
     if (!row && key) {   // HN อยู่ในที่เก็บถาวร: ย้ายกลับ แล้วบันทึกทับรายการนั้น (ไม่สร้างซ้ำ)
       const back = regMoveBack_(ss, x => hnKey_(x.hn) === key);
@@ -2597,10 +2597,24 @@ function regSave(rec, pin, token) {
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
-    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.reg.fields.filter(f => f[0] in set), set);
-    const want = row ? id : set.id;
-    return regRows_(ss).filter(x => x.id === want)[0];
+    const at = row || sh.getLastRow() + 1;
+    writeFields_(sh, at, header, TABLES.reg.fields.filter(f => f[0] in set), set);
+    return regRowAt_(ss, sh, header, at);
   });
+}
+// แถวที่มี HN นี้ (ไม่นับแถว skipRow) · อ่านเฉพาะคอลัมน์ HN · ไม่พบ = 0
+function regFindHn_(sh, header, key, skipRow) {
+  const c = header.indexOf('HN'), n = sh.getLastRow() - 1;
+  if (c < 0 || n < 1) return 0;
+  const v = sh.getRange(2, c + 1, n, 1).getValues();
+  for (let i = 0; i < n; i++) if (i + 2 !== skipRow && hnKey_(v[i][0]) === key) return i + 2;
+  return 0;
+}
+// หนึ่งแถวของแถบลงทะเบียน (เลขแถวในชีต) → รายการ · ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) = ต่อจากคอลัมน์ชื่อ สกุล
+function regRowAt_(ss, sh, header, row) {
+  const v = sh.getRange(row, 1, 1, header.length).getValues()[0], r = rowConv_(TABLES.reg, header, ss.getSpreadsheetTimeZone()).conv(v);
+  if (!r.name) r.name = [header.indexOf('ชื่อ'), header.indexOf('สกุล')].filter(i => i >= 0).map(i => String(v[i]).trim()).filter(Boolean).join(' ');
+  return r;
 }
 
 function regSaveInto_(ss, id, rec, cut) {
@@ -2608,7 +2622,7 @@ function regSaveInto_(ss, id, rec, cut) {
   REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
   set.updated = new Date().toISOString();
   if (row) writeFields_(sh, row, header, TABLES.reg.fields.filter(f => f[0] in set), set);
-  return regRows_(ss).filter(x => x.id === id)[0];
+  return row ? regRowAt_(ss, sh, header, row) : null;
 }
 
 /* ---------- ที่เก็บถาวรของแถบลงทะเบียน (ตั้งค่า → ลงทะเบียน: reg.archiveYears · 0 = ไม่ย้าย · ไม่ตั้ง = 3 ปี) ---------- */
