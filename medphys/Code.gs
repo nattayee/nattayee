@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.7';
-const API_LEVEL = 61;
+const CODE_VERSION = '2026-11-09.8';
+const API_LEVEL = 62;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -181,9 +181,25 @@ const TABLES = {
 };
 // ที่เก็บถาวรของแถบลงทะเบียน (API 61): ผู้ป่วยที่ลงทะเบียน/แก้ล่าสุดเกิน N ปี และไม่มีรายการในแถบอื่นตั้งแต่นั้น · ช่องเดียวกับ Registry + เวลาที่ย้าย
 // เขียนผ่าน regArchive_ / regMoveBack_ เท่านั้น · หน้าเว็บไม่โหลด (ค้นผ่าน regFind)
+// แถบแจกงานแพทย์ (API 62): ผู้ป่วยหนึ่งคนต่อหนึ่งแถว ใช้แค่ HN และชื่อ · doc = แพทย์ที่ได้ · how = auto (ตามคิว) | manual (เลือกเอง) · date = วันที่แจก
+// st = '' รอลงนัด (แถบลงนัด จัดกลุ่มตามแพทย์ · ลงนัด HN นี้ตั้งแต่วันที่แจก = ลงนัดแล้ว) | skip = ไม่ต้องลงนัด · เขียนผ่าน dqAdd / dqEdit / dqRemove เท่านั้น
+TABLES.dq = {
+  sheet: 'DocQueue',
+  fields: [
+    ['id', 'id'], ['hn', 'HN'], ['name', 'Name'], ['doc', 'แพทย์'], ['how', 'วิธีแจก'], ['date', 'วันที่แจก'], ['st', 'สถานะ'], ['note', 'Note'],
+    ['by', 'แจกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD
+  ],
+};
+// วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
+TABLES.dqLeave = {
+  sheet: 'DocLeaves',
+  fields: [['id', 'id'], ['doc', 'แพทย์'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated']],
+};
 TABLES.regArch = { sheet: 'RegistryArchive', fields: TABLES.reg.fields.concat([['archAt', 'ย้ายเข้าที่เก็บเมื่อ']]) };
 // ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
 const DEFAULT_STAFF = ['JR', 'WM', 'NY', 'WS'];
+const DEFAULT_DOCTORS = ['SC', 'TA', 'PM', 'TC', 'VS'];   // ตรงกับค่าเริ่มต้นของหน้าเว็บ
 const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
 
 /* ---------- หน้าเว็บและเมนู ---------- */
@@ -346,11 +362,11 @@ function getData(a, b) {
 // รุ่นของแต่ละตาราง (Script property tableVer) เปลี่ยนทุกครั้งที่บันทึกตารางนั้น (tableSheet_ ระหว่างล็อก · เก็บตอนปล่อยล็อก)
 // หน้าเว็บที่มีข้อมูลรุ่นเดียวกันอยู่แล้วไม่ต้องอ่านและส่งซ้ำ (รีเฟรชทุก 1 นาทีเบาลงมาก) · หน้าเว็บขอทั้งหมดใหม่ทุก 1 ชั่วโมง และตอนเปิดหน้าเว็บ (กันแก้ในชีตโดยตรง)
 const TABLE_VER_PROP = 'tableVer';
-const DELTA_TABLES = ['cases', 'logs'];   // ตารางใหญ่: ส่งเฉพาะแถวที่แก้ (คอลัมน์ rev)
+const DELTA_TABLES = ['cases', 'logs', 'dq'];   // ตารางใหญ่: ส่งเฉพาะแถวที่แก้ (คอลัมน์ rev)
 const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
 const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
 // ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
-const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'] };
+const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'] };
 const OUT_WINDOWED = ['duty', 'ctsim', 'appt', 'bq', 'jobs'];
 let DIRTY_ = null;
 // ตารางที่บันทึกในคำขอนี้ · นอกล็อก = เก็บรุ่นใหม่ทันที
@@ -395,8 +411,9 @@ function tablesFor_(ss, config, user, need, have) {
   const read = {
     cases: () => (cases = readTable_(ss, 'cases', config)), logs: () => readTable_(ss, 'logs'), leaves: () => readTable_(ss, 'leaves'), duty: () => recentDuty_(ss), ctsim: () => recentCt_(ss),
     appt: () => recentAppt_(ss), reg: () => regRows_(ss), bq: () => recentBq_(ss, config, cases, !bqRoom), jobs: () => jobsFor_(ss, user, config), vac: () => readTable_(ss, 'vac'), spq: () => readTable_(ss, 'spq'),
+    dq: () => readTable_(ss, 'dq'), dqLeave: () => readTable_(ss, 'dqLeave'),
   };
-  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases };
+  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave };
   Object.keys(want).forEach(k => {
     if (!want[k]) { out[k] = []; return; }
     const v = verOf(k);
@@ -446,12 +463,13 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'] };
+  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'],
+  dq: ['dq', 'appt'], dqLeave: ['dq'] };   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
@@ -476,10 +494,10 @@ function navAccess_(config, view, role) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -698,7 +716,7 @@ const CFG_TABS = {
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
-  tabs: ['reg', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
 };
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
@@ -2428,7 +2446,7 @@ const timeOf_ = v => (Object.prototype.toString.call(v) === '[object Date]' ? (i
 //   at: เวลาแรกสุดที่พบในแถบอื่นที่ไม่ใช่ลงทะเบียน (Created หรือวันที่ของรายการ · ไม่มีทั้งคู่ = '' = เก่าสุด · ไม่พบในแถบอื่น = null) }
 // อ่านเฉพาะคอลัมน์ HN, Created และวันที่ของแต่ละชีต
 function hnSeen_(ss) {
-  const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg' && t !== 'spq'));   // นัดเทคนิคพิเศษที่นำเข้าไม่นับ (นำเข้าเพราะ HN มีในแถบอื่นอยู่แล้ว)
+  const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg' && t !== 'spq' && t !== 'dq'));   // นัดเทคนิคพิเศษที่นำเข้าไม่นับ (นำเข้าเพราะ HN มีในแถบอื่นอยู่แล้ว) · แจกงานแพทย์ไม่นับ (ยังดึงลงทะเบียนจาก Google Drive ได้)
   order.forEach(t => {
     const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
     const sh = head('hn') ? ss.getSheetByName(def.sheet) : null;
@@ -2836,6 +2854,204 @@ function apptMark(id, mark, token) {
 function recentAppt_(ss) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   return readTable_(ss, 'appt').filter(x => (x.date === 'on call' ? String(x.created).slice(0, 10) : String(x.date)) >= from);   // On Call: นับจากวันที่ลงนัด
+}
+
+/* ---------- แถบแจกงานแพทย์ (API 62): ใช้แค่ HN และชื่อ · คิววนแบบเดียวกับแจกเคส MP แต่ลาไม่เสียคิว ---------- */
+// ตั้งค่า → แจกงานแพทย์ (config.dq): off = แพทย์ที่ไม่รับคิว · skips = หักคิวรายเดือน { 'YYYY-MM': { รหัส: n } } · pointer = ตำแหน่งคิวที่ตั้งเอง { code, at }
+// payback = คืนคิวหลังลาสูงสุดต่อคนต่อรอบ (ไม่ตั้ง = 1 · 0 = ไม่จำกัด) · perMonth = จำนวนเคสต่อเดือน (หน้าเว็บใช้แสดงผล) · ลำดับคิว = ลำดับใน ตั้งค่า → แพทย์ (Doc)
+function dqDocs_(cfg) {
+  const src = cfg && Array.isArray(cfg.doctors) ? cfg.doctors.map(x => (x && typeof x === 'object' ? x.code : x)) : DEFAULT_DOCTORS, out = [];
+  src.forEach(c => { const k = String(c == null ? '' : c).trim().toUpperCase(); if (k && out.indexOf(k) < 0) out.push(k); });
+  return out;
+}
+function dqCfg_(cfg) {
+  const q = cfg && cfg.dq && typeof cfg.dq === 'object' ? cfg.dq : {}, off = (Array.isArray(q.off) ? q.off : []).map(c => String(c).trim().toUpperCase());
+  return {
+    docs: dqDocs_(cfg).filter(c => off.indexOf(c) < 0), skips: q.skips && typeof q.skips === 'object' ? q.skips : {},
+    pointer: q.pointer && q.pointer.code && q.pointer.at ? { code: String(q.pointer.code).trim().toUpperCase(), at: String(q.pointer.at) } : null,
+    payback: q.payback == null || q.payback === '' ? 1 : Math.max(0, Math.floor(+q.payback) || 0),
+  };
+}
+// แพทย์ที่เป็นผู้ใช้ที่เข้าระบบ (ตั้งค่า → แพทย์: บัญชี LPCH ที่เชื่อม หรืออีเมล) · ไม่ใช่แพทย์ = ''
+function dqSelf_(u, cfg) {
+  const low = v => String(v == null ? '' : v).trim().toLowerCase(), list = cfg && Array.isArray(cfg.doctors) ? cfg.doctors : [];
+  const hit = list.filter(x => x && typeof x === 'object' && ((low(x.user) && low(x.user) === low(u.username)) || (low(x.email) && low(x.email) === low(u.me))))[0];
+  return hit ? String(hit.code).trim().toUpperCase() : '';
+}
+const dqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+const dqNow_ = () => new Date().toISOString();
+
+/**
+ * แจกงานแพทย์ภายใต้ล็อก (ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ) · recs = [{ id?, hn, name, how: auto | manual, doc (เลือกเอง), note }]
+ * auto = แพทย์ตามคิว (dqPick_) วันที่แจก = วันนี้ · คืนรายการที่บันทึก
+ */
+function dqAdd(recs, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีผู้ป่วยที่จะแจก');
+  if (recs.length > 50) throw new Error('แจกได้ครั้งละไม่เกิน 50 คน');
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss) || {}, q = dqCfg_(cfg), all = dqDocs_(cfg), day = today_(ss);
+    const rows = readTable_(ss, 'dq'), leaves = readTable_(ss, 'dqLeave'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];
+    recs.forEach((r, i) => {
+      r = r && typeof r === 'object' ? r : {};
+      const hn = dqCut_(r.hn, 40), how = r.how === 'manual' ? 'manual' : 'auto';
+      if (!hn) throw new Error('กรอก HN');
+      let doc = how === 'manual' ? dqCut_(r.doc, 10).toUpperCase() : '';
+      if (how === 'manual' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
+      if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, date: day });
+      if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
+      const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '' };
+      rows.push(rec);
+      out.push(rec);
+    });
+    appendNew_(ss, 'dq', out);
+    return out;
+  });
+}
+// แก้รายการ (PIN): HN ชื่อ Note · st = skip (ไม่ต้องลงนัด) | '' (รอลงนัด) · เปลี่ยนแพทย์ = เลือกเอง (คิวเดิมยังเป็นของคนที่ถึงคิว คนใหม่ถูกข้ามเมื่อคิววนมาถึง)
+function dqEdit(id, ch, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  ch = ch && typeof ch === 'object' ? ch : {};
+  pinChange_(u, pin, true);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss) || {}, sh = tableSheet_(ss, 'dq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = rowConv_(TABLES.dq, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]), set = {};
+    if ('hn' in ch) { set.hn = dqCut_(ch.hn, 40); if (!set.hn) throw new Error('กรอก HN'); }
+    if ('name' in ch) set.name = dqCut_(ch.name, 200);
+    if ('note' in ch) set.note = dqCut_(ch.note, 500);
+    if ('st' in ch) set.st = ch.st === 'skip' ? 'skip' : '';
+    if ('doc' in ch) {
+      const d = dqCut_(ch.doc, 10).toUpperCase();
+      if (dqDocs_(cfg).indexOf(d) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + d);
+      if (d !== cur.doc) { set.doc = d; set.how = 'manual'; }
+    }
+    set.updated = dqNow_();
+    writeFields_(sh, row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
+    return Object.assign(cur, set);
+  });
+}
+// ลบรายการ (PIN) · รายการตามคิวที่ลบ = คิวนั้นกลับไปเป็นของคนที่ถึงคิว
+function dqRemove(id, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  pinChange_(u, pin, true);
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'dq'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+// วันลาแพทย์: ผู้ที่บันทึกในแถบแจกงานแพทย์ได้ (ทุกแพทย์) หรือแพทย์ของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์ และเห็นแถบนี้)
+function dqLeaveUser_(token, doc) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (u.via === 'google' || navAccess_(cfg, 'dq', u.role) === 'edit') return u;
+  if (doc && navAccess_(cfg, 'dq', u.role) && dqSelf_(u, cfg) === doc) return u;
+  throw new Error('ลงวันลาแพทย์ได้เฉพาะผู้ที่บันทึกในแถบแจกงานแพทย์ได้ หรือแพทย์ลงของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์)');
+}
+function dqLeaveSave(rec, token) {
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const doc = dqCut_(rec.doc, 10).toUpperCase(), from = dqCut_(rec.from, 10), to = dqCut_(rec.to, 10) || from, isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const u = dqLeaveUser_(token, doc);
+  if (!isDate(from) || !isDate(to)) throw new Error('วันที่ลาไม่ถูกต้อง');
+  if (to < from) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา');
+  return withLock_(() => {
+    const ss = ss_();
+    if (dqDocs_(readConfig_(ss) || {}).indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
+    const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '' };
+    appendNew_(ss, 'dqLeave', [r]);
+    return r;
+  });
+}
+function dqLeaveRemove(id, pin, token) {
+  const cur = readTable_(ss_(), 'dqLeave').filter(x => x.id === String(id))[0];
+  if (!cur) return false;
+  pinChange_(dqLeaveUser_(token, cur.doc), pin, true);
+  return withLock_(() => {
+    const sh = tableSheet_(ss_(), 'dqLeave'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
+    if (row) sh.deleteRow(row);
+    return !!row;
+  });
+}
+/*
+ * คิวแจกงานแพทย์ (โค้ดชุดเดียวกับ dqPick ใน index.html · ใช้แค่ HN และชื่อ)
+ * o = { docs: รหัสแพทย์ตามลำดับคิว, leaves: [{ doc, from, to }], rows: [{ doc, how, date, created }] (แจกแล้ว),
+ *       skips: { 'YYYY-MM': { รหัส: n } }, pointer: { code, at } | null, payback: คืนคิวสูงสุดต่อคนต่อรอบ (0 = ไม่จำกัด), date: วันที่แจก ('' = ไม่ดูวันลา), ym: หักคิวรายเดือนนับถึงเดือนนี้ }
+ * - วนตามลำดับแพทย์ · เลือกเอง (how = manual): คิวไม่ขยับ คนที่ได้ถูกข้าม 1 ครั้งเมื่อคิววนมาถึง · หักคิวรายเดือน: ข้ามตามจำนวนครั้ง (ใช้ไม่หมดยกไปเดือนถัดไป)
+ * - ถึงคิวแพทย์ที่ลา: แพทย์ที่ไม่ลารับแทน (คนที่ติดค้างน้อยที่สุด ถัดจากคนลา) และติดคิวไว้ · คิววนถึงคนที่รับแทนเมื่อแพทย์ที่ลากลับมาแล้ว = คืนคิวให้แพทย์ที่ลา (ลาไม่เสียคิว)
+ * - แจกแล้วไม่ตรงคิว (เช่น ลงวันลาย้อนหลัง): คิวไม่ขยับ คนที่ได้ถูกข้ามเมื่อคิววนมาถึง (เหมือนเลือกเอง)
+ * คืนรหัสแพทย์ที่ได้เคสถัดไป ('' = ไม่มีใครรับได้) · trace: log (ผลของแต่ละรายการ), credit (รอหักคิว), owe (ค้างคืนคิว), next, ahead(k) (ถัดไป k เคส ไม่ดูวันลา)
+ */
+function dqPick_(o, trace) {
+  const docs = o.docs || [], n = docs.length, idx = c => docs.indexOf(c);
+  const away = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.from <= d && d <= (l.to || l.from));
+  const lim = Math.max(0, Math.floor(+o.payback) || 0);
+  const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
+  // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null
+  const walk = (s, d) => {
+    let limit = n;
+    Object.keys(s.credit).forEach(k => { limit += n * Math.max(0, s.credit[k] || 0); });
+    const skipped = [];
+    for (let k = 0; k < limit; k++) {
+      const at = s.pos + k, x = docs[at % n], r = Math.floor(at / n);
+      if (s.credit[x] > 0) { s.credit[x]--; skipped.push(x); continue; }
+      if (away(x, d)) {
+        // คนรับแทน: แพทย์ที่ไม่ลาที่ติดค้างน้อยที่สุด (รับแทนอยู่ + รอหักคิว) ถัดจากคนลาตามลำดับ (ไม่ให้คนเดียวรับแทนทั้งหมด)
+        let y = '', best = 0;
+        for (let j = 1; j < n; j++) {
+          const c = docs[(at + j) % n];
+          if (away(c, d)) continue;
+          let load = Math.max(0, s.credit[c] || 0);
+          s.owe.forEach(e => { if (e.by === c) load++; });
+          if (!y || load < best) { y = c; best = load; }
+        }
+        if (!y) return null;
+        s.pos = at + 1;
+        s.owe.push({ by: y, to: x });
+        return { code: y, owner: x, kind: 'cover', skipped: skipped };
+      }
+      let w = -1;
+      for (let j = 0; j < s.owe.length && w < 0; j++) {
+        const e = s.owe[j], pd = s.paid[e.to];
+        if (e.by === x && idx(e.to) >= 0 && !away(e.to, d) && (!lim || !pd || pd.r !== r || pd.n < lim)) w = j;
+      }
+      s.pos = at + 1;
+      if (w < 0) return { code: x, owner: x, kind: 'own', skipped: skipped };
+      const e = s.owe.splice(w, 1)[0], pd = s.paid[e.to];
+      s.paid[e.to] = { r: r, n: pd && pd.r === r ? pd.n + 1 : 1 };
+      return { code: e.to, owner: x, kind: 'repay', skipped: skipped };
+    }
+    return null;
+  };
+  let st = { pos: 0, credit: {}, owe: [], paid: {} };
+  const log = [], pointer = o.pointer && idx(o.pointer.code) >= 0 ? o.pointer : null;
+  let pointerDone = !pointer;
+  const setPointer = () => { st.pos = (Math.floor(st.pos / n) + 1) * n + idx(pointer.code); pointerDone = true; };
+  const ym = String(o.ym || o.date || '').slice(0, 7);
+  const skipDays = n ? Object.keys(o.skips || {}).filter(m => m <= ym).map(m => ({ created: m + '-01', skip: o.skips[m] })) : [];
+  const list = (n ? o.rows || [] : []).concat(skipDays).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  list.forEach(c => {
+    if (!pointerDone && c.created >= pointer.at) setPointer();
+    if (c.skip) {
+      Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) st.credit[code] = (st.credit[code] || 0) + m; });
+      return;
+    }
+    if (idx(c.doc) < 0) { log.push({ row: c, kind: 'out' }); return; }   // แพทย์ที่ไม่อยู่ในคิว
+    if (c.how === 'manual') { st.credit[c.doc] = (st.credit[c.doc] || 0) + 1; log.push({ row: c, kind: 'manual' }); return; }
+    const s = copy(st), res = walk(s, c.date);
+    if (res && res.code === c.doc) { st = s; log.push({ row: c, kind: res.kind, owner: res.owner, skipped: res.skipped }); return; }
+    st.credit[c.doc] = (st.credit[c.doc] || 0) + 1;
+    log.push({ row: c, kind: 'early', owner: res ? res.code : '' });
+  });
+  if (!pointerDone && n) setPointer();
+  const next = n ? walk(copy(st), o.date) : null;
+  if (trace) {
+    trace.log = log;
+    trace.credit = Object.assign({}, st.credit);
+    trace.owe = st.owe.slice();
+    trace.next = next;
+    trace.ahead = (k, d) => { const s = copy(st), out = []; for (let i = 0; i < k; i++) { const r = walk(s, d || ''); if (!r) break; out.push(r); } return out; };
+  }
+  return next ? next.code : '';
 }
 
 /**
