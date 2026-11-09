@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.6';
+const CODE_VERSION = '2026-11-09.7';
 const API_LEVEL = 61;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -2630,6 +2630,8 @@ function regSaveInto_(ss, id, rec, cut) {
 // = ย้ายไปแท็บ RegistryArchive · หน้าเว็บโหลดเฉพาะแท็บ Registry (เร็วขึ้นเมื่อผู้ป่วยหลายพันคน) · ค้นที่เก็บถาวรได้ (regFind) · ใช้อีก = ย้ายกลับ
 const REG_ARCH_PROP = 'regArch';
 const regArchYears_ = cfg => { const y = cfg && cfg.reg && cfg.reg.archiveYears; return y === 0 || y === '0' ? 0 : [1, 2, 3, 5].indexOf(+y) >= 0 ? +y : 3; };
+// ผู้ป่วยที่ดึงจาก Google Drive แล้วไม่เคยมีรายการในแถบอื่นเลย (ไม่มีนัด เคส CT-SIM ฯลฯ): ย้ายเมื่อดึงมา/แก้ล่าสุดเกิน N เดือน (0 = ใช้กติกาปกติ · ไม่ตั้ง = 6 เดือน)
+const regArchDriveMonths_ = cfg => { const m = cfg && cfg.reg && cfg.reg.archiveDriveMonths; return m === 0 || m === '0' ? 0 : [1, 3, 6, 12].indexOf(+m) >= 0 ? +m : 6; };
 function regArchStatus_() { try { return JSON.parse(propRead_(REG_ARCH_PROP) || 'null'); } catch (e) { return null; } }
 // HN → วันล่าสุดที่มีรายการในแถบอื่น (yyyy-MM-dd · วันที่ของรายการ / Start RT / วันทำ CT / Created)
 function hnLatest_(ss) {
@@ -2691,9 +2693,9 @@ function regMoveBack_(ss, pick) {
 }
 // วันละครั้ง (force = ปุ่ม "ย้ายตอนนี้"): ย้ายผู้ป่วยเก่าเข้าที่เก็บถาวร · ล็อกไม่ว่าง = ข้าม (ครั้งหน้า) · สถานะใน Script property regArch
 function regArchive_(ss, cfg, force) {
-  const years = regArchYears_(cfg), last = regArchStatus_() || {}, td = today_(ss);
-  if (!years || (!force && last.day === td)) return last;
-  const res = { day: td, at: new Date().toISOString(), years: years, moved: 0, total: last.total || 0, error: '' };
+  const years = regArchYears_(cfg), months = regArchDriveMonths_(cfg), last = regArchStatus_() || {}, td = today_(ss);
+  if ((!years && !months) || (!force && last.day === td)) return last;
+  const res = { day: td, at: new Date().toISOString(), years: years, months: months, moved: 0, drive: 0, total: last.total || 0, error: '' };
   if (!force) {   // เปิดหน้าเว็บ: ไม่รอคนที่กำลังบันทึก
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(500)) return last;
@@ -2703,11 +2705,16 @@ function regArchive_(ss, cfg, force) {
     withLock_(() => {
       const sh = ss.getSheetByName(TABLES.reg.sheet);
       if (sh && sh.getLastRow() > 1) {
-        const cutoff = Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), latest = hnLatest_(ss);
+        const tz = ss.getSpreadsheetTimeZone(), latest = hnLatest_(ss);
+        const cutY = years ? Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), tz, 'yyyy-MM-dd') : '';
+        const cutM = months ? Utilities.formatDate(new Date(Date.now() - months * 30.44 * 864e5), tz, 'yyyy-MM-dd') : '';
         res.moved = regMoveRows_(ss, 'reg', 'regArch', r => {
-          const at = [String(r.created).slice(0, 10), String(r.updated).slice(0, 10)].filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)).sort().pop();
-          const k = hnLoose_(r.hn);
-          return !!at && at < cutoff && !!String(r.name).trim() && !(k && latest[k] && latest[k] >= cutoff);   // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) ไม่ย้าย
+          const at = [String(r.created).slice(0, 10), String(r.updated).slice(0, 10)].filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)).sort().pop();   // ลงทะเบียน / แก้ / ย้ายกลับ ล่าสุด
+          const k = hnLoose_(r.hn), used = !!(k && latest[k]);
+          if (!at || !String(r.name).trim()) return false;   // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) ไม่ย้าย
+          if (cutY && at < cutY && !(used && latest[k] >= cutY)) return true;
+          if (cutM && at < cutM && !used && String(r.by).indexOf('Google Drive') === 0) { res.drive++; return true; }   // ดึงจาก Drive แล้วไม่เคยใช้
+          return false;
         }, { 'ย้ายเข้าที่เก็บเมื่อ': res.at }).length;
       }
       const ah = ss.getSheetByName(TABLES.regArch.sheet);
