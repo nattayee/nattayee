@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.3';
-const API_LEVEL = 59;
+const CODE_VERSION = '2026-11-09.4';
+const API_LEVEL = 60;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -2009,7 +2009,7 @@ function regRows_(ss) {
 }
 /* ---------- แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (API 57) ---------- */
 // config.reg.drive = { on, url (ลิงก์โฟลเดอร์), every (นาที), map: { hn, name, doc, icd, dx, right, note } (ชื่อหัวคอลัมน์ · ไม่มีคีย์ = เดาจากหัวคอลัมน์ · '' = ไม่ใช้), filter: { col, vals } (เฉพาะแถวที่คอลัมน์ col เป็นค่าใน vals)
-// ไฟล์ .xlsx · Google Sheets · .csv ในโฟลเดอร์ (ไม่รวมโฟลเดอร์ย่อย) แผ่นแรก · หัวตาราง = แถวแรก (ใน 15 แถว) ที่มีหัวคอลัมน์ของ HN
+// ไฟล์ .xlsx · .xls (Excel 97–2003 หรือไฟล์ HTML / XML / ข้อความที่ตั้งชื่อเป็น .xls) · Google Sheets · .csv ในโฟลเดอร์ (ไม่รวมโฟลเดอร์ย่อย) แผ่นแรก · หัวตาราง = แถวแรก (ใน 15 แถว) ที่มีหัวคอลัมน์ของ HN
 // ไม่ดึงซ้ำ: ไฟล์ที่ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อนข้ามทั้งไฟล์ · HN ที่มีในระบบแล้ว (ทุกแถบที่เก็บ HN) ข้าม (ไม่ทับข้อมูลเดิม) · สถานะเก็บใน Script property regDrive
 const REG_DRIVE_PROP = 'regDrive';
 function regDriveFolder_(url) {
@@ -2039,15 +2039,19 @@ function xlsxRows_(blob) {
     return Array.from(r, v => v || '');
   });
 }
-const REG_DRIVE_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.google-apps.spreadsheet', 'text/csv'];
+const REG_DRIVE_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.google-apps.spreadsheet', 'text/csv', 'application/vnd.ms-excel'];
+const REG_DRIVE_EXT = /\.(xlsx|xls|csv)$/i;
+// ไฟล์ที่อ่านได้ (ใหม่สุดก่อน) · others = ชื่อไฟล์อื่นในโฟลเดอร์ที่อ่านไม่ได้ (ชนิดไม่รองรับ เช่น .ods, .pdf) ให้แจ้งในผลดึง
 function regDriveFiles_(folder) {
-  const out = [], it = folder.getFiles();
-  while (it.hasNext()) { const f = it.next(); if (REG_DRIVE_TYPES.indexOf(f.getMimeType()) >= 0 || /\.(xlsx|csv)$/i.test(f.getName())) out.push(f); }
-  // ไฟล์ .xlsx / .csv ที่บันทึกเป็น Google ชีต (ชื่อเดียวกันไม่มีนามสกุล) ไว้ในโฟลเดอร์แล้ว = อ่าน Google ชีตแทน
+  const out = [], others = [], it = folder.getFiles();
+  while (it.hasNext()) { const f = it.next(); if (REG_DRIVE_TYPES.indexOf(f.getMimeType()) >= 0 || REG_DRIVE_EXT.test(f.getName())) out.push(f); else others.push(String(f.getName())); }
+  // ไฟล์ .xlsx / .xls / .csv ที่บันทึกเป็น Google ชีต (ชื่อเดียวกันไม่มีนามสกุล) ไว้ในโฟลเดอร์แล้ว = อ่าน Google ชีตแทน
   const gs = {};
   out.forEach(f => { if (f.getMimeType() === REG_DRIVE_TYPES[1]) gs[String(f.getName()).trim()] = true; });
-  return out.filter(f => f.getMimeType() === REG_DRIVE_TYPES[1] || !gs[String(f.getName()).replace(/\.(xlsx|csv)$/i, '').trim()])
+  const res = out.filter(f => f.getMimeType() === REG_DRIVE_TYPES[1] || !gs[String(f.getName()).replace(REG_DRIVE_EXT, '').trim()])
     .sort((a, b) => b.getLastUpdated() - a.getLastUpdated());
+  res.others = others;
+  return res;
 }
 // เนื้อไฟล์: DriveApp getBlob · ไม่ได้ (เช่น Access denied: DriveApp ทั้งที่เป็นเจ้าของไฟล์) = ดาวน์โหลดผ่าน Drive API ด้วยสิทธิ์เดียวกันของสคริปต์
 function regDriveBlob_(f) {
@@ -2064,7 +2068,191 @@ function regDriveRows_(f) {
   const t = f.getMimeType();
   if (t === 'application/vnd.google-apps.spreadsheet') return SpreadsheetApp.openById(f.getId()).getSheets()[0].getDataRange().getDisplayValues().map(r => r.map(v => String(v).trim()));
   if (t === 'text/csv' || /\.csv$/i.test(f.getName())) return Utilities.parseCsv(regDriveBlob_(f).getDataAsString('UTF-8')).map(r => r.map(v => String(v).trim()));
+  if (t === 'application/vnd.ms-excel' || /\.xls$/i.test(f.getName())) return xlsAnyRows_(regDriveBlob_(f));
   return xlsxRows_(regDriveBlob_(f));
+}
+
+/* ---------- ไฟล์ .xls: Excel 97–2003 (BIFF8 / BIFF5 ใน Compound File) หรือไฟล์ HTML / XML Spreadsheet 2003 / ข้อความ ที่ตั้งชื่อเป็น .xls ---------- */
+// ระบบโรงพยาบาลหลายระบบส่งออก .xls ที่ข้างในเป็นตาราง HTML หรือข้อความคั่นด้วย Tab · ดูจากไบต์แรกของไฟล์ (ไม่เชื่อนามสกุล)
+function xlsAnyRows_(blob) {
+  const raw = blob.getBytes(), u = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) u[i] = raw[i] & 255;
+  if (u[0] === 0xD0 && u[1] === 0xCF && u[2] === 0x11 && u[3] === 0xE0) return biffRows_(u);
+  if (u[0] === 0x50 && u[1] === 0x4B) return xlsxRows_(blob);   // .xlsx ที่ตั้งชื่อเป็น .xls
+  const t = textOf_(blob, u);
+  if (/urn:schemas-microsoft-com:office:spreadsheet/.test(t) && /<(?:ss:)?Row\b/.test(t)) return ssmlRows_(t);   // ก่อน HTML: มีแท็ก <Table> เหมือนกัน
+  if (/<table\b/i.test(t)) return htmlRows_(t);
+  const lines = t.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+  if (lines.some(l => l.indexOf('\t') >= 0)) return lines.map(l => l.split('\t').map(v => v.replace(/^"|"$/g, '').trim()));
+  return Utilities.parseCsv(lines.join('\n')).map(r => r.map(v => String(v).trim()));
+}
+// ข้อความของไฟล์: BOM · charset ใน HTML / XML · ภาษาไทย 8 บิต (TIS-620 / Windows-874) ถอดเอง · อื่นๆ UTF-8
+function textOf_(blob, u) {
+  if (u[0] === 0xFF && u[1] === 0xFE) return blob.getDataAsString('UTF-16LE');
+  if (u[0] === 0xFE && u[1] === 0xFF) return blob.getDataAsString('UTF-16BE');
+  let head = '';
+  for (let i = 0; i < Math.min(u.length, 4096); i++) head += String.fromCharCode(u[i]);
+  const m = /charset\s*=\s*["']?([\w-]+)/i.exec(head) || /encoding\s*=\s*["']([\w-]+)/i.exec(head), cs = m ? m[1].toLowerCase() : '';
+  if (/^(tis-?620|(x-)?windows-874|cp874|ms874|iso-8859-11)$/.test(cs)) return cp874_(u);
+  if (cs && !/^utf-?8$/.test(cs)) { try { return blob.getDataAsString(cs); } catch (e) { /* ชื่อ charset ที่ไม่รู้จัก: ลอง UTF-8 */ } }
+  const t = blob.getDataAsString('UTF-8');
+  return t.indexOf('\uFFFD') >= 0 && u.some(b => b >= 0xA1 && b <= 0xFB) ? cp874_(u) : t;
+}
+// TIS-620 / Windows-874: 0xA1–0xFB = ก–๛ (U+0E01–U+0E5B)
+function cp874_(u, from, to) {
+  const W = { 0x80: 0x20AC, 0x85: 0x2026, 0x91: 0x2018, 0x92: 0x2019, 0x93: 0x201C, 0x94: 0x201D, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014, 0xA0: 0xA0 };
+  let s = '';
+  for (let i = from || 0, n = to == null ? u.length : to; i < n; i++) { const b = u[i]; s += String.fromCharCode(b < 0x80 ? b : b >= 0xA1 && b <= 0xFB ? b + 0x0D60 : W[b] || 0xFFFD); }
+  return s;
+}
+// ตาราง HTML: แถว = <tr> · ช่อง = <td> / <th> (ปิดหรือไม่ปิดแท็กก็ได้ · colspan = เว้นช่อง)
+function htmlRows_(t) {
+  const clean = v => xmlText_(v.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ')).replace(/[\s\u00A0]+/g, ' ').trim();
+  t = t.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '');
+  return (t.match(/<tr\b[\s\S]*?(?=<tr\b|<\/table>|$)/gi) || []).map(tr => {
+    const r = [], re = /<t[dh]\b([^>]*)>([\s\S]*?)(?=<t[dh]\b|<\/tr>|$)/gi;
+    let m;
+    while ((m = re.exec(tr))) {
+      r.push(clean(m[2]));
+      const span = +((/\bcolspan\s*=\s*["']?(\d+)/i.exec(m[1]) || [])[1] || 1);
+      for (let k = 1; k < Math.min(span, 50); k++) r.push('');
+    }
+    return r;
+  });
+}
+// XML Spreadsheet 2003: <Row> <Cell ss:Index> <Data>
+function ssmlRows_(t) {
+  return (t.match(/<(?:ss:)?Row\b[^>]*>[\s\S]*?<\/(?:ss:)?Row>/g) || []).map(rw => {
+    const r = [];
+    (rw.match(/<(?:ss:)?Cell\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:ss:)?Cell>)/g) || []).forEach(c => {
+      const idx = /\bss:Index="(\d+)"/.exec(c);
+      if (idx) while (r.length < +idx[1] - 1) r.push('');
+      const d = /<(?:ss:)?Data\b[^>]*>([\s\S]*?)<\/(?:ss:)?Data>/.exec(c);
+      r.push(d ? xmlText_(d[1].replace(/<[^>]*>/g, '')).trim() : '');
+    });
+    return r;
+  });
+}
+// Compound File (OLE2): stream ที่ชื่อตรง (ไม่สนตัวพิมพ์) ตามลำดับใน want → Uint8Array · ไม่มี = null
+function cfbStream_(u, want) {
+  const dv = new DataView(u.buffer, u.byteOffset, u.byteLength), u32 = o => dv.getUint32(o, true);
+  const ss = 1 << dv.getUint16(30, true), mss = 1 << dv.getUint16(32, true), sec = n => (n + 1) * ss, END = 0xFFFFFFFA;
+  const nFat = u32(44), dir0 = u32(48), cutoff = u32(56), mf0 = u32(60), difat0 = u32(68);
+  const fatSecs = [];
+  for (let i = 0; i < 109 && fatSecs.length < nFat; i++) fatSecs.push(u32(76 + i * 4));
+  for (let d = difat0, g = 0; fatSecs.length < nFat && d < END && g < 4096; g++) {
+    const o = sec(d), per = ss / 4 - 1;
+    for (let i = 0; i < per && fatSecs.length < nFat; i++) fatSecs.push(u32(o + i * 4));
+    d = u32(o + per * 4);
+  }
+  const table = secs => { const t = []; secs.forEach(s => { const o = sec(s); for (let i = 0; i < ss / 4 && o + i * 4 + 4 <= u.length; i++) t.push(u32(o + i * 4)); }); return t; };
+  const fat = table(fatSecs);
+  const chain = (start, t) => { const out = []; for (let s = start, g = 0; s < END && s < t.length && g <= t.length; g++) { out.push(s); s = t[s]; } return out; };
+  const read = (start, size) => {
+    const parts = chain(start, fat), buf = new Uint8Array(parts.length * ss);
+    parts.forEach((s, i) => buf.set(u.subarray(sec(s), Math.min(u.length, sec(s) + ss)), i * ss));
+    return size == null ? buf : buf.subarray(0, Math.min(size, buf.length));
+  };
+  const dir = read(dir0), ents = [];
+  for (let o = 0; o + 128 <= dir.length; o += 128) {
+    const nl = dir[o + 64] | (dir[o + 65] << 8), type = dir[o + 66];
+    if (!type) continue;
+    let name = '';
+    for (let i = 0; i + 1 < Math.min(nl - 2, 64); i += 2) name += String.fromCharCode(dir[o + i] | (dir[o + i + 1] << 8));
+    ents.push({ name: name, type: type, start: (dir[o + 116] | (dir[o + 117] << 8) | (dir[o + 118] << 16) | (dir[o + 119] << 24)) >>> 0, size: (dir[o + 120] | (dir[o + 121] << 8) | (dir[o + 122] << 16) | (dir[o + 123] << 24)) >>> 0 });
+  }
+  let e = null;
+  want.some(w => (e = ents.filter(x => x.type === 2 && x.name.toLowerCase() === w)[0]));
+  if (!e) return null;
+  const root = ents.filter(x => x.type === 5)[0];
+  if (e.size >= cutoff || !root) return read(e.start, e.size);
+  // stream เล็ก (ต่ำกว่า 4096 ไบต์) อยู่ใน mini stream ของ Root Entry
+  const mini = read(root.start, root.size), mfat = table(chain(mf0, fat)), parts = chain(e.start, mfat), buf = new Uint8Array(parts.length * mss);
+  parts.forEach((s, i) => buf.set(mini.subarray(s * mss, Math.min(mini.length, s * mss + mss)), i * mss));
+  return buf.subarray(0, Math.min(e.size, buf.length));
+}
+// BIFF8 (Excel 97–2003) / BIFF5: แผ่นงานแรก → แถวเป็นข้อความ (ตัวเลขจำนวนเต็มไม่มีทศนิยม · สูตรใช้ค่าที่คำนวณไว้)
+function biffRows_(u) {
+  const b = cfbStream_(u, ['workbook', 'book']);
+  if (!b) throw new Error('ไฟล์ .xls นี้ไม่มีข้อมูลแผ่นงาน (ไม่พบ Workbook)');
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), u16 = o => dv.getUint16(o, true), n = b.length, recs = [];
+  for (let p = 0; p + 4 <= n;) { const len = u16(p + 2); recs.push({ t: u16(p), p: p + 4, len: len, at: p }); p += 4 + len; }
+  if (!recs.length || recs[0].t !== 0x0809) throw new Error('ไฟล์ .xls รุ่นนี้อ่านไม่ได้ (รองรับ Excel 97–2003) · เปิดไฟล์แล้วบันทึกเป็น .xlsx หรือ Google ชีต');
+  const biff8 = u16(recs[0].p) === 0x0600;
+  let cp = 1252, sst = [], sheetAt = -1;
+  // ข้อความ 8 บิตของ BIFF5: ตาม CODEPAGE (874 = ไทย) · BIFF8 ไม่บีบอัด = UTF-16
+  const str8 = (from, cnt) => { if (cp === 874) return cp874_(b, from, from + cnt); let s = ''; for (let i = 0; i < cnt; i++) s += String.fromCharCode(b[from + i]); return s; };
+  const ustr = o => {   // XLUnicodeString (BIFF8) / ShortString (BIFF5) ในเรคคอร์ดเดียว
+    const cch = u16(o);
+    if (!biff8) return str8(o + 2, cch);
+    const hi = b[o + 2] & 1;
+    let s = '';
+    for (let i = 0; i < cch; i++) s += String.fromCharCode(hi ? u16(o + 3 + i * 2) : b[o + 3 + i]);
+    return s;
+  };
+  for (let i = 1; i < recs.length && recs[i].t !== 0x000A; i++) {
+    const r = recs[i];
+    if (r.t === 0x0042) cp = u16(r.p);
+    else if (r.t === 0x0085 && b[r.p + 5] === 0 && sheetAt < 0) sheetAt = dv.getUint32(r.p, true);   // แผ่นงานแรก (worksheet)
+    else if (r.t === 0x00FC) sst = sstOf_(b, recs, i);
+  }
+  const rows = [], put = (row, col, v) => { if (col < 1024) (rows[row] = rows[row] || [])[col] = v; };
+  const num = v => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1e10) / 1e10));
+  const rk = o => { const x = dv.getUint32(o, true); let v; if (x & 2) v = (x | 0) >> 2; else { const t = new DataView(new ArrayBuffer(8)); t.setUint32(4, x & 0xFFFFFFFC, true); v = t.getFloat64(0, true); } return num(x & 1 ? v / 100 : v); };
+  let start = recs.findIndex(r => r.at === sheetAt && r.t === 0x0809), fcell = null;
+  if (start < 0) start = recs.findIndex((r, i) => i > 0 && r.t === 0x0809);
+  if (start < 0) return [];
+  for (let i = start + 1; i < recs.length && recs[i].t !== 0x000A; i++) {
+    const r = recs[i], p = r.p, row = u16(p), col = u16(p + 2);
+    switch (r.t) {
+      case 0x00FD: put(row, col, sst[dv.getUint32(p + 6, true)] || ''); break;   // LABELSST
+      case 0x0204: case 0x00D6: put(row, col, ustr(p + 6)); break;   // LABEL / RSTRING
+      case 0x0203: put(row, col, num(dv.getFloat64(p + 6, true))); break;   // NUMBER
+      case 0x027E: put(row, col, rk(p + 6)); break;   // RK
+      case 0x00BD: for (let k = 0, c = col; p + 4 + k * 6 + 6 <= p + r.len - 2; k++, c++) put(row, c, rk(p + 4 + k * 6 + 2)); break;   // MULRK
+      case 0x0205: if (!b[p + 7]) put(row, col, b[p + 6] ? 'TRUE' : 'FALSE'); break;   // BOOLERR
+      case 0x0006:   // FORMULA: ค่าที่คำนวณไว้ (ข้อความอยู่ในเรคคอร์ด STRING ถัดไป)
+        if (u16(p + 12) !== 0xFFFF) put(row, col, num(dv.getFloat64(p + 6, true)));
+        else if (b[p + 6] === 0) fcell = [row, col];
+        else if (b[p + 6] === 1) put(row, col, b[p + 8] ? 'TRUE' : 'FALSE');
+        break;
+      case 0x0207: if (fcell) { put(fcell[0], fcell[1], ustr(p)); fcell = null; } break;   // STRING
+    }
+  }
+  const out = [];
+  for (let i = 0; i < rows.length; i++) out.push(Array.from(rows[i] || [], v => (v == null ? '' : String(v).trim())));
+  return out;
+}
+// ข้อความใช้ร่วม (SST) ของ BIFF8: ข้อความยาวต่อในเรคคอร์ด CONTINUE ได้ (ต้นเรคคอร์ดใหม่มีไบต์บอกแบบตัวอักษรอีกครั้ง)
+function sstOf_(b, recs, i) {
+  const segs = [recs[i]];
+  for (let j = i + 1; j < recs.length && recs[j].t === 0x003C; j++) segs.push(recs[j]);
+  let si = 0, p = segs[0].p + 8, end = segs[0].p + segs[0].len;
+  const total = (b[segs[0].p + 4] | (b[segs[0].p + 5] << 8) | (b[segs[0].p + 6] << 16) | (b[segs[0].p + 7] << 24)) >>> 0, out = [];
+  const next = () => { if (++si >= segs.length) return false; p = segs[si].p; end = p + segs[si].len; return true; };
+  const byte = () => { if (p >= end && !next()) throw new Error('eof'); return b[p++]; };
+  const skip = k => { while (k > 0) { if (p >= end && !next()) return; const t = Math.min(k, end - p); p += t; k -= t; } };
+  try {
+    for (let k = 0; k < total; k++) {
+      if (p >= end && !next()) break;
+      const cch = byte() | (byte() << 8);
+      let fl = byte();
+      const rich = fl & 8 ? byte() | (byte() << 8) : 0, ext = fl & 4 ? (byte() | (byte() << 8) | (byte() << 16) | (byte() << 24)) >>> 0 : 0;
+      const ch = [];
+      for (let left = cch; left > 0;) {
+        if (p >= end) { if (!next()) break; fl = b[p++]; }
+        const hi = fl & 1, take = Math.min(left, hi ? (end - p) >> 1 : end - p);
+        for (let x = 0; x < take; x++) { ch.push(hi ? b[p] | (b[p + 1] << 8) : b[p]); p += hi ? 2 : 1; }
+        left -= take;
+        if (!take) p = end;
+      }
+      skip(rich * 4 + ext);
+      let s = '';
+      for (let x = 0; x < ch.length; x += 4096) s += String.fromCharCode.apply(null, ch.slice(x, x + 4096));
+      out.push(s);
+    }
+  } catch (e) { /* ไฟล์ขาด: ใช้เท่าที่อ่านได้ */ }
+  return out;
 }
 // หัวตาราง: แถวแรกที่มีหัวคอลัมน์ของ HN (ไม่ได้ตั้ง = คำว่า HN) ใน 15 แถวแรก
 function regDriveHead_(rows, hnCol) {
@@ -2205,7 +2393,7 @@ function regDriveCheck(set, token) {
   if (!u.isAdmin && !(u.sub && u.sub.indexOf('tabs') >= 0)) throw new Error('ตั้งค่าการดึงจาก Google Drive ได้เฉพาะแอดมิน');
   set = set && typeof set === 'object' ? set : {};
   const files = regDriveFiles_(regDriveFolder_(set.url));
-  if (!files.length) return { files: [], headers: [], guess: {}, filterVals: [], msg: 'ไม่พบไฟล์ .xlsx / Google Sheets / .csv ในโฟลเดอร์นี้' };
+  if (!files.length) return { files: [], headers: [], guess: {}, filterVals: [], msg: 'ไม่พบไฟล์ .xlsx / .xls / Google Sheets / .csv ในโฟลเดอร์นี้' + (files.others.length ? ' (มีแต่ไฟล์ที่อ่านไม่ได้: ' + files.others.slice(0, 5).join(', ') + ')' : '') };
   let rows;
   try { rows = regDriveRows_(files[0]); } catch (e) { throw new Error('อ่านไฟล์ ' + files[0].getName() + ' ไม่ได้: ' + e.message); }
   const map = set.map && typeof set.map === 'object' ? set.map : {}, hi = regDriveHead_(rows, map.hn);
@@ -2244,9 +2432,11 @@ function regDriveSync_(ss, cfg, force, by) {
     const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : st.files || {};
     try {
       const files = regDriveFiles_(regDriveFolder_(d.url)), seenHn = hnSeen_(ss), tidy = regDriveTidy_(ss, cfg, seenHn), have = {}, add = [], errs = [];
+      if (!files.length) errs.push('ไม่พบไฟล์ .xlsx / .xls / .csv / Google ชีต ในโฟลเดอร์' + (files.others.length ? ' (มีแต่ไฟล์ที่อ่านไม่ได้: ' + files.others.slice(0, 5).join(', ') + ')' : ''));
+      else if (files.others.length) errs.push('ไฟล์ชนิดที่อ่านไม่ได้ (ข้าม): ' + files.others.slice(0, 5).join(', ') + (files.others.length > 5 ? ' …' : '') + ' · บันทึกเป็น .xlsx หรือ Google ชีต');
       Object.keys(seenHn).forEach(k => { have[k] = seenHn[k].t; });
       tidy.gone.forEach(k => { have[k] = 'other'; });   // เพิ่งลบออกจากแถบลงทะเบียน: ยังมีในแถบอื่น
-      let skipped = 0, inSys = 0, filtered = 0, read = 0;
+      let skipped = 0, inSys = 0, filtered = 0, read = 0, rows = 0;
       files.forEach(f => {
         const id = f.getId(), mod = f.getLastUpdated().toISOString();
         if (!all && seen[id] === mod) return;   // ไฟล์ไม่เปลี่ยนตั้งแต่ดึงครั้งก่อน
@@ -2255,6 +2445,8 @@ function regDriveSync_(ss, cfg, force, by) {
         try { got = regDriveRecs_(regDriveRows_(f), cfg, d); } catch (e) { errs.push(f.getName() + ': อ่านไฟล์ไม่ได้ (' + e.message + ')'); return; }
         if (got.err) { errs.push(f.getName() + ': ' + got.err); return; }
         filtered += got.filtered;
+        rows += got.recs.length + got.filtered;
+        if (!got.recs.length && !got.filtered) errs.push(f.getName() + ': ไม่มีแถวที่มี HN ใต้หัวตาราง');
         got.recs.forEach(r => {
           const k = hnLoose_(r.hn);
           if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
@@ -2266,7 +2458,7 @@ function regDriveSync_(ss, cfg, force, by) {
       if (add.length) appendNew_(ss, 'reg', add);
       const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
       files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
-      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, rows: rows, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
     } catch (e) {
       st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
     }

@@ -3080,6 +3080,7 @@ const regOn = () => serverHas(REG_API);
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (regDriveCheck, regDrivePull, regDriveTick) · ตั้งค่า → ลงทะเบียน
 const REG_DRIVE_API = 57;
 const regDriveOn = () => serverHas(REG_DRIVE_API);
+const REG_XLS_API = 60;   // Code.gs ที่อ่านไฟล์ .xls (Excel 97–2003 / HTML / ข้อความ) และแจ้งไฟล์ที่อ่านไม่ได้
 const REG_DRIVE_FIELDS = [['hn', 'HN', true], ['name', 'ชื่อ-สกุล (มีคำนำหน้าได้)', true], ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['right', 'สิทธิการรักษา'], ['note', 'Note']];
 const REG_DRIVE_EVERY = [[15, 'ทุก 15 นาที'], [30, 'ทุก 30 นาที'], [60, 'ทุก 1 ชั่วโมง'], [180, 'ทุก 3 ชั่วโมง'], [360, 'ทุก 6 ชั่วโมง'], [1440, 'วันละครั้ง']];
 // แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, ซ่อนไม่ได้] (ตั้งค่า → ลงทะเบียน) · HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมี HN หรือชื่อ-สกุลอย่างน้อยหนึ่งช่อง
@@ -3898,7 +3899,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.9';
+const PAGE_VERSION = '2026-11-09.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6178,7 +6179,7 @@ function renderReg() {
   const nMonth = state.reg.filter(r => rgDay(r).slice(0, 7) === ym).length;
   $('#rg-help').textContent = words.length ? `ค้นทุกเดือน: พบ ${list.length} คน จากทั้งหมด ${state.reg.length} คน`
     : `${fmtMonth(ym)} · ลงทะเบียน ${nMonth} คน · ทั้งหมด ${state.reg.length} คน${edit ? ' · กดแถวเพื่อแก้' : ''}`
-      + (rdOk && rdSt && rdSt.at ? ` · ดึงจาก Google Drive ล่าสุด ${stampText(rdSt.at)}: เพิ่ม ${rdSt.added || 0} คน${rdSt.err ? ' (มีข้อผิดพลาด ดูที่ ตั้งค่า → ลงทะเบียน)' : ''}` : '');
+      + (rdOk && rdSt && rdSt.at ? ` · ดึงจาก Google Drive ล่าสุด ${stampText(rdSt.at)}: เพิ่ม ${rdSt.added || 0} คน${rdSt.err ? ` · ⚠ ${str(rdSt.err).slice(0, 140)}${str(rdSt.err).length > 140 ? '…' : ''}` : ''}` : '');
   const span = cols.length + 2;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>นัด</th></tr></thead>`;
   const cell = (r, k) => {
@@ -11243,7 +11244,7 @@ const rdSkipText = st => `HN มีในระบบแล้ว (ไม่ด�
   + (st.removed ? ` · ลบรายการที่ดึงไว้ก่อนแต่ HN มีในระบบอยู่แล้ว ${st.removed}` : '') + (st.docFix ? ` · ใส่รหัสแพทย์ให้รายการที่ดึงไว้ ${st.docFix}` : '');
 function rdStatusHtml(st) {
   if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
-  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
+  return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0}${st.rows != null ? ` (${st.rows} แถว)` : ''} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
     + (st.err ? `<br><span class="acct-warn">${esc(st.err)}</span>` : '');
 }
 function regDriveSec(d) {
@@ -11265,9 +11266,9 @@ function regDriveSec(d) {
     : `<p class="br-preview">พบ ${chk.nFiles} ไฟล์: ${chk.files.slice(0, 6).map(f => `${esc(f.name)} <span class="muted">(แก้ล่าสุด ${esc(stampText(f.at))})</span>`).join(' · ')}${chk.nFiles > 6 ? ' …' : ''}<br>ไฟล์ล่าสุด: ${chk.headRow ? `หัวตารางแถวที่ ${chk.headRow} · ข้อมูล ${chk.rows} แถว` : '<span class="acct-warn">ไม่พบคอลัมน์ HN · เลือกคอลัมน์ HN ด้านล่าง</span>'}</p>`;
   const ready = !local && api && !!saved.url;
   return `<h3 class="sub-h" id="rd-sec">ดึงผู้ป่วยจาก Google Drive</h3>
-      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่มีในระบบแล้วไม่ดึง</b> (ลงทะเบียนแล้ว หรือมีในแถบอื่น: เคส CT-SIM ลงนัด นัดคิวใส่แร่ กิจกรรม Vac-Lok · ไม่ทับข้อมูลเดิม · รายการที่ดึงไว้ก่อนแล้วยังไม่มีใครแก้ แต่ HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบให้ตอนดึงครั้งถัดไป) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
+      <p class="muted def-note" style="margin:0 0 10px">อ่านไฟล์ .xlsx, .xls (Excel 97–2003 หรือไฟล์ HTML / ข้อความที่ระบบโรงพยาบาลส่งออกเป็น .xls), Google Sheets หรือ .csv ทุกไฟล์ในโฟลเดอร์ (แผ่นแรก · หัวตาราง = แถวที่มีคอลัมน์ HN) แล้วลงทะเบียนให้เอง · <b>HN ที่มีในระบบแล้วไม่ดึง</b> (ลงทะเบียนแล้ว หรือมีในแถบอื่น: เคส CT-SIM ลงนัด นัดคิวใส่แร่ กิจกรรม Vac-Lok · ไม่ทับข้อมูลเดิม · รายการที่ดึงไว้ก่อนแล้วยังไม่มีใครแก้ แต่ HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบให้ตอนดึงครั้งถัดไป) · ไฟล์ที่ไม่ได้แก้ตั้งแต่ดึงครั้งก่อนไม่อ่านซ้ำ · มีไฟล์ใหม่หรือไฟล์เดิมเพิ่มแถว = ดึงเฉพาะ HN ใหม่
         · คำนำหน้าแยกจากชื่อให้เอง (น.ส. = นางสาว · ด.ช. ด.ญ. · ยศ / คำย่ออื่นใช้ตามไฟล์) และเลือกเพศจากคำนำหน้า · แพทย์จับคู่กับ ทีม → แพทย์ ด้วยชื่อ-สกุล (หรือชื่อต้นที่ตรงคนเดียว · ใส่ชื่อแพทย์ทีหลัง = ดึงครั้งถัดไปใส่รหัสแพทย์ให้รายการที่ดึงไว้) · สิทธิจับคู่กับตัวเลือกด้านบน (ถ้วนหน้า → บัตรทอง, ประกันสังคม, ข้าราชการ, ชำระเงินเอง · ไม่ตรง = ข้อความในไฟล์) · ICD-10 ใช้รหัสมะเร็ง (C, D) ตัวแรก ไม่มี = รหัสแรก</p>
-      ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก Google Drive ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก Google Drive ต้องใช้ Code.gs รุ่น 2026-11-08.2 ขึ้นไป · วาง Code.gs ใหม่ กด Run ฟังก์ชัน regDriveTick หนึ่งครั้งเพื่ออนุญาตให้อ่าน Google Drive แล้ว Deploy เวอร์ชันใหม่</span></p>' : ''}
+      ${local ? '<p class="notice"><b>โหมดตัวอย่าง</b><span>ดึงจาก Google Drive ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs</span></p>' : !api ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การดึงจาก Google Drive ต้องใช้ Code.gs รุ่น 2026-11-08.2 ขึ้นไป · วาง Code.gs ใหม่ กด Run ฟังก์ชัน regDriveTick หนึ่งครั้งเพื่ออนุญาตให้อ่าน Google Drive แล้ว Deploy เวอร์ชันใหม่</span></p>' : !serverHas(REG_XLS_API) ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>อ่านไฟล์ .xls (Excel 97–2003) ได้เมื่อใช้ Code.gs รุ่น 2026-11-09.4 ขึ้นไป · Code.gs ที่ใช้อยู่ข้ามไฟล์ .xls โดยไม่แจ้ง</span></p>' : ''}
       <label class="check" style="margin-bottom:12px"><input type="checkbox" data-k="reg.drive.on"${b.on ? ' checked' : ''}> ดึงอัตโนมัติ</label>
       <div class="field" style="margin-bottom:12px"><span class="lbl">ลิงก์โฟลเดอร์ Google Drive <span class="sub-lbl">drive.google.com/drive/folders/… · บัญชี Google ที่ Deploy ระบบนี้ต้องเปิดโฟลเดอร์ได้</span></span>
         <span class="br-url" style="display:flex;gap:8px"><input data-k="reg.drive.url" value="${esc(b.url)}" placeholder="drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์โฟลเดอร์ Google Drive"><button type="button" class="btn ghost" data-rdchk${local || !api ? ' disabled' : ''}>ตรวจโฟลเดอร์</button></span></div>
@@ -11291,7 +11292,8 @@ async function rdCheckRun(btn) {
     updateSaveBar();
   } catch (e) { if (btn) btn.disabled = false; toast('ตรวจโฟลเดอร์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-const rdDoneMsg = st => (st.err && !st.added ? `ดึงจาก Google Drive ไม่สำเร็จ: ${st.err}` : `ดึงจาก Google Drive แล้ว · เพิ่มผู้ป่วย ${st.added} คน · ${rdSkipText(st)}${st.err ? ` · ${st.err}` : ''}`);
+const rdDoneMsg = st => (st.err && !st.added && !st.read ? `ดึงจาก Google Drive ไม่สำเร็จ: ${st.err}`
+  : `ดึงจาก Google Drive แล้ว · อ่าน ${st.read || 0} ไฟล์${st.rows != null ? ` ${st.rows} แถว` : ''} · เพิ่มผู้ป่วย ${st.added} คน · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}${st.err ? ` · ${st.err}` : ''}`);
 async function rdPullNow(btn) {
   btn.disabled = true;
   try {
