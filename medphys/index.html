@@ -2044,6 +2044,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <p class="muted" id="rg-help" style="margin:-4px 0 10px;font-size:13px"></p>
     <p class="notice" id="rg-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
     <div class="table-wrap ct-wrap"><table class="ct-tbl rg-tbl" id="rg-tbl"></table></div>
+    <div class="rg-arch" id="rg-arch" hidden></div>
   </section>
 
   <section id="view-appt" hidden>
@@ -3080,7 +3081,11 @@ const regOn = () => serverHas(REG_API);
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (regDriveCheck, regDrivePull, regDriveTick) · ตั้งค่า → ลงทะเบียน
 const REG_DRIVE_API = 57;
 const regDriveOn = () => serverHas(REG_DRIVE_API);
-const REG_XLS_API = 60;   // Code.gs ที่อ่านไฟล์ .xls (Excel 97–2003 / HTML / ข้อความ) และแจ้งไฟล์ที่อ่านไม่ได้
+const REG_XLS_API = 60;
+// ที่เก็บถาวรของแถบลงทะเบียน (Code.gs API 61: regFind, regRestore, regArchiveNow · ตั้งค่า → ลงทะเบียน)
+const ARCH_API = 61;
+const archOn = () => store.mode === 'sheet' && serverHas(ARCH_API);
+const ARCH_YEARS = [[0, 'ไม่ย้าย'], [1, '1 ปี'], [2, '2 ปี'], [3, '3 ปี (ค่าเริ่มต้น)'], [5, '5 ปี']];   // Code.gs ที่อ่านไฟล์ .xls (Excel 97–2003 / HTML / ข้อความ) และแจ้งไฟล์ที่อ่านไม่ได้
 const REG_DRIVE_FIELDS = [['hn', 'HN', true], ['name', 'ชื่อ-สกุล (มีคำนำหน้าได้)', true], ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['right', 'สิทธิการรักษา'], ['note', 'Note']];
 const REG_DRIVE_EVERY = [[15, 'ทุก 15 นาที'], [30, 'ทุก 30 นาที'], [60, 'ทุก 1 ชั่วโมง'], [180, 'ทุก 3 ชั่วโมง'], [360, 'ทุก 6 ชั่วโมง'], [1440, 'วันละครั้ง']];
 // แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, ซ่อนไม่ได้] (ตั้งค่า → ลงทะเบียน) · HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมี HN หรือชื่อ-สกุลอย่างน้อยหนึ่งช่อง
@@ -3261,7 +3266,7 @@ const DEFAULT_CONFIG = {
     cal: { simNew: true, simBadge: 'lim', simAll: 'total', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
-    drive: { on: false, url: '', every: 60, map: {}, filter: { col: '', vals: [] } } },   // ดึงจาก Google Drive: map ไม่มีคีย์ = เดาจากหัวคอลัมน์ · filter.col '-' = ทุกแถว
+    drive: { on: false, url: '', every: 60, map: {}, filter: { col: '', vals: [] } }, archiveYears: 3 },   // archiveYears: ย้ายผู้ป่วยเก่าเข้าที่เก็บถาวร (0 = ไม่ย้าย)   // ดึงจาก Google Drive: map ไม่มีคีย์ = เดาจากหัวคอลัมน์ · filter.col '-' = ทุกแถว
   // แถบนัดคิวใส่แร่: จำนวนเคสสูงสุดต่อวัน (เกิน = สีแดง เตือนตอนลงนัด) · รูปแบบการใส่ · ผู้ลงชื่อ MP / RC ได้ (ตำแหน่ง / ชื่อผู้ใช้ LPCH)
   // นัดคิวใส่แร่: docShow = แสดงแพทย์ chip (สัญลักษณ์สีของแพทย์) | name (ชื่อ-สกุล) | both · rtt = RTT เริ่มต้นของนัดใหม่
   // hold = วันที่มีนัดใส่แร่ในแถบห้องฉาย: auto (สถานะชื่อ HDR · ไม่มี = HDR) | id สถานะ fraction | off (ไม่ใช้)
@@ -3387,7 +3392,8 @@ const fmtDay = s => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? DAY_FMT.format(parseI
 const nowStamp = () => { const d = new Date(); return `${iso(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const fmtStamp = s => (s ? [fmtDay(s.slice(0, 10)), s.slice(11, 16)].filter(Boolean).join(' ') : '');
 const fmtMonth = ym => MONTH_FMT.format(parseISO(ym + '-01'));
-const num = (n, dp = 1) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: dp });
+const NUM_FMT = {};   // ตัวจัดรูปแบบตัวเลขต่อจำนวนทศนิยม (สร้างครั้งเดียว · toLocaleString สร้างใหม่ทุกครั้ง ช้าเมื่อข้อมูลเยอะ)
+const num = (n, dp = 1) => (NUM_FMT[dp] || (NUM_FMT[dp] = new Intl.NumberFormat('en-US', { maximumFractionDigits: dp }))).format(Number(n || 0));
 const signed = (n, dp = 1) => (n >= 0 ? '+' : '−') + num(Math.abs(n), dp);
 const errMsg = e => str(e && (e.message || e)) || 'ไม่ทราบสาเหตุ';
 const pref = {
@@ -3766,6 +3772,7 @@ function mergeConfig(c) {
   out.reg.drive = { on: !!rdv.on, url: str(rdv.url), every: REG_DRIVE_EVERY.some(([m]) => m === +rdv.every) ? +rdv.every : d.reg.drive.every,
     map: Object.fromEntries(REG_DRIVE_FIELDS.filter(([k]) => k in rdm).map(([k]) => [k, str(rdm[k])])),
     filter: { col: str(rdf.col), vals: Array.isArray(rdf.vals) ? [...new Set(rdf.vals.map(str).filter(Boolean))] : [] } };
+  out.reg.archiveYears = rg.archiveYears != null && ARCH_YEARS.some(([y]) => y === +rg.archiveYears) ? +rg.archiveYears : d.reg.archiveYears;
   for (const [k] of REG_LISTS) out.reg[k] = Array.isArray(rg[k]) ? [...new Set(rg[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.reg[k].slice();   // ค่าเริ่มต้นของรุ่น 2026-10-29.3 (SRS/SRT ช่องเดียว) → กลับเป็นแยก SRS, SRT
   const bq = c.bq && typeof c.bq === 'object' ? c.bq : {};
   out.bq = { max: Math.min(50, Math.max(1, Math.floor(+bq.max) || d.bq.max)), techs: Array.isArray(bq.techs) ? [...new Set(bq.techs.map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.bq.techs.slice(),
@@ -3899,7 +3906,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.10';
+const PAGE_VERSION = '2026-11-09.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -3926,7 +3933,7 @@ const call = (fn, ...args) => new Promise((ok, fail) => google.script.run.withSu
 })[fn](...args, lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : '')));
 const sheetStore = {
   mode: 'sheet',
-  load: () => call('getData'),
+  load: have => (have ? call('getData', have) : call('getData')),   // have = รุ่นของข้อมูลที่มี (Code.gs API 61 · ส่งเฉพาะที่เปลี่ยน)
   save: (table, rec) => call('saveRecord', table, rec),
   addCases: recs => call('addCases', recs),
   remove: (table, id) => call('deleteRecord', table, id),
@@ -3981,6 +3988,9 @@ const sheetStore = {
   tdfPull: force => call('tdfPull', !!force),
   regDriveCheck: set => call('regDriveCheck', set),
   regDrivePull: force => call('regDrivePull', !!force),
+  regFind: q => call('regFind', q),
+  regRestore: id => call('regRestore', id),
+  regArchiveNow: () => call('regArchiveNow'),
   spqCheck: set => call('spqCheck', set),
   spqPull: force => call('spqPull', !!force),
 };
@@ -4166,6 +4176,9 @@ function localStore() {
     regDriveCheck: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     regDrivePull: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     spqCheck: async () => { throw new Error('นำเข้าจากระบบนัดคิวเทคนิคพิเศษใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    regFind: async () => ({ rows: [], total: 0 }),
+    regRestore: async () => { throw new Error('ที่เก็บถาวรใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
+    regArchiveNow: async () => { throw new Error('ที่เก็บถาวรใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     spqPull: async () => { throw new Error('นำเข้าจากระบบนัดคิวเทคนิคพิเศษใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     tags: async (id, tags, pin) => {
       demoCheckPin(pin);
@@ -4577,7 +4590,9 @@ const state = {
   srcChk: {},   // ผลตรวจชีตของระบบอื่น (ตั้งค่า) { brachy, tdf }
   rdChk: null,   // ผลตรวจโฟลเดอร์ Google Drive ของแถบลงทะเบียน (ตั้งค่า)
   regDrive: null,   // ผลดึงจาก Google Drive ครั้งล่าสุด { at, by, added, skipped, filtered, read, nFiles, err }
-  spq: [], spqSync: null, spqChk: null,   // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ · ผลดึงครั้งล่าสุด · ผลตรวจชีต (ตั้งค่า)
+  regArch: null,   // ที่เก็บถาวรของแถบลงทะเบียน { day, at, years, moved, total, error }
+  spq: [], spqSync: null, spqChk: null,
+  tv: {}, tt: {},   // รุ่นของแต่ละตารางที่มี และเวลาเซิร์ฟเวอร์ตอนได้ (Code.gs API 61: รีเฟรชได้เฉพาะตาราง/แถวที่เปลี่ยน)   // นัดที่นำเข้าจากระบบนัดคิวเทคนิคพิเศษ · ผลดึงครั้งล่าสุด · ผลตรวจชีต (ตั้งค่า)
   config: mergeConfig(null), cfgReqs: [], cases: [], logs: [], leaves: [], duty: [], ct: [], appt: [], reg: [], bq: [], jobs: [], vac: [], vacImp: null, loaded: false, error: '', fresh: [], user: { me: '', owner: '', isAdmin: true, canEdit: true },
   gate: null, homeUrl: LPCH_HOME,
   view: pref.get('view', 'work'), tab: 'open', cat: '', person: '', q: '', limit: 60, courseTab: 'on',
@@ -5290,7 +5305,16 @@ function renderCaseMode() {
   $$('.case-mode').forEach(el => { el.innerHTML = [['card', 'การ์ด'], ['line', 'บรรทัดเดียว']].map(([v, l]) => `<button type="button" data-cview="${v}" aria-pressed="${m === v}">${l}</button>`).join(''); });
 }
 // ข้อความของเคสที่ใช้ค้นหา (ช่องค้นหาในหน้างาน และแว่นขยายมุมขวาบน)
-const caseText = c => `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${sitesOf(c).map(siteText).join(' ')} ${c.ptags} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase();
+const caseTextMemo = new WeakMap();
+function caseText(c) {
+  const fp = [c.hn, c.name, c.doc, c.type, c.aim, c.tech, c.dpf, c.fx, c.rx, c.freq, c.icd, c.dx, c.area, c.room, c.sites, c.ptags, c.note, c.mp, c.cat, ...extraList().map(f => c['x_' + f.id])].join('\u0001');
+  const m = caseTextMemo.get(c);
+  if (m && m.cfg === state.config && m.fp === fp) return m.t;
+  const t = caseText0(c);
+  caseTextMemo.set(c, { cfg: state.config, fp, t });
+  return t;
+}
+const caseText0 = c => `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)} ${c.type} ${c.aim} ${c.tech} ${doseText(c)} ${dxValue(c)} ${dxShort(c)} ${c.area} ${c.room} ${sitesOf(c).map(siteText).join(' ')} ${c.ptags} ${c.note} ${c.mp} ${catOf(c.cat).label} ${extraList().map(f => extraText(f, c['x_' + f.id])).join(' ')}`.toLowerCase();
 // ช่องค้นหาของแต่ละแถบ (งานรอ ตารางแจกเคส ห้องฉาย RC และกิจกรรม · หน้างานใช้ช่องค้นหาเดิม): กรองเฉพาะรายการในแถบนั้นทันที ไม่ไปแถบอื่น
 // ทุกคำที่พิมพ์ต้องตรง (เหมือนแว่นขยาย) · Esc ล้าง · จำไว้จนกว่าจะโหลดหน้าใหม่
 const tabQ = {};
@@ -6144,9 +6168,21 @@ function normReg(o) {
   return renRec('reg', r);
 }
 const hnKey = v => str(v).replace(/\s+/g, '').toUpperCase();
+// ดัชนี HN → รายการ ของรายการข้อมูล (state.reg, state.appt, state.cases ฯลฯ) แทนการไล่หาทั้งรายการทุกครั้ง (ข้อมูลหลายพันแถว)
+// รายการเดิม (ตัวเดียวกัน จำนวนเท่าเดิม) ภายใน 3 วินาที = ใช้ดัชนีเดิม · แก้ข้อมูลแล้ววาดใหม่ทันทีจึงไม่ค้างค่าเก่า
+const hnIdxMemo = new WeakMap();
+function hnIndexOf(list) {
+  const m = hnIdxMemo.get(list), now = Date.now();
+  if (m && m.n === list.length && now - m.at < 3000) return m.map;
+  const map = new Map();
+  for (const x of list) { const k = hnKey(x.hn); if (!k) continue; const a = map.get(k); if (a) a.push(x); else map.set(k, [x]); }
+  hnIdxMemo.set(list, { n: list.length, at: now, map });
+  return map;
+}
+const byHn = (list, hn) => (hnKey(hn) ? hnIndexOf(list).get(hnKey(hn)) || [] : []);
 // ช่องแบบติ๊ก (Bitelock, C-RAD, เคสวิจัย): YES จากฟอร์ม · TRUE จากช่องติ๊กในชีต · ✓ / Y / 1 จากข้อมูลเดิม
 const yesV = v => /^(yes|y|true|1|✓|✔|x)$/i.test(str(v));
-const regByHn = hn => (hnKey(hn) ? state.reg.find(r => hnKey(r.hn) === hnKey(hn)) : null);
+const regByHn = hn => byHn(state.reg, hn)[0] || null;
 // ชื่อเต็ม: คำนำหน้าภาษาไทยติดชื่อ (นางสาวสมใจ ใจดี) · คำนำหน้าภาษาอังกฤษเว้นวรรค (Mr. John Smith)
 const regName = r => `${r.title}${/[A-Za-z]/.test(r.title) ? ' ' : ''}${r.name}`.trim();
 // อายุ (ปีเต็ม) ณ วันที่ on (เริ่มต้น = วันนี้)
@@ -6158,9 +6194,10 @@ function ageOn(birth, on) {
 }
 const rgMode = k => state.config.reg.form[k] || 'off';
 const rgDay = r => (r.created ? iso(new Date(r.created)) : '');
+const RG_MAX = 200, RG_MAX_MONTH = 500;   // แถวสูงสุดในตารางแถบลงทะเบียน: ค้นหา / ดูรายเดือน
 const rgText = r => [r.hn, regName(r), r.name, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.note].join(' ').toLowerCase();
 // นัดของผู้ป่วย (แถบลงนัด) ล่าสุดก่อน
-const regAppts = r => state.appt.filter(a => hnKey(a.hn) === hnKey(r.hn)).sort((a, b) => (isDay(b.date) ? b.date : '9').localeCompare(isDay(a.date) ? a.date : '9') || b.created.localeCompare(a.created));
+const regAppts = r => byHn(state.appt, r.hn).slice().sort((a, b) => (isDay(b.date) ? b.date : '9').localeCompare(isDay(a.date) ? a.date : '9') || b.created.localeCompare(a.created));
 const apShort = a => `${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${apState(a) === 'took' ? ' · ลง CT-SIM แล้ว' : apState(a) === 'skip' ? ' · ไม่มาทำ CT' : ''}`;
 const RG_OLD = 'แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 // คอลัมน์ในตาราง · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์ (อายุ ตามช่องวันเกิด)
@@ -6174,11 +6211,14 @@ function renderReg() {
   $('#rg-api').hidden = regOn() || !canEdit();
   syncTabQ('reg');
   const words = tabWords('reg'), latest = (a, b) => b.created.localeCompare(a.created);
-  const list = (words.length ? state.reg.filter(r => wordsIn(words, rgText(r))) : state.reg.filter(r => rgDay(r).slice(0, 7) === ym)).sort(latest);
+  // วันที่ลงทะเบียน (แปลงเวลาครั้งเดียวต่อแถว) · แสดงไม่เกิน RG_MAX แถว (ค้นเจอหลายพันคน = หน้าไม่ค้าง · พิมพ์เพิ่มเพื่อจำกัด)
+  const dayOf = new Map(), dOf = r => { let d = dayOf.get(r); if (d === undefined) dayOf.set(r, d = rgDay(r)); return d; };
+  const all = (words.length ? state.reg.filter(r => wordsIn(words, rgText(r))) : state.reg.filter(r => dOf(r).slice(0, 7) === ym)).sort(latest);
+  const list = all.slice(0, words.length ? RG_MAX : RG_MAX_MONTH), cut = all.length - list.length;
   const cols = RG_COLS.filter(([k]) => k === 'hn' || k === 'name' || rgMode(k) !== 'off');
-  const nMonth = state.reg.filter(r => rgDay(r).slice(0, 7) === ym).length;
-  $('#rg-help').textContent = words.length ? `ค้นทุกเดือน: พบ ${list.length} คน จากทั้งหมด ${state.reg.length} คน`
-    : `${fmtMonth(ym)} · ลงทะเบียน ${nMonth} คน · ทั้งหมด ${state.reg.length} คน${edit ? ' · กดแถวเพื่อแก้' : ''}`
+  const nMonth = words.length ? 0 : all.length;
+  $('#rg-help').textContent = words.length ? `ค้นทุกเดือน: พบ ${all.length} คน${cut ? ` (แสดง ${list.length} คนล่าสุด · พิมพ์เพิ่มเพื่อจำกัด)` : ''} จากทั้งหมด ${state.reg.length} คน`
+    : `${fmtMonth(ym)} · ลงทะเบียน ${nMonth} คน · ทั้งหมด ${state.reg.length} คน${state.regArch && state.regArch.total ? ` (ที่เก็บถาวรอีก ${state.regArch.total} คน · ค้นหาได้)` : ''}${edit ? ' · กดแถวเพื่อแก้' : ''}`
       + (rdOk && rdSt && rdSt.at ? ` · ดึงจาก Google Drive ล่าสุด ${stampText(rdSt.at)}: เพิ่ม ${rdSt.added || 0} คน${rdSt.err ? ` · ⚠ ${str(rdSt.err).slice(0, 140)}${str(rdSt.err).length > 140 ? '…' : ''}` : ''}` : '');
   const span = cols.length + 2;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>นัด</th></tr></thead>`;
@@ -6192,14 +6232,58 @@ function renderReg() {
     const a = regAppts(r)[0];
     return `<td class="rg-ap">${a ? `<span class="muted">${esc(apShort(a))}</span>` : ''}${apEdit ? `<button type="button" class="btn ghost sm" data-rgap="${esc(r.id)}" title="เปิดฟอร์มลงนัดพร้อมข้อมูลผู้ป่วยนี้">+ ลงนัด</button>` : ''}</td>`;
   };
-  const td = today(), days = [...new Set(list.map(rgDay))];
+  const td = today(), byDay = new Map();
+  for (const r of list) { const d = dOf(r), a = byDay.get(d); if (a) a.push(r); else byDay.set(d, [r]); }
   let no = 0;
-  const body = days.map(d => {
-    const rows = list.filter(r => rgDay(r) === d);
+  const body = [...byDay].map(([d, rows]) => {
     return `<tr class="ct-day${d === td ? ' today' : ''}"><td colspan="${span}"><b>${esc(isDay(d) ? LONG_DAY_FMT.format(parseISO(d)) : 'ไม่ทราบวันที่')}</b><span class="muted"> · ${rows.length} คน</span></td></tr>`
       + rows.map(r => `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-rgedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num">${++no}</td>${cols.map(([k]) => cell(r, k)).join('')}${apCell(r)}</tr>`).join('');
   }).join('');
+  regArchSearch(words.join(' '));
   $('#rg-tbl').innerHTML = head + `<tbody>${body || `<tr><td colspan="${span}" class="empty-state">${words.length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้น' : `ยังไม่มีผู้ป่วยลงทะเบียนใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
+}
+// ค้นในที่เก็บถาวร (ผู้ป่วยที่ลงทะเบียนเกิน N ปีและไม่มีรายการในแถบอื่น · Code.gs ย้ายให้วันละครั้ง) · รอหยุดพิมพ์ 0.4 วินาที · จำผลของคำค้นล่าสุด
+let archQ = { q: '', rows: null, total: 0 }, archTimer = 0;
+function regArchSearch(q) {
+  clearTimeout(archTimer);
+  if (!q || !archOn() || !(state.regArch && state.regArch.total)) { archQ = { q: '', rows: null, total: 0 }; return renderRgArch(); }
+  if (archQ.q === q && archQ.rows) return renderRgArch();
+  archQ = { q, rows: null, total: 0 };
+  renderRgArch();
+  archTimer = setTimeout(async () => {
+    let r = null, err = '';
+    try { r = await store.regFind(q); } catch (e) { err = errMsg(e); }
+    if (archQ.q !== q) return;
+    archQ = { q, rows: r ? (r.rows || []).map(normReg) : [], total: r ? +r.total || 0 : 0, err };
+    if (state.view === 'reg') renderRgArch();
+  }, 400);
+}
+function renderRgArch() {
+  const box = $('#rg-arch');
+  if (!archQ.q) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  const yrs = (state.regArch && state.regArch.years) || state.config.reg.archiveYears;
+  const head = `<h3 class="sub-h">ที่เก็บถาวร <span class="muted">ลงทะเบียนเกิน ${yrs} ปีและไม่มีรายการในแถบอื่น · กดแถว = ย้ายกลับมาแถบลงทะเบียน</span></h3>`;
+  if (!archQ.rows) { box.innerHTML = head + '<p class="muted">กำลังค้นในที่เก็บถาวร…</p>'; return; }
+  if (archQ.err) { box.innerHTML = head + `<p class="acct-warn">${esc(archQ.err)}</p>`; return; }
+  if (!archQ.rows.length) { box.innerHTML = head + '<p class="muted">ไม่พบในที่เก็บถาวร</p>'; return; }
+  const edit = canEdit() && regOn(), apEdit = accessOf('appt') === 'edit' && apptOn();
+  box.innerHTML = head + `<div class="table-wrap ct-wrap"><table class="ct-tbl rg-tbl"><thead><tr><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>Diag</th><th>ลงทะเบียน</th><th></th></tr></thead><tbody>${archQ.rows.map(r => `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-rgarch="${esc(r.id)}" tabindex="0"` : ''}>
+    <td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b></td><td class="ct-name">${esc(regName(r))}</td><td>${esc(ctDocText(r.doc))}</td><td>${esc(dxShort(r) || r.icd)}</td><td>${esc(rgDay(r) ? fmtDayY(rgDay(r)) : '')}</td>
+    <td class="rg-ap">${apEdit ? `<button type="button" class="btn ghost sm" data-rgarchap="${esc(r.id)}">+ ลงนัด</button>` : ''}</td></tr>`).join('')}</tbody></table></div>${archQ.total > archQ.rows.length ? `<p class="muted">พบ ${archQ.total} คน แสดง ${archQ.rows.length} คนล่าสุด · พิมพ์เพิ่มเพื่อจำกัด</p>` : ''}`;
+}
+// ผู้ป่วยในที่เก็บถาวร: ย้ายกลับมาแถบลงทะเบียน (ใช้อีกครั้ง) แล้วทำต่อ (แก้ไข / ลงนัด)
+async function restoreArch(id, then) {
+  try {
+    const rec = normReg(await store.regRestore(id));
+    const i = state.reg.findIndex(x => x.id === rec.id);
+    if (i >= 0) state.reg[i] = rec; else state.reg.push(rec);
+    if (archQ.rows) archQ.rows = archQ.rows.filter(x => x.id !== id);
+    if (state.regArch && state.regArch.total) state.regArch.total--;
+    toast(`ย้าย ${rec.hn || regName(rec)} กลับมาแถบ${navLabel('reg')}แล้ว`);
+    if (state.view === 'reg') renderReg();
+    if (then) then(rec);
+  } catch (e) { toast('ย้ายกลับไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 // ฟอร์มลงทะเบียน · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้
 const rgDlg = $('#rg-dlg'), rgForm = $('#rg-form');
@@ -6327,6 +6411,7 @@ rgForm.addEventListener('change', e => {
   syncRgForm();
 });
 rgForm.addEventListener('input', e => { clearMissing(e); if (e.target.id === 'r-hn' || e.target.id === 'r-birth') syncRgForm(); });
+$('#rg-arch').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-rgarch]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); restoreArch(tr.dataset.rgarch, r => openRgForm(r.id)); } });
 $('#rg-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-rgedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openRgForm(tr.dataset.rgedit); } });
 
 // ฟอร์มลงนัด ← แถบลงทะเบียน: ผู้ป่วยที่เลือก (ปุ่มลงนัด / รายการในช่อง HN) หรือ HN ที่พิมพ์ตรงกับที่ลงทะเบียน
@@ -6352,9 +6437,17 @@ function apRegNote(picked) {
 }
 // ผู้ป่วยทั้งระบบ (HN เดียวกัน = คนเดียวกัน): แถบลงทะเบียนก่อน แล้วเติมช่องที่ยังว่างจากรายการล่าสุดของแถบลงนัด CT-SIM เคส (แจกเคส · ห้องฉาย) นัดคิวใส่แร่ และกิจกรรม
 // { hn, title, name, birth, sex, doc, icd, dx, src: ['reg', 'appt', …] } · ผู้ป่วยที่ลงทะเบียนโดยไม่มี HN ค้นด้วยชื่อได้
-const PT_SRC = { reg: 'ลงทะเบียน', appt: 'ลงนัด', ct: 'CT-SIM', cases: 'เคส', bq: 'ใส่แร่', logs: 'กิจกรรม' };
+const PT_SRC = { reg: 'ลงทะเบียน', appt: 'ลงนัด', ct: 'CT-SIM', cases: 'เคส', bq: 'ใส่แร่', logs: 'กิจกรรม', arch: 'ที่เก็บถาวร' };
 const ptHnOk = hn => /[0-9A-Za-z]/.test(str(hn));
+let ptMemo = null;
 function ptIndex() {
+  const src = [state.reg, state.appt, state.ct, state.cases, state.bq, state.logs], now = Date.now();
+  if (ptMemo && now - ptMemo.at < 5000 && ptMemo.src.every((x, i) => x === src[i] && (x || []).length === ptMemo.n[i])) return ptMemo.out;
+  const out = ptIndex0();
+  ptMemo = { src, n: src.map(x => (x || []).length), at: now, out };
+  return out;
+}
+function ptIndex0() {
   const m = new Map(), out = [];
   const get = hn => { const k = hnKey(hn); if (!m.has(k)) { const p = { hn: str(hn).trim(), title: '', name: '', birth: '', sex: '', doc: '', icd: '', dx: '', src: [] }; m.set(k, p); out.push(p); } return m.get(k); };
   for (const r of state.reg || []) {
@@ -6393,15 +6486,37 @@ function setupRegCombo(pre, pick, typed, skipReg) {
   const input = $(`#${pre}-hn`), list = $(`#${pre}-hn-list`);
   let items = [], active = -1, closeTimer = 0;
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
+  let archFor = '', archHits = [], archTimer2 = 0;
+  // ไม่พบ (หรือพบน้อย) ในข้อมูลที่โหลด: ค้นที่เก็บถาวรของแถบลงทะเบียน (รอหยุดพิมพ์ · พิมพ์อย่างน้อย 3 ตัว)
+  const archAsk = q => {
+    clearTimeout(archTimer2);
+    if (archFor === q || str(q).length < 3 || !archOn() || !(state.regArch && state.regArch.total)) return;
+    archTimer2 = setTimeout(async () => {
+      let r = null;
+      try { r = await store.regFind(q); } catch (e) { r = null; }
+      if (str(input.value) !== q) return;
+      archFor = q;
+      archHits = r ? (r.rows || []).slice(0, 5).map(x => ({ ...normReg(x), src: ['arch'] })) : [];
+      if (archHits.length && document.activeElement === input) draw();
+    }, 350);
+  };
   const draw = () => {
+    const q = str(input.value);
     items = regSearch(input.value, skipReg);
-    if (!items.length || (items.length === 1 && hnKey(items[0].hn) === hnKey(input.value))) return close();
+    if (archFor === q) items = [...items, ...archHits.filter(a => !items.some(x => hnKey(x.hn) === hnKey(a.hn)))].slice(0, 8);
+    else if (items.length < 3) archAsk(q);
+    if (!items.length || (items.length === 1 && hnKey(items[0].hn) === hnKey(input.value) && !(items[0].src || []).includes('arch'))) return close();   // ที่เก็บถาวร: แสดงให้เลือก (พิมพ์ตรงแล้วออกจากช่องไม่เลือกให้เอง)
     list.innerHTML = items.map((r, i) => { const age = ageOn(r.birth), sub = [age && `อายุ ${age} ปี`, r.sex, Object.keys(PT_SRC).filter(x => (r.src || []).includes(x)).map(x => PT_SRC[x]).join(', ')].filter(Boolean).join(' · '); return `<li role="option" id="${pre}-hn-o${i}" data-i="${i}" aria-selected="${i === active}"><span class="code">${esc(r.hn || 'ไม่มี HN')}</span><span>${esc(regName(r) || '(ไม่มีชื่อ)')}${sub ? `<small>${esc(sub)}</small>` : ''}</span></li>`; }).join('');
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
     input.setAttribute('aria-activedescendant', active >= 0 ? `${pre}-hn-o${active}` : '');
   };
-  const choose = i => { const r = items[i]; if (!r) return; close(); pick(r, true); clearMissing({ target: input }); };
+  const choose = i => {
+    const r = items[i];
+    if (!r) return;
+    close(); pick(r, true); clearMissing({ target: input });
+    if ((r.src || []).includes('arch') && ['reg', 'appt', 'bq'].some(v => accessOf(v) === 'edit')) restoreArch(r.id);   // ใช้อีกครั้ง: ย้ายกลับแถบลงทะเบียน
+  };
   input.addEventListener('input', () => { clearTimeout(closeTimer); active = -1; draw(); if (typed) typed(); });
   input.addEventListener('keydown', e => {
     if (list.hidden) { if (e.key === 'ArrowDown') draw(); return; }
@@ -6480,7 +6595,7 @@ const bqCtKept = (a, now) => bqCtPairs(a).every(p => bqCtPairs(now).some(q => q.
 function bqRoomOf(a) {
   const k = hnKey(a.hn);
   if (!k) return '';
-  const cs = state.cases.filter(c => hnKey(c.hn) === k && c.room && catOf(c.cat).kind !== 'simple' && !c.replan).sort((x, y) => str(x.sim).localeCompare(str(y.sim)));
+  const cs = byHn(state.cases, k).filter(c => c.room && catOf(c.cat).kind !== 'simple' && !c.replan).sort((x, y) => str(x.sim).localeCompare(str(y.sim)));
   const c = [...cs].reverse().find(x => isDay(x.sim) && x.sim <= a.date) || cs[0];
   if (!c) return str(a.rtRoom);
   const mv = parseMoves(c).filter(m => m.scope === 'on' && m.date <= a.date).pop();
@@ -7625,7 +7740,7 @@ function renderCourse() {
   $('#course-help').textContent = tab === 'on' ? '' : 'แถบวันฉาย: วันที่และเลข fraction เรียงต่อกัน สีเขียว = ฉายแล้ว · ขีดฆ่า = ยกเลิก';
   $('#course-help').hidden = tab === 'on';
   const hol = holidayMap(), td = today();
-  const list = of(tab).map(c => ({ c, sc: tab === 'on' ? courseSched(c, hol) : caseSchedule(c, hol) }));
+  const list = of(tab).map(c => ({ c, sc: tab === 'on' ? courseSched(c, hol) : c.rtDate ? null : caseSchedule(c, hol) }));   // แท็บอื่น: มีวันจบแล้วยังไม่ต้องคำนวณตาราง (เรียงด้วยวันจบ)
   $('#course-grid').hidden = tab !== 'on';
   $('#course-bar').hidden = tab !== 'on';
   $('#course-list').hidden = tab === 'on';
@@ -7644,7 +7759,7 @@ function renderCourse() {
   }
   const endOf = x => x.c.rtDate || (x.sc && x.sc.off ? x.sc.off.date : '');
   list.sort((a, b) => endOf(b).localeCompare(endOf(a)));
-  $('#course-list').innerHTML = list.length ? list.slice(0, 150).map(x => courseRow(x.c, x.sc, td)).join('')
+  $('#course-list').innerHTML = list.length ? list.slice(0, 150).map(x => courseRow(x.c, x.sc || (x.sc = caseSchedule(x.c, hol)), td)).join('')
     : `<li class="empty-state">${words.length ? 'ไม่พบเคสที่ตรงกับคำค้นในแท็บนี้' : tab === 'complete' ? 'ยังไม่มีเคสที่ Complete course' : tab === 'cancel' ? 'ยังไม่มีเคสที่ Cancel RT' : 'ยังไม่มีเคสที่ Off RT'}</li>`;
   // เลื่อนแถบวันฉายให้เห็นวันนี้ (หรือวันฉายถัดไป)
   $$('#course-list .cr-strip').forEach(sp => { const t = $('.cd.today', sp) || $('.cd.next', sp); if (t) sp.scrollLeft = Math.max(0, t.offsetLeft - 160); });
@@ -8567,12 +8682,18 @@ const ICD10 = [
   ['Q28.2', 'Arteriovenous malformation of cerebral vessels', 'AVM หลอดเลือดสมอง'],
 ];
 // รายการรวม: ICD-10 ในระบบ + รหัสที่เพิ่มเองในหน้าตั้งค่า (ชื่อที่เพิ่มเองมาก่อน)
+// สร้างใหม่เมื่อรหัสที่เพิ่มเองเปลี่ยน (เดิมสร้างทุกครั้งที่เรียก · เรียกต่อเคสตอนค้นหา)
+let icdMemo = null;
 function icdList() {
+  const ex = state.config.icdExtra;
+  if (icdMemo && icdMemo.ex === ex) return icdMemo.list;
   const map = new Map(ICD10.map(([code, name, th]) => [code, { code, name, th }]));
-  for (const x of state.config.icdExtra) map.set(x.code, { code: x.code, name: x.name || (map.get(x.code) || {}).name || '', th: x.th || (map.get(x.code) || {}).th || '' });
-  return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+  for (const x of ex) map.set(x.code, { code: x.code, name: x.name || (map.get(x.code) || {}).name || '', th: x.th || (map.get(x.code) || {}).th || '' });
+  const list = [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+  icdMemo = { ex, list, map: new Map(list.map(x => [x.code, x])) };
+  return list;
 }
-const icdOf = code => icdList().find(x => x.code === code) || icdList().find(x => x.code === String(code).split('.')[0]);
+const icdOf = code => { icdList(); return icdMemo.map.get(code) || icdMemo.map.get(String(code).split('.')[0]); };
 function icdSearch(q) {
   q = str(q).toLowerCase();
   if (!q) return [];
@@ -10069,15 +10190,15 @@ const vacSrc = r => (r.src === 'ctsim' ? 'CT-SIM' : /^vac:/.test(r.src) ? 'น�
 // ข้อมูลเดิมของ HN: ชื่อ (บันทึกไว้ → ลงทะเบียน → CT-SIM → เคส)
 function vacName(r) {
   if (str(r.name)) return r.name;
-  const k = hnKey(r.hn), g = state.reg.find(x => hnKey(x.hn) === k), c = state.ct.find(x => hnKey(x.hn) === k && x.name), cs = state.cases.find(x => hnKey(x.hn) === k && x.name);
+  const g = byHn(state.reg, r.hn)[0], c = byHn(state.ct, r.hn).find(x => x.name), cs = byHn(state.cases, r.hn).find(x => x.name);
   return g ? regName(g) : c ? c.name : cs ? cs.name : '';
 }
 // การฉายของ HN หลังวันทำ CT: วันจบ (Complete / Cancel RT / Off RT / fraction สุดท้ายตามตาราง) · Hold ที่ยังไม่กลับมา
 function vacCourse(r) {
   const k = hnKey(r.hn), hol = holidayMap(), td = today(), out = { end: '', rt: '', hold: '', any: false };
   if (!k) return out;
-  for (const c of state.cases) {
-    if (hnKey(c.hn) !== k || !isDay(c.sim) || (r.ct && c.sim < r.ct)) continue;
+  for (const c of byHn(state.cases, k)) {
+    if (!isDay(c.sim) || (r.ct && c.sim < r.ct)) continue;
     out.any = true;
     const sc = caseSchedule(c, hol), off = sc && sc.off ? sc.off.date : '';
     const end = c.rt ? c.rtDate : off || (sc && sc.end) || '';
@@ -11237,11 +11358,33 @@ async function spqPullNow(btn) {
   } catch (e) { toast('นำเข้านัดเทคนิคพิเศษไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   btn.disabled = false;
 }
+// ตั้งค่า → ลงทะเบียน: ย้ายผู้ป่วยเก่าเข้าที่เก็บถาวร (หน้าเว็บโหลดเร็วเมื่อผู้ป่วยหลายพันคน)
+function regArchSec(d) {
+  const st = state.regArch, api = archOn();
+  return `<h3 class="sub-h" id="arch-sec">ที่เก็บถาวร (ผู้ป่วยเก่า)</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ผู้ป่วยที่ลงทะเบียนหรือแก้ล่าสุดเกินที่ตั้ง และไม่มีรายการในแถบอื่นตั้งแต่นั้น (เคส CT-SIM ลงนัด นัดคิวใส่แร่ Vac-Lok กิจกรรม) ย้ายไปแท็บ RegistryArchive ให้เองวันละครั้ง
+        · แถบลงทะเบียนโหลดเฉพาะผู้ป่วยที่ยังใช้อยู่ (เร็วขึ้นเมื่อมีหลายพันคน) · ช่องค้นหาของแถบลงทะเบียนและช่อง HN ในฟอร์มค้นในที่เก็บถาวรด้วย
+        · ใช้อีกครั้ง (กดแถว ลงนัด เลือกในช่อง HN ลงทะเบียน HN เดิม หรือดึงจาก Google Drive) = ย้ายกลับมาเอง · HN ในที่เก็บถาวรยังนับว่ามีในระบบ (ไม่ดึงซ้ำ)</p>
+      ${!api && store.mode === 'sheet' ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ที่เก็บถาวรใช้ได้เมื่อใช้ Code.gs รุ่น 2026-11-09.5 ขึ้นไป</span></p>' : ''}
+      <label class="field" style="max-width:320px;margin-bottom:8px"><span class="lbl">ย้ายเข้าที่เก็บเมื่อไม่ได้ใช้เกิน</span><select data-k="reg.archiveYears" aria-label="ย้ายผู้ป่วยเข้าที่เก็บถาวรเมื่อไม่ได้ใช้เกิน">${ARCH_YEARS.map(([y, l]) => opt(String(y), l, String(d.reg.archiveYears))).join('')}</select></label>
+      <p class="br-status">${st && st.at ? `ที่เก็บถาวร <b>${st.total || 0} คน</b> · ย้ายล่าสุด ${esc(stampText(st.at))}${st.moved ? ` (${st.moved} คน)` : ''}${st.error ? ` · <span class="acct-warn">${esc(st.error)}</span>` : ''}` : '<span class="muted">ยังไม่เคยย้าย</span>'}</p>
+      <div class="mem-bar"><button type="button" class="btn ghost" data-archnow${api ? '' : ' disabled'}>ย้ายตอนนี้</button><span class="muted">ตามค่าที่บันทึกไว้ (เปลี่ยนจำนวนปีแล้วกดบันทึกการตั้งค่าก่อน)</span></div>`;
+}
+async function archNow(btn) {
+  btn.disabled = true;
+  try {
+    state.regArch = await store.regArchiveNow();
+    toast(`ย้ายเข้าที่เก็บถาวร ${state.regArch.moved || 0} คน · ที่เก็บถาวรทั้งหมด ${state.regArch.total || 0} คน`);
+    await refresh(true);
+    if (state.view === 'settings') renderSettings();
+  } catch (e) { toast('ย้ายไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  btn.disabled = false;
+}
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (ตั้งค่า → ลงทะเบียน)
 const minText = m => (m % 1440 === 0 ? `${m / 1440} วัน` : m % 60 === 0 ? `${m / 60} ชั่วโมง` : `${m} นาที`);
 // HN ที่มีในระบบแล้ว (ไม่ดึง) · inSys = มีในแถบอื่น (เคส CT-SIM นัด ฯลฯ) แต่ยังไม่ได้ลงทะเบียน
 const rdSkipText = st => `HN มีในระบบแล้ว (ไม่ดึง) ${st.skipped || 0}${st.inSys ? ` (ในแถบอื่น ${st.inSys})` : ''}`
-  + (st.removed ? ` · ลบรายการที่ดึงไว้ก่อนแต่ HN มีในระบบอยู่แล้ว ${st.removed}` : '') + (st.docFix ? ` · ใส่รหัสแพทย์ให้รายการที่ดึงไว้ ${st.docFix}` : '');
+  + (st.restored ? ` · ย้ายกลับจากที่เก็บถาวร ${st.restored}` : '') + (st.removed ? ` · ลบรายการที่ดึงไว้ก่อนแต่ HN มีในระบบอยู่แล้ว ${st.removed}` : '') + (st.docFix ? ` · ใส่รหัสแพทย์ให้รายการที่ดึงไว้ ${st.docFix}` : '');
 function rdStatusHtml(st) {
   if (!st || !st.at) return '<span class="muted">ยังไม่เคยดึง</span>';
   return `ดึงล่าสุด ${esc(stampText(st.at))}${st.by ? ` (${esc(st.by)})` : ''} · ไฟล์ในโฟลเดอร์ ${st.nFiles || 0} · อ่านไฟล์ใหม่/ที่แก้ ${st.read || 0}${st.rows != null ? ` (${st.rows} แถว)` : ''} · <b>เพิ่มผู้ป่วย ${st.added || 0} คน</b> · ${rdSkipText(st)}${st.filtered ? ` · ไม่ตรงตัวกรอง ${st.filtered}` : ''}`
@@ -11565,7 +11708,8 @@ function renderSettings() {
       <h3 class="sub-h">ฟอร์มลงทะเบียน</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN คำนำหน้า ชื่อ-สกุล เริ่มต้นบังคับกรอก (HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมีอย่างน้อยหนึ่งช่อง) · HN ซ้ำกับผู้ป่วยที่ลงทะเบียนแล้วไม่ได้ (ไม่กรอก HN ไม่ตรวจซ้ำ) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · เพศเลือกให้จากคำนำหน้า (นาย, ด.ช. · นาง, นางสาว, ด.ญ.) ตัวเลือกของเพศ = Gender ใน ตัวเลือกในใบสั่ง CT Simulation (ด้านล่าง)</p>
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${REG_FORM.map(([k, l, , keep]) => `<tr><td style="text-align:left">${esc(l)}</td><td><select data-k="reg.form.${k}" aria-label="${esc(l)} ในฟอร์มลงทะเบียน">${PT_OPTS.filter(([v]) => !keep || v !== 'off').map(([v, t]) => opt(v, t, d.reg.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
-      ${regDriveSec(d)}</div>
+      ${regDriveSec(d)}
+      ${regArchSec(d)}</div>
     <div class="sec" data-sec="appt"><div class="sec-head"><h2>ลงนัด (แถบ ${esc(navLabel('appt'))})</h2><p>ตัวเลือกของช่อง CT และเทคนิคพิเศษ ช่องในฟอร์มลงนัด และตัวเลือกของใบสั่ง CT Simulation · ข้อมูลนัดใส่ลงใบสั่ง CT Simulation (PDF หน้าตาตามไฟล์ CT Simulation Order Form version2) ให้เอง: ปุ่ม ใบสั่ง PDF ในฟอร์ม และปุ่ม PDF ในตาราง · เทคนิคพิเศษเป็นสีแดงในแถบลงนัด และปฏิทิน Start RT นับแยกเป็น เทคนิคพิเศษ/เทคนิคอื่นๆ (เคสและรายการ CT ดูจาก Technique, Note และนัดที่ผูกกัน) · นัดที่ยังไม่ลง CT-SIM รอในแถบ ${esc(navLabel('ctsim'))} (ปุ่ม "นัดรอลง CT") · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู</p></div>
       ${apptOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป</span></p>'}
       ${apptOn() && !orderOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>Draw area ช่องของใบสั่ง และนัด CT แบบ on call บันทึกได้เมื่อใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป</span></p>' : ''}
@@ -12232,7 +12376,7 @@ const LONG_DAY_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'long', day: 'n
 const dash = { day: '', pend: '', at: '' };   // at = วันที่ปฏิทินกำลังแสดง (มุมมองวัน/สัปดาห์/3 เดือน/ปี)
 // ข้อมูลปฏิทินของช่วงวันที่: กำลังฉายรายห้อง (ผู้ป่วยไม่ซ้ำ) และเหตุการณ์แต่ละอย่างรายวัน
 function dashIndex(from, to, room) {
-  const hol = holidayMap(), tx = {}, ev = {};
+  const hol = holidayMap(), tx = {}, ev = {}, longAgo = plusDays(from, -365);
   const inRoom = c => !room || roomsOf(c).includes(room);
   const put = (key, ds, c) => { if (ds < from || ds > to) return; const m = (ev[key] = ev[key] || {}); (m[ds] = m[ds] || []).push(c); };
   for (const c of state.cases) {
@@ -12244,6 +12388,7 @@ function dashIndex(from, to, room) {
     if (isDay(c.fin)) put('fin', c.fin.slice(0, 10), c);
     if (isDay(c.eval)) put('eval', c.eval.slice(0, 10), c);
     if (c.replan) continue;   // งานวางแผนใหม่: วันฉายนับที่เคสเดิม
+    if (isDay(c.sim) && (c.sim > to || (c.rt && isDay(c.rtDate) && c.rtDate < from && c.sim < longAgo))) continue;   // เริ่มหลังช่วง / จบไปนานก่อนช่วง: ไม่มีวันในช่วง
     const sc = caseSchedule(c, hol);
     if (!sc) continue;
     put('start', sc.start, c);
@@ -12506,7 +12651,8 @@ function renderDashStats() {
   rangeBoxes('dash', p);
   $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้`;
   const hol = holidayMap(), td = today(), rooms = dashRooms();
-  const onToday = state.cases.filter(c => { const sc = catOf(c.cat).kind !== 'simple' && !c.replan && caseSchedule(c, hol); return sc && sc.days.has(td); });
+  const longAgo = plusDays(td, -365);
+  const onToday = state.cases.filter(c => { if (isDay(c.sim) && (c.sim > td || (c.rt && isDay(c.rtDate) && c.rtDate < td && c.sim < longAgo))) return false; const sc = catOf(c.cat).kind !== 'simple' && !c.replan && caseSchedule(c, hol); return sc && sc.days.has(td); });
   const cats = state.config.cats.filter(k => k.on || list.some(c => c.cat === k.id));
   const row = (name, cs, catId) => {
     const units = cs.reduce((t, c) => t + unitsOf(c), 0);
@@ -14006,6 +14152,8 @@ document.addEventListener('click', e => {
     if (apr) openApForm(apr.dataset.apedit);
     const rgr = e.target.closest('tr[data-rgedit]');
     if (rgr) openRgForm(rgr.dataset.rgedit);
+    const rga = e.target.closest('tr[data-rgarch]');
+    if (rga) restoreArch(rga.dataset.rgarch, r => openRgForm(r.id));
     const bqr = e.target.closest('tr[data-bqedit]');
     if (bqr) openBqEdit(bqr.dataset.bqedit);
     const bqh = e.target.closest('rect[data-bqday]');   // แท่งกราฟในแดชบอร์ด
@@ -14022,6 +14170,7 @@ document.addEventListener('click', e => {
   if (ds.vacquick) return vacQuickImport(t);
   if (ds.aprect) return openApForm(null, null, ds.aprect);
   if (ds.rgap) { const r = state.reg.find(x => x.id === ds.rgap); return r && openApForm('', r); }
+  if (ds.rgarchap) return restoreArch(ds.rgarchap, r => openApForm('', r));
   if (ds.rgopen) return openRgForm(ds.rgopen);
   if (ds.bqv) { state.bqView = ds.bqv; pref.set('bqView', ds.bqv); state.bqPt = ''; return renderBq(); }
   if (ds.bqf) { state.bqF = ds.bqf; state.bqLimit = BQ_DAYS; return renderBq(); }
@@ -14203,6 +14352,7 @@ document.addEventListener('click', e => {
   if (ds.rdchk !== undefined) return rdCheckRun(t);
   if (ds.rdpull !== undefined) return rdPullNow(t);
   if (ds.spqchk !== undefined) return spqCheckRun(t);
+  if (ds.archnow !== undefined) return archNow(t);
   if (ds.spqpull !== undefined) return spqPullNow(t);
   if (ds.add === 'crew') { draft.crew.push({ name: '', role: draft.dutyRoles.rtt[0] || 'RTT', active: true, user: '', email: '' }); renderSettings(); $$('[data-k^="crew."][data-k$=".name"]').pop().focus(); return; }
   if (ds.add === 'doctor') { draft.doctors.push({ code: '', name: '', color: '' }); renderSettings(); $$('[data-k^="doctors."][data-k$=".code"]').pop().focus(); return; }
@@ -14778,7 +14928,13 @@ $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit =
 $('#ct-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-ctedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCtForm(tr.dataset.ctedit); } });
 const TAB_RENDER = { vac: () => renderJobs(), pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt(), appt: () => renderAppt(), reg: () => renderReg(), bq: () => { state.bqPt = ''; renderBq(); } };
 for (const el of $$('[data-tq]')) {
-  el.addEventListener('input', () => { tabQ[el.dataset.tq] = el.value; TAB_RENDER[el.dataset.tq](); });
+  let tqTimer = 0;
+  el.addEventListener('input', () => {
+    tabQ[el.dataset.tq] = el.value;
+    clearTimeout(tqTimer);
+    const big = state.cases.length + state.reg.length + state.logs.length > 4000;   // ข้อมูลหลายพันแถว: ไม่ค้นทุกตัวอักษร
+    if (big) tqTimer = setTimeout(() => TAB_RENDER[el.dataset.tq](), 150); else TAB_RENDER[el.dataset.tq]();
+  });
   el.addEventListener('keydown', e => { if (e.key === 'Escape' && el.value) { e.preventDefault(); el.value = ''; tabQ[el.dataset.tq] = ''; TAB_RENDER[el.dataset.tq](); } });
 }
 $('#cat-filter').addEventListener('change', e => { state.cat = e.target.value; state.limit = 60; renderWork(); });
@@ -15237,28 +15393,63 @@ $('#gate-form').addEventListener('submit', async e => {
   finally { btn.disabled = false; }
 });
 let movedOnce = false;
+// ข้อมูลจาก Code.gs API 61: ตารางแบบย่อ { c: คีย์, r: แถว } · ตารางรุ่นเดิม (same) ใช้ของที่มี · Cases / Logs ที่เปลี่ยน (delta) = แทน/เพิ่มเฉพาะแถวนั้น
+// เทียบรหัสทั้งตารางกับเซิร์ฟเวอร์: ไม่ตรง (มีแถวถูกลบ) = ขอทั้งตารางใหม่ทันที · ขอทั้งหมดใหม่ทุก FULL_EVERY (กันแก้ในชีตโดยตรง)
+const VER_API = 61;
+const FULL_EVERY = 60 * 60000;   // ทั้งหมดทุก 1 ชั่วโมง (และตอนเปิดหน้าเว็บ / กด F5) · ระหว่างนั้นได้เฉพาะที่เปลี่ยน
+let lastFull = 0, fixAsk = 0;
+const unpackRows = x => (x && Array.isArray(x.c) && Array.isArray(x.r) ? x.r.map(a => { const o = {}; x.c.forEach((k, i) => { o[k] = i < a.length ? a[i] : ''; }); return o; }) : Array.isArray(x) ? x : []);
+function idsHash(list) {   // เหมือน idsHash_ ใน Code.gs
+  const t = list.map(x => str(x.id)).filter(Boolean).sort().join('|');
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+  return h.toString(36) + '.' + t.length;
+}
 async function refresh(quiet) {
   let advCleared = 0;
   try {
-    const d = await store.load();
+    const api = state.loaded ? state.api : +window.MEDPHYS_API || 0, vOk = store.mode === 'sheet' && api >= VER_API;
+    const part = vOk && state.loaded && quiet && Date.now() - lastFull < FULL_EVERY;
+    const d = await store.load(vOk ? (part ? { pack: 1, v: state.tv, t: state.tt } : { pack: 1 }) : null);
+    if (!part) lastFull = Date.now();
+    const same = new Set(d.same || []), delta = d.delta || {};
+    let bad = '';
+    // ตาราง k: รุ่นเดิม = รายการเดิม · delta = แทนแถวเดิม (id เดียวกัน) / เพิ่มต่อท้าย · อื่นๆ = ทั้งตารางใหม่
+    const take = (k, cur, norm, keep) => {
+      if (same.has(k)) return cur;
+      if (delta[k]) {
+        const m = new Map(cur.map(x => [x.id, x]));
+        for (const x of unpackRows(delta[k].rows).map(norm)) if (keep(x)) m.set(x.id, x);
+        const out = [...m.values()];
+        if (idsHash(out) !== delta[k].hash) bad = k;
+        return out;
+      }
+      return unpackRows(d[k]).map(norm).filter(keep);
+    };
+    const all = () => true;
     state.config = mergeConfig(d.config);
     // หน้าตั้งค่าที่วาดไว้ก่อนข้อมูลมาถึง (เปิดหน้าเว็บที่หน้าตั้งค่า) ใช้ค่าเริ่มต้นอยู่: ถ้ายังไม่ได้แก้ วาดใหม่จากข้อมูลจริง
     // ไม่อย่างนั้นกดบันทึกจะเอาค่าเริ่มต้นไปทับการตั้งค่าจริง
     if (draft && JSON.stringify(draft) === draftBase) draft = null;
-    state.cases = (d.cases || []).map(normCase);
-    state.logs = (d.logs || []).map(normLog);
-    state.leaves = (d.leaves || []).map(normLeave);
-    state.duty = (d.duty || []).map(normDuty).filter(x => isDay(x.date));
-    state.ct = (d.ctsim || []).map(normCt).filter(x => isDay(x.date));
-    state.appt = (d.appt || []).map(normAppt).filter(x => isDay(x.date) || x.date === 'on call');
-    state.reg = (d.reg || []).map(normReg).filter(x => x.hn);
-    state.bq = (d.bq || []).map(normBq).filter(x => x.date && x.hn);
-    state.jobs = (d.jobs || []).map(normJob).filter(x => /^\d{4}-\d{2}$/.test(x.ym));
-    state.vac = (d.vac || []).map(normVac).filter(x => x.no && x.hn);
+    state.cases = take('cases', state.cases, normCase, all);
+    state.logs = take('logs', state.logs, normLog, all);
+    state.leaves = take('leaves', state.leaves, normLeave, all);
+    state.duty = take('duty', state.duty, normDuty, x => isDay(x.date));
+    state.ct = take('ctsim', state.ct, normCt, x => isDay(x.date));
+    state.appt = take('appt', state.appt, normAppt, x => isDay(x.date) || x.date === 'on call');
+    state.reg = take('reg', state.reg, normReg, x => x.hn);
+    state.bq = take('bq', state.bq, normBq, x => x.date && x.hn);
+    state.jobs = take('jobs', state.jobs, normJob, x => /^\d{4}-\d{2}$/.test(x.ym));
+    state.vac = take('vac', state.vac, normVac, x => x.no && x.hn);
+    const tv = d.ver || {};
+    state.tt = Object.fromEntries(Object.keys(tv).map(k => [k, same.has(k) && state.tt[k] ? state.tt[k] : d.now || '']));
+    state.tv = { ...tv };
+    if (bad) { state.tv[bad] = ''; if (Date.now() - fixAsk > 30000) { fixAsk = Date.now(); setTimeout(() => refresh(true), 300); } }   // มีแถวถูกลบ: ขอทั้งตารางนั้นใหม่
     state.brachy = d.brachy || null;
     state.tdf = d.tdf || null;
     state.regDrive = d.regDrive || null;
-    state.spq = (d.spq || []).map(normSpq).filter(b => b.hn && isDay(b.start));
+    state.regArch = d.regArch || null;
+    state.spq = take('spq', state.spq, normSpq, b => b.hn && isDay(b.start));
     state.spqSync = d.spqSync || null;
     state.user = store.mode === 'sheet' ? { me: '', owner: '', isAdmin: true, canEdit: true, ...(d.user || {}) } : demoUser();
     state.cfgReqs = cfgReqsFor(d.cfgReqs || d.cfgreq || [], state.user, d.config || {});

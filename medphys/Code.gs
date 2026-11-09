@@ -27,11 +27,13 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.4';
-const API_LEVEL = 60;
+const CODE_VERSION = '2026-11-09.5';
+const API_LEVEL = 61;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
+// คอลัมน์เวลาแก้ล่าสุดของแถว (Cases, Logs · ระบบเขียนเองทุกครั้งที่บันทึก) ใช้ส่งเฉพาะแถวที่เปลี่ยนให้หน้าเว็บ (API 61)
+const REV_HEAD = 'แก้ไขล่าสุด (ระบบ)';
 const TABLES = {
   cases: {
     sheet: 'Cases',
@@ -70,6 +72,7 @@ const TABLES = {
       ['sites', 'บริเวณเพิ่มเติม'],   // ฉายหลายที่: บริเวณที่ 2 เป็นต้นไป [{area, dpf, fx, freq}] (JSON)
       ['batch', 'ชุด'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
+      ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD
     ],
   },
   logs: {
@@ -79,6 +82,7 @@ const TABLES = {
       ['caseId', 'เคส (id)'], ['title', 'กิจกรรม'], ['min', 'เวลา'], ['k', 'k'], ['note', 'Note'],
       ['created', 'Created'], ['updated', 'Updated'],
       ['src', 'ที่มา'],   // brachy:<รหัสนัด>:plan|rc = ดึงจากระบบนัด Brachytherapy (ว่าง = บันทึกเอง)
+      ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD
     ],
   },
   leaves: {
@@ -175,6 +179,9 @@ const TABLES = {
     ],
   },
 };
+// ที่เก็บถาวรของแถบลงทะเบียน (API 61): ผู้ป่วยที่ลงทะเบียน/แก้ล่าสุดเกิน N ปี และไม่มีรายการในแถบอื่นตั้งแต่นั้น · ช่องเดียวกับ Registry + เวลาที่ย้าย
+// เขียนผ่าน regArchive_ / regMoveBack_ เท่านั้น · หน้าเว็บไม่โหลด (ค้นผ่าน regFind)
+TABLES.regArch = { sheet: 'RegistryArchive', fields: TABLES.reg.fields.concat([['archAt', 'ย้ายเข้าที่เก็บเมื่อ']]) };
 // ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
 const DEFAULT_STAFF = ['JR', 'WM', 'NY', 'WS'];
 const DAY_ROTATE_CATS = ['brachy', 'brachyn', 'p2h', 'hyper'];
@@ -189,7 +196,7 @@ function doGet(e) {
       lpch: !!lpchUrl_(), page: pageUrl_() ? 'github' : 'file', sheet: sheetSource_(), clean: oldCode_().length === 0 }, null, 1)).setMimeType(ContentService.MimeType.JSON);
   }
   const page = page_(!!p.refresh);
-  const vars = { MEDPHYS_PAGE_SOURCE: page.source };
+  const vars = { MEDPHYS_PAGE_SOURCE: page.source, MEDPHYS_API: API_LEVEL };   // API: หน้าเว็บขอข้อมูลแบบย่อได้ตั้งแต่โหลดครั้งแรก
   // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
   if (p.sso && lpchUrl_()) {
     try { vars.MEDPHYS_LPCH_TOKEN = String(lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(p.sso) })).token); } catch (err) {
@@ -311,38 +318,129 @@ function appTitle_() {
 
 /* ---------- API ที่หน้าเว็บเรียกผ่าน google.script.run ---------- */
 
-function getData(token) {
+// have (API 61 · หน้าเว็บส่งก่อน token): { pack: 1 = ส่งตารางแบบย่อ, v: { ตาราง: รุ่นที่หน้าเว็บมี }, t: { ตาราง: เวลาเซิร์ฟเวอร์ตอนได้ข้อมูลนั้น } }
+// ตารางรุ่นเดิม = ไม่อ่านไม่ส่ง (same) · Cases / Logs รุ่นเปลี่ยน = ส่งเฉพาะแถวที่แก้หลังครั้งก่อน (delta) · ไม่มี have = ส่งทั้งหมดแบบเดิม
+function getData(a, b) {
+  const token = arguments.length >= 2 ? b : a, have = arguments.length >= 2 && a && typeof a === 'object' ? a : null;
   const ss = ss_();
   const config = readConfig_(ss);
   const user = who_(token, ss, config);
   user.hasPin = !!pinRecord_(user);
   const need = guestNeeds_(user, config);
-  const cases = need.cases ? readTable_(ss, 'cases', config) : [], fixed = need.cases ? clearAdvance_(ss, config, cases) : 0;
-  return {
-    user: user,
-    api: API_LEVEL,
-    codeVersion: CODE_VERSION,
-    homeUrl: lpchUrl_(),
-    cases: cases,
-    advanceCleared: fixed,
-    logs: need.logs ? readTable_(ss, 'logs') : [],
-    leaves: need.leaves ? readTable_(ss, 'leaves') : [],
-    duty: need.duty ? recentDuty_(ss) : [],
-    ctsim: need.ctsim ? recentCt_(ss) : [],
-    appt: need.appt ? recentAppt_(ss) : [],
-    reg: need.reg ? regRows_(ss) : [],
+  const out = { user: user, api: API_LEVEL, codeVersion: CODE_VERSION, homeUrl: lpchUrl_() };
+  if (need.reg) { try { regArchive_(ss, config || {}, false); } catch (e) { /* ครั้งหน้า */ } }   // ผู้ป่วยเก่า → ที่เก็บถาวร (วันละครั้ง)
+  Object.assign(out, tablesFor_(ss, config, user, need, have));
+  return Object.assign(out, {
     regDrive: need.reg ? regDriveStatus_() : null,
-    bq: need.bq ? recentBq_(ss, config) : [],
-    jobs: need.jobs ? jobsFor_(ss, user, config) : [],
-    vac: need.vac ? readTable_(ss, 'vac') : [],
-    spq: need.appt || need.ctsim || need.cases ? readTable_(ss, 'spq') : [],   // นัดเทคนิคพิเศษที่นำเข้า (ปฏิทิน Start RT)
+    regArch: need.reg ? regArchStatus_() : null,
     spqSync: config && config.appt && config.appt.spq && (config.appt.spq.on || user.isAdmin) ? spqStatus_() : null,
     brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
     tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
     config: config,
     cfgReqs: user.isAdmin || (user.sub && user.sub.length) ? cfgReqs_(ss, config || {}, user) : [],
     sheetUrl: ss.getUrl(),
+  });
+}
+
+/* ---------- ข้อมูลตารางที่ส่งให้หน้าเว็บ: รุ่นของตาราง · แถวที่เปลี่ยน · แบบย่อ (API 61) ---------- */
+// รุ่นของแต่ละตาราง (Script property tableVer) เปลี่ยนทุกครั้งที่บันทึกตารางนั้น (tableSheet_ ระหว่างล็อก · เก็บตอนปล่อยล็อก)
+// หน้าเว็บที่มีข้อมูลรุ่นเดียวกันอยู่แล้วไม่ต้องอ่านและส่งซ้ำ (รีเฟรชทุก 1 นาทีเบาลงมาก) · หน้าเว็บขอทั้งหมดใหม่ทุก 1 ชั่วโมง และตอนเปิดหน้าเว็บ (กันแก้ในชีตโดยตรง)
+const TABLE_VER_PROP = 'tableVer';
+const DELTA_TABLES = ['cases', 'logs'];   // ตารางใหญ่: ส่งเฉพาะแถวที่แก้ (คอลัมน์ rev)
+const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
+const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
+// ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
+const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'] };
+const OUT_WINDOWED = ['duty', 'ctsim', 'appt', 'bq', 'jobs'];
+let DIRTY_ = null;
+// ตารางที่บันทึกในคำขอนี้ · นอกล็อก = เก็บรุ่นใหม่ทันที
+function markDirty_(table) { (DIRTY_ = DIRTY_ || {})[table] = 1; if (!LOCKED_) saveDirty_(); }
+// Script properties อ่านครั้งเดียวต่อคำขอ (Google จำกัดจำนวนครั้งอ่าน/เขียนต่อวัน · หน้าเว็บรีเฟรชทุก 1 นาที) · ค่าที่บันทึกในคำขอนี้ผ่าน propSave_
+let PROPS_ = null;
+function propRead_(k) {
+  if (!PROPS_) { try { PROPS_ = PropertiesService.getScriptProperties().getProperties() || {}; } catch (e) { PROPS_ = {}; } }
+  return PROPS_[k] == null ? null : PROPS_[k];
+}
+function propSave_(k, v) { PropertiesService.getScriptProperties().setProperty(k, v); if (PROPS_) PROPS_[k] = v; }
+// fresh = อ่านค่าล่าสุดจริง (ระหว่างล็อก ก่อนเขียน)
+function tableVers_(fresh) { try { return JSON.parse((fresh ? PropertiesService.getScriptProperties().getProperty(TABLE_VER_PROP) : propRead_(TABLE_VER_PROP)) || '{}') || {}; } catch (e) { return {}; } }
+function saveDirty_() {
+  if (!DIRTY_) return;
+  const d = DIRTY_;
+  DIRTY_ = null;
+  try {
+    const v = tableVers_(true), stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    Object.keys(d).forEach(t => { v[t] = stamp; });
+    propSave_(TABLE_VER_PROP, JSON.stringify(v));
+  } catch (e) { /* เก็บรุ่นไม่ได้: หน้าเว็บได้ข้อมูลใหม่ตอนขอทั้งหมดรอบถัดไป */ }
+}
+// แถวเป็นอาร์เรย์ตามคอลัมน์ (ไม่ซ้ำชื่อคีย์ทุกแถว · ตัดช่องว่างท้ายแถว) { c: คีย์, r: แถว }
+function pack_(rows) {
+  const keys = {}, c = [];
+  rows.forEach(o => { Object.keys(o).forEach(k => { if (!keys[k]) { keys[k] = 1; c.push(k); } }); });
+  return { c: c, r: rows.map(o => { const r = c.map(k => (o[k] == null ? '' : o[k])); while (r.length && r[r.length - 1] === '') r.pop(); return r; }) };
+}
+const idsHash_ = ids => strHash_(ids.slice().sort().join('|'));
+function tablesFor_(ss, config, user, need, have) {
+  const vers = tableVers_();
+  let init = false;
+  Object.keys(OUT_TABLES).forEach(k => OUT_TABLES[k].forEach(t => { if (!vers[t]) { vers[t] = 'i' + Date.now().toString(36); init = true; } }));
+  if (init) { try { propSave_(TABLE_VER_PROP, JSON.stringify(vers)); } catch (e) { /* ครั้งหน้า */ } }
+  // ห้องฉายของนัดใส่แร่ (rtRoom) มาจาก Cases: หน้าเว็บที่ได้ Cases คำนวณเอง (API 61) · ไม่ได้ Cases = เซิร์ฟเวอร์ใส่ให้ (รุ่นของ bq ขึ้นกับ Cases ด้วย)
+  const bqRoom = !(have && need.cases), deps = k => (k === 'bq' && !bqRoom ? ['bq'] : OUT_TABLES[k]);
+  const td = today_(ss), verOf = k => deps(k).map(t => vers[t]).join('.') + (OUT_WINDOWED.indexOf(k) >= 0 ? '@' + td : '');
+  const hv = have && have.v && typeof have.v === 'object' ? have.v : {}, ht = have && have.t && typeof have.t === 'object' ? have.t : {}, pk = !!(have && have.pack);
+  const out = { ver: {}, now: new Date().toISOString(), same: [], delta: {}, advanceCleared: 0 };
+  let cases = null;
+  const read = {
+    cases: () => (cases = readTable_(ss, 'cases', config)), logs: () => readTable_(ss, 'logs'), leaves: () => readTable_(ss, 'leaves'), duty: () => recentDuty_(ss), ctsim: () => recentCt_(ss),
+    appt: () => recentAppt_(ss), reg: () => regRows_(ss), bq: () => recentBq_(ss, config, cases, !bqRoom), jobs: () => jobsFor_(ss, user, config), vac: () => readTable_(ss, 'vac'), spq: () => readTable_(ss, 'spq'),
   };
+  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases };
+  Object.keys(want).forEach(k => {
+    if (!want[k]) { out[k] = []; return; }
+    const v = verOf(k);
+    out.ver[k] = v;
+    if (have && hv[k] === v) { out.same.push(k); return; }
+    if (have && DELTA_TABLES.indexOf(k) >= 0 && hv[k] && ht[k] && !isNaN(Date.parse(ht[k]))) {
+      const dl = readDelta_(ss, k, k === 'cases' ? config : null, new Date(Date.parse(ht[k]) - DELTA_MARGIN_MS).toISOString());
+      if (dl) {
+        if (k === 'cases') out.advanceCleared += clearAdvance_(ss, config, dl.rows);
+        out.delta[k] = { rows: pk ? pack_(dl.rows) : dl.rows, hash: dl.hash, n: dl.n };
+        return;
+      }
+    }
+    const rows = read[k]();
+    if (k === 'cases') out.advanceCleared += clearAdvance_(ss, config, rows);
+    out[k] = pk ? pack_(rows) : rows;
+  });
+  return out;
+}
+// แถวที่แก้หลังเวลา since: อ่านคอลัมน์ id และ rev ก่อน แล้วอ่านเฉพาะแถวที่เปลี่ยน (เป็นช่วงต่อกัน) · ค่าตรวจรหัสทั้งตาราง (หน้าเว็บเทียบ: ไม่ตรง = มีแถวถูกลบ)
+// ยังไม่มีคอลัมน์ rev / แก้เกิน DELTA_MAX แถว = null (ส่งทั้งตาราง)
+function readDelta_(ss, table, cfg, since) {
+  const def = tableDef_(table, cfg), sh = ss.getSheetByName(def.sheet);
+  if (!sh) return null;
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return { rows: [], hash: idsHash_([]), n: 0 };
+  const header = headerOf_(sh), rc = header.indexOf(REV_HEAD), cv = rowConv_(def, header, ss.getSpreadsheetTimeZone());
+  if (rc < 0 || cv.cols[0] < 0) return null;
+  const ids = sh.getRange(2, cv.cols[0] + 1, n, 1).getValues(), revs = sh.getRange(2, rc + 1, n, 1).getValues(), all = [], hit = [];
+  for (let i = 0; i < n; i++) {
+    const id = String(ids[i][0]).trim();
+    if (!id) continue;
+    all.push(id);
+    if (timeOf_(revs[i][0]) > since) hit.push(i);
+  }
+  if (hit.length > DELTA_MAX) return null;
+  const width = sh.getLastColumn(), rows = [];
+  for (let k = 0; k < hit.length;) {
+    let j = k;
+    while (j + 1 < hit.length && hit[j + 1] === hit[j] + 1) j++;
+    sh.getRange(2 + hit[k], 1, hit[j] - hit[k] + 1, width).getValues().forEach(r => { if (String(r[cv.cols[0]]).trim() !== '') rows.push(cv.conv(r)); });
+    k = j + 1;
+  }
+  return { rows: rows, hash: idsHash_(all), n: all.length };
 }
 
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
@@ -381,7 +479,7 @@ function navAccess_(config, view, role) {
 const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -1491,6 +1589,7 @@ function ctRemove(id, pin, token) {
     if (row && id) vacUnlink_(ss, id);
     if (row && id) {
       const as = ss.getSheetByName(TABLES.appt.sheet);
+      if (as) markDirty_('appt');
       if (as) {
         const ah = headerOf_(as), clear = { took: '', tookBy: '', tookAt: '' };
         readTable_(ss, 'appt').filter(a => a.took === id).forEach(a => {
@@ -1681,12 +1780,13 @@ function bqCancel(id, scope, pin, token) {
   return res;
 }
 // นัดที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
-function recentBq_(ss, cfg) {
+function recentBq_(ss, cfg, cases, noRoom) {
   const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   const rows = readTable_(ss, 'bq').filter(x => String(x.date) >= from);
+  if (noRoom) return rows;   // หน้าเว็บคำนวณห้องฉายจาก Cases เอง
   // API 53: ห้องฉายรังสีภายนอกของผู้ป่วย (rtRoom) = เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนัด (ไม่มี = เคสแรก) · ตำแหน่งที่ไม่ได้รับข้อมูลเคสก็เห็นห้อง
   const byHn = {};
-  readTable_(ss, 'cases', cfg).forEach(c => { const k = hnKey_(c.hn); if (k && c.room) (byHn[k] = byHn[k] || []).push(c); });
+  (cases || readTable_(ss, 'cases', cfg)).forEach(c => { const k = hnKey_(c.hn); if (k && c.room) (byHn[k] = byHn[k] || []).push(c); });
   rows.forEach(r => {
     const cs = (byHn[hnKey_(r.hn)] || []).slice().sort((a, b) => String(a.sim).localeCompare(String(b.sim)));
     const before = cs.filter(c => /^\d{4}-\d{2}-\d{2}$/.test(String(c.sim)) && String(c.sim) <= String(r.date));
@@ -1849,6 +1949,7 @@ function vacLink_(ss, ct, no, u) {
 function vacUnlink_(ss, ctId) {
   const sh = ss.getSheetByName(TABLES.vac.sheet);
   if (!sh) return;
+  markDirty_('vac');
   const header = headerOf_(sh), idCol = header.indexOf('id') + 1;
   readTable_(ss, 'vac').filter(x => x.ctId === ctId).forEach(x => {
     const r = findRow_(sh, idCol, x.id);
@@ -2371,6 +2472,7 @@ function regDriveTidy_(ss, cfg, seen) {
       if (code) { docs[i - 1] = [code]; notes[i - 1] = [note.slice(0, m.index)]; out.docs++; }
     }
   }
+  if (out.docs || del.length) markDirty_('reg');
   if (out.docs) {
     sh.getRange(2, c.doc + 1, docs.length, 1).setNumberFormat('@').setValues(docs);
     sh.getRange(2, c.note + 1, notes.length, 1).setNumberFormat('@').setValues(notes);
@@ -2385,7 +2487,7 @@ function regDriveTidy_(ss, cfg, seen) {
   return out;
 }
 function regDriveStatus_() {
-  try { const v = JSON.parse(PropertiesService.getScriptProperties().getProperty(REG_DRIVE_PROP) || 'null'); if (v) { delete v.files; delete v.sig; } return v; } catch (e) { return null; }
+  try { const v = JSON.parse(propRead_(REG_DRIVE_PROP) || 'null'); if (v) { delete v.files; delete v.sig; } return v; } catch (e) { return null; }
 }
 // แอดมิน: ตรวจโฟลเดอร์ก่อนบันทึกการตั้งค่า · คืนรายชื่อไฟล์ หัวคอลัมน์ของไฟล์ล่าสุด ช่องที่เดาให้ และค่าของคอลัมน์ตัวกรอง (ไม่ส่งข้อมูลผู้ป่วย)
 function regDriveCheck(set, token) {
@@ -2435,6 +2537,7 @@ function regDriveSync_(ss, cfg, force, by) {
       if (!files.length) errs.push('ไม่พบไฟล์ .xlsx / .xls / .csv / Google ชีต ในโฟลเดอร์' + (files.others.length ? ' (มีแต่ไฟล์ที่อ่านไม่ได้: ' + files.others.slice(0, 5).join(', ') + ')' : ''));
       else if (files.others.length) errs.push('ไฟล์ชนิดที่อ่านไม่ได้ (ข้าม): ' + files.others.slice(0, 5).join(', ') + (files.others.length > 5 ? ' …' : '') + ' · บันทึกเป็น .xlsx หรือ Google ชีต');
       Object.keys(seenHn).forEach(k => { have[k] = seenHn[k].t; });
+      const arch = regArchHns_(ss), back = {};   // HN ในที่เก็บถาวร (ยังไม่อยู่ในแถบลงทะเบียน) = ย้ายกลับ
       tidy.gone.forEach(k => { have[k] = 'other'; });   // เพิ่งลบออกจากแถบลงทะเบียน: ยังมีในแถบอื่น
       let skipped = 0, inSys = 0, filtered = 0, read = 0, rows = 0;
       files.forEach(f => {
@@ -2449,6 +2552,7 @@ function regDriveSync_(ss, cfg, force, by) {
         if (!got.recs.length && !got.filtered) errs.push(f.getName() + ': ไม่มีแถวที่มี HN ใต้หัวตาราง');
         got.recs.forEach(r => {
           const k = hnLoose_(r.hn);
+          if (have[k] && have[k] !== 'reg' && have[k] !== 'drive' && arch[k]) { back[k] = 1; have[k] = 'reg'; return; }
           if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
           have[k] = 'drive';
           add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + f.getName()).slice(0, 120), created: now, updated: '' }));
@@ -2456,13 +2560,14 @@ function regDriveSync_(ss, cfg, force, by) {
         seen[id] = mod;
       });
       if (add.length) appendNew_(ss, 'reg', add);
+      const restored = Object.keys(back).length ? regMoveBack_(ss, r => back[hnLoose_(r.hn)]).length : 0;
       const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
       files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
-      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, rows: rows, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, rows: rows, restored: restored, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
     } catch (e) {
       st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
     }
-    props.setProperty(REG_DRIVE_PROP, JSON.stringify(st));
+    propSave_(REG_DRIVE_PROP, JSON.stringify(st));
     return out(st);
   });
 }
@@ -2483,6 +2588,10 @@ function regSave(rec, pin, token) {
     const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
     const key = hnKey_(cut(rec.hn, 40)), dup = key ? regRows_(ss).filter(x => hnKey_(x.hn) === key && (!row || x.id !== id))[0] : null;
     if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + regName_(dup) + ')');
+    if (!row && key) {   // HN อยู่ในที่เก็บถาวร: ย้ายกลับ แล้วบันทึกทับรายการนั้น (ไม่สร้างซ้ำ)
+      const back = regMoveBack_(ss, x => hnKey_(x.hn) === key);
+      if (back.length) return regSaveInto_(ss, back[0], rec, cut);
+    }
     const set = {};
     REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
     const now = new Date().toISOString();
@@ -2491,6 +2600,138 @@ function regSave(rec, pin, token) {
     writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.reg.fields.filter(f => f[0] in set), set);
     const want = row ? id : set.id;
     return regRows_(ss).filter(x => x.id === want)[0];
+  });
+}
+
+function regSaveInto_(ss, id, rec, cut) {
+  const sh = tableSheet_(ss, 'reg'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id), set = {};
+  REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
+  set.updated = new Date().toISOString();
+  if (row) writeFields_(sh, row, header, TABLES.reg.fields.filter(f => f[0] in set), set);
+  return regRows_(ss).filter(x => x.id === id)[0];
+}
+
+/* ---------- ที่เก็บถาวรของแถบลงทะเบียน (ตั้งค่า → ลงทะเบียน: reg.archiveYears · 0 = ไม่ย้าย · ไม่ตั้ง = 3 ปี) ---------- */
+// วันละครั้ง (เปิดหน้าเว็บ / ตัวตั้งเวลา): ลงทะเบียนหรือแก้ล่าสุดเกิน N ปี และ HN ไม่มีรายการในแถบอื่น (เคส CT-SIM นัด นัดใส่แร่ Vac-Lok กิจกรรม) ตั้งแต่นั้น
+// = ย้ายไปแท็บ RegistryArchive · หน้าเว็บโหลดเฉพาะแท็บ Registry (เร็วขึ้นเมื่อผู้ป่วยหลายพันคน) · ค้นที่เก็บถาวรได้ (regFind) · ใช้อีก = ย้ายกลับ
+const REG_ARCH_PROP = 'regArch';
+const regArchYears_ = cfg => { const y = cfg && cfg.reg && cfg.reg.archiveYears; return y === 0 || y === '0' ? 0 : [1, 2, 3, 5].indexOf(+y) >= 0 ? +y : 3; };
+function regArchStatus_() { try { return JSON.parse(propRead_(REG_ARCH_PROP) || 'null'); } catch (e) { return null; } }
+// HN → วันล่าสุดที่มีรายการในแถบอื่น (yyyy-MM-dd · วันที่ของรายการ / Start RT / วันทำ CT / Created)
+function hnLatest_(ss) {
+  const out = {}, skip = ['reg', 'regArch', 'spq'];
+  Object.keys(TABLES).filter(t => skip.indexOf(t) < 0).forEach(t => {
+    const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
+    if (!head('hn')) return;
+    const sh = ss.getSheetByName(def.sheet);
+    if (!sh || sh.getLastRow() < 2) return;
+    const hdr = headerOf_(sh), n = sh.getLastRow() - 1, tz = ss.getSpreadsheetTimeZone();
+    const cols = ['hn', 'date', 'sim', 'ct', 'in', 'created', 'updated'].map(k => (head(k) ? hdr.indexOf(head(k)) : -1));
+    if (cols[0] < 0) return;
+    const data = cols.map(c => (c < 0 ? null : sh.getRange(2, c + 1, n, 1).getValues()));
+    for (let i = 0; i < n; i++) {
+      const k = hnLoose_(data[0][i][0]);
+      if (!k) continue;
+      for (let j = 1; j < data.length; j++) {
+        if (!data[j]) continue;
+        const v = cellText_(data[j][i][0], tz).slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v) && (!out[k] || v > out[k])) out[k] = v;
+      }
+    }
+  });
+  return out;
+}
+function regArchHns_(ss) { const sh = ss.getSheetByName(TABLES.regArch.sheet), o = {}; if (!sh || sh.getLastRow() < 2) return o; const c = headerOf_(sh).indexOf('HN'); if (c < 0) return o; sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnLoose_(r[0]); if (k) o[k] = true; }); return o; }
+// ลบแถว (เลขแถวในชีต) จากล่างขึ้นบน ทีละช่วงที่ติดกัน
+function deleteRowsAt_(sh, rows) {
+  const del = rows.slice().sort((a, b) => a - b);
+  for (let j = del.length - 1; j >= 0;) {
+    let k = j;
+    while (k > 0 && del[k - 1] === del[k] - 1) k--;
+    sh.deleteRows(del[k], j - k + 1);
+    j = k - 1;
+  }
+}
+// ย้ายแถวระหว่าง Registry กับ RegistryArchive ตามหัวคอลัมน์ของชีตปลายทาง (extra = ค่าที่ใส่เพิ่มตามหัวคอลัมน์)
+function regMoveRows_(ss, from, to, pick, extra) {
+  const src = ss.getSheetByName(TABLES[from].sheet), tz = ss.getSpreadsheetTimeZone();
+  if (!src || src.getLastRow() < 2) return [];
+  const sh = headerOf_(src), values = src.getRange(2, 1, src.getLastRow() - 1, sh.length).getValues(), idc = sh.indexOf('id'), cv = rowConv_(TABLES[from], sh, tz), take = [], ids = [];
+  values.forEach((r, i) => { if (String(r[idc]).trim() && pick(cv.conv(r))) { take.push(i); ids.push(String(r[idc]).trim()); } });
+  if (!take.length) return [];   // ไม่มีแถวที่ย้าย: ไม่เปลี่ยนรุ่นของตาราง
+  markDirty_(from);
+  const dst = tableSheet_(ss, to), dh = headerOf_(dst);
+  const rows = take.map(i => dh.map(h => (extra && h in extra ? extra[h] : sh.indexOf(h) >= 0 ? safeText_(cellText_(values[i][sh.indexOf(h)], tz)) : '')));
+  dst.getRange(dst.getLastRow() + 1, 1, rows.length, dh.length).setNumberFormat('@').setValues(rows);
+  deleteRowsAt_(src, take.map(i => i + 2));
+  return ids;
+}
+// ที่เก็บถาวร → แถบลงทะเบียน (Updated = ตอนนี้ ไม่ย้ายกลับไปอีกจนครบ N ปี) · คืนรหัสที่ย้าย · HN ที่ลงทะเบียนอยู่แล้วไม่ย้าย (ลบออกจากที่เก็บ)
+function regMoveBack_(ss, pick) {
+  const active = {};
+  regRows_(ss).forEach(r => { const k = hnLoose_(r.hn); if (k) active[k] = true; });
+  const dupIds = [];
+  const ids = regMoveRows_(ss, 'regArch', 'reg', r => { if (!pick(r)) return false; if (hnLoose_(r.hn) && active[hnLoose_(r.hn)]) { dupIds.push(r.id); return false; } active[hnLoose_(r.hn)] = true; return true; }, { Updated: new Date().toISOString() });
+  if (dupIds.length) { const sh = tableSheet_(ss, 'regArch'), c = headerOf_(sh).indexOf('id') + 1; deleteRowsAt_(sh, dupIds.map(id => findRow_(sh, c, id)).filter(Boolean)); }
+  return ids;
+}
+// วันละครั้ง (force = ปุ่ม "ย้ายตอนนี้"): ย้ายผู้ป่วยเก่าเข้าที่เก็บถาวร · ล็อกไม่ว่าง = ข้าม (ครั้งหน้า) · สถานะใน Script property regArch
+function regArchive_(ss, cfg, force) {
+  const years = regArchYears_(cfg), last = regArchStatus_() || {}, td = today_(ss);
+  if (!years || (!force && last.day === td)) return last;
+  const res = { day: td, at: new Date().toISOString(), years: years, moved: 0, total: last.total || 0, error: '' };
+  if (!force) {   // เปิดหน้าเว็บ: ไม่รอคนที่กำลังบันทึก
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(500)) return last;
+    lock.releaseLock();
+  }
+  try {
+    withLock_(() => {
+      const sh = ss.getSheetByName(TABLES.reg.sheet);
+      if (sh && sh.getLastRow() > 1) {
+        const cutoff = Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), latest = hnLatest_(ss);
+        res.moved = regMoveRows_(ss, 'reg', 'regArch', r => {
+          const at = [String(r.created).slice(0, 10), String(r.updated).slice(0, 10)].filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)).sort().pop();
+          const k = hnLoose_(r.hn);
+          return !!at && at < cutoff && !!String(r.name).trim() && !(k && latest[k] && latest[k] >= cutoff);   // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) ไม่ย้าย
+        }, { 'ย้ายเข้าที่เก็บเมื่อ': res.at }).length;
+      }
+      const ah = ss.getSheetByName(TABLES.regArch.sheet);
+      res.total = ah ? Math.max(0, ah.getLastRow() - 1) : 0;
+    });
+  } catch (e) { res.error = String(e.message || e).slice(0, 200); }
+  try { propSave_(REG_ARCH_PROP, JSON.stringify(res)); } catch (e) { /* ครั้งหน้า */ }
+  return res;
+}
+// แอดมิน: ย้ายตอนนี้ (หลังเปลี่ยนจำนวนปี)
+function regArchiveNow(token) {
+  const u = who_(token);
+  if (!u.isAdmin && !(u.sub && u.sub.indexOf('tabs') >= 0)) throw new Error('ย้ายเข้าที่เก็บถาวรได้เฉพาะแอดมิน');
+  const ss = ss_();
+  return regArchive_(ss, readConfig_(ss) || {}, true);
+}
+// ค้นในที่เก็บถาวร: HN ขึ้นต้นด้วยที่พิมพ์ หรือมีทุกคำ (ชื่อ แพทย์ Diag Note) · ล่าสุดก่อน ไม่เกิน 30 คน
+function regFind(q, token) {
+  const ss = ss_(), cfg = readConfig_(ss), u = who_(token, ss, cfg);
+  if (!guestNeeds_(u, cfg).reg) throw new Error('ไม่มีสิทธิ์ดูผู้ป่วยที่ลงทะเบียน');
+  q = String(q == null ? '' : q).trim().slice(0, 100);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean), k = hnLoose_(q);
+  if (!words.length) return { rows: [], total: 0 };
+  const hit = readTable_(ss, 'regArch').filter(r => (k && /\d/.test(k) && hnLoose_(r.hn).indexOf(k) === 0) || words.every(w => [r.hn, r.title, r.name, r.doc, r.icd, r.dx, r.note].join(' ').toLowerCase().indexOf(w) >= 0));
+  hit.sort((a, b) => String(b.created).localeCompare(String(a.created)));
+  return { rows: hit.slice(0, 30), total: hit.length };
+}
+// ใช้ผู้ป่วยในที่เก็บถาวรอีกครั้ง (แก้ไข ลงนัด นัดใส่แร่): ย้ายกลับแถบลงทะเบียน · คืนรายการ
+function regRestore(id, token) {
+  requireEdit_(token, EDIT_VIEWS.reg.concat(EDIT_VIEWS.appt, EDIT_VIEWS.bq));
+  id = String(id == null ? '' : id).trim();
+  return withLock_(() => {
+    const ss = ss_(), ah = ss.getSheetByName(TABLES.regArch.sheet);
+    const row = ah ? readTable_(ss, 'regArch').filter(x => x.id === id)[0] : null;
+    if (!row) { const cur = regRows_(ss).filter(x => x.id === id)[0]; if (cur) return cur; throw new Error('ไม่พบผู้ป่วยนี้ในที่เก็บถาวร (อาจถูกย้ายกลับไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง'); }
+    regMoveBack_(ss, x => x.id === id);
+    const k = hnLoose_(row.hn), all = regRows_(ss);
+    return all.filter(x => x.id === id)[0] || all.filter(x => k && hnLoose_(x.hn) === k)[0];
   });
 }
 
@@ -2870,7 +3111,7 @@ function extSync_(ss, cfg, key, why) {
         if (mine[k]) return;
         const r = w.want[k];
         if (isDup(r)) { res.manual++; return; }
-        add.push(Object.assign({ id: Utilities.getUuid(), caseId: '', min: '', k: '', created: now, updated: '', src: k }, r));
+        add.push(Object.assign({ id: Utilities.getUuid(), caseId: '', min: '', k: '', created: now, updated: '', src: k, rev: now }, r));
       });
       if (add.length) {
         const cols = header.map(h => fields.filter(f => f[1] === h)[0]);
@@ -2881,11 +3122,11 @@ function extSync_(ss, cfg, key, why) {
     });
     res.ok = true;
   } catch (e) { res.error = e.message; }
-  try { PropertiesService.getScriptProperties().setProperty(x.prop, JSON.stringify(res).slice(0, 8000)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
+  try { propSave_(x.prop, JSON.stringify(res).slice(0, 8000)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
   return res;
 }
 function extStatus_(key) {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(EXT[key].prop) || 'null'); } catch (e) { return null; }
+  try { return JSON.parse(propRead_(EXT[key].prop) || 'null'); } catch (e) { return null; }
 }
 function brachyStatus_() { return extStatus_('brachy'); }
 
@@ -2937,6 +3178,7 @@ function brachyTick() {
   Object.keys(EXT).forEach(k => { if (cfg[EXT[k].cfg] && cfg[EXT[k].cfg].on) extSync_(ss, cfg, k, 'ตั้งเวลา'); });
   if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');   // ผู้ป่วยจากโฟลเดอร์ Google Drive (ตามรอบที่ตั้ง)
   if (cfg.appt && cfg.appt.spq && cfg.appt.spq.on && cfg.appt.spq.url) spqSync_(ss, cfg, 'ตั้งเวลา');   // นัดจากระบบนัดคิวเทคนิคพิเศษ
+  try { regArchive_(ss, cfg, false); } catch (e) { /* ครั้งหน้า */ }   // ผู้ป่วยเก่า → ที่เก็บถาวร (วันละครั้ง)
 }
 // ตัวตั้งเวลาเฉพาะการดึงผู้ป่วยจากโฟลเดอร์ Google Drive (ไม่ได้ตั้ง brachyTick ไว้) · Triggers → Add Trigger → regDriveTick → Time-driven
 function regDriveTick() {
@@ -3009,7 +3251,7 @@ function spqWanted_(rows, seen) {
   return { keep: keep, unmatched: unmatched, old: old };
 }
 function spqStatus_() {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(SPQ_PROP) || 'null'); } catch (e) { return null; }
+  try { return JSON.parse(propRead_(SPQ_PROP) || 'null'); } catch (e) { return null; }
 }
 // ดึงและเขียนแท็บ SpecialQueue (เขียนเมื่อข้อมูลเปลี่ยน) · คืนสรุป { at, why, ok, rows, matched, unmatched, old, tab, sig, error } (เก็บใน Script property SPQ_SYNC)
 function spqSync_(ss, cfg, why) {
@@ -3027,7 +3269,7 @@ function spqSync_(ss, cfg, why) {
     }
     res.ok = true;
   } catch (e) { res.error = String(e.message || e).slice(0, 400); }
-  try { PropertiesService.getScriptProperties().setProperty(SPQ_PROP, JSON.stringify(res)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
+  try { propSave_(SPQ_PROP, JSON.stringify(res)); } catch (e) { /* เก็บสรุปไม่ได้: ครั้งหน้าดึงใหม่ */ }
   return res;
 }
 // แอดมิน (หรือแอดมินรองหมวดแถบ): ตรวจชีตด้วยค่าที่กำลังตั้ง (ยังไม่บันทึก) · ไม่เขียนอะไร · ไม่ส่ง HN หรือชื่อผู้ป่วย
@@ -3559,6 +3801,7 @@ function extraFields_(cfg) {
 
 function tableSheet_(ss, table, cfg) {
   const def = tableDef_(table, cfg);
+  markDirty_(table);   // เปิดชีตเพื่อบันทึก: หน้าเว็บโหลดตารางนี้ใหม่
   let sh = ss.getSheetByName(def.sheet);
   if (!sh) {
     sh = ss.insertSheet(def.sheet);
@@ -3585,18 +3828,16 @@ function readTable_(ss, table, cfg) {
   if (!sh || sh.getLastRow() < 2) return [];
   const tz = ss.getSpreadsheetTimeZone();
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const header = values.shift().map(v => String(v).trim());
+  const cv = rowConv_(def, values.shift().map(v => String(v).trim()), tz);
+  if (cv.cols[0] < 0) return [];
+  return values.filter(r => String(r[cv.cols[0]]).trim() !== '').map(cv.conv);
+}
+// แถวในชีต → { คีย์: ข้อความ } ตามคอลัมน์ของตาราง (หัวคอลัมน์ชื่อเก่าใน RENAMED_COLS ก็อ่านได้)
+function rowConv_(def, header, tz) {
   const oldName = {};
   Object.keys(RENAMED_COLS).forEach(k => { oldName[RENAMED_COLS[k]] = k; });
   const cols = def.fields.map(f => (header.indexOf(f[1]) >= 0 || !oldName[f[1]] ? header.indexOf(f[1]) : header.indexOf(oldName[f[1]])));
-  if (cols[0] < 0) return [];
-  return values
-    .filter(r => String(r[cols[0]]).trim() !== '')
-    .map(r => {
-      const o = {};
-      def.fields.forEach((f, i) => { o[f[0]] = cols[i] < 0 ? '' : cellText_(r[cols[i]], tz); });
-      return o;
-    });
+  return { cols: cols, conv: r => { const o = {}; def.fields.forEach((f, i) => { o[f[0]] = cols[i] < 0 ? '' : cellText_(r[cols[i]], tz); }); return o; } };
 }
 
 function findRow_(sh, col, id) {
@@ -3611,8 +3852,10 @@ function findRow_(sh, col, id) {
 function writeFields_(sh, row, header, fields, rec) {
   const cells = fields
     .map(f => ({ col: header.indexOf(f[1]) + 1, value: safeText_(rec[f[0]]) }))
-    .filter(c => c.col > 0)
-    .sort((a, b) => a.col - b.col);
+    .filter(c => c.col > 0);
+  const rv = header.indexOf(REV_HEAD);   // Cases / Logs: เวลาแก้ล่าสุดของแถว (ส่งเฉพาะแถวที่เปลี่ยน)
+  if (rv >= 0 && !cells.some(c => c.col === rv + 1)) cells.push({ col: rv + 1, value: new Date().toISOString() });
+  cells.sort((a, b) => a.col - b.col);
   let run = [];
   const flush = () => {
     if (!run.length) return;
@@ -3635,9 +3878,10 @@ function appendNew_(ss, table, records) {
   if (sh.getLastRow() > 1) sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues().forEach(r => { have[String(r[0])] = true; });
   const fresh = records.filter(r => !have[r.id]);
   if (!fresh.length) return 0;
+  const stamp = new Date().toISOString();
   const rows = fresh.map(rec => header.map(h => {
     const f = def.fields.find(x => x[1] === h);
-    return f ? safeText_(rec[f[0]]) : '';
+    return !f ? '' : f[0] === 'rev' ? stamp : safeText_(rec[f[0]]);
   }));
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, header.length).setNumberFormat('@').setValues(rows);
   return fresh.length;
@@ -3689,7 +3933,7 @@ function withLock_(fn) {
     return fn();
   } finally {
     LOCKED_ = false;
-    try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); }
+    try { SpreadsheetApp.flush(); saveDirty_(); } finally { lock.releaseLock(); }
   }
 }
 
