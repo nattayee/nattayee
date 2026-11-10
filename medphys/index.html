@@ -1537,6 +1537,7 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .acc-sel[data-v="edit"]{border-color:var(--ok);color:var(--ok);font-weight:600}
 .acc-sel[data-v="view"]{color:var(--fg)}
 .acc-sel[data-v=""]{color:var(--faint)}
+.nav-acc th.acc-admin,.nav-acc td.acc-admin{background:var(--accent-soft)}
 .acc-fixed{font-size:13px;color:var(--muted)}
 .mem-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px}
 .mem-list{display:grid;gap:6px;margin-top:10px}
@@ -3186,7 +3187,11 @@ function applyQColors() {
 }
 const paintStyle = hex => (hexOf(hex) ? `--c:${inkOn(hexOf(hex))};--cs:${hexOf(hex)}` : '');
 // ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้ที่ ตั้งค่า → แถบเมนู) · สิทธิ์ต่อแถบ: '' = มองไม่เห็น · 'view' = ดูอย่างเดียว · 'edit' = บันทึก/แก้ไขได้
-const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];
+const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other', 'Register', 'Refer'];
+// คอลัมน์ Admin ใน ตั้งค่า → แถบเมนู: แอดมินใช้สิทธิ์รายแถบของคอลัมน์นี้แทนตำแหน่งของตัวเอง (ยังไม่ตั้ง = เท่า MP) · ไม่ใช่ตำแหน่งใน LPCH (ไม่อยู่ใน config.roles)
+// Code.gs API 66 ขึ้นไป (navRole_) · รุ่นเก่า = แอดมินใช้คอลัมน์ของตำแหน่งตัวเองเหมือนเดิม (ให้ตรงกับที่ Code.gs ตรวจ)
+const ADMIN_ROLE = 'Admin';
+const ADMIN_API = 66;
 const ACCESS_API = 23;   // Code.gs ที่ตรวจสิทธิ์รายแถบตามตำแหน่ง และดึงสมาชิกจาก LPCH ได้
 const ACCESS_OPTS = [['', 'ไม่เห็น'], ['view', 'ดูได้'], ['edit', 'บันทึกได้']];
 const ROLE_RE = /^[\w -]{1,20}$/;
@@ -3562,13 +3567,14 @@ const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: '
 function accessOf(view, asSet) {
   const u = state.user;
   if (!VIEWS.includes(view)) return '';
-  const full = u.via === 'google', role = full || u.pending ? 'MP' : u.role;
+  const full = u.via === 'google', role = full || u.pending ? 'MP' : u.isAdmin && (store.mode !== 'sheet' || serverHas(ADMIN_API)) ? ADMIN_ROLE : u.role;
   const x = (state.config.nav || []).find(n => n.view === view);
-  let a = x && x.access && x.access[role] !== undefined ? x.access[role] : !x ? (role === 'MP' ? 'edit' : '') : x.on === false ? '' : role === 'MP' ? 'edit' : x.guest !== false ? 'view' : '';
+  const mpLike = role === 'MP' || role === ADMIN_ROLE;
+  let a = x && x.access && x.access[role] !== undefined ? x.access[role] : !x ? (mpLike ? 'edit' : '') : x.on === false ? '' : mpLike ? 'edit' : x.guest !== false ? 'view' : '';
   if (full && a && view !== 'settings') return 'edit';
   if (u.pending) return a ? 'view' : '';
   if (view === 'settings') return a || role === 'MP' || u.isAdmin || store.mode === 'local' ? 'view' : '';
-  if (!asSet && a === 'edit' && role !== 'MP' && store.mode === 'sheet' && !serverHas(ACCESS_API)) a = 'view';
+  if (!asSet && a === 'edit' && !mpLike && store.mode === 'sheet' && !serverHas(ACCESS_API)) a = 'view';
   return a;
 }
 // ตั้งให้บันทึกได้แล้ว แต่ Code.gs ที่ deploy อยู่ยังเก่ากว่า API 23 จึงดูได้อย่างเดียว
@@ -3901,8 +3907,9 @@ function mergeConfig(c) {
     }
   }
   out.admins = Array.isArray(c.admins) ? c.admins.map(x => str(x).toLowerCase()).filter(Boolean) : [];
-  out.roles = Array.isArray(c.roles) ? c.roles.map(str).filter((r, i, a) => ROLE_RE.test(r) && a.indexOf(r) === i) : d.roles.slice();
+  out.roles = Array.isArray(c.roles) ? c.roles.map(str).filter((r, i, a) => ROLE_RE.test(r) && a.indexOf(r) === i && r !== ADMIN_ROLE) : d.roles.slice();
   if (!out.roles.includes('MP')) out.roles.unshift('MP');
+  for (const r of LPCH_ROLES) if (!out.roles.includes(r)) out.roles.push(r);   // ตำแหน่งใหม่ของ RO Workspace (เช่น Register, Refer) เป็นคอลัมน์ทันที
   if (Array.isArray(c.fxTypes)) {
     const acts = FX_ACTS.map(x => x[0]), seen = new Set();
     out.fxTypes = c.fxTypes.filter(x => x && /^[\w-]{1,40}$/.test(str(x.id)) && !seen.has(str(x.id)) && seen.add(str(x.id))).map(x => ({
@@ -4064,8 +4071,10 @@ function mergeConfig(c) {
       access[r] = a === 'edit' || a === 'view' || a === '' ? a : !on ? '' : r === 'MP' ? 'edit' : guest ? 'view' : '';
       if (x.view === 'settings') access[r] = r === 'MP' || access[r] ? 'view' : '';
     }
+    const aa = src[ADMIN_ROLE];
+    access[ADMIN_ROLE] = x.view === 'settings' ? 'view' : aa === 'edit' || aa === 'view' || aa === '' ? aa : access.MP;   // ยังไม่ตั้ง = เท่า MP
     const vals = Object.entries(access);
-    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && v), access, parent: str(x.parent) };
+    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && r !== ADMIN_ROLE && v), access, parent: str(x.parent) };
   });
   // รวมแถบ (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบย่อยอยู่ในเมนู ▾ ของแถบหลัก · ไม่ซ้อนเกิน 1 ชั้น · ตั้งค่า อยู่ใต้แถบอื่นไม่ได้และมีแถบย่อยไม่ได้
   // ยังไม่เคยตั้ง (navGrouped): แจกงาน (งาน) ตารางแจกเคส RC และกิจกรรม สรุป P4P อยู่ใต้แถบ Planning (ชื่อที่ตั้ง หรือแถบงานรอ)
@@ -4141,7 +4150,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-10.4';
+const PAGE_VERSION = '2026-11-10.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12264,6 +12273,7 @@ function defField(f, d) {
 // ช่องสิทธิ์ของแถบต่อตำแหน่ง: ไม่เห็น / ดูได้ / บันทึกได้ · "ตั้งค่า" มีแค่ ไม่เห็น / ดูได้ (MP เห็นเสมอ)
 function accSel(x, i, r) {
   if (x.view === 'settings' && r === 'MP') return '<span class="acc-fixed" title="MP เห็นตั้งค่าเสมอ แก้ได้เฉพาะแอดมิน">ดูได้</span>';
+  if (x.view === 'settings' && r === ADMIN_ROLE) return '<span class="acc-fixed" title="แอดมินแก้การตั้งค่าได้เสมอ">แก้ได้</span>';
   const v = (x.access || {})[r] || '', opts = x.view === 'settings' ? ACCESS_OPTS.slice(0, 2) : ACCESS_OPTS;
   return `<select class="acc-sel" data-navacc="${i}" data-accrole="${esc(r)}" data-v="${v}" aria-label="${esc(VIEW_LABEL[x.view] || x.view)} · ${esc(r)}">${opts.map(([k, l]) => opt(k, l, v)).join('')}</select>`;
 }
@@ -13019,13 +13029,14 @@ function renderSettings() {
         <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
     <div class="sec"><div class="sec-head"><h2>แถบเมนู</h2><p>ลำดับ ชื่อ และสิทธิ์ของแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น · <b>อยู่ใต้แถบ</b> = รวมไว้ในเมนู ▾ ของแถบนั้น (กดชื่อแถบหลัก = หน้าของแถบหลักเอง · แถบย่อยเรียงตามลำดับในตารางนี้ · ซ้อนได้ชั้นเดียว) · ชื่อที่แสดงว่าง = ชื่อเดิม
       · สิทธิ์ตามตำแหน่งใน LPCH RO Workspace: <b>ไม่เห็น</b> / <b>ดูได้</b> (ดูอย่างเดียว) / <b>บันทึกได้</b> (บันทึก แก้ไข ลบในแถบนั้น ยืนยันด้วยรหัส PIN)
-      · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ</p></div>
+      · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ
+      · <b>Admin</b> = ผู้ที่เป็นแอดมิน (ตั้งค่า → แอดมิน) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง (ยังไม่ตั้ง = เท่า MP)${store.mode === 'sheet' && !serverHas(ADMIN_API) ? ' · ต้องใช้ Code.gs รุ่น 2026-11-10.5 ขึ้นไป' : ''}</p></div>
       ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป (ที่ใช้อยู่: รุ่น ${esc(state.codeVersion || 'เก่า')}) แล้ว Deploy เวอร์ชันใหม่ · ระหว่างนี้ตำแหน่งอื่นที่ตั้ง "บันทึกได้" จะดูได้อย่างเดียว</span></p>` : ''}
-      <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th><th style="text-align:left">อยู่ใต้แถบ</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
+      <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th><th style="text-align:left">อยู่ใต้แถบ</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th class="acc-admin" title="แอดมิน (ตั้งค่า → แอดมิน) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง · ยังไม่ตั้ง = เท่า MP">Admin</th><th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
         <td class="idx">${i + 1}</td><td class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</td>
         <td><input class="nav-label" data-k="nav.${i}.label" value="${esc(x.label)}" maxlength="30" placeholder="${esc(VIEW_LABEL[x.view] || x.view)}" aria-label="ชื่อแถบ ${esc(VIEW_LABEL[x.view] || x.view)}"></td>
         <td>${x.view === 'settings' ? '<span class="muted">แถบหลัก</span>' : `<select data-k="nav.${i}.parent" data-navparent aria-label="${esc(VIEW_LABEL[x.view] || x.view)} อยู่ใต้แถบ">${opt('', '— แถบหลัก —', x.parent || '')}${d.nav.filter(p => p.view !== x.view && p.view !== 'settings' && !p.parent).map(p => opt(p.view, `▾ ${str(p.label) || VIEW_LABEL[p.view] || p.view}`, x.parent || '')).join('')}</select>`}</td>
-        ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}
+        ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}<td class="acc-admin">${accSel(x, i, ADMIN_ROLE)}</td>
         <td><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
       </tr>`).join('')}</tbody></table></div>
       <h3 class="sub-h">สมาชิกและตำแหน่งจาก LPCH RO Workspace</h3>

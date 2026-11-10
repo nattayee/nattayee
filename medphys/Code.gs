@@ -19,7 +19,10 @@ const APP_TITLE = 'Treatment Planning Management';   // ชื่อเริ่
 // URL /exec ของ LPCH RO Workspace (เปลี่ยนได้ที่ Script property LPCH_URL · ใส่ - เพื่อปิดและใช้บัญชี Google อย่างเดียว)
 const LPCH_URL = 'https://script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่บันทึกได้ทุกแถบตั้งต้น (แอดมินปรับรายแถบได้ที่ ตั้งค่า → แถบเมนู)
-const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other'];   // ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้จากรายชื่อสมาชิก)
+const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other', 'Register', 'Refer'];   // ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้จากรายชื่อสมาชิก)
+// คอลัมน์ Admin ใน ตั้งค่า → แถบเมนู (API 66): แอดมินใช้สิทธิ์รายแถบของคอลัมน์นี้แทนตำแหน่งของตัวเอง · ยังไม่ตั้ง = เท่า MP
+const ADMIN_ROLE = 'Admin';
+const navRole_ = u => (u && u.isAdmin && u.via !== 'google' ? ADMIN_ROLE : (u && u.role) || '');
 const LPCH_CHECK_SECONDS = 300;
 // หน้าเว็บ (index.html) โหลดจาก GitHub อัตโนมัติ จึงได้หน้าเว็บรุ่นล่าสุดเสมอ ไม่ต้องวางไฟล์ index ใหม่ทุกครั้ง
 // เปลี่ยนได้ที่ Script property PAGE_URL · ใส่ - เพื่อใช้ไฟล์ index ในโปรเจกต์ · เปิด …/exec?refresh=1 เพื่อโหลดรุ่นล่าสุดทันที
@@ -27,8 +30,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.4';
-const API_LEVEL = 65;
+const CODE_VERSION = '2026-11-10.5';
+const API_LEVEL = 66;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -483,7 +486,7 @@ const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p',
   dq: ['dq', 'appt'], dqLeave: ['dq'] };   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
-  const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, user.role));
+  const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, navRole_(user)));
   Object.keys(GUEST_TABLES).forEach(t => { out[t] = GUEST_TABLES[t].some(v => seen.indexOf(v) >= 0); });
   return out;
 }
@@ -501,6 +504,7 @@ function navAccess_(config, view, role) {
   if (!x) { let p = null; for (let v = view; !p && NAV_PREV[v]; v = NAV_PREV[v]) p = find(NAV_PREV[v]); x = { on: true, guest: p ? p.guest !== false : true }; }
   const acc = x.access && typeof x.access === 'object' ? x.access : null;
   if (acc && Object.prototype.hasOwnProperty.call(acc, role)) return acc[role] === 'edit' || acc[role] === 'view' ? acc[role] : '';
+  if (role === ADMIN_ROLE) return navAccess_(config, view, 'MP');   // ยังไม่ได้ตั้งคอลัมน์ Admin = เท่า MP
   if (x.on === false) return '';
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
@@ -3083,8 +3087,8 @@ function dqRemove(id, pin, token) {
 // วันลาแพทย์: ผู้ที่บันทึกในแถบแจกงานแพทย์ได้ (ทุกแพทย์) หรือแพทย์ของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์ และเห็นแถบนี้)
 function dqLeaveUser_(token, doc) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
-  if (u.via === 'google' || navAccess_(cfg, 'dq', u.role) === 'edit') return u;
-  if (doc && navAccess_(cfg, 'dq', u.role) && dqSelf_(u, cfg) === doc) return u;
+  if (u.via === 'google' || navAccess_(cfg, 'dq', navRole_(u)) === 'edit') return u;
+  if (doc && navAccess_(cfg, 'dq', navRole_(u)) && dqSelf_(u, cfg) === doc) return u;
   throw new Error('ลงวันลาแพทย์ได้เฉพาะผู้ที่บันทึกในแถบแจกงานแพทย์ได้ หรือแพทย์ลงของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์)');
 }
 function dqLeaveSave(rec, token) {
@@ -3974,8 +3978,8 @@ function who_(token, ss, cfg) {
       const admins = adminList_(cfg);
       const listed = (!!p.email && admins.indexOf(p.email) >= 0) || admins.indexOf(p.username) >= 0;
       // canEdit = บันทึกได้อย่างน้อยหนึ่งแถบ (ตั้งค่า → แถบเมนู) · แอดมินต้องเป็น MP (p.canEdit) และเป็นแอดมินของ LPCH หรืออยู่ในรายชื่อแอดมิน
-      const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => navAccess_(cfg, v, p.role) === 'edit');
       const isAdmin = p.canEdit && (p.lpchAdmin || listed);
+      const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => navAccess_(cfg, v, isAdmin ? ADMIN_ROLE : p.role) === 'edit');
       return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
         canEdit: anyEdit, isAdmin: isAdmin, lpchAdmin: p.lpchAdmin, sub: isAdmin ? [] : subTabs_(cfg, p) };
     }
@@ -3991,8 +3995,8 @@ function requireEdit_(token, views) {
   const u = who_(token, ss, cfg);
   if (u.via === 'google') return u;
   const list = views || Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []);
-  if (!list.some(v => navAccess_(cfg, v, u.role) === 'edit')) {
-    throw new Error('ตำแหน่ง ' + (u.role || '-') + ' บันทึกในแถบนี้ไม่ได้ (บัญชี ' + u.username + ' ดูได้อย่างเดียว) · แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู');
+  if (!list.some(v => navAccess_(cfg, v, navRole_(u)) === 'edit')) {
+    throw new Error('ตำแหน่ง ' + (u.isAdmin ? 'Admin (แอดมิน)' : u.role || '-') + ' บันทึกในแถบนี้ไม่ได้ (บัญชี ' + u.username + ' ดูได้อย่างเดียว) · แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู');
   }
   return u;
 }
