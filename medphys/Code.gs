@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.6';
-const API_LEVEL = 67;
+const CODE_VERSION = '2026-11-10.8';
+const API_LEVEL = 68;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -552,6 +552,7 @@ function saveRecord(table, rec, token) {
  * แจกเคสใหม่ภายใต้ล็อก ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ
  * รับได้หลายเคส (หลายเทคนิคของผู้ป่วยคนเดียว) เคสแรกเลือก MP ตามคิวของเทคนิคนั้น
  * how = 'follow' ให้ MP คนเดียวกับเคสแรก (คิวไม่ขยับ หักคิวเมื่อวนมาถึง) · how = 'manual' ใช้ MP ที่เลือกมา
+ * how = 'replan' (API 68) เคสเดิมของผู้ป่วยที่กำลังฉาย ให้ MP คนเดิมที่ส่งมา ไม่เกี่ยวกับคิว (เหมือนงานวางแผนใหม่)
  */
 function addCases(recs, token) {
   const u = requireEdit_(token, ['work']);
@@ -569,7 +570,7 @@ function addCases(recs, token) {
       const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
       const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
       const date = rec.in || today;
-      if (rec.how === 'manual') {
+      if (rec.how === 'manual' || rec.how === 'replan') {
         rec.mp = String(rec.mp || '').toUpperCase();
         if (!staff.some(s => String(s.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
       } else if (rec.how === 'follow' && out.length) {
@@ -1370,7 +1371,7 @@ function tagCase(id, tags, pin, token) {
  * rp = { kind, label, reason, room, sim, ct, dpf, fx, area, sites: [...], mp } · mp ว่าง = MP ของเคสเดิม (บันทึกซ้ำ = คนที่รับงานอยู่) · ระบุ = ส่งให้คนนั้น
  */
 function replanCase(id, date, rp, pin, token) {
-  const u = requireEdit_(token, EDIT_VIEWS.course);
+  const u = requireEdit_(token, EDIT_VIEWS.course.concat(['work']));   // แถบแจกงานฟิสิกส์แจกงานที่รอ (CP ไม่ทำ CT ใหม่) ได้ด้วย (API 68)
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
   date = cut(date, 10);

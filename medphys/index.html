@@ -440,6 +440,9 @@ button.duty-line:hover{border-color:var(--accent)}
 .ap-rect>h3 small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
 .ap-rect .ct-pull{margin-top:8px}
 .ap-rect .ct-pull li{background:var(--surface)}
+.cp-wait{margin:0 0 14px}   /* แถบแจกงานฟิสิกส์: รอแจก (CP ไม่ทำ CT ใหม่) */
+.cp-wait select{min-width:150px}
+.old-dates{align-self:end;margin:0;padding:8px 12px;border-radius:8px;background:var(--sunken);color:var(--muted);font-size:13px}
 /* แถบแจกงานแพทย์ · กล่องรอลงนัดในแถบลงนัด (แยกตามแพทย์) */
 .dq-top{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;margin:0 0 14px}
 .dq-top:has(.dq-form[hidden]){grid-template-columns:1fr}
@@ -2195,6 +2198,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   <section id="view-work" hidden>
     <div class="sec" id="intake-sec" data-box="intake">
       <div class="sec-head"><h2>แจกเคสใหม่</h2><p id="queue-note"></p><button type="button" class="btn sm ct-pull-btn" id="ct-pull" hidden>ดึงจาก CT-SIM</button></div>
+      <div class="ap-rect cp-wait" id="cp-wait" hidden></div>
       <form class="intake" id="intake" novalidate autocomplete="off">
         <p class="ct-from" id="i-ctfrom" hidden></p>
         <div class="intake-top">
@@ -2223,16 +2227,22 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
           <div class="add-site-row"><button type="button" class="btn ghost" id="i-addsite" data-addsite="i">+ เพิ่มบริเวณที่ฉาย</button></div>
         </div>
         <div class="intake-dates">
-          <label class="field plan-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
+          <label class="field plan-field" id="i-ct-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
-          <div class="field plan-field"><span class="lbl"><label for="i-sim">Start RT<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
+          <p class="old-dates" id="i-old-dates" hidden>เคสเดิม: ไม่ต้องกรอก CT-Sim และ Start RT</p>
+          <div class="field plan-field" id="i-sim-field"><span class="lbl"><label for="i-sim">Start RT<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
           <label class="field note-field"><span class="lbl"><span>Note<b class="req" data-req="note" hidden>*</b></span></span><input id="i-note"></label>
         </div>
         <div class="extra-grid" id="i-extra" hidden></div>
         <div class="intake-mode">
+          <div class="field" id="i-kind-field"><span class="lbl">เคส <span class="sub-lbl" id="i-kind-note"></span></span><div class="chips" id="i-kind" role="radiogroup" aria-label="เคสใหม่หรือเคสเดิม">
+            <label><input type="radio" name="ikind" value="new" checked><span>เคสใหม่</span></label>
+            <label title="ผู้ป่วยระหว่างฉาย (On tx) หรือกำลังฉายอยู่ในแถบห้องฉาย · ไม่ต้องกรอก CT-Sim และ Start RT · แจกให้ฟิสิกส์คนเดิมได้"><input type="radio" name="ikind" value="old"><span>เคสเดิม</span></label>
+          </div></div>
           <div class="field"><span class="lbl">วิธีแจก</span><div class="chips" id="i-mode" role="radiogroup" aria-label="วิธีแจก">
             <label><input type="radio" name="imode" value="auto" checked><span>อัตโนมัติตามคิว</span></label>
             <label><input type="radio" name="imode" value="manual"><span>เลือกเอง</span></label>
+            <label id="i-mode-same" hidden><input type="radio" name="imode" value="same"><span>คนเดิม</span></label>
           </div></div>
           <div class="field" id="i-pick-field" hidden><span class="lbl">ผู้รับเคส</span><div class="chips people" id="i-pick" role="radiogroup" aria-label="ผู้รับเคส"></div></div>
         </div>
@@ -3226,6 +3236,8 @@ const fxAdjNegOn = () => serverHas(FXADJ_API);
 const fxAdjCan = () => store.mode === 'local' || !!state.user.isAdmin || state.user.via === 'google' || (state.config.fxAdj.roles || []).includes(state.user.role);
 const REPLAN_API = 28;   // Code.gs ที่สร้างงานวางแผนใหม่ให้ MP คนเดิมได้ (replanCase)
 const replanOn = () => serverHas(REPLAN_API);
+// Code.gs API 68: แจกเคสเดิมให้ MP คนเดิมแบบไม่เกี่ยวกับคิว (how = replan) · แถบแจกงานฟิสิกส์แจกงานที่รอ (CP ไม่ทำ CT ใหม่) ได้
+const OLDCASE_API = 68;
 const replanMpOn = () => serverHas(29);   // Code.gs ที่เลือกส่งงานวางแผนใหม่ให้ MP คนอื่นได้
 // ตั้งค่า → รหัส PIN: แอดมินเลือกกลุ่มงานที่ต้องใส่ PIN (ค่าเริ่มต้นทุกกลุ่ม) · Code.gs ตรวจตามที่ตั้ง (checkPin_ act)
 const PIN_GROUPS = [
@@ -4163,7 +4175,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-10.7';
+const PAGE_VERSION = '2026-11-10.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4318,9 +4330,9 @@ function localStore() {
       const out = [];
       for (const rec of recs) {
         const follow = rec.how === 'follow' && out.length > 0;
-        const how = rec.how === 'manual' || follow ? rec.how : 'auto';
+        const how = rec.how === 'manual' || rec.how === 'replan' || follow ? rec.how : 'auto';
         const qi = queueInput(rec.cat, rec.in), auto = () => pickNext({ ...qi, cases: [...qi.cases, ...out.filter(x => x.cat === rec.cat)] });
-        const r = { ...rec, how, mp: how === 'manual' ? rec.mp : follow ? out[0].mp : auto(), created: nowISO() };
+        const r = { ...rec, how, mp: how === 'manual' || how === 'replan' ? rec.mp : follow ? out[0].mp : auto(), created: nowISO() };
         if (!r.mp) throw new Error(`${catOf(rec.cat).label}: ${NOBODY}`);
         delete r.ctFrom;
         out.push(r);
@@ -4482,7 +4494,7 @@ function localStore() {
     },
     // เหมือน replanCase ใน Code.gs
     replan: async (id, date, rp, pin) => {
-      demoCheckPin(pin);
+      if (!rp || pin) demoCheckPin(pin);   // สร้างงานไม่ต้องใส่ PIN (เหมือน Code.gs)
       const p = db.cases.find(x => x.id === id);
       if (!p) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
       const old = db.cases.find(x => { const m = rpOf(x); return m && m.of === id && m.date === date; });
@@ -5599,6 +5611,7 @@ function render() {
   renderPendBadge();
   renderCfgBadge();
   renderApBadge();
+  renderWorkBadge();
   if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
   const ro = !!state.view && state.view !== 'settings' && accessOf(state.view) === 'view';
@@ -9442,9 +9455,14 @@ function syncFx() {
   $('#pin-fx-back-sub').textContent = pausable ? 'ค่าเริ่มต้น = ฉายวันนี้ · เว้นว่าง = จนกว่าจะกลับมา' : 'เว้นว่าง = จนกว่าจะกลับมา';
   ctx.auto = !ctx.cur && !!t && t.act === 'given' && ctx.date <= today() && !(t.need && t.reasons.length && !chipValue(box));
   // งานวางแผนใหม่ที่จะส่งให้ MP คนเดิม (สถานะที่ตั้งไว้ · ย้ายห้อง)
-  const rpWill = replanOn() && !!t && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && !adding);
-  $('#pin-fx-rp').hidden = !rpWill;
+  const cpWait = replanOn() && !!t && !moving && !adding && !!t.replan && t.act !== 'off' && noNewCt(t.reasons.length ? chipValue(box) : '');
+  const rpWill = replanOn() && !!t && !cpWait && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && !adding);
+  $('#pin-fx-rp').hidden = !rpWill && !cpWait;
   $('#pin-rp-box').hidden = !rpWill || !replanMpOn();
+  if (cpWait) {
+    const c0 = state.cases.find(x => x.id === ctx.id), rx = c0 ? replanRx(c0, ctx.date) : {};
+    $('#pin-fx-rp').innerHTML = `↻ <b>รอแจกงานวางแผนใหม่</b>ในแถบ<b>${esc(navLabel('work'))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf ? cGyText(rx.dpf) : '? cGy')} × ${esc(rx.fx)} fx ที่เหลือ` : ''} · เลือกผู้รับงานที่นั่น (ค่าเริ่มต้น = MP คนเดิม)`;
+  }
   if (rpWill) {
     const cs = (ctx.ids || [ctx.id]).map(id => state.cases.find(x => x.id === id)).filter(Boolean), rd = moving ? ctx.day : ctx.date, rx = cs.length ? replanRx(cs[0], rd) : {};
     const same = ctx.rpMps(rd), pick = replanMpOn() ? chipValue($('#pin-rp-mp')) : '', away = same.filter(m => onLeave(m, today()));
@@ -9684,10 +9702,70 @@ function readTags() {
 // ช่องเวลา BD protocol: แสดงเมื่อติ๊ก BD protocol
 const syncBd = () => { $('#pin-bd-box').hidden = !chipValues($('#pin-tags')).some(isBdName); };
 $('#pin-tags').addEventListener('change', syncBd);
+// CP (ไม่ทำ CT ใหม่) ที่บันทึกในแถบห้องฉาย → รอแจกงานวางแผนใหม่ในแถบแจกงานฟิสิกส์ (เคสละรายการ · ล่าสุดไม่เกิน 60 วัน)
+// ออกจากรายการเมื่อ: แจกแล้ว (มีงานวางแผนใหม่ของเคสนั้นวันนั้น) · ล้างหรือเปลี่ยนสถานะ · Complete course / Cancel RT / Off RT
+const fxTypeOf = id => (state.config.fxTypes || []).find(t => t.id === id) || null;
+function cpWaiting() {
+  if (!replanOn()) return [];
+  const from = plusDays(today(), -60), made = new Set();
+  for (const x of state.cases) { const m = rpOf(x); if (m) made.add(m.of + '|' + m.date); }
+  const out = [];
+  for (const c of state.cases) {
+    if (!c.hn || c.rt || !str(c.fxlog)) continue;
+    const evs = parseFx(c);
+    for (const e of evs) {
+      const t = fxTypeOf(e.type);
+      if (!t || !t.replan || t.act === 'off' || !noNewCt(e.reason) || e.date < from || made.has(c.id + '|' + e.date)) continue;
+      if (evs.some(x => x.act === 'off' && x.date >= e.date)) continue;
+      out.push({ c, e, t, hn: c.hn, name: c.name, rx: replanRx(c, e.date) });
+    }
+  }
+  return out.sort((a, b) => a.e.date.localeCompare(b.e.date));
+}
+const cpCanSend = () => canEdit() && replanOn() && (accessOf('course') === 'edit' || serverHas(OLDCASE_API) || store.mode !== 'sheet');
+function renderCpWait() {
+  const box = $('#cp-wait'), list = cpWaiting(), edit = cpCanSend(), td = today();
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  const opts = x => [opt('', `คนเดิม (${x.c.mp || 'ไม่มี MP'})`, ''), ...activeStaff().filter(s => s.code !== x.c.mp).map(s => opt(s.code, `${s.code}${onLeave(s.code, td) ? ' (ลา)' : ''}`, ''))].join('');
+  const row = x => { const k = `${x.c.id}|${x.e.date}`; return `<li data-cpw="${esc(k)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} · <b>${esc(x.t.label)}</b> ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · เหลือ ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
+    <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP เดิม ${x.c.mp}${onLeave(x.c.mp, td) ? ' (ลาวันนี้)' : ''}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><select data-cpmp="${esc(k)}" aria-label="ส่งงานวางแผนใหม่ของ ${esc(x.hn)} ให้">${opts(x)}</select><button type="button" class="btn primary sm" data-cpsend="${esc(k)}">แจกงาน</button></span>` : ''}</li>`; };
+  box.innerHTML = `<h3>รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่) · ${list.length} คน<small>บันทึก CP (ไม่ทำ CT ใหม่) ในแถบ${esc(navLabel('course'))} · แจกแล้วเป็นงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ในงานรอ ไม่เกี่ยวกับคิว</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
+}
+async function sendCp(key, btn) {
+  const x = cpWaiting().find(v => `${v.c.id}|${v.e.date}` === key);
+  if (!x) { renderCpWait(); return toast('รายการนี้ไม่ได้รอแจกแล้ว', { err: true }); }
+  const sel = $(`[data-cpmp="${CSS.escape(key)}"]`), mp = sel ? sel.value : '';
+  if (!mp && !x.c.mp) { if (sel) sel.focus(); return toast('ผู้ป่วยนี้ไม่มี MP เดิม เลือกผู้รับงานก่อน', { err: true }); }
+  const meta = { kind: x.t.id, label: x.t.label, reason: x.e.reason || '', sim: x.e.back || (x.e.act === 'treat' ? x.e.date : ''), ct: '', mp };
+  if (btn) btn.disabled = true;
+  try {
+    const rec = normCase(await store.replan(x.c.id, x.e.date, { ...meta, ...x.rx }, ''));
+    const i = state.cases.findIndex(c => c.id === rec.id);
+    if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
+    state.fresh = [rec.id];
+    render();
+    toast(`แจกงานวางแผนใหม่ ${rec.hn} (${x.t.label} ${fmtDay(x.e.date)}) → ${rec.mp} · อยู่ในงานรอ`);
+  } catch (e) { toast('แจกงานไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn) btn.disabled = false; }
+}
+// วงกลมบนแถบแจกงานฟิสิกส์: จำนวนงานวางแผนใหม่ที่รอแจก (CP ไม่ทำ CT ใหม่)
+function renderWorkBadge() {
+  const b = $('.nav [data-view="work"]');
+  if (!b) return;
+  let dot = $('.nav-dot', b);
+  const n = (state.loaded || store.mode === 'local') && navOn('work') ? cpWaiting().length : 0;
+  if (!n) { if (dot) dot.remove(); b.removeAttribute('title'); return; }
+  if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
+  dot.className = 'nav-dot warn';
+  dot.textContent = n;
+  b.title = `รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่) ${n} คน`;
+}
 function renderWork() {
   renderCaseMode();
   $('#intake-sec').hidden = !canEdit();
   renderCtPullBtn();
+  renderCpWait();
   $('#open-leaves').textContent = canEdit() ? 'จัดการวันลา' : 'ดูวันลา';
   renderIntake();
   const ym = thisMonth(), td = today();
@@ -10477,6 +10555,7 @@ function caseAct(c, k, st) {
 const howChips = c => {
   const sib = c.batch && batchIndex[c.batch] ? batchIndex[c.batch].filter(x => x.id !== c.id) : [];
   return [c.how === 'manual' ? '<span class="chip" title="แจกแบบเลือกเอง">เลือกเอง</span>'
+    : c.how === 'replan' && !c.replan ? '<span class="chip" title="เคสเดิมของผู้ป่วยที่กำลังฉาย ให้ MP คนเดิม ไม่เกี่ยวกับคิว">เคสเดิม</span>'
     : c.how === 'follow' ? '<span class="chip" title="ให้คนเดียวกับเทคนิคแรกที่แจกพร้อมกัน คิวของเทคนิคนี้ไม่ขยับ และจะข้ามคนนี้ 1 ครั้งเมื่อวนมาถึง">ตามเทคนิคแรก</span>' : '',
   sib.length ? `<span class="chip" title="แจกพร้อมกันในเคสเดียวกัน">+ ${esc(sib.map(x => catOf(x.cat).label).join(', '))}</span>` : ''].join('');
 };
@@ -14547,6 +14626,36 @@ function logDeleted(id) {
 
 /* ---------- แจกเคสใหม่ ---------- */
 const intake = $('#intake');
+// เคสเดิม: ผู้ป่วยที่กำลังฉายอยู่ในแถบห้องฉาย (HN เดียวกัน) · MP คนเดิม = MP ของเคสที่กำลังฉาย หรือเคสล่าสุดของ HN นี้ที่มี MP ในรายชื่อ
+function onTxCase(hn) {
+  const k = hnKey(hn);
+  return k ? state.cases.filter(c => hnKey(c.hn) === k && inCourse(c) && courseTabOf(c) === 'on').sort((a, b) => str(b.created).localeCompare(str(a.created)))[0] || null : null;
+}
+function prevMpOf(hn) {
+  const k = hnKey(hn), codes = new Set(state.config.staff.map(s => s.code));
+  if (!k) return null;
+  const tx = onTxCase(hn);
+  if (tx && codes.has(tx.mp)) return { mp: tx.mp, c: tx, tx: true };
+  const c = state.cases.filter(x => hnKey(x.hn) === k && codes.has(x.mp)).sort((a, b) => str(b.created).localeCompare(str(a.created)))[0];
+  return c ? { mp: c.mp, c, tx: false } : null;
+}
+// เลือกเคสใหม่ / เคสเดิมให้เอง: HN ที่กำลังฉายอยู่ หรือ Aim = On tx → เคสเดิม · ผู้ใช้กดเลือกเองแล้วไม่เปลี่ยนให้
+let kindBy = '';
+const isOldKind = () => chipValue($('#i-kind')) === 'old';
+function setKind(v, by) {
+  setChip($('#i-kind'), v);
+  kindBy = by;
+  const mode = chipValue($('#i-mode'));
+  if (v === 'old' && mode !== 'manual' && prevMpOf($('#i-hn').value)) setChip($('#i-mode'), 'same');
+  if (v !== 'old' && mode === 'same') setChip($('#i-mode'), 'auto');
+}
+function autoKind() {
+  if (kindBy === 'user') return;
+  const old = !!onTxCase($('#i-hn').value) || /^on\s*tx$/i.test(chipValue($('#i-aim')));
+  if (old && !isOldKind()) setKind('old', 'auto');
+  else if (!old && isOldKind() && kindBy === 'auto') setKind('new', '');
+  else if (old && isOldKind() && chipValue($('#i-mode')) === 'auto' && kindBy === 'auto' && prevMpOf($('#i-hn').value)) setChip($('#i-mode'), 'same');   // พิมพ์ HN ทีหลัง
+}
 // ช่องบังคับที่ยังว่าง (ช่องงานวางแผนนับเฉพาะเมื่อเลือกเทคนิคงานวางแผน)
 function missingRequired(ks) {
   const req = state.config.required, plan = ks.some(k => k.kind !== 'simple');
@@ -14556,7 +14665,8 @@ function missingRequired(ks) {
     dpf: () => str($('#i-dpf').value), fx: () => str($('#i-fx').value), freq: () => readFreq('i'),
     ct: () => $('#i-ct').value, sim: () => $('#i-oncall').checked || $('#i-sim').value, note: () => str($('#i-note').value),
   };
-  const need = REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !(f.key === 'room' && !roomSitesOn()) && !filled[f.key]());
+  const old = isOldKind();
+  const need = REQ_FIELDS.find(f => req[f.key] && !(f.plan && !plan) && !(old && (f.key === 'ct' || f.key === 'sim')) && !(f.key === 'tech' && !ks.some(k => k.tech && k.kind !== 'simple')) && !(f.key === 'room' && !roomSitesOn()) && !filled[f.key]());
   if (need) return need;
   const vals = readExtra('i'), x = extraList().find(f => f.req && !vals['x_' + f.id]);
   return x ? { key: 'x-' + x.id, label: x.label, pick: x.type === 'pick' || x.type === 'multi' } : null;
@@ -14616,15 +14726,24 @@ function syncIntake() {
   renderCounts(ks.map(k => k.id));
   const allSimple = ks.length > 0 && ks.every(k => k.kind === 'simple');
   $$('.plan-field', intake).forEach(el => { el.hidden = allSimple; });
+  autoKind();
+  const old = isOldKind(), prev = old ? prevMpOf($('#i-hn').value) : null, tx = onTxCase($('#i-hn').value);
+  $('#i-kind-field').hidden = allSimple;
+  $('#i-ct-field').hidden = $('#i-sim-field').hidden = allSimple || old;   // เคสเดิม: ไม่ต้องกรอก CT-Sim / Start RT
+  $('#i-old-dates').hidden = allSimple || !old;
+  $('#i-kind-note').textContent = tx ? `HN นี้กำลังฉายอยู่${tx.room ? ` ห้อง ${tx.room}` : ''}${tx.mp ? ` · MP ${tx.mp}` : ''}` : old && prev ? `เคสเดิมของ HN นี้: MP ${prev.mp}` : old && str($('#i-hn').value) ? 'ไม่พบเคสเดิมของ HN นี้ในระบบ' : '';
+  $('#i-mode-same').hidden = !old || !prev;
+  $('#i-mode-same span').innerHTML = prev ? `คนเดิม <small>${esc(prev.mp)}</small>` : 'คนเดิม';
+  if (chipValue($('#i-mode')) === 'same' && (!old || !prev)) setChip($('#i-mode'), 'auto');
   $('#i-tech-field').hidden = !ks.some(k => k.tech);
   $('#i-room-field').hidden = !roomSitesOn();
   $('#i-in-lbl').textContent = allSimple ? 'Date' : 'In';
   $('#i-sim').disabled = $('#i-oncall').checked;
   const date = $('#i-in').value || workdayFrom(today());
   const dayTxt = date === today() ? 'วันนี้' : `วัน ${fmtDay(date)}`;
-  const manual = chipValue($('#i-mode')) === 'manual';
+  const manual = chipValue($('#i-mode')) === 'manual', same = chipValue($('#i-mode')) === 'same' && prev;
   $('#i-pick-field').hidden = !manual;
-  $$('#i-cat label').forEach(l => l.classList.toggle('main', !manual && ks.length > 1 && $('input', l).value === ks[0].id));
+  $$('#i-cat label').forEach(l => l.classList.toggle('main', !manual && !same && ks.length > 1 && $('input', l).value === ks[0].id));
   const away = activeStaff().filter(s => onLeave(s.code, date)).map(s => s.code);
   const box = $('#i-assign');
   box.className = 'assign';
@@ -14636,6 +14755,13 @@ function syncIntake() {
   const times = k => (countOf(k.id) > 1 ? ` ×${countOf(k.id)}` : '');
   const labels = ks.map(k => k.label + times(k)).join(', ');
   const totalPts = ks.reduce((t, k) => t + unitPts(k.min, k.w) * countOf(k.id), 0);
+  if (same) {   // เคสเดิม → MP คนเดิม
+    if (onLeave(prev.mp, date)) box.className = 'assign warn';
+    const free = serverHas(OLDCASE_API) || store.mode !== 'sheet';
+    box.innerHTML = `${av(prev.mp, 'lg')}<span>ส่งให้ ${named(prev.mp)} · คนเดิม (เคสเดิม)${ks.length > 1 ? ` ${ks.length} เทคนิค` : ''}
+      <small>${onLeave(prev.mp, date) ? `${esc(prev.mp)} ลา${dayTxt} · ` : ''}${free ? `ไม่เกี่ยวกับคิว (เหมือนงานวางแผนใหม่) · คิว ${esc(labels)} ไม่ขยับ` : `Code.gs รุ่นนี้แจกเป็นแบบเลือกเอง (คิว ${esc(labels)} จะข้าม ${esc(prev.mp)} เมื่อวนมาถึง)`} · ${num(totalPts, 3)} แต้ม</small></span>`;
+    return;
+  }
   if (manual) {
     const pick = chipValue($('#i-pick'));
     if (!pick) { box.innerHTML = `${av('', 'lg')}<span>เลือกผู้รับเคส<small>คิวของ ${esc(labels)} จะไม่ขยับ</small></span>`; return; }
@@ -14666,7 +14792,9 @@ function fillIntake(c) {
   for (const f of ['hn', 'name', 'ct', 'in', 'note']) $('#i-' + f).value = c[f] || '';
   $('#i-oncall').checked = c.sim === 'on call';
   $('#i-sim').value = c.sim === 'on call' ? '' : c.sim || '';
-  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-room', c.room], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
+  setChip($('#i-kind'), c.kind === 'old' || c.how === 'replan' ? 'old' : 'new');
+  kindBy = c.kind === 'old' || c.how === 'replan' ? 'user' : '';
+  for (const [id, v] of [['#i-doc', c.doc], ['#i-type', c.type], ['#i-aim', c.aim], ['#i-room', c.room], ['#i-tech', c.tech], ['#i-mode', c.how === 'manual' ? 'manual' : c.how === 'replan' ? 'same' : 'auto'], ['#i-pick', c.how === 'manual' ? c.mp : '']]) {
     $$(id + ' input').forEach(i => { i.checked = i.value === v; });
   }
   fillDose('i', c);
@@ -14742,6 +14870,7 @@ let intakeTouched = false, intakeSig = '';
 const defaultsSig = () => today() + JSON.stringify(state.config.defaults || {});
 function resetIntake() {
   intakeCt = '';
+  kindBy = '';
   fillIntake(defaultCase());
   applyRules();
   // ปุ่มเลือกได้หลายอย่างที่ติ๊กค่าเริ่มต้นไว้: กดเลือกอย่างอื่นครั้งแรกจะเปลี่ยนแทน ไม่เพิ่มต่อจากค่าเริ่มต้น
@@ -14769,17 +14898,19 @@ async function submitIntake(e) {
     if (target) target.focus();
     return toast(`${need.pick ? 'เลือก' : 'กรอก'} ${need.label} ก่อนแจกเคส (ช่องบังคับ)`, { err: true });
   }
+  const old = isOldKind(), prev = old ? prevMpOf(hn) : null, same = chipValue($('#i-mode')) === 'same' && !!prev;
   const manual = chipValue($('#i-mode')) === 'manual';
-  const pick = manual ? chipValue($('#i-pick')) : '';
+  const pick = manual ? chipValue($('#i-pick')) : same ? prev.mp : '';
   if (manual && !pick) return toast('เลือกผู้รับเคส หรือเปลี่ยนเป็นแจกอัตโนมัติ', { err: true });
+  const sameHow = serverHas(OLDCASE_API) || store.mode !== 'sheet' ? 'replan' : 'manual';   // Code.gs เก่า: เคสเดิมให้คนเดิมแบบเลือกเอง
   const batch = catIds.length > 1 ? 'b-' + uid() : '';
   const shared = { hn, name: $('#i-name').value, in: $('#i-in').value || workdayFrom(today()), note: $('#i-note').value, area: readArea('i'), ...readDose('i'), ...readDx('i'), ...readExtra('i'), ...(roomSitesOn() ? { sites: readSites('i') } : {}) };
   const recs = catIds.map((id, i) => {
     const k = catOf(id), simple = k.kind === 'simple';
     const plan = v => (simple ? '' : v);
     return normCase({
-      ...shared, id: uid(), cat: k.id, mp: pick, how: manual ? 'manual' : i ? 'follow' : 'auto', batch, n: countOf(k.id),
-      ct: plan($('#i-ct').value), sim: plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
+      ...shared, id: uid(), cat: k.id, mp: pick, how: same ? sameHow : manual ? 'manual' : i ? 'follow' : 'auto', batch, n: countOf(k.id),
+      ct: old ? '' : plan($('#i-ct').value), sim: old ? '' : plan($('#i-oncall').checked ? 'on call' : $('#i-sim').value),
       doc: plan(chipValue($('#i-doc'))), type: plan(chipValue($('#i-type'))), aim: plan(chipValue($('#i-aim'))), room: roomSitesOn() ? plan(chipValue($('#i-room'))) : '',
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
     });
@@ -14802,7 +14933,7 @@ async function submitIntake(e) {
     $('#i-hn').focus();
     const main = saved.filter(x => !rpOf(x)), jobs = saved.filter(x => rpOf(x));
     const summary = `${main.map(x => catOf(x.cat).label + (unitsOf(x) > 1 ? ` ×${unitsOf(x)}` : '')).join(', ')} → ${main[0].mp}${jobs.map(x => ` · ${rpOf(x).label} (${catOf(x.cat).label}) → ${x.mp}`).join('')}`;
-    toast(`แจกเคส ${hn}: ${summary}${manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (งานถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
+    toast(`แจกเคส ${hn}: ${summary}${same ? ' (เคสเดิม · คนเดิม)' : manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (งานถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
   } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
@@ -15159,7 +15290,8 @@ async function submitPin(e, clear) {
       }
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
-      const rpTo = t && t.replan && t.act !== 'off' ? rpTarget(ctx, ctx.date) : null;
+      const cpWait = !!t && t.replan && t.act !== 'off' && noNewCt(ev.reason);   // CP ไม่ทำ CT ใหม่: รอแจกในแถบแจกงานฟิสิกส์ (ลบงานที่ส่งไว้แล้วแต่ยังไม่เริ่ม)
+      const rpTo = t && t.replan && t.act !== 'off' && !cpWait ? rpTarget(ctx, ctx.date) : null;
       const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || (ev.act === 'treat' ? ctx.date : ''), ct: noNewCt(ev.reason) ? '' : ctx.date, mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
@@ -15173,7 +15305,7 @@ async function submitPin(e, clear) {
       } finally { if (rec) render(); }
       pinDlg.close();
       if (ctx.mode === 'ptags') { toast(`${rec.hn} · ${rec.ptags ? `รายละเอียดผู้ป่วย: ${rec.ptags}` : 'ล้างรายละเอียดผู้ป่วยแล้ว'}`); return; }
-      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}${replanNote(rp)}`);
+      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}${replanNote(rp)}${cpWait ? ` · รอแจกงานในแถบ${navLabel('work')}` : ''}`);
       return;
     }
     if (ctx.mode === 'logedit' || ctx.mode === 'logadd') { await store.editLog(ctx.rec, pin); logSaved(ctx.rec, ctx.mode === 'logadd'); pinDlg.close(); return; }   // editLog บันทึกรายการใหม่ได้ด้วย
@@ -15499,7 +15631,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-clear') return submitPin(null, true);
   const inCaseDlg = !!t.closest('#case-dlg');   // ปุ่มขั้นตอนในหน้าแก้ไขเคส: ใช้สิทธิ์แก้ไขเคส
   if (inCaseDlg && ds.stamp) return canEditCases() ? openStamp(ds.id, ds.stamp, ds.sid || '') : toast(RO_MSG, { err: true });
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ds.ctduty || ds.ctskip || ds.ctunskip || ds.ctuse || ds.apuse || ds.apskip || ds.apunskip || ds.apfill || ['add-rc', 'add-other', 'log-del', 'course-add', 'ct-add', 'ct-pull', 'ct-apull', 'ap-add', 'ap-del'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ds.ctduty || ds.ctskip || ds.ctunskip || ds.ctuse || ds.cpsend || ds.apuse || ds.apskip || ds.apunskip || ds.apfill || ['add-rc', 'add-other', 'log-del', 'course-add', 'ct-add', 'ct-pull', 'ct-apull', 'ap-add', 'ap-del'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -15510,6 +15642,7 @@ document.addEventListener('click', e => {
   if (ds.ctduty) return openDuty(ds.ctduty, 'ct');
   if (ds.ctroom) { pref.set('ctRoom', ds.ctroom); return renderCt(); }
   if (ds.ctuse) return useCt(ds.ctuse);
+  if (ds.cpsend) return sendCp(ds.cpsend, t);   // แถบแจกงานฟิสิกส์: แจกงานวางแผนใหม่ที่รอ (CP ไม่ทำ CT ใหม่)
   if (ds.ctskip) return markCt(ds.ctskip, 'skip');
   if (ds.ctunskip) return markCt(ds.ctunskip, '');
   if (ds.ctunlink !== undefined) { intakeCt = ''; return renderCtPullBtn(); }
@@ -16268,6 +16401,7 @@ intake.addEventListener('change', e => {
   clearMissing(e);
   if (siteChip(e)) return;
   if (e.target.name === 'icat') { catOrder = catOrder.filter(id => id !== e.target.value); if (e.target.checked) catOrder.push(e.target.value); else delete catCount[e.target.value]; }
+  if (e.target.name === 'ikind') setKind(e.target.value, 'user');
   if (e.target.name === 'icat' || e.target.name === 'itech' || e.target.name === 'itype' || e.target.id === 'i-dx') applyRules();
   if (e.target.name === 'icat') syncSiteCats('i');
   if (e.target.id === 'i-in') renderIntake(); else syncIntake();
@@ -16275,6 +16409,7 @@ intake.addEventListener('change', e => {
 intake.addEventListener('input', e => {
   intakeTouched = true;
   clearMissing(e);
+  if (e.target.id === 'i-hn') syncIntake();   // HN ที่กำลังฉายอยู่ = เคสเดิม
   if (e.target.id === 'i-dx') applyRules();
   doseInput(e);
   if (e.target.dataset.cnt && e.target.value !== '') { catCount[e.target.dataset.cnt] = clampN(e.target.value); syncIntake(); }
