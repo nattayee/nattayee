@@ -7252,8 +7252,8 @@ async function readRepFile(file) {
   }
   if (b[0] === 0xd0 && b[1] === 0xcf) throw new Error('ไฟล์ .xls แบบเก่า (Excel 97–2003) อ่านในเบราว์เซอร์ไม่ได้ · เปิดใน Excel แล้วบันทึกเป็น .xlsx หรือ .csv ก่อน');
   let text = new TextDecoder('utf-8').decode(buf);
-  if (text.includes('�')) { try { text = new TextDecoder('windows-874').decode(buf); } catch (e) { /* ใช้ UTF-8 */ } }
-  text = text.replace(/^﻿/, '');
+  if (text.includes('\uFFFD')) { try { text = new TextDecoder('windows-874').decode(buf); } catch (e) { /* ใช้ UTF-8 */ } }
+  text = text.replace(/^\uFEFF/, '');
   if (/^\s*</.test(text)) {
     const xml = /<Workbook[\s>]/i.test(text) && /<Row[\s>]/.test(text), doc = new DOMParser().parseFromString(text, xml ? 'text/xml' : 'text/html');
     if (xml) return [{ name: 'Sheet1', rows: [...doc.getElementsByTagName('Row')].map(r => [...r.getElementsByTagName('Cell')].map(c => c.textContent.trim())) }];
