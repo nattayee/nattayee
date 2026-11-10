@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.1';
-const API_LEVEL = 63;
+const CODE_VERSION = '2026-11-10.2';
+const API_LEVEL = 64;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -191,6 +191,8 @@ TABLES.dq = {
     ['id', 'id'], ['hn', 'HN'], ['name', 'Name'], ['doc', 'แพทย์'], ['how', 'วิธีแจก'], ['date', 'วันที่แจก'], ['st', 'สถานะ'], ['note', 'Note'],
     ['by', 'แจกโดย'], ['created', 'Created'], ['updated', 'Updated'],
     ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD
+    // API 64 ดึงจากรายงาน Consult ของ HIS (how = import · src = his · date = วันที่รับ Consult): ไม่นับในคิว ไม่ไปรอลงนัด · ใช้ในสรุปรายเดือนและไฟล์ส่งออก
+    ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icd', 'ICD10'], ['src', 'ที่มา'],
   ],
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
@@ -2953,11 +2955,55 @@ function dqEdit(id, ch, pin, token) {
     if ('doc' in ch) {
       const d = dqCut_(ch.doc, 10).toUpperCase();
       if (dqDocs_(cfg).indexOf(d) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + d);
-      if (d !== cur.doc) { set.doc = d; set.how = 'manual'; }
+      if (d !== cur.doc) { set.doc = d; if (cur.how !== 'import') set.how = 'manual'; }   // ดึงจากรายงาน: ยังไม่นับในคิว
     }
     set.updated = dqNow_();
     writeFields_(sh, row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
     return Object.assign(cur, set);
+  });
+}
+/**
+ * ดึงจากรายงานผู้ป่วยที่รับ Consult ของ HIS (หน้าเว็บอ่านไฟล์ จับคู่แพทย์ผู้นัด → รหัสแพทย์แล้วส่งมา) · recs = [{ hn, name, doc, date: วันที่รับ Consult, visit, chan, refer, icd }]
+ * ใหม่ = how import (ไม่นับในคิว ไม่ไปรอลงนัด) · HN เดียวกันที่แจกไว้แล้วภายใน 30 วัน = ไม่เพิ่ม เติมเฉพาะช่องที่ยังว่าง (วันที่นัดมา ช่องทาง ส่งตัวจาก ICD10) · ดึงไฟล์เดิมซ้ำได้
+ */
+const DQ_IMPORT_DAYS = 30;
+function dqImport(recs, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  if (!Array.isArray(recs) || !recs.length) throw new Error('ไม่มีรายการที่จะดึง');
+  if (recs.length > 3000) throw new Error('ดึงได้ครั้งละไม่เกิน 3000 รายการ');
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v), dayMs = v => Date.parse(v + 'T00:00:00Z');
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss) || {}, all = dqDocs_(cfg), sh = tableSheet_(ss, 'dq'), header = headerOf_(sh);
+    const tz = ss.getSpreadsheetTimeZone(), cv = rowConv_(TABLES.dq, header, tz), n = sh.getLastRow() - 1;
+    const cur = n > 0 ? sh.getRange(2, 1, n, header.length).getValues().map((r, i) => Object.assign(cv.conv(r), { row: i + 2 })) : [];
+    const byHn = {};
+    cur.forEach(r => { const k = hnLoose_(r.hn); if (k) (byHn[k] = byHn[k] || []).push(r); });
+    const by = String(u.name || u.username || u.me || ''), t0 = Date.now(), add = [], skip = { have: 0, nodoc: 0, bad: 0 }, filled = [];
+    recs.forEach((r, i) => {
+      r = r && typeof r === 'object' ? r : {};
+      const hn = dqCut_(r.hn, 40), doc = dqCut_(r.doc, 10).toUpperCase(), date = dqCut_(r.date, 10), k = hnLoose_(hn);
+      if (!hn || !isDate(date)) { skip.bad++; return; }
+      if (all.indexOf(doc) < 0) { skip.nodoc++; return; }
+      const ext = { visit: isDate(dqCut_(r.visit, 10)) ? dqCut_(r.visit, 10) : '', chan: dqCut_(r.chan, 100), refer: dqCut_(r.refer, 200), icd: dqCut_(r.icd, 200) };
+      const same = (byHn[k] || []).filter(x => isDate(x.date) && Math.abs(dayMs(x.date) - dayMs(date)) <= DQ_IMPORT_DAYS * 864e5)[0];
+      if (same) {
+        skip.have++;
+        const set = {};
+        Object.keys(ext).forEach(f => { if (ext[f] && !String(same[f] || '').trim()) set[f] = ext[f]; });
+        if (same.row && Object.keys(set).length) {
+          set.updated = dqNow_();
+          writeFields_(sh, same.row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
+          Object.assign(same, set);
+          filled.push(Object.assign({}, same, { row: undefined }));
+        }
+        return;
+      }
+      const rec = Object.assign({ id: Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: 'import', date: date, st: '', note: '', src: 'his', by: by, created: new Date(t0 + i).toISOString(), updated: '' }, ext);
+      add.push(rec);
+      (byHn[k] = byHn[k] || []).push(rec);
+    });
+    if (add.length) appendNew_(ss, 'dq', add);
+    return { added: add, filled: filled.map(x => { delete x.row; return x; }), skipped: skip };
   });
 }
 // ลบรายการ (PIN) · รายการตามคิวที่ลบ = คิวนั้นกลับไปเป็นของคนที่ถึงคิว
@@ -3007,7 +3053,7 @@ function dqLeaveRemove(id, pin, token) {
  *       skips: { 'YYYY-MM': { รหัส: n } }, pointer: { code, at } | null, payback: คืนคิวสูงสุดต่อคนต่อรอบ (0 = ไม่จำกัด), date: วันที่แจก ('' = ไม่ดูวันลา), ym: หักคิวรายเดือนนับถึงเดือนนี้ }
  * - วนตามลำดับแพทย์ · เลือกเอง (how = manual): คิวไม่ขยับ คนที่ได้ถูกข้าม 1 ครั้งเมื่อคิววนมาถึง · หักคิวรายเดือน: ข้ามตามจำนวนครั้ง (ใช้ไม่หมดยกไปเดือนถัดไป)
  * - ถึงคิวแพทย์ที่ลา: แพทย์ที่ไม่ลารับแทน (คนที่ติดค้างน้อยที่สุด ถัดจากคนลา) และติดคิวไว้ · คิววนถึงคนที่รับแทนเมื่อแพทย์ที่ลากลับมาแล้ว = คืนคิวให้แพทย์ที่ลา (ลาไม่เสียคิว)
- * - แจกแล้วไม่ตรงคิว (เช่น ลงวันลาย้อนหลัง): คิวไม่ขยับ คนที่ได้ถูกข้ามเมื่อคิววนมาถึง (เหมือนเลือกเอง)
+ * - แจกแล้วไม่ตรงคิว (เช่น ลงวันลาย้อนหลัง): คิวไม่ขยับ คนที่ได้ถูกข้ามเมื่อคิววนมาถึง (เหมือนเลือกเอง) · ดึงจากรายงาน HIS (how = import) = ไม่นับในคิว
  * คืนรหัสแพทย์ที่ได้เคสถัดไป ('' = ไม่มีใครรับได้) · trace: log (ผลของแต่ละรายการ), credit (รอหักคิว), owe (ค้างคืนคิว), next, ahead(k) (ถัดไป k เคส ไม่ดูวันลา)
  */
 function dqPick_(o, trace) {
@@ -3064,6 +3110,7 @@ function dqPick_(o, trace) {
       Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) st.credit[code] = (st.credit[code] || 0) + m; });
       return;
     }
+    if (c.how === 'import') { log.push({ row: c, kind: 'import' }); return; }   // ดึงจากรายงาน HIS: ไม่นับในคิว
     if (idx(c.doc) < 0) { log.push({ row: c, kind: 'out' }); return; }   // แพทย์ที่ไม่อยู่ในคิว
     if (c.how === 'manual') { st.credit[c.doc] = (st.credit[c.doc] || 0) + 1; log.push({ row: c, kind: 'manual' }); return; }
     const s = copy(st), res = walk(s, c.date);
