@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-09.8';
-const API_LEVEL = 62;
+const CODE_VERSION = '2026-11-10.1';
+const API_LEVEL = 63;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -116,6 +116,8 @@ const TABLES = {
     fields: [
       ['id', 'id'], ['hn', 'HN'], ['title', 'คำนำหน้า'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'วันเกิด'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'],
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+      // API 63 (ตามรายงาน Consult จาก HIS): วันที่รับ Consult · วันที่นัดมา (YYYY-MM-DD) · ช่องทาง · ส่งตัวจาก (โรงพยาบาลต้นทาง) · ICD-10 อื่น (รหัสที่เหลือ คั่นด้วย , ) · ชีตเดิม: เพิ่มคอลัมน์ท้ายให้เอง
+      ['consult', 'วันที่รับ Consult'], ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icds', 'ICD-10 อื่น'],
     ],
   },
   // แถบนัดคิวใส่แร่: นัดใส่แร่หนึ่งแถวต่อหนึ่ง Fraction (course = คอร์สเดียวกัน) · status = นัดแล้ว / มาตามนัด / ยกเลิก · mp / rc = รหัสนักฟิสิกส์ที่ลงชื่อ · rtt = ชื่อ RTT
@@ -2111,7 +2113,8 @@ function vacImport(token) {
  * rec = ช่องใน REG_FIELDS · HN คำนำหน้า ชื่อ-สกุล บังคับตาม ตั้งค่า → ลงทะเบียน (config.reg.form · ยังไม่ตั้ง = บังคับ) · ต้องมี HN หรือชื่อ-สกุล
  * HN ซ้ำกับผู้ป่วยคนอื่นไม่ได้ (ไม่สนช่องว่างและตัวพิมพ์) · id ที่ยังไม่มี = เพิ่มใหม่ · คืนรายการหลังบันทึก
  */
-const REG_FIELDS = ['hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note'];
+const REG_FIELDS = ['hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'consult', 'visit', 'chan', 'refer', 'icds'];
+const REG_CUT_ = k => (k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : k === 'consult' || k === 'visit' ? 10 : 200);
 const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase();
 const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name).trim();
 // ผู้ป่วยที่ลงทะเบียน · แถวที่บันทึกด้วยรุ่น 2026-10-30.1 (คอลัมน์ ชื่อ และ สกุล) ใช้สองคอลัมน์นั้นเป็นชื่อ-สกุล
@@ -2382,7 +2385,31 @@ function regDriveHead_(rows, hnCol) {
 // เดาหัวคอลัมน์ของแต่ละช่องจากชื่อหัวคอลัมน์
 function regDriveGuess_(head) {
   const find = re => head.filter(h => re.test(h))[0] || '';
-  return { hn: find(/^hn$/i), name: find(/ชื่อ.*(สกุล|คนไข้|ผู้ป่วย)|^ชื่อ$/), doc: find(/แพทย์|doctor/i), icd: find(/icd\s*-?10/i), dx: find(/^dx\b|diag/i), right: find(/^mc$|สิทธิ/i), note: '', filterCol: find(/คลินิกที่มารับบริการ/) || find(/คลินิก|clinic/i) };
+  return { hn: find(/^hn$/i), name: find(/ชื่อ.*(สกุล|คนไข้|ผู้ป่วย)|^ชื่อ$/), doc: find(/แพทย์|doctor/i), icd: find(/icd\s*-?10/i), dx: find(/^dx\b|diag/i), right: find(/^mc$|สิทธิ/i), note: '',
+    consult: find(/consult|รับปรึกษา/i), visit: find(/วันที่นัด|นัดมา|^นัด$/), chan: find(/ช่องทาง|channel/i), refer: find(/ส่งตัว|ส่งต่อจาก|ต้นทาง|refer\s*from/i),
+    filterCol: find(/คลินิกที่มารับบริการ/) || find(/คลินิก|clinic/i) };
+}
+// วันที่ในไฟล์ → YYYY-MM-DD: วันที่ของชีต · YYYY-MM-DD · d/m/yy(yy) · d-Mon-yy · 1 ต.ค. 69 · เลขวันที่ของ Excel · ปี พ.ศ. (เกิน 2400 / 2 หลักตั้งแต่ 40) = ลบ 543 · อ่านไม่ได้ = ''
+const REG_MON_ = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12, 'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6, 'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12 };
+function regDate_(v, tz) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v) ? '' : Utilities.formatDate(v, tz || 'Asia/Bangkok', 'yyyy-MM-dd');
+  const s = String(v == null ? '' : v).trim(), two = n => (n < 10 ? '0' : '') + n;
+  if (!s) return '';
+  const out = (y, m, d) => {
+    y = +y; m = +m; d = +d;
+    if (y < 100) y = y >= 40 ? 2500 + y : 2000 + y;
+    if (y > 2400) y -= 543;
+    return y > 1900 && y < 2200 && m >= 1 && m <= 12 && d >= 1 && d <= new Date(Date.UTC(y, m, 0)).getUTCDate() ? y + '-' + two(m) + '-' + two(d) : '';   // วันที่ไม่มีจริง (31/02) = ''
+  };
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return out(m[1], m[2], m[3]);
+  m = /^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})$/.exec(s);
+  if (m) return out(m[3], m[2], m[1]);
+  m = /^(\d{1,2})[\s-]+([A-Za-z]{3})[A-Za-z]*\.?[\s-]+(\d{2,4})$/.exec(s) || /^(\d{1,2})\s*([ก-๙]\.[ก-๙]{1,2}\.)\s*(\d{2,4})$/.exec(s);
+  if (m && REG_MON_[m[2].toLowerCase()]) return out(m[3], REG_MON_[m[2].toLowerCase()], m[1]);
+  m = /^(\d{5})(?:\.\d+)?$/.exec(s);
+  if (m && +m[1] > 20000 && +m[1] < 80000) { const d = new Date(Date.UTC(1899, 11, 30) + +m[1] * 864e5); return out(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  return '';
 }
 // ชื่อพร้อมคำนำหน้า → { title, name } · น.ส. = นางสาว · เด็กชาย = ด.ช. · ยศ / คำย่ออื่น (ร.ต.อ., พญ.) เป็นคำนำหน้าตามเดิม
 const REG_TITLES_ = [['นางสาว', 'นางสาว'], ['น.ส.', 'นางสาว'], ['นาง', 'นาง'], ['นาย', 'นาย'], ['เด็กชาย', 'ด.ช.'], ['ด.ช.', 'ด.ช.'], ['เด็กหญิง', 'ด.ญ.'], ['ด.ญ.', 'ด.ญ.']];
@@ -2423,7 +2450,7 @@ function regDriveRecs_(rows, cfg, d) {
   const set = d.map || {}, hi = regDriveHead_(rows, set.hn);
   if (hi < 0) return { recs: [], filtered: 0, err: 'ไม่พบหัวคอลัมน์ ' + (set.hn || 'HN') };
   const head = rows[hi], g = regDriveGuess_(head), map = {};
-  ['hn', 'name', 'doc', 'icd', 'dx', 'right', 'note'].forEach(k => { map[k] = String((k in set ? set[k] : g[k]) || '').trim(); });
+  ['hn', 'name', 'doc', 'icd', 'dx', 'right', 'note', 'consult', 'visit', 'chan', 'refer'].forEach(k => { map[k] = String((k in set ? set[k] : g[k]) || '').trim(); });
   if (!map.hn || !map.name) return { recs: [], filtered: 0, err: 'ยังไม่ได้เลือกคอลัมน์ ' + (map.hn ? 'ชื่อ-สกุล' : 'HN') };
   const col = k => (map[k] ? head.indexOf(map[k]) : -1), cell = (r, k) => { const i = col(k); return i < 0 ? '' : String(r[i] || '').trim(); };
   const flt = d.filter || {}, fc = flt.col && flt.col !== '-' ? head.indexOf(String(flt.col).trim()) : -1, fv = Array.isArray(flt.vals) ? flt.vals.map(String) : [];
@@ -2435,7 +2462,8 @@ function regDriveRecs_(rows, cfg, d) {
     if (fc >= 0 && fv.length && fv.indexOf(String(r[fc] || '').trim()) < 0) { filtered++; return; }
     const nm = regSplitName_(cell(r, 'name')), docRaw = cell(r, 'doc'), doc = regDocCode_(docRaw, cfg), icds = cell(r, 'icd').toUpperCase().match(/[A-Z]\d{2}(?:\.\d{1,2})?/g) || [], icd = icds.filter(x => /^[CD]/.test(x))[0] || icds[0] || '';
     const note = [cell(r, 'note'), docRaw && !doc ? 'แพทย์: ' + docRaw : ''].filter(Boolean).join(' · ');
-    out.push({ hn: hn.slice(0, 40), title: nm.title.slice(0, 40), name: nm.name.slice(0, 200), sex: regSexOf_(nm.title, cfg), birth: '', phone: '', right: regRightOf_(cell(r, 'right'), cfg).slice(0, 200), doc: doc, icd: icd, dx: cell(r, 'dx').slice(0, 2000), note: note.slice(0, 2000) });
+    out.push({ hn: hn.slice(0, 40), title: nm.title.slice(0, 40), name: nm.name.slice(0, 200), sex: regSexOf_(nm.title, cfg), birth: '', phone: '', right: regRightOf_(cell(r, 'right'), cfg).slice(0, 200), doc: doc, icd: icd, dx: cell(r, 'dx').slice(0, 2000), note: note.slice(0, 2000),
+      consult: regDate_(cell(r, 'consult')), visit: regDate_(cell(r, 'visit')), chan: cell(r, 'chan').slice(0, 200), refer: cell(r, 'refer').replace(/\s+/g, ' ').slice(0, 200), icds: icds.filter((x, i) => x !== icd && icds.indexOf(x) === i).join(', ').slice(0, 200) });
   });
   return { recs: out, filtered: filtered, err: '' };
 }
@@ -2600,6 +2628,7 @@ function regSave(rec, pin, token) {
   if (!cut(rec.hn, 40) && !cut(rec.name, 200)) throw new Error('กรอก HN หรือชื่อ-สกุล');
   const birth = cut(rec.birth, 10);
   if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) throw new Error('วันเกิดไม่ถูกต้อง');
+  [['consult', 'วันที่รับ Consult'], ['visit', 'วันที่นัดมา']].forEach(f => { const v = cut(rec[f[0]], 10); if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error(f[1] + ' ไม่ถูกต้อง'); });
   pinChange_(u, pin, rowExists_('reg', rec.id));
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
@@ -2611,7 +2640,7 @@ function regSave(rec, pin, token) {
       if (back.length) return regSaveInto_(ss, back[0], rec, cut);
     }
     const set = {};
-    REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
+    REG_FIELDS.forEach(k => { set[k] = cut(rec[k], REG_CUT_(k)); });
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
@@ -2637,7 +2666,7 @@ function regRowAt_(ss, sh, header, row) {
 
 function regSaveInto_(ss, id, rec, cut) {
   const sh = tableSheet_(ss, 'reg'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id), set = {};
-  REG_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : 200); });
+  REG_FIELDS.forEach(k => { set[k] = cut(rec[k], REG_CUT_(k)); });
   set.updated = new Date().toISOString();
   if (row) writeFields_(sh, row, header, TABLES.reg.fields.filter(f => f[0] in set), set);
   return row ? regRowAt_(ss, sh, header, row) : null;

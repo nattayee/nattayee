@@ -2510,8 +2510,15 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       </div>
       <label class="field" data-rgf="phone"><span class="lbl">เบอร์โทร</span><input id="r-phone" type="tel" maxlength="40" autocomplete="off"></label>
       <div class="field" data-rgf="right"><span class="lbl">สิทธิการรักษา</span><div class="chips" id="r-right" role="radiogroup" aria-label="สิทธิการรักษา"></div></div>
+      <div class="row2">
+        <label class="field" data-rgf="consult"><span class="lbl">วันที่รับ Consult</span><input type="date" id="r-consult"></label>
+        <label class="field" data-rgf="visit"><span class="lbl">วันที่นัดมา</span><input type="date" id="r-visit"></label>
+      </div>
+      <div class="field" data-rgf="chan"><span class="lbl">ช่องทาง</span><div class="chips" id="r-chan" role="radiogroup" aria-label="ช่องทาง"></div></div>
+      <label class="field" data-rgf="refer"><span class="lbl">ส่งตัวจาก <span class="sub-lbl">โรงพยาบาลต้นทาง · พิมพ์เพื่อเลือก หรือพิมพ์ชื่ออื่น</span></span><input id="r-refer" maxlength="200" autocomplete="off" list="r-refer-list" placeholder="เช่น โรงพยาบาลลำปาง"><datalist id="r-refer-list"></datalist></label>
       <div class="field" data-rgf="doc"><span class="lbl">แพทย์ (Doc)</span><div class="chips" id="r-doc" role="radiogroup" aria-label="แพทย์"></div></div>
       <div class="field dx-field" data-rgf="dx"><span class="lbl">Diag (ICD-10)</span><div class="combo"><input id="r-dx" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="r-dx-list" autocomplete="off" placeholder="พิมพ์รหัสหรือชื่อ เช่น C50, เต้านม, breast"><ul class="combo-list" id="r-dx-list" role="listbox" hidden></ul></div></div>
+      <label class="field" data-rgf="icds"><span class="lbl">ICD-10 อื่น <span class="sub-lbl">รหัสที่เหลือเมื่อมีหลายรหัส คั่นด้วย , เช่น C79.5, C77.3</span></span><input id="r-icds" maxlength="200" autocomplete="off" placeholder="เช่น C79.5"></label>
       <label class="field" data-rgf="note"><span class="lbl">Note</span><input id="r-note" maxlength="2000" autocomplete="off"></label>
       <p class="ct-took" id="r-appts" hidden></p>
     </div>
@@ -3188,6 +3195,8 @@ const cbctTechDef = x => { const p = str(x).split('/').map(v => v.trim().toLower
 // นำเข้านัดจากระบบนัดคิวเทคนิคพิเศษ (Code.gs spqCheck, spqPull · แท็บ SpecialQueue · เฉพาะ HN ที่มีในระบบ) · ตั้งค่า → ลงนัด
 const SPQ_API = 59;
 const spqOn = () => serverHas(SPQ_API);
+const REG2_API = 63;   // Code.gs ที่เก็บ วันที่รับ Consult · วันที่นัดมา · ช่องทาง · ส่งตัวจาก · ICD-10 อื่น (Code.gs รุ่นเก่า: ช่องเหล่านี้ไม่แสดงในฟอร์ม)
+const REG2_KEYS = ['consult', 'visit', 'chan', 'refer', 'icds'];
 const REG_API = 40;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove) แบบชื่อ-สกุลช่องเดียว และ HN คำนำหน้า ชื่อ-สกุล บังคับตามตั้งค่า
 const regOn = () => serverHas(REG_API);
 // แถบลงทะเบียน: ดึงผู้ป่วยจากไฟล์ในโฟลเดอร์ Google Drive (regDriveCheck, regDrivePull, regDriveTick) · ตั้งค่า → ลงทะเบียน
@@ -3199,11 +3208,15 @@ const ARCH_API = 61;
 const archOn = () => store.mode === 'sheet' && serverHas(ARCH_API);
 const ARCH_YEARS = [[0, 'ไม่ย้าย'], [1, '1 ปี'], [2, '2 ปี'], [3, '3 ปี (ค่าเริ่มต้น)'], [5, '5 ปี']];
 const ARCH_DRIVE = [[0, 'ไม่แยก (ใช้กติกาด้านบน)'], [1, '1 เดือน'], [3, '3 เดือน'], [6, '6 เดือน (ค่าเริ่มต้น)'], [12, '12 เดือน']];   // ดึงจาก Drive แล้วไม่เคยใช้   // Code.gs ที่อ่านไฟล์ .xls (Excel 97–2003 / HTML / ข้อความ) และแจ้งไฟล์ที่อ่านไม่ได้
-const REG_DRIVE_FIELDS = [['hn', 'HN', true], ['name', 'ชื่อ-สกุล (มีคำนำหน้าได้)', true], ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['right', 'สิทธิการรักษา'], ['note', 'Note']];
+const REG_DRIVE_FIELDS = [['hn', 'HN', true], ['name', 'ชื่อ-สกุล (มีคำนำหน้าได้)', true], ['doc', 'แพทย์'], ['icd', 'ICD-10 (หลายรหัส: รหัสแรกที่เป็น C/D = หลัก ที่เหลือ = ICD-10 อื่น)'], ['dx', 'Diagnosis'], ['right', 'สิทธิการรักษา'],
+  ['consult', 'วันที่รับ Consult'], ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['note', 'Note']];
 const REG_DRIVE_EVERY = [[15, 'ทุก 15 นาที'], [30, 'ทุก 30 นาที'], [60, 'ทุก 1 ชั่วโมง'], [180, 'ทุก 3 ชั่วโมง'], [360, 'ทุก 6 ชั่วโมง'], [1440, 'วันละครั้ง']];
 // แถบลงทะเบียน: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, ซ่อนไม่ได้] (ตั้งค่า → ลงทะเบียน) · HN และชื่อ-สกุลซ่อนไม่ได้ · ต้องมี HN หรือชื่อ-สกุลอย่างน้อยหนึ่งช่อง
-const REG_FORM = [['hn', 'HN', 'req', true], ['title', 'คำนำหน้า', 'req'], ['name', 'ชื่อ-สกุล', 'req', true], ['sex', 'เพศ', 'show'], ['birth', 'วันเกิด (อายุ)', 'show'], ['phone', 'เบอร์โทร', 'off'], ['right', 'สิทธิการรักษา', 'off'], ['doc', 'แพทย์ (Doc)', 'show'], ['dx', 'Diag (ICD-10)', 'show'], ['note', 'Note', 'show']];
-const REG_LISTS = [['titles', 'คำนำหน้า'], ['rights', 'สิทธิการรักษา']];
+// วันที่รับ Consult · วันที่นัดมา · ช่องทาง · ส่งตัวจาก · ICD-10 อื่น: ตามรายงานผู้ป่วยที่รับ Consult จาก HIS (Code.gs API 63)
+const REG_FORM = [['hn', 'HN', 'req', true], ['title', 'คำนำหน้า', 'req'], ['name', 'ชื่อ-สกุล', 'req', true], ['sex', 'เพศ', 'show'], ['birth', 'วันเกิด (อายุ)', 'show'], ['phone', 'เบอร์โทร', 'off'], ['right', 'สิทธิการรักษา', 'off'],
+  ['consult', 'วันที่รับ Consult', 'show'], ['visit', 'วันที่นัดมา', 'show'], ['chan', 'ช่องทาง', 'show'], ['refer', 'ส่งตัวจาก (โรงพยาบาลต้นทาง)', 'show'],
+  ['doc', 'แพทย์ (Doc) · แพทย์ผู้นัด', 'show'], ['dx', 'Diag (ICD-10)', 'show'], ['icds', 'ICD-10 อื่น (มีหลายรหัส)', 'show'], ['note', 'Note', 'show']];
+const REG_LISTS = [['titles', 'คำนำหน้า'], ['rights', 'สิทธิการรักษา'], ['chans', 'ช่องทาง (รับ Consult)'], ['refers', 'ส่งตัวจาก: รายชื่อโรงพยาบาล (ตัวเลือกตอนพิมพ์ · พิมพ์ชื่ออื่นได้)']];
 // คอลัมน์ในชีตของ TDF Dose Calculator (มีคอลัมน์ JSON ของทั้งรายการ = ไม่ต้องเลือกคอลัมน์อื่น)
 const TDF_FIELDS = [['rc', 'คน Recheck (RC)'], ['calc', 'คนคำนวณ'], ['hn', 'HN'], ['name', 'ชื่อผู้ป่วย'], ['reviewAt', 'วันที่ Recheck'], ['date', 'วันที่คำนวณ'],
   ['type', 'ประเภท'], ['status', 'สถานะ'], ['id', 'รหัส'], ['json', 'ข้อมูลทั้งรายการ (JSON)']];
@@ -3379,6 +3392,12 @@ const DEFAULT_CONFIG = {
     cal: { simNew: true, simBadge: 'lim', simAll: 'total', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
+    chans: ['MOPH Refer', 'E-mail', 'Line'],   // ช่องทางที่รับ Consult · refers = โรงพยาบาลต้นทางที่ส่งตัวบ่อย (ตามรายงาน Consult)
+    refers: ['โรงพยาบาลลำปาง ลำปาง', 'โรงพยาบาลเชียงรายประชานุเคราะห์ เชียงราย', 'โรงพยาบาลแพร่ แพร่', 'โรงพยาบาลน่าน น่าน', 'โรงพยาบาลอุตรดิตถ์ อุตรดิตถ์', 'โรงพยาบาลพะเยา พะเยา',
+      'โรงพยาบาลมหาราชนครเชียงใหม่ มหาวิทยาลัยเชียงใหม่', 'โรงพยาบาลลานนา เชียงใหม่', 'โรงพยาบาลสมเด็จพระยุพราชปัว น่าน', 'โรงพยาบาลแม่สอด ตาก', 'โรงพยาบาลลำพูน ลำพูน',
+      'โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ตาก', 'โรงพยาบาลนครพิงค์ เชียงใหม่', 'โรงพยาบาลเกาะคา ลำปาง', 'โรงพยาบาลกำแพงเพชร กำแพงเพชร', 'โรงพยาบาลศรีสังวรสุโขทัย สุโขทัย',
+      'โรงพยาบาลเชียงคำ พะเยา', 'โรงพยาบาลสุโขทัย สุโขทัย', 'โรงพยาบาลพริ้นซ์ ลำพูน', 'โรงพยาบาลเกษมราษฎร์ศรีบุรินทร์ เชียงราย', 'โรงพยาบาลมหาวิทยาลัยนเรศวร',
+      'โรงพยาบาลค่ายสุรศักดิ์มนตรี ลำปาง', 'โรงพยาบาลสบปราบ ลำปาง', 'โรงพยาบาลเถิน ลำปาง', 'โรงพยาบาลแม่พริก ลำปาง', 'โรงพยาบาลพุทธชินราช พิษณุโลก'],
     drive: { on: false, url: '', every: 60, map: {}, filter: { col: '', vals: [] } }, archiveYears: 3, archiveDriveMonths: 6 },   // archiveYears: ย้ายผู้ป่วยเก่าเข้าที่เก็บถาวร (0 = ไม่ย้าย)   // ดึงจาก Google Drive: map ไม่มีคีย์ = เดาจากหัวคอลัมน์ · filter.col '-' = ทุกแถว
   // แถบแจกงานแพทย์: perMonth = จำนวนเคสต่อเดือน (แสดงความคืบหน้า / คาดการณ์) · off = แพทย์ที่ไม่รับคิว · skips = หักคิวรายเดือน { 'YYYY-MM': { รหัส: n } }
   // pointer = ตั้งคิวถัดไปเอง { code, at } · payback = คืนคิวหลังลาสูงสุดต่อแพทย์ต่อรอบ (0 = คืนทั้งหมดทันที) · ลำดับคิว = ลำดับใน แพทย์ (Doc)
@@ -4033,7 +4052,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-09.16';
+const PAGE_VERSION = '2026-11-10.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4728,8 +4747,8 @@ function demoDb() {
   // ผู้ป่วยที่ลงทะเบียน (ชื่อสมมติ): สองคนแรกมีนัดด้านบน
   const rg = (i, title, name, sex, birth, o) => ({ id: 'demo-r' + i, hn: String(999000300 + i), title, name, sex, birth, created: new Date(t0 + i * 36e5).toISOString(), ...o });
   const reg = [
-    rg(1, 'นาย', 'ตัวอย่าง หนึ่ง', 'Male', '1958-04-12', { doc: 'SC', icd: 'C34.9' }),
-    rg(2, 'นาง', 'ตัวอย่าง สอง', 'Female', '1966-09-03', { doc: 'TA', icd: 'C50.9' }),
+    rg(1, 'นาย', 'ตัวอย่าง หนึ่ง', 'Male', '1958-04-12', { doc: 'SC', icd: 'C34.9', icds: 'C79.5', consult: d(-12), visit: d(-5), chan: 'MOPH Refer', refer: 'โรงพยาบาลลำปาง ลำปาง' }),
+    rg(2, 'นาง', 'ตัวอย่าง สอง', 'Female', '1966-09-03', { doc: 'TA', icd: 'C50.9', consult: d(-10), visit: d(-3), chan: 'E-mail', refer: 'โรงพยาบาลแพร่ แพร่' }),
     rg(5, 'นางสาว', 'ตัวอย่าง ห้า', 'Female', '1979-01-25', { created: new Date().toISOString() }),
   ];
   // นัดคิวใส่แร่ (ชื่อสมมติ): คอร์สละหลาย Fx ในวันทำการ · นัดที่ผ่านมาแล้ว = มาตามนัด มี MP / RC · หนึ่งวันมีเคสเกินสูงสุด (6 เคส)
@@ -6343,12 +6362,15 @@ $('#ap-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[
 
 // แถบลงทะเบียน (แถบแรก): ผู้ป่วยที่ลงทะเบียน · HN คำนำหน้า ชื่อ สกุล บังคับ · HN ไม่ซ้ำ · ช่องอื่นตาม ตั้งค่า → ลงทะเบียน
 // แถบลงนัดดึงไปใช้: ช่อง HN ของฟอร์มลงนัด (พิมพ์ HN หรือชื่อ) และปุ่มลงนัดในตาราง → ชื่อ อายุ เพศ แพทย์ Diag
-const REG_KEYS = ['id', 'hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'by', 'created', 'updated'];
+const REG_KEYS = ['id', 'hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'consult', 'visit', 'chan', 'refer', 'icds', 'by', 'created', 'updated'];
 function normReg(o) {
   const r = {};
   for (const k of REG_KEYS) r[k] = str(o[k]);
   r.name = r.name || [o.first, o.last].map(str).filter(Boolean).join(' ');   // ข้อมูลตัวอย่างรุ่น 2026-10-30.1 (ชื่อ สกุล แยกกัน)
   r.birth = isDay(r.birth) ? r.birth : '';
+  r.consult = dateStr(r.consult);
+  r.visit = dateStr(r.visit);
+  r.icds = icdCodes(r.icds);
   r.doc = r.doc.toUpperCase();
   r.id = r.id || uid();
   return renRec('reg', r);
@@ -6378,16 +6400,19 @@ function ageOn(birth, on) {
   const a = Y - y - (M < m || (M === m && D < d) ? 1 : 0);
   return a >= 0 && a < 150 ? String(a) : '';
 }
-const rgMode = k => state.config.reg.form[k] || 'off';
+const rgMode = k => (REG2_KEYS.includes(k) && !serverHas(REG2_API) ? 'off' : state.config.reg.form[k] || 'off');
+// ICD-10 หลายรหัส → 'C79.5, C77.3' (ตัวพิมพ์ใหญ่ ไม่ซ้ำ)
+const icdCodes = v => [...new Set((str(v).toUpperCase().match(/[A-Z]\d{2}(?:\.\d{1,2})?/g) || []))].join(', ');
+const referShort = v => str(v).replace(/^โรงพยาบาล/, 'รพ.');
 const rgDay = r => (r.created ? iso(new Date(r.created)) : '');
 const RG_MAX = 200, RG_MAX_MONTH = 500;   // แถวสูงสุดในตารางแถบลงทะเบียน: ค้นหา / ดูรายเดือน
-const rgText = r => [r.hn, regName(r), r.name, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.note].join(' ').toLowerCase();
+const rgText = r => [r.hn, regName(r), r.name, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.icds, r.chan, r.refer, r.note].join(' ').toLowerCase();
 // นัดของผู้ป่วย (แถบลงนัด) ล่าสุดก่อน
 const regAppts = r => byHn(state.appt, r.hn).slice().sort((a, b) => (isDay(b.date) ? b.date : '9').localeCompare(isDay(a.date) ? a.date : '9') || b.created.localeCompare(a.created));
 const apShort = a => `${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${apState(a) === 'took' ? ' · ลง CT-SIM แล้ว' : apState(a) === 'skip' ? ' · ไม่มาทำ CT' : ''}`;
 const RG_OLD = 'แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 // คอลัมน์ในตาราง · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์ (อายุ ตามช่องวันเกิด)
-const RG_COLS = [['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'อายุ'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'], ['doc', 'แพทย์'], ['dx', 'Diag'], ['note', 'Note']];
+const RG_COLS = [['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'อายุ'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'], ['consult', 'รับ Consult'], ['visit', 'นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['doc', 'แพทย์'], ['dx', 'Diag'], ['note', 'Note']];
 // ตาราง: ผู้ป่วยที่ลงทะเบียนในเดือนที่เลือก (ล่าสุดก่อน) แยกตามวัน · มีคำค้น = ค้นทุกเดือน
 function renderReg() {
   const ym = state.month, edit = canEdit() && regOn(), apEdit = accessOf('appt') === 'edit' && apptOn();
@@ -6411,8 +6436,8 @@ function renderReg() {
   const cell = (r, k) => {
     if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b></td>`;
     if (k === 'name') return `<td class="ct-name">${esc(regName(r))}</td>`;
-    const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? dxShort(r) || r.icd : r[k];
-    return `<td class="ct-${k}"${k === 'birth' && r.birth ? ` title="เกิด ${esc(apDate(r.birth))}"` : ''}>${esc(v)}</td>`;
+    const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? [dxShort(r) || r.icd, rgMode('icds') !== 'off' && r.icds ? '+ ' + r.icds : ''].filter(Boolean).join(' ') : k === 'consult' || k === 'visit' ? (r[k] ? fmtDay(r[k]) : '') : k === 'refer' ? referShort(r.refer) : r[k];
+    return `<td class="ct-${k}"${k === 'birth' && r.birth ? ` title="เกิด ${esc(apDate(r.birth))}"` : k === 'refer' && r.refer ? ` title="${esc(r.refer)}"` : ''}>${esc(v)}</td>`;
   };
   const apCell = r => {
     const a = regAppts(r)[0];
@@ -6490,7 +6515,7 @@ function openRgForm(id) {
   if (!regOn()) return toast(RG_OLD, { err: true });
   if (rgDlg.open) rgDlg.close();
   const cfg = state.config;
-  editingRg = r ? clone(r) : normReg({ id: uid(), doc: rgMode('doc') !== 'off' ? myDoctor() : '' });
+  editingRg = r ? clone(r) : normReg({ id: uid(), doc: rgMode('doc') !== 'off' ? myDoctor() : '', consult: rgMode('consult') !== 'off' ? today() : '' });
   const g = editingRg;
   $('#rg-title').textContent = r ? `แก้ไขผู้ป่วย ${r.hn || regName(r)}` : 'ลงทะเบียนผู้ป่วย';
   for (const f of ['hn', 'name', 'phone', 'note']) $('#r-' + f).value = g[f] || '';
@@ -6499,6 +6524,12 @@ function openRgForm(id) {
   $('#r-birth').value = g.birth;
   $('#r-birth').max = today();
   ctChips('#r-right', 'rright', cfg.reg.rights, g.right);
+  $('#r-consult').value = g.consult;
+  $('#r-visit').value = g.visit;
+  ctChips('#r-chan', 'rchan', cfg.reg.chans, g.chan);
+  $('#r-refer').value = g.refer;
+  $('#r-refer-list').innerHTML = cfg.reg.refers.map(v => `<option value="${esc(v)}"></option>`).join('');
+  $('#r-icds').value = g.icds;
   ctChips('#r-doc', 'rdoc', docCodes(), g.doc);
   $$('#r-doc label').forEach(l => { const v = $('input', l).value; if (docName(v)) l.title = docName(v); });
   $('#r-dx').value = dxValue(g);
@@ -6514,9 +6545,8 @@ function openRgForm(id) {
   if (!r) $('#r-hn').focus();
 }
 function syncRgForm() {
-  const f = state.config.reg.form;
   for (const el of $$('[data-rgf]', rgForm)) {
-    const v = f[el.dataset.rgf] || 'off';
+    const v = rgMode(el.dataset.rgf);
     el.classList.toggle('pt-off', v === 'off');
     el.classList.toggle('ctf-req', v === 'req');
   }
@@ -6532,20 +6562,22 @@ const rgDup = () => { const k = hnKey($('#r-hn').value); return k ? state.reg.fi
 const RG_FILLED = {
   hn: () => str($('#r-hn').value), title: () => readTitle(), name: () => str($('#r-name').value), sex: () => chipValue($('#r-sex')), birth: () => $('#r-birth').value, phone: () => str($('#r-phone').value), right: () => chipValue($('#r-right')),
   doc: () => chipValue($('#r-doc')), dx: () => str($('#r-dx').value), note: () => str($('#r-note').value),
+  consult: () => $('#r-consult').value, visit: () => $('#r-visit').value, chan: () => chipValue($('#r-chan')), refer: () => str($('#r-refer').value), icds: () => icdCodes($('#r-icds').value),
 };
 const readRgForm = () => normReg({ ...editingRg, hn: str($('#r-hn').value), title: readTitle(), name: $('#r-name').value.replace(/\s+/g, ' '), sex: chipValue($('#r-sex')), birth: $('#r-birth').value,
-  phone: $('#r-phone').value, right: chipValue($('#r-right')), doc: chipValue($('#r-doc')), note: $('#r-note').value, ...readDx('r') });
+  phone: $('#r-phone').value, right: chipValue($('#r-right')), doc: chipValue($('#r-doc')), note: $('#r-note').value, ...readDx('r'),
+  ...(serverHas(REG2_API) ? { consult: $('#r-consult').value, visit: $('#r-visit').value, chan: chipValue($('#r-chan')), refer: str($('#r-refer').value).replace(/\s+/g, ' '), icds: icdCodes($('#r-icds').value) } : {}) });
 function submitRg(e, thenAp) {
   if (e) e.preventDefault();
   const rec = readRgForm();
   const flag = (el, msg) => { const f = el.closest('.field'); if (f) f.classList.add('missing'); el.focus(); toast(msg, { err: true }); };
   const other = chipValue($('#r-title')) === OTHER;
   // ช่องบังคับ (ตั้งค่า → ลงทะเบียน) ตามลำดับในฟอร์ม · HN คำนำหน้า ชื่อ-สกุล ข้อความเดิม
-  const f = state.config.reg.form, miss = REG_FORM.find(([k]) => f[k] === 'req' && !RG_FILLED[k]());
+  const miss = REG_FORM.find(([k]) => rgMode(k) === 'req' && !RG_FILLED[k]());
   if (miss) {
     const [k, l] = miss, box = $(`[data-rgf="${k}"]`, rgForm), el = k === 'title' ? (other ? $('#r-title-other') : $('#r-title input')) : $('input', box);
     const msg = k === 'hn' ? 'กรอก HN ก่อนบันทึก' : k === 'title' ? (other ? 'กรอกคำนำหน้า' : 'เลือกคำนำหน้า') : k === 'name' ? 'กรอกชื่อ-สกุล'
-      : `${['phone', 'dx', 'note'].includes(k) ? 'กรอก' : k === 'birth' ? 'ใส่' : 'เลือก'} ${l} ก่อนบันทึก (ช่องบังคับ)`;
+      : `${['phone', 'dx', 'note', 'refer', 'icds'].includes(k) ? 'กรอก' : ['birth', 'consult', 'visit'].includes(k) ? 'ใส่' : 'เลือก'} ${l} ก่อนบันทึก (ช่องบังคับ)`;
     return flag(el || box, msg);
   }
   if (!rec.hn && !rec.name) return flag($('#r-hn'), 'กรอก HN หรือชื่อ-สกุล');
