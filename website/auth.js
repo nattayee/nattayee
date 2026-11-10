@@ -12,7 +12,8 @@
   var CFG = S.auth || {};
   var TOKEN_KEY = "lpch-ro-token";
   var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
-    ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"], ["Other", "อื่นๆ"]];
+    ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"],
+    ["Register", "Register"], ["Refer", "Refer"], ["Other", "อื่นๆ"]];
   // Admin rights (same keys as ADMIN_PERMS in Code.gs). admin หลัก has all of them; admin หลัก picks them for each admin รอง.
   var PERMS = [
     ["users", "จัดการสมาชิก", "อนุมัติ ระงับ ลบ และเปลี่ยนตำแหน่งสมาชิกทั่วไป"],
