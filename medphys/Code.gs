@@ -22,7 +22,12 @@ const LPCH_EDIT_ROLES = ['MP'];   // ตำแหน่งใน LPCH ที่�
 const LPCH_ROLES = ['RO', 'MP', 'RTT', 'Nurse', 'Other', 'Register', 'Refer'];   // ตำแหน่งใน LPCH RO Workspace (ดึงเพิ่มได้จากรายชื่อสมาชิก)
 // คอลัมน์ Admin ใน ตั้งค่า → แถบเมนู (API 66): แอดมินใช้สิทธิ์รายแถบของคอลัมน์นี้แทนตำแหน่งของตัวเอง · ยังไม่ตั้ง = เท่า MP
 const ADMIN_ROLE = 'Admin';
-const navRole_ = u => (u && u.isAdmin && u.via !== 'google' ? ADMIN_ROLE : (u && u.role) || '');
+// คอลัมน์แอดมินรอง (API 67): ผู้ที่อยู่ในรายชื่อแอดมินรอง (config.subAdmins) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง · ยังไม่ตั้ง (หรือ "ตามตำแหน่ง") = ตามตำแหน่งของตัวเอง
+// การแก้ตั้งค่าของแอดมินรองยังเป็นคำขอที่รอแอดมินหลักอนุมัติ (cfgPropose) เหมือนเดิม
+const SUB_ROLE = 'SubAdmin';
+const navRole_ = u => (!u || u.via === 'google' ? (u && u.role) || '' : u.isAdmin ? ADMIN_ROLE : u.isSub ? SUB_ROLE : u.role || '');
+// สิทธิ์ของผู้ใช้ต่อแถบ: คอลัมน์ Admin / แอดมินรอง / ตำแหน่ง ตามที่ผู้ใช้เป็น
+const userAccess_ = (config, view, u) => navAccess_(config, view, navRole_(u), u && u.role);
 const LPCH_CHECK_SECONDS = 300;
 // หน้าเว็บ (index.html) โหลดจาก GitHub อัตโนมัติ จึงได้หน้าเว็บรุ่นล่าสุดเสมอ ไม่ต้องวางไฟล์ index ใหม่ทุกครั้ง
 // เปลี่ยนได้ที่ Script property PAGE_URL · ใส่ - เพื่อใช้ไฟล์ index ในโปรเจกต์ · เปิด …/exec?refresh=1 เพื่อโหลดรุ่นล่าสุดทันที
@@ -30,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.5';
-const API_LEVEL = 66;
+const CODE_VERSION = '2026-11-10.6';
+const API_LEVEL = 67;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -486,7 +491,7 @@ const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p',
   dq: ['dq', 'appt'], dqLeave: ['dq'] };   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
-  const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || navAccess_(config, v, navRole_(user)));
+  const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || userAccess_(config, v, user));
   Object.keys(GUEST_TABLES).forEach(t => { out[t] = GUEST_TABLES[t].some(v => seen.indexOf(v) >= 0); });
   return out;
 }
@@ -496,13 +501,14 @@ function guestNeeds_(user, config) {
  * ตั้งที่ ตั้งค่า → แถบเมนู (config.nav[i].access[role]) · ตำแหน่งที่ยังไม่ได้ตั้ง: MP บันทึกได้ทุกแถบที่ "แสดง"
  * ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น" (แบบเดิม) · แถบใหม่ที่การตั้งค่าเดิมยังไม่มี ทำตามแถบก่อนหน้า (NAV_PREV) หรือแถบที่ระบุ (NAV_LIKE) เหมือนหน้าเว็บ
  */
-function navAccess_(config, view, role) {
+function navAccess_(config, view, role, base) {
   const nav = config && Array.isArray(config.nav) ? config.nav : [];
   const find = v => nav.filter(x => x && x.view === v)[0];
   let x = find(view);
-  if (!x && NAV_LIKE[view]) return navAccess_(config, NAV_LIKE[view], role);
+  if (!x && NAV_LIKE[view]) return navAccess_(config, NAV_LIKE[view], role, base);
   if (!x) { let p = null; for (let v = view; !p && NAV_PREV[v]; v = NAV_PREV[v]) p = find(NAV_PREV[v]); x = { on: true, guest: p ? p.guest !== false : true }; }
   const acc = x.access && typeof x.access === 'object' ? x.access : null;
+  if (role === SUB_ROLE && !(acc && ['edit', 'view', ''].indexOf(acc[SUB_ROLE]) >= 0)) return navAccess_(config, view, base || '');   // แอดมินรอง "ตามตำแหน่ง"
   if (acc && Object.prototype.hasOwnProperty.call(acc, role)) return acc[role] === 'edit' || acc[role] === 'view' ? acc[role] : '';
   if (role === ADMIN_ROLE) return navAccess_(config, view, 'MP');   // ยังไม่ได้ตั้งคอลัมน์ Admin = เท่า MP
   if (x.on === false) return '';
@@ -737,11 +743,15 @@ const CFG_TABS = {
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
 const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
 
-// หมวดที่แอดมินรองคนนี้แก้ได้ (config.subAdmins [{ user: ชื่อผู้ใช้หรืออีเมล RO Workspace, tabs }])
-function subTabs_(cfg, p) {
+// แถวของผู้ใช้นี้ในรายชื่อแอดมินรอง (config.subAdmins [{ user: ชื่อผู้ใช้หรืออีเมล RO Workspace, tabs }]) · ไม่อยู่ = null
+function subEntry_(cfg, p) {
   const list = cfg && Array.isArray(cfg.subAdmins) ? cfg.subAdmins : [];
   const me = [String(p.username || '').toLowerCase(), String(p.email || '').toLowerCase()].filter(Boolean);
-  const x = list.filter(s => s && me.indexOf(String(s.user || '').trim().toLowerCase()) >= 0)[0];
+  return list.filter(s => s && String(s.user || '').trim() && me.indexOf(String(s.user || '').trim().toLowerCase()) >= 0)[0] || null;
+}
+// หมวดที่แอดมินรองคนนี้แก้ได้
+function subTabs_(cfg, p) {
+  const x = subEntry_(cfg, p);
   return x && Array.isArray(x.tabs) ? x.tabs.map(String).filter((t, i, a) => CFG_TABS[t] && a.indexOf(t) === i) : [];
 }
 function cfgTabOf_(key) {
@@ -780,7 +790,8 @@ function cfgPropose(changes, note, token) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
   if (u.isAdmin) throw new Error('แอดมินหลักบันทึกการตั้งค่าได้เลย ไม่ต้องขออนุมัติ');
   const tabs = u.sub || [];
-  if (!tabs.length) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมินหรือแอดมินรอง)' : ''));
+  if (!tabs.length) throw new Error(u.isSub ? 'แอดมินรอง' + (u.name ? ' ' + u.name : '') + ' ยังไม่ได้รับสิทธิ์แก้หมวดใดในตั้งค่า (แอดมินหลักติ๊กหมวดได้ที่ ตั้งค่า → แอดมิน → แอดมินรอง)'
+    : 'แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมินหรือแอดมินรอง)' : ''));
   changes = changes && typeof changes === 'object' && !Array.isArray(changes) ? changes : {};
   const keys = Object.keys(changes);
   if (!keys.length) throw new Error('ไม่มีการแก้ไข');
@@ -3087,8 +3098,8 @@ function dqRemove(id, pin, token) {
 // วันลาแพทย์: ผู้ที่บันทึกในแถบแจกงานแพทย์ได้ (ทุกแพทย์) หรือแพทย์ของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์ และเห็นแถบนี้)
 function dqLeaveUser_(token, doc) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
-  if (u.via === 'google' || navAccess_(cfg, 'dq', navRole_(u)) === 'edit') return u;
-  if (doc && navAccess_(cfg, 'dq', navRole_(u)) && dqSelf_(u, cfg) === doc) return u;
+  if (u.via === 'google' || userAccess_(cfg, 'dq', u) === 'edit') return u;
+  if (doc && userAccess_(cfg, 'dq', u) && dqSelf_(u, cfg) === doc) return u;
   throw new Error('ลงวันลาแพทย์ได้เฉพาะผู้ที่บันทึกในแถบแจกงานแพทย์ได้ หรือแพทย์ลงของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์)');
 }
 function dqLeaveSave(rec, token) {
@@ -3978,10 +3989,11 @@ function who_(token, ss, cfg) {
       const admins = adminList_(cfg);
       const listed = (!!p.email && admins.indexOf(p.email) >= 0) || admins.indexOf(p.username) >= 0;
       // canEdit = บันทึกได้อย่างน้อยหนึ่งแถบ (ตั้งค่า → แถบเมนู) · แอดมินต้องเป็น MP (p.canEdit) และเป็นแอดมินของ LPCH หรืออยู่ในรายชื่อแอดมิน
-      const isAdmin = p.canEdit && (p.lpchAdmin || listed);
-      const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => navAccess_(cfg, v, isAdmin ? ADMIN_ROLE : p.role) === 'edit');
+      const isAdmin = p.canEdit && (p.lpchAdmin || listed), isSub = !isAdmin && !!subEntry_(cfg, p);
+      const me = { via: 'lpch', isAdmin: isAdmin, isSub: isSub, role: p.role };
+      const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => userAccess_(cfg, v, me) === 'edit');
       return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
-        canEdit: anyEdit, isAdmin: isAdmin, lpchAdmin: p.lpchAdmin, sub: isAdmin ? [] : subTabs_(cfg, p) };
+        canEdit: anyEdit, isAdmin: isAdmin, isSub: isSub, lpchAdmin: p.lpchAdmin, sub: isSub ? subTabs_(cfg, p) : [] };
     }
     why = p.error;
   }
@@ -3995,8 +4007,8 @@ function requireEdit_(token, views) {
   const u = who_(token, ss, cfg);
   if (u.via === 'google') return u;
   const list = views || Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []);
-  if (!list.some(v => navAccess_(cfg, v, navRole_(u)) === 'edit')) {
-    throw new Error('ตำแหน่ง ' + (u.isAdmin ? 'Admin (แอดมิน)' : u.role || '-') + ' บันทึกในแถบนี้ไม่ได้ (บัญชี ' + u.username + ' ดูได้อย่างเดียว) · แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู');
+  if (!list.some(v => userAccess_(cfg, v, u) === 'edit')) {
+    throw new Error('ตำแหน่ง ' + (u.isAdmin ? 'Admin (แอดมิน)' : u.isSub ? 'แอดมินรอง (' + (u.role || '-') + ')' : u.role || '-') + ' บันทึกในแถบนี้ไม่ได้ (บัญชี ' + u.username + ' ดูได้อย่างเดียว) · แอดมินเปิดสิทธิ์ได้ที่ ตั้งค่า → แถบเมนู');
   }
   return u;
 }
