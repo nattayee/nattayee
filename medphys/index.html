@@ -4089,7 +4089,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-10.2';
+const PAGE_VERSION = '2026-11-10.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6494,7 +6494,7 @@ function renderReg() {
   const span = cols.length + 2;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>นัด</th></tr></thead>`;
   const cell = (r, k) => {
-    if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b></td>`;
+    if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b>${rgPending.has(r.id) ? ' <small class="muted rg-saving">กำลังบันทึก…</small>' : ''}</td>`;
     if (k === 'name') return `<td class="ct-name">${esc(regName(r))}</td>`;
     const v = k === 'birth' ? ageOn(r.birth) : k === 'doc' ? ctDocText(r.doc) : k === 'dx' ? [dxShort(r) || r.icd, rgMode('icds') !== 'off' && r.icds ? '+ ' + r.icds : ''].filter(Boolean).join(' ') : k === 'consult' || k === 'visit' ? (r[k] ? fmtDay(r[k]) : '') : k === 'refer' ? referShort(r.refer) : r[k];
     return `<td class="ct-${k}"${k === 'birth' && r.birth ? ` title="เกิด ${esc(apDate(r.birth))}"` : k === 'refer' && r.refer ? ` title="${esc(r.refer)}"` : ''}>${esc(v)}</td>`;
@@ -6568,14 +6568,15 @@ const readTitle = () => { const v = chipValue($('#r-title')); return v === OTHER
 // คำนำหน้า → เพศ (ยังไม่ได้เลือกเพศ): ตัวเลือก Gender ของใบสั่ง (Male / Female หรือ ชาย / หญิง)
 const TITLE_SEX = { 'นาย': 'm', 'ด.ช.': 'm', 'เด็กชาย': 'm', 'Mr.': 'm', 'นาง': 'f', 'นางสาว': 'f', 'น.ส.': 'f', 'ด.ญ.': 'f', 'เด็กหญิง': 'f', 'Mrs.': 'f', 'Ms.': 'f', 'Miss': 'f' };
 const sexOfTitle = t => { const s = TITLE_SEX[t]; return s ? state.config.order.genders.find(g => (s === 'f' ? /^(female|หญิง)/i : /^(male|ชาย)/i).test(g)) || '' : ''; };
-function openRgForm(id) {
+function openRgForm(id, draft) {
   const r = id ? state.reg.find(x => x.id === id) : null;
   if (id && !r) return;
+  if (r && rgPending.has(r.id)) return toast('กำลังบันทึกผู้ป่วยนี้ รอสักครู่แล้วค่อยแก้', { err: true });
   if (accessOf('reg') !== 'edit') return toast(RO_MSG, { err: true });
   if (!regOn()) return toast(RG_OLD, { err: true });
   if (rgDlg.open) rgDlg.close();
   const cfg = state.config;
-  editingRg = r ? clone(r) : normReg({ id: uid(), doc: rgMode('doc') !== 'off' ? myDoctor() : '', consult: rgMode('consult') !== 'off' ? today() : '' });
+  editingRg = r ? clone(r) : draft ? normReg(clone(draft)) : normReg({ id: uid(), doc: rgMode('doc') !== 'off' ? myDoctor() : '', consult: rgMode('consult') !== 'off' ? today() : '' });
   const g = editingRg;
   $('#rg-title').textContent = r ? `แก้ไขผู้ป่วย ${r.hn || regName(r)}` : 'ลงทะเบียนผู้ป่วย';
   for (const f of ['hn', 'name', 'phone', 'note']) $('#r-' + f).value = g[f] || '';
@@ -6662,6 +6663,28 @@ function openRgPin(mode, rec, thenAp) {
   if (pinSkipDialog(mode)) return submitPin(null);
   pinDlg.showModal();
   firstPinInput().focus();
+}
+// ลงทะเบียนใหม่ (ไม่ต้องใส่ PIN): ปิดฟอร์มและแสดงในตารางทันที (ไม่ต้องรอเซิร์ฟเวอร์) · บันทึกเบื้องหลัง
+// ไม่สำเร็จ (เช่น มีคนลง HN นี้ไปก่อน) = เอาออกจากตาราง แล้วเปิดฟอร์มพร้อมข้อมูลที่กรอกให้แก้ · ระหว่างบันทึกแถวนั้นแก้ไม่ได้
+const rgPending = new Set();
+function rgSaveFast(ctx) {
+  const tmp = normReg({ ...ctx.rec, by: state.user.name || '', created: nowISO() });
+  rgPending.add(tmp.id);
+  if (pinDlg.open) pinDlg.close();
+  rgSaved(tmp, true, ctx.thenAp);
+  store.regSave(ctx.rec, '').then(r => {
+    rgPending.delete(tmp.id);
+    const rec = normReg(r), i = state.reg.findIndex(x => x.id === tmp.id);
+    if (i >= 0) state.reg[i] = rec; else if (!state.reg.some(x => x.id === rec.id)) state.reg.push(rec);   // HN จากที่เก็บถาวร: id เดิมของรายการนั้น
+    render();
+  }).catch(e => {
+    rgPending.delete(tmp.id);
+    state.reg = state.reg.filter(x => x.id !== tmp.id);
+    render();
+    if (e && e.login) return;
+    toast(`ลงทะเบียน ${tmp.hn || regName(tmp)} ไม่สำเร็จ: ${errMsg(e)}`, { err: true });
+    if (accessOf('reg') === 'edit') openRgForm(null, ctx.rec);
+  });
 }
 function rgSaved(rec, isNew, thenAp) {
   const i = state.reg.findIndex(x => x.id === rec.id);
@@ -14760,6 +14783,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'dqedit') { const rec = normDq(await store.dqEdit(ctx.id, ctx.ch, pin)); pinDlg.close(); dqSaved(rec); return; }
     if (ctx.mode === 'dqdel') { await store.dqRemove(ctx.id, pin); pinDlg.close(); dqGone(ctx.id); return; }
     if (ctx.mode === 'dqldel') { await store.dqLeaveRemove(ctx.id, pin); pinDlg.close(); dqLeaveGone(ctx.id); return; }
+    if (ctx.mode === 'rgsave' && ctx.isNew && !pin) return rgSaveFast(ctx);
     if (ctx.mode === 'rgsave') { const rec = normReg(await store.regSave(ctx.rec, pin)); pinDlg.close(); rgSaved(rec, ctx.isNew, ctx.thenAp); return; }
     if (ctx.mode === 'rgdel') { await store.regRemove(ctx.id, pin); rgDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'bqnew') { const recs = await store.bqCreate(ctx.rec, pin); pinDlg.close(); bqSaved(recs, `ลงนัด ${ctx.rec.hn} ${recs.length} Fx แล้ว`); return; }

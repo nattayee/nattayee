@@ -27,7 +27,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.2';
+const CODE_VERSION = '2026-11-10.3';
 const API_LEVEL = 64;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -118,6 +118,7 @@ const TABLES = {
       ['doc', 'แพทย์'], ['icd', 'ICD-10'], ['dx', 'Diagnosis'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
       // API 63 (ตามรายงาน Consult จาก HIS): วันที่รับ Consult · วันที่นัดมา (YYYY-MM-DD) · ช่องทาง · ส่งตัวจาก (โรงพยาบาลต้นทาง) · ICD-10 อื่น (รหัสที่เหลือ คั่นด้วย , ) · ชีตเดิม: เพิ่มคอลัมน์ท้ายให้เอง
       ['consult', 'วันที่รับ Consult'], ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icds', 'ICD-10 อื่น'],
+      ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD (รุ่น 2026-11-10.3): ลงทะเบียน/แก้แล้วหน้าเว็บอื่นรับเฉพาะแถวนั้น ไม่โหลดผู้ป่วยทั้งหมดใหม่
     ],
   },
   // แถบนัดคิวใส่แร่: นัดใส่แร่หนึ่งแถวต่อหนึ่ง Fraction (course = คอร์สเดียวกัน) · status = นัดแล้ว / มาตามนัด / ยกเลิก · mp / rc = รหัสนักฟิสิกส์ที่ลงชื่อ · rtt = ชื่อ RTT
@@ -366,7 +367,7 @@ function getData(a, b) {
 // รุ่นของแต่ละตาราง (Script property tableVer) เปลี่ยนทุกครั้งที่บันทึกตารางนั้น (tableSheet_ ระหว่างล็อก · เก็บตอนปล่อยล็อก)
 // หน้าเว็บที่มีข้อมูลรุ่นเดียวกันอยู่แล้วไม่ต้องอ่านและส่งซ้ำ (รีเฟรชทุก 1 นาทีเบาลงมาก) · หน้าเว็บขอทั้งหมดใหม่ทุก 1 ชั่วโมง และตอนเปิดหน้าเว็บ (กันแก้ในชีตโดยตรง)
 const TABLE_VER_PROP = 'tableVer';
-const DELTA_TABLES = ['cases', 'logs', 'dq'];   // ตารางใหญ่: ส่งเฉพาะแถวที่แก้ (คอลัมน์ rev)
+const DELTA_TABLES = ['cases', 'logs', 'dq', 'reg'];   // ตารางใหญ่: ส่งเฉพาะแถวที่แก้ (คอลัมน์ rev)
 const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
 const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
 // ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
@@ -425,6 +426,7 @@ function tablesFor_(ss, config, user, need, have) {
     if (have && hv[k] === v) { out.same.push(k); return; }
     if (have && DELTA_TABLES.indexOf(k) >= 0 && hv[k] && ht[k] && !isNaN(Date.parse(ht[k]))) {
       const dl = readDelta_(ss, k, k === 'cases' ? config : null, new Date(Date.parse(ht[k]) - DELTA_MARGIN_MS).toISOString());
+      if (dl && k === 'reg') regFixNames_(ss, dl.rows);
       if (dl) {
         if (k === 'cases') out.advanceCleared += clearAdvance_(ss, config, dl.rows);
         out.delta[k] = { rows: pk ? pack_(dl.rows) : dl.rows, hash: dl.hash, n: dl.n };
@@ -2120,8 +2122,10 @@ const REG_CUT_ = k => (k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : k =
 const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase();
 const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name).trim();
 // ผู้ป่วยที่ลงทะเบียน · แถวที่บันทึกด้วยรุ่น 2026-10-30.1 (คอลัมน์ ชื่อ และ สกุล) ใช้สองคอลัมน์นั้นเป็นชื่อ-สกุล
-function regRows_(ss) {
-  const rows = readTable_(ss, 'reg'), sh = ss.getSheetByName(TABLES.reg.sheet);
+function regRows_(ss) { return regFixNames_(ss, readTable_(ss, 'reg')); }
+// ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) = ต่อจากคอลัมน์ชื่อ สกุล
+function regFixNames_(ss, rows) {
+  const sh = ss.getSheetByName(TABLES.reg.sheet);
   if (!sh || !rows.some(r => !r.name)) return rows;
   const head = headerOf_(sh), id = head.indexOf('id'), first = head.indexOf('ชื่อ'), last = head.indexOf('สกุล'), n = sh.getLastRow() - 1;
   if (id < 0 || (first < 0 && last < 0) || n < 1) return rows;
@@ -2631,13 +2635,14 @@ function regSave(rec, pin, token) {
   const birth = cut(rec.birth, 10);
   if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) throw new Error('วันเกิดไม่ถูกต้อง');
   [['consult', 'วันที่รับ Consult'], ['visit', 'วันที่นัดมา']].forEach(f => { const v = cut(rec[f[0]], 10); if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error(f[1] + ' ไม่ถูกต้อง'); });
-  pinChange_(u, pin, rowExists_('reg', rec.id));
+  // รุ่น 2026-11-10.3 (เร็วขึ้น): ไม่อ่านทั้งตาราง · id และ HN อ่านพร้อมกันครั้งเดียว · PIN ตรวจในล็อก (รู้แถวแล้ว) · ที่เก็บถาวรดูคอลัมน์ HN ก่อน (ย้ายเฉพาะเมื่อพบ)
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'reg'), header = headerOf_(sh);
-    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
-    const key = hnKey_(cut(rec.hn, 40)), dupRow = key ? regFindHn_(sh, header, key, row) : 0, dup = dupRow ? regRowAt_(ss, sh, header, dupRow) : null;
+    const id = cut(rec.id, 80), key = hnKey_(cut(rec.hn, 40)), look = regLookup_(sh, header, id, key), row = look.row;
+    pinChange_(u, pin, !!row);   // แก้รายการเดิม = ต้องใส่ PIN · ลงทะเบียนใหม่ไม่ต้อง
+    const dup = look.dupRow ? regRowAt_(ss, sh, header, look.dupRow) : null;
     if (dup) throw new Error('HN ' + cut(rec.hn, 40) + ' ลงทะเบียนแล้ว (' + regName_(dup) + ')');
-    if (!row && key) {   // HN อยู่ในที่เก็บถาวร: ย้ายกลับ แล้วบันทึกทับรายการนั้น (ไม่สร้างซ้ำ)
+    if (!row && key && regArchHas_(ss, key)) {   // HN อยู่ในที่เก็บถาวร: ย้ายกลับ แล้วบันทึกทับรายการนั้น (ไม่สร้างซ้ำ)
       const back = regMoveBack_(ss, x => hnKey_(x.hn) === key);
       if (back.length) return regSaveInto_(ss, back[0], rec, cut);
     }
@@ -2648,8 +2653,28 @@ function regSave(rec, pin, token) {
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
     const at = row || sh.getLastRow() + 1;
     writeFields_(sh, at, header, TABLES.reg.fields.filter(f => f[0] in set), set);
-    return regRowAt_(ss, sh, header, at);
+    if (row) return regRowAt_(ss, sh, header, at);
+    const out = {};   // รายการใหม่: รู้ทุกช่องแล้ว ไม่ต้องอ่านกลับ
+    TABLES.reg.fields.forEach(f => { out[f[0]] = ''; });
+    return Object.assign(out, set);
   });
+}
+// แถวของ id และแถวอื่นที่มี HN เดียวกัน: อ่านสองคอลัมน์ครั้งเดียว · ไม่พบ = 0
+function regLookup_(sh, header, id, key) {
+  const n = sh.getLastRow() - 1, ic = header.indexOf('id'), hc = header.indexOf('HN'), out = { row: 0, dupRow: 0 };
+  const cols = [ic, hc].filter(c => c >= 0);
+  if (n < 1 || !cols.length || (!id && !key)) return out;
+  const c0 = Math.min.apply(null, cols), v = sh.getRange(2, c0 + 1, n, Math.max.apply(null, cols) - c0 + 1).getValues();
+  if (id && ic >= 0) for (let i = 0; i < n; i++) if (String(v[i][ic - c0]) === id) { out.row = i + 2; break; }
+  if (key && hc >= 0) for (let i = 0; i < n; i++) if (i + 2 !== out.row && hnKey_(v[i][hc - c0]) === key) { out.dupRow = i + 2; break; }
+  return out;
+}
+// HN นี้อยู่ในที่เก็บถาวรไหม: อ่านเฉพาะคอลัมน์ HN
+function regArchHas_(ss, key) {
+  const sh = ss.getSheetByName(TABLES.regArch.sheet);
+  if (!sh || sh.getLastRow() < 2) return false;
+  const c = headerOf_(sh).indexOf('HN');
+  return c >= 0 && sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().some(r => hnKey_(r[0]) === key);
 }
 // แถวที่มี HN นี้ (ไม่นับแถว skipRow) · อ่านเฉพาะคอลัมน์ HN · ไม่พบ = 0
 function regFindHn_(sh, header, key, skipRow) {
@@ -3826,7 +3851,12 @@ function pinChange_(u, pin, change) {
   checkPin_(u, pin);
 }
 const caseOf_ = id => (id ? readTable_(ss_(), 'cases', readConfig_(ss_())).filter(c => c.id === id)[0] || null : null);
-const rowExists_ = (table, id) => !!id && readTable_(ss_(), table).some(x => String(x.id) === String(id));
+// มีรายการ id นี้ไหม: อ่านเฉพาะคอลัมน์ id (เดิมอ่านทั้งตาราง · แถบลงทะเบียน 2 หมื่นแถว = หลายวินาที)
+const rowExists_ = (table, id) => {
+  if (!id) return false;
+  const sh = ss_().getSheetByName(tableDef_(table).sheet);
+  return !!sh && sh.getLastRow() > 1 && findRow_(sh, headerOf_(sh).indexOf('id') + 1, id) > 0;
+};
 const jsonList_ = v => { try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
 const has_ = v => String(v == null ? '' : v).trim() !== '';
 // act = กลุ่มงาน (ตั้งค่า → รหัส PIN ในหน้าเว็บ: steps, edit, logs, fx, course, ptags, mqt, ptadd, duty, ct, appt, jobs, reg, bq) · แอดมินตั้ง config.pin[act] = false = ไม่ต้องใส่ PIN
@@ -4075,7 +4105,12 @@ function adminList_(cfg) {
 function adminInfo_(ss, cfg) {
   let me = '', owner = '';
   try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { /* ไม่ทราบอีเมล */ }
-  try { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; } catch (e) { /* ไม่ทราบเจ้าของ */ }
+  // เจ้าของไฟล์: ถาม Drive ช้า (ทุกคำขอ ทุกการบันทึก) = จำไว้ 6 ชั่วโมง
+  try {
+    const cache = CacheService.getScriptCache(), key = 'ssOwner_' + ss.getId(), hit = cache.get(key);
+    if (hit !== null && hit !== undefined) owner = hit === '-' ? '' : hit;
+    else { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; cache.put(key, owner || '-', 21600); }
+  } catch (e) { /* ไม่ทราบเจ้าของ */ }
   const admins = adminList_(cfg);
   const isAdmin = (!!me && (me === owner || admins.indexOf(me) >= 0)) || (!admins.length && !owner);
   return { me: me, owner: owner, isAdmin: isAdmin };
@@ -4200,11 +4235,16 @@ function appendNew_(ss, table, records) {
   return fresh.length;
 }
 
+// ชีต Config อ่านครั้งเดียวต่อคำขอ (ตรวจสิทธิ์แล้วบันทึก = เดิมอ่าน 2–3 ครั้ง) · คืนสำเนาใหม่ทุกครั้ง · writeConfig_ ล้าง
+let CFG_MEMO_ = null;
 function readConfig_(ss) {
-  const sh = ss.getSheetByName(CONFIG_SHEET);
-  if (!sh || sh.getLastRow() < 2) return null;
+  if (!CFG_MEMO_ || CFG_MEMO_.ss !== ss) {
+    const sh = ss.getSheetByName(CONFIG_SHEET);
+    CFG_MEMO_ = { ss: ss, rows: !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues() };
+  }
+  if (!CFG_MEMO_.rows.length) return null;
   const out = {};
-  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(r => {
+  CFG_MEMO_.rows.forEach(r => {
     if (!r[0]) return;
     try { out[r[0]] = JSON.parse(r[1]); } catch (e) { /* ข้ามค่าที่อ่านไม่ได้ */ }
   });
@@ -4212,6 +4252,7 @@ function readConfig_(ss) {
 }
 
 function writeConfig_(ss, config) {
+  CFG_MEMO_ = null;
   const sh = ss.getSheetByName(CONFIG_SHEET) || ss.insertSheet(CONFIG_SHEET);
   const rows = Object.keys(config).map(k => [k, JSON.stringify(config[k])]);
   sh.clearContents();
