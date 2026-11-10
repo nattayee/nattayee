@@ -27,8 +27,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.3';
-const API_LEVEL = 64;
+const CODE_VERSION = '2026-11-10.4';
+const API_LEVEL = 65;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -201,6 +201,11 @@ TABLES.dqLeave = {
   sheet: 'DocLeaves',
   fields: [['id', 'id'], ['doc', 'แพทย์'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated']],
 };
+// แพทย์เวร S1 รายวัน (API 65 · แถบแจกงานแพทย์ ปุ่ม เวร S1): id = วันที่ · เคส Emergency แจกให้แพทย์เวร S1 ของวันนั้น (ไม่มี = ตามวันในสัปดาห์ใน ตั้งค่า) · เขียนผ่าน dqDutySave เท่านั้น
+TABLES.dqDuty = {
+  sheet: 'DocDuty',
+  fields: [['id', 'id'], ['date', 'วันที่'], ['doc', 'แพทย์เวร S1'], ['by', 'บันทึกโดย'], ['updated', 'Updated']],
+};
 TABLES.regArch = { sheet: 'RegistryArchive', fields: TABLES.reg.fields.concat([['archAt', 'ย้ายเข้าที่เก็บเมื่อ']]) };
 // ใช้เมื่อยังไม่เคยบันทึกการตั้งค่าจากหน้าเว็บ
 const DEFAULT_STAFF = ['JR', 'WM', 'NY', 'WS'];
@@ -371,7 +376,7 @@ const DELTA_TABLES = ['cases', 'logs', 'dq', 'reg'];   // ตารางให�
 const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
 const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
 // ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
-const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'] };
+const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'], dqDuty: ['dqDuty'] };
 const OUT_WINDOWED = ['duty', 'ctsim', 'appt', 'bq', 'jobs'];
 let DIRTY_ = null;
 // ตารางที่บันทึกในคำขอนี้ · นอกล็อก = เก็บรุ่นใหม่ทันที
@@ -416,9 +421,9 @@ function tablesFor_(ss, config, user, need, have) {
   const read = {
     cases: () => (cases = readTable_(ss, 'cases', config)), logs: () => readTable_(ss, 'logs'), leaves: () => readTable_(ss, 'leaves'), duty: () => recentDuty_(ss), ctsim: () => recentCt_(ss),
     appt: () => recentAppt_(ss), reg: () => regRows_(ss), bq: () => recentBq_(ss, config, cases, !bqRoom), jobs: () => jobsFor_(ss, user, config), vac: () => readTable_(ss, 'vac'), spq: () => readTable_(ss, 'spq'),
-    dq: () => readTable_(ss, 'dq'), dqLeave: () => readTable_(ss, 'dqLeave'),
+    dq: () => readTable_(ss, 'dq'), dqLeave: () => readTable_(ss, 'dqLeave'), dqDuty: () => readTable_(ss, 'dqDuty'),
   };
-  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave };
+  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave, dqDuty: need.dqLeave };
   Object.keys(want).forEach(k => {
     if (!want[k]) { out[k] = []; return; }
     const v = verOf(k);
@@ -503,7 +508,7 @@ function navAccess_(config, view, role) {
 const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty'];
 function saveRecord(table, rec, token) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
   requireEdit_(token, EDIT_VIEWS[table]);
@@ -2926,7 +2931,20 @@ function dqCfg_(cfg) {
     docs: dqDocs_(cfg).filter(c => off.indexOf(c) < 0), skips: q.skips && typeof q.skips === 'object' ? q.skips : {},
     pointer: q.pointer && q.pointer.code && q.pointer.at ? { code: String(q.pointer.code).trim().toUpperCase(), at: String(q.pointer.at) } : null,
     payback: q.payback == null || q.payback === '' ? 1 : Math.max(0, Math.floor(+q.payback) || 0),
+    days: dqDays_(q.days), bonus: (Array.isArray(q.bonus) ? q.bonus : []).filter(b => b && b.code && b.at).map(b => ({ code: String(b.code).trim().toUpperCase(), n: Math.max(0, Math.floor(+b.n) || 0), at: String(b.at) })),
+    s1wd: q.s1wd && typeof q.s1wd === 'object' ? q.s1wd : {},
   };
+}
+// วันที่ไม่แจก (ตั้งค่า → แจกงานแพทย์): { 0–6: [รหัส] } (0 = อาทิตย์)
+function dqDays_(v) {
+  const out = {};
+  if (v && typeof v === 'object') Object.keys(v).forEach(k => { if (/^[0-6]$/.test(k) && Array.isArray(v[k])) out[k] = v[k].map(c => String(c).trim().toUpperCase()).filter(Boolean); });
+  return out;
+}
+// แพทย์เวร S1 ของวันที่ (ตารางเวร S1 · ไม่มี = ตามวันในสัปดาห์ใน ตั้งค่า) · ไม่มี = ''
+function dqS1_(q, duty, day) {
+  const d = (duty || []).filter(x => x.date === day && x.doc)[0];
+  return String(d ? d.doc : q.s1wd[new Date(day + 'T00:00:00Z').getUTCDay()] || '').trim().toUpperCase();
 }
 // แพทย์ที่เป็นผู้ใช้ที่เข้าระบบ (ตั้งค่า → แพทย์: บัญชี LPCH ที่เชื่อม หรืออีเมล) · ไม่ใช่แพทย์ = ''
 function dqSelf_(u, cfg) {
@@ -2948,14 +2966,16 @@ function dqAdd(recs, token) {
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss) || {}, q = dqCfg_(cfg), all = dqDocs_(cfg), day = today_(ss);
     const rows = readTable_(ss, 'dq'), leaves = readTable_(ss, 'dqLeave'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];
+    let duty = null;
     recs.forEach((r, i) => {
       r = r && typeof r === 'object' ? r : {};
-      const hn = dqCut_(r.hn, 40), how = r.how === 'manual' ? 'manual' : 'auto';
+      const hn = dqCut_(r.hn, 40), how = r.how === 'manual' || r.how === 'emer' ? r.how : 'auto';
       if (!hn) throw new Error('กรอก HN');
-      let doc = how === 'manual' ? dqCut_(r.doc, 10).toUpperCase() : '';
-      if (how === 'manual' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
-      if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, date: day });
-      if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
+      let doc = how === 'auto' ? '' : dqCut_(r.doc, 10).toUpperCase();
+      if (how === 'emer' && !doc) { doc = dqS1_(q, duty || (duty = readTable_(ss, 'dqDuty')), day); if (!doc) throw new Error('ยังไม่ได้กำหนดแพทย์เวร S1 ของวันนี้ (ปุ่ม เวร S1 ในแถบ) · หรือเลือกแพทย์เอง'); }
+      if (how !== 'auto' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
+      if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, days: q.days, bonus: q.bonus, date: day });
+      if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาหรือวันที่ไม่แจกทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
       const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '' };
       rows.push(rec);
       out.push(rec);
@@ -3031,6 +3051,25 @@ function dqImport(recs, token) {
     return { added: add, filled: filled.map(x => { delete x.row; return x; }), skipped: skip };
   });
 }
+// ตารางเวร S1 (แถบแจกงานแพทย์): list = [{ date, doc }] · doc ว่าง = ใช้ตามวันในสัปดาห์ (ลบรายการของวันนั้น) · คืนตารางเวรทั้งหมด
+function dqDutySave(list, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  if (!Array.isArray(list) || !list.length) return readTable_(ss_(), 'dqDuty');
+  if (list.length > 400) throw new Error('บันทึกเวรได้ครั้งละไม่เกิน 400 วัน');
+  return withLock_(() => {
+    const ss = ss_(), all = dqDocs_(readConfig_(ss) || {}), sh = tableSheet_(ss, 'dqDuty'), header = headerOf_(sh), by = String(u.name || u.username || u.me || '');
+    list.forEach(x => {
+      const date = dqCut_(x && x.date, 10), doc = dqCut_(x && x.doc, 10).toUpperCase();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
+      if (doc && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
+      const row = findRow_(sh, header.indexOf('id') + 1, date);
+      if (!doc) { if (row) sh.deleteRow(row); return; }
+      const set = { id: date, date: date, doc: doc, by: by, updated: dqNow_() };
+      writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.dqDuty.fields, set);
+    });
+    return readTable_(ss, 'dqDuty');
+  });
+}
 // ลบรายการ (PIN) · รายการตามคิวที่ลบ = คิวนั้นกลับไปเป็นของคนที่ถึงคิว
 function dqRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.dq);
@@ -3075,15 +3114,19 @@ function dqLeaveRemove(id, pin, token) {
 /*
  * คิวแจกงานแพทย์ (โค้ดชุดเดียวกับ dqPick ใน index.html · ใช้แค่ HN และชื่อ)
  * o = { docs: รหัสแพทย์ตามลำดับคิว, leaves: [{ doc, from, to }], rows: [{ doc, how, date, created }] (แจกแล้ว),
- *       skips: { 'YYYY-MM': { รหัส: n } }, pointer: { code, at } | null, payback: คืนคิวสูงสุดต่อคนต่อรอบ (0 = ไม่จำกัด), date: วันที่แจก ('' = ไม่ดูวันลา), ym: หักคิวรายเดือนนับถึงเดือนนี้ }
+ *       skips: { 'YYYY-MM': { รหัส: n } }, pointer: { code, at } | null, payback: คืนคิวสูงสุดต่อคนต่อรอบ (0 = ไม่จำกัด), date: วันที่แจก ('' = ไม่ดูวันลา), ym: หักคิวรายเดือนนับถึงเดือนนี้,
+ *       days: { วันในสัปดาห์ 0–6: [รหัสที่ไม่แจกวันนั้น] }, bonus: [{ code, n, at }] (คิวชดเชย) }
  * - วนตามลำดับแพทย์ · เลือกเอง (how = manual): คิวไม่ขยับ คนที่ได้ถูกข้าม 1 ครั้งเมื่อคิววนมาถึง · หักคิวรายเดือน: ข้ามตามจำนวนครั้ง (ใช้ไม่หมดยกไปเดือนถัดไป)
  * - ถึงคิวแพทย์ที่ลา: แพทย์ที่ไม่ลารับแทน (คนที่ติดค้างน้อยที่สุด ถัดจากคนลา) และติดคิวไว้ · คิววนถึงคนที่รับแทนเมื่อแพทย์ที่ลากลับมาแล้ว = คืนคิวให้แพทย์ที่ลา (ลาไม่เสียคิว)
- * - แจกแล้วไม่ตรงคิว (เช่น ลงวันลาย้อนหลัง): คิวไม่ขยับ คนที่ได้ถูกข้ามเมื่อคิววนมาถึง (เหมือนเลือกเอง) · ดึงจากรายงาน HIS (how = import) = ไม่นับในคิว
- * คืนรหัสแพทย์ที่ได้เคสถัดไป ('' = ไม่มีใครรับได้) · trace: log (ผลของแต่ละรายการ), credit (รอหักคิว), owe (ค้างคืนคิว), next, ahead(k) (ถัดไป k เคส ไม่ดูวันลา)
+ * - วันที่ไม่แจกแพทย์คนนั้น (days · ตั้งค่า) = เหมือนลา: คนอื่นรับแทน แล้วคืนคิวในวันอื่น (ไม่เสียคิว)
+ * - คิวชดเชย (bonus · ตั้งค่า): แพทย์คนนั้นได้คิวแทรกเพิ่ม n คิว ตั้งแต่เวลา at (ไม่เกินจำนวนคืนคิวต่อรอบ) เช่น กลับจากลาก่อนเริ่มใช้ระบบ
+ * - แจกแล้วไม่ตรงคิว (เช่น ลงวันลาย้อนหลัง): คิวไม่ขยับ คนที่ได้ถูกข้ามเมื่อคิววนมาถึง (เหมือนเลือกเอง) · ดึงจากรายงาน HIS (how = import) และเคส Emergency (how = emer · แพทย์เวร S1) = ไม่นับในคิว
+ * คืนรหัสแพทย์ที่ได้เคสถัดไป ('' = ไม่มีใครรับได้) · trace: log (ผลของแต่ละรายการ), credit (รอหักคิว), owe (ค้างคืนคิว), next, ahead(k, d, rest) (ถัดไป k เคส: เคสแรกวันที่ d ที่เหลือวันที่ rest · '' = ไม่ดูวันลา)
  */
 function dqPick_(o, trace) {
   const docs = o.docs || [], n = docs.length, idx = c => docs.indexOf(c);
-  const away = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.from <= d && d <= (l.to || l.from));
+  const offDay = (c, d) => { const l = o.days && o.days[new Date(d + 'T00:00:00Z').getUTCDay()]; return Array.isArray(l) && l.indexOf(c) >= 0; };
+  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.from <= d && d <= (l.to || l.from)));
   const lim = Math.max(0, Math.floor(+o.payback) || 0);
   const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
   // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null
@@ -3128,14 +3171,20 @@ function dqPick_(o, trace) {
   const setPointer = () => { st.pos = (Math.floor(st.pos / n) + 1) * n + idx(pointer.code); pointerDone = true; };
   const ym = String(o.ym || o.date || '').slice(0, 7);
   const skipDays = n ? Object.keys(o.skips || {}).filter(m => m <= ym).map(m => ({ created: m + '-01', skip: o.skips[m] })) : [];
-  const list = (n ? o.rows || [] : []).concat(skipDays).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  const bonus = n ? (o.bonus || []).filter(b => b && b.at && idx(b.code) >= 0).map(b => ({ created: String(b.at), bonus: b })) : [];
+  const list = (n ? o.rows || [] : []).concat(skipDays, bonus).sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
   list.forEach(c => {
     if (!pointerDone && c.created >= pointer.at) setPointer();
     if (c.skip) {
       Object.keys(c.skip).forEach(code => { const m = Math.min(50, Math.max(0, Math.floor(+c.skip[code]) || 0)); if (m && idx(code) >= 0) st.credit[code] = (st.credit[code] || 0) + m; });
       return;
     }
-    if (c.how === 'import') { log.push({ row: c, kind: 'import' }); return; }   // ดึงจากรายงาน HIS: ไม่นับในคิว
+    if (c.bonus) {   // คิวชดเชย: แพทย์คนอื่นผลัดกันคืนให้ (ถัดจากคนนั้นตามลำดับ) ไม่ใช่คนเดียว
+      const t = idx(c.bonus.code), m = Math.min(50, Math.max(0, Math.floor(+c.bonus.n) || 0));
+      for (let i = 0; n > 1 && i < m; i++) st.owe.push({ by: docs[(t + 1 + (i % (n - 1))) % n], to: c.bonus.code });
+      return;
+    }
+    if (c.how === 'import' || c.how === 'emer') { log.push({ row: c, kind: c.how }); return; }   // ดึงจากรายงาน HIS · Emergency (แพทย์เวร S1): ไม่นับในคิว
     if (idx(c.doc) < 0) { log.push({ row: c, kind: 'out' }); return; }   // แพทย์ที่ไม่อยู่ในคิว
     if (c.how === 'manual') { st.credit[c.doc] = (st.credit[c.doc] || 0) + 1; log.push({ row: c, kind: 'manual' }); return; }
     const s = copy(st), res = walk(s, c.date);
@@ -3150,7 +3199,7 @@ function dqPick_(o, trace) {
     trace.credit = Object.assign({}, st.credit);
     trace.owe = st.owe.slice();
     trace.next = next;
-    trace.ahead = (k, d) => { const s = copy(st), out = []; for (let i = 0; i < k; i++) { const r = walk(s, d || ''); if (!r) break; out.push(r); } return out; };
+    trace.ahead = (k, d, rest) => { const s = copy(st), out = []; for (let i = 0; i < k; i++) { const r = walk(s, (i && rest !== undefined ? rest : d) || ''); if (!r) break; out.push(r); } return out; };
   }
   return next ? next.code : '';
 }
