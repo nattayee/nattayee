@@ -1035,6 +1035,7 @@ button.chk.done.q-late:hover{background:var(--late-soft);box-shadow:inset 0 0 0 
 .pin-what b{color:var(--fg);font-weight:500}
 .pin-input{max-width:160px;font-family:var(--mono);font-size:20px;letter-spacing:.5em;text-align:center}
 .pin-err{margin:0;font-size:13px;color:var(--late)}
+.pin-wait{margin:0;font-size:13px;color:var(--muted)}   /* รอเซิร์ฟเวอร์: นับวินาทีให้เห็นว่ายังทำงานอยู่ */
 .linkish{padding:0;border:0;background:none;color:var(--accent);font-size:13px;text-decoration:underline;justify-self:start}
 button.who{padding:0;border:0;background:none;font:inherit;cursor:pointer}
 button.who:hover .nm{text-decoration:underline}
@@ -2978,6 +2979,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       </div>
       <label class="field" id="pin-field"><span class="lbl">รหัส PIN ของคุณ</span><input class="pin-input" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
       <p class="pin-err" id="pin-err" role="alert" hidden></p>
+      <p class="pin-wait" id="pin-wait" aria-live="polite" hidden></p>
     </div>
     <footer class="dlg-foot">
       <button type="button" class="btn ghost danger" id="pin-clear" hidden>ล้างการบันทึก</button>
@@ -4240,7 +4242,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.4';
+const PAGE_VERSION = '2026-11-11.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -15241,6 +15243,23 @@ const pinDlg = $('#pin-dlg'), pinForm = $('#pin-form');
 const PIN_RE = /^\d{4}$/;
 let pinCtx = null;
 function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidden = !msg; }
+// ระหว่างรอเซิร์ฟเวอร์: ปุ่มเขียนว่า "กำลังบันทึก…" · เกิน 5 วินาทีนับเวลาให้เห็น (เดิมปุ่มจางเฉย ๆ ดูเหมือนค้าง กดซ้ำก็ไม่มีอะไรเกิดขึ้น)
+let pinBusyOn = false, pinBusyT = 0;
+function pinSaveLabel(l) { const b = $('#pin-save'); b.dataset.label = l; b.textContent = pinBusyOn ? 'กำลังบันทึก…' : l; }
+function pinBusy(on) {
+  const b = $('#pin-save'), w = $('#pin-wait'), t0 = Date.now();
+  pinBusyOn = on;
+  clearInterval(pinBusyT);
+  b.textContent = on ? 'กำลังบันทึก…' : b.dataset.label || 'บันทึก';
+  w.hidden = true;
+  if (!on) return;
+  pinBusyT = setInterval(() => {
+    const n = Math.round((Date.now() - t0) / 1000);
+    if (n < 5) return;
+    w.hidden = false;
+    w.textContent = `กำลังบันทึก ${n} วินาที · ระบบยังทำงานอยู่ ไม่ต้องกดซ้ำ${n >= 60 ? ' · นานผิดปกติ: ถ้าเกิน 2 นาที โหลดหน้าใหม่แล้วดูว่าบันทึกแล้วหรือยัง' : ''}`;
+  }, 1000);
+}
 const firstPinInput = () => ['#pin-proof', '#pin-new', '#pin'].map(id => $(id)).find(el => !el.closest('[hidden]')) || $('#pin-save');   // ไม่ต้องใส่ PIN = ปุ่มบันทึก
 function syncPinForm() {
   const has = !!state.user.hasPin, set = pinCtx.mode === 'set', lpch = state.user.via === 'lpch';
@@ -15268,7 +15287,7 @@ function syncPinForm() {
   $('#pin-proof-lbl').textContent = pinCtx.forgot ? 'รหัสผ่าน LPCH RO Workspace' : 'รหัส PIN เดิม';
   $('#pin-field').hidden = !need || set || !has;
   if (!need) $('#pin-forgot').hidden = $('#pin-proof-box').hidden = true;
-  $('#pin-save').textContent = set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'dqdel' ? 'ลบการแจก' : pinCtx.mode === 'dqldel' ? 'ยกเลิกวันลา' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'ptdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'logdel' || pinCtx.mode === 'ctdel' ? 'ลบรายการ' : pinCtx.mode === 'apdel' ? 'ลบนัด' : pinCtx.mode === 'vacdel' ? 'ลบ' : pinCtx.mode === 'rgdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'bqcancel' ? 'ยกเลิกนัด' : pinCtx.mode === 'bqnew' ? 'ลงนัด' : (pinCtx.mode === 'ptadd' || pinCtx.mode === 'ctsave') && pinCtx.isNew ? 'เพิ่มผู้ป่วย' : pinCtx.mode === 'apsave' && pinCtx.isNew ? 'ลงนัด' : pinCtx.mode === 'rgsave' && pinCtx.isNew ? 'ลงทะเบียน' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก';
+  pinSaveLabel(set ? 'บันทึกรหัส PIN' : pinCtx.mode === 'dqdel' ? 'ลบการแจก' : pinCtx.mode === 'dqldel' ? 'ยกเลิกวันลา' : pinCtx.mode === 'del' ? 'ลบเคส' : pinCtx.mode === 'ptdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'logdel' || pinCtx.mode === 'ctdel' ? 'ลบรายการ' : pinCtx.mode === 'apdel' ? 'ลบนัด' : pinCtx.mode === 'vacdel' ? 'ลบ' : pinCtx.mode === 'rgdel' ? 'ลบผู้ป่วย' : pinCtx.mode === 'bqcancel' ? 'ยกเลิกนัด' : pinCtx.mode === 'bqnew' ? 'ลงนัด' : (pinCtx.mode === 'ptadd' || pinCtx.mode === 'ctsave') && pinCtx.isNew ? 'เพิ่มผู้ป่วย' : pinCtx.mode === 'apsave' && pinCtx.isNew ? 'ลงนัด' : pinCtx.mode === 'rgsave' && pinCtx.isNew ? 'ลงทะเบียน' : pinCtx.mode === 'course' ? (pinCtx.status === 'cancel' ? 'Cancel RT' : 'Complete course') : 'บันทึก');
   $('#pin-save').classList.toggle('danger', danger);
   for (const id of ['#pin', '#pin-new', '#pin-new2', '#pin-proof']) $(id).value = '';
   pinErr('');
@@ -15380,7 +15399,8 @@ function openPinSettings() {
 async function submitPin(e, clear) {
   if (e) e.preventDefault();
   const ctx = pinCtx, btn = $('#pin-save');
-  if (!ctx || btn.disabled) return;
+  if (!ctx) return;
+  if (btn.disabled) return pinErr('กำลังบันทึกรายการก่อนหน้าอยู่ · รอให้เสร็จก่อน (ปุ่มกดได้อีกครั้งเมื่อบันทึกเสร็จ)');
   if (ctx.mode === 'fx' && !clear) {
     const t = fxSelType(), back = $('#pin-fx-back').value;
     if (!t) { const r = $('#pin-fx-type input'); if (r) r.focus(); return pinErr('เลือกสถานะของ fraction'); }
@@ -15430,6 +15450,7 @@ async function submitPin(e, clear) {
   }
   btn.disabled = true;
   pinErr('');
+  pinBusy(true);
   try {
     if (needNew) {
       await store.setPin(newPin, ctx.mode === 'set' && has ? (ctx.forgot ? { password: $('#pin-proof').value } : { pin: $('#pin-proof').value }) : null);
@@ -15607,7 +15628,7 @@ async function submitPin(e, clear) {
     pinErr(m.replace(/^Error:\s{0,}/, ''));
     for (const id of ['#pin', '#pin-proof']) $(id).value = '';
     const f = firstPinInput(); if (f) f.focus();
-  } finally { btn.disabled = false; }
+  } finally { btn.disabled = false; pinBusy(false); }
 }
 // กลับมาฉายระหว่างช่วง Hold / HV ฯลฯ ที่ยังไม่กลับมา: ใส่วันกลับมาฉาย = วันที่กด ให้ทุกเคสของผู้ป่วย แล้วบันทึกสถานะของวันนั้นต่อ
 async function fxReturn(ctx, pin) {

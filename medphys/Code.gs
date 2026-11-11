@@ -35,7 +35,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.4';
+const CODE_VERSION = '2026-11-11.5';
 const API_LEVEL = 69;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -1145,7 +1145,7 @@ function stampSteps_(id, steps, pin, token, at) {
       if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
     });
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1186,7 +1186,7 @@ function stampBoost(id, sid, steps, pin, at, token) {
     if (Object.keys(cur).length) all[sid] = cur; else delete all[sid];
     const set = { bsteps: Object.keys(all).length ? JSON.stringify(all) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1245,7 +1245,7 @@ function courseCase(id, status, date, note, pin, token) {
       ? { rt: status, rtDate: date, rtAt: now, rtBy: String(u.name || u.username || u.me || ''), rtNote: note }
       : { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1301,7 +1301,7 @@ function fractionCase(id, date, ev, pin, token) {
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const set = { fxlog: list.length ? JSON.stringify(list) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1339,7 +1339,7 @@ function moveCase(id, date, mv, pin, token) {
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const set = { rmove: list.length ? JSON.stringify(list) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1361,7 +1361,7 @@ function tagCase(id, tags, pin, token) {
     if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const set = { ptags: text };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1467,7 +1467,7 @@ function addFxCase(id, date, add, pin, token) {
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const set = { fxadd: list.length ? JSON.stringify(list) : '' };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1492,7 +1492,7 @@ function timeCase(id, time, pin, token) {
     if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const set = { mqt: text };
     writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === id)[0];
+    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1526,9 +1526,9 @@ function courseAdd(rec, pin, token) {
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), how: 'direct', mp: '', in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: now, updated: '' });
-    writeFields_(sh, row || sh.getLastRow() + 1, header, fields.filter(f => f[0] in set), set);
-    const want = row ? id : set.id;
-    return readTable_(ss, 'cases', cfg).filter(c => c.id === want)[0];
+    const at = row || sh.getLastRow() + 1;
+    writeFields_(sh, at, header, fields.filter(f => f[0] in set), set);
+    return rowAt_(ss, 'cases', cfg, sh, header, at);
   });
 }
 
@@ -3926,7 +3926,14 @@ function pinChange_(u, pin, change) {
   if (String(pin == null ? '' : pin) === '' && pinRecord_(u)) throw new Error('PINNEED|การแก้ไขหรือลบต้องใส่รหัส PIN');
   checkPin_(u, pin);
 }
-const caseOf_ = id => (id ? readTable_(ss_(), 'cases', readConfig_(ss_())).filter(c => c.id === id)[0] || null : null);
+// เคสเดียวตาม id: อ่านคอลัมน์ id แล้วอ่านเฉพาะแถวนั้น (เดิมอ่านทั้งชีต Cases = ช้ามากเมื่อข้อมูลเยอะ · บันทึกสถานะ fraction ค้าง)
+const caseOf_ = id => {
+  if (!id) return null;
+  const ss = ss_(), cfg = readConfig_(ss), sh = ss.getSheetByName(tableDef_('cases', cfg).sheet);
+  if (!sh || sh.getLastRow() < 2) return null;
+  const header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+  return row ? rowAt_(ss, 'cases', cfg, sh, header, row) : null;
+};
 // มีรายการ id นี้ไหม: อ่านเฉพาะคอลัมน์ id (เดิมอ่านทั้งตาราง · แถบลงทะเบียน 2 หมื่นแถว = หลายวินาที)
 const rowExists_ = (table, id) => {
   if (!id) return false;
@@ -4256,6 +4263,11 @@ function readTable_(ss, table, cfg) {
   const cv = rowConv_(def, values.shift().map(v => String(v).trim()), tz);
   if (cv.cols[0] < 0) return [];
   return values.filter(r => String(r[cv.cols[0]]).trim() !== '').map(cv.conv);
+}
+// แถวเดียวของตาราง (แถวที่เพิ่งเขียน) แบบเดียวกับ readTable_ แต่อ่านแค่แถวนั้น
+function rowAt_(ss, table, cfg, sh, header, row) {
+  const cv = rowConv_(tableDef_(table, cfg), header, ss.getSpreadsheetTimeZone());
+  return cv.conv(sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0]);
 }
 // แถวในชีต → { คีย์: ข้อความ } ตามคอลัมน์ของตาราง (หัวคอลัมน์ชื่อเก่าใน RENAMED_COLS ก็อ่านได้)
 function rowConv_(def, header, tz) {
