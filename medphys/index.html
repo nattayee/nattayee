@@ -440,6 +440,12 @@ button.duty-line:hover{border-color:var(--accent)}
 .ap-rect>h3 small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
 .ap-rect .ct-pull{margin-top:8px}
 .ap-rect .ct-pull li{background:var(--surface)}
+.bq-rtst{display:block;width:max-content;max-width:100%;margin-top:3px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* แถบนัดคิวใส่แร่: สถานะในแถบห้องฉาย */
+.bq-rtst.on{background:var(--ok-soft);color:var(--ok)}
+.bq-rtst.hold{background:var(--warn-soft);color:var(--warn)}
+.bq-rtst.wait{background:var(--accent-soft);color:var(--accent)}
+.bq-rtst.done{background:var(--sunken);color:var(--muted)}
+.bq-rtst.stop{background:var(--late-soft);color:var(--late)}
 .cp-wait{margin:0 0 14px}   /* แถบแจกงานฟิสิกส์: รอแจก (CP ไม่ทำ CT ใหม่) */
 .cp-wait select{min-width:150px}
 .old-dates{align-self:end;margin:0;padding:8px 12px;border-radius:8px;background:var(--sunken);color:var(--muted);font-size:13px}
@@ -739,6 +745,11 @@ button.fxc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 @media (max-width:700px){.fxg-c0{gap:4px;padding:4px 6px}.fxg-legend,.fx-prog,.fxg-stat,.fxg-row .fxg-c0 .av,.fxg-row .doc-chip,.fxg-row .bd-time,.fxg-row .fxg-name,.fxg-row .fxg-meta{display:none}.fxc b{font-size:13px}}
 /* หน้าต่างบันทึกสถานะ fraction */
 .fx-box{display:grid;gap:12px}
+.fx-groups{display:grid;gap:10px}
+.fx-grp{display:grid;gap:6px}
+.fx-grp-lbl{font-size:12.5px;font-weight:600;color:var(--muted)}
+.fx-grp-lbl small{font-weight:400;color:var(--faint)}
+.fx-grp.skip .chips label input:checked+span{background:var(--warn);border-color:var(--warn);color:var(--surface)}
 .fx-back{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .fx-back input{width:auto}
 .chip-btn{min-height:30px;padding:3px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--fg);font:inherit;font-size:12.5px}
@@ -2875,7 +2886,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       </div>
       <label class="field" id="pin-date-field" hidden><span class="lbl" id="pin-date-lbl">วันที่</span><input type="date" id="pin-date"></label>
       <div class="fx-box" id="pin-fx-box" hidden>
-        <div class="field"><span class="lbl">สถานะของ fraction</span><div class="chips" id="pin-fx-type" role="radiogroup" aria-label="สถานะของ fraction"></div></div>
+        <div class="field"><span class="lbl">สถานะของ fraction</span><div class="fx-groups" id="pin-fx-type" role="radiogroup" aria-label="สถานะของ fraction"></div></div>
         <div class="field" id="pin-fx-reason-box" hidden><span class="lbl" id="pin-fx-reason-lbl">เหตุผล</span><div class="chips" id="pin-fx-reason" role="radiogroup" aria-label="เหตุผล"></div></div>
         <div class="field" id="pin-fx-off-box" hidden><span class="lbl">หยุดฉายแบบ</span><div class="chips" id="pin-fx-off" role="radiogroup" aria-label="หยุดฉายแบบ">
           <label title="ฉายครบแล้ว วันนี้เป็นวันฉายครั้งสุดท้าย เคสไปอยู่แถบ Complete course"><input type="radio" name="fxoff" value="complete"><span>Complete course</span></label>
@@ -3453,9 +3464,12 @@ const DEFAULT_CONFIG = {
   // สถานะของ fraction ในแถบ Complete (แอดมินเพิ่ม/แก้ได้): act skip = ไม่ได้ฉาย เลื่อน fraction · treat = ฉายตามปกติ บันทึกไว้ · off = Off RT
   // reasons = เหตุผลให้เลือก · need = ต้องเลือกเหตุผล · title = คำอธิบาย
   fxTypes: [
-    { id: 'given', label: 'ฉายแล้ว', title: 'บันทึกว่า fraction นี้ฉายแล้ว', act: 'given', reasons: [], need: false, replan: false },
-    { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false },
-    { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false },
+    { id: 'given', label: 'Complete Fraction', title: 'บันทึกว่า fraction นี้ฉายแล้ว', act: 'given', reasons: [], need: false, replan: false },
+    // ฉายแล้วและส่งไปรอลงนัด CT ใหม่ (Re-CT) + งานวางแผนใหม่ให้ MP คนเดิม · ไม่เลื่อน fraction
+    { id: 'rectg', label: 'Complete Fraction and Re-CT', title: 'ฉาย fraction นี้แล้ว และส่งไปรอลงนัด CT ใหม่ (Re-CT)', act: 'given', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: false, replan: true },
+    // open = ไม่ถามวันกลับมาฉาย (จนกว่าจะกลับมา · กลับมาแล้วกดช่องวันที่กลับมา เลือกสถานะในกลุ่มฉายแล้ว)
+    { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false, open: true },
+    { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false, open: true },
     { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true, replan: true },
     // CP (Change plan): ฉายวันนั้นได้ (เปลี่ยนแผน ลดโดส ฯลฯ ไม่เลื่อน fraction) · ทำ CT ใหม่ = รอลงนัด CT + งานวางแผนใหม่ (เหมือน Re-CT แต่ไม่หยุดฉาย)
     // ไม่ทำ CT ใหม่ = งานวางแผนใหม่ให้ MP คนเดิม (CT-Sim เดิม) · Start RT ของงาน = วันนั้น
@@ -3941,6 +3955,7 @@ function mergeConfig(c) {
       reasons: Array.isArray(x.reasons) ? x.reasons.map(str).filter(Boolean) : [], need: !!x.need,
       replan: x.replan !== undefined ? !!x.replan : str(x.id) === 'rect',   // ตั้งค่าที่บันทึกก่อนมีตัวเลือกนี้: Re-CT เปิดไว้
       pause: x.pause !== undefined ? !!x.pause : str(x.id) === 'cp',   // ฉายตามปกติ + เลือกหยุดฉายได้ตอนบันทึก (CP เปิดไว้)
+      open: x.open !== undefined ? !!x.open : ['hold', 'hv'].includes(str(x.id)),   // ไม่ถามวันกลับมาฉาย (Hold, HV เปิดไว้)
     }));
     // สถานะใหม่ของระบบ (เช่น ฉายแล้ว) ที่แอดมินยังไม่เคยเห็นในตั้งค่า เพิ่มให้ตามลำดับเดิม · ลบทิ้งแล้วไม่กลับมา
     const known = Array.isArray(c.fxSeen) ? c.fxSeen.map(str) : ['hold', 'hv', 'rect', 'off'];
@@ -4175,7 +4190,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.1';
+const PAGE_VERSION = '2026-11-11.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6059,7 +6074,8 @@ const apInMonth = (r, ym) => (isDay(r.date) ? r.date.slice(0, 7) === ym : str(r.
 // Complete course / Cancel RT / Off RT · ล้างหรือเปลี่ยนสถานะ · ใส่วันกลับมาฉายไว้และถึงวันนั้นแล้ว · Re-CT เกิน 60 วัน
 const newCtReason = r => /ทำ\s*CT\s*ใหม่/i.test(str(r)) && !/ไม่ทำ/.test(str(r));   // CP: ทำ CT ใหม่
 const noNewCt = r => /ไม่ทำ\s*CT/i.test(str(r));   // CP: ไม่ทำ CT ใหม่ = งานวางแผนใหม่ใช้ CT-Sim เดิม
-const isReCt = e => (e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)))) || (['skip', 'treat'].includes(e.act) && newCtReason(e.reason));
+const isReCt = e => (e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)))) || (['given', 'treat'].includes(e.act) && (e.type === 'rectg' || /\bre-?ct\b/i.test(str(e.label))))
+  || (['skip', 'treat'].includes(e.act) && newCtReason(e.reason));
 const localDay = v => { const t = Date.parse(str(v)); return Number.isFinite(t) ? iso(new Date(t)) : ''; };
 function reCtWaiting() {
   if (!apptOn()) return [];
@@ -7834,11 +7850,31 @@ const bqCtLabel = p => `${p.t}${p.room ? ' ' + ctShort(p.room) : ''}`;
 // เพิ่มรอบ CT ใหม่ = บันทึกใหม่ · รอบที่บันทึกไว้ยังอยู่ครบ (ชนิดและห้องเดิม)
 const bqCtKept = (a, now) => bqCtPairs(a).every(p => bqCtPairs(now).some(q => q.t === p.t && q.room === p.room));
 // ห้องฉายรังสีภายนอกของผู้ป่วย (วันนัดใส่แร่): เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนั้น (ย้ายห้องตลอดไปแล้ว = ห้องใหม่) · ไม่มีข้อมูลเคส = ที่ Code.gs ส่งมา
-function bqRoomOf(a) {
+function bqRtCase(a) {
   const k = hnKey(a.hn);
-  if (!k) return '';
+  if (!k) return null;
   const cs = byHn(state.cases, k).filter(c => c.room && catOf(c.cat).kind !== 'simple' && !c.replan).sort((x, y) => str(x.sim).localeCompare(str(y.sim)));
-  const c = [...cs].reverse().find(x => isDay(x.sim) && x.sim <= a.date) || cs[0];
+  return [...cs].reverse().find(x => isDay(x.sim) && x.sim <= a.date) || cs[0] || null;
+}
+// สถานะในแถบห้องฉาย ณ วันนัด (นัดล่วงหน้า = วันนี้): On Treatment · สถานะไม่ได้ฉายที่บันทึก (Hold, HV, Re-CT ฯลฯ) · รอเริ่มฉาย · ฉายครบ · Complete course · Cancel RT · Off RT
+// ไม่นับสถานะ HDR อัตโนมัติของวันนัดใส่แร่ (บันทึกเองเท่านั้น) · ไม่มีเคสฉายรังสีภายนอก = ไม่แสดง
+function bqRtStatus(a) {
+  const c = bqRtCase(a);
+  if (!c) return null;
+  const td = today(), d = isDay(a.date) && a.date < td ? a.date : td;
+  if (c.rt === 'cancel' && c.rtDate && c.rtDate <= d) return { t: 'Cancel RT', k: 'stop' };
+  if (c.rt === 'complete' && c.rtDate && c.rtDate < d) return { t: 'Complete course', k: 'done' };
+  const evs = parseFx(c), off = evs.find(e => e.act === 'off' && e.date <= d);
+  if (off) return { t: off.label || 'Off RT', k: 'stop' };
+  if (!isDay(c.sim) || c.sim > d) return { t: 'รอเริ่มฉาย', k: 'wait' };
+  const e = fxEventAt(evs, d);
+  if (e && e.act === 'skip') return { t: e.label, k: 'hold' };
+  const sc = caseSchedule(c, holidayMap());
+  if (sc && sc.end && !sc.pending && sc.end < d && c.rt !== 'complete') return { t: 'ฉายครบ', k: 'done' };
+  return { t: 'On Treatment', k: 'on' };
+}
+function bqRoomOf(a) {
+  const c = bqRtCase(a);
   if (!c) return str(a.rtRoom);
   const mv = parseMoves(c).filter(m => m.scope === 'on' && m.date <= a.date).pop();
   return mv ? mv.room : c.room;
@@ -8014,7 +8050,9 @@ function bqRowsHtml(rows, edit) {
     const usC = '<span class="bq-imgc us">US</span>';
     const us = a.us ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqus="${esc(a.id)}" data-v="" title="Ultrasound · กดเพื่อเอาออก">${usC}</button>` : `<span class="bq-img" title="Ultrasound">${usC}</span>`)
       : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqImgOn() ? '' : ' old'}" data-bqus="${esc(a.id)}" data-v="US" title="${esc(bqImgOn() ? 'บันทึกว่าทำ Ultrasound' : bqImgOld())}">+ US</button>` : '';
-    const rtr = bqRoomOf(a), room = rtr ? `<span class="bq-rtroom" title="ฉายรังสีภายนอกที่ห้อง ${esc(roomLabel(rtr))}">${esc(roomLabel(rtr))}</span>` : '<span class="muted">—</span>';
+    const rtr = bqRoomOf(a), rst = bqRtStatus(a), dOf = isDay(a.date) && a.date < today() ? a.date : today();
+    const room = (rtr ? `<span class="bq-rtroom" title="ฉายรังสีภายนอกที่ห้อง ${esc(roomLabel(rtr))}">${esc(roomLabel(rtr))}</span>` : rst ? '' : '<span class="muted">—</span>')
+      + (rst ? `<span class="bq-rtst ${rst.k}" title="${esc(`สถานะในแถบ${navLabel('course')} ณ ${fmtDay(dOf)}`)}">${esc(rst.t)}</span>` : '');
     return `<tr class="ct-row bq-row${st ? ' ' + st : ''}${edit ? ' click' : ''}"${edit ? ` data-bqedit="${esc(a.id)}" tabindex="0"` : ''}>
       <td class="num">${bqLive(a) ? ++q : '–'}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td class="bq-rtc">${room}</td><td>${bqDocHtml(a.doc)}</td>
       <td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td class="ct-note">${esc(a.note)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td>
@@ -9341,6 +9379,10 @@ function openFx(id, day, away, lane = '') {
   // แถวย่อย: ฉายแล้วของแถวนั้น (ถ้ามี) ก่อนสถานะของทั้งผู้ป่วย
   const lcur = lane ? laneEvs(c).find(e => e.lane === lane && e.date === day) || null : null;
   const evs = parseFx(c), cur = lcur || fxEventAt(evs, day), date = cur ? cur.date : day, moves = parseMoves(c), mvCur = moveAt(moves, day);
+  // วันที่อยู่ในช่วง Hold / HV ฯลฯ ที่ยังไม่กลับมา: เลือกสถานะกลุ่มฉายแล้ว = กลับมาฉายวันนี้ (จบช่วงนั้นที่วันนี้ แล้วบันทึกวันนี้) · กลุ่มไม่ได้ฉาย = แก้รายการเดิม
+  const ret = !lcur && cur && cur.act === 'skip' && cur.date < day ? day : '';
+  const scR = ret ? caseSchedule({ ...c, noAuto: day, fxlog: JSON.stringify(evs.map(e => (e === cur ? { ...e, back: day } : e))) }, holidayMap()) : null;
+  const listR = scR && scR.fx.get(day), retNum = listR ? fxNum(lane ? laneList(listR, lane) : listR) : '';
   // เลข fraction ของวันนั้นตามตารางที่ไม่มีรายการนี้ (แก้ Hold เดิม = fraction ที่ถูกเลื่อนออกไป)
   const sc = caseSchedule({ ...c, noAuto: date, fxlog: JSON.stringify(evs.filter(e => e.date !== date)), rmove: JSON.stringify(moves.filter(m => m.date !== day)) }, holidayMap());
   const list0 = sc && sc.fx.get(date), list = lane ? laneList(list0, lane) : list0, num = list ? fxNum(list) : '', laneLbl = lane && sc ? fxLaneLabel(c, caseSchedule(c, holidayMap()) || sc, lane) : '';
@@ -9351,30 +9393,53 @@ function openFx(id, day, away, lane = '') {
   const hdr = !cur && sc0 ? sc0.evs.find(e => e.auto && e.date === day) || null : null;   // วันนัดใส่แร่: สถานะ HDR อัตโนมัติ
   const lastOf = x => { const s = caseSchedule(x, hol); return s && !s.pending ? s.last : ''; };
   const addIds = hnGroup(c).filter(x => planReady(x) && (x.id === id || lastOf(x) === day || parseAdds(x).some(a => a.date === day))).map(x => x.id);
-  pinCtx = { mode: 'fx', id, ids: hnGroup(c).filter(planReady).map(x => x.id), date, day, cur, num, lane, laneLbl, forgot: false, auto: false, n0: list ? (list.find(v => v.site === 0 || v.boost) || list[0]).from : 0, mvCur, mvDay, fromRoom, addCur, addIds, last: sc0 ? sc0.planned : 0 };
+  pinCtx = { mode: 'fx', id, ids: hnGroup(c).filter(planReady).map(x => x.id), date, day, cur, num, lane, laneLbl, forgot: false, auto: false, n0: list ? (list.find(v => v.site === 0 || v.boost) || list[0]).from : 0, mvCur, mvDay, fromRoom, addCur, addIds, last: sc0 ? sc0.planned : 0, ret, retNum };
   $('#pin-title').textContent = `${num ? `Fx ${num} · ` : ''}${laneLbl ? laneLbl + ' · ' : ''}${fmtDay(date)} · ${c.hn || ''}`;
   $('#pin-what').innerHTML = cur
     ? `บันทึกแล้ว <b>${esc(cur.label)}</b>${cur.reason ? ` (${esc(cur.reason)})` : ''} ${esc(LONG_DAY_FMT.format(parseISO(cur.date)))} โดย <b>${esc(cur.by || '—')}</b> ${esc(fmtStamp(cur.at) || '')}<br>แก้แล้วบันทึกใหม่ หรือกด "ล้างสถานะ" ให้ fraction กลับมาตามเดิม`
     : `${esc(LONG_DAY_FMT.format(parseISO(date)))}${num ? ` · <b>Fx ${esc(num)}${sc.planned ? '/' + sc.planned : ''}</b>` : ''} · ${esc(catOf(c.cat).label)}${c.name ? ` · ${esc(c.name)}` : ''}`;
+  if (ret) {
+    $('#pin-title').textContent = `${retNum ? `Fx ${retNum} · ` : ''}${laneLbl ? laneLbl + ' · ' : ''}${fmtDay(day)} · ${c.hn || ''}`;
+    $('#pin-what').innerHTML = `${esc(LONG_DAY_FMT.format(parseISO(day)))} อยู่ในช่วง <b>${esc(cur.label)}</b> ตั้งแต่ ${esc(fmtDay(cur.date))}${cur.back ? ` ถึงก่อน ${esc(fmtDay(cur.back))}` : ' (จนกว่าจะกลับมา)'}<br>เลือกสถานะในกลุ่ม <b>ฉายแล้ว</b> = กลับมาฉายวันนี้ (จบ ${esc(cur.label)} ที่วันนี้) · กลุ่ม <b>ไม่ได้ฉาย</b> = แก้รายการ ${esc(cur.label)} เดิม`;
+  }
   if (hdr) $('#pin-what').innerHTML += `<br><span class="fx-auto">${esc(hdr.note)} · สถานะ <b>${esc(hdr.label)}</b> อัตโนมัติ: วันนี้ไม่ฉาย เลื่อนไป ${esc(fmtDay(hdr.back))} · บันทึกสถานะอื่นของวันนี้ = ใช้ที่บันทึกแทน</span>`;
   if (mvCur) $('#pin-what').innerHTML += `<br>${esc(moveTip(mvCur))}`;
   if (addCur) $('#pin-what').innerHTML += `<br>${esc(addTip(addCur))}`;
   if (lane) $('#pin-what').innerHTML += `<br><b>ฉายแล้ว</b> บันทึกเฉพาะแถวนี้${laneLbl ? ` (${esc(laneLbl)})` : ''} · สถานะอื่น (Hold, Off RT ฯลฯ) ใช้กับทุกแถวของผู้ป่วย`;
   if (pinCtx.ids.length > 1) $('#pin-what').innerHTML += `<br>บันทึกให้ทุกเทคนิคของผู้ป่วยนี้ (${pinCtx.ids.length} เคส)`;
   $('#pin-val-field').hidden = true;
-  const types = (state.config.fxTypes || []).filter(t => t.act !== 'given' || fx2On());   // Code.gs รุ่นเก่ายังเก็บ "ฉายแล้ว" ไม่ได้
-  if (cur && !types.some(t => t.id === cur.type)) types.push({ id: cur.type, label: cur.label, title: '', act: cur.act, reasons: cur.reason ? [cur.reason] : [], need: false });
+  const base = (state.config.fxTypes || []).filter(t => t.act !== 'given' || fx2On());   // Code.gs รุ่นเก่ายังเก็บ "ฉายแล้ว" ไม่ได้
+  if (cur && !base.some(t => t.id === cur.type)) base.push({ id: cur.type, label: cur.label, title: '', act: cur.act, reasons: cur.reason ? [cur.reason] : [], need: false });
+  // กลุ่ม: ฉายแล้ว (ฉายแล้ว · ฉายตามปกติ · Off RT) · ไม่ได้ฉาย (เลื่อน fraction · ย้ายห้อง) · เพิ่ม / ลบ fraction
+  // สถานะที่เลือกหยุดฉายได้ (CP) อยู่ทั้งสองกลุ่ม: ฉายแล้ว = ฉายวันนี้ · ไม่ได้ฉาย = หยุดฉาย (id~skip)
+  const types = [];
+  for (const t of base) {
+    const lbl = t.act === 'given' && t.label === 'ฉายแล้ว' ? 'Complete Fraction' : t.label;   // ชื่อเดิมของตั้งค่าที่บันทึกไว้
+    if (fxPausable(t)) { types.push({ ...t, label: lbl, pause: false, grp: 'given' }, { ...t, label: lbl, id: t.id + '~skip', base: t.id, act: 'skip', pause: false, grp: 'skip' }); continue; }
+    types.push({ ...t, label: lbl, grp: t.act === 'skip' ? 'skip' : 'given' });
+  }
   // ย้ายห้อง (มีในตัว): วันฉายที่มีห้องอื่นให้ย้ายไป · Code.gs รุ่น 2026-10-18.4 ขึ้นไป
   const toRooms = state.config.rooms.filter(r => r !== fromRoom);
   if (mvDay && !toRooms.includes(mvDay.room)) toRooms.push(mvDay.room);
-  if (moveOn() && num && (toRooms.length || mvCur)) types.push(MOVE_TYPE);
-  // เพิ่ม / ลบ fraction: ตำแหน่งที่ตั้งไว้ · Code.gs ใหม่ = ทุกวันที่มี fraction · Code.gs เดิม = เพิ่มได้ที่ fraction สุดท้าย
-  if (addFxOn() && num && fxAdjCan() && ((sc0 && (fxAdjNegOn() || (!sc0.pending && sc0.last === day))) || addCur)) types.push(ADD_TYPE);
+  if (moveOn() && num && (toRooms.length || mvCur)) types.push({ ...MOVE_TYPE, grp: 'skip' });
+  // เพิ่ม fraction / ลบ fraction: ตำแหน่งที่ตั้งไว้ (ค่าเริ่มต้น MP) · Code.gs ใหม่ = ทุกวันที่มี fraction · Code.gs เดิม = เพิ่มได้ที่ fraction สุดท้าย
+  if (addFxOn() && num && fxAdjCan()) {
+    if ((sc0 && (fxAdjNegOn() || (!sc0.pending && sc0.last === day))) || (addCur && addCur.n > 0)) types.push(ADD_PLUS);
+    if ((sc0 && fxAdjNegOn()) || (addCur && addCur.n < 0)) types.push(ADD_MINUS);
+  }
   pinCtx.types = types;
-  // วันฉายที่ถึงแล้วและยังไม่ได้บันทึก: เลือก "ฉายแล้ว" ไว้ให้ ใส่ PIN ครบ 4 หลักแล้วบันทึกเลย · กดช่อง "ย้าย" = เลือกย้ายห้องไว้
-  const pre = away && types.includes(MOVE_TYPE) ? MOVE_TYPE.id : cur ? cur.type : hdr ? (types.some(t => t.id === hdr.type) ? hdr.type : '') : num && date <= today() ? (types.find(t => t.act === 'given') || {}).id : '';
+  // ค่าเริ่มต้น (วันฉายที่ถึงแล้วและยังไม่ได้บันทึก): Complete Fraction · fraction สุดท้ายของคอร์ส = Off RT (Complete course)
+  // ใส่ PIN ครบ 4 หลักแล้วบันทึกเลย (Complete Fraction) · กดช่อง "ย้าย" = เลือกย้ายห้องไว้ · ช่วง Hold ที่ยังไม่กลับมา = Complete Fraction (กลับมาฉาย)
+  const plain = types.find(t => t.act === 'given' && !t.replan), offT = types.find(t => t.act === 'off');
+  const isLast = !!sc0 && !sc0.pending && sc0.last === date && !!num && courseOn();
+  const curId = cur && (cur.act === 'skip' && types.some(t => t.base === cur.type) ? cur.type + '~skip' : cur.type);
+  const pre = away && types.some(t => t.id === MOVE_TYPE.id) ? MOVE_TYPE.id
+    : ret ? (day <= today() && plain ? plain.id : '')
+    : cur ? curId
+    : hdr ? (types.some(t => t.id === hdr.type) ? hdr.type : '')
+    : num && date <= today() ? (isLast && offT ? offT.id : (plain || {}).id) : '';
   chipGroup($('#pin-fx-room'), 'fxroom', toRooms, mvDay ? mvDay.room : toRooms.length === 1 ? toRooms[0] : '');
-  setChip($('#pin-fx-off'), '');
+  setChip($('#pin-fx-off'), offT && pre === offT.id && !cur ? 'complete' : '');
   setChip($('#pin-fx-scope'), mvDay ? mvDay.scope : '');
   const ns = Array.from({ length: 10 }, (_, i) => String(i + 1)), an = addCur ? String(Math.abs(addCur.n)) : '';
   if (an && !ns.includes(an)) ns.push(an);
@@ -9386,7 +9451,9 @@ function openFx(id, day, away, lane = '') {
   pinCtx.rpMps = mpsAt;
   mpChips($('#pin-rp-mp'), 'rpmp', '', today());
   $('#pin-rp-mp').insertAdjacentHTML('afterbegin', '<label><input type="radio" name="rpmp" value="" checked><span id="pin-rp-same"></span></label>');
-  $('#pin-fx-type').innerHTML = types.length ? types.map(t => `<label title="${esc([t.title, (FX_ACTS.find(a => a[0] === t.act) || [])[1]].filter(Boolean).join(' · '))}"><input type="radio" name="fxtype" value="${esc(t.id)}"${pre === t.id ? ' checked' : ''}><span>${esc(t.label)}</span></label>`).join('')
+  const chip = t => `<label title="${esc([t.title, (FX_ACTS.find(a => a[0] === t.act) || [])[1]].filter(Boolean).join(' · '))}"><input type="radio" name="fxtype" value="${esc(t.id)}"${pre === t.id ? ' checked' : ''}><span>${esc(t.label)}</span></label>`;
+  const grps = [['given', 'ฉายแล้ว'], ['skip', 'ไม่ได้ฉาย'], ['add', 'เพิ่ม / ลบ fraction', `เฉพาะ ${(state.config.fxAdj.roles || []).join(', ') || 'MP'}`]];
+  $('#pin-fx-type').innerHTML = types.length ? grps.map(([g, l, sub]) => { const ts = types.filter(t => t.grp === g); return ts.length ? `<div class="fx-grp ${g}"><span class="fx-grp-lbl">${l}${sub ? ` <small>${esc(sub)}</small>` : ''}</span><div class="chips">${ts.map(chip).join('')}</div></div>` : ''; }).join('')
     : '<span class="muted">แอดมินยังไม่ได้ตั้งสถานะ (ตั้งค่า → สถานะ fraction)</span>';
   $('#pin-fx-back').value = cur ? cur.back : hdr ? hdr.back : '';   // วันนัดใส่แร่: กลับมาฉายวันทำการถัดไป
   pinCtx.fxPause = !!cur && cur.act === 'skip';   // สถานะที่เลือกหยุดฉายได้ (CP): ที่บันทึกไว้แบบหยุดฉาย
@@ -9405,10 +9472,14 @@ function openFx(id, day, away, lane = '') {
 const fxSelType = () => { const v = chipValue($('#pin-fx-type')); return (pinCtx && pinCtx.types || []).find(t => t.id === v) || null; };
 const MOVE_TYPE = { id: '__move', label: 'ย้ายห้อง', title: 'ย้ายไปฉายอีกห้อง: เฉพาะ fraction นี้ หรือตั้งแต่ fraction นี้เป็นต้นไป', act: 'move', reasons: [], need: false };
 const fxMoving = () => !!pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'move';
-const ADD_TYPE = { id: '__add', label: 'เพิ่ม / ลบ fraction', title: 'เพิ่ม fraction ต่อท้ายคอร์ส หรือลบ fraction ท้ายคอร์ส (ใส่จำนวนและเหตุผล)', act: 'add', reasons: [], need: false };
+const ADD_PLUS = { id: '__addp', label: 'เพิ่ม fraction', title: 'เพิ่ม fraction ต่อท้ายคอร์ส (ใส่จำนวนและเหตุผล)', act: 'add', reasons: [], need: false, grp: 'add', sign: 1 };
+const ADD_MINUS = { id: '__addm', label: 'ลบ fraction', title: 'ลบ fraction ท้ายคอร์ส (ใส่จำนวนและเหตุผล)', act: 'add', reasons: [], need: false, grp: 'add', sign: -1 };
+// วันที่ของสถานะที่เลือก: กลับมาฉายระหว่างช่วง Hold ฯลฯ = วันที่กด · อื่นๆ = วันของรายการ
+const fxDay = () => (pinCtx.ret && fxAct(fxSelType()) !== 'skip' ? pinCtx.ret : pinCtx.date);
+const fxNumAt = () => (pinCtx.ret && fxAct(fxSelType()) !== 'skip' ? pinCtx.retNum : pinCtx.num);
 const fxAdding = () => !!pinCtx && pinCtx.mode === 'fx' && (fxSelType() || {}).act === 'add';
 // จำนวนที่เลือก (ลบ = ติดลบ) · ลบได้สูงสุด = จาก fraction ของวันที่เลือกถึงท้ายคอร์ส และเหลืออย่างน้อย 1
-const fxAdjN = () => { const n = +chipValue($('#pin-fx-addn')) || 0; return chipValue($('#pin-fx-addsign')) === 'ลบ' ? -n : n; };
+const fxAdjN = () => { const n = +chipValue($('#pin-fx-addn')) || 0, t = fxSelType(); return (t && t.sign ? t.sign < 0 : chipValue($('#pin-fx-addsign')) === 'ลบ') ? -n : n; };
 function fxAdjMax(c, ctx) {
   const sc = caseSchedule({ ...c, fxadd: JSON.stringify(parseAdds(c).filter(a => a.date !== ctx.day)) }, holidayMap()), planned = sc ? sc.planned : 0, from = parseInt(String(ctx.num).split(/[^\d]/)[0], 10) || planned;
   return Math.max(0, Math.min(planned - 1, planned - from + 1));
@@ -9422,23 +9493,24 @@ const fxAdvWhat = t => (t.act === 'off' ? { complete: 'Complete course', cancel:
 const fxAct = t => (t && fxPausable(t) && pinCtx && pinCtx.fxPause ? 'skip' : t && t.act);
 function fxDraft() {
   const t = fxSelType(), act = fxAct(t);
-  return t && { type: t.id, label: t.label, act, back: act === 'skip' ? str($('#pin-fx-back').value) : '', reason: t.reasons.length ? chipValue($('#pin-fx-reason')) : '', note: str($('#pin-note').value) };
+  return t && { type: t.base || t.id, label: t.label, act, back: act === 'skip' && !t.open ? str($('#pin-fx-back').value) : '', reason: t.reasons.length ? chipValue($('#pin-fx-reason')) : '', note: str($('#pin-note').value) };
 }
 // เลือกสถานะแล้ว: เหตุผลของสถานะนั้น · วันกลับมาฉาย (สถานะที่ไม่ได้ฉาย) · ตัวอย่างว่า fraction เลื่อนไปวันไหน ครบวันไหน
 function syncFx() {
   const ctx = pinCtx, t = fxSelType(), box = $('#pin-fx-reason');
   if (box.dataset.type !== (t ? t.id : '')) {
-    const keep = t && ctx.cur && ctx.cur.type === t.id ? ctx.cur.reason : '';
+    const keep = t && ctx.cur && ctx.cur.type === (t.base || t.id) ? ctx.cur.reason : '';
     const reasons = t ? [...t.reasons, ...(keep && !t.reasons.includes(keep) ? [keep] : [])] : [];
     box.innerHTML = reasons.map(r => `<label><input type="radio" name="fxreason" value="${esc(r)}"${r === keep ? ' checked' : ''}><span>${esc(r)}</span></label>`).join('');
     box.dataset.type = t ? t.id : '';
   }
   $('#pin-fx-reason-box').hidden = !box.children.length;
   $('#pin-fx-reason-lbl').innerHTML = `เหตุผล${t && t.need ? ' <b class="req">*</b>' : ' <span class="sub-lbl">ไม่บังคับ</span>'}`;
-  const skip = !!t && t.act === 'skip', moving = !!t && t.act === 'move', adding = !!t && t.act === 'add', off = fxOffMode(), pausable = fxPausable(t);
+  const skip = !!t && t.act === 'skip' && !t.open, moving = !!t && t.act === 'move', adding = !!t && t.act === 'add', off = fxOffMode(), pausable = fxPausable(t);
   $('#pin-fx-back-box').hidden = !skip && !pausable;
   $('#pin-fx-move-box').hidden = !moving;
   $('#pin-fx-add-box').hidden = !adding;
+  $('#pin-fx-addsign').hidden = !!(t && t.sign);   // เพิ่ม fraction / ลบ fraction แยกปุ่มแล้ว
   $('#pin-fx-off-box').hidden = !off || !courseOn();
   $('#pin-clear').hidden = !(adding ? ctx.addCur : moving ? ctx.mvCur : off === 'complete' || off === 'cancel' ? null : ctx.cur);   // ล้างตามสิ่งที่เลือก: การเพิ่ม fraction การย้ายห้อง หรือสถานะของวันนี้
   $('#pin-clear').textContent = adding ? 'ล้างการเพิ่ม / ลบ fraction' : moving ? 'ล้างการย้ายห้อง' : 'ล้างสถานะ';
@@ -9453,14 +9525,15 @@ function syncFx() {
     .filter((x, i, a) => a.findIndex(y => y[0] === x[0]) === i).map(([v, l]) => `<button type="button" class="chip-btn" data-fxback="${v}" aria-pressed="${v === 'today' ? pz : !pz && $('#pin-fx-back').value === v}">${esc(l)}</button>`).join('');
   $('#pin-fx-back-lbl').textContent = pausable ? 'ฉายวันนี้ หรือหยุดฉาย กลับมาฉายวันที่' : 'กลับมาฉายวันที่';
   $('#pin-fx-back-sub').textContent = pausable ? 'ค่าเริ่มต้น = ฉายวันนี้ · เว้นว่าง = จนกว่าจะกลับมา' : 'เว้นว่าง = จนกว่าจะกลับมา';
-  ctx.auto = !ctx.cur && !!t && t.act === 'given' && ctx.date <= today() && !(t.need && t.reasons.length && !chipValue(box));
+  ctx.auto = !ctx.cur && !ctx.ret && !!t && t.act === 'given' && !t.replan && ctx.date <= today() && !(t.need && t.reasons.length && !chipValue(box));
   // งานวางแผนใหม่ที่จะส่งให้ MP คนเดิม (สถานะที่ตั้งไว้ · ย้ายห้อง)
-  const cpWait = replanOn() && !!t && !moving && !adding && !!t.replan && t.act !== 'off' && noNewCt(t.reasons.length ? chipValue(box) : '');
-  const rpWill = replanOn() && !!t && !cpWait && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && !adding);
+  // CP ไม่ทำ CT ใหม่ · ย้ายห้อง: งานวางแผนใหม่ไปรอแจกในแถบแจกงานฟิสิกส์ (เคสเดิม) · สถานะอื่นที่ตั้งให้ส่งงาน: ส่งให้ MP คนเดิมเลย
+  const cpWait = replanOn() && !!t && !adding && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && noNewCt(t.reasons.length ? chipValue(box) : ''));
+  const rpWill = replanOn() && !!t && !cpWait && !moving && !!t.replan && t.act !== 'off' && !adding;
   $('#pin-fx-rp').hidden = !rpWill && !cpWait;
   $('#pin-rp-box').hidden = !rpWill || !replanMpOn();
   if (cpWait) {
-    const c0 = state.cases.find(x => x.id === ctx.id), rx = c0 ? replanRx(c0, ctx.date) : {};
+    const c0 = state.cases.find(x => x.id === ctx.id), rx = c0 ? replanRx(c0, moving ? ctx.day : ctx.date) : {};
     $('#pin-fx-rp').innerHTML = `↻ <b>รอแจกงานวางแผนใหม่</b>ในแถบ<b>${esc(navLabel('work'))}</b>${rx.fx ? ` · prescription ${esc(rx.dpf ? cGyText(rx.dpf) : '? cGy')} × ${esc(rx.fx)} fx ที่เหลือ` : ''} · เลือกผู้รับงานที่นั่น (ค่าเริ่มต้น = MP คนเดิม)`;
   }
   if (rpWill) {
@@ -9489,31 +9562,34 @@ function syncFx() {
       : `ตั้งแต่ ${fx} (${esc(fmtDay(ctx.day))}) ไปฉายที่ห้อง <b>${esc(to)}</b> ตลอดไป · ห้อง ${esc(from)} แสดงสถานะ "ย้าย"`;
     return;
   }
+  const d = fxDay(), n = fxNumAt(), back = ctx.ret && d === ctx.ret ? `กลับมาฉาย <b>${esc(fmtDay(d))}</b> · จบ ${esc(ctx.cur.label)} ที่เริ่ม ${esc(fmtDay(ctx.cur.date))} · ` : '';
   if (t.act === 'given') {
-    prev.innerHTML = ctx.date > today() ? `ยังไม่ถึง ${esc(fmtDay(ctx.date))} บันทึกฉายแล้วล่วงหน้าไม่ได้`
-      : `บันทึกว่า <b>${ctx.num ? `Fx ${esc(ctx.num)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(ctx.date))}${ctx.auto && state.user.hasPin && pinNeed('fx') ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
+    const reCt = apptOn() && isReCt({ act: t.act, type: t.base || t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
+    prev.innerHTML = d > today() ? `ยังไม่ถึง ${esc(fmtDay(d))} บันทึกฉายแล้วล่วงหน้าไม่ได้`
+      : `${back}บันทึกว่า <b>${n ? `Fx ${esc(n)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(d))}${reCt}${ctx.auto && state.user.hasPin && pinNeed('fx') ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
     return;
   }
-  if (ctx.date > today() && t.act === 'off') { prev.textContent = advMsg(ctx.date, fxAdvWhat(t)); return; }   // Off RT (Complete course / Cancel RT) ล่วงหน้าไม่ได้
+  if (d > today() && t.act === 'off') { prev.textContent = advMsg(d, fxAdvWhat(t)); return; }   // Off RT (Complete course / Cancel RT) ล่วงหน้าไม่ได้
   const ev = fxDraft(), evs = parseFx(c).filter(e => e.date !== ctx.date);
   evs.push({ date: ctx.date, ...ev });
   const sc = caseSchedule({ ...c, fxlog: JSON.stringify(evs) }, hol), td = today();
   const end = sc && sc.end ? ` · ครบ <b>${esc(fmtDay(sc.end))}</b>` : '';
   if (off === 'complete' || off === 'cancel') {
     const sc0 = caseSchedule(c, hol), n = fxGiven(sc0, off === 'complete' ? nextDate(ctx.date) : ctx.date);
-    prev.innerHTML = off === 'complete'
+    prev.innerHTML = back + (off === 'complete'
       ? `บันทึก <b>Complete course</b> · ฉายครั้งสุดท้าย <b>${esc(fmtDay(ctx.date))}</b> · ฉายแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · ${ctx.date >= today() ? `อยู่ในตารางวันฉายและนับสถิติถึงสิ้นวัน ${esc(fmtDay(ctx.date))} แล้วย้ายไปแถบ Complete course` : 'เคสย้ายไปแถบ Complete course'}`
-      : `<b>Cancel RT</b> · ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · เคสย้ายไปแถบ Cancel RT${str($('#pin-note').value) ? '' : ' · กรอกสาเหตุในช่องด้านล่าง'}`;
+      : `<b>Cancel RT</b> · ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${n}/${sc0 ? sc0.planned : '?'} fx · เคสย้ายไปแถบ Cancel RT${str($('#pin-note').value) ? '' : ' · กรอกสาเหตุในช่องด้านล่าง'}`);
     return;
   }
   if (t.act === 'off' && courseOn()) { prev.textContent = 'เลือก Complete course หรือ Cancel RT'; return; }
   if (t.act === 'off') { prev.innerHTML = `หยุดฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${fxGiven(sc, ctx.date)}/${sc ? sc.planned : '?'} fx · เคสย้ายไปแถบ Off RT`; return; }
   const toAp = apptOn() && isReCt({ act: ev.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอลงนัด CT</b> ในแถบ${esc(navLabel('appt'))}` : '';
-  if (ev.act === 'treat') { prev.innerHTML = `ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}${toAp}`; return; }
+  if (ev.act === 'treat') { prev.innerHTML = `${back}ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}${toAp}`; return; }
   const n0 = ctx.n0, hit = n0 && sc ? [...sc.fx].find(([d, l]) => d >= ctx.date && l.some(v => (v.site === 0 || v.boost) && v.from <= n0 && n0 <= v.to)) : null;
   let lastOff = ev.back ? plusDays(ev.back, -1) : '';   // วันทำการสุดท้ายที่ไม่ได้ฉาย
   while (lastOff > ctx.date && !isWorkday(lastOff, hol)) lastOff = plusDays(lastOff, -1);
-  const backTxt = ev.back ? `ไม่ได้ฉาย ${esc(fmtDay(ctx.date))}${lastOff > ctx.date ? `–${esc(fmtDay(lastOff))}` : ''} กลับมาฉาย <b>${esc(fmtDay(ev.back))}</b>` : `ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> จนกว่าจะกลับมา`;
+  const backTxt = ev.back ? `ไม่ได้ฉาย ${esc(fmtDay(ctx.date))}${lastOff > ctx.date ? `–${esc(fmtDay(lastOff))}` : ''} กลับมาฉาย <b>${esc(fmtDay(ev.back))}</b>`
+    : `ไม่ได้ฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> จนกว่าจะกลับมา${t.open ? ' · กลับมาแล้ว กดช่องวันที่กลับมา เลือก <b>Complete Fraction</b>' : ''}`;
   prev.innerHTML = `${backTxt}${n0 ? hit ? ` · Fx ${n0} เลื่อนไป <b>${esc(fmtDay(hit[0]))}</b>` : ` · Fx ${n0} เป็นต้นไปรอไว้ (เหลือ ${sc ? sc.pending : '?'} fx)` : ''}${end}${td > ctx.date ? ' · ย้อนหลัง' : ''}${toAp}`;
 }
 // Mosaiq Time หน้า HN: Enter หรือออกจากช่อง (ค่าเปลี่ยน) → ยืนยันด้วยรหัส PIN · บันทึกให้ทุกเคสของผู้ป่วยนี้ · ช่องว่าง = ล้าง
@@ -9702,7 +9778,7 @@ function readTags() {
 // ช่องเวลา BD protocol: แสดงเมื่อติ๊ก BD protocol
 const syncBd = () => { $('#pin-bd-box').hidden = !chipValues($('#pin-tags')).some(isBdName); };
 $('#pin-tags').addEventListener('change', syncBd);
-// CP (ไม่ทำ CT ใหม่) ที่บันทึกในแถบห้องฉาย → รอแจกงานวางแผนใหม่ในแถบแจกงานฟิสิกส์ (เคสละรายการ · ล่าสุดไม่เกิน 60 วัน)
+// CP (ไม่ทำ CT ใหม่) และย้ายห้อง (ตั้งค่า: ย้ายห้องแล้วส่งงานวางแผนใหม่) ที่บันทึกในแถบห้องฉาย → รอแจกงานวางแผนใหม่ในแถบแจกงานฟิสิกส์ (เคสเดิม · ไม่เกิน 60 วัน)
 // ออกจากรายการเมื่อ: แจกแล้ว (มีงานวางแผนใหม่ของเคสนั้นวันนั้น) · ล้างหรือเปลี่ยนสถานะ · Complete course / Cancel RT / Off RT
 const fxTypeOf = id => (state.config.fxTypes || []).find(t => t.id === id) || null;
 function cpWaiting() {
@@ -9711,8 +9787,12 @@ function cpWaiting() {
   for (const x of state.cases) { const m = rpOf(x); if (m) made.add(m.of + '|' + m.date); }
   const out = [];
   for (const c of state.cases) {
-    if (!c.hn || c.rt || !str(c.fxlog)) continue;
+    if (!c.hn || c.rt) continue;
     const evs = parseFx(c);
+    if (state.config.moveReplan) for (const m of parseMoves(c)) {
+      if (m.date < from || made.has(c.id + '|' + m.date) || evs.some(x => x.act === 'off' && x.date <= m.date)) continue;
+      out.push({ c, mv: m, e: { date: m.date, act: 'move', reason: `${m.from ? m.from + ' → ' : ''}${m.room} · ${m.scope === 'on' ? 'ตลอดไป' : 'เฉพาะวันนั้น'}`, note: m.note, by: m.by }, t: { id: '__move', label: 'ย้ายห้อง' }, hn: c.hn, name: c.name, rx: replanRx(c, m.date) });
+    }
     for (const e of evs) {
       const t = fxTypeOf(e.type);
       if (!t || !t.replan || t.act === 'off' || !noNewCt(e.reason) || e.date < from || made.has(c.id + '|' + e.date)) continue;
@@ -9730,14 +9810,15 @@ function renderCpWait() {
   const opts = x => [opt('', `คนเดิม (${x.c.mp || 'ไม่มี MP'})`, ''), ...activeStaff().filter(s => s.code !== x.c.mp).map(s => opt(s.code, `${s.code}${onLeave(s.code, td) ? ' (ลา)' : ''}`, ''))].join('');
   const row = x => { const k = `${x.c.id}|${x.e.date}`; return `<li data-cpw="${esc(k)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} · <b>${esc(x.t.label)}</b> ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · เหลือ ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
     <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP เดิม ${x.c.mp}${onLeave(x.c.mp, td) ? ' (ลาวันนี้)' : ''}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><select data-cpmp="${esc(k)}" aria-label="ส่งงานวางแผนใหม่ของ ${esc(x.hn)} ให้">${opts(x)}</select><button type="button" class="btn primary sm" data-cpsend="${esc(k)}">แจกงาน</button></span>` : ''}</li>`; };
-  box.innerHTML = `<h3>รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่) · ${list.length} คน<small>บันทึก CP (ไม่ทำ CT ใหม่) ในแถบ${esc(navLabel('course'))} · แจกแล้วเป็นงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ในงานรอ ไม่เกี่ยวกับคิว</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
+  box.innerHTML = `<h3>รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่ · ย้ายห้อง) · ${list.length} คน<small>บันทึกในแถบ${esc(navLabel('course'))} · แจกแล้วเป็นงานวางแผนใหม่ของเคสเดิม (prescription = fraction ที่เหลือ) ในงานรอ ไม่เกี่ยวกับคิว</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
 }
 async function sendCp(key, btn) {
   const x = cpWaiting().find(v => `${v.c.id}|${v.e.date}` === key);
   if (!x) { renderCpWait(); return toast('รายการนี้ไม่ได้รอแจกแล้ว', { err: true }); }
   const sel = $(`[data-cpmp="${CSS.escape(key)}"]`), mp = sel ? sel.value : '';
   if (!mp && !x.c.mp) { if (sel) sel.focus(); return toast('ผู้ป่วยนี้ไม่มี MP เดิม เลือกผู้รับงานก่อน', { err: true }); }
-  const meta = { kind: x.t.id, label: x.t.label, reason: x.e.reason || '', sim: x.e.back || (x.e.act === 'treat' ? x.e.date : ''), ct: '', mp };
+  const meta = x.mv ? { kind: '__move', label: 'ย้ายห้อง', reason: `${x.mv.room} ${x.mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(x.mv.date)}`, room: x.mv.room, sim: x.mv.date, ct: '', mp }
+    : { kind: x.t.id, label: x.t.label, reason: x.e.reason || '', sim: x.e.back || (x.e.act === 'treat' ? x.e.date : ''), ct: '', mp };
   if (btn) btn.disabled = true;
   try {
     const rec = normCase(await store.replan(x.c.id, x.e.date, { ...meta, ...x.rx }, ''));
@@ -9759,7 +9840,7 @@ function renderWorkBadge() {
   if (!dot) { dot = document.createElement('span'); b.appendChild(dot); }
   dot.className = 'nav-dot warn';
   dot.textContent = n;
-  b.title = `รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่) ${n} คน`;
+  b.title = `รอแจกงานวางแผนใหม่ (CP ไม่ทำ CT ใหม่ · ย้ายห้อง) ${n} คน`;
 }
 function renderWork() {
   renderCaseMode();
@@ -12898,6 +12979,7 @@ function renderSettings() {
         <label class="field"><span class="lbl">การทำงาน</span><select data-k="fxTypes.${i}.act">${FX_ACTS.map(([v, l]) => opt(v, l, t.act)).join('')}</select></label>
         <label class="check"><input type="checkbox" data-k="fxTypes.${i}.need"${t.need ? ' checked' : ''}> ต้องเลือกเหตุผล</label>
         <label class="check" title="บันทึกสถานะนี้แล้วส่งงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ให้ MP คนเดิม แสดงในงานรอ"><input type="checkbox" data-k="fxTypes.${i}.replan"${t.replan ? ' checked' : ''}> ส่งงานวางแผนใหม่ให้ MP คนเดิม</label>
+        ${t.act === 'skip' ? `<label class="check" title="ไม่ถามวันกลับมาฉาย: ไม่ได้ฉายจนกว่าจะกลับมา · กลับมาแล้วกดช่องวันที่กลับมา เลือก Complete Fraction"><input type="checkbox" data-k="fxTypes.${i}.open"${t.open ? ' checked' : ''}> จนกว่าจะกลับมาอย่างเดียว</label>` : ''}
         <span class="btns">${DRAG_H}<button type="button" class="icon-btn" data-up="fxTypes.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fxTypes.${i}" aria-label="ลบสถานะ ${esc(t.label)}">×</button></span>
       </div>
       <div class="opt-edit">${t.reasons.map((v, j) => `<span class="opt-chip" ${dragAttr(`fxTypes.${i}.reasons.${j}`)}>${esc(v)}<button type="button" data-rmopt="fxTypes.${i}.reasons.${j}" aria-label="ลบ ${esc(v)}">×</button></span>`).join('')}<input class="opt-new" data-addopt="fxTypes.${i}.reasons" placeholder="+ เพิ่มเหตุผลให้เลือก" aria-label="เพิ่มเหตุผลของ ${esc(t.label)}"></div>
@@ -13000,7 +13082,7 @@ function renderSettings() {
         <div><button type="button" class="btn ghost sm" data-add="queue"${d.queues.length >= Q_IDS.length ? ' disabled' : ''}>+ เพิ่มคิว</button></div></div>
       ${fxCards ? `<div class="cat-list">${fxCards}</div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div>
-      <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): ส่งงานวางแผนใหม่ให้ MP คนเดิม</span></label>
+      <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): งานวางแผนใหม่ไปรอแจกในแถบ${esc(navLabel('work'))} (เคสเดิม · เลือกผู้รับได้ ค่าเริ่มต้น MP คนเดิม)</span></label>
       <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
     <div class="sec" data-sec="grid"><div class="sec-head"><h2>ตารางวันฉาย (แถบ ${esc(navLabel('course'))})</h2><p>จำนวนผู้ป่วยใต้วันที่ที่เกินกำหนดเป็นสีแดง · ผู้ปฏิบัติงานประจำวัน (RTT / RA) เลือกจากสมาชิก LPCH RO Workspace ตามตำแหน่งที่ติ๊ก · ฟอร์ม "+ เพิ่มผู้ป่วย" บันทึกผู้ป่วยเข้าตารางวันฉายโดยไม่แจกงานให้ MP (ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู)</p></div>
       ${directOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวันต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป (สีแดงเมื่อเกินจำนวนใช้ได้เลย)</span></p>'}
@@ -14073,7 +14155,7 @@ function renderDashCharts() {
   $('#chart-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${b.p === v}">${l}</button>`).join('');
   rangeBoxes('chart', b.p);
   $('#chart-count').innerHTML = [['case', 'เคส'], ['pt', 'ผู้ป่วย']].map(([v, l]) => `<button type="button" data-vcount="${v}" aria-pressed="${by === v}">${l}</button>`).join('');
-  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · Brachytherapy ตามวันนัดในแถบนัดคิวใส่แร่`;
+  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · CT-SIM ตามวันทำ CT · Brachytherapy ตามวันนัดในแถบนัดคิวใส่แร่`;
   const cases = planCases().filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
   const count = cs => (by === 'pt' ? uniq(cs).length : cs.length), unit = by === 'pt' ? 'คน' : 'เคส', series = [{ name: by === 'pt' ? 'ผู้ป่วย' : 'เคส', unit }];
   // ห้องฉาย (ห้องของบริเวณที่ 1) · แพทย์ (ลำดับตามตั้งค่า) · ไม่ระบุไว้ท้าย
@@ -14106,10 +14188,26 @@ function renderDashCharts() {
   const brTop = `<div class="viz-kpis"><div class="viz-kpi"><small>เคส (ราย)</small><b>${pts(bqs)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${bqs.length}</b></div><div class="viz-kpi"><small>แพทย์</small><b>${brDocs.filter(d => d !== NODOC).length}</b></div></div>
     ${bqs.length ? `<p class="viz-note">รูปแบบการใส่: ${brTechs.map(t => `${esc(t)} <b>${bqs.filter(a => techK(a) === t).length}</b>`).join(' · ')}</p>` : ''}
     <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vbrby="${v}" aria-pressed="${brBy === v}">${l}</button>`).join('')}</span></div>`;
+  // CT-SIM: จากแถบ CT-SIM ตามวันทำ CT · ราย = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนครั้งที่ทำ CT · แยกตามเครื่อง CT (ค่าเริ่มต้น) แพทย์ หรือเดือน
+  // ตาราง: CM (ใส่สารทึบรังสี) / ไม่ใช้ CM / HDR (CT สำหรับใส่แร่) เป็นคอลัมน์
+  const cts = state.ct.filter(r => isDay(r.date) && inBounds(r.date, b)), hdr0 = (state.config.ct.hdrs || [])[0] || 'HDR', NOCT = 'ไม่ระบุเครื่อง';
+  const cmN = rs => rs.filter(r => str(r.cm)).length, hdrN = rs => rs.filter(r => r.hdr === hdr0).length;
+  const ctBy = ['doc', 'month'].includes(pref.get('vizCtBy', 'ct')) ? pref.get('vizCtBy', 'ct') : 'ct';
+  const ctRow = (label, rs, o = {}) => ({ label, vals: [pts(rs), rs.length], two: true, short: o.short, tsub: o.name || '',
+    sub: [o.name, [['CM', cmN(rs)], ['ไม่ใช้ CM', rs.length - cmN(rs)], [hdr0, hdrN(rs)]].filter(x => x[1]).map(([k, n]) => `${k} ${n}`).join(' · ')].filter(Boolean).join(' · '),
+    extra: [cmN(rs), rs.length - cmN(rs), hdrN(rs)] });
+  const ctK = r => str(r.ct) || NOCT, ctMs = ordered(ctRooms().map(x => x.id), cts.map(ctK), NOCT), ctDocs = ordered(docCodes(), cts.map(docK), NODOC);
+  const ctRows = ctBy === 'doc' ? ctDocs.map(d => ctRow(d, cts.filter(r => docK(r) === d), { name: d === NODOC ? '' : docName(d) }))
+    : ctBy === 'month' ? [...new Set(cts.map(r => r.date.slice(0, 7)))].sort().map(ym => ctRow(fmtMonth(ym), cts.filter(r => r.date.startsWith(ym)), { short: fmtMonth(ym).split(' ')[0] }))
+      : ctMs.map(m => ctRow(m === NOCT ? m : ctLabel(m), cts.filter(r => ctK(r) === m), { short: m === NOCT ? m : ctShort(m) }));
+  const ctTop = `<div class="viz-kpis"><div class="viz-kpi"><small>ผู้ป่วย (ราย)</small><b>${pts(cts)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${cts.length}</b></div><div class="viz-kpi"><small>ใช้ CM</small><b>${cmN(cts)}</b></div><div class="viz-kpi"><small>${esc(hdr0)}</small><b>${hdrN(cts)}</b></div></div>
+    <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['ct', 'เครื่อง CT'], ['doc', 'แพทย์'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vctby="${v}" aria-pressed="${ctBy === v}">${l}</button>`).join('')}</span></div>`;
   box.innerHTML = [
     vizCard('room', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละห้อง`, 'ห้องของบริเวณที่ 1 · เคสวางแผน (ไม่นับกิจกรรมแบบง่าย)', roomRows, series),
     vizCard('doc', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละแพทย์`, '', docRows, series),
     vizCard('icd', 'ICD-10 10 อันดับ', `นับเป็น${by === 'pt' ? 'ผู้ป่วย' : 'เคส'} · เฉพาะเคสที่มีรหัส ICD-10`, icdRows, series, { empty: 'ไม่มีเคสที่มีรหัส ICD-10 ในช่วงนี้' }),
+    vizCard('ctsim', 'CT-SIM', `จากแถบ${navLabel('ctsim')} ตามวันทำ CT · ราย = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนครั้งที่ทำ CT`, ctRows, [{ name: 'ราย', unit: 'ราย' }, { name: 'ครั้ง', unit: 'ครั้ง' }],
+      { types: ['bar', 'col', 'table'], top: ctTop, extra: ['CM', 'ไม่ใช้ CM', hdr0], empty: ctOn() ? `ไม่มีการทำ CT ในช่วงนี้ (แถบ${navLabel('ctsim')})` : 'ยังไม่ได้ใช้แถบ CT-SIM' }),
     vizCard('brachy', 'Brachytherapy', `จากแถบนัดคิวใส่แร่ ตามวันนัด · ${brDone ? 'นับเฉพาะมาตามนัด' : 'ไม่นับนัดที่ยกเลิก'} · เคส (ราย) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx)`, brRows, [{ name: 'เคส (ราย)', unit: 'ราย' }, { name: 'ครั้ง', unit: 'ครั้ง' }],
       { types: ['bar', 'col', 'table'], top: brTop, extra: brExtra, empty: 'ไม่มีนัดใส่แร่ในช่วงนี้ (แถบนัดคิวใส่แร่)' }),
   ].join('');
@@ -15110,9 +15208,10 @@ async function submitPin(e, clear) {
     const t = fxSelType(), back = $('#pin-fx-back').value;
     if (!t) { const r = $('#pin-fx-type input'); if (r) r.focus(); return pinErr('เลือกสถานะของ fraction'); }
     if (t.need && t.reasons.length && !chipValue($('#pin-fx-reason'))) { $('#pin-fx-reason input').focus(); return pinErr(`เลือกเหตุผลของ ${t.label}`); }
-    if (fxAct(t) === 'skip' && back && !(isDay(back) && back > ctx.date)) { $('#pin-fx-back').focus(); return pinErr(`วันกลับมาฉายต้องหลัง ${fmtDay(ctx.date)}`); }
-    if (t.act === 'given' && ctx.date > today()) return pinErr(`ยังไม่ถึง ${fmtDay(ctx.date)} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
-    if (ctx.date > today() && t.act === 'off') return pinErr(advMsg(ctx.date, fxAdvWhat(t)));
+    const fd = fxDay();
+    if (fxAct(t) === 'skip' && !t.open && back && !(isDay(back) && back > ctx.date)) { $('#pin-fx-back').focus(); return pinErr(`วันกลับมาฉายต้องหลัง ${fmtDay(ctx.date)}`); }
+    if (t.act === 'given' && fd > today()) return pinErr(`ยังไม่ถึง ${fmtDay(fd)} บันทึกฉายแล้วล่วงหน้าไม่ได้`);
+    if (fd > today() && t.act === 'off') return pinErr(advMsg(fd, fxAdvWhat(t)));
     if (fxOffMode() === 'off' && courseOn()) { $('#pin-fx-off input').focus(); return pinErr('เลือก Complete course หรือ Cancel RT'); }
     if (fxOffMode() === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
     if (t.act === 'move' && !chipValue($('#pin-fx-scope'))) { $('#pin-fx-scope input').focus(); return pinErr('เลือก ย้าย (เฉพาะ fraction นี้) หรือ ย้ายตลอดไป'); }
@@ -15161,6 +15260,7 @@ async function submitPin(e, clear) {
       renderAcct();
     }
     if (ctx.mode === 'set') { pinDlg.close(); toast('บันทึกรหัส PIN แล้ว'); return; }
+    if (ctx.mode === 'fx' && !clear && ctx.ret && fxAct(fxSelType()) !== 'skip') await fxReturn(ctx, pin);   // กลับมาฉายระหว่างช่วง Hold ฯลฯ
     if (ctx.mode === 'edit') { await store.editCase(ctx.rec, pin); caseSaved(ctx.rec); pinDlg.close(); await addSiteJobs(ctx.rec); return; }
     if (ctx.mode === 'del') { await store.removeCase(ctx.id, pin); caseDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'ptadd') { const rec = normCase(await store.courseAdd(ctx.rec, pin)); patientSaved(rec, ctx.isNew); pinDlg.close(); return; }
@@ -15247,10 +15347,8 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'fx' && fxMoving()) {   // ย้ายห้อง: ทุกเคสของผู้ป่วยคนนี้ · ล้าง = ลบรายการย้ายที่ครอบวันนี้ (วันที่ของรายการนั้น)
       const mv = clear ? null : { room: chipValue($('#pin-fx-room')), from: ctx.fromRoom, scope: chipValue($('#pin-fx-scope')), note: str($('#pin-note').value) };
       const day = clear ? ctx.mvCur.date : ctx.day, ids = ctx.ids || [ctx.id];
-      // งานวางแผนใหม่ให้ MP คนเดิม (prescription นับจากเคสก่อนบันทึก)
-      const rpTo = mv && state.config.moveReplan ? rpTarget(ctx, day) : null;
-      const rpMeta = rpTo !== null ? { kind: '__move', label: 'ย้ายห้อง', reason: `${mv.room} ${mv.scope === 'on' ? 'ตลอดไป' : 'เฉพาะ ' + fmtDay(day)}`, room: mv.room, sim: day, ct: '', mp: rpTo } : null;
-      const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), day)])) : {};
+      // งานวางแผนใหม่ (ตั้งค่า: ย้ายห้องแล้วส่งงานวางแผนใหม่) ไปรอแจกในแถบแจกงานฟิสิกส์ (เคสเดิม) · บันทึกใหม่ / ล้าง = ลบงานของวันนั้นที่ยังไม่เริ่ม
+      const mvWait = !!mv && !!state.config.moveReplan && replanOn(), rpMeta = null, rx = {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
         for (const id of ids) {
@@ -15261,7 +15359,7 @@ async function submitPin(e, clear) {
         rp = await syncReplans(ids, day, rpMeta, rx, pin);
       } finally { if (rec) render(); }
       pinDlg.close();
-      toast(`${rec.hn} · ${clear ? `ล้างการย้ายไปห้อง ${ctx.mvCur.room}` : `ย้ายไปฉายห้อง ${mv.room} ${mv.scope === 'on' ? 'ตั้งแต่' : 'เฉพาะ'} ${fmtDay(day)}`}${replanNote(rp)}`);
+      toast(`${rec.hn} · ${clear ? `ล้างการย้ายไปห้อง ${ctx.mvCur.room}` : `ย้ายไปฉายห้อง ${mv.room} ${mv.scope === 'on' ? 'ตั้งแต่' : 'เฉพาะ'} ${fmtDay(day)}`}${replanNote(rp)}${mvWait ? ` · รอแจกงานวางแผนใหม่ในแถบ${navLabel('work')}` : ''}`);
       return;
     }
     if (ctx.mode === 'mqt') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
@@ -15279,7 +15377,7 @@ async function submitPin(e, clear) {
     }
     if (ctx.mode === 'fx' || ctx.mode === 'ptags') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
       const ev = clear || ctx.mode === 'ptags' ? null : fxDraft(), tags = ctx.mode === 'ptags' ? readTags() : '', ids = ctx.ids || [ctx.id];
-      if (ctx.mode === 'fx' && ctx.lane && (clear ? !!(ctx.cur && ctx.cur.lane) : !!ev && ev.act === 'given')) {   // แถวย่อย: ฉายแล้ว / ล้าง เฉพาะแถวนั้น
+      if (ctx.mode === 'fx' && ctx.lane && (clear ? !!(ctx.cur && ctx.cur.lane) : !!ev && ev.act === 'given' && !(fxTypeOf(ev.type) || {}).replan)) {   // แถวย่อย: ฉายแล้ว / ล้าง เฉพาะแถวนั้น (Complete Fraction and Re-CT = ทั้งผู้ป่วย)
         const r1 = normCase(await store.fraction(ctx.id, ctx.date, clear ? { lane: ctx.lane, clear: true } : { ...ev, lane: ctx.lane }, pin));
         const i = state.cases.findIndex(c => c.id === r1.id);
         if (i >= 0) state.cases[i] = r1; else state.cases.push(r1);
@@ -15333,6 +15431,17 @@ async function submitPin(e, clear) {
     for (const id of ['#pin', '#pin-proof']) $(id).value = '';
     const f = firstPinInput(); if (f) f.focus();
   } finally { btn.disabled = false; }
+}
+// กลับมาฉายระหว่างช่วง Hold / HV ฯลฯ ที่ยังไม่กลับมา: ใส่วันกลับมาฉาย = วันที่กด ให้ทุกเคสของผู้ป่วย แล้วบันทึกสถานะของวันนั้นต่อ
+async function fxReturn(ctx, pin) {
+  for (const id of ctx.ids || [ctx.id]) {
+    const c = state.cases.find(x => x.id === id), h = c && parseFx(c).find(e => e.date === ctx.cur.date && e.act === 'skip');
+    if (!h) continue;
+    const rec = normCase(await store.fraction(id, h.date, { type: h.type, label: h.label, act: 'skip', back: ctx.ret, reason: h.reason, note: h.note }, pin));
+    const i = state.cases.findIndex(x => x.id === id);
+    if (i >= 0) state.cases[i] = rec;
+  }
+  Object.assign(ctx, { date: ctx.ret, day: ctx.ret, num: ctx.retNum, cur: null, ret: '' });
 }
 async function doStamp(id, step, value, pin, note, at) {
   const prev = clone(state.cases.find(c => c.id === id) || {});
@@ -15679,6 +15788,7 @@ document.addEventListener('click', e => {
   if (ds.vizt) { pref.set('viz:' + ds.viz, ds.vizt); return renderDashCharts(); }
   if (ds.vcount) { pref.set('vizCount', ds.vcount); return renderDashCharts(); }
   if (ds.vbrby) { pref.set('vizBrBy', ds.vbrby); return renderDashCharts(); }
+  if (ds.vctby) { pref.set('vizCtBy', ds.vctby); return renderDashCharts(); }
   if (ds.dperiod) {
     // กำหนดเองครั้งแรก: เริ่มที่เดือนที่เลือก
     if (ds.dperiod === 'custom' && !pref.get('dashFrom', '') && !pref.get('dashTo', '')) { pref.set('dashFrom', state.month + '-01'); pref.set('dashTo', monthEnd(state.month)); }
