@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.8';
-const API_LEVEL = 72;
+const CODE_VERSION = '2026-11-11.9';
+const API_LEVEL = 73;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -202,6 +202,8 @@ TABLES.dq = {
     ['rev', 'แก้ไขล่าสุด (ระบบ)'],   // = REV_HEAD
     // API 64 ดึงจากรายงาน Consult ของ HIS (how = import · src = his · date = วันที่รับ Consult): ไม่นับในคิว ไม่ไปรอลงนัด · ใช้ในสรุปรายเดือนและไฟล์ส่งออก
     ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icd', 'ICD10'], ['src', 'ที่มา'],
+    // API 73: st = doc (ขอเอกสารเพิ่ม · กลับไปแถบแจกงานแพทย์) | nort (ไม่ RT) · รายละเอียด ใคร เมื่อไร (dqMark)
+    ['stNote', 'รายละเอียดสถานะ'], ['stBy', 'สถานะโดย'], ['stAt', 'สถานะเมื่อ'],
   ],
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
@@ -699,7 +701,7 @@ function deleteRecord(table, id, token) {
   return withLock_(() => {
     const sh = tableSheet_(ss_(), table);
     const row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -736,7 +738,10 @@ function saveConfig(config, token) {
   const u = who_(token);
   if (!u.isAdmin) throw new Error('แก้การตั้งค่าได้เฉพาะแอดมิน' + (u.name ? ' (' + u.name + ' ไม่ใช่แอดมิน)' : ''));
   return withLock_(() => {
-    writeConfig_(ss_(), config || {});
+    const old = readConfig_(ss_()) || {}, nw = config || {};
+    const keys = Object.keys(Object.assign({}, old, nw)).filter(k => JSON.stringify(old[k]) !== JSON.stringify(nw[k]));
+    writeConfig_(ss_(), nw);
+    if (keys.length) audit_('config', '', '', 'edit', { 'หัวข้อที่แก้': keys.join(', ') });   // API 73: ประวัติการแก้ตั้งค่า (เฉพาะชื่อหัวข้อ)
     try { CacheService.getScriptCache().remove('appName'); } catch (e) { /* แคชใช้ไม่ได้: ชื่อแท็บเปลี่ยนภายใน 6 ชั่วโมง */ }
     return true;
   });
@@ -748,7 +753,7 @@ const CFG_TABS = {
   team: ['staff', 'doctors', 'crew'],
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
-  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'dutyRoles', 'ptForm'],
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm'],
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
 };
@@ -1058,7 +1063,7 @@ function moveActCases(token) {
     })));
     const sh = tableSheet_(ss, 'cases');
     const idCol = headerOf_(sh).indexOf('id') + 1;
-    old.map(c => findRow_(sh, idCol, c.id)).filter(r => r > 0).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+    old.map(c => findRow_(sh, idCol, c.id)).filter(r => r > 0).sort((a, b) => b - a).forEach(r => delRow_(sh, r));
     return old.length;
   });
 }
@@ -1417,7 +1422,7 @@ function replanCase(id, date, rp, pin, token) {
       if (!old) return { id: '', removed: false };
       if (['fin', 'eval', 'mu', 'd0', 'd4', 'mc', 'pc'].some(k => String(old[k] || ''))) return { id: old.id, removed: false, started: true };
       const row = findRow_(sh, header.indexOf('id') + 1, old.id);
-      if (row) sh.deleteRow(row);
+      if (row) delRow_(sh, row);
       return { id: old.id, removed: true };
     }
     const meta = JSON.stringify({ of: id, date: date, kind: rec.kind, label: rec.label, reason: rec.reason });
@@ -1554,7 +1559,7 @@ function courseRemove(id, pin, token) {
     const row = findRow_(sh, header.indexOf('id') + 1, id);
     if (!row) return false;
     if (String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct') throw new Error('ลบได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย');
-    sh.deleteRow(row);
+    delRow_(sh, row);
     return true;
   });
 }
@@ -1582,7 +1587,7 @@ function dutyDay(date, list, pin, token) {
     const at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
     recs.forEach(r => {
       const id = date + '|' + r.room, row = findRow_(sh, idCol, id);
-      if (!r.rtt.length && !r.ra.length && !r.qc.length) { if (row) sh.deleteRow(row); return; }
+      if (!r.rtt.length && !r.ra.length && !r.qc.length) { if (row) delRow_(sh, row); return; }
       writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.duty.fields, { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), qc: r.qc.join(', '), by: by, at: at });
     });
     return readTable_(ss, 'duty').filter(x => x.date === date);
@@ -1644,7 +1649,7 @@ function ctRemove(id, pin, token) {
   pinChange_(u, pin, true);
   return withLock_(() => {
     const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     if (row && id) vacUnlink_(ss, id);
     if (row && id) {
       const as = ss.getSheetByName(TABLES.appt.sheet);
@@ -1987,7 +1992,7 @@ function vacRemove(id, pin, token) {
   pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'vac'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -1995,7 +2000,7 @@ function vacRemove(id, pin, token) {
 function vacLink_(ss, ct, no, u) {
   const sh = tableSheet_(ss, 'vac'), header = headerOf_(sh), rows = readTable_(ss, 'vac'), idCol = header.indexOf('id') + 1;
   const cur = rows.filter(x => x.ctId === ct.id)[0];
-  if (!no) { if (cur) { const r = findRow_(sh, idCol, cur.id); if (r) sh.deleteRow(r); } return; }
+  if (!no) { if (cur) { const r = findRow_(sh, idCol, cur.id); if (r) delRow_(sh, r); } return; }
   const imp = cur ? null : rows.filter(x => !x.ctId && String(x.no) === no && hnKey_(x.hn) === hnKey_(ct.hn) && (!x.ct || x.ct === ct.date))[0];
   const target = cur || imp;
   const set = { no: no, hn: ct.hn, name: ct.name || (target ? target.name : ''), ct: ct.date, ctId: ct.id };
@@ -2013,7 +2018,7 @@ function vacUnlink_(ss, ctId) {
   readTable_(ss, 'vac').filter(x => x.ctId === ctId).forEach(x => {
     const r = findRow_(sh, idCol, x.id);
     if (!r) return;
-    if (x.src === 'ctsim') sh.deleteRow(r);
+    if (x.src === 'ctsim') delRow_(sh, r);
     else writeFields_(sh, r, header, TABLES.vac.fields.filter(f => f[0] === 'ctId'), { ctId: '' });
   });
 }
@@ -2889,7 +2894,7 @@ function regRemove(id, pin, token) {
   pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'reg'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -2943,7 +2948,7 @@ function apptRemove(id, pin, token) {
   pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'appt'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -3121,7 +3126,7 @@ function dqDutySave(list, token) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
       if (doc && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
       const row = findRow_(sh, header.indexOf('id') + 1, date);
-      if (!doc) { if (row) sh.deleteRow(row); return; }
+      if (!doc) { if (row) delRow_(sh, row); return; }
       const set = { id: date, date: date, doc: doc, by: by, updated: dqNow_() };
       writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.dqDuty.fields, set);
     });
@@ -3134,7 +3139,7 @@ function dqRemove(id, pin, token) {
   pinChange_(u, pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'dq'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -3157,8 +3162,33 @@ function dqLeaveSave(rec, token) {
     const ss = ss_();
     if (dqDocs_(readConfig_(ss) || {}).indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
     const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '', kind: kind, assign: assign };
+    // API 73: id ที่มีอยู่แล้ว = แก้วันลา (ยืนยันด้วย PIN · แพทย์แก้ได้เฉพาะของตัวเอง เหมือนลงวันลา)
+    const sh = tableSheet_(ss, 'dqLeave'), header = headerOf_(sh), row = rec.id ? findRow_(sh, header.indexOf('id') + 1, r.id) : 0;
+    if (row) {
+      const cur = rowConv_(TABLES.dqLeave, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]);
+      if (cur.doc !== doc) dqLeaveUser_(token, cur.doc);   // ย้ายวันลาไปแพทย์อื่น: ต้องแก้ของแพทย์เดิมได้ด้วย
+      pinChange_(u, rec.pin, true);
+      const set = { doc: doc, from: from, to: to, note: r.note, kind: kind, assign: assign, updated: dqNow_() };
+      writeFields_(sh, row, header, TABLES.dqLeave.fields.filter(f => f[0] in set), set);
+      return Object.assign(cur, set);
+    }
     appendNew_(ss, 'dqLeave', [r]);
     return r;
+  });
+}
+// สถานะจากแถบ Consult / แจกงานแพทย์ (API 73 · ไม่ต้องใช้ PIN เหมือนไม่มาทำ CT): doc = ขอเอกสารเพิ่ม (ต้องมีรายละเอียด) · nort = ไม่ RT · '' = กลับไปรอลงนัด
+function dqMark(id, st, text, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq.concat(['consult']));
+  st = st === 'doc' || st === 'nort' ? st : '';
+  text = dqCut_(text, 500);
+  if (st === 'doc' && !text) throw new Error('กรอกเอกสารที่ขอเพิ่ม');
+  return withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'dq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (!row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = rowConv_(TABLES.dq, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]);
+    const set = { st: st, stNote: text, stBy: String(u.name || u.username || u.me || ''), stAt: dqNow_(), updated: dqNow_() };
+    writeFields_(sh, row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
+    return Object.assign(cur, set);
   });
 }
 function dqLeaveRemove(id, pin, token) {
@@ -3167,7 +3197,7 @@ function dqLeaveRemove(id, pin, token) {
   pinChange_(dqLeaveUser_(token, cur.doc), pin, true);
   return withLock_(() => {
     const sh = tableSheet_(ss_(), 'dqLeave'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) sh.deleteRow(row);
+    if (row) delRow_(sh, row);
     return !!row;
   });
 }
@@ -3554,7 +3584,7 @@ function extSync_(ss, cfg, key, why) {
       });
       // ลบ: นัดถูกยกเลิก เปลี่ยนเป็นไม่นับ หรือหายไป (เฉพาะวันที่ตั้งแต่ "ดึงตั้งแต่")
       const drop = Object.keys(mine).filter(k => !w.want[k] && (!w.from || mine[k].date >= w.from)).map(k => findRow_(sh, header.indexOf('id') + 1, mine[k].id)).filter(Boolean).sort((a, b) => b - a);
-      drop.forEach(r => sh.deleteRow(r));
+      drop.forEach(r => delRow_(sh, r));
       res.removed = drop.length;
       // เพิ่มใหม่ (ทีละชุด)
       const add = [];
@@ -4033,6 +4063,7 @@ function who_(token, ss, cfg) {
   cfg = cfg || readConfig_(ss) || {};
   const g = adminInfo_(ss, cfg);
   const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
+  AUDIT_U_ = google;
   if (!lpchUrl_()) return google;
   // เปิด LPCH แล้ว: เว็บใช้บัญชี LPCH เสมอ (รวมเจ้าของไฟล์) บัญชี Google ใช้ได้เฉพาะหน้าที่เปิดจากเมนูในชีต
   // และต้องเป็นเจ้าของไฟล์หรืออีเมลในรายชื่อแอดมิน (Google ยืนยันตัวตนให้ ค่า SHEET_DIALOG ไม่ได้ให้สิทธิ์เพิ่มเอง)
@@ -4048,8 +4079,8 @@ function who_(token, ss, cfg) {
       const isAdmin = p.canEdit && (p.lpchAdmin || listed), isSub = !isAdmin && !!subEntry_(cfg, p);
       const me = { via: 'lpch', isAdmin: isAdmin, isSub: isSub, role: p.role };
       const anyEdit = Object.keys(EDIT_VIEWS).reduce((a, t) => a.concat(EDIT_VIEWS[t]), []).some(v => userAccess_(cfg, v, me) === 'edit');
-      return { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
-        canEdit: anyEdit, isAdmin: isAdmin, isSub: isSub, lpchAdmin: p.lpchAdmin, sub: isSub ? subTabs_(cfg, p) : [] };
+      return (AUDIT_U_ = { via: 'lpch', name: p.name, username: p.username, role: p.role, me: p.email, owner: g.owner,
+        canEdit: anyEdit, isAdmin: isAdmin, isSub: isSub, lpchAdmin: p.lpchAdmin, sub: isSub ? subTabs_(cfg, p) : [] });
     }
     why = p.error;
   }
@@ -4327,6 +4358,7 @@ function writeFields_(sh, row, header, fields, rec) {
   const cells = fields
     .map(f => ({ col: header.indexOf(f[1]) + 1, value: safeText_(rec[f[0]]) }))
     .filter(c => c.col > 0);
+  auditWrite_(sh, row, header, cells);
   const rv = header.indexOf(REV_HEAD);   // Cases / Logs: เวลาแก้ล่าสุดของแถว (ส่งเฉพาะแถวที่เปลี่ยน)
   if (rv >= 0 && !cells.some(c => c.col === rv + 1)) cells.push({ col: rv + 1, value: new Date().toISOString() });
   cells.sort((a, b) => a.col - b.col);
@@ -4352,6 +4384,7 @@ function appendNew_(ss, table, records) {
   if (sh.getLastRow() > 1) sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues().forEach(r => { have[String(r[0])] = true; });
   const fresh = records.filter(r => !have[r.id]);
   if (!fresh.length) return 0;
+  fresh.forEach(rec => auditAdd_(table, rec, def.fields));
   const stamp = new Date().toISOString();
   const rows = fresh.map(rec => header.map(h => {
     const f = def.fields.find(x => x[1] === h);
@@ -4404,6 +4437,120 @@ function safeText_(v) {
 // เขียนชีตทีละคน (ล็อกเดียวทั้งสคริปต์ ทุกผู้ใช้ใช้ร่วมกัน) รอคิวได้ไม่เกิน 20 วินาที
 // flush ก่อนปล่อยล็อก ให้คนถัดไปอ่านข้อมูลที่เพิ่งเขียนเสมอ (เช่น แจกเคสพร้อมกันจะไม่ได้คนเดียวกัน)
 let LOCKED_ = false;
+/* ---------- ประวัติการบันทึก (API 73 · แท็บ AuditLog) ----------
+ * ทุกการบันทึกผ่าน writeFields_ / appendNew_ / delRow_ = หนึ่งแถว: เวลา ผู้บันทึก ตาราง id HN การทำ (เพิ่ม / แก้ / ลบ) ฟังก์ชัน รายละเอียด (หัวคอลัมน์: [ค่าเดิม, ค่าใหม่])
+ * เขียนรวมตอนปล่อยล็อก (นอกล็อก = เขียนทันที) · อ่านผ่าน auditRecent (ทั้งแถบ) / auditFor (รายการ) ตามสิทธิ์ดูแถบนั้น
+ */
+const AUDIT_SHEET = 'AuditLog';
+const AUDIT_HEAD = ['เวลา', 'โดย', 'บัญชี', 'ตาราง', 'id', 'HN', 'การทำ', 'ฟังก์ชัน', 'รายละเอียด'];
+const AUDIT_SKIP = ['แก้ไขล่าสุด (ระบบ)', 'Updated', 'Created'];
+let AUDIT_U_ = null, AUDIT_BUF_ = [];
+const auditCut_ = v => { const s = String(v == null ? '' : v); return s.length > 600 ? s.slice(0, 600) + '…' : s; };
+// ตารางของชีต (ชื่อแท็บ → คีย์ใน TABLES)
+function auditTable_(name) {
+  for (const k in TABLES) if (TABLES[k] && TABLES[k].sheet === name) return k;
+  return name;
+}
+// ฟังก์ชันที่ผู้ใช้เรียก (ชื่อแรกใน stack ที่ไม่ลงท้ายด้วย _) เช่น fractionCase, apptSave
+function auditFn_() {
+  try {
+    const st = String(new Error().stack || '').split('\n');
+    for (const l of st) { const m = l.match(/at ([A-Za-z0-9]+) \(/); if (m && !/_$/.test(m[1]) && m[1] !== 'Error') return m[1]; }
+  } catch (e) { /* ไม่มี stack */ }
+  return '';
+}
+function audit_(table, id, hn, act, what) {
+  if (table === AUDIT_SHEET) return;
+  const u = AUDIT_U_ || {};
+  AUDIT_BUF_.push([new Date().toISOString(), String(u.name || u.username || u.me || ''), String(u.username || u.me || ''), table, String(id || ''), String(hn || ''), act, auditFn_(), auditCut_(JSON.stringify(what || {})).slice(0, 4000)]);
+  if (!LOCKED_) auditFlush_();
+}
+function auditFlush_() {
+  if (!AUDIT_BUF_.length) return;
+  const rows = AUDIT_BUF_;
+  AUDIT_BUF_ = [];
+  try {
+    const ss = ss_();
+    let sh = ss.getSheetByName(AUDIT_SHEET);
+    if (!sh) { sh = ss.insertSheet(AUDIT_SHEET); sh.getRange(1, 1, 1, AUDIT_HEAD.length).setValues([AUDIT_HEAD]).setFontWeight('bold'); sh.setFrozenRows(1); }
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, AUDIT_HEAD.length).setNumberFormat('@').setValues(rows);
+  } catch (e) { console.log('auditFlush_ ' + e); }   // ประวัติเขียนไม่ได้ ไม่ทำให้การบันทึกล้ม
+}
+// แก้ / เพิ่มแถว: เทียบค่าเดิมทีละคอลัมน์ที่เขียน (แถวใหม่ = ค่าที่ไม่ว่าง)
+function auditWrite_(sh, row, header, cells) {
+  try {
+    const name = sh.getName();
+    if (name === AUDIT_SHEET) return;
+    const isNew = row > sh.getLastRow(), old = isNew ? [] : sh.getRange(row, 1, 1, header.length).getValues()[0];
+    const what = {};
+    cells.forEach(c => {
+      const h = header[c.col - 1];
+      if (!h || h === 'id' || AUDIT_SKIP.indexOf(h) >= 0) return;
+      const was = isNew ? '' : String(old[c.col - 1] == null ? '' : old[c.col - 1]);
+      if (old[c.col - 1] instanceof Date) return;   // วันที่ในชีต (เขียนเป็นข้อความเหมือนเดิม) ไม่นับเป็นการเปลี่ยน
+      if (was === c.value) return;
+      what[h] = isNew ? auditCut_(c.value) : [auditCut_(was), auditCut_(c.value)];
+    });
+    const idc = header.indexOf('id'), hnc = header.indexOf('HN'), val = i => { const c = cells.filter(x => x.col === i + 1)[0]; return c ? c.value : i >= 0 && !isNew ? old[i] : ''; };
+    if (!Object.keys(what).length) return;
+    audit_(auditTable_(name), val(idc), val(hnc), isNew ? 'add' : 'edit', what);
+  } catch (e) { console.log('auditWrite_ ' + e); }
+}
+function auditAdd_(table, rec, fields) {
+  const what = {};
+  fields.forEach(f => { if (AUDIT_SKIP.indexOf(f[1]) < 0 && f[0] !== 'id' && rec[f[0]] != null && String(rec[f[0]]) !== '') what[f[1]] = auditCut_(rec[f[0]]); });
+  audit_(table, rec.id, rec.hn, 'add', what);
+}
+// ลบแถว: เก็บค่าที่มีของแถวนั้นไว้ในประวัติ แล้วลบ
+function delRow_(sh, row) {
+  try {
+    const header = headerOf_(sh), v = sh.getRange(row, 1, 1, header.length).getValues()[0], what = {};
+    header.forEach((h, i) => { if (h && AUDIT_SKIP.indexOf(h) < 0 && h !== 'id' && String(v[i] == null ? '' : v[i]) !== '') what[h] = auditCut_(v[i] instanceof Date ? Utilities.formatDate(v[i], ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd') : v[i]); });
+    audit_(auditTable_(sh.getName()), v[header.indexOf('id')], v[header.indexOf('HN')], 'del', what);
+  } catch (e) { console.log('delRow_ ' + e); }
+  sh.deleteRow(row);
+}
+// ตารางที่ดูประวัติได้ในแต่ละแถบ (ต้องดูแถบนั้นได้)
+const AUDIT_VIEWS = { reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], consult: ['dq', 'appt'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
+  course: ['cases', 'duty'], ctsim: ['ctsim', 'vac', 'appt'], dash: ['cases'], logs: ['logs'], p4p: ['logs'], jobs: ['jobs', 'vac'], settings: ['config'] };
+function auditTablesFor_(view, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (!AUDIT_VIEWS[view]) throw new Error('แถบนี้ไม่มีประวัติการบันทึก');
+  if (u.via !== 'google' && !userAccess_(cfg, view, u)) throw new Error('ดูประวัติของแถบนี้ไม่ได้');
+  return { ss: ss, tables: AUDIT_VIEWS[view] };
+}
+const auditRow_ = (r, i) => ({ row: i, at: String(r[0]), by: String(r[1]), user: String(r[2]), table: String(r[3]), id: String(r[4]), hn: String(r[5]), act: String(r[6]), fn: String(r[7]), what: (() => { try { return JSON.parse(String(r[8] || '{}')); } catch (e) { return {}; } })() });
+// ประวัติล่าสุดของแถบ (ใหม่ก่อน) · q = คำค้น (HN ผู้บันทึก รายละเอียด) · before = แถวที่อ่านถึงแล้ว (โหลดเพิ่ม) · คืน { rows, before, more }
+function auditRecent(view, q, before, token) {
+  const a = auditTablesFor_(view, token), sh = a.ss.getSheetByName(AUDIT_SHEET);
+  if (!sh || sh.getLastRow() < 2) return { rows: [], before: 0, more: false };
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean), out = [];
+  let end = Math.min(sh.getLastRow(), +before > 1 ? +before - 1 : sh.getLastRow());
+  while (end >= 2 && out.length < 150) {
+    const start = Math.max(2, end - 1999), vals = sh.getRange(start, 1, end - start + 1, AUDIT_HEAD.length).getValues();
+    for (let i = vals.length - 1; i >= 0 && out.length < 150; i--) {
+      const r = vals[i];
+      if (a.tables.indexOf(String(r[3])) < 0) continue;
+      if (words.length) { const t = (r[1] + ' ' + r[2] + ' ' + r[5] + ' ' + r[8]).toLowerCase(); if (!words.every(w => t.indexOf(w) >= 0)) continue; }
+      out.push(auditRow_(r, start + i));
+    }
+    end = start - 1;
+    if (!words.length && out.length) break;   // ไม่ค้นหา: ทีละ 2,000 แถว
+  }
+  const last = out.length ? out[out.length - 1].row : end + 1;
+  return { rows: out, before: last, more: last > 2 };
+}
+// ประวัติของรายการ (id ไม่เกิน 30) ใหม่ก่อน
+function auditFor(ids, view, token) {
+  const a = auditTablesFor_(view, token), sh = a.ss.getSheetByName(AUDIT_SHEET);
+  ids = (Array.isArray(ids) ? ids : [ids]).map(String).filter(Boolean).slice(0, 30);
+  if (!sh || sh.getLastRow() < 2 || !ids.length) return [];
+  const n = sh.getLastRow() - 1, col = sh.getRange(2, 5, n, 1), rows = {};
+  if (typeof col.createTextFinder === 'function') ids.forEach(id => col.createTextFinder(id).matchEntireCell(true).findAll().forEach(c => { rows[c.getRow()] = true; }));
+  else col.getValues().forEach((v, i) => { if (ids.indexOf(String(v[0])) >= 0) rows[i + 2] = true; });
+  return Object.keys(rows).map(Number).sort((x, y) => y - x).slice(0, 300)
+    .map(r => auditRow_(sh.getRange(r, 1, 1, AUDIT_HEAD.length).getValues()[0], r)).filter(x => a.tables.indexOf(x.table) >= 0);
+}
 function withLock_(fn) {
   if (LOCKED_) return fn();   // ถือล็อกอยู่แล้วในคำขอนี้
   const lock = LockService.getScriptLock();
@@ -4413,7 +4560,7 @@ function withLock_(fn) {
     return fn();
   } finally {
     LOCKED_ = false;
-    try { SpreadsheetApp.flush(); saveDirty_(); } finally { lock.releaseLock(); }
+    try { SpreadsheetApp.flush(); saveDirty_(); auditFlush_(); } finally { lock.releaseLock(); }
   }
 }
 
