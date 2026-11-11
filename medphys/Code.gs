@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.6';
-const API_LEVEL = 70;
+const CODE_VERSION = '2026-11-11.7';
+const API_LEVEL = 71;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -569,6 +569,12 @@ function addCases(recs, token) {
     recs.forEach(rec => {
       if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
       const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
+      // API 71: HN นี้มีงานเทคนิคเดียวกันที่ยังไม่ Plan complete = ถามยืนยันก่อน (dupOk = ผู้ใช้กดยืนยันแจกเพิ่มแล้ว) · งานบริเวณเพิ่มเติมไม่ตรวจ
+      const meta = jobMeta_(rec);
+      if (!rec.dupOk && !(meta && meta.kind === 'site')) {
+        const dup = openJobs_(cases, cfg, rec.hn, rec.cat, '', !!rec.planJob);   // planJob = หน้าเว็บบอกว่าเป็นหมวดวางแผน (ชีตที่ยังไม่เคยบันทึกตั้งค่าหมวด)
+        if (dup.length) throw new Error('DUPJOB|HN ' + rec.hn + ' มีงาน ' + dup.map(c => jobText_(c, cfg)).join(' | ') + ' ที่ยังไม่ Plan complete อยู่แล้ว · แจกซ้ำจะนับแต้มซ้ำ · ถ้าต้องการแจกเพิ่มจริง กด "แจกเคส" อีกครั้ง');
+      }
       const byDay = cat ? cat.rotate === 'day' || cat.rotate === false : DAY_ROTATE_CATS.indexOf(rec.cat) >= 0;
       const date = rec.in || today;
       if (rec.how === 'manual' || rec.how === 'replan') {
@@ -1417,6 +1423,9 @@ function replanCase(id, date, rp, pin, token) {
       writeFields_(sh, findRow_(sh, header.indexOf('id') + 1, old.id), header, fields.filter(f => f[0] in set), set);
       return readTable_(ss, 'cases', cfg).filter(c => c.id === old.id)[0];
     }
+    // API 71: ผู้ป่วยนี้มีงานเทคนิคเดียวกันที่ยังไม่ Plan complete อยู่แล้ว (อีกเคสของ HN เดียวกัน · คนอื่นเพิ่งบันทึกจากอีกเครื่อง) = ไม่สร้างซ้ำ
+    const dup = openJobs_(rows, cfg, parent.hn, parent.cat, parent.id, true);
+    if (dup.length) return { id: '', dup: dup.map(c => ({ id: c.id, hn: c.hn, cat: c.cat, mp: c.mp, in: c['in'], replan: c.replan })) };
     const out = {};
     fields.forEach(f => { out[f[0]] = parent[f[0]]; });
     STAMP_FIELDS.forEach(k => { out[k] = ''; });
@@ -2142,6 +2151,22 @@ function vacImport(token) {
 const REG_FIELDS = ['hn', 'title', 'name', 'sex', 'birth', 'phone', 'right', 'doc', 'icd', 'dx', 'note', 'consult', 'visit', 'chan', 'refer', 'icds'];
 const REG_CUT_ = k => (k === 'hn' ? 40 : k === 'note' || k === 'dx' ? 2000 : k === 'consult' || k === 'visit' ? 10 : 200);
 const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase();
+// กันงานวางแผนซ้ำ (API 71 · ตรงกับ openJob ในหน้าเว็บ · ตรวจภายใต้ล็อก จึงกันการบันทึกพร้อมกันจากหลายเครื่องได้):
+// งานของ HN เดียวกัน เทคนิคเดียวกัน ที่ยังไม่ Plan complete · ไม่นับ: Plan complete / สถานะจบการฉาย / เพิ่มในตารางวันฉาย (direct)
+// งานบริเวณเพิ่มเติม (ตั้งใจแยกงาน) · เคสที่ In เกิน 90 วัน (ยกเว้นงานวางแผนใหม่) · หมวดงานง่ายไม่ตรวจ · หมวดที่ไม่รู้จัก: plan = ถือเป็นงานวางแผน
+function openJobs_(rows, cfg, hn, cat, skip, plan) {
+  const key = hnKey_(hn), k = (cfg && Array.isArray(cfg.cats) ? cfg.cats : []).filter(x => x && x.id === cat)[0];
+  if (!key || !cat || (k ? k.kind === 'simple' : !plan)) return [];
+  const from = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  return rows.filter(c => {
+    if (!c || c.id === skip || c.cat !== cat || hnKey_(c.hn) !== key || has_(c.pc) || has_(c.rt) || c.how === 'direct') return false;
+    const m = jobMeta_(c);
+    return m ? m.kind !== 'site' : String(c['in'] || '').slice(0, 10) >= from;
+  });
+}
+const jobMeta_ = c => { try { const m = JSON.parse((c && c.replan) || 'null'); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
+const jobText_ = (c, cfg) => { const k = (cfg && Array.isArray(cfg.cats) ? cfg.cats : []).filter(x => x && x.id === c.cat)[0], m = jobMeta_(c);
+  return (m ? '↻ ' + m.label + ' ' : '') + (k ? k.label : c.cat) + ' · MP ' + (c.mp || '-') + ' · In ' + String(c['in'] || '').slice(0, 10); };
 const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name).trim();
 // ผู้ป่วยที่ลงทะเบียน · แถวที่บันทึกด้วยรุ่น 2026-10-30.1 (คอลัมน์ ชื่อ และ สกุล) ใช้สองคอลัมน์นั้นเป็นชื่อ-สกุล
 function regRows_(ss) { return regFixNames_(ss, readTable_(ss, 'reg')); }

@@ -4246,7 +4246,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.6';
+const PAGE_VERSION = '2026-11-11.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8942,8 +8942,8 @@ function apCourseRows() {
 const preRow = c => !!(c.ctId || c.apId);
 // งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
 const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
-// งานวางแผนที่ยังไม่ Plan complete (กันงานซ้ำ): เทคนิควางแผน · งานวางแผนใหม่จากสถานะ fraction · หรือแจกมาไม่เกิน 90 วัน
-const openJob = c => catOf(c.cat).kind !== 'simple' && !c.rt && !planReady(c) && (!!rpOf(c) || (isDay(c.in) && daysFrom(c.in) >= -90));
+// งานวางแผนที่ยังไม่ Plan complete (กันงานซ้ำ · Code.gs API 71 ตรวจแบบเดียวกันตอนบันทึก): เทคนิควางแผน · งานวางแผนใหม่จากสถานะ fraction · หรือแจกมาไม่เกิน 90 วัน
+const openJob = c => catOf(c.cat).kind !== 'simple' && !c.rt && !planReady(c) && (m => (m ? m.kind !== 'site' : isDay(c.in) && daysFrom(c.in) >= -90))(rpOf(c));   // งานบริเวณเพิ่มเติม = ตั้งใจแยกงาน ไม่นับ
 // fresh = ไล่ทั้งรายการ (ระหว่างบันทึก รายการเพิ่งเปลี่ยน) · ไม่ใส่ = ใช้ดัชนี HN (แสดงผล)
 const openJobsOf = (hn, cat, skip, fresh) => (!hnKey(hn) ? [] : (fresh ? state.cases.filter(c => hnKey(c.hn) === hnKey(hn)) : byHn(state.cases, hn)).filter(c => c.id !== skip && (!cat || c.cat === cat) && openJob(c)));
 const jobText = c => { const m = rpOf(c); return `${m ? `↻ ${m.label}${m.reason ? ` · ${m.reason}` : ''} ` : ''}${catOf(c.cat).label} · MP ${c.mp || '–'} · In ${fmtDay(c.in)}`; };
@@ -9036,6 +9036,11 @@ async function syncReplans(ids, date, meta, rx, pin) {
       if (dup.length) { out.dup.push(...dup.filter(x => !out.dup.includes(x))); continue; }
     }
     const r = await store.replan(id, date, meta && { ...meta, ...rx[id] }, pin);
+    if (meta && r && Array.isArray(r.dup)) {   // Code.gs API 71: มีงานอยู่แล้ว (เช่น อีกเครื่องเพิ่งบันทึก) = ไม่สร้าง · โหลดข้อมูลใหม่ให้เห็นงานนั้น
+      for (const x of r.dup) { const c = state.cases.find(v => v.id === x.id) || normCase(x); if (!out.dup.some(v => v.id === c.id)) out.dup.push(c); }
+      out.stale = true;
+      continue;
+    }
     if (meta) {
       const rec = normCase(r), i = state.cases.findIndex(c => c.id === rec.id);
       if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
@@ -10051,7 +10056,12 @@ async function sendCp(key, btn) {
     : { kind: x.t.id, label: x.t.label, reason: x.e.reason || '', sim: x.e.back || (x.e.act === 'treat' ? x.e.date : ''), ct: '', mp };
   if (btn) btn.disabled = true;
   try {
-    const rec = normCase(await store.replan(x.c.id, x.e.date, { ...meta, ...x.rx }, ''));
+    const r = await store.replan(x.c.id, x.e.date, { ...meta, ...x.rx }, '');
+    if (r && Array.isArray(r.dup)) {   // Code.gs API 71: ผู้ป่วยนี้มีงานอยู่แล้ว (อีกเครื่องเพิ่งแจก) = ไม่แจกซ้ำ
+      if (store.mode === 'sheet') refresh(true);
+      return toast(`ไม่แจกซ้ำ: ${x.hn} มีงาน ${r.dup.map(v => jobText(state.cases.find(c => c.id === v.id) || normCase(v))).join(' | ')} ที่ยังไม่ Plan complete อยู่แล้ว`, { err: true });
+    }
+    const rec = normCase(r);
     const i = state.cases.findIndex(c => c.id === rec.id);
     if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
     state.fresh = [rec.id];
@@ -15254,6 +15264,8 @@ async function submitIntake(e) {
       tech: simple || !k.tech ? '' : chipValue($('#i-tech')), updated: nowISO(),
     });
   });
+  if (intake.dataset.dupOk === dupKey) recs.forEach(r => { r.dupOk = 1; });   // ยืนยันแจกเพิ่มแล้ว (Code.gs API 71 ไม่ถามซ้ำ)
+  recs.forEach(r => { if (catOf(r.cat).kind !== 'simple') r.planJob = 1; });   // หมวดวางแผน: Code.gs ตรวจงานซ้ำแม้ชีตยังไม่มีตั้งค่าหมวด
   const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : '';
   if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
   const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in, true);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดียวกับเคสแรก
@@ -15275,7 +15287,15 @@ async function submitIntake(e) {
     toast(`แจกเคส ${hn}: ${summary}${same ? ' (เคสเดิม · คนเดิม)' : manual ? ' (เลือกเอง)' : saved.length > 1 ? ' (งานถัดไปหักคิวเมื่อวนมาถึง)' : ''}`, { undo: () => undoAssign(saved) });
     setTimeout(() => { if (state.fresh === ids) { state.fresh = []; $$('.row.fresh').forEach(r => r.classList.remove('fresh')); } }, 5000);
     if (store.mode === 'sheet') refresh(true);
-  } catch (err) { toast('แจกเคสไม่สำเร็จ: ' + errMsg(err), { err: true }); }
+  } catch (err) {
+    const m = errMsg(err);
+    if (m.includes('DUPJOB|')) {   // Code.gs API 71: มีงานเทคนิคเดียวกันที่ยังไม่ Plan complete (อาจเพิ่งแจกจากอีกเครื่อง) = กดอีกครั้งเพื่อยืนยัน
+      intake.dataset.dupOk = dupKey;
+      if (store.mode === 'sheet') refresh(true);
+      return toast(m.slice(m.indexOf('DUPJOB|') + 7), { err: true });
+    }
+    toast('แจกเคสไม่สำเร็จ: ' + m, { err: true });
+  }
   finally { btn.disabled = false; }
 }
 // เลิกทำ = ลบทุกเคสที่เพิ่งแจกในชุดนั้น คิวกลับไปที่คนเดิม และคืนข้อมูลลงฟอร์มให้แก้
@@ -15660,6 +15680,7 @@ async function submitPin(e, clear) {
           if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
         }
         if (ctx.mode === 'fx') rp = await syncReplans([ctx.id, ...ids.filter(x => x !== ctx.id)].filter(x => ids.includes(x)), ctx.date, rpMeta, rx, pin);
+        if (rp.stale && store.mode === 'sheet') refresh(true);
       } finally { if (rec) render(); }
       pinDlg.close();
       if (ctx.mode === 'ptags') { toast(`${rec.hn} · ${rec.ptags ? `รายละเอียดผู้ป่วย: ${rec.ptags}` : 'ล้างรายละเอียดผู้ป่วยแล้ว'}`); return; }
