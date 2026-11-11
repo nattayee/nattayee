@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.9';
-const API_LEVEL = 73;
+const CODE_VERSION = '2026-11-11.10';
+const API_LEVEL = 74;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -399,16 +399,64 @@ function propRead_(k) {
   return PROPS_[k] == null ? null : PROPS_[k];
 }
 function propSave_(k, v) { PropertiesService.getScriptProperties().setProperty(k, v); if (PROPS_) PROPS_[k] = v; }
+/* ---------- ความเร็วของการบันทึก (รุ่น 2026-11-11.10 · API 74): ค่าที่อ่านแล้วจำไว้ตลอดคำขอ ----------
+ * แต่ละคำขอของ Apps Script เริ่มตัวแปรใหม่ · การเรียกชีต / แคช / property แต่ละครั้ง = ไปกลับ 1 รอบ (หลายสิบ ms)
+ * ชีตตามชื่อ · เขตเวลา · ผู้ใช้ของ token · ค่าในแคช จำตลอดคำขอ · หัวคอลัมน์จำเฉพาะระหว่างถือล็อก (นอกล็อกคนอื่นเพิ่มคอลัมน์ได้)
+ */
+let REQ_ = {};
+function reqMap_(k) { return REQ_[k] || (REQ_[k] = new WeakMap()); }
+function sheet_(doc, name) {
+  const m = reqMap_('sheets');
+  let by = m.get(doc);
+  if (!by) m.set(doc, (by = {}));
+  if (by[name]) return by[name];
+  const sh = doc.getSheetByName(name);
+  if (sh) { by[name] = sh; reqMap_('names').set(sh, name); }
+  return sh;
+}
+function sheetName_(sh) { const m = reqMap_('names'); if (!m.has(sh)) m.set(sh, sh.getName()); return m.get(sh); }
+function tz_(doc) {
+  const m = reqMap_('tz');
+  if (m.has(doc)) return m.get(doc);
+  // ชีตข้อมูลหลัก: เขตเวลามากับแคชที่อ่านพร้อมผู้ใช้ (เปลี่ยนเขตเวลาของชีต = มีผลภายใน 6 ชั่วโมง)
+  const key = doc === SS_ && REQ_.cache ? 'ssTz' : '';
+  let v = key && typeof REQ_.cache[key] === 'string' && REQ_.cache[key] ? REQ_.cache[key] : '';
+  if (!v) { v = doc.getSpreadsheetTimeZone(); if (key && key in REQ_.cache) { try { cachePut_(key, v, 21600); } catch (e) { /* อ่านใหม่รอบหน้า */ } } }
+  m.set(doc, v);
+  return v;
+}
+// แคชหลายค่าในครั้งเดียว (ผู้ใช้ของ token + เจ้าของไฟล์) · cacheGet_ ใช้ค่าที่อ่านไว้ก่อน
+function cachePre_(keys) {
+  const c = REQ_.cache || (REQ_.cache = {}), need = keys.filter(k => !(k in c));
+  if (!need.length) return;
+  try {
+    const cache = CacheService.getScriptCache();
+    if (typeof cache.getAll !== 'function') return;
+    const got = cache.getAll(need) || {};
+    need.forEach(k => { c[k] = got[k] === undefined ? null : got[k]; });
+  } catch (e) { /* อ่านทีละค่าแทน */ }
+}
+function cacheGet_(k) { const c = REQ_.cache; return c && k in c ? c[k] : CacheService.getScriptCache().get(k); }
+function cachePut_(k, v, sec) { CacheService.getScriptCache().put(k, v, sec); if (REQ_.cache) REQ_.cache[k] = v; }
 // fresh = อ่านค่าล่าสุดจริง (ระหว่างล็อก ก่อนเขียน)
-function tableVers_(fresh) { try { return JSON.parse((fresh ? PropertiesService.getScriptProperties().getProperty(TABLE_VER_PROP) : propRead_(TABLE_VER_PROP)) || '{}') || {}; } catch (e) { return {}; } }
+// รุ่น 2026-11-11.10: เก็บรุ่นแยกรายตาราง (property tv_<ตาราง>) = บันทึกแล้วเขียนอย่างเดียว ไม่ต้องอ่านค่ารวมก่อน · ค่ารวมเดิม (tableVer) ยังอ่านได้
+const TABLE_VER_ONE = 'tv_';
+function tableVers_() {
+  let v = {};
+  try { v = JSON.parse(propRead_(TABLE_VER_PROP) || '{}') || {}; } catch (e) { v = {}; }
+  Object.keys(PROPS_ || {}).forEach(k => { if (k.indexOf(TABLE_VER_ONE) === 0 && PROPS_[k]) v[k.slice(TABLE_VER_ONE.length)] = PROPS_[k]; });
+  return v;
+}
 function saveDirty_() {
   if (!DIRTY_) return;
   const d = DIRTY_;
   DIRTY_ = null;
   try {
-    const v = tableVers_(true), stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    Object.keys(d).forEach(t => { v[t] = stamp; });
-    propSave_(TABLE_VER_PROP, JSON.stringify(v));
+    const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 5), set = {}, props = PropertiesService.getScriptProperties();
+    Object.keys(d).forEach(t => { set[TABLE_VER_ONE + t] = stamp; });
+    if (Object.keys(set).length > 1 && typeof props.setProperties === 'function') props.setProperties(set);
+    else Object.keys(set).forEach(k => props.setProperty(k, set[k]));
+    if (PROPS_) Object.assign(PROPS_, set);
   } catch (e) { /* เก็บรุ่นไม่ได้: หน้าเว็บได้ข้อมูลใหม่ตอนขอทั้งหมดรอบถัดไป */ }
 }
 // แถวเป็นอาร์เรย์ตามคอลัมน์ (ไม่ซ้ำชื่อคีย์ทุกแถว · ตัดช่องว่างท้ายแถว) { c: คีย์, r: แถว }
@@ -458,11 +506,11 @@ function tablesFor_(ss, config, user, need, have) {
 // แถวที่แก้หลังเวลา since: อ่านคอลัมน์ id และ rev ก่อน แล้วอ่านเฉพาะแถวที่เปลี่ยน (เป็นช่วงต่อกัน) · ค่าตรวจรหัสทั้งตาราง (หน้าเว็บเทียบ: ไม่ตรง = มีแถวถูกลบ)
 // ยังไม่มีคอลัมน์ rev / แก้เกิน DELTA_MAX แถว = null (ส่งทั้งตาราง)
 function readDelta_(ss, table, cfg, since) {
-  const def = tableDef_(table, cfg), sh = ss.getSheetByName(def.sheet);
+  const def = tableDef_(table, cfg), sh = sheet_(ss, def.sheet);
   if (!sh) return null;
   const n = sh.getLastRow() - 1;
   if (n < 1) return { rows: [], hash: idsHash_([]), n: 0 };
-  const header = headerOf_(sh), rc = header.indexOf(REV_HEAD), cv = rowConv_(def, header, ss.getSpreadsheetTimeZone());
+  const header = headerOf_(sh), rc = header.indexOf(REV_HEAD), cv = rowConv_(def, header, tz_(ss));
   if (rc < 0 || cv.cols[0] < 0) return null;
   const ids = sh.getRange(2, cv.cols[0] + 1, n, 1).getValues(), revs = sh.getRange(2, rc + 1, n, 1).getValues(), all = [], hit = [];
   for (let i = 0; i < n; i++) {
@@ -522,22 +570,23 @@ const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'p
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
 const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty'];
-function saveRecord(table, rec, token) {
+function saveRecord(table, rec, token) { return saveRecord_(table, rec, token, null); }
+// edit = { pin }: แก้รายการที่มีอยู่ต้องยืนยัน PIN (ตรวจหลังอ่านแถวภายใต้ล็อก · เดิมอ่านคอลัมน์ id ก่อนล็อกอีกรอบ)
+function saveRecord_(table, rec, token, edit) {
   if (OWN_WRITERS.indexOf(table) >= 0) throw new Error('ตาราง ' + table + ' บันทึกผ่านแถบของตัวเองเท่านั้น');
-  requireEdit_(token, EDIT_VIEWS[table]);
+  const u = requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
-  if (!rec || !rec.id) throw new Error('ไม่มีรหัสรายการ');
+  if (!rec || !rec.id) { if (edit) pinChange_(u, edit.pin, false); throw new Error('ไม่มีรหัสรายการ'); }
   return withLock_(() => {
     const ss = ss_();
     const cfg = table === 'cases' ? readConfig_(ss) : null;   // หัวข้อเพิ่มเติมที่แอดมินตั้ง เป็นคอลัมน์ของ Cases
-    const sh = tableSheet_(ss, table, cfg);
-    const header = headerOf_(sh);
-    const found = findRow_(sh, header.indexOf('id') + 1, rec.id);
+    const x = openRow_(ss, table, cfg, rec.id), sh = x.sh, header = x.header, found = x.row;
+    if (edit) pinChange_(u, edit.pin, !!found);
     let fields = tableDef_(table, cfg).fields;
     // เคสที่มีอยู่แล้ว: ช่องของปุ่มบันทึกขั้นตอนเติมได้เฉพาะช่องที่ยังว่าง ไม่เขียนทับหรือลบ (คนอื่นอาจเพิ่งกด)
     // แก้หรือล้างได้ทาง stampCase เท่านั้น
     if (found && table === 'cases') {
-      const cur = sh.getRange(found, 1, 1, header.length).getValues()[0];
+      const cur = x.vals;
       fields = fields.filter(f => {
         if (STAMP_FIELDS.indexOf(f[0]) < 0) return true;
         const col = header.indexOf(f[1]);
@@ -546,7 +595,7 @@ function saveRecord(table, rec, token) {
     }
     // หน้าเว็บรุ่นเก่าไม่ส่งช่อง src: ไม่ล้างที่มาของรายการที่ดึงจากระบบนัด
     if (table === 'logs' && rec.src === undefined) fields = fields.filter(f => f[0] !== 'src');
-    writeFields_(sh, found || sh.getLastRow() + 1, header, fields, rec);
+    writeFields_(sh, found || sh.getLastRow() + 1, header, fields, rec, found ? x.vals : null);
     return rec;
   });
 }
@@ -565,8 +614,9 @@ function addCases(recs, token) {
     const cfg = readConfig_(ss) || {};
     const staff = Array.isArray(cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code, active: true }));
     const leaves = readTable_(ss, 'leaves');
-    const cases = readTable_(ss, 'cases');
-    const today = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    // คิว (pickNext_) และงานซ้ำ (openJobs_) ใช้แค่ช่องเหล่านี้ · อ่านทั้งชีต Cases (60+ คอลัมน์) ช้าตามจำนวนเคสสะสม
+    const cases = readCols_(ss, 'cases', cfg, ['cat', 'mp', 'how', 'n', 'in', 'created', 'hn', 'pc', 'rt', 'replan']);
+    const today = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd');
     const out = [];
     recs.forEach(rec => {
       if (!rec || !rec.cat) throw new Error('เลือกเทคนิคก่อนแจกเคส');
@@ -606,13 +656,14 @@ function addCases(recs, token) {
     const sh = tableSheet_(ss, 'cases', cfg);
     const header = headerOf_(sh);
     const fields = tableDef_('cases', cfg).fields;
-    out.forEach(rec => writeFields_(sh, sh.getLastRow() + 1, header, fields, rec));
+    const base = sh.getLastRow();
+    out.forEach((rec, i) => writeFields_(sh, base + 1 + i, header, fields, rec, null));
     // แจกจากรายการของแถบ CT-SIM (ctFrom = id ของรายการนั้น): บันทึกว่าแจกแล้วเป็นเคสไหน ใครแจก
     const ctFrom = String((recs[0] && recs[0].ctFrom) || '').trim();
     if (ctFrom) {
-      const cs = tableSheet_(ss, 'ctsim'), ch = headerOf_(cs), row = findRow_(cs, ch.indexOf('id') + 1, ctFrom);
-      const set = { took: out.map(r => r.id).join(', '), tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') };
-      if (row) writeFields_(cs, row, ch, TABLES.ctsim.fields.filter(f => f[0] in set), set);
+      const x = openRow_(ss, 'ctsim', null, ctFrom);
+      const set = { took: out.map(r => r.id).join(', '), tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') };
+      if (x.row) writeFields_(x.sh, x.row, x.header, TABLES.ctsim.fields.filter(f => f[0] in set), set, x.vals);
     }
     return out;
   });
@@ -699,17 +750,16 @@ function deleteRecord(table, id, token) {
   requireEdit_(token, EDIT_VIEWS[table]);
   tableDef_(table);
   return withLock_(() => {
-    const sh = tableSheet_(ss_(), table);
-    const row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) delRow_(sh, row);
+    const sh = tableSheet_(ss_(), table), header = headerOf_(sh);
+    const row = findRow_(sh, header.indexOf('id') + 1, id);
+    if (row) delRow_(sh, row, header);
     return !!row;
   });
 }
 
 // หน้าแก้ไขเคส: บันทึกหรือลบต้องยืนยันด้วยรหัส PIN ของคนที่เข้าสู่ระบบ (เหมือนปุ่มบันทึกขั้นตอน)
 function editCase(rec, pin, token) {
-  pinChange_(requireEdit_(token, EDIT_VIEWS.cases), pin, rowExists_('cases', rec && rec.id));
-  return saveRecord('cases', rec, token);
+  return saveRecord_('cases', rec, token, { pin: pin });
 }
 
 function removeCase(id, pin, token) {
@@ -719,8 +769,7 @@ function removeCase(id, pin, token) {
 
 // หน้าแก้ไขกิจกรรม (RC งานวิชาการ ฯลฯ): บันทึกการแก้ไขหรือลบต้องยืนยันด้วยรหัส PIN เหมือนหน้าแก้ไขเคส
 function editLog(rec, pin, token) {
-  pinChange_(requireEdit_(token, EDIT_VIEWS.logs), pin, rowExists_('logs', rec && rec.id));
-  return saveRecord('logs', rec, token);
+  return saveRecord_('logs', rec, token, { pin: pin });
 }
 
 function removeLog(id, pin, token) {
@@ -873,9 +922,9 @@ const LEGACY_HEADERS = {
 function importLegacy() {
   const ss = ss_();
   requireAdmin_(ss);
-  const tz = ss.getSpreadsheetTimeZone();
+  const tz = tz_(ss);
   const found = parseLegacy_(name => {
-    const sh = ss.getSheetByName(name);
+    const sh = sheet_(ss, name);
     return sh ? sh.getDataRange().getValues() : null;
   }, tz);
   const added = withLock_(() => {
@@ -1140,27 +1189,20 @@ function stampVals_(steps) {
 
 function stampSteps_(id, steps, pin, token, at) {
   const u = requireEdit_(token, EDIT_VIEWS.cases);
-  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes, c0 = caseOf_(id);
-  pinChange_(u, pin, !c0 || keys.some(k => vals[k] === null || has_(c0[k])));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const now = stampTime_(at, ss.getSpreadsheetTimeZone());
+  const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
+  return caseEdit_(u, id, pin, c0 => !c0 || keys.some(k => vals[k] === null || has_(c0[k])), (c0, ss) => {
+    const now = stampTime_(at, tz_(ss));
     const name = String(u.name || u.username || u.me || '');
-    const finCol = header.indexOf('Finish') + 1;
     const set = {};
     keys.forEach(step => {
-      const clear = vals[step] === null, at = clear ? '' : now, by = clear ? '' : name;
-      set[step] = at;
+      const clear = vals[step] === null, when = clear ? '' : now, by = clear ? '' : name;
+      set[step] = when;
       set[step + 'By'] = by;
       if (STEP_VALUES.indexOf(step) >= 0) set[step + 'Val'] = clear ? '' : vals[step];
       if (STEP_VALUES.indexOf(step) >= 0 && (clear || step in notes)) set[step + 'Note'] = clear ? '' : notes[step];
-      if (step === 'eval' && !clear && finCol > 0 && !String(sh.getRange(row, finCol).getValue()).trim()) { set.fin = at; set.finBy = by; }
+      if (step === 'eval' && !clear && !has_(c0.fin)) { set.fin = when; set.finBy = by; }
     });
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
+    return set;
   });
 }
 
@@ -1174,21 +1216,12 @@ function stampBoost(id, sid, steps, pin, at, token) {
   if (!/^[\w-]{1,40}$/.test(sid)) throw new Error('ไม่พบแผน boost นี้');
   const parsed = stampVals_(steps), keys = parsed.keys, vals = parsed.vals, notes = parsed.notes;
   if (!keys.length) throw new Error('เลือกขั้นตอนที่จะบันทึก');
-  const c0 = caseOf_(id);
-  let b0 = {};
-  try { b0 = (JSON.parse(String((c0 && c0.bsteps) || '{}')) || {})[sid] || {}; } catch (e) { b0 = {}; }
-  pinChange_(u, pin, !c0 || keys.some(k => vals[k] === null || has_(b0[k])));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const col = header.indexOf('ขั้นตอนของ boost');
-    let all = {};
-    try { all = col < 0 ? {} : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '{}')); } catch (e) { all = {}; }
+  const boostOf = c0 => { try { const a = JSON.parse(String((c0 && c0.bsteps) || '{}')); return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; } catch (e) { return {}; } };
+  return caseEdit_(u, id, pin, c0 => !c0 || keys.some(k => vals[k] === null || has_((boostOf(c0)[sid] || {})[k])), (c0, ss) => {
+    let all = boostOf(c0);
     if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
     const cur = all[sid] && typeof all[sid] === 'object' ? all[sid] : {};
-    const now = stampTime_(at, ss.getSpreadsheetTimeZone()), name = String(u.name || u.username || u.me || '');
+    const now = stampTime_(at, tz_(ss)), name = String(u.name || u.username || u.me || '');
     keys.forEach(step => {
       const clear = vals[step] === null, when = clear ? '' : now, by = clear ? '' : name;
       cur[step] = when;
@@ -1199,14 +1232,12 @@ function stampBoost(id, sid, steps, pin, at, token) {
     });
     Object.keys(cur).forEach(k => { if (cur[k] === '') delete cur[k]; });
     if (Object.keys(cur).length) all[sid] = cur; else delete all[sid];
-    const set = { bsteps: Object.keys(all).length ? JSON.stringify(all) : '' };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
+    return { bsteps: Object.keys(all).length ? JSON.stringify(all) : '' };
   });
 }
 
 // วันนี้ตามเขตเวลาของชีต (yyyy-MM-dd)
-function today_(ss) { return Utilities.formatDate(new Date(), (ss || ss_()).getSpreadsheetTimeZone(), 'yyyy-MM-dd'); }
+function today_(ss) { return Utilities.formatDate(new Date(), tz_(ss || ss_()), 'yyyy-MM-dd'); }
 // บันทึกล่วงหน้าไม่ได้ (API 51): ฉายแล้ว · Off RT · Complete course / Cancel RT ของวันหลังวันนี้ (Hold, Port film ฯลฯ ยังบันทึกล่วงหน้าได้)
 const FX_NOW_ACTS = ['given', 'off'];
 // ล้างที่บันทึกล่วงหน้าไว้ก่อนมีกติกานี้ (ตอนโหลดข้อมูล): รายการสถานะ fraction ข้างบนที่วันที่หลังวันนี้ · สถานะการฉาย (Complete course / Cancel RT) ที่วันที่หลังวันนี้
@@ -1248,19 +1279,11 @@ function courseCase(id, status, date, note, pin, token) {
   if (status && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('ใส่วันที่');
   if (status === 'cancel' && !note) throw new Error('กรอกสาเหตุที่ Cancel RT');
   if (status && date > today_()) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึก ' + (status === 'cancel' ? 'Cancel RT' : 'Complete course') + ' ล่วงหน้าไม่ได้');
-  const c0 = caseOf_(id);
-  pinChange_(u, pin, !status || !c0 || has_(c0.rt));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const now = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
-    const set = status
+  return caseEdit_(u, id, pin, c0 => !status || !c0 || has_(c0.rt), (c0, ss) => {
+    const now = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm');
+    return status
       ? { rt: status, rtDate: date, rtAt: now, rtBy: String(u.name || u.username || u.me || ''), rtNote: note }
       : { rt: '', rtDate: '', rtAt: '', rtBy: '', rtNote: '' };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
   });
 }
 
@@ -1293,30 +1316,20 @@ function fractionCase(id, date, ev, pin, token) {
     if (rec.back && (!isDate(rec.back) || rec.back <= date)) throw new Error('วันกลับมาฉายต้องหลังวันที่ ' + date);
   }
   const same = x => x && String(x.date).slice(0, 10) === date && (!lane || String(x.lane || '') === lane);
-  pinChange_(u, pin, !ev || jsonList_((caseOf_(id) || {}).fxlog).some(same));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
+  return caseEdit_(u, id, pin, c0 => !ev || jsonList_((c0 || {}).fxlog).some(same), (c0, ss) => {
     if (rec && FX_NOW_ACTS.indexOf(rec.act) >= 0 && date > today_(ss)) throw new Error('ยังไม่ถึงวันที่ ' + date + ' บันทึก' + (rec.act === 'given' ? 'ฉายแล้ว' : ' ' + rec.label + ' ') + 'ล่วงหน้าไม่ได้');
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const col = header.indexOf('สถานะ fraction');
-    let list = [];
-    try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
-    if (!Array.isArray(list)) list = [];
+    let list = jsonList_(c0.fxlog);
     list = list.filter(x => x && !same(x));   // ทั้งผู้ป่วย = ทุกรายการของวันนั้น (รวมแถวย่อย) · แถวย่อย = เฉพาะแถวนั้น
     if (rec) {
       const inside = list.filter(x => !x.lane && x.act === 'skip' && x.date < date && (!x.back || date < x.back))[0];
       if (inside) throw new Error('วันที่ ' + date + ' อยู่ในช่วง ' + inside.label + ' ตั้งแต่ ' + inside.date + ' แก้ที่รายการนั้นแทน');
       if (rec.act === 'off') list = list.filter(x => x.act !== 'off');
       rec.by = String(u.name || u.username || u.me || '');
-      rec.at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+      rec.at = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm');
       list.push(rec);
     }
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const set = { fxlog: list.length ? JSON.stringify(list) : '' };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
+    return { fxlog: list.length ? JSON.stringify(list) : '' };
   });
 }
 
@@ -1335,26 +1348,16 @@ function moveCase(id, date, mv, pin, token) {
     if (!rec.room) throw new Error('เลือกห้องที่ย้ายไป');
     if (rec.room === rec.from) throw new Error('ห้องที่ย้ายไปต้องไม่ใช่ห้องเดิม');
   }
-  pinChange_(u, pin, !mv || jsonList_((caseOf_(id) || {}).rmove).some(x => x && String(x.date).slice(0, 10) === date));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const col = header.indexOf('ย้ายห้อง');
-    let list = [];
-    try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
-    if (!Array.isArray(list)) list = [];
+  return caseEdit_(u, id, pin, c0 => !mv || jsonList_((c0 || {}).rmove).some(x => x && String(x.date).slice(0, 10) === date), (c0, ss) => {
+    let list = jsonList_(c0.rmove);
     list = list.filter(x => x && x.date !== date);
     if (rec) {
       rec.by = String(u.name || u.username || u.me || '');
-      rec.at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+      rec.at = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm');
       list.push(rec);
     }
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const set = { rmove: list.length ? JSON.stringify(list) : '' };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
+    return { rmove: list.length ? JSON.stringify(list) : '' };
   });
 }
 
@@ -1368,16 +1371,7 @@ function tagCase(id, tags, pin, token) {
   const list = String(tags == null ? '' : tags).split(',').map(x => x.trim().slice(0, 40)).filter(x => x && !seen[x.toLowerCase()] && (seen[x.toLowerCase()] = true));
   const text = list.join(', ');
   if (text.length > 300) throw new Error('รายละเอียดผู้ป่วยยาวเกินไป (ไม่เกิน 300 ตัวอักษร)');
-  pinChange_(u, pin, has_((caseOf_(id) || {}).ptags));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const set = { ptags: text };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
-  });
+  return caseEdit_(u, id, pin, c0 => has_((c0 || {}).ptags), () => ({ ptags: text }));
 }
 
 /**
@@ -1410,27 +1404,28 @@ function replanCase(id, date, rp, pin, token) {
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss);
     const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
-    const rows = readTable_(ss, 'cases', cfg), parent = rows.filter(c => c.id === id)[0];
+    // เคสเดิม = แถวเดียว · งานของวันนั้น / งานซ้ำ หาจากคอลัมน์ที่ใช้ (เดิมอ่านทั้งชีต Cases)
+    const px = openRow_(ss, 'cases', cfg, id), parent = px.cur;
+    const rows = parent ? readCols_(ss, 'cases', cfg, ['cat', 'mp', 'how', 'in', 'hn', 'pc', 'rt', 'replan']) : [];
     if (!parent) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     if (rec && rec.mp) {
       const staff = Array.isArray(cfg && cfg.staff) && cfg.staff.length ? cfg.staff : DEFAULT_STAFF.map(code => ({ code: code }));
       if (!staff.some(x => String(x.code).toUpperCase() === rec.mp)) throw new Error('ไม่พบรหัสนักฟิสิกส์ ' + rec.mp);
     }
     const metaOf = c => { try { const m = JSON.parse(c.replan || 'null'); return m && typeof m === 'object' ? m : null; } catch (e) { return null; } };
-    const old = rows.filter(c => { const m = metaOf(c); return m && m.of === id && m.date === date; })[0];
+    const oldRef = rows.filter(c => { const m = metaOf(c); return m && m.of === id && m.date === date; })[0];
+    const ox = oldRef ? openRow_(ss, 'cases', cfg, oldRef.id) : null, old = ox ? ox.cur : null;
     if (!rec) {
       if (!old) return { id: '', removed: false };
       if (['fin', 'eval', 'mu', 'd0', 'd4', 'mc', 'pc'].some(k => String(old[k] || ''))) return { id: old.id, removed: false, started: true };
-      const row = findRow_(sh, header.indexOf('id') + 1, old.id);
-      if (row) delRow_(sh, row);
+      if (ox.row) delRow_(ox.sh, ox.row, ox.header, ox.vals);
       return { id: old.id, removed: true };
     }
     const meta = JSON.stringify({ of: id, date: date, kind: rec.kind, label: rec.label, reason: rec.reason });
     if (old) {   // แก้: สาเหตุ วันเริ่มฉาย ห้อง (prescription และขั้นตอนที่ MP ทำไปแล้วคงไว้)
       const set = { replan: meta, sim: rec.sim, room: rec.room || old.room };
       if (rec.mp) set.mp = rec.mp;
-      writeFields_(sh, findRow_(sh, header.indexOf('id') + 1, old.id), header, fields.filter(f => f[0] in set), set);
-      return readTable_(ss, 'cases', cfg).filter(c => c.id === old.id)[0];
+      return saveRow_(ox, fields, set);
     }
     // API 71: ผู้ป่วยนี้มีงานเทคนิคเดียวกันที่ยังไม่ Plan complete อยู่แล้ว (อีกเคสของ HN เดียวกัน · คนอื่นเพิ่งบันทึกจากอีกเครื่อง) = ไม่สร้างซ้ำ
     const dup = openJobs_(rows, cfg, parent.hn, parent.cat, parent.id, true);
@@ -1440,10 +1435,10 @@ function replanCase(id, date, rp, pin, token) {
     STAMP_FIELDS.forEach(k => { out[k] = ''; });
     Object.assign(out, {
       id: Utilities.getUuid(), how: 'replan', batch: '', note: '', replan: meta, mp: rec.mp || parent.mp,
-      in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: new Date().toISOString(), updated: '',
+      in: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd'), created: new Date().toISOString(), updated: '',
       sim: rec.sim, ct: rec.ct || parent.ct, room: rec.room || parent.room, dpf: rec.dpf || parent.dpf, fx: rec.fx, rx: '', area: rec.area || parent.area, sites: rec.sites,
     });
-    writeFields_(sh, sh.getLastRow() + 1, header, fields, out);
+    writeFields_(sh, sh.getLastRow() + 1, header, fields, out, null);
     return out;
   });
 }
@@ -1466,26 +1461,16 @@ function addFxCase(id, date, add, pin, token) {
   }
   const fa = (readConfig_(ss_()) || {}).fxAdj, roles = fa && Array.isArray(fa.roles) ? fa.roles.map(String) : ['MP'];
   if (u.via === 'lpch' && !u.isAdmin && roles.indexOf(String(u.role || '')) < 0) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' เพิ่ม / ลบ fraction ไม่ได้ (ตั้งค่า → สถานะ fraction)');
-  pinChange_(u, pin, !add || jsonList_((caseOf_(id) || {}).fxadd).some(x => x && String(x.date).slice(0, 10) === date));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const col = header.indexOf('เพิ่ม fraction');
-    let list = [];
-    try { list = col < 0 ? [] : JSON.parse(String(sh.getRange(row, col + 1).getValue() || '[]')); } catch (e) { list = []; }
-    if (!Array.isArray(list)) list = [];
+  return caseEdit_(u, id, pin, c0 => !add || jsonList_((c0 || {}).fxadd).some(x => x && String(x.date).slice(0, 10) === date), (c0, ss) => {
+    let list = jsonList_(c0.fxadd);
     list = list.filter(x => x && x.date !== date);
     if (rec) {
       rec.by = String(u.name || u.username || u.me || '');
-      rec.at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+      rec.at = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm');
       list.push(rec);
     }
     list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const set = { fxadd: list.length ? JSON.stringify(list) : '' };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
+    return { fxadd: list.length ? JSON.stringify(list) : '' };
   });
 }
 
@@ -1502,16 +1487,7 @@ function timeCase(id, time, pin, token) {
     if (!m || +m[1] > 23 || +(m[2] || 0) > 59) throw new Error('Mosaiq Time ต้องเป็นเวลา เช่น 08:30');
     text = ('0' + +m[1]).slice(-2) + ':' + (m[2] || '00');
   }
-  pinChange_(u, pin, has_((caseOf_(id) || {}).mqt));
-  return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const set = { mqt: text };
-    writeFields_(sh, row, header, TABLES.cases.fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, row);
-  });
+  return caseEdit_(u, id, pin, c0 => has_((c0 || {}).mqt), () => ({ mqt: text }));
 }
 
 /**
@@ -1531,22 +1507,19 @@ function courseAdd(rec, pin, token) {
   if (cut(rec.ct, 10) && !isDate(cut(rec.ct, 10))) throw new Error('วันที่ CT-Sim ไม่ถูกต้อง');
   const sim = cut(rec.sim, 10);
   if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
-  pinChange_(u, pin, rowExists_('cases', rec.id));
   return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss);
-    const sh = tableSheet_(ss, 'cases', cfg), header = headerOf_(sh), fields = tableDef_('cases', cfg).fields;
-    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
-    const planned = !!row && String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct';
+    const ss = ss_(), cfg = readConfig_(ss), fields = tableDef_('cases', cfg).fields;
+    const id = cut(rec.id, 80), x = openRow_(ss, 'cases', cfg, id), row = x.row;
+    pinChange_(u, pin, !!row);
+    const planned = !!row && String(x.cur.how).trim() !== 'direct';
     const set = {};
     DIRECT_FIELDS.concat(fields.map(f => f[0]).filter(k => /^x_/.test(k))).forEach(k => { set[k] = cut(rec[k], k === 'sites' ? 5000 : k === 'dx' || k === 'note' ? 2000 : 200); });
     if (planned) delete set.cat;   // เคสที่แจกงาน: หมวดเป็นส่วนของ MP (แต้มและคิว)
     set.sim = sim;
     const now = new Date().toISOString();
     if (row) set.updated = now;
-    else Object.assign(set, { id: id || Utilities.getUuid(), how: 'direct', mp: '', in: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'), created: now, updated: '' });
-    const at = row || sh.getLastRow() + 1;
-    writeFields_(sh, at, header, fields.filter(f => f[0] in set), set);
-    return rowAt_(ss, 'cases', cfg, sh, header, at);
+    else Object.assign(set, { id: id || Utilities.getUuid(), how: 'direct', mp: '', in: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd'), created: now, updated: '' });
+    return saveRow_(x, fields, set);
   });
 }
 
@@ -1555,11 +1528,10 @@ function courseRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.course);
   pinChange_(u, pin, true);
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'cases', readConfig_(ss)), header = headerOf_(sh);
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) return false;
-    if (String(sh.getRange(row, header.indexOf('วิธีแจก') + 1).getValue()).trim() !== 'direct') throw new Error('ลบได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย');
-    delRow_(sh, row);
+    const ss = ss_(), x = openRow_(ss, 'cases', readConfig_(ss), id);
+    if (!x.row) return false;
+    if (String(x.cur.how).trim() !== 'direct') throw new Error('ลบได้เฉพาะผู้ป่วยที่เพิ่มในแถบห้องฉาย');
+    delRow_(x.sh, x.row, x.header, x.vals);
     return true;
   });
 }
@@ -1581,22 +1553,28 @@ function dutyDay(date, list, pin, token) {
     return (Array.isArray(v) ? v : []).map(x => cut(x, 60).replace(/,/g, ' ').replace(/\s+/g, ' ')).filter(x => x && !seen[x] && (seen[x] = true)).slice(0, 30);
   };
   const recs = list.slice(0, 30).filter(x => x && typeof x === 'object' && /^CT:/.test(String(x.room || '')) === isCt).map(x => ({ room: cut(x.room, 40), rtt: names(x.rtt), ra: names(x.ra), qc: names(x.qc) }));
-  pinChange_(u, pin, readTable_(ss_(), 'duty').some(x => String(x.date) === date && recs.some(r => r.room === x.room)));
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'duty'), header = headerOf_(sh), idCol = header.indexOf('id') + 1;
-    const at = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
+    // แถวของวันนั้น (ทุกห้อง · id = วันที่|ห้อง): อ่านคอลัมน์ id ครั้งเดียว แล้วอ่านเฉพาะแถวของวันนี้ (เดิมอ่านทั้งตาราง 2 รอบ)
+    const ss = ss_(), R = openRows_(ss, 'duty', null, v => v.indexOf(date + '|') === 0), sh = R.sh, header = R.header, cv = R.cv, day = R.at;
+    let last = R.last;
+    pinChange_(u, pin, recs.some(r => !!day[date + '|' + r.room]));
+    const at = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm'), by = String(u.name || u.username || u.me || '');
+    const gone = [];
     recs.forEach(r => {
-      const id = date + '|' + r.room, row = findRow_(sh, idCol, id);
-      if (!r.rtt.length && !r.ra.length && !r.qc.length) { if (row) delRow_(sh, row); return; }
-      writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.duty.fields, { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), qc: r.qc.join(', '), by: by, at: at });
+      const id = date + '|' + r.room, cur = day[id];
+      if (!r.rtt.length && !r.ra.length && !r.qc.length) { if (cur) { gone.push(cur); delete day[id]; } return; }
+      const set = { id: id, date: date, room: r.room, rtt: r.rtt.join(', '), ra: r.ra.join(', '), qc: r.qc.join(', '), by: by, at: at };
+      if (cur) cur.vals = writeFields_(sh, cur.row, header, TABLES.duty.fields, set, cur.vals);
+      else { last += 1; day[id] = { row: last, vals: writeFields_(sh, last, header, TABLES.duty.fields, set, null) }; }
     });
-    return readTable_(ss, 'duty').filter(x => x.date === date);
+    gone.sort((a, b) => b.row - a.row).forEach(g => delRow_(sh, g.row, header, g.vals));   // ลบจากล่างขึ้นบน (เลขแถวของที่เหลือไม่เลื่อน)
+    return Object.keys(day).map(k => cv.conv(day[k].vals)).filter(x => x.date === date);
   });
 }
 
 // ผู้ปฏิบัติงานที่ส่งให้หน้าเว็บ: ตั้งแต่ 1 ปีก่อน (ตารางย้อนหลังเกินนั้นไม่ค่อยได้ดู)
 function recentDuty_(ss) {
-  const from = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const from = Utilities.formatDate(new Date(Date.now() - 366 * 864e5), tz_(ss), 'yyyy-MM-dd');
   return readTable_(ss, 'duty').filter(x => String(x.date) >= from);
 }
 
@@ -1617,26 +1595,22 @@ function ctSave(rec, pin, token) {
   if (!isDate(cut(rec.date, 10))) throw new Error('วันที่ทำ CT ไม่ถูกต้อง');
   const sim = cut(rec.sim, 10);
   if (sim && sim !== 'on call' && !isDate(sim)) throw new Error('วันที่ Start RT ไม่ถูกต้อง');
-  pinChange_(u, pin, rowExists_('ctsim', rec.id));
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), header = headerOf_(sh);
-    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const ss = ss_(), id = cut(rec.id, 80), x = openRow_(ss, 'ctsim', null, id), row = x.row;
+    pinChange_(u, pin, !!row);
     const set = {};
     CT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'extra' ? 4000 : k === 'note' || k === 'dx' ? 2000 : 200); });
     set.send = set.send ? 'yes' : '';
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
-    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.ctsim.fields.filter(f => f[0] in set), set);
-    const want = row ? id : set.id;
-    // ลงจากนัดในแถบลงนัด (apptFrom = id ของนัด เฉพาะรายการใหม่): บันทึกว่านัดนี้ลง CT-SIM แล้ว ใครลง
-    const from = row ? '' : cut(rec.apptFrom, 80);
+    // ลงจากนัดในแถบลงนัด (apptFrom = id ของนัด เฉพาะรายการใหม่): บันทึกว่านัดนี้ลง CT-SIM แล้ว ใครลง · อ่านแถวของนัดก่อนเขียน (อ่านหลังเขียน = ชีตต้องบันทึกค้างก่อน)
+    const from = row ? '' : cut(rec.apptFrom, 80), a = from ? openRow_(ss, 'appt', null, from) : null;
+    const out = saveRow_(x, TABLES.ctsim.fields, set);   // รายการหลังบันทึกจากค่าที่เขียน (เดิมอ่านทั้งตาราง CT-SIM กลับมา)
     if (from) {
-      const as = tableSheet_(ss, 'appt'), ah = headerOf_(as), ar = findRow_(as, ah.indexOf('id') + 1, from);
-      const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') };
-      if (ar) writeFields_(as, ar, ah, TABLES.appt.fields.filter(f => f[0] in mark), mark);
+      const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') };
+      if (a.row) writeFields_(a.sh, a.row, a.header, TABLES.appt.fields.filter(f => f[0] in mark), mark, a.vals);
     }
-    const out = readTable_(ss, 'ctsim').filter(x => x.id === want)[0];
     // Vac-Lok ที่เลือกในฟอร์ม (API 48 · ไม่ส่ง vac = ไม่แตะ): ผูกการใช้ Vac-Lok กับรายการนี้ · ว่าง = ไม่ใช้ (ลบการใช้ที่ผูกไว้) · คืนการใช้ทั้งหมด
     if ('vac' in rec) { vacLink_(ss, out, cut(rec.vac, 20), u); out.vacAll = readTable_(ss, 'vac'); }
     return out;
@@ -1648,17 +1622,17 @@ function ctRemove(id, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ctsim);
   pinChange_(u, pin, true);
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), row = findRow_(sh, headerOf_(sh).indexOf('id') + 1, id);
-    if (row) delRow_(sh, row);
+    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), ch = headerOf_(sh), row = findRow_(sh, ch.indexOf('id') + 1, id);
+    if (row) delRow_(sh, row, ch);
     if (row && id) vacUnlink_(ss, id);
     if (row && id) {
-      const as = ss.getSheetByName(TABLES.appt.sheet);
+      const as = sheet_(ss, TABLES.appt.sheet);
       if (as) markDirty_('appt');
       if (as) {
-        const ah = headerOf_(as), clear = { took: '', tookBy: '', tookAt: '' };
-        readTable_(ss, 'appt').filter(a => a.took === id).forEach(a => {
-          const ar = findRow_(as, ah.indexOf('id') + 1, a.id);
-          if (ar) writeFields_(as, ar, ah, TABLES.appt.fields.filter(f => f[0] in clear), clear);
+        const clear = { took: '', tookBy: '', tookAt: '' };
+        readCols_(ss, 'appt', null, ['took']).filter(a => a.took === id).forEach(a => {   // เฉพาะคอลัมน์ id + ลง CT-SIM แล้ว
+          const y = openRow_(ss, 'appt', null, a.id);
+          if (y.row) writeFields_(y.sh, y.row, y.header, TABLES.appt.fields.filter(f => f[0] in clear), clear, y.vals);
         });
       }
     }
@@ -1672,20 +1646,19 @@ function ctMark(id, mark, token) {
   const u = requireEdit_(token, ['work']);
   mark = mark === 'skip' ? 'skip' : '';
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'ctsim'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const took = String(sh.getRange(row, header.indexOf('แจกเคสแล้ว (id)') + 1).getValue() || '').trim();
-    const gone = !mark && took && took !== 'skip' && (() => { const ids = readTable_(ss, 'cases').map(c => c.id); return took.split(',').every(x => ids.indexOf(x.trim()) < 0); })();
+    const ss = ss_(), x = openRow_(ss, 'ctsim', null, id);
+    if (!x.row) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const took = String(x.cur.took || '').trim();
+    const gone = !mark && took && took !== 'skip' && (() => { const ids = readCols_(ss, 'cases', null, []).map(c => c.id); return took.split(',').every(v => ids.indexOf(v.trim()) < 0); })();
     if (mark ? took : took !== 'skip' && !gone) throw new Error(took === 'skip' ? 'รายการนี้ตั้งไม่ต้องแจกไว้แล้ว' : took ? 'รายการนี้แจกเคสไปแล้ว' : 'รายการนี้ยังรอแจกเคสอยู่');
-    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
-    writeFields_(sh, row, header, TABLES.ctsim.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'ctsim').filter(x => x.id === id)[0];
+    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
+    return saveRow_(x, TABLES.ctsim.fields, set);
   });
 }
 
 // รายการ CT-SIM ที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (ส่งออก Excel รายเดือนย้อนหลังได้ 1 ปี)
 function recentCt_(ss) {
-  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), tz_(ss), 'yyyy-MM-dd');
   return readTable_(ss, 'ctsim').filter(x => String(x.date) >= from);
 }
 
@@ -1731,13 +1704,18 @@ function bqCreate(p, pin, token) {
   if (dates.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error('วันนัดไม่ถูกต้อง');
 
   const course = 'BT' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-  withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'bq'), now = new Date().toISOString(), sorted = dates.slice().sort();
-    bqAppend_(sh, headerOf_(sh), sorted.map((d, i) => ({ id: Utilities.getUuid(), course: course, date: d, hn: hn, name: name, doc: bqCut_(p.doc, 200), tech: tech,
-      fx: String(i + 1), total: String(sorted.length), note: bqCut_(p.note, 2000), status: BQ_BOOKED, rtt: bqCut_(p.rtt, 100), mp: '', rc: '', hist: '', src: '', by: bqWho_(u), created: now, editedBy: '', updated: '' })));
+  const made = withLock_(() => {
+    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), now = new Date().toISOString(), sorted = dates.slice().sort();
+    const recs = sorted.map((d, i) => ({ id: Utilities.getUuid(), course: course, date: d, hn: hn, name: name, doc: bqCut_(p.doc, 200), tech: tech,
+      fx: String(i + 1), total: String(sorted.length), note: bqCut_(p.note, 2000), status: BQ_BOOKED, rtt: bqCut_(p.rtt, 100), mp: '', rc: '', hist: '', src: '', by: bqWho_(u), created: now, editedBy: '', updated: '' }));
+    bqAppend_(sh, header, recs);
+    recs.forEach(rec => auditAdd_('bq', rec, TABLES.bq.fields));
+    // นัดที่เพิ่งลง ในรูปเดียวกับที่อ่านจากชีต (เดิมอ่านทั้งตารางนัดกลับมา)
+    const cv = rowConv_(TABLES.bq, header, tz_(ss)), cols = header.map(h => TABLES.bq.fields.filter(f => f[1] === h)[0]);
+    return recs.map(rec => cv.conv(cols.map(f => (f ? safeText_(rec[f[0]]) : ''))));
   });
   bqStats_();
-  return readTable_(ss_(), 'bq').filter(x => x.course === course);
+  return made;
 }
 
 // แก้นัดหนึ่ง Fx: วันที่ แพทย์ รูปแบบการใส่ หมายเหตุ สถานะ (นัดแล้ว / มาตามนัด / ยกเลิก) RTT MP RC (RTT ลงได้ทุกคนที่บันทึกแถบนี้ได้) · เก็บประวัติ (ใคร เมื่อไร อะไรเปลี่ยน) · คืนนัดหลังแก้
@@ -1751,7 +1729,9 @@ function bqEdit(id, ch, pin, token) {
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
   if ('us' in set && ['', 'US'].indexOf(set.us) < 0) throw new Error('Ultrasound ไม่ถูกต้อง');
   const cfg = readConfig_(ss_()) || {};
-  const cur0 = readTable_(ss_(), 'bq').filter(x => x.id === id)[0] || {};
+  const rec = withLock_(() => {
+  // แถวของนัดนี้อ่านครั้งเดียวภายใต้ล็อก (เดิมอ่านทั้งตารางนัด 3 รอบ: ก่อนล็อก ในล็อก และตอนคืนค่า)
+  const ss = ss_(), x = openRow_(ss, 'bq', null, id), cur0 = x.cur || {};
   if ('ct' in set || 'ctRoom' in set) {   // CT แต่ละรอบต้องมีห้อง · ไม่ซ้ำชนิด · ไม่ได้ทำ CT (ว่าง) = ไม่มีห้อง
     const pairs = bqCtPairs_('ct' in set ? set.ct : cur0.ct, 'ctRoom' in set ? set.ctRoom : cur0.ctRoom);
     if (pairs.some(p => BQ_CT.indexOf(p.t) < 1)) throw new Error('CT ต้องเป็น CT, Re-CT1 หรือ Re-CT2');
@@ -1764,10 +1744,8 @@ function bqEdit(id, ch, pin, token) {
   // CT: เพิ่มรอบใหม่ = บันทึกใหม่ (ไม่ต้องใส่ PIN) · เอารอบที่บันทึกไว้ออกหรือเปลี่ยนห้อง = แก้
   const ctKept = () => { const now = bqCtPairs_(set.ct, set.ctRoom); return bqCtPairs_(cur0.ct, cur0.ctRoom).every(p => now.some(q => q.t === p.t && q.room === p.room)); };
   pinChange_(u, pin, Object.keys(set).some(k => String(cur0[k] || '') !== set[k] && (k === 'status' ? !(cur0.status === BQ_BOOKED && (set.status === BRACHY_ST_DONE || set.status === BQ_NOSHOW)) : k === 'ct' || k === 'ctRoom' ? !ctKept() : has_(cur0[k]))));
-  const rec = withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const cur = readTable_(ss, 'bq').filter(x => x.id === id)[0];
+    if (!x.row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = x.cur;
     const diff = Object.keys(set).filter(k => String(cur[k] || '') !== set[k]);
     if (!diff.length) return cur;
     if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
@@ -1775,8 +1753,7 @@ function bqEdit(id, ch, pin, token) {
     if (rc && rc === mp) throw new Error('RC ต้องไม่ใช่คนเดียวกับ MP');
     const out = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, diff.map(k => ({ f: k, from: String(cur[k] || ''), to: set[k] }))) };
     diff.forEach(k => { out[k] = set[k]; });
-    writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in out), out);
-    return readTable_(ss, 'bq').filter(x => x.id === id)[0];
+    return saveRow_(x, TABLES.bq.fields, out);
   });
   bqStats_();
   return rec;
@@ -1793,20 +1770,19 @@ function bqEditDay(ids, ch, pin, token) {
   if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
   const cfg = readConfig_(ss_()) || {};
   if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
-  const all0 = readTable_(ss_(), 'bq');
-  pinChange_(u, pin, ids.some(id => { const x = all0.filter(r => r.id === id)[0]; return x && has_(x[k]) && String(x[k]) !== v; }));
   const out = withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), recs = [];
+    // เฉพาะแถวของนัดที่เลือก (เดิมอ่านทั้งตารางนัด 2 รอบ และอ่านคอลัมน์ id ซ้ำทุกนัด)
+    const ss = ss_(), R = openRows_(ss, 'bq', null, x => ids.indexOf(x) >= 0), recs = [];
+    const curOf = id => (R.at[id] ? R.cv.conv(R.at[id].vals) : null);
+    pinChange_(u, pin, ids.some(id => { const x = curOf(id); return x && has_(x[k]) && String(x[k]) !== v; }));
     ids.forEach(id => {
-      const cur = all.filter(x => x.id === id)[0];
+      const cur = curOf(id);
       if (!cur || cur.status === BRACHY_ST_CANCEL || cur.status === BQ_NOSHOW) return;
       if (v && ((k === 'rc' && cur.mp === v) || (k === 'mp' && cur.rc === v))) return;
       if (String(cur[k] || '') === v) { recs.push(cur); return; }
-      const row = findRow_(sh, header.indexOf('id') + 1, id);
-      if (!row) return;
       const set = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, [{ f: k, from: String(cur[k] || ''), to: v }]) };
       set[k] = v;
-      writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in set), set);
+      writeFields_(R.sh, R.at[id].row, R.header, TABLES.bq.fields.filter(f => f[0] in set), set, R.at[id].vals);
       recs.push(Object.assign({}, cur, set));
     });
     return recs;
@@ -1819,7 +1795,7 @@ function bqHist_(old, u, ch) {
   let list = [];
   try { list = JSON.parse(old || '[]'); } catch (e) { list = []; }
   if (!Array.isArray(list)) list = [];
-  list.push({ at: Utilities.formatDate(new Date(), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'), by: bqWho_(u), ch: ch });
+  list.push({ at: Utilities.formatDate(new Date(), tz_(ss_()), 'yyyy-MM-dd HH:mm'), by: bqWho_(u), ch: ch });
   return JSON.stringify(list.slice(-40));
 }
 // ยกเลิกนัด: scope 'course' = ทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ · อื่น ๆ = เฉพาะ Fx นี้ · คืน { changed, ids }
@@ -1827,15 +1803,19 @@ function bqCancel(id, scope, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.bq);
   pinChange_(u, pin, true);
   const res = withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'bq'), header = headerOf_(sh), all = readTable_(ss, 'bq'), tg = all.filter(x => x.id === id)[0];
+    const ss = ss_(), t0 = openRow_(ss, 'bq', null, id), tg = t0.cur;
     if (!tg) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const pick = scope === 'course' ? all.filter(x => x.course && x.course === tg.course && x.status === BQ_BOOKED) : [tg].filter(x => x.status !== BRACHY_ST_CANCEL);
+    let pick;   // [{ row, vals, cur }] · ทั้งคอร์ส: หา id จากคอลัมน์ คอร์ส + สถานะ แล้วอ่านเฉพาะแถวนั้น (เดิมอ่านทั้งตารางนัด)
+    if (scope === 'course') {
+      const want = !tg.course ? [] : readCols_(ss, 'bq', null, ['course', 'status']).filter(r => r.course === tg.course && r.status === BQ_BOOKED).map(r => r.id);
+      const R = want.length ? openRows_(ss, 'bq', null, v => want.indexOf(v) >= 0) : { at: {} };
+      pick = want.filter(k => R.at[k]).map(k => ({ row: R.at[k].row, vals: R.at[k].vals, cur: R.cv.conv(R.at[k].vals) }));
+    } else pick = tg.status !== BRACHY_ST_CANCEL ? [{ row: t0.row, vals: t0.vals, cur: tg }] : [];
     const now = new Date().toISOString(), ids = [];
-    pick.forEach(x => {
-      const row = findRow_(sh, header.indexOf('id') + 1, x.id);
-      if (!row) return;
+    pick.forEach(t => {
+      const x = t.cur;
       const out = { status: BRACHY_ST_CANCEL, updated: now, editedBy: bqWho_(u), hist: bqHist_(x.hist, u, [{ f: 'status', from: x.status, to: BRACHY_ST_CANCEL }]) };
-      writeFields_(sh, row, header, TABLES.bq.fields.filter(f => f[0] in out), out);
+      writeFields_(t0.sh, t.row, t0.header, TABLES.bq.fields.filter(f => f[0] in out), out, t.vals);
       ids.push(x.id);
     });
     return { changed: ids.length, ids: ids };
@@ -1845,7 +1825,7 @@ function bqCancel(id, scope, pin, token) {
 }
 // นัดที่ส่งให้หน้าเว็บ: ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
 function recentBq_(ss, cfg, cases, noRoom) {
-  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), tz_(ss), 'yyyy-MM-dd');
   const rows = readTable_(ss, 'bq').filter(x => String(x.date) >= from);
   if (noRoom) return rows;   // หน้าเว็บคำนวณห้องฉายจาก Cases เอง
   // API 53: ห้องฉายรังสีภายนอกของผู้ป่วย (rtRoom) = เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนัด (ไม่มี = เคสแรก) · ตำแหน่งที่ไม่ได้รับข้อมูลเคสก็เห็นห้อง
@@ -1894,7 +1874,7 @@ function bqImportRead_(cfg) {
   if (!tab) throw new Error('ไม่พบแท็บในชีตของระบบนัด');
   const map = Object.assign(brachyGuess_(tab.headers, bqImportKeys_()), s.map && typeof s.map === 'object' ? s.map : {});
   if (!map.date || !map.hn) throw new Error('ไม่พบคอลัมน์วันที่หรือ HN ในแท็บ ' + tab.name + ' · ตั้งค่า → Brachytherapy จากระบบนัด → ตรวจชีต แล้วเลือกคอลัมน์');
-  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone(), last = sh.getLastRow();
+  const sh = sheet_(book, tab.name), tz = tz_(book), last = sh.getLastRow();
   const values = last > 1 ? sh.getRange(1, 1, last, sh.getLastColumn()).getValues() : [];
   const header = (values.shift() || []).map(v => String(v).trim()), at = k => (map[k] ? header.indexOf(map[k]) : -1);
   const docKey = v => String(v || '').replace(/^(นพ\.|พญ\.|นาย|นางสาว|นาง|ดร\.)/, '').replace(/\s+/g, '').toLowerCase();
@@ -1974,17 +1954,14 @@ function vacSave(rec, pin, token) {
   if (!cut(rec.no, 20)) throw new Error('เลือกเลข Vac-Lok');
   if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
   ['ct', 'off', 'hold'].forEach(k => { const v = cut(rec[k], 10); if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('วันที่ไม่ถูกต้อง'); });
-  pinChange_(u, pin, rowExists_('vac', rec.id));
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'vac'), header = headerOf_(sh);
-    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const ss = ss_(), id = cut(rec.id, 80), x = openRow_(ss, 'vac', null, id), row = x.row;
+    pinChange_(u, pin, !!row);
     const set = {};
     VAC_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'note' ? 1000 : k === 'name' ? 200 : 80); });
     if (row) set.updated = vacNow_();
     else Object.assign(set, { id: id || Utilities.getUuid(), src: 'manual', by: String(u.name || u.username || u.me || ''), created: vacNow_(), updated: '' });
-    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.vac.fields.filter(f => f[0] in set), set);
-    const want = row ? id : set.id;
-    return readTable_(ss, 'vac').filter(x => x.id === want)[0];
+    return saveRow_(x, TABLES.vac.fields, set);
   });
 }
 function vacRemove(id, pin, token) {
@@ -2011,7 +1988,7 @@ function vacLink_(ss, ct, no, u) {
 }
 // ลบรายการ CT-SIM: การใช้ Vac-Lok ที่เพิ่มจากฟอร์มนั้นลบด้วย · ที่นำเข้าหรือบันทึกเองเหลือไว้ (เอาการผูกออก)
 function vacUnlink_(ss, ctId) {
-  const sh = ss.getSheetByName(TABLES.vac.sheet);
+  const sh = sheet_(ss, TABLES.vac.sheet);
   if (!sh) return;
   markDirty_('vac');
   const header = headerOf_(sh), idCol = header.indexOf('id') + 1;
@@ -2081,7 +2058,7 @@ function vacParse_(sh, tz, rooms) {
 function vacImportRead_(cfg) {
   const s = cfg.vac || {}, url = String(s.url || '').trim();
   if (!url) throw new Error('ใส่ลิงก์ชีต Vac-Lok ที่ ตั้งค่า → RTT/RA Jobs → Vac-Lok แล้วบันทึกก่อน');
-  const book = extBook_(s, 'Vac-Lok'), tz = book.getSpreadsheetTimeZone(), rooms = Array.isArray(cfg.rooms) ? cfg.rooms : [];
+  const book = extBook_(s, 'Vac-Lok'), tz = tz_(book), rooms = Array.isArray(cfg.rooms) ? cfg.rooms : [];
   const gid = /[#&?]gid=(\d+)/.exec(url), idOf = sh => (typeof sh.getSheetId === 'function' ? String(sh.getSheetId()) : '');
   const parsed = book.getSheets().map(sh => ({ sh: sh, p: vacParse_(sh, tz, rooms) })).filter(x => x.p);
   const pick = (gid && parsed.filter(x => idOf(x.sh) === gid[1])[0]) || parsed.filter(x => x.p.layout === 'room')[0] || parsed[0];
@@ -2166,7 +2143,7 @@ const hnKey_ = v => String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase()
 function openJobs_(rows, cfg, hn, cat, skip, plan) {
   const key = hnKey_(hn), k = (cfg && Array.isArray(cfg.cats) ? cfg.cats : []).filter(x => x && x.id === cat)[0];
   if (!key || !cat || (k ? k.kind === 'simple' : !plan)) return [];
-  const from = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const from = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(ss_()), 'yyyy-MM-dd');
   const revised = {};   // API 72: งานที่ส่งแก้แผนแล้ว (มีงานแก้แผนผูกอยู่) = ปิดแล้ว ไม่นับ
   rows.forEach(c => { const m = jobMeta_(c); if (m && m.kind === 'revise') revised[m.of] = true; });
   return rows.filter(c => {
@@ -2183,7 +2160,7 @@ const regName_ = r => (r.title + (/[A-Za-z]/.test(r.title) ? ' ' : '') + r.name)
 function regRows_(ss) { return regFixNames_(ss, readTable_(ss, 'reg')); }
 // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) = ต่อจากคอลัมน์ชื่อ สกุล
 function regFixNames_(ss, rows) {
-  const sh = ss.getSheetByName(TABLES.reg.sheet);
+  const sh = sheet_(ss, TABLES.reg.sheet);
   if (!sh || !rows.some(r => !r.name)) return rows;
   const head = headerOf_(sh), id = head.indexOf('id'), first = head.indexOf('ชื่อ'), last = head.indexOf('สกุล'), n = sh.getLastRow() - 1;
   if (id < 0 || (first < 0 && last < 0) || n < 1) return rows;
@@ -2541,7 +2518,7 @@ function hnSeen_(ss) {
   const out = {}, order = ['reg'].concat(Object.keys(TABLES).filter(t => t !== 'reg' && t !== 'spq' && t !== 'dq'));   // นัดเทคนิคพิเศษที่นำเข้าไม่นับ (นำเข้าเพราะ HN มีในแถบอื่นอยู่แล้ว) · แจกงานแพทย์ไม่นับ (ยังดึงลงทะเบียนจาก Google Drive ได้)
   order.forEach(t => {
     const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
-    const sh = head('hn') ? ss.getSheetByName(def.sheet) : null;
+    const sh = head('hn') ? sheet_(ss, def.sheet) : null;
     if (!sh || sh.getLastRow() < 2) return;
     const hdr = headerOf_(sh), n = sh.getLastRow() - 1, colOf = k => (head(k) ? hdr.indexOf(head(k)) : -1), read = c => (c < 0 ? null : sh.getRange(2, c + 1, n, 1).getValues());
     const hn = read(colOf('hn'));
@@ -2563,7 +2540,7 @@ function knownHns_(ss) { const seen = hnSeen_(ss), o = {}; Object.keys(seen).for
 // · HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบ (ดึงด้วย Code.gs รุ่นก่อน 2026-11-08.4 ที่ตรวจเฉพาะแถบลงทะเบียน) · HN ที่เพิ่งมีในแถบอื่นหลังดึง (เช่นลงนัดต่อ) ไม่ลบ
 // · แพทย์ที่เคยจับคู่ไม่ได้ (Note "แพทย์: …") ตรงกับ ทีม → แพทย์ แล้ว = ใส่รหัสแพทย์ และเอาออกจาก Note
 function regDriveTidy_(ss, cfg, seen) {
-  const sh = ss.getSheetByName(TABLES.reg.sheet), out = { removed: 0, docs: 0, gone: [] };
+  const sh = sheet_(ss, TABLES.reg.sheet), out = { removed: 0, docs: 0, gone: [] };
   if (!sh || sh.getLastRow() < 2) return out;
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), hdr = values[0].map(v => String(v).trim()), c = {};
   ['hn', 'by', 'created', 'updated', 'doc', 'note'].forEach(k => { c[k] = hdr.indexOf(TABLES.reg.fields.filter(f => f[0] === k)[0][1]); });
@@ -2729,7 +2706,7 @@ function regLookup_(sh, header, id, key) {
 }
 // HN นี้อยู่ในที่เก็บถาวรไหม: อ่านเฉพาะคอลัมน์ HN
 function regArchHas_(ss, key) {
-  const sh = ss.getSheetByName(TABLES.regArch.sheet);
+  const sh = sheet_(ss, TABLES.regArch.sheet);
   if (!sh || sh.getLastRow() < 2) return false;
   const c = headerOf_(sh).indexOf('HN');
   return c >= 0 && sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().some(r => hnKey_(r[0]) === key);
@@ -2744,7 +2721,7 @@ function regFindHn_(sh, header, key, skipRow) {
 }
 // หนึ่งแถวของแถบลงทะเบียน (เลขแถวในชีต) → รายการ · ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) = ต่อจากคอลัมน์ชื่อ สกุล
 function regRowAt_(ss, sh, header, row) {
-  const v = sh.getRange(row, 1, 1, header.length).getValues()[0], r = rowConv_(TABLES.reg, header, ss.getSpreadsheetTimeZone()).conv(v);
+  const v = sh.getRange(row, 1, 1, header.length).getValues()[0], r = rowConv_(TABLES.reg, header, tz_(ss)).conv(v);
   if (!r.name) r.name = [header.indexOf('ชื่อ'), header.indexOf('สกุล')].filter(i => i >= 0).map(i => String(v[i]).trim()).filter(Boolean).join(' ');
   return r;
 }
@@ -2771,9 +2748,9 @@ function hnLatest_(ss) {
   Object.keys(TABLES).filter(t => skip.indexOf(t) < 0).forEach(t => {
     const def = TABLES[t], head = k => (def.fields.filter(x => x[0] === k)[0] || [])[1];
     if (!head('hn')) return;
-    const sh = ss.getSheetByName(def.sheet);
+    const sh = sheet_(ss, def.sheet);
     if (!sh || sh.getLastRow() < 2) return;
-    const hdr = headerOf_(sh), n = sh.getLastRow() - 1, tz = ss.getSpreadsheetTimeZone();
+    const hdr = headerOf_(sh), n = sh.getLastRow() - 1, tz = tz_(ss);
     const cols = ['hn', 'date', 'sim', 'ct', 'in', 'created', 'updated'].map(k => (head(k) ? hdr.indexOf(head(k)) : -1));
     if (cols[0] < 0) return;
     const data = cols.map(c => (c < 0 ? null : sh.getRange(2, c + 1, n, 1).getValues()));
@@ -2789,7 +2766,7 @@ function hnLatest_(ss) {
   });
   return out;
 }
-function regArchHns_(ss) { const sh = ss.getSheetByName(TABLES.regArch.sheet), o = {}; if (!sh || sh.getLastRow() < 2) return o; const c = headerOf_(sh).indexOf('HN'); if (c < 0) return o; sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnLoose_(r[0]); if (k) o[k] = true; }); return o; }
+function regArchHns_(ss) { const sh = sheet_(ss, TABLES.regArch.sheet), o = {}; if (!sh || sh.getLastRow() < 2) return o; const c = headerOf_(sh).indexOf('HN'); if (c < 0) return o; sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnLoose_(r[0]); if (k) o[k] = true; }); return o; }
 // ลบแถว (เลขแถวในชีต) จากล่างขึ้นบน ทีละช่วงที่ติดกัน
 function deleteRowsAt_(sh, rows) {
   const del = rows.slice().sort((a, b) => a - b);
@@ -2802,7 +2779,7 @@ function deleteRowsAt_(sh, rows) {
 }
 // ย้ายแถวระหว่าง Registry กับ RegistryArchive ตามหัวคอลัมน์ของชีตปลายทาง (extra = ค่าที่ใส่เพิ่มตามหัวคอลัมน์)
 function regMoveRows_(ss, from, to, pick, extra) {
-  const src = ss.getSheetByName(TABLES[from].sheet), tz = ss.getSpreadsheetTimeZone();
+  const src = sheet_(ss, TABLES[from].sheet), tz = tz_(ss);
   if (!src || src.getLastRow() < 2) return [];
   const sh = headerOf_(src), values = src.getRange(2, 1, src.getLastRow() - 1, sh.length).getValues(), idc = sh.indexOf('id'), cv = rowConv_(TABLES[from], sh, tz), take = [], ids = [];
   values.forEach((r, i) => { if (String(r[idc]).trim() && pick(cv.conv(r))) { take.push(i); ids.push(String(r[idc]).trim()); } });
@@ -2835,9 +2812,9 @@ function regArchive_(ss, cfg, force) {
   }
   try {
     withLock_(() => {
-      const sh = ss.getSheetByName(TABLES.reg.sheet);
+      const sh = sheet_(ss, TABLES.reg.sheet);
       if (sh && sh.getLastRow() > 1) {
-        const tz = ss.getSpreadsheetTimeZone(), latest = hnLatest_(ss);
+        const tz = tz_(ss), latest = hnLatest_(ss);
         const cutY = years ? Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), tz, 'yyyy-MM-dd') : '';
         const cutM = months ? Utilities.formatDate(new Date(Date.now() - months * 30.44 * 864e5), tz, 'yyyy-MM-dd') : '';
         res.moved = regMoveRows_(ss, 'reg', 'regArch', r => {
@@ -2849,7 +2826,7 @@ function regArchive_(ss, cfg, force) {
           return false;
         }, { 'ย้ายเข้าที่เก็บเมื่อ': res.at }).length;
       }
-      const ah = ss.getSheetByName(TABLES.regArch.sheet);
+      const ah = sheet_(ss, TABLES.regArch.sheet);
       res.total = ah ? Math.max(0, ah.getLastRow() - 1) : 0;
     });
   } catch (e) { res.error = String(e.message || e).slice(0, 200); }
@@ -2879,7 +2856,7 @@ function regRestore(id, token) {
   requireEdit_(token, EDIT_VIEWS.reg.concat(EDIT_VIEWS.appt, EDIT_VIEWS.bq));
   id = String(id == null ? '' : id).trim();
   return withLock_(() => {
-    const ss = ss_(), ah = ss.getSheetByName(TABLES.regArch.sheet);
+    const ss = ss_(), ah = sheet_(ss, TABLES.regArch.sheet);
     const row = ah ? readTable_(ss, 'regArch').filter(x => x.id === id)[0] : null;
     if (!row) { const cur = regRows_(ss).filter(x => x.id === id)[0]; if (cur) return cur; throw new Error('ไม่พบผู้ป่วยนี้ในที่เก็บถาวร (อาจถูกย้ายกลับไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง'); }
     regMoveBack_(ss, x => x.id === id);
@@ -2910,9 +2887,7 @@ function apptSave(rec, pin, token) {
   // API 69: แถบ CT-SIM แก้ CT Order ที่มีอยู่แล้วได้ · ลงนัดใหม่ = ตำแหน่งที่บันทึกในแถบ CT Order / Consult ได้
   const u = requireEdit_(token, EDIT_VIEWS.appt.concat(EDIT_VIEWS.ctsim));
   rec = rec && typeof rec === 'object' ? rec : {};
-  if (u.via !== 'google' && !EDIT_VIEWS.appt.some(v => userAccess_(readConfig_(ss_()) || {}, v, u) === 'edit') && !rowExists_('appt', rec.id)) {
-    throw new Error('แถบ CT-SIM แก้ได้เฉพาะ CT Order ที่มีอยู่แล้ว · ลงนัดใหม่ที่แถบ CT Order');
-  }
+  const cfg0 = readConfig_(ss_()) || {}, ctOnly = u.via !== 'google' && !EDIT_VIEWS.appt.some(v => userAccess_(cfg0, v, u) === 'edit');
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
   if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
@@ -2927,18 +2902,16 @@ function apptSave(rec, pin, token) {
     try { o = JSON.parse(order); } catch (e) { throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง'); }
     if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('ข้อมูลใบสั่ง CT Sim ไม่ถูกต้อง');
   }
-  pinChange_(u, pin, rowExists_('appt', rec.id));
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh);
-    const id = cut(rec.id, 80), row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+    const ss = ss_(), id = cut(rec.id, 80), x = openRow_(ss, 'appt', null, id), row = x.row;
+    if (ctOnly && !row) throw new Error('แถบ CT-SIM แก้ได้เฉพาะ CT Order ที่มีอยู่แล้ว · ลงนัดใหม่ที่แถบ CT Order');
+    pinChange_(u, pin, !!row);
     const set = {};
     APPT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'order' ? 20000 : k === 'note' || k === 'dx' ? 2000 : 200); });
     const now = new Date().toISOString();
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
-    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.appt.fields.filter(f => f[0] in set), set);
-    const want = row ? id : set.id;
-    return readTable_(ss, 'appt').filter(x => x.id === want)[0];
+    return saveRow_(x, TABLES.appt.fields, set);   // เดิมอ่านทั้งตารางนัดกลับมาเพื่อคืนแถวเดียว
   });
 }
 
@@ -2958,19 +2931,18 @@ function apptMark(id, mark, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ctsim.concat(EDIT_VIEWS.appt));
   mark = mark === 'skip' ? 'skip' : '';
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'appt'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบนัดนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const took = String(sh.getRange(row, header.indexOf('ลง CT-SIM แล้ว (id)') + 1).getValue() || '').trim();
+    const ss = ss_(), x = openRow_(ss, 'appt', null, id);
+    if (!x.row) throw new Error('ไม่พบนัดนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const took = String(x.cur.took || '').trim();
     if (mark ? took : took !== 'skip') throw new Error(took === 'skip' ? 'นัดนี้ตั้งว่าไม่มาทำ CT ไว้แล้ว' : took ? 'นัดนี้ลง CT-SIM ไปแล้ว' : 'นัดนี้ยังรอลง CT-SIM อยู่');
-    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
-    writeFields_(sh, row, header, TABLES.appt.fields.filter(f => f[0] in set), set);
-    return readTable_(ss, 'appt').filter(x => x.id === id)[0];
+    const set = mark ? { took: 'skip', tookBy: String(u.name || u.username || u.me || ''), tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') } : { took: '', tookBy: '', tookAt: '' };
+    return saveRow_(x, TABLES.appt.fields, set);
   });
 }
 
 // นัดที่ส่งให้หน้าเว็บ: วันนัด CT ตั้งแต่ 13 เดือนก่อน (รวมนัดล่วงหน้าทั้งหมด)
 function recentAppt_(ss) {
-  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const from = Utilities.formatDate(new Date(Date.now() - 400 * 864e5), tz_(ss), 'yyyy-MM-dd');
   return readTable_(ss, 'appt').filter(x => (x.date === 'on call' ? String(x.created).slice(0, 10) : String(x.date)) >= from);   // On Call: นับจากวันที่ลงนัด
 }
 
@@ -3023,7 +2995,9 @@ function dqAdd(recs, token) {
   if (recs.length > 50) throw new Error('แจกได้ครั้งละไม่เกิน 50 คน');
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss) || {}, q = dqCfg_(cfg), all = dqDocs_(cfg), day = today_(ss);
-    const rows = readTable_(ss, 'dq'), leaves = readTable_(ss, 'dqLeave'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];
+    // คิว (dqPick_) ใช้ doc how date created · เจ้าของไข้เดิมใช้ hn · อ่านทั้งตารางช้าตามจำนวนที่แจกสะสม
+    const rows = readCols_(ss, 'dq', null, ['hn', 'doc', 'how', 'date', 'created']), known = rows.map(x => x.id);
+    const leaves = readTable_(ss, 'dqLeave'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];
     let duty = null;
     recs.forEach((r, i) => {
       r = r && typeof r === 'object' ? r : {};
@@ -3043,7 +3017,7 @@ function dqAdd(recs, token) {
       rows.push(rec);
       out.push(rec);
     });
-    appendNew_(ss, 'dq', out);
+    appendNew_(ss, 'dq', out, known);
     return out;
   });
 }
@@ -3053,9 +3027,9 @@ function dqEdit(id, ch, pin, token) {
   ch = ch && typeof ch === 'object' ? ch : {};
   pinChange_(u, pin, true);
   return withLock_(() => {
-    const ss = ss_(), cfg = readConfig_(ss) || {}, sh = tableSheet_(ss, 'dq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const cur = rowConv_(TABLES.dq, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]), set = {};
+    const ss = ss_(), cfg = readConfig_(ss) || {}, x = openRow_(ss, 'dq', null, id);
+    if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = x.cur, set = {};
     if ('hn' in ch) { set.hn = dqCut_(ch.hn, 40); if (!set.hn) throw new Error('กรอก HN'); }
     if ('name' in ch) set.name = dqCut_(ch.name, 200);
     if ('note' in ch) set.note = dqCut_(ch.note, 500);
@@ -3066,7 +3040,7 @@ function dqEdit(id, ch, pin, token) {
       if (d !== cur.doc) { set.doc = d; if (cur.how !== 'import') set.how = 'manual'; }   // ดึงจากรายงาน: ยังไม่นับในคิว
     }
     set.updated = dqNow_();
-    writeFields_(sh, row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
+    writeFields_(x.sh, x.row, x.header, TABLES.dq.fields.filter(f => f[0] in set), set, x.vals);
     return Object.assign(cur, set);
   });
 }
@@ -3082,7 +3056,7 @@ function dqImport(recs, token) {
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v), dayMs = v => Date.parse(v + 'T00:00:00Z');
   return withLock_(() => {
     const ss = ss_(), cfg = readConfig_(ss) || {}, all = dqDocs_(cfg), sh = tableSheet_(ss, 'dq'), header = headerOf_(sh);
-    const tz = ss.getSpreadsheetTimeZone(), cv = rowConv_(TABLES.dq, header, tz), n = sh.getLastRow() - 1;
+    const tz = tz_(ss), cv = rowConv_(TABLES.dq, header, tz), n = sh.getLastRow() - 1;
     const cur = n > 0 ? sh.getRange(2, 1, n, header.length).getValues().map((r, i) => Object.assign(cv.conv(r), { row: i + 2 })) : [];
     const byHn = {};
     cur.forEach(r => { const k = hnLoose_(r.hn); if (k) (byHn[k] = byHn[k] || []).push(r); });
@@ -3163,13 +3137,13 @@ function dqLeaveSave(rec, token) {
     if (dqDocs_(readConfig_(ss) || {}).indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
     const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '', kind: kind, assign: assign };
     // API 73: id ที่มีอยู่แล้ว = แก้วันลา (ยืนยันด้วย PIN · แพทย์แก้ได้เฉพาะของตัวเอง เหมือนลงวันลา)
-    const sh = tableSheet_(ss, 'dqLeave'), header = headerOf_(sh), row = rec.id ? findRow_(sh, header.indexOf('id') + 1, r.id) : 0;
+    const x = rec.id ? openRow_(ss, 'dqLeave', null, r.id) : null, row = x ? x.row : 0;
     if (row) {
-      const cur = rowConv_(TABLES.dqLeave, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]);
+      const cur = x.cur;
       if (cur.doc !== doc) dqLeaveUser_(token, cur.doc);   // ย้ายวันลาไปแพทย์อื่น: ต้องแก้ของแพทย์เดิมได้ด้วย
       pinChange_(u, rec.pin, true);
       const set = { doc: doc, from: from, to: to, note: r.note, kind: kind, assign: assign, updated: dqNow_() };
-      writeFields_(sh, row, header, TABLES.dqLeave.fields.filter(f => f[0] in set), set);
+      writeFields_(x.sh, row, x.header, TABLES.dqLeave.fields.filter(f => f[0] in set), set, x.vals);
       return Object.assign(cur, set);
     }
     appendNew_(ss, 'dqLeave', [r]);
@@ -3183,11 +3157,11 @@ function dqMark(id, st, text, token) {
   text = dqCut_(text, 500);
   if (st === 'doc' && !text) throw new Error('กรอกเอกสารที่ขอเพิ่ม');
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'dq'), header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
-    if (!row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const cur = rowConv_(TABLES.dq, header, ss.getSpreadsheetTimeZone()).conv(sh.getRange(row, 1, 1, header.length).getValues()[0]);
+    const ss = ss_(), x = openRow_(ss, 'dq', null, id);
+    if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = x.cur;
     const set = { st: st, stNote: text, stBy: String(u.name || u.username || u.me || ''), stAt: dqNow_(), updated: dqNow_() };
-    writeFields_(sh, row, header, TABLES.dq.fields.filter(f => f[0] in set), set);
+    writeFields_(x.sh, x.row, x.header, TABLES.dq.fields.filter(f => f[0] in set), set, x.vals);
     return Object.assign(cur, set);
   });
 }
@@ -3325,20 +3299,18 @@ function jobsSave(rec, pin, token) {
     return JSON.stringify(o);
   };
   const cells = json(rec.cells, false, 45000), leaves = json(rec.leaves, true, 5000), prof = json(rec.prof, false, 2000);
-  pinChange_(u, pin, rowExists_('jobs', nameKey_(who) + '|' + ym));
   return withLock_(() => {
-    const ss = ss_(), sh = tableSheet_(ss, 'jobs'), header = headerOf_(sh), id = nameKey_(who) + '|' + ym;
-    const row = findRow_(sh, header.indexOf('id') + 1, id);
-    const old = row ? readTable_(ss, 'jobs').filter(x => x.id === id)[0] : null;
+    const ss = ss_(), id = nameKey_(who) + '|' + ym, x = openRow_(ss, 'jobs', null, id), row = x.row;
+    pinChange_(u, pin, !!row);
+    const old = row ? x.cur : null;
     const set = { id: id, ym: ym, who: who, user: own ? String(u.username || '') : (old && old.user) || cut(rec.user, 80), kind: kind, prof: prof, cells: cells, leaves: leaves,
       by: String(u.name || u.username || u.me || ''), updated: new Date().toISOString() };
-    writeFields_(sh, row || sh.getLastRow() + 1, header, TABLES.jobs.fields, set);
-    return readTable_(ss, 'jobs').filter(x => x.id === id)[0];
+    return saveRow_(x, TABLES.jobs.fields, set);
   });
 }
 // ภาระงานที่ส่งให้หน้าเว็บ: 13 เดือนล่าสุด · ของตัวเอง (ชื่อตรงกับบัญชี LPCH) · แอดมินและบัญชี Google ได้ทุกคน
 function jobsFor_(ss, user, cfg) {
-  const d = new Date(Date.now() - 400 * 864e5), from = Utilities.formatDate(d, ss.getSpreadsheetTimeZone(), 'yyyy-MM');
+  const d = new Date(Date.now() - 400 * 864e5), from = Utilities.formatDate(d, tz_(ss), 'yyyy-MM');
   const all = readTable_(ss, 'jobs').filter(x => String(x.id).split('|')[1] >= from);
   if (user.via === 'google' || user.isAdmin) return all;
   const mine = jobNames_(user, cfg || readConfig_(ss) || {});
@@ -3478,7 +3450,7 @@ function brachyRead_(book, s, soft) {
   const miss = BRACHY_NEED.filter(k => !map[k] || tab.headers.indexOf(map[k]) < 0);
   if (miss.length && soft) return { tab: tab, map: map, tabs: tabs, rows: [], missing: miss };
   if (miss.length) throw new Error('ยังไม่ได้เลือกคอลัมน์ ' + miss.map(k => BRACHY_LABEL[k]).join(', ') + ' ของแท็บ ' + tab.name + ' · ตั้งค่า → Brachytherapy จากระบบนัด → ตรวจชีต แล้วเลือกคอลัมน์');
-  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone();
+  const sh = sheet_(book, tab.name), tz = tz_(book);
   const last = sh.getLastRow(), width = sh.getLastColumn();
   const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
   const header = (values.shift() || []).map(v => String(v).trim());
@@ -3700,7 +3672,7 @@ function spqRead_(book, soft) {
   const map = brachyGuess_(tab.headers, SPQ_KEYS), miss = SPQ_NEED.filter(k => !map[k]);
   if (miss.length && soft) return { tab: tab, tabs: tabs, map: map, rows: [], missing: miss.map(k => SPQ_LABEL[k]) };
   if (miss.length) throw new Error('แท็บ ' + tab.name + ' ไม่มีคอลัมน์ ' + miss.map(k => SPQ_LABEL[k]).join(', ') + ' · ต้องเป็นชีตของระบบนัดคิวเทคนิคพิเศษ');
-  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone(), last = sh.getLastRow(), width = sh.getLastColumn();
+  const sh = sheet_(book, tab.name), tz = tz_(book), last = sh.getLastRow(), width = sh.getLastColumn();
   const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
   const header = (values.shift() || []).map(v => String(v).trim()), col = {};
   Object.keys(SPQ_KEYS).forEach(k => { col[k] = map[k] ? header.indexOf(map[k]) : -1; });
@@ -3741,7 +3713,7 @@ function spqSync_(ss, cfg, why) {
   try {
     const got = spqRead_(spqBook_(s), false), w = spqWanted_(got.rows, hnSeen_(ss)), sig = strHash_(JSON.stringify(w.keep));
     Object.assign(res, { tab: got.tab.name, rows: got.rows.length, matched: w.keep.length, unmatched: w.unmatched, old: w.old, sig: sig });
-    if (sig !== prev.sig || !ss.getSheetByName(TABLES.spq.sheet)) {
+    if (sig !== prev.sig || !sheet_(ss, TABLES.spq.sheet)) {
       withLock_(() => {
         const sh = tableSheet_(ss, 'spq'), header = headerOf_(sh), fields = TABLES.spq.fields, cols = header.map(h => fields.filter(f => f[1] === h)[0]), last = sh.getLastRow();
         if (last > 1) sh.getRange(2, 1, last - 1, header.length).clearContent();
@@ -3821,7 +3793,7 @@ function tdfRead_(book, s, soft) {
   const tabs = brachyTabs_(book);
   const tab = brachyPick_(tabs, s, TDF_KEYS, g => !!g.json || (!!g.rc && !!g.hn));
   if (!tab) throw new Error('ไม่พบแท็บในชีตของ TDF Dose Calculator');
-  const sh = book.getSheetByName(tab.name), tz = book.getSpreadsheetTimeZone();
+  const sh = sheet_(book, tab.name), tz = tz_(book);
   const last = sh.getLastRow(), width = sh.getLastColumn();
   const values = last > 1 ? sh.getRange(1, 1, last, width).getValues() : [];
   const header = (values.shift() || []).map(v => String(v).trim());
@@ -3983,7 +3955,7 @@ function pinHash_(salt, pin) {
 
 function pinRecord_(u) {
   if (!u || (u.via === 'lpch' ? !u.username : !u.me)) return null;
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(pinKey_(u)) || 'null'); } catch (e) { return null; }
+  try { return JSON.parse(propRead_(pinKey_(u)) || 'null'); } catch (e) { return null; }
 }
 
 // ทุกแถบ ทุกงาน: บันทึกใหม่ไม่ต้องใส่ PIN · แก้ไขหรือลบของที่บันทึกไว้แล้วต้องใส่ PIN ของคนที่เข้าสู่ระบบ (กติกาเดียวกับ pinFresh ในหน้าเว็บ)
@@ -3993,10 +3965,70 @@ function pinChange_(u, pin, change) {
   if (String(pin == null ? '' : pin) === '' && pinRecord_(u)) throw new Error('PINNEED|การแก้ไขหรือลบต้องใส่รหัส PIN');
   checkPin_(u, pin);
 }
+// แก้เคสเดียวภายใต้ล็อก: อ่านแถวครั้งเดียว (เดิมอ่านก่อนล็อก 1 รอบ ในล็อกอีก 2–3 รอบ) แล้วคืนเคสหลังบันทึกจากค่าที่เขียน (ไม่อ่านกลับ)
+// change(cur) = ต้องยืนยัน PIN ไหม (cur = null เมื่อไม่พบเคส) · build(cur, ss, cfg) คืนช่องที่จะเขียน
+function caseEdit_(u, id, pin, change, build) {
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss), x = openRow_(ss, 'cases', cfg, id);
+    pinChange_(u, pin, change(x.cur));
+    if (!x.row) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const set = build(x.cur, ss, cfg);
+    if (REQ_.dry) return null;   // casesDo รอบตรวจ: ยังไม่เขียน
+    const out = saveRow_(x, TABLES.cases.fields, set);
+    if (x.pre) x.pre.vals = null;   // แถวที่อ่านล่วงหน้าใช้ได้ครั้งเดียว (เขียนแล้ว = อ่านใหม่ถ้าถูกเรียกอีก)
+    return out;
+  });
+}
+/**
+ * API 74: คำสั่งเดียวกันกับทุกเคสของผู้ป่วยคนเดียว (หลายเทคนิค) ในรอบเดียว ล็อกเดียว · เดิมหน้าเว็บเรียกทีละเคส = ช้าเป็นเท่าตัว
+ * fn = ชื่อฟังก์ชันใน CASE_BATCH · args = พารามิเตอร์หลัง id (ไม่รวม token) · คืนเคสหลังบันทึกตามลำดับ ids
+ * ตรวจทุกเคสก่อน (PIN · ไม่พบเคส · ค่าที่ไม่ถูกต้อง) แล้วจึงเขียน: ผิดเคสใดเคสหนึ่ง = ไม่เขียนเลยสักเคส
+ */
+const CASE_BATCH = { fractionCase: 3, tagCase: 2, timeCase: 2, courseCase: 4, moveCase: 3, addFxCase: 3 };   // จำนวนพารามิเตอร์หลัง id
+function casesDo(fn, ids, args, token) {
+  if (!Object.prototype.hasOwnProperty.call(CASE_BATCH, fn)) throw new Error('คำสั่งนี้ใช้กับหลายเคสไม่ได้');
+  ids = (Array.isArray(ids) ? ids : []).map(v => String(v == null ? '' : v)).filter((v, i, a) => v && a.indexOf(v) === i);
+  if (!ids.length || ids.length > 20) throw new Error('จำนวนเคสไม่ถูกต้อง');
+  args = Array.isArray(args) ? args.slice(0, CASE_BATCH[fn]) : [];
+  while (args.length < CASE_BATCH[fn]) args.push('');
+  const f = { fractionCase: fractionCase, tagCase: tagCase, timeCase: timeCase, courseCase: courseCase, moveCase: moveCase, addFxCase: addFxCase }[fn];
+  const all = () => ids.map(id => f.apply(null, [id].concat(args, [token])));
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss);
+    try {
+      REQ_.rows = openRows_(ss, 'cases', cfg, v => ids.indexOf(v) >= 0);   // แถวของทุกเคส: คอลัมน์ id รอบเดียว + แถวที่ต้องการ
+      REQ_.dry = true;
+      all();
+      REQ_.dry = false;
+      return all();
+    } finally { REQ_.dry = false; REQ_.rows = null; }
+  });
+}
+// อ่านเฉพาะคอลัมน์ที่ใช้ของตารางใหญ่ (อ่านทั้งตาราง = ช้าตามจำนวนช่อง) · คืนรายการแบบ readTable_ ที่มีเฉพาะ id + keys
+// คอลัมน์ที่อยู่ห่างกันไม่เกิน 3 อ่านเป็นช่วงเดียว (ลดจำนวนรอบ)
+function readCols_(ss, table, cfg, keys) {
+  const def = tableDef_(table, cfg), sh = sheet_(ss, def.sheet);
+  if (!sh) return [];
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const tz = tz_(ss), cv = rowConv_(def, headerOf_(sh), tz);
+  if (cv.cols[0] < 0) return [];
+  const want = def.fields.map((f, i) => ({ k: f[0], col: cv.cols[i] })).filter(x => (x.k === 'id' || keys.indexOf(x.k) >= 0) && x.col >= 0).sort((a, b) => a.col - b.col);
+  const spans = [];
+  want.forEach(x => { const sp = spans[spans.length - 1]; if (sp && x.col - sp.to <= 3) sp.to = x.col; else spans.push({ from: x.col, to: x.col }); x.span = spans.length - 1; });
+  const data = spans.map(sp => sh.getRange(2, sp.from + 1, last - 1, sp.to - sp.from + 1).getValues());
+  const out = [];
+  for (let r = 0; r < last - 1; r++) {
+    const o = {};
+    want.forEach(x => { o[x.k] = cellText_(data[x.span][r][x.col - spans[x.span].from], tz); });
+    if (o.id !== '') out.push(o);
+  }
+  return out;
+}
 // เคสเดียวตาม id: อ่านคอลัมน์ id แล้วอ่านเฉพาะแถวนั้น (เดิมอ่านทั้งชีต Cases = ช้ามากเมื่อข้อมูลเยอะ · บันทึกสถานะ fraction ค้าง)
 const caseOf_ = id => {
   if (!id) return null;
-  const ss = ss_(), cfg = readConfig_(ss), sh = ss.getSheetByName(tableDef_('cases', cfg).sheet);
+  const ss = ss_(), cfg = readConfig_(ss), sh = sheet_(ss, tableDef_('cases', cfg).sheet);
   if (!sh || sh.getLastRow() < 2) return null;
   const header = headerOf_(sh), row = findRow_(sh, header.indexOf('id') + 1, id);
   return row ? rowAt_(ss, 'cases', cfg, sh, header, row) : null;
@@ -4004,7 +4036,7 @@ const caseOf_ = id => {
 // มีรายการ id นี้ไหม: อ่านเฉพาะคอลัมน์ id (เดิมอ่านทั้งตาราง · แถบลงทะเบียน 2 หมื่นแถว = หลายวินาที)
 const rowExists_ = (table, id) => {
   if (!id) return false;
-  const sh = ss_().getSheetByName(tableDef_(table).sheet);
+  const sh = sheet_(ss_(), tableDef_(table).sheet);
   return !!sh && sh.getLastRow() > 1 && findRow_(sh, headerOf_(sh).indexOf('id') + 1, id) > 0;
 };
 const jsonList_ = v => { try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
@@ -4015,6 +4047,8 @@ function checkPin_(u, pin, act) {
   if (act) { const cfg = readConfig_(ss_()) || {}; if (cfg.pin && cfg.pin[act] === false) return; }
   const rec = pinRecord_(u);
   if (!rec) throw new Error('PIN|ยังไม่ได้ตั้งรหัส PIN');
+  const okKey = pinKey_(u) + ':' + String(pin == null ? '' : pin);
+  if (REQ_.pinOk === okKey) return;   // ตรวจผ่านแล้วในคำขอนี้ (หลายเคสของผู้ป่วยคนเดียว)
   const cache = CacheService.getScriptCache(), key = 'pintry_' + pinKey_(u);
   const tries = +(cache.get(key) || 0);
   if (tries >= PIN_TRIES) throw new Error('ใส่รหัส PIN ผิด ' + PIN_TRIES + ' ครั้ง รอ 5 นาทีแล้วลองใหม่');
@@ -4023,7 +4057,8 @@ function checkPin_(u, pin, act) {
     const left = PIN_TRIES - tries - 1;
     throw new Error('รหัส PIN ไม่ถูกต้อง' + (left > 0 ? ' (ใส่ได้อีก ' + left + ' ครั้ง)' : ' รอ 5 นาทีแล้วลองใหม่'));
   }
-  cache.remove(key);
+  if (tries) cache.remove(key);   // ไม่เคยใส่ผิด = ไม่มีอะไรให้ล้าง
+  REQ_.pinOk = okKey;
 }
 
 // ตั้งหรือเปลี่ยนรหัส PIN ของตัวเอง · มีรหัสอยู่แล้วต้องใส่ proof = { pin: รหัสเดิม } หรือ { password: รหัสผ่าน LPCH } (ลืม PIN)
@@ -4038,7 +4073,7 @@ function setPin(pin, proof, token) {
     else throw new Error('ใส่รหัส PIN เดิม' + (u.via === 'lpch' ? ' หรือรหัสผ่าน LPCH' : '') + ' เพื่อเปลี่ยนรหัส PIN');
   }
   const salt = Utilities.getUuid();
-  PropertiesService.getScriptProperties().setProperty(pinKey_(u), JSON.stringify({ s: salt, h: pinHash_(salt, pin), at: new Date().toISOString() }));
+  propSave_(pinKey_(u), JSON.stringify({ s: salt, h: pinHash_(salt, pin), at: new Date().toISOString() }));
   CacheService.getScriptCache().remove('pintry_' + pinKey_(u));
   return true;
 }
@@ -4059,8 +4094,14 @@ function checkLpchPassword_(username, password) {
  * ยังไม่ได้เข้าสู่ระบบ → Error ที่ขึ้นต้นด้วย LOGIN| หน้าเว็บจะแสดงช่องเข้าสู่ระบบ
  */
 function who_(token, ss, cfg) {
+  const memo = REQ_.who || (REQ_.who = {}), key = 't:' + String(token == null ? '' : token);
+  if (memo[key]) return (AUDIT_U_ = memo[key]);
+  return (memo[key] = who0_(token, ss, cfg));
+}
+function who0_(token, ss, cfg) {
   ss = ss || ss_();
   cfg = cfg || readConfig_(ss) || {};
+  if (token && token !== SHEET_DIALOG && /^[\w-]{20,200}$/.test(String(token))) cachePre_(['ssOwner_' + ss.getId(), 'lpch_' + token, 'ssTz']);
   const g = adminInfo_(ss, cfg);
   const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
   AUDIT_U_ = google;
@@ -4116,7 +4157,7 @@ function lpchMembers(token) {
 
 function lpchUrl_() {
   let v = null;
-  try { v = PropertiesService.getScriptProperties().getProperty('LPCH_URL'); } catch (e) { v = null; }
+  try { v = propRead_('LPCH_URL'); } catch (e) { v = null; }
   v = String(v == null || v === '' ? LPCH_URL : v).trim();
   return v === '-' ? '' : v;
 }
@@ -4155,15 +4196,15 @@ function lpchProfile_(u) {
 function lpchUser_(token) {
   token = String(token || '');
   if (!/^[\w-]{20,200}$/.test(token)) return { error: 'การเข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง' };
-  const cache = CacheService.getScriptCache(), key = 'lpch_' + token;
-  const hit = cache.get(key);
+  const key = 'lpch_' + token;
+  const hit = cacheGet_(key);
   if (hit) return JSON.parse(hit);
   let p;
   try { p = lpchProfile_(lpchCall_({ action: 'me', token: token }).user); } catch (e) {
     if (e.message !== 'session_expired') throw e;   // LPCH ติดต่อไม่ได้: แจ้งตามจริง ไม่ออกจากระบบ
     p = { error: 'การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' };
   }
-  cache.put(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  cachePut_(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
   return p;
 }
 
@@ -4183,6 +4224,7 @@ function lpchLogin(username, password) {
 function lpchLogout(token) {
   if (!token) return true;
   CacheService.getScriptCache().remove('lpch_' + token);
+  if (REQ_.cache) delete REQ_.cache['lpch_' + token];
   try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
   return true;
 }
@@ -4259,9 +4301,9 @@ function adminInfo_(ss, cfg) {
   try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { /* ไม่ทราบอีเมล */ }
   // เจ้าของไฟล์: ถาม Drive ช้า (ทุกคำขอ ทุกการบันทึก) = จำไว้ 6 ชั่วโมง
   try {
-    const cache = CacheService.getScriptCache(), key = 'ssOwner_' + ss.getId(), hit = cache.get(key);
+    const key = 'ssOwner_' + ss.getId(), hit = cacheGet_(key);
     if (hit !== null && hit !== undefined) owner = hit === '-' ? '' : hit;
-    else { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; cache.put(key, owner || '-', 21600); }
+    else { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; cachePut_(key, owner || '-', 21600); }
   } catch (e) { /* ไม่ทราบเจ้าของ */ }
   const admins = adminList_(cfg);
   const isAdmin = (!!me && (me === owner || admins.indexOf(me) >= 0)) || (!admins.length && !owner);
@@ -4302,31 +4344,37 @@ function extraFields_(cfg) {
 function tableSheet_(ss, table, cfg) {
   const def = tableDef_(table, cfg);
   markDirty_(table);   // เปิดชีตเพื่อบันทึก: หน้าเว็บโหลดตารางนี้ใหม่
-  let sh = ss.getSheetByName(def.sheet);
+  let sh = sheet_(ss, def.sheet);
   if (!sh) {
     sh = ss.insertSheet(def.sheet);
     sh.setFrozenRows(1);
   }
-  let header = headerOf_(sh);
+  let header = headerOf_(sh), changed = false;
   if (table === 'cases' && header.some(h => RENAMED_COLS[h] && header.indexOf(RENAMED_COLS[h]) < 0)) {
     header = header.map(h => (RENAMED_COLS[h] && header.indexOf(RENAMED_COLS[h]) < 0 ? RENAMED_COLS[h] : h));
     sh.getRange(1, 1, 1, header.length).setValues([header]);
+    changed = true;
   }
   const missing = def.fields.map(f => f[1]).filter(h => header.indexOf(h) < 0);
-  if (missing.length) sh.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  if (missing.length) { sh.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold'); changed = true; }
+  if (changed && LOCKED_) reqMap_('head').set(sh, header.concat(missing));   // หัวคอลัมน์ที่เพิ่งเขียน (ไม่ต้องอ่านซ้ำ)
   return sh;
 }
 
 function headerOf_(sh) {
+  const m = LOCKED_ ? reqMap_('head') : null;
+  if (m && m.has(sh)) return m.get(sh).slice();
   const n = sh.getLastColumn();
-  return n ? sh.getRange(1, 1, 1, n).getValues()[0].map(v => String(v).trim()) : [];
+  const h = n ? sh.getRange(1, 1, 1, n).getValues()[0].map(v => String(v).trim()) : [];
+  if (m) m.set(sh, h);
+  return h.slice();
 }
 
 function readTable_(ss, table, cfg) {
   const def = tableDef_(table, cfg);
-  const sh = ss.getSheetByName(def.sheet);
+  const sh = sheet_(ss, def.sheet);
   if (!sh || sh.getLastRow() < 2) return [];
-  const tz = ss.getSpreadsheetTimeZone();
+  const tz = tz_(ss);
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
   const cv = rowConv_(def, values.shift().map(v => String(v).trim()), tz);
   if (cv.cols[0] < 0) return [];
@@ -4334,7 +4382,7 @@ function readTable_(ss, table, cfg) {
 }
 // แถวเดียวของตาราง (แถวที่เพิ่งเขียน) แบบเดียวกับ readTable_ แต่อ่านแค่แถวนั้น
 function rowAt_(ss, table, cfg, sh, header, row) {
-  const cv = rowConv_(tableDef_(table, cfg), header, ss.getSpreadsheetTimeZone());
+  const cv = rowConv_(tableDef_(table, cfg), header, tz_(ss));
   return cv.conv(sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0]);
 }
 // แถวในชีต → { คีย์: ข้อความ } ตามคอลัมน์ของตาราง (หัวคอลัมน์ชื่อเก่าใน RENAMED_COLS ก็อ่านได้)
@@ -4354,11 +4402,13 @@ function findRow_(sh, col, id) {
 }
 
 // เขียนเฉพาะคอลัมน์ของระบบ เป็นข้อความล้วน ไม่ทับคอลัมน์ที่ผู้ใช้เพิ่มเอง
-function writeFields_(sh, row, header, fields, rec) {
+// old = ค่าของแถวนั้นที่ผู้เรียกอ่านไว้แล้ว (อาร์เรย์) · null = แถวใหม่ · ไม่ส่ง = อ่านเอง (แบบเดิม)
+// คืนค่าของแถวหลังเขียน (อาร์เรย์ตามหัวคอลัมน์) ใช้แทนการอ่านแถวกลับมา
+function writeFields_(sh, row, header, fields, rec, old) {
   const cells = fields
     .map(f => ({ col: header.indexOf(f[1]) + 1, value: safeText_(rec[f[0]]) }))
     .filter(c => c.col > 0);
-  auditWrite_(sh, row, header, cells);
+  const was = auditWrite_(sh, row, header, cells, old);
   const rv = header.indexOf(REV_HEAD);   // Cases / Logs: เวลาแก้ล่าสุดของแถว (ส่งเฉพาะแถวที่เปลี่ยน)
   if (rv >= 0 && !cells.some(c => c.col === rv + 1)) cells.push({ col: rv + 1, value: new Date().toISOString() });
   cells.sort((a, b) => a.col - b.col);
@@ -4373,15 +4423,50 @@ function writeFields_(sh, row, header, fields, rec) {
     run.push(c);
   });
   flush();
+  const merged = (was || []).slice();
+  while (merged.length < header.length) merged.push('');
+  cells.forEach(c => { merged[c.col - 1] = c.value; });
+  return merged;
+}
+// แถวตาม id ของตาราง อ่านครั้งเดียว: { sh, header, row (0 = ไม่มี), vals (ค่าดิบของแถว), cv, cur (แบบ readTable_) } · ใช้ระหว่างถือล็อก
+function openRow_(ss, table, cfg, id) {
+  const pre = table === 'cases' && REQ_.rows && id ? REQ_.rows.at[String(id)] : null;   // casesDo อ่านไว้แล้ว
+  if (pre && pre.vals) { const R = REQ_.rows; return { sh: R.sh, header: R.header, row: pre.row, vals: pre.vals, cv: R.cv, cur: R.cv.conv(pre.vals), pre: pre }; }
+  const sh = tableSheet_(ss, table, cfg), header = headerOf_(sh);
+  const row = id ? findRow_(sh, header.indexOf('id') + 1, id) : 0;
+  const vals = row ? sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0] : null;
+  const cv = rowConv_(tableDef_(table, cfg), header, tz_(ss));
+  return { sh: sh, header: header, row: row, vals: vals, cv: cv, cur: vals ? cv.conv(vals) : null };
+}
+// แถวของหลาย id: อ่านคอลัมน์ id ครั้งเดียว แล้วอ่านเฉพาะแถวที่ต้องการ (อยู่ใกล้กัน = ช่วงเดียว) · pick(id) = ต้องการแถวนี้
+// คืน { sh, header, cv, last, at: { id: { row, vals } } } · ใช้ระหว่างถือล็อก
+function openRows_(ss, table, cfg, pick) {
+  const sh = tableSheet_(ss, table, cfg), header = headerOf_(sh), idCol = header.indexOf('id') + 1, last = sh.getLastRow();
+  const ids = last > 1 && idCol > 0 ? sh.getRange(2, idCol, last - 1, 1).getValues() : [];
+  const at = {}, rows = [];
+  ids.forEach((r, i) => { const v = String(r[0]); if (v !== '' && !at[v] && pick(v)) { at[v] = { row: i + 2 }; rows.push(i + 2); } });
+  if (rows.length) {
+    const w = Math.max(1, header.length), lo = Math.min.apply(null, rows), hi = Math.max.apply(null, rows);
+    if (hi - lo + 1 <= Math.max(60, rows.length * 4)) { const block = sh.getRange(lo, 1, hi - lo + 1, w).getValues(); Object.keys(at).forEach(k => { at[k].vals = block[at[k].row - lo]; }); }
+    else Object.keys(at).forEach(k => { at[k].vals = sh.getRange(at[k].row, 1, 1, w).getValues()[0]; });
+  }
+  return { sh: sh, header: header, last: last, at: at, cv: rowConv_(tableDef_(table, cfg), header, tz_(ss)) };
+}
+// เขียนช่องใน set ของแถวที่เปิดไว้ (แถวใหม่ = ต่อท้าย) แล้วคืนรายการหลังเขียน (ไม่อ่านชีตซ้ำ)
+function saveRow_(x, fields, set) {
+  const at = x.row || x.sh.getLastRow() + 1;
+  return x.cv.conv(writeFields_(x.sh, at, x.header, fields.filter(f => f[0] in set), set, x.row ? x.vals : null));
 }
 
-function appendNew_(ss, table, records) {
+// known = id ทั้งหมดของตารางที่ผู้เรียกอ่านไว้แล้วภายใต้ล็อก (ไม่ต้องอ่านคอลัมน์ id ซ้ำ)
+function appendNew_(ss, table, records, known) {
   const def = tableDef_(table);
   const sh = tableSheet_(ss, table);
   const header = headerOf_(sh);
   const idCol = header.indexOf('id') + 1;
-  const have = {};
-  if (sh.getLastRow() > 1) sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues().forEach(r => { have[String(r[0])] = true; });
+  const have = {}, last = sh.getLastRow();
+  if (known) known.forEach(id => { have[String(id)] = true; });
+  else if (last > 1) sh.getRange(2, idCol, last - 1, 1).getValues().forEach(r => { have[String(r[0])] = true; });
   const fresh = records.filter(r => !have[r.id]);
   if (!fresh.length) return 0;
   fresh.forEach(rec => auditAdd_(table, rec, def.fields));
@@ -4390,7 +4475,7 @@ function appendNew_(ss, table, records) {
     const f = def.fields.find(x => x[1] === h);
     return !f ? '' : f[0] === 'rev' ? stamp : safeText_(rec[f[0]]);
   }));
-  sh.getRange(sh.getLastRow() + 1, 1, rows.length, header.length).setNumberFormat('@').setValues(rows);
+  sh.getRange(last + 1, 1, rows.length, header.length).setNumberFormat('@').setValues(rows);
   return fresh.length;
 }
 
@@ -4398,8 +4483,11 @@ function appendNew_(ss, table, records) {
 let CFG_MEMO_ = null;
 function readConfig_(ss) {
   if (!CFG_MEMO_ || CFG_MEMO_.ss !== ss) {
-    const sh = ss.getSheetByName(CONFIG_SHEET);
-    CFG_MEMO_ = { ss: ss, rows: !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues() };
+    const sh = sheet_(ss, CONFIG_SHEET);
+    let rows = [];
+    if (sh && typeof sh.getDataRange === 'function') rows = sh.getDataRange().getValues().slice(1);   // ทั้งชีต Config ในรอบเดียว (ไม่ต้องนับแถวก่อน)
+    else if (sh) { const last = sh.getLastRow(); rows = last < 2 ? [] : sh.getRange(2, 1, last - 1, 2).getValues(); }
+    CFG_MEMO_ = { ss: ss, rows: rows };
   }
   if (!CFG_MEMO_.rows.length) return null;
   const out = {};
@@ -4412,7 +4500,7 @@ function readConfig_(ss) {
 
 function writeConfig_(ss, config) {
   CFG_MEMO_ = null;
-  const sh = ss.getSheetByName(CONFIG_SHEET) || ss.insertSheet(CONFIG_SHEET);
+  const sh = sheet_(ss, CONFIG_SHEET) || ss.insertSheet(CONFIG_SHEET);
   const rows = Object.keys(config).map(k => [k, JSON.stringify(config[k])]);
   sh.clearContents();
   sh.getRange(1, 1, 1, 2).setValues([['key', 'value (JSON)']]).setFontWeight('bold');
@@ -4462,26 +4550,33 @@ function auditFn_() {
 function audit_(table, id, hn, act, what) {
   if (table === AUDIT_SHEET) return;
   const u = AUDIT_U_ || {};
+  // ระหว่างถือล็อก: หาแถวสุดท้ายของ AuditLog ก่อนเขียนข้อมูล (อ่านหลังเขียน = ชีตต้องบันทึกค้างก่อน 1 รอบ) · เขียนรวมกับข้อมูลตอนปล่อยล็อก
+  if (LOCKED_ && !REQ_.auditAt) { try { const sh = sheet_(ss_(), AUDIT_SHEET); if (sh) REQ_.auditAt = { sh: sh, last: sh.getLastRow() }; } catch (e) { /* หาตอนเขียนแทน */ } }
   AUDIT_BUF_.push([new Date().toISOString(), String(u.name || u.username || u.me || ''), String(u.username || u.me || ''), table, String(id || ''), String(hn || ''), act, auditFn_(), auditCut_(JSON.stringify(what || {})).slice(0, 4000)]);
   if (!LOCKED_) auditFlush_();
 }
 function auditFlush_() {
   if (!AUDIT_BUF_.length) return;
-  const rows = AUDIT_BUF_;
+  const rows = AUDIT_BUF_, at = REQ_.auditAt;
   AUDIT_BUF_ = [];
+  REQ_.auditAt = null;
   try {
     const ss = ss_();
-    let sh = ss.getSheetByName(AUDIT_SHEET);
+    let sh = at ? at.sh : sheet_(ss, AUDIT_SHEET);
     if (!sh) { sh = ss.insertSheet(AUDIT_SHEET); sh.getRange(1, 1, 1, AUDIT_HEAD.length).setValues([AUDIT_HEAD]).setFontWeight('bold'); sh.setFrozenRows(1); }
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, AUDIT_HEAD.length).setNumberFormat('@').setValues(rows);
+    sh.getRange((at ? at.last : sh.getLastRow()) + 1, 1, rows.length, AUDIT_HEAD.length).setNumberFormat('@').setValues(rows);
   } catch (e) { console.log('auditFlush_ ' + e); }   // ประวัติเขียนไม่ได้ ไม่ทำให้การบันทึกล้ม
 }
 // แก้ / เพิ่มแถว: เทียบค่าเดิมทีละคอลัมน์ที่เขียน (แถวใหม่ = ค่าที่ไม่ว่าง)
-function auditWrite_(sh, row, header, cells) {
+function auditWrite_(sh, row, header, cells, known) {
+  // known: อาร์เรย์ = ค่าของแถวเดิมที่อ่านไว้แล้ว · null = แถวใหม่ · ไม่ส่ง = อ่านเอง · คืนค่าของแถวเดิม (null = แถวใหม่)
+  let isNew = known === null, old = Array.isArray(known) ? known : [];
+  if (known === undefined) {
+    try { isNew = row > sh.getLastRow(); old = isNew ? [] : sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0]; } catch (e) { console.log('auditWrite_ read ' + e); }
+  }
   try {
-    const name = sh.getName();
-    if (name === AUDIT_SHEET) return;
-    const isNew = row > sh.getLastRow(), old = isNew ? [] : sh.getRange(row, 1, 1, header.length).getValues()[0];
+    const name = sheetName_(sh);
+    if (name === AUDIT_SHEET) return isNew ? null : old;
     const what = {};
     cells.forEach(c => {
       const h = header[c.col - 1];
@@ -4492,9 +4587,9 @@ function auditWrite_(sh, row, header, cells) {
       what[h] = isNew ? auditCut_(c.value) : [auditCut_(was), auditCut_(c.value)];
     });
     const idc = header.indexOf('id'), hnc = header.indexOf('HN'), val = i => { const c = cells.filter(x => x.col === i + 1)[0]; return c ? c.value : i >= 0 && !isNew ? old[i] : ''; };
-    if (!Object.keys(what).length) return;
-    audit_(auditTable_(name), val(idc), val(hnc), isNew ? 'add' : 'edit', what);
+    if (Object.keys(what).length) audit_(auditTable_(name), val(idc), val(hnc), isNew ? 'add' : 'edit', what);
   } catch (e) { console.log('auditWrite_ ' + e); }
+  return isNew ? null : old;
 }
 function auditAdd_(table, rec, fields) {
   const what = {};
@@ -4502,11 +4597,11 @@ function auditAdd_(table, rec, fields) {
   audit_(table, rec.id, rec.hn, 'add', what);
 }
 // ลบแถว: เก็บค่าที่มีของแถวนั้นไว้ในประวัติ แล้วลบ
-function delRow_(sh, row) {
+function delRow_(sh, row, head, vals) {
   try {
-    const header = headerOf_(sh), v = sh.getRange(row, 1, 1, header.length).getValues()[0], what = {};
-    header.forEach((h, i) => { if (h && AUDIT_SKIP.indexOf(h) < 0 && h !== 'id' && String(v[i] == null ? '' : v[i]) !== '') what[h] = auditCut_(v[i] instanceof Date ? Utilities.formatDate(v[i], ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd') : v[i]); });
-    audit_(auditTable_(sh.getName()), v[header.indexOf('id')], v[header.indexOf('HN')], 'del', what);
+    const header = head || headerOf_(sh), v = vals || sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0], what = {};
+    header.forEach((h, i) => { if (h && AUDIT_SKIP.indexOf(h) < 0 && h !== 'id' && String(v[i] == null ? '' : v[i]) !== '') what[h] = auditCut_(v[i] instanceof Date ? Utilities.formatDate(v[i], tz_(ss_()), 'yyyy-MM-dd') : v[i]); });
+    audit_(auditTable_(sheetName_(sh)), v[header.indexOf('id')], v[header.indexOf('HN')], 'del', what);
   } catch (e) { console.log('delRow_ ' + e); }
   sh.deleteRow(row);
 }
@@ -4522,7 +4617,7 @@ function auditTablesFor_(view, token) {
 const auditRow_ = (r, i) => ({ row: i, at: String(r[0]), by: String(r[1]), user: String(r[2]), table: String(r[3]), id: String(r[4]), hn: String(r[5]), act: String(r[6]), fn: String(r[7]), what: (() => { try { return JSON.parse(String(r[8] || '{}')); } catch (e) { return {}; } })() });
 // ประวัติล่าสุดของแถบ (ใหม่ก่อน) · q = คำค้น (HN ผู้บันทึก รายละเอียด) · before = แถวที่อ่านถึงแล้ว (โหลดเพิ่ม) · คืน { rows, before, more }
 function auditRecent(view, q, before, token) {
-  const a = auditTablesFor_(view, token), sh = a.ss.getSheetByName(AUDIT_SHEET);
+  const a = auditTablesFor_(view, token), sh = sheet_(a.ss, AUDIT_SHEET);
   if (!sh || sh.getLastRow() < 2) return { rows: [], before: 0, more: false };
   const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean), out = [];
   let end = Math.min(sh.getLastRow(), +before > 1 ? +before - 1 : sh.getLastRow());
@@ -4542,7 +4637,7 @@ function auditRecent(view, q, before, token) {
 }
 // ประวัติของรายการ (id ไม่เกิน 30) ใหม่ก่อน
 function auditFor(ids, view, token) {
-  const a = auditTablesFor_(view, token), sh = a.ss.getSheetByName(AUDIT_SHEET);
+  const a = auditTablesFor_(view, token), sh = sheet_(a.ss, AUDIT_SHEET);
   ids = (Array.isArray(ids) ? ids : [ids]).map(String).filter(Boolean).slice(0, 30);
   if (!sh || sh.getLastRow() < 2 || !ids.length) return [];
   const n = sh.getLastRow() - 1, col = sh.getRange(2, 5, n, 1), rows = {};
@@ -4556,11 +4651,13 @@ function withLock_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new Error('มีคนกำลังบันทึกข้อมูลอยู่ รอสักครู่แล้วลองใหม่');
   LOCKED_ = true;
+  REQ_.head = null;   // หัวคอลัมน์: อ่านใหม่หนึ่งครั้งหลังได้ล็อก
+  REQ_.auditAt = null;
   try {
     return fn();
   } finally {
     LOCKED_ = false;
-    try { SpreadsheetApp.flush(); saveDirty_(); auditFlush_(); } finally { lock.releaseLock(); }
+    try { auditFlush_(); SpreadsheetApp.flush(); saveDirty_(); } finally { lock.releaseLock(); }
   }
 }
 
@@ -4576,21 +4673,21 @@ function ss_() {
   if (id) return (SS_ = openSheet_(id));
   // สร้างภายใต้ล็อก กันสองคนเปิดครั้งแรกพร้อมกันแล้วได้ชีตคนละไฟล์
   return (SS_ = withLock_(() => {
-    const again = sheetIdProp_();
+    const again = sheetIdProp_(true);
     if (again) return openSheet_(again);
     const ss = SpreadsheetApp.create(APP_TITLE + ' (ข้อมูล)');
     ss.setSpreadsheetTimeZone('Asia/Bangkok');
     const first = ss.getSheets()[0];
     first.setName(TABLES.cases.sheet);
     first.setFrozenRows(1);
-    PropertiesService.getScriptProperties().setProperty('SHEET_ID', ss.getId());
+    propSave_('SHEET_ID', ss.getId());
     return ss;
   }));
 }
 
 // ID จาก Script property SHEET_ID (ใส่ได้ทั้ง ID และลิงก์ของชีต) ไม่ได้ตั้ง = ''
-function sheetIdProp_() {
-  const raw = String(PropertiesService.getScriptProperties().getProperty('SHEET_ID') || '').trim();
+function sheetIdProp_(fresh) {
+  const raw = String((fresh ? PropertiesService.getScriptProperties().getProperty('SHEET_ID') : propRead_('SHEET_ID')) || '').trim();
   if (!raw) return '';
   const m = /\/d\/([\w-]{20,})/.exec(raw) || /^([\w-]{20,})$/.exec(raw);
   if (!m) throw new Error('Script property SHEET_ID ต้องเป็น ID หรือลิงก์ของ Google Sheet (ตอนนี้: ' + raw + ')');

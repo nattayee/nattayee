@@ -1759,6 +1759,13 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));top:auto;right:auto;margin:0;border:0;overflow:visible;z-index:50;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:14px;opacity:0;pointer-events:none;transform:translate(-50%,16px);transition:opacity .18s,transform .18s}
 .toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
 .toast.err{background:var(--late);color:var(--accent-fg)}
+/* บันทึกเบื้องหลังไม่สำเร็จ: ค้างไว้จนกดปิด (ไม่หายเองเหมือนข้อความด้านล่าง) · ช่องที่กำลังบันทึก = กรอบเส้นประ */
+.save-fails{position:fixed;inset:auto auto calc(70px + env(safe-area-inset-bottom,0px)) 16px;margin:0;padding:0;border:0;background:none;overflow:visible;display:none;flex-direction:column;gap:6px;max-width:min(560px,calc(100vw - 32px));z-index:60}
+.save-fails.on{display:flex}
+.save-fail{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--late);color:var(--accent-fg);font-size:14px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.save-fail button{flex:none;padding:0 4px;border:0;background:none;color:inherit;font-size:18px;line-height:1.1;cursor:pointer}
+.fxc.saving{outline:2px dashed var(--accent);outline-offset:-2px}
+.fxc.saving .fx-ok{opacity:.45}
 .toast button{padding:0;border:0;background:none;color:inherit;font-weight:600;text-decoration:underline}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 /* ฟอร์มลงนัด: ช่องของใบสั่ง CT Simulation (ตั้งค่า → ลงนัด) · Draw area = ลากขอบเขตที่จะทำ CT บนรูปโครงกระดูกจากใบสั่ง */
@@ -3187,6 +3194,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
+<div class="save-fails" id="save-fails" role="alert" popover="manual"></div>
 
 <script>
 (() => {
@@ -4345,7 +4353,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.10';
+const PAGE_VERSION = '2026-11-11.11';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4440,6 +4448,7 @@ const sheetStore = {
   dqMark: (id, st, text) => call('dqMark', id, st, text),
   auditRecent: (view, q, before) => call('auditRecent', view, q, before),
   auditFor: (ids, view) => call('auditFor', ids, view),
+  casesDo: (fn, ids, args) => call('casesDo', fn, ids, args),
   dqImport: recs => call('dqImport', recs),
   dqDutySave: list => call('dqDutySave', list),
 };
@@ -9824,6 +9833,8 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     else if (num) {
       const gv = (!!e && e.date === d && e.act === 'given') || !!le || (c.rt === 'complete' && c.rtDate === d);   // Complete course วันนั้น = ฉายครั้งสุดท้ายแล้ว · แถวย่อย = ฉายแล้วของแถวนั้น
       cls.push('fx', gv ? 'given' : d < td ? 'done' : d === td ? 'today' : 'next');
+      const savingNow = fxOpt.length > 0 && gv && cs.some(x => fxSaving(x.id, d, lane));
+      if (savingNow) cls.push('saving');
       if (pend) cls.push('pend');
       if (sc.boost.has(d)) cls.push('boost');
       body = fxNumHtml(num);
@@ -9839,6 +9850,7 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
       if (rs.some(r => r !== roomOf(c))) { cls.push('rm'); tip += ` · ห้อง ${rs.map(roomLabel).join(', ')}`; }
       if (mv) tip += ` · ${mv.scope === 'on' ? `ย้ายมาจาก ${mv.from || 'ห้องเดิม'} ตั้งแต่ ${fmtDay(mv.date)}` : `ย้ายมาจาก ${mv.from || 'ห้องเดิม'} เฉพาะวันนี้`}`;
       if (room && !rs.includes(room)) cls.push('oroom');
+      if (savingNow) tip += ' · กำลังบันทึก…';
       if (gv) { body += '<i class="fx-ok" aria-hidden="true">✓</i>'; tip += ' · ' + (le ? `${fxTip(le)} (เฉพาะแถวนี้)` : e && e.date === d && e.act === 'given' ? fxTip(e) : `Complete course (ฉายครั้งสุดท้าย) · ย้ายไปแถบ Complete course วันถัดไป`); }
       else if (e && e.date === d) { cls.push('noted'); body += `<span class="fxl">${esc(e.label)}</span>`; tip += ' · ' + fxTip(e); }
       const rb = backAt.get(d), rl = rounds.filter(r => r.date < d).pop();
@@ -10814,6 +10826,36 @@ const readFreq = pre => { const v = chipValue($(`#${pre}-freq`)); return v === O
 const readDose = pre => ({ dpf: toGy($(`#${pre}-dpf`).value), fx: str($(`#${pre}-fx`).value), rx: toGy($(`#${pre}-rx`).value), freq: readFreq(pre) });   // ช่องเป็น cGy → เก็บ Gy
 // ฟีเจอร์ที่ต้องใช้ Code.gs รุ่นใหม่ (เก็บลงชีตได้) · Code.gs รุ่นเก่าจะซ่อนไว้ ไม่ให้กรอกแล้วหาย
 const serverHas = api => store.mode !== 'sheet' || !state.loaded || (state.api || 0) >= api;
+/* ---------- ความเร็วของการบันทึก (รุ่น 2026-11-11.11 · Code.gs API 74) ---------- */
+// ผู้ป่วยหลายเทคนิค (หลายเคสของ HN เดียวกัน): Code.gs API 74 บันทึกทุกเคสในรอบเดียว (casesDo · เดิมเรียกทีละเคส = รอเป็นเท่าตัว) · รุ่นเก่า / โหมดตัวอย่าง = ทีละเคสเหมือนเดิม
+const BATCH_API = 74;
+const batchOn = () => store.mode === 'sheet' && state.loaded && (state.api || 0) >= BATCH_API;
+const putCase = r => { const i = state.cases.findIndex(c => c.id === r.id); if (i >= 0) state.cases[i] = r; else state.cases.push(r); return r; };
+async function casesEach(fn, ids, args, one, each) {
+  const done = r => { const c = putCase(normCase(r)); if (each) each(c); return c; };
+  if (ids.length > 1 && batchOn()) return (await store.casesDo(fn, ids, args)).map(done);
+  const out = [];
+  for (const id of ids) out.push(done(await one(id)));
+  return out;
+}
+// "ฉายแล้ว" ที่กำลังบันทึกเบื้องหลัง [{ ids, date, lane, stamp }]: ตารางวันฉายแสดงเป็นฉายแล้วทันที (parseFx รวมให้) · ไม่แตะข้อมูลของเคสจนเซิร์ฟเวอร์ตอบ
+const fxOpt = [];
+const fxSaving = (id, d, lane) => fxOpt.some(o => o.date === d && o.ids.includes(id) && (!lane || !o.lane || o.lane === lane));
+// บันทึกเบื้องหลังไม่สำเร็จ: แจ้งค้างไว้จนกดปิด
+const saveFails = [];
+function renderSaveFails() {
+  const b = $('#save-fails');
+  b.innerHTML = saveFails.map((m, i) => `<div class="save-fail"><span>${esc(m)}</span><button type="button" data-failx="${i}" aria-label="ปิดข้อความนี้">×</button></div>`).join('');
+  b.classList.toggle('on', saveFails.length > 0);
+  try {
+    const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+    if (b.showPopover && b.matches(':popover-open')) b.hidePopover();
+    if (b.parentNode !== host) host.appendChild(b);
+    if (b.showPopover && saveFails.length) b.showPopover();
+  } catch (e) { /* แสดงแบบธรรมดา */ }
+}
+function saveFail(msg) { saveFails.push(msg); if (saveFails.length > 6) saveFails.shift(); renderSaveFails(); }
+window.addEventListener('beforeunload', e => { if (fxOpt.length) { e.preventDefault(); e.returnValue = ''; } });   // ยังบันทึกไม่เสร็จ: เตือนก่อนปิดหน้า
 const roomSitesOn = () => serverHas(ROOM_API);
 const stampsOn = () => serverHas(STAMP_API);
 const editPinOn = () => serverHas(EDIT_PIN_API);
@@ -14186,7 +14228,8 @@ function treatDays(start, fx, freq, hol, block) {
 function parseFx(c, all) {
   let a = [];
   try { a = JSON.parse(c.fxlog || '[]'); } catch (e) { a = []; }
-  if (!Array.isArray(a)) return [];
+  if (!Array.isArray(a)) a = [];
+  if (fxOpt.length && c.id) for (const o of fxOpt) if (o.ids.includes(c.id) && !a.some(x => x && str(x.date).slice(0, 10) === o.date && str(x.lane) === o.lane)) a = a.concat([o.stamp]);   // กำลังบันทึก ฉายแล้ว
   const acts = FX_ACTS.map(x => x[0]);
   return a.filter(x => x && isDay(x.date) && (all || !str(x.lane))).map(x => {
     const date = str(x.date).slice(0, 10), act = acts.includes(x.act) ? x.act : 'treat', back = act === 'skip' && isDay(x.back) ? str(x.back).slice(0, 10) : '', lane = str(x.lane);
@@ -16025,6 +16068,7 @@ async function submitPin(e, clear) {
     if ($('#pin-date').value > today()) { $('#pin-date').focus(); return pinErr(advMsg($('#pin-date').value, ctx.status === 'cancel' ? 'Cancel RT' : 'Complete course')); }
     if (ctx.status === 'cancel' && !str($('#pin-note').value)) { $('#pin-note').focus(); return pinErr('กรอกสาเหตุที่ Cancel RT'); }
   }
+  if (ctx.mode === 'fx' && !clear && !need && fxQuickOk(ctx)) return fxQuickSave(ctx);
   btn.disabled = true;
   pinErr('');
   pinBusy(true);
@@ -16087,11 +16131,8 @@ async function submitPin(e, clear) {
       const status = clear ? '' : ctx.status;
       let rec = null;
       try {
-        for (const id of ctx.ids || [ctx.id]) {   // ทุกเทคนิคของผู้ป่วยคนนี้
-          rec = normCase(await store.course(id, status, status ? $('#pin-date').value : '', status ? str($('#pin-note').value) : '', pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        const cd = status ? $('#pin-date').value : '', cn = status ? str($('#pin-note').value) : '';   // ทุกเทคนิคของผู้ป่วยคนนี้
+        await casesEach('courseCase', ctx.ids || [ctx.id], [status, cd, cn, pin], id => store.course(id, status, cd, cn, pin), r => { rec = r; });
       } finally { if (rec) render(); }
       pinDlg.close();
       if (status) state.courseTab = courseTabOf(rec);   // Complete course วันนี้ = ยังอยู่ในแถบกำลังฉาย
@@ -16103,12 +16144,9 @@ async function submitPin(e, clear) {
       const status = fxOffMode(), note = str($('#pin-note').value);
       let rec = null;
       try {
-        for (const id of ctx.ids || [ctx.id]) {
-          if (ctx.cur && ctx.cur.act === 'off') await store.fraction(id, ctx.cur.date, null, pin);   // เปลี่ยนจาก Off RT
-          rec = normCase(await store.course(id, status, ctx.date, note, pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        const cids = ctx.ids || [ctx.id];
+        if (ctx.cur && ctx.cur.act === 'off') await casesEach('fractionCase', cids, [ctx.cur.date, null, pin], id => store.fraction(id, ctx.cur.date, null, pin));   // เปลี่ยนจาก Off RT
+        await casesEach('courseCase', cids, [status, ctx.date, note, pin], id => store.course(id, status, ctx.date, note, pin), r => { rec = r; });
       } finally { if (rec) render(); }
       pinDlg.close();
       toast(`${rec.hn} · ${status === 'cancel' ? 'บันทึก Cancel RT' : 'บันทึก Complete course'} ${fmtDay(ctx.date)} แล้ว · ย้ายไปแถบ ${status === 'cancel' ? 'Cancel RT' : 'Complete course'}`);
@@ -16121,11 +16159,7 @@ async function submitPin(e, clear) {
       if (add && add.n < 0) ctx.addIds = [ctx.id];   // ลบ: เฉพาะเคสของแถวนี้
       let rec = null;
       try {
-        for (const id of ctx.addIds) {
-          rec = normCase(await store.addFx(id, ctx.day, add, pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        await casesEach('addFxCase', ctx.addIds, [ctx.day, add, pin], id => store.addFx(id, ctx.day, add, pin), r => { rec = r; });
       } finally { if (rec) render(); }
       pinDlg.close();
       const sc1 = caseSchedule(rec, holidayMap());
@@ -16139,11 +16173,7 @@ async function submitPin(e, clear) {
       const mvWait = !!mv && !!state.config.moveReplan && replanOn(), rpMeta = null, rx = {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
-        for (const id of ids) {
-          rec = normCase(await store.move(id, day, mv, pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        await casesEach('moveCase', ids, [day, mv, pin], id => store.move(id, day, mv, pin), r => { rec = r; });
         rp = await syncReplans(ids, day, rpMeta, rx, pin);
       } finally { if (rec) render(); }
       pinDlg.close();
@@ -16153,11 +16183,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'mqt') {   // ทุกเคสของผู้ป่วยคนนี้ (HN เดียวกัน)
       let rec = null;
       try {
-        for (const id of ctx.ids) {
-          rec = normCase(await store.mqTime(id, ctx.value, pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        await casesEach('timeCase', ctx.ids, [ctx.value, pin], id => store.mqTime(id, ctx.value, pin), r => { rec = r; });
       } finally { if (rec) { ctx.saved = true; delete mqDraft[ctx.id]; render(); } }
       pinDlg.close();
       toast(`${rec.hn} · ${ctx.value ? `Mosaiq Time ${ctx.value}` : 'ล้าง Mosaiq Time แล้ว'}`);
@@ -16182,11 +16208,8 @@ async function submitPin(e, clear) {
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
       try {
-        for (const id of ids) {
-          rec = normCase(ctx.mode === 'ptags' ? await store.tags(id, tags, pin) : await store.fraction(id, ctx.date, ev, pin));
-          const i = state.cases.findIndex(c => c.id === id);
-          if (i >= 0) state.cases[i] = rec; else state.cases.push(rec);
-        }
+        if (ctx.mode === 'ptags') await casesEach('tagCase', ids, [tags, pin], id => store.tags(id, tags, pin), r => { rec = r; });
+        else await casesEach('fractionCase', ids, [ctx.date, ev, pin], id => store.fraction(id, ctx.date, ev, pin), r => { rec = r; });
         if (ctx.mode === 'fx') rp = await syncReplans([ctx.id, ...ids.filter(x => x !== ctx.id)].filter(x => ids.includes(x)), ctx.date, rpMeta, rx, pin);
         if (rp.stale && store.mode === 'sheet') refresh(true);
       } finally { if (rec) render(); }
@@ -16220,6 +16243,35 @@ async function submitPin(e, clear) {
     for (const id of ['#pin', '#pin-proof']) $(id).value = '';
     const f = firstPinInput(); if (f) f.focus();
   } finally { btn.disabled = false; pinBusy(false); }
+}
+// "ฉายแล้ว" ครั้งแรกของวันนั้น (งานที่กดบ่อยที่สุดของห้องฉาย): ไม่ต้องใส่ PIN · ไม่ใช่สถานะที่ส่งงานวางแผนใหม่ · ไม่ได้อยู่ในช่วง Hold
+// = ปิดหน้าต่าง ขึ้น ✓ ทันที แล้วบันทึกเบื้องหลัง (กดคนถัดไปต่อได้เลย) · ช่องมีกรอบเส้นประจนเซิร์ฟเวอร์ตอบ · ไม่สำเร็จ = เอา ✓ ออกและแจ้งค้างไว้
+function fxQuickOk(ctx) {
+  const ev = fxDraft();
+  if (store.mode !== 'sheet' || !state.loaded || !ev || ev.act !== 'given' || (fxTypeOf(ev.type) || {}).replan || ctx.ret || ctx.cur || fxAdding() || fxMoving()) return false;
+  const ids = ctx.lane ? [ctx.id] : ctx.ids || [ctx.id];
+  return !state.cases.some(c => { const m = rpOf(c); return m && ids.includes(m.of) && m.date === ctx.date; });   // มีงานวางแผนใหม่ของวันนี้ = ทางปกติ (ลบงานที่ยังไม่เริ่ม)
+}
+function fxQuickSave(ctx) {
+  const ev = fxDraft(), lane = ctx.lane || '', date = ctx.date, ids = lane ? [ctx.id] : (ctx.ids || [ctx.id]).slice();
+  const c0 = state.cases.find(x => x.id === ctx.id) || {}, hn = c0.hn || '', what = `${ev.label}${ctx.laneLbl ? ` · ${ctx.laneLbl}` : ''} ${fmtDay(date)}`;
+  const o = { ids, date, lane, stamp: { date, type: ev.type, label: ev.label, act: 'given', by: state.user.name || '', at: nowStamp(), ...(lane ? { lane } : {}) } };
+  fxOpt.push(o);
+  pinDlg.close();
+  render();
+  (async () => {
+    let fail = '';
+    try {
+      if (lane) putCase(normCase(await store.fraction(ctx.id, date, { ...ev, lane }, '')));
+      else await casesEach('fractionCase', ids, [date, ev, ''], id => store.fraction(id, date, ev, ''));
+    } catch (err) { fail = errMsg(err).replace(/^Error:\s{0,}/, ''); }
+    fxOpt.splice(fxOpt.indexOf(o), 1);
+    render();
+    if (!fail) return toast(`${hn} · ${what}`);
+    const stale = fail.includes('PINNEED|');   // มีคนบันทึกวันนี้ไว้แล้ว (เครื่องอื่น): โหลดข้อมูลล่าสุดมาแสดง
+    saveFail(`บันทึกไม่สำเร็จ: HN ${hn} · ${what} · ${stale ? 'มีการบันทึกของวันนี้อยู่แล้วจากเครื่องอื่น (โหลดข้อมูลล่าสุดให้แล้ว) กดช่องนั้นเพื่อดูหรือแก้ไข' : fail.replace('PIN|', '') + ' · กดช่องนั้นเพื่อบันทึกอีกครั้ง'}`);
+    if (store.mode === 'sheet') refresh(true);
+  })();
 }
 // กลับมาฉายระหว่างช่วง Hold / HV ฯลฯ ที่ยังไม่กลับมา: ใส่วันกลับมาฉาย = วันที่กด ให้ทุกเคสของผู้ป่วย แล้วบันทึกสถานะของวันนั้นต่อ
 async function fxReturn(ctx, pin) {
@@ -16528,6 +16580,7 @@ document.addEventListener('click', e => {
   if (ds.viewas) { pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; render(); return refresh(true).then(() => render()); }   // โหลดใหม่: คำขอของแอดมินรองตามมุมมอง
   if (ds.histView) return openHist(t);   // ประวัติการบันทึก
   if (ds.jsrc !== undefined) return openJobSrc(ds.jsrc);   // RTT/RA Jobs: ที่มาของคะแนน
+  if (ds.failx !== undefined) { saveFails.splice(+ds.failx, 1); return renderSaveFails(); }
   if (t.id === 'dqe-back') return dqEditing && dqBack(dqEditing.id);
   if (t.id === 'logout') return logout();
   if (t.id === 'theme-btn') return toggleTheme();
