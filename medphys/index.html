@@ -440,6 +440,27 @@ button.duty-line:hover{border-color:var(--accent)}
 .ap-rect>h3 small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
 .ap-rect .ct-pull{margin-top:8px}
 .ap-rect .ct-pull li{background:var(--surface)}
+.ct-tabs{padding:6px 14px;border-bottom:1px solid var(--line);background:var(--sunken)}   /* หน้าต่าง CT-SIM: แท็บ CT Order / เพิ่มผู้ป่วย */
+#ct-form.tab-order .dlg-body>:not(#ct-order),#ct-form.tab-order #ct-save,#ct-form.tab-order #ct-del{display:none}
+.ct-order{display:grid;gap:12px}
+.ct-order-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:15px}
+.ct-order-kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.ct-order-kv dt{color:var(--muted);font-size:13px}
+.ct-order-kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.ct-order-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ct-order .notice{margin:0}
+.ct-order-q{max-width:320px}
+.dpk-rooms.need button{border-color:var(--accent);color:var(--accent)}   /* Start RT: ต้องเลือกห้องก่อน */
+.dpk-d.lock b{opacity:.6}
+#ap-form.consult .dlg-cols>.dlg-col+.dlg-col,#ap-form.consult .ap-acts{display:none}   /* ลงนัด CT+RT (แถบ Consult): ไม่มีส่วนใบสั่ง */
+#ap-form.consult .dlg-cols{grid-template-columns:minmax(0,1fr)}
+#ap-dlg:has(#ap-form.consult){width:min(720px,calc(100vw - 24px))}
+.dq-st{display:inline-block;margin-left:4px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:18px;vertical-align:1px;white-space:nowrap}   /* แจกงานแพทย์: สถานะหลังชื่อ */
+.dq-st.long{background:var(--late-soft);color:var(--late)}
+.dq-st.leave{background:var(--warn-soft);color:var(--warn)}
+.dq-st.off,.dq-st.back{background:var(--sunken);color:var(--muted)}
+.dq-st.s1{background:var(--accent-soft);color:var(--accent)}
+.vrow .when .dq-st{white-space:normal;margin-left:0}   /* รายการวันลา: ป้ายลายาวขึ้นบรรทัดใหม่ในช่องของมัน */
 .bq-rtst{display:block;width:max-content;max-width:100%;margin-top:3px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* แถบนัดคิวใส่แร่: สถานะในแถบห้องฉาย */
 .bq-rtst.on{background:var(--ok-soft);color:var(--ok)}
 .bq-rtst.hold{background:var(--warn-soft);color:var(--warn)}
@@ -2071,6 +2092,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <nav class="nav" aria-label="เมนู">
         <button type="button" data-view="reg">ลงทะเบียน</button>
         <button type="button" data-view="dq">แจกงานแพทย์</button>
+        <button type="button" data-view="consult">Consult</button>
         <button type="button" data-view="appt">ลงนัด</button>
         <button type="button" data-view="bq">นัดคิวใส่แร่</button>
         <button type="button" data-view="work">งาน</button>
@@ -2180,16 +2202,25 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <div class="dq-sheet" id="dq-sheet" hidden></div>
   </section>
 
+  <section id="view-consult" hidden>
+    <div class="toolbar">
+      <input type="search" class="tab-q" data-tq="consult" placeholder="ค้นหา HN, ชื่อ, แพทย์" autocomplete="off" aria-label="ค้นหาในแถบนี้">
+      <span class="spacer"></span>
+    </div>
+    <p class="notice" id="cs-api" hidden><b>ยังบันทึกไม่ได้</b><span>ลงนัด CT+RT จากแถบนี้ต้องใช้ Code.gs รุ่น 2026-11-11.4 ขึ้นไป (หรือตำแหน่งที่บันทึกในแถบ CT Order ได้) · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <div class="ap-dq" id="ap-dq" hidden></div>
+    <p class="empty-state" id="cs-empty" hidden>ไม่มีผู้ป่วยรอลงนัด · ผู้ป่วยที่แจกในแถบแจกงานแพทย์จะมารอที่นี่ แยกตามแพทย์</p>
+  </section>
   <section id="view-appt" hidden>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <input type="search" class="tab-q" data-tq="appt" placeholder="ค้นหา HN, ชื่อ, เทคนิค, แพทย์" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
-      <button type="button" class="btn primary" id="ap-add" hidden>+ ลงนัด</button>
+      <button type="button" class="btn primary" id="ap-add" hidden>+ CT Order</button>
     </div>
     <p class="muted" id="ap-help" style="margin:-4px 0 10px;font-size:13px"></p>
     <p class="notice" id="ap-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
-    <div class="ap-dq" id="ap-dq" hidden></div>
+    <div class="ap-rect ap-co" id="ap-co" hidden></div>
     <div class="ap-rect" id="ap-rect" hidden></div>
     <div class="table-wrap ct-wrap"><table class="ct-tbl ap-tbl" id="ap-tbl"></table></div>
   </section>
@@ -2351,6 +2382,8 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <input type="search" class="tab-q" data-tq="ctsim" placeholder="ค้นหา HN, ชื่อ, แพทย์, Organ" autocomplete="off" aria-label="ค้นหาในแถบนี้">
       <span class="spacer"></span>
+      <button type="button" class="btn" id="ct-cal-ct" data-ctcal title="ปฏิทินนัดทำ CT-Sim (ดูอย่างเดียว) · กดวันที่เพื่อดูรายชื่อ">ปฏิทิน CT-Sim</button>
+      <button type="button" class="btn" id="ct-cal-sim" data-ctcal title="ปฏิทิน Start RT (ดูอย่างเดียว) · เลือกห้องฉายก่อน แล้วกดวันที่เพื่อดูรายชื่อ">ปฏิทิน Start RT</button>
       <button type="button" class="btn" id="ct-xlsx" title="ไฟล์ Excel ของเดือนนี้ เครื่องที่เลือก แบบไฟล์ CT-SIM เดิม (แผ่น CT-SIM, SUM, Competency)">ส่งออก Excel</button>
       <button type="button" class="btn ct-pull-btn" id="ct-apull" hidden>นัดรอลง CT</button>
       <button type="button" class="btn primary" id="ct-add" hidden>+ เพิ่มผู้ป่วย</button>
@@ -2504,7 +2537,12 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
 <dialog id="ct-dlg" class="dlg-wide" aria-labelledby="ct-title">
   <form class="dlg ct-form" id="ct-form" novalidate autocomplete="off">
     <header class="dlg-head"><h2 id="ct-title">เพิ่มผู้ป่วย CT-SIM</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="tabs ct-tabs" role="tablist" id="ct-tabs" aria-label="ส่วนของหน้าต่าง">
+      <button type="button" class="tab" role="tab" data-cttab="order" aria-selected="false">CT Order<span class="n" id="ct-tab-n"></span></button>
+      <button type="button" class="tab" role="tab" data-cttab="form" aria-selected="true" id="ct-tab-form">เพิ่มผู้ป่วย CT-SIM</button>
+    </div>
     <div class="dlg-body">
+      <div class="ct-order" id="ct-order" hidden></div>
       <p class="ct-from" id="t-appt" hidden></p>
       <div class="dlg-cols">
         <div class="dlg-col">
@@ -2973,11 +3011,15 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   <form class="dlg" id="dql-form" novalidate>
     <header class="dlg-head"><h2 id="dql-title">วันลาแพทย์</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body">
-      <p class="preview" style="margin:0">ลาไม่เสียคิว: ถึงคิวแพทย์ที่ลา (ตามวันที่แจก) แพทย์คนอื่นรับแทน แล้ว<b>คืนคิวให้เมื่อกลับมาทำงาน</b> · วันลาของ MP แยกอยู่ที่แถบงาน</p>
+      <p class="preview" style="margin:0"><b>ลาปกติ</b>: ถึงคิวแพทย์ที่ลา (ตามวันที่แจก) แพทย์คนอื่นรับแทน แล้ว<b>คืนคิวให้เมื่อกลับมาทำงาน</b> · <b>ลายาว</b>: ไม่แจกงาน คิวที่ถึงระหว่างลา<b>เสียไป ไม่ชดเชย</b> · ใส่วันที่เริ่มแจกงานได้ถ้าจะรับเคสก่อนกลับมา · วันลาของ MP แยกอยู่ที่แถบงาน</p>
       <div class="leave-add" id="dql-add">
         <div class="field"><span class="lbl">แพทย์</span><div class="chips" id="dql-doc" role="radiogroup" aria-label="แพทย์"></div></div>
         <label class="field"><span class="lbl">ตั้งแต่</span><input type="date" id="dql-from"></label>
         <label class="field"><span class="lbl">ถึง</span><input type="date" id="dql-to"></label>
+        <div class="field" id="dql-kind-f"><span class="lbl">ประเภทการลา</span><div class="chips" id="dql-kind" role="radiogroup" aria-label="ประเภทการลา">
+          <label title="แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา"><input type="radio" name="dqlkind" value="" checked><span>ลาปกติ</span></label>
+          <label title="ไม่แจกงาน คิวที่ถึงระหว่างลาเสียไป ไม่ชดเชย"><input type="radio" name="dqlkind" value="long"><span>ลายาว</span></label></div></div>
+        <label class="field" id="dql-assign-f" hidden><span class="lbl">แจกงานตั้งแต่ <span class="sub-lbl">ไม่บังคับ · รับเคสก่อนกลับมาได้</span></span><input type="date" id="dql-assign"></label>
         <label class="field"><span class="lbl">Note</span><input id="dql-note" maxlength="300" autocomplete="off" placeholder="เช่น ลาพักร้อน, ประชุม"></label>
         <button type="submit" class="btn primary" id="dql-save">เพิ่มวันลา</button>
       </div>
@@ -3263,7 +3305,7 @@ const PIN_GROUPS = [
   ['duty', 'ผู้ปฏิบัติงานประจำวัน', 'RTT, RA (และ QC ของ CT-SIM) ใต้วันที่'],
   ['ct', 'CT-SIM', 'เพิ่ม แก้ ลบผู้ป่วยในแถบ CT-SIM'],
   ['reg', 'ลงทะเบียน', 'ลงทะเบียน แก้ ลบผู้ป่วยในแถบลงทะเบียน'],
-  ['appt', 'ลงนัด', 'ลง แก้ ลบนัดในแถบลงนัด'],
+  ['appt', 'ลงนัด (CT Order)', 'ลง แก้ ลบนัดในแถบ CT Order · ลงนัด CT+RT ในแถบ Consult · แก้ CT Order จากหน้าต่าง CT-SIM'],
   ['bq', 'นัดคิวใส่แร่', 'ลงนัด แก้ไข มาแล้ว ยกเลิก ลงชื่อ MP/RC ในแถบนัดคิวใส่แร่'],
   ['jobs', 'RTT/RA Jobs', 'บันทึกภาระงานรายเดือน (งานที่แก้ งานบริหาร ธุรการ วันลา)'],
   ['vac', 'Vac-Lok', 'บันทึก แก้ ลบการใช้ Vac-Lok (แถบ RTT/RA Jobs)'],
@@ -3511,7 +3553,7 @@ const DEFAULT_CONFIG = {
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4, dayOn: true, docOn: true },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (On = จำกัด)
     simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true,
     cbct: { on: true, def: {} }, spq: { on: false, url: '' },   // cbct: วันทำ CBCT ของเทคนิคพิเศษนับเป็นผู้ป่วยใหม่ · def = รูปแบบเริ่มต้นของแต่ละเทคนิค · spq = นำเข้าจากระบบนัดคิวเทคนิคพิเศษ
-    cal: { simNew: true, simBadge: 'lim', simAll: 'total', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
+    cal: { calV: 2, simNew: true, simBadge: 'lim', simAll: 'pick', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน pick = ต้องเลือกห้องก่อน (ไม่แสดงตัวเลข กดวันที่ไม่ได้) · total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
     chans: ['MOPH Refer', 'E-mail', 'Line'],   // ช่องทางที่รับ Consult · refers = โรงพยาบาลต้นทางที่ส่งตัวบ่อย (ตามรายงาน Consult)
@@ -3592,10 +3634,10 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['reg', 'dq', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'];
+const VIEWS = ['reg', 'dq', 'consult', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'];
 const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p'];   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
-const VIEW_LABEL = { reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', appt: 'ลงนัด', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
+const VIEW_LABEL = { reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'Consult', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
 // ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
@@ -4032,8 +4074,11 @@ function mergeConfig(c) {
   const asq = ap.spq && typeof ap.spq === 'object' ? ap.spq : {};
   out.appt.spq = { on: !!asq.on, url: str(asq.url).trim() };
   const acal = ap.cal && typeof ap.cal === 'object' ? ap.cal : {};
-  const CAL_PICK = { simDoc: ['pick', 'always', 'off'], simBadge: ['lim', 'sp'], simAll: ['total', 'rooms'] };
+  const CAL_PICK = { simDoc: ['pick', 'always', 'off'], simBadge: ['lim', 'sp'], simAll: ['pick', 'total', 'rooms'] };
   out.appt.cal = Object.fromEntries(Object.entries(d.appt.cal).map(([k, v]) => [k, CAL_PICK[k] ? (CAL_PICK[k].includes(acal[k]) ? acal[k] : v) : typeof acal[k] === 'boolean' ? acal[k] : v]));
+  // calV 2: ปฏิทิน Start RT ต้องเลือกห้องก่อน (ค่าเดิม "ตัวเลขรวม" เปลี่ยนให้ครั้งเดียว · ตั้งกลับทีหลังได้)
+  if (acal.calV !== 2 && out.appt.cal.simAll === 'total') out.appt.cal.simAll = 'pick';
+  out.appt.cal.calV = 2;
   const rg = c.reg && typeof c.reg === 'object' ? c.reg : {};
   out.reg = { form: Object.fromEntries(REG_FORM.map(([k, , v, keep]) => { const x = rg.form && rg.form[k]; return [k, [...(keep ? [] : ['off']), 'show', 'req'].includes(x) ? x : v]; })) };
   const rdv = rg.drive && typeof rg.drive === 'object' ? rg.drive : {}, rdm = rdv.map && typeof rdv.map === 'object' ? rdv.map : {}, rdf = rdv.filter && typeof rdv.filter === 'object' ? rdv.filter : {};
@@ -4118,7 +4163,8 @@ function mergeConfig(c) {
     access[ADMIN_ROLE] = x.view === 'settings' ? 'view' : aa === 'edit' || aa === 'view' || aa === '' ? aa : access.MP;   // ยังไม่ตั้ง = เท่า MP
     access[SUB_ROLE] = x.view === 'settings' ? 'view' : ACC_SET.includes(src[SUB_ROLE]) ? src[SUB_ROLE] : 'role';   // ยังไม่ตั้ง = ตามตำแหน่ง
     const vals = Object.entries(access).filter(([, v]) => v !== 'role');
-    return { view: x.view, label: str(x.label).slice(0, 30), on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && r !== ADMIN_ROLE && r !== SUB_ROLE && v), access, parent: str(x.parent) };
+    const lbl = x.view === 'appt' && /^ลงนัด( CT\+RT)?$/.test(str(x.label).trim()) ? '' : str(x.label).slice(0, 30);   // ชื่อเดิมของแถบลงนัด = CT Order
+    return { view: x.view, label: lbl, on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && r !== ADMIN_ROLE && r !== SUB_ROLE && v), access, parent: str(x.parent) };
   });
   // รวมแถบ (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบย่อยอยู่ในเมนู ▾ ของแถบหลัก · ไม่ซ้อนเกิน 1 ชั้น · ตั้งค่า อยู่ใต้แถบอื่นไม่ได้และมีแถบย่อยไม่ได้
   // ยังไม่เคยตั้ง (navGrouped): แจกงาน (งาน) ตารางแจกเคส RC และกิจกรรม สรุป P4P อยู่ใต้แถบ Planning (ชื่อที่ตั้ง หรือแถบงานรอ)
@@ -4194,7 +4240,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.3';
+const PAGE_VERSION = '2026-11-11.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4844,7 +4890,9 @@ function localStore() {
       if (!isDay(from) || !isDay(to)) throw new Error('วันที่ลาไม่ถูกต้อง');
       if (to < from) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา');
       if (!dqAllDocs().includes(doc)) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
-      const v = { id: str(rec.id) || uid(), doc, from, to, note: str(rec.note), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
+      const kind = rec.kind === 'long' ? 'long' : '', assign = kind ? str(rec.assign) : '';
+      if (assign && (!isDay(assign) || assign <= from || assign > to)) throw new Error('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย');
+      const v = { id: str(rec.id) || uid(), doc, from, to, note: str(rec.note), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '', kind, assign };
       db.dqLeave.push(v);
       persist();
       return clone(v);
@@ -5588,6 +5636,7 @@ function renderLogo() {
 }
 function render() {
   const gated = state.gate != null;
+  if (calBox && !calBox.getClientRects().length) closeCal();
   renderTheme();
   applyQColors();
   renderLogo();
@@ -5657,6 +5706,7 @@ function render() {
   else if (state.view === 'ctsim') renderCt();
   else if (state.view === 'reg') renderReg();
   else if (state.view === 'dq') renderDq();
+  else if (state.view === 'consult') renderConsult();
   else if (state.view === 'appt') renderAppt();
   else if (state.view === 'bq') renderBq();
   else if (state.view === 'jobs') renderJobs();
@@ -5822,6 +5872,7 @@ function openCtForm(id, ap) {
   const c = editingCt, lap = r && state.appt.find(a => a.took === r.id);
   if (lap && !c.ctcm && !c.special) Object.assign(c, { ctcm: lap.cm, special: lap.special });   // รายการเดิมที่ลงจากนัด (ก่อนมีช่องนี้): ใช้ของนัด
   $('#ct-title').textContent = r ? `แก้ไขผู้ป่วย CT-SIM ${r.hn}` : 'เพิ่มผู้ป่วย CT-SIM';
+  $('#ct-tab-form').textContent = r ? 'แก้ไขผู้ป่วย CT-SIM' : 'เพิ่มผู้ป่วย CT-SIM';
   chipGroup($('#t-machine'), 'tmachine', ctRooms().map(x => x.id), c.ct, ctLabel);
   $$('#t-machine label').forEach(l => { $('span', l).textContent = ctLabel($('input', l).value); });
   for (const f of ['date', 'hn', 'name', 'note']) $('#t-' + f).value = c[f] || '';
@@ -5861,6 +5912,7 @@ function openCtForm(id, ap) {
   $('#ct-del').hidden = !r;
   syncCtForm();
   syncCtAppt();
+  setCtTab(!r && !ap && apWaiting().length ? 'order' : 'form');   // เพิ่มใหม่ (มี CT Order รออยู่) = เริ่มที่แท็บ CT Order
   if (!ctDlg.open) ctDlg.showModal();
   if (!r && ap) focusChips($('#t-machine'));   // จากนัด: ข้อมูลใส่ให้แล้ว (ไม่เปิดปฏิทินบังฟอร์ม) · ตรวจเครื่องและวันที่ทำ CT
   else if (!r) $('#t-hn').focus();
@@ -6033,8 +6085,12 @@ async function markCt(id, mark) {
 const AP_OLD = 'แถบลงนัดต้องใช้ Code.gs รุ่น 2026-10-28.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 // แพทย์: มีลิมิต CT-Sim ต่อแพทย์ (ตั้งค่า → ลงนัด) = แสดงในฟอร์มเสมอ (ต้องรู้แพทย์ของนัดจึงนับได้)
 // dose = แถว Prescription (แสดงเมื่อมีช่องใดช่องหนึ่ง) · rx ตาม Dose/fx และ Fx · แพทย์ / ห้องฉาย แสดงเสมอเมื่อเปิดลิมิตที่ใช้ช่องนั้น
+// ลงนัด CT+RT (แถบ Consult): ช่องตามที่กำหนด (ไม่มีส่วนใบสั่ง) · CT Order = ช่องตาม ตั้งค่า → ลงนัด
+const CFORM = { name: 'req', prio: 'show', cm: 'req', special: 'show', dpf: 'show', fx: 'req', freq: 'req', sim: 'req', room: 'req', doc: 'req', dx: 'show' };
+const apCons = () => apForm.classList.contains('consult');
+const apFormCfg = () => (apCons() ? CFORM : state.config.appt.form);
 const apMode = k => {
-  const f = state.config.appt.form, sl = simLim();
+  const f = apFormCfg(), sl = simLim();
   if (k === 'dose') return ['dpf', 'fx', 'freq'].some(x => (f[x] || 'off') !== 'off') ? 'show' : 'off';
   if (k === 'rx') return ['dpf', 'fx'].some(x => (f[x] || 'off') !== 'off') ? 'show' : 'off';
   const v = f[k] || 'off';
@@ -6116,6 +6172,16 @@ function renderReCt(edit) {
     <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP ${x.c.mp}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-aprect="${esc(x.c.id)}">ลงนัด</button></span>` : ''}</li>`;
   box.innerHTML = `<h3>รอลงนัด CT (Re-CT / CP) · ${list.length} คน<small>บันทึกสถานะ Re-CT หรือ CP (ทำ CT ใหม่) ในแถบ${esc(navLabel('course'))} · ลงนัดแล้วออกจากรายการเอง</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
 }
+// แถบ CT Order: นัดที่ลง CT+RT จากแถบ Consult แล้ว ยังไม่ได้กรอกใบสั่ง (CT Order) · ลง CT-SIM แล้วหรือไม่มาทำ CT = ออกจากรายการ
+const apCoWaiting = () => state.appt.filter(a => { const o = parseOrder(a.order); return apState(a) === 'wait' && o.src === 'consult' && !o.co; })
+  .sort((a, b) => (isDay(a.date) ? a.date : '0').localeCompare(isDay(b.date) ? b.date : '0') || a.created.localeCompare(b.created));
+function renderApCo(edit) {
+  const box = $('#ap-co'), words = tabWords('appt'), all = apCoWaiting(), list = words.length ? all.filter(a => wordsIn(words, apText(a))) : all;
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  const row = a => `<li><div class="ct-pull-main"><b class="hn">${esc(a.hn)}</b>${a.name ? ' ' + esc(a.name) : ''}${apEmerg(a) ? ' <span class="chip late">Emergency</span>' : ''}<small>${[a.doc && `แพทย์ ${a.doc}`, isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT on call', a.sim && `Start RT ${apSimText(a)}`, a.room && `ห้อง ${a.room}`, a.by && `ลงนัดโดย ${a.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-apco="${esc(a.id)}">CT Order</button></span>` : ''}</li>`;
+  box.innerHTML = `<h3>รอ CT Order · ${list.length} คน<small>ลงนัด CT+RT จากแถบ ${esc(navLabel('consult'))} แล้ว · กด CT Order เพื่อกรอกใบสั่ง CT Simulation</small></h3><ul class="ct-pull">${list.map(row).join('')}</ul>`;
+}
 // วงกลมบนแถบลงนัด: จำนวนผู้ป่วยรอลงนัด CT (Re-CT)
 function renderApBadge() {
   const b = $('.nav [data-view="appt"]');
@@ -6133,7 +6199,7 @@ function renderAppt() {
   $('#ap-add').hidden = !edit;
   $('#ap-api').hidden = apptOn() || !canEdit();
   syncTabQ('appt');
-  renderApDq(edit);
+  renderApCo(edit);
   renderReCt(edit);
   const dk = r => (isDay(r.date) ? r.date : '0');   // On Call ก่อน
   const words = tabWords('appt'), all = state.appt.filter(r => apInMonth(r, ym)).sort((a, b) => dk(a).localeCompare(dk(b)) || a.created.localeCompare(b.created));
@@ -6236,10 +6302,12 @@ function ordExamHtml(o) {
 }
 // rg = ผู้ป่วยจากแถบลงทะเบียน (ปุ่มลงนัด): นัดใหม่พร้อม HN ชื่อ อายุ เพศ แพทย์ Diag · rc = id เคสในรายการรอลงนัด CT (Re-CT)
 // dqId = ลงนัดจากรายการรอลงนัดของแจกงานแพทย์: HN ชื่อ แพทย์ที่ได้ (+ ข้อมูลจากแถบลงทะเบียนถ้ามี)
-function openApForm(id, rg, rc, dqId) {
-  const r = id ? state.appt.find(x => x.id === id) : null;
+function openApForm(id, rg, rc, dqId, mode) {
+  const r = id ? state.appt.find(x => x.id === id) : null, cons = mode === 'consult';
   if (id && !r) return;
-  if (accessOf('appt') !== 'edit') return toast(RO_MSG, { err: true });
+  const via = cons ? 'consult' : mode === 'ct' ? 'ctsim' : 'appt';
+  if (!apEditVia(via)) return toast(accessOf(via) === 'edit' ? AP_VIA_OLD : RO_MSG, { err: true });
+  apForm.classList.toggle('consult', cons);
   if (!apptOn()) return toast(AP_OLD, { err: true });
   const cfg = state.config, ap = cfg.appt;
   const re = !r && rc ? reCtWaiting().find(x => x.c.id === rc) : null;
@@ -6250,7 +6318,8 @@ function openApForm(id, rg, rc, dqId) {
   editingAp = r ? clone(r) : dq ? normAppt({ id: uid(), ...(dqRg ? regToAp(dqRg) : {}), hn: dq.hn, name: dq.name || (dqRg ? regName(dqRg) : ''), doc: dq.doc })
     : normAppt({ id: uid(), ...(rg ? regToAp(rg) : re ? reCtToAp(re) : {}), doc: (rg && rg.doc) || (re && reCtToAp(re).doc) || (apMode('doc') !== 'off' ? myDoctor() : '') });
   const a = editingAp, o = apOrder = parseOrder(a.order), fill = o.fill || {};
-  $('#ap-title').textContent = r ? `แก้ไขนัด ${r.hn}` : re ? `ลงนัด CT · ${re.e.label} ${re.hn}` : dq ? `ลงนัด · ${dq.hn} (แจกให้แพทย์ ${dq.doc})` : 'ลงนัด';
+  $('#ap-title').textContent = cons ? `ลงนัด CT+RT${dq ? ` · ${dq.hn} (แจกให้แพทย์ ${dq.doc})` : ''}`
+    : r ? `CT Order · ${r.hn}` : re ? `CT Order · ${re.e.label} ${re.hn}` : dq ? `CT Order · ${dq.hn} (แจกให้แพทย์ ${dq.doc})` : 'CT Order';
   for (const f of ['hn', 'name', 'note']) $('#a-' + f).value = a[f] || '';
   $('#a-date').value = isDay(a.date) ? a.date : '';
   $('#a-oncall-ct').checked = a.date === 'on call';
@@ -6289,7 +6358,7 @@ function openApForm(id, rg, rc, dqId) {
   const st = apState(a), c = st === 'took' && state.ct.find(x => x.id === a.took);
   $('#a-took').hidden = !r || st === 'wait';
   $('#a-took').textContent = st === 'took' ? `ลง CT-SIM แล้ว${c ? ` (${ctLabel(c.ct)} ${fmtDay(c.date)})` : ''}${a.tookBy ? ` โดย ${a.tookBy}` : ''} · แก้ที่นี่ไม่เปลี่ยนรายการใน CT-SIM` : st === 'skip' ? `ตั้งว่าไม่มาทำ CT${a.tookBy ? ` (${a.tookBy})` : ''} · คืนกลับได้ที่แถบ CT-SIM → นัดรอลง CT` : '';
-  $('#ap-del').hidden = !r;
+  $('#ap-del').hidden = !r || !!mode;   // แถบ Consult / CT-SIM: ลบนัดไม่ได้ (ลบที่แถบ CT Order)
   $('#a-hn-list').hidden = true;
   $('.sub-lbl', $('#a-hn').closest('.field')).hidden = !state.reg.length;   // ยังไม่มีผู้ป่วยลงทะเบียน: ไม่ต้องบอกวิธีเลือก
   apRegNote();
@@ -6375,6 +6444,8 @@ function readApOrder() {
     ...apCbctPick(),
     // Vac-Lok ที่จองไว้: ติ๊ก Vac-lok เท่านั้น (ช่องไม่แสดงเพราะ Code.gs เก่า/ยังไม่มีเลข = เลขเดิมคงไว้)
     vac: !apPicked('immob').some(isVacImmob) ? '' : $('#a-vac-f').hidden ? str(apOrder.vac) : chipValue($('#a-vac')),
+    // ลงนัด CT+RT จากแถบ Consult (src) · กรอก CT Order แล้ว (co = บันทึกจากฟอร์ม CT Order) → ออกจากรอ CT Order
+    src: apCons() ? 'consult' : str(apOrder.src), co: apCons() ? apOrder.co || '' : 1,
   };
   for (const k of Object.keys(o)) if (!o[k] || (Array.isArray(o[k]) && !o[k].length) || (k === 'fill' && !Object.keys(o[k]).length)) delete o[k];
   return Object.keys(o).length ? JSON.stringify(o) : '';
@@ -6438,7 +6509,7 @@ function submitAp(e) {
   if (ctCall && !orderOn()) return toast('นัด CT แบบ on call ต้องใช้ Code.gs รุ่น 2026-10-29.1 ขึ้นไป', { err: true });
   const inputErr = apMode('dose') !== 'off' && checkDose('a');
   if (inputErr) return toast(inputErr, { err: true });
-  const f = state.config.appt.form, miss = APPT_FORM.find(([k]) => f[k] === 'req' && AP_FILLED[k] && !AP_FILLED[k]());
+  const f = apFormCfg(), miss = APPT_FORM.find(([k]) => f[k] === 'req' && AP_FILLED[k] && !AP_FILLED[k]());
   if (miss) {
     const box = $(`[data-apf="${miss[0]}"]`, apForm);
     if (box.classList.contains('field')) box.classList.add('missing');
@@ -6515,10 +6586,10 @@ function openApPin(mode, rec) {
   const isNew = !state.appt.some(x => x.id === rec.id);
   pinCtx = { mode, rec, id: rec.id, isNew, forgot: false, auto: mode === 'apsave' };
   const who = `<b>${esc(state.user.name || state.user.me || '')}</b>`, what = [`นัด CT ${fmtDay(rec.date)}`, rec.name, rec.cm, rec.special].filter(Boolean).map(esc).join(' · ');
-  $('#pin-title').textContent = `${mode === 'apdel' ? 'ลบนัด' : isNew ? 'ลงนัด' : 'บันทึกการแก้ไขนัด'} · ${rec.hn || ''}`;
+  $('#pin-title').textContent = `${mode === 'apdel' ? 'ลบนัด' : apCons() ? 'ลงนัด CT+RT' : isNew ? 'ลงนัด' : 'บันทึก CT Order'} · ${rec.hn || ''}`;
   $('#pin-what').innerHTML = mode === 'apdel'
     ? `ลบนัดนี้ (${what}) ย้อนกลับไม่ได้${rec.took && rec.took !== 'skip' ? ' · รายการที่ลง CT-SIM แล้วไม่ถูกลบ' : ''} · ${pinNeed(mode) ? 'ยืนยันด้วยรหัส PIN ของ' : 'กดลบเพื่อยืนยัน · บันทึกในชื่อ'} ${who}`
-    : `${what}${isNew ? ' · ส่งไปรอในแถบ CT-SIM' : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`;
+    : `${what}${apCons() ? ` · รอ CT Order ในแถบ ${esc(navLabel('appt'))}` : isNew ? ' · ส่งไปรอในแถบ CT-SIM' : ''} · ยืนยันด้วยรหัส PIN ของ ${who}`;
   $('#pin-val-field').hidden = true;
   $('#pin-note-field').hidden = true;
   $('#pin-clear').hidden = true;
@@ -6532,9 +6603,11 @@ function apSaved(rec, isNew) {
   if (i < 0) state.appt.push(rec); else state.appt[i] = rec;
   apDlg.close();
   const ym = isDay(rec.date) ? rec.date.slice(0, 7) : thisMonth();   // On Call: อยู่ในเดือนนี้จนกว่าจะลง CT-SIM
-  if (state.view === 'appt' && ym !== state.month) state.month = ym;   // ลงนัดจากแถบลงทะเบียน: เดือนของแถบนั้นไม่เปลี่ยน
+  if (state.view === 'appt' && ym !== state.month) state.month = ym;   // ลงนัดจากแถบลงทะเบียน / Consult: เดือนของแถบนั้นไม่เปลี่ยน
   render();
-  toast(`${isNew ? 'ลงนัด' : 'บันทึก'} ${rec.hn} · ${isDay(rec.date) ? `นัด CT ${fmtDay(rec.date)}` : 'On Call (ยังไม่มีวันนัด CT)'}${isNew ? ' · ส่งไปรอในแถบ CT-SIM แล้ว' : ''}`);
+  if (ctDlg.open) renderCtOrder();   // แก้จากหน้าต่าง CT-SIM
+  const co = parseOrder(rec.order);
+  toast(`${co.src === 'consult' && !co.co ? 'ลงนัด CT+RT' : isNew ? 'ลงนัด' : 'บันทึก CT Order'} ${rec.hn} · ${isDay(rec.date) ? `นัด CT ${fmtDay(rec.date)}` : 'On Call (ยังไม่มีวันนัด CT)'}${co.src === 'consult' && !co.co ? ` · รอ CT Order ในแถบ ${navLabel('appt')}` : isNew ? ' · ส่งไปรอในแถบ CT-SIM แล้ว' : ''}`);
 }
 function apDeleted(id) {
   state.appt = state.appt.filter(x => x.id !== id);
@@ -7016,16 +7089,33 @@ function normDq(o) {
   r.created = r.created || nowISO();
   return r;
 }
-const DQL_KEYS = ['id', 'doc', 'from', 'to', 'note', 'by', 'created', 'updated'];
+const DQL_KEYS = ['id', 'doc', 'from', 'to', 'note', 'by', 'created', 'updated', 'kind', 'assign'];
 function normDql(o) {
   const v = {};
   for (const k of DQL_KEYS) v[k] = str(o[k]);
   v.doc = v.doc.toUpperCase();
   v.from = dateStr(v.from);
   v.to = dateStr(v.to) || v.from;
+  v.kind = v.kind === 'long' ? 'long' : '';
+  v.assign = v.kind ? dateStr(v.assign) : '';
   v.id = v.id || uid();
   return v;
 }
+// ลายาว / ลาปกติ (Code.gs API 69 · รุ่นเก่า = ลาปกติอย่างเดียว ให้คิวในหน้าเว็บตรงกับที่ Code.gs แจก)
+const DQL_API = 69;
+const dqlKindOn = () => store.mode !== 'sheet' || serverHas(DQL_API);
+// สถานะของแพทย์วันนี้ (หลังชื่อ): ลายาว · ลา · ไม่แจกวันนี้ (ตามวัน) · เวร S1
+function dqDocStatus(c, d = today()) {
+  const lv = state.dqLeave.filter(l => l.doc === c && l.from <= d && d <= (l.to || l.from)), lg = lv.find(l => l.kind === 'long');
+  if (lg && (!lg.assign || d < lg.assign)) return { t: `ลายาว ถึง ${fmtDay(lg.to)}${lg.assign ? ` · แจกงานตั้งแต่ ${fmtDay(lg.assign)}` : ''}`, k: 'long' };
+  if (lg) return { t: `ลายาว ถึง ${fmtDay(lg.to)} · รับเคสแล้ว`, k: 'back' };
+  if (lv.length) return { t: `ลา${lv[0].to > d ? ` ถึง ${fmtDay(lv[0].to)}` : 'วันนี้'}`, k: 'leave' };
+  if (dq2On() && dqDayOff(c, d)) return { t: 'ไม่แจกวันนี้', k: 'off' };
+  if (dq2On() && dqS1(d) === c) return { t: 'เวร S1', k: 's1' };
+  return null;
+}
+const dqStatusHtml = c => { const x = dqDocStatus(c); return x ? ` <span class="dq-st ${x.k}">${esc(x.t)}</span>` : ''; };
+const dqlKindText = l => (l.kind === 'long' ? `ลายาว${l.assign ? ` · แจกงานตั้งแต่ ${fmtDay(l.assign)}` : ''}` : '');
 const DQ_PAYBACK = [[1, '1 เคสต่อรอบ (ค่าเริ่มต้น)'], [2, '2 เคสต่อรอบ'], [0, 'คืนทั้งหมดทันที']];
 const DQ_HOW = { own: 'ตามคิว', cover: 'รับแทน', repay: 'คืนคิว', manual: 'เลือกเอง', early: 'นอกคิว', out: 'ไม่อยู่ในคิว', import: 'จากรายงาน HIS', emer: 'Emergency' };
 /*
@@ -7043,7 +7133,10 @@ const DQ_HOW = { own: 'ตามคิว', cover: 'รับแทน', repay: 
 function dqPick(o, trace) {
   const docs = o.docs || [], n = docs.length, idx = c => docs.indexOf(c);
   const offDay = (c, d) => { const l = o.days && o.days[new Date(d + 'T00:00:00Z').getUTCDay()]; return Array.isArray(l) && l.indexOf(c) >= 0; };
-  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.from <= d && d <= (l.to || l.from)));
+  // ลาปกติ (และวันที่ไม่แจกตามวัน): แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา · ลายาว (kind = long): ไม่แจก คิวที่ถึงระหว่างนั้นเสียไป ไม่ชดเชย
+  // ลายาว แจกงานตั้งแต่ (assign): รับเคสได้ตั้งแต่วันนั้น (ก่อนกลับมาได้) · ไม่ระบุ = หลังวันลาวันสุดท้าย
+  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.from <= d && d <= (l.to || l.from)));
+  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.kind === 'long' && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
   const lim = Math.max(0, Math.floor(+o.payback) || 0);
   const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
   // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null
@@ -7053,13 +7146,14 @@ function dqPick(o, trace) {
     const skipped = [];
     for (let k = 0; k < limit; k++) {
       const at = s.pos + k, x = docs[at % n], r = Math.floor(at / n);
+      if (longOff(x, d)) continue;   // ลายาว: คิวนี้เสียไป (หักคิวที่รออยู่เก็บไว้จนกลับมา)
       if (s.credit[x] > 0) { s.credit[x]--; skipped.push(x); continue; }
       if (away(x, d)) {
         // คนรับแทน: แพทย์ที่ไม่ลาที่ติดค้างน้อยที่สุด (รับแทนอยู่ + รอหักคิว) ถัดจากคนลาตามลำดับ (ไม่ให้คนเดียวรับแทนทั้งหมด)
         let y = '', best = 0;
         for (let j = 1; j < n; j++) {
           const c = docs[(at + j) % n];
-          if (away(c, d)) continue;
+          if (away(c, d) || longOff(c, d)) continue;
           let load = Math.max(0, s.credit[c] || 0);
           s.owe.forEach(e => { if (e.by === c) load++; });
           if (!y || load < best) { y = c; best = load; }
@@ -7072,7 +7166,7 @@ function dqPick(o, trace) {
       let w = -1;
       for (let j = 0; j < s.owe.length && w < 0; j++) {
         const e = s.owe[j], pd = s.paid[e.to];
-        if (e.by === x && idx(e.to) >= 0 && !away(e.to, d) && (!lim || !pd || pd.r !== r || pd.n < lim)) w = j;
+        if (e.by === x && idx(e.to) >= 0 && !away(e.to, d) && !longOff(e.to, d) && (!lim || !pd || pd.r !== r || pd.n < lim)) w = j;
       }
       s.pos = at + 1;
       if (w < 0) return { code: x, owner: x, kind: 'own', skipped: skipped };
@@ -7163,7 +7257,8 @@ function dqRun() {
   dqMemo = { key, val };
   return val;
 }
-const dqAway = (code, d) => state.dqLeave.find(l => l.doc === code && l.from <= d && d <= (l.to || l.from)) || null;
+// ลาอยู่วันนั้น (ลายาวที่ถึงวันแจกงานแล้ว = รับเคสได้ ไม่นับว่าลา)
+const dqAway = (code, d) => state.dqLeave.find(l => l.doc === code && l.from <= d && d <= (l.to || l.from) && !(l.kind === 'long' && l.assign && d >= l.assign)) || null;
 const dqDocText = code => (code ? `${code}${docName(code) ? ' ' + docName(code) : ''}` : '');
 // ลงนัดแล้ว: นัด HN นี้ที่ลงตั้งแต่วันที่แจก (ไม่นับนัดที่ตั้งว่าไม่มาทำ CT)
 const dqAppt = r => byHn(state.appt, r.hn).find(a => localDay(a.created) >= r.date && apState(a) !== 'skip') || null;
@@ -7187,7 +7282,7 @@ function dqWho(run) {
   const first = emer
     ? (s1 ? `<label class="dq-who-q"><input type="radio" name="dqwho" value="s1"${cur === 's1' ? ' checked' : ''}><span>เวร S1 · <b>${dqNm(s1)}</b></span></label>` : '<span class="muted dq-nos1">ยังไม่ได้กำหนดแพทย์เวร S1 วันนี้ (ปุ่ม เวร S1) · เลือกแพทย์</span>')
     : `<label class="dq-who-q"><input type="radio" name="dqwho" value="auto"${cur === 'auto' ? ' checked' : ''}><span>ตามคิว${run.code ? ` · <b>${dqNm(run.code)}</b>` : ' · ไม่มีแพทย์ว่าง'}</span></label>`;
-  box.innerHTML = first + dqAllDocs().map(c => `<label title="${esc(docName(c))}"><input type="radio" name="dqwho" value="${esc(c)}"${cur === c ? ' checked' : ''}><span>${dqNm(c)}${dqAway(c, td) ? '<small>ลา</small>' : dq2On() && dqDayOff(c, td) ? '<small>ไม่แจกวันนี้</small>' : ''}</span></label>`).join('');
+  box.innerHTML = first + dqAllDocs().map(c => `<label title="${esc(docName(c))}"><input type="radio" name="dqwho" value="${esc(c)}"${cur === c ? ' checked' : ''}><span>${dqNm(c)}${dqAway(c, td) ? `<small>${dqAway(c, td).kind === 'long' ? 'ลายาว' : 'ลา'}</small>` : dq2On() && dqDayOff(c, td) ? '<small>ไม่แจกวันนี้</small>' : ''}</span></label>`).join('');
   dqWarn(run);
 }
 // แพทย์ที่จะได้เคสตามที่เลือกในฟอร์ม
@@ -7210,7 +7305,7 @@ function dqDupCheck() {
 function renderDq() {
   const ym = state.month, edit = canEdit() && dqOn(), run = dqRun(), q = state.config.dq, td = today(), docs = dqDocs();
   $('#dq-api').hidden = dqOn() || !canEdit();
-  $('#dq-ap-lbl').textContent = navLabel('appt');
+  $('#dq-ap-lbl').textContent = navLabel('consult');
   $('#dq-leave-btn').textContent = accessOf('dq') === 'edit' || myDoctor() ? 'วันลาแพทย์' : 'ดูวันลาแพทย์';
   syncTabQ('dq');
   $('#dq-import').hidden = !edit || !dqImportOn();
@@ -7234,7 +7329,7 @@ function renderDq() {
     ${offToday.length ? `<p class="dq-line">วันนี้ไม่แจก (ตามวัน): ${offToday.map(c => `<b>${esc(c)}</b>`).join(', ')} · ไม่เสียคิว</p>` : ''}
     ${credit.length ? `<p class="dq-line">รอหักคิว: ${credit.map(([c, n]) => `<b>${esc(c)}</b> ${n} ครั้ง`).join(' · ')}</p>` : ''}
     ${Object.keys(owed).length ? `<p class="dq-line">ค้างคืนคิว (ลาไม่เสียคิว): ${Object.entries(owed).map(([c, by]) => `<b>${esc(c)}</b> อีก ${by.length} เคส (${esc([...new Set(by)].join(', '))} รับแทนไว้)`).join(' · ')}</p>` : ''}
-    ${lv.length ? `<p class="dq-line">ลาวันนี้: ${lv.map(([c, l]) => `<b>${esc(c)}</b>${l.to > td ? ` ถึง ${esc(fmtDay(l.to))}` : ''}`).join(' · ')}</p>` : ''}`;
+    ${lv.length ? `<p class="dq-line">ลาวันนี้: ${lv.map(([c, l]) => `<b>${esc(c)}</b>${l.kind === 'long' ? ' ลายาว (ไม่ชดเชย)' : ''}${l.to > td ? ` ถึง ${esc(fmtDay(l.to))}` : ''}`).join(' · ')}</p>` : ''}`;
   // สรุปรายแพทย์ของเดือน: ได้แล้ว · คาดทั้งเดือน (เดือนนี้: ที่เหลือจนครบจำนวนต่อเดือน ไม่ดูวันลา) · หักคิวเดือนนี้ · รอหักคิว · ค้างคืนคิว · วันลาในเดือน
   const inMonth = state.dq.filter(r => r.date.slice(0, 7) === ym), per = Math.max(1, Math.floor(+q.perMonth) || 160);
   const cur = ym === thisMonth(), left = cur ? Math.max(0, per - inMonth.length) : 0, fc = {};
@@ -7244,7 +7339,7 @@ function renderDq() {
   const got = c => inMonth.filter(r => r.doc === c);
   const sumRow = c => {
     const g = got(c), man = g.filter(r => r.how === 'manual').length, exp = g.length + (fc[c] || 0), lvs = leaveIn(c), off = !docs.includes(c);
-    return `<tr><td>${docChip(c)} ${esc(docName(c))}${off ? ' <small class="muted">(ไม่อยู่ในคิว)</small>' : ''}</td><td>${g.length}${man ? ` <small class="muted">(เลือกเอง ${man})</small>` : ''}</td>${cur ? `<td>${exp}<span class="bar"><i style="width:${Math.min(100, Math.round((exp / per) * 100 * Math.max(1, docs.length)))}%"></i></span></td>` : ''}<td>${skipM[c] ? esc(String(skipM[c])) : '–'}</td><td>${run.credit[c] > 0 ? run.credit[c] : '–'}</td><td>${(owed[c] || []).length || '–'}</td><td class="l">${lvs.length ? lvs.map(l => esc(rangeText(l))).join(', ') : '<span class="muted">–</span>'}</td></tr>`;
+    return `<tr><td>${docChip(c)} ${esc(docName(c))}${off ? ' <small class="muted">(ไม่อยู่ในคิว)</small>' : dqStatusHtml(c)}</td><td>${g.length}${man ? ` <small class="muted">(เลือกเอง ${man})</small>` : ''}</td>${cur ? `<td>${exp}<span class="bar"><i style="width:${Math.min(100, Math.round((exp / per) * 100 * Math.max(1, docs.length)))}%"></i></span></td>` : ''}<td>${skipM[c] ? esc(String(skipM[c])) : '–'}</td><td>${run.credit[c] > 0 ? run.credit[c] : '–'}</td><td>${(owed[c] || []).length || '–'}</td><td class="l">${lvs.length ? lvs.map(l => esc(rangeText(l) + (l.kind === 'long' ? ' (ลายาว)' : ''))).join(', ') : '<span class="muted">–</span>'}</td></tr>`;
   };
   $('#dq-sum').innerHTML = codes.length ? `<table><thead><tr><th>แพทย์</th><th>ได้ใน${esc(fmtMonth(ym))}</th>${cur ? `<th title="ที่ได้แล้ว + ที่เหลือจนครบ ${per} เคส ตามคิว (ไม่ดูวันลา)">คาดทั้งเดือน</th>` : ''}<th>หักคิวเดือนนี้</th><th title="เลือกเอง / หักคิวที่ยังรอข้าม">รอหักคิว</th><th title="คิวที่ลาไว้ รอได้คืน">ค้างคืนคิว</th><th style="text-align:left">วันลาในเดือน</th></tr></thead><tbody>${codes.map(sumRow).join('')}</tbody></table>` : '';
   // ตาราง: รายการของเดือน (ลำดับที่แจก) · ค้นหา = ทุกเดือน (ล่าสุดก่อน ไม่เกิน 200)
@@ -7290,7 +7385,7 @@ async function submitDq(e) {
     render();
     const r = out[0];
     const over = r && max > 0 && dqCount(r.doc, r.date) > max;
-    if (r) toast(`แจก ${r.hn} ให้แพทย์ ${dqDocText(r.doc)}${r.how === 'manual' ? ' (เลือกเอง)' : r.how === 'emer' ? ' (Emergency)' : ''} · ลำดับ ${dqSeqText(r)}${over ? ` · ⚠ เกินกำหนด ${max} เคส${dqPerText()} (${dqCount(r.doc, r.date)} เคส)` : ''} · รอลงนัดในแถบ${navLabel('appt')}`, over ? { err: true } : {});
+    if (r) toast(`แจก ${r.hn} ให้แพทย์ ${dqDocText(r.doc)}${r.how === 'manual' ? ' (เลือกเอง)' : r.how === 'emer' ? ' (Emergency)' : ''} · ลำดับ ${dqSeqText(r)}${over ? ` · ⚠ เกินกำหนด ${max} เคส${dqPerText()} (${dqCount(r.doc, r.date)} เคส)` : ''} · รอลงนัดในแถบ${navLabel('consult')}`, over ? { err: true } : {});
     $('#dq-hn').focus();
   } catch (ex) { toast('แจกไม่สำเร็จ: ' + errMsg(ex), { err: true }); }
   finally { btn.disabled = false; }
@@ -7314,36 +7409,51 @@ function openDqLeaves() {
   $('#dql-from').value = today();
   $('#dql-to').value = today();
   $('#dql-note').value = '';
+  setChip($('#dql-kind'), '');
+  $('#dql-assign').value = '';
+  syncDql();
   renderDqLeaves();
   dqlDlg.showModal();
 }
+function syncDql() {
+  const long = chipValue($('#dql-kind')) === 'long';
+  $('#dql-kind-f').hidden = !dqlKindOn();
+  $('#dql-assign-f').hidden = !long || !dqlKindOn();
+  $('#dql-assign').min = $('#dql-from').value ? plusDays($('#dql-from').value, 1) : '';
+  $('#dql-assign').max = $('#dql-to').value || '';
+}
+$('#dql-kind').addEventListener('change', syncDql);
 function renderDqLeaves() {
   const td = today(), up = state.dqLeave.filter(l => l.to >= td).sort((a, b) => a.from.localeCompare(b.from) || a.doc.localeCompare(b.doc)), past = state.dqLeave.length - up.length;
   $('#dql-list').innerHTML = up.length
-    ? up.map(v => `<li class="vrow">${docChip(v.doc)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}</span><span class="note">${esc([v.note, v.by && `ลงโดย ${v.by}`].filter(Boolean).join(' · '))}</span>${dqLeaveCan(v.doc) && dqOn() ? `<button type="button" class="icon-btn" data-dqunleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.doc)} ${esc(rangeText(v))}">×</button>` : ''}</li>`).join('')
+    ? up.map(v => `<li class="vrow">${docChip(v.doc)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}${v.kind === 'long' ? ` <span class="dq-st long">${esc(dqlKindText(v))}</span>` : ''}</span><span class="note">${esc([v.note, v.by && `ลงโดย ${v.by}`].filter(Boolean).join(' · '))}</span>${dqLeaveCan(v.doc) && dqOn() ? `<button type="button" class="icon-btn" data-dqunleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.doc)} ${esc(rangeText(v))}">×</button>` : ''}</li>`).join('')
     : '<li class="empty-state" style="padding:20px">ยังไม่มีวันลาแพทย์ที่กำลังจะถึง</li>';
   $('#dql-past').textContent = past ? `วันลาที่ผ่านไปแล้ว ${past} รายการ (ยังใช้คืนคิว)` : '';
 }
 dqlForm.addEventListener('submit', async e => {
   e.preventDefault();
   const doc = chipValue($('#dql-doc')), from = $('#dql-from').value, to = $('#dql-to').value || from, note = str($('#dql-note').value);
+  const kind = dqlKindOn() && chipValue($('#dql-kind')) === 'long' ? 'long' : '', assign = kind ? $('#dql-assign').value : '';
   if (!doc || !isDay(from)) return toast('เลือกแพทย์และวันที่ลา', { err: true });
   if (to < from) return toast('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา', { err: true });
+  if (assign && (assign <= from || assign > to)) { $('#dql-assign').focus(); return toast('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย', { err: true }); }
   if (!dqLeaveCan(doc)) return toast(RO_MSG, { err: true });
   const btn = $('#dql-save');
   btn.disabled = true;
   try {
-    const rec = normDql(await store.dqLeaveSave({ id: uid(), doc, from, to, note }));
+    const rec = normDql(await store.dqLeaveSave({ id: uid(), doc, from, to, note, ...(kind ? { kind, assign } : {}) }));
     if (!state.dqLeave.some(x => x.id === rec.id)) state.dqLeave.push(rec);
     dqMemo = null;
     $('#dql-note').value = '';
     render();
     renderDqLeaves();
-    toast(`แพทย์ ${doc} ลา ${rangeText(rec)} · ถึงคิวในวันนั้นแพทย์คนอื่นรับแทน แล้วคืนคิวให้เมื่อกลับมา`);
+    toast(rec.kind === 'long' ? `แพทย์ ${doc} ลายาว ${rangeText(rec)} · ไม่แจกงาน คิวที่ถึงระหว่างลาไม่ชดเชย${rec.assign ? ` · เริ่มแจกงาน ${fmtDay(rec.assign)}` : ''}`
+      : `แพทย์ ${doc} ลา ${rangeText(rec)} · ถึงคิวในวันนั้นแพทย์คนอื่นรับแทน แล้วคืนคิวให้เมื่อกลับมา`);
   } catch (ex) { toast('บันทึกไม่สำเร็จ: ' + errMsg(ex), { err: true }); }
   finally { btn.disabled = false; }
 });
-$('#dql-from').addEventListener('change', () => { if (!$('#dql-to').value || $('#dql-to').value < $('#dql-from').value) $('#dql-to').value = $('#dql-from').value; });
+$('#dql-from').addEventListener('change', () => { if (!$('#dql-to').value || $('#dql-to').value < $('#dql-from').value) $('#dql-to').value = $('#dql-from').value; syncDql(); });
+$('#dql-to').addEventListener('change', syncDql);
 function removeDqLeave(id) {
   const v = state.dqLeave.find(l => l.id === id);
   if (!v) return;
@@ -7763,7 +7873,7 @@ function dqSetSec(d) {
   const rows = docs.map((c, i) => `<tr><th scope="row" style="text-align:left">${i + 1}. ${docChipOf(c, colorOf(c), '')} ${esc((d.doctors.find(x => x.code === c) || {}).name || '')}</th>
     <td><input type="checkbox" data-dqoff="${esc(c)}"${off.has(c) ? '' : ' checked'} aria-label="แพทย์ ${esc(c)} รับคิว"></td>
     <td><input type="number" min="0" max="50" step="1" data-dqskip="${esc(ym)}|${esc(c)}" value="${sk[c] ? esc(String(sk[c])) : ''}" placeholder="0" style="width:72px" aria-label="หักคิว ${esc(c)} ${esc(fmtMonth(ym))}"${off.has(c) ? ' disabled' : ''}></td></tr>`).join('');
-  return `<div class="sec" data-sec="dq"><div class="sec-head"><h2>แจกงานแพทย์ (แถบ ${esc(navLabel('dq'))})</h2><p>ใช้แค่ HN และชื่อ · แจกแล้วไปรอลงนัดในแถบ ${esc(navLabel('appt'))} แยกตามแพทย์ (แพทย์ที่เข้าระบบลงนัดของตัวเองได้ เมื่อตำแหน่งนั้นบันทึกในแถบลงนัดได้) · วันลาแพทย์ลงที่ปุ่ม "วันลาแพทย์" ในแถบ · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู (ยังไม่ตั้ง = เท่าแถบลงทะเบียน)</p></div>
+  return `<div class="sec" data-sec="dq"><div class="sec-head"><h2>แจกงานแพทย์ (แถบ ${esc(navLabel('dq'))})</h2><p>ใช้แค่ HN และชื่อ · แจกแล้วไปรอลงนัดในแถบ ${esc(navLabel('consult'))} แยกตามแพทย์ (แพทย์ที่เข้าระบบลงนัด CT+RT ของตัวเองได้ เมื่อตำแหน่งนั้นบันทึกในแถบนั้นได้) · วันลาแพทย์ลงที่ปุ่ม "วันลาแพทย์" ในแถบ · ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู (ยังไม่ตั้ง = เท่าแถบลงทะเบียน)</p></div>
     ${dqOn() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>${esc(DQ_OLD)}</span></p>`}
     <ul class="rules">
       <li>แจกตามคิววนตามลำดับใน แพทย์ (Doc) ด้านบน (เฉพาะที่ติ๊ก รับคิว) แบบเดียวกับคิวแจกเคส MP</li>
@@ -7800,15 +7910,27 @@ function dqWaiting() {
   const from = plusDays(today(), -DQ_WAIT_DAYS);
   return state.dq.filter(r => r.date >= from && r.st !== 'skip' && r.how !== 'import' && !dqAppt(r)).sort((a, b) => a.created.localeCompare(b.created));   // ดึงจากรายงาน HIS: ไม่ไปรอลงนัด
 }
+// แถบ Consult: ผู้ป่วยที่แจกงานแพทย์แล้วรอลงนัด แยกตามแพทย์ (แพทย์ที่เข้าระบบอยู่บนสุด) · ลงนัด CT+RT = ฟอร์มสั้น แล้วไปรอ CT Order
+const CONSULT_API = 69;   // Code.gs ที่ให้ตำแหน่งที่บันทึกในแถบ Consult ได้ ลงนัดได้ · แถบ CT-SIM แก้ CT Order ที่มีอยู่ได้
+const AP_VIA_OLD = 'ลงนัดจากแถบนี้ต้องใช้ Code.gs รุ่น 2026-11-11.4 ขึ้นไป (หรือตำแหน่งที่บันทึกในแถบ CT Order ได้) · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+// บันทึกนัดได้: ตำแหน่งที่บันทึกในแถบ CT Order ได้ · หรือบันทึกในแถบ v (Consult / CT-SIM) ได้และ Code.gs รองรับ
+const apEditVia = v => accessOf('appt') === 'edit' || (v !== 'appt' && accessOf(v) === 'edit' && (store.mode !== 'sheet' || serverHas(CONSULT_API)));
+function renderConsult() {
+  const edit = canEdit() && apptOn() && apEditVia('consult');
+  syncTabQ('consult');
+  $('#cs-api').hidden = !(store.mode === 'sheet' && canEdit() && (!apptOn() || !apEditVia('consult')));
+  renderApDq(edit);
+  $('#cs-empty').hidden = !$('#ap-dq').hidden;
+}
 function renderApDq(edit) {
-  const box = $('#ap-dq'), words = tabWords('appt'), all = dqWaiting(), list = words.length ? all.filter(r => wordsIn(words, dqText(r))) : all;
+  const box = $('#ap-dq'), words = tabWords('consult'), all = dqWaiting(), list = words.length ? all.filter(r => wordsIn(words, dqText(r))) : all;
   box.hidden = !list.length;
   if (!list.length) { box.innerHTML = ''; return; }
   const me = myDoctor(), order = dqAllDocs(), at = c => (order.includes(c) ? order.indexOf(c) : 999);
   const codes = [...new Set(list.map(r => r.doc))].sort((a, b) => (b === me) - (a === me) || at(a) - at(b) || a.localeCompare(b));
   const can = c => edit && (!me || c === me);
-  const row = r => { const h = dqHow(r); return `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b>${r.name ? ' ' + esc(r.name) : ''}<small>${[`แจก ${fmtDay(r.date)}`, h.kind === 'own' ? '' : h.label, r.note].filter(Boolean).map(esc).join(' · ')}</small></div>${can(r.doc) ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-dqap="${esc(r.id)}">ลงนัด</button></span>` : ''}</li>`; };
-  box.innerHTML = `<h3>รอลงนัด · แจกงานแพทย์ ${list.length} คน<small>แจกที่แถบ${esc(navLabel('dq'))} · ลงนัดแล้วออกจากรายการเอง${me ? ` · คุณลงนัดได้เฉพาะของแพทย์ ${esc(me)}` : ''}</small></h3>`
+  const row = r => { const h = dqHow(r); return `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b>${r.name ? ' ' + esc(r.name) : ''}<small>${[`แจก ${fmtDay(r.date)}`, h.kind === 'own' ? '' : h.label, r.note].filter(Boolean).map(esc).join(' · ')}</small></div>${can(r.doc) ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-dqap="${esc(r.id)}">ลงนัด CT+RT</button></span>` : ''}</li>`; };
+  box.innerHTML = `<h3>รอลงนัด · แจกงานแพทย์ ${list.length} คน<small>แจกที่แถบ${esc(navLabel('dq'))} · ลงนัด CT+RT แล้วไปรอ CT Order ในแถบ ${esc(navLabel('appt'))}${me ? ` · คุณลงนัดได้เฉพาะของแพทย์ ${esc(me)}` : ''}</small></h3>`
     + codes.map(c => { const rs = list.filter(r => r.doc === c); return `<details class="ap-dq-g${c === me ? ' mine' : ''}"${!me || c === me || codes.length === 1 ? ' open' : ''}><summary>${docChip(c)} ${esc(docName(c))} <span class="n">${rs.length} คน</span></summary><ul class="ct-pull">${rs.map(row).join('')}</ul></details>`; }).join('');
 }
 
@@ -8678,6 +8800,56 @@ function useAp(id) {
   openCtForm(null, a);
   toast(`ใส่ข้อมูลนัด ${a.hn} แล้ว · ตรวจแล้วกดบันทึก`);
 }
+// หน้าต่าง CT-SIM แท็บ CT Order: ใบสั่งที่แพทย์ลงในแถบ CT Order (นัดที่ใส่ในฟอร์ม · นัดที่ผูกกับรายการนี้ · นัดรอลง CT-SIM ของ HN ที่กรอก) แก้ได้จากที่นี่
+// ยังไม่มี = รายการ CT Order ที่รอลง CT-SIM ให้เลือก (ใส่ข้อมูลในแท็บเพิ่มผู้ป่วย)
+let ctTab = 'form';
+function setCtTab(t) {
+  ctTab = t === 'order' ? 'order' : 'form';
+  ctForm.classList.toggle('tab-order', ctTab === 'order');
+  $$('#ct-tabs [data-cttab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.cttab === ctTab)));
+  $('#ct-order').hidden = ctTab !== 'order';
+  if (calBox && calBox.closest('#ct-dlg')) closeCal();
+  renderCtOrder();
+  $('.dlg-body', ctForm).scrollTop = 0;
+}
+$('#ct-tabs').addEventListener('click', e => { const b = e.target.closest('[data-cttab]'); if (b) setCtTab(b.dataset.cttab); });
+function ctOrderOf() {
+  if (!editingCt) return null;
+  const r = state.ct.find(x => x.id === editingCt.id), hn = str($('#t-hn').value);
+  return (ctAppt && state.appt.find(x => x.id === ctAppt)) || (r && state.appt.find(a => a.took === r.id)) || (!r && hn && apWaiting().find(x => x.hn === hn)) || null;
+}
+function renderCtOrder() {
+  const box = $('#ct-order'), a = ctOrderOf(), isNew = !!editingCt && !state.ct.some(x => x.id === editingCt.id), wait = apWaiting();
+  $('#ct-tab-n').textContent = !a && isNew && wait.length ? String(wait.length) : '';
+  if (ctTab !== 'order') return;
+  if (!a) {
+    if (!isNew) { box.innerHTML = '<p class="empty-state">รายการนี้ไม่ได้ลงจาก CT Order</p>'; return; }
+    box.innerHTML = `<p class="muted" style="margin:0">CT Order ที่รอลง CT-SIM ${wait.length} คน · กด <b>ใช้</b> เพื่อใส่ข้อมูลในแท็บ${esc($('#ct-tab-form').textContent)}</p>
+      <input type="search" class="ct-order-q" id="ct-order-q" placeholder="ค้นหา HN, ชื่อ, แพทย์" autocomplete="off" aria-label="ค้นหา CT Order">
+      <ul class="ct-pull" id="ct-order-list"></ul>`;
+    $('#ct-order-q').addEventListener('input', renderCtOrderList);
+    return renderCtOrderList();
+  }
+  const o = parseOrder(a.order), pend = o.src === 'consult' && !o.co, isMine = ctAppt === a.id;
+  const kv = [['ประเภทเคส', apEmerg(a) ? 'Emergency' : 'Normal'], ['นัดทำ CT-Sim', a.date === 'on call' ? 'On Call' : fmtDay(a.date)],
+    ...AP_COLS.filter(([k]) => !['hn', 'name'].includes(k)).map(([k, l]) => [l, k === 'special' ? splitList(a.special).join(', ') : str(apVal(a, k))]),
+    ['Position', str(o.pos)], ['Immobilization', (o.immob || []).filter(x => !x.includes(':')).map(x => (x === 'Other' && o.fill && o.fill['immob:Other'] ? o.fill['immob:Other'] : x)).join(', ')],
+    ['ลงนัดโดย', str(a.by)]].filter(([, v]) => v);
+  const edit = apEditVia('ctsim');
+  box.innerHTML = `<div class="ct-order-head"><b class="hn">${esc(a.hn)}</b>${a.name ? ` <span>${esc(a.name)}</span>` : ''}${emergTag(a)} ${apStateChip(a)}</div>
+    ${pend ? `<p class="notice"><b>ยังไม่ได้กรอก CT Order</b><span>แพทย์ลงนัด CT+RT จากแถบ ${esc(navLabel('consult'))} แล้ว · รอกรอกใบสั่งในแถบ ${esc(navLabel('appt'))}${edit ? ' หรือกดแก้ไข CT Order ด้านล่าง' : ''}</span></p>` : ''}
+    <dl class="ct-order-kv">${kv.map(([l, v]) => `<dt>${esc(l)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <div class="ct-order-acts">${edit ? `<button type="button" class="btn" data-ctoedit="${esc(a.id)}">แก้ไข CT Order</button>` : ''}<button type="button" class="btn ghost" data-appdf="${esc(a.id)}">ดูใบสั่ง</button>
+      ${isNew ? `<button type="button" class="btn primary" data-apfill="${esc(a.id)}">${isMine ? 'ใส่ข้อมูลจาก CT Order อีกครั้ง' : 'ใช้ข้อมูล CT Order นี้'}</button>` : ''}
+      <span class="muted">${isNew ? (isMine ? 'ใส่ข้อมูลในฟอร์มแล้ว · แก้ CT Order แล้วกดใส่ข้อมูลอีกครั้งเพื่อใช้ค่าใหม่' : 'HN ตรงกับ CT Order ที่รอลง CT-SIM') : 'รายการนี้ลงจาก CT Order นี้'}</span></div>`;
+}
+function renderCtOrderList() {
+  const words = str($('#ct-order-q') && $('#ct-order-q').value).toLowerCase().split(/\s+/).filter(Boolean), td = today();
+  const list = apWaiting().filter(r => wordsIn(words, apText(r))).sort((a, b) => (b.date === td) - (a.date === td) || (isDay(a.date) ? a.date : '0').localeCompare(isDay(b.date) ? b.date : '0'));   // วันนี้ก่อน แล้วตามวันนัด
+  $('#ct-order-list').innerHTML = list.length ? list.map(r => { const o = parseOrder(r.order); return `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b>${r.name ? ' ' + esc(r.name) : ''}${emergTag(r)}${o.src === 'consult' && !o.co ? ' <span class="chip warn">ยังไม่กรอก CT Order</span>' : ''}<small>${[r.date === 'on call' ? 'นัด CT On Call' : `นัด CT ${fmtDay(r.date)}${r.date === td ? ' (วันนี้)' : ''}`, r.cm, ctDocText(r.doc), apSimText(r) && `Start RT ${apSimText(r)}`, r.room].filter(Boolean).map(esc).join(' · ')}</small></div>`
+    + `<span class="ct-pull-acts"><button type="button" class="btn ghost sm" data-appdf="${esc(r.id)}">ใบสั่ง</button><button type="button" class="btn primary sm" data-apfill="${esc(r.id)}">ใช้</button></span></li>`; }).join('')
+    : `<li class="empty-state">${words.length ? 'ไม่พบ CT Order ที่ตรงกับคำค้น' : 'ไม่มี CT Order รอลง CT-SIM'}</li>`;
+}
 // ฟอร์ม CT-SIM: บอกว่าข้อมูลมาจากนัดไหน · รายการใหม่ที่ HN ตรงกับนัดที่รอลง CT-SIM เสนอให้ใช้ข้อมูลนัด
 function syncCtAppt() {
   const box = $('#t-appt'), a = ctAppt && state.appt.find(x => x.id === ctAppt);
@@ -8690,6 +8862,7 @@ function syncCtAppt() {
   const m = isNew && hn ? apWaiting().find(x => x.hn === hn) : null;
   box.hidden = !m;
   box.innerHTML = m ? `HN นี้มีนัดรอลง CT-SIM: ${apSummary(m)} <button type="button" class="link-btn" data-apfill="${esc(m.id)}">ใช้ข้อมูลนัด</button>` : '';
+  renderCtOrder();
 }
 async function markAp(id, mark) {
   try {
@@ -13122,7 +13295,7 @@ function renderSettings() {
       <div class="form-grid cal-show" style="margin-bottom:12px">
         <div class="field"><span class="lbl">ปฏิทิน Start RT</span>
           <label class="field" style="margin:0 0 6px"><span class="lbl">ตัวเลขผู้ป่วยใหม่แสดงเป็น</span><select data-k="appt.cal.simBadge" aria-label="ตัวเลขผู้ป่วยใหม่ในปฏิทิน Start RT">${opt('lim', 'ผู้ป่วยใหม่/ลิมิต (เลือกห้อง = ลิมิตห้อง · ทุกห้อง = รวมทุกห้อง)', d.appt.cal.simBadge)}${opt('sp', 'เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)', d.appt.cal.simBadge)}</select></label>
-          <label class="field" style="margin:0 0 6px"><span class="lbl">ยังไม่เลือกห้องในปฏิทิน (เปิดขึ้นมา)</span><select data-k="appt.cal.simAll" aria-label="ปฏิทิน Start RT ตอนยังไม่เลือกห้อง">${opt('total', 'แสดงเฉพาะตัวเลขรวมทุกห้อง · เลือกห้องแล้วจึงเห็นรายละเอียด', d.appt.cal.simAll)}${opt('rooms', 'แสดงแถวรายห้อง (และป้ายแพทย์ตามด้านล่าง) แบบเดิม', d.appt.cal.simAll)}</select></label>
+          <label class="field" style="margin:0 0 6px"><span class="lbl">ยังไม่เลือกห้องในปฏิทิน (เปิดขึ้นมา)</span><select data-k="appt.cal.simAll" aria-label="ปฏิทิน Start RT ตอนยังไม่เลือกห้อง">${opt('pick', 'ต้องเลือกห้องก่อน · ไม่แสดงตัวเลข กดวันที่ไม่ได้จนกว่าจะเลือกห้อง', d.appt.cal.simAll)}${opt('total', 'แสดงเฉพาะตัวเลขรวมทุกห้อง · เลือกห้องแล้วจึงเห็นรายละเอียด', d.appt.cal.simAll)}${opt('rooms', 'แสดงแถวรายห้อง (และป้ายแพทย์ตามด้านล่าง) แบบเดิม', d.appt.cal.simAll)}</select></label>
           ${AP_CAL.filter(([k]) => k.startsWith('sim') && !['simDoc', 'simBadge', 'simAll'].includes(k)).map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
           <label class="field" style="margin-top:6px"><span class="lbl">ป้ายแพทย์: ผู้ป่วยของแพทย์ในห้อง (ใหม่ + ฉายต่อเนื่อง) <span class="sub-lbl">บรรทัดล่างใต้ชื่อเครื่องฉาย</span></span><select data-k="appt.cal.simDoc" aria-label="ป้ายแพทย์ในปฏิทิน Start RT">${[['pick', 'เมื่อเลือกห้องในปฏิทิน (แบบแถวรายห้อง: หรือเต็มจอ)'], ['always', 'แสดงเสมอ (แบบแถวรายห้อง: ทุกห้อง)'], ['off', 'ไม่แสดง']].map(([v, t]) => opt(v, t, d.appt.cal.simDoc)).join('')}</select></label></div>
         <div class="field"><span class="lbl">ปฏิทิน CT-Sim</span>${AP_CAL.filter(([k]) => k.startsWith('ct')).map(([k, l]) => `<label class="check"><input type="checkbox" data-k="appt.cal.${k}"${d.appt.cal[k] !== false ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>
@@ -15674,7 +15847,9 @@ document.addEventListener('click', e => {
   if (ds.vacimport) return vacImportRun(t, ds.vacimport === 'check');
   if (ds.vacquick) return vacQuickImport(t);
   if (ds.aprect) return openApForm(null, null, ds.aprect);
-  if (ds.dqap) return openApForm(null, null, null, ds.dqap);
+  if (ds.dqap) return openApForm(null, null, null, ds.dqap, 'consult');
+  if (ds.apco) return openApForm(ds.apco);   // แถบ CT Order: รอ CT Order → ฟอร์มเต็ม
+  if (ds.ctoedit) return openApForm(ds.ctoedit, null, null, null, 'ct');   // หน้าต่าง CT-SIM แท็บ CT Order
   if (ds.dqunleave) return removeDqLeave(ds.dqunleave);
   if (t.id === 'dq-leave-btn') return openDqLeaves();
   if (t.id === 'dq-import') return $('#dq-file').click();
@@ -15744,7 +15919,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pin-clear') return submitPin(null, true);
   const inCaseDlg = !!t.closest('#case-dlg');   // ปุ่มขั้นตอนในหน้าแก้ไขเคส: ใช้สิทธิ์แก้ไขเคส
   if (inCaseDlg && ds.stamp) return canEditCases() ? openStamp(ds.id, ds.stamp, ds.sid || '') : toast(RO_MSG, { err: true });
-  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ds.ctduty || ds.ctskip || ds.ctunskip || ds.ctuse || ds.cpsend || ds.apuse || ds.apskip || ds.apunskip || ds.apfill || ['add-rc', 'add-other', 'log-del', 'course-add', 'ct-add', 'ct-pull', 'ct-apull', 'ap-add', 'ap-del'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
+  if (!canEdit() && (ds.leaveToday || ds.unleave || ds.step || ds.stamp || ds.stampsave || ds.rc || ds.logedit || ds.course || ds.fxc || ds.ptags || ds.duty || ds.ctduty || ds.ctskip || ds.ctunskip || ds.ctuse || ds.cpsend || ds.apco || ds.apuse || ds.apskip || ds.apunskip || ds.apfill || ['add-rc', 'add-other', 'log-del', 'course-add', 'ct-add', 'ct-pull', 'ct-apull', 'ap-add', 'ap-del'].includes(t.id) || (t.id === 'case-del' && !ptMode))) return toast(RO_MSG, { err: true });
   if (ds.who !== undefined) { state.who = state.who === ds.who && t.classList.contains('card') ? '' : ds.who; return renderP4P(); }
   if (ds.view) { state.view = ds.view; pref.set('view', ds.view); if (ds.view !== 'settings') draft = null; render(); return; }
   if (ds.leaveToday) return addLeave(ds.leaveToday, today(), today(), '');
@@ -15991,6 +16166,8 @@ document.addEventListener('focusout', e => { const el = e.target; if (isWorkdayB
 // Start RT: ปุ่มห้องฉายในปฏิทินดูจำนวนรายห้อง · เลือกห้องแล้วกดวันที่ = ตั้งห้องฉายในฟอร์มเป็นห้องนั้นด้วย
 const CAL_BOXES = { 'i-ct': 'ct', 'f-ct': 'ct', 't-date': 'ct', 'a-date': 'ct', 'i-sim': 'sim', 'f-sim': 'sim', 't-sim': 'sim', 'a-sim': 'sim' };
 const CAL_ROOM_BOX = { 'i-sim': 'i-room', 'f-sim': 'f-room', 't-sim': 't-room', 'a-sim': 'a-room' };
+const CAL_VIEW_BOX = { 'ct-cal-ct': 'ct', 'ct-cal-sim': 'sim' };   // ปุ่มบนแถบ CT-SIM: เปิดปฏิทินดูอย่างเดียว (กดวันที่ = ดูรายชื่อ)
+const calKind = el => CAL_BOXES[el.id] || CAL_VIEW_BOX[el.id];
 const CAL_DOC_BOX = { 'i-ct': 'i-doc', 'f-ct': 'f-doc', 't-date': 't-doc', 'a-date': 'a-doc', 'i-sim': 'i-doc', 'f-sim': 'f-doc', 't-sim': 't-doc', 'a-sim': 'a-doc' };   // แพทย์ที่เลือกในฟอร์ม (ปฏิทิน CT เน้นแพทย์คนนั้น)
 const CAL_MAX_W = 980;   // ปฏิทินกว้างออกด้านข้างได้ถึงเท่านี้ (ไม่เกินจอ) · ปุ่ม ⤢ = เต็มจอ (จำไว้ในเครื่องนี้)
 const CAL_WD = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];   // สัปดาห์เริ่มวันอาทิตย์ (เหมือนปฏิทินในแดชบอร์ด)
@@ -15999,7 +16176,7 @@ let calBox = null, calMonth = '', calData = null, calAt = 0, calRoom = '', calFu
 let calWarn = '';   // ลงนัด: วันที่กด (หรือที่บันทึก) เต็มแล้ว · แสดงบนปฏิทินจนกว่าจะเลือกวันอื่นหรือปิด
 for (const id of Object.keys(CAL_BOXES)) { const el = $('#' + id); el.classList.add('dpk-box'); if (coarse) el.readOnly = true; }
 // รายการที่กำลังแก้: หน้าแก้ไขเคส = เคสนั้น · ฟอร์ม CT-SIM = รายการนั้น (และนัดที่ใส่มา) · ฟอร์มลงนัด = นัดนั้น · ฟอร์มแจกเคส = รายการ CT ที่ดึงมาใส่
-const calSkip = el => (el.id[0] === 'f' ? { c: editingCase && editingCase.id, r: '', a: '' } : el.id[0] === 't' ? { c: '', r: editingCt && editingCt.id, a: ctAppt }
+const calSkip = el => (CAL_VIEW_BOX[el.id] ? { c: '', r: '', a: '' } : el.id[0] === 'f' ? { c: editingCase && editingCase.id, r: '', a: '' } : el.id[0] === 't' ? { c: '', r: editingCt && editingCt.id, a: ctAppt }
   : el.id[0] === 'a' ? { c: '', r: '', a: editingAp && editingAp.id, hn: str($('#a-hn').value) } : { c: '', r: intakeCt, a: '' });
 // เทคนิคพิเศษที่อยู่ในข้อความ (Technique, Note, รายละเอียดผู้ป่วย): ตรงทั้งคำ ไม่สนตัวพิมพ์ · ชื่อที่มีเว้นวรรคหรือเครื่องหมาย = มีข้อความนั้น
 function spFinder() {
@@ -16186,6 +16363,7 @@ function calTip(d, raw, h, kind) {
 }
 function calInfo(d) {
   const { counts, hol, kind } = calData;
+  if (calData.need) return '<span>เลือกห้องฉายก่อน แล้วจึงเห็นรายชื่อและเลือกวันได้</span>';
   if (!d) return `<span>เลือกวัน · ชี้ที่วันเพื่อดูรายชื่อ</span>`;
   const raw = counts.get(d), v = calOf(raw), dt = parseISO(d), rest = calRoom && raw && !v ? ` (ทุกห้อง ${raw.n})` : '';
   const ld = kind === 'sim' && calData.load && !hol[d] && isWeekday(d) ? calData.load(d) : null, lq = ld && ld.all ? `<div class="dpk-load">โควตารวมวันนั้น <b${calData.lim && ld.q > calData.lim ? ' class="over"' : ''}>${ld.q}</b> (ผู้ป่วยทั้งหมด ${ld.all} คน · เทคนิคพิเศษ ${ld.sp})${calData.lim && ld.q > calData.lim ? ` · เกิน ${calData.lim}` : ''}</div>` : '';
@@ -16292,12 +16470,14 @@ function simDocOver(rec, L) {
 // ชิปห้องฉายของฟอร์ม (ช่อง Start RT ที่มีห้องฉายให้เลือกและแสดงอยู่)
 const calRoomBox = el => { const b = CAL_ROOM_BOX[el.id] && $('#' + CAL_ROOM_BOX[el.id]); return b && b.getClientRects().length ? b : null; };
 function renderCal() {
-  const el = calBox, kind = CAL_BOXES[el.id], v = isDay(el.value) ? el.value : '', td = today(), work = isWorkdayBox(el);
+  const el = calBox, kind = calKind(el), v = isDay(el.value) ? el.value : '', td = today(), work = isWorkdayBox(el);
   const rb0 = kind === 'sim' && calRoomBox(el);
   calData = { counts: calCounts(kind, calSkip(el)), hol: holidayMap(), kind, doc: calDocOf(el), room: kind !== 'sim' ? '' : calRoom && calRoom !== NO_ROOM ? calRoom : rb0 ? chipValue(rb0) : '' };
   if (kind === 'sim') { calData.L = roomLoad(calSkip(el).a); calData.apRec = el.id === 'a-sim' && editingAp ? readApForm() : null; }   // ผู้ป่วยที่ฉายอยู่ต่อห้อง · ฟอร์มลงนัด: Fx และความถี่ของนัดนี้
   // Start RT: โควตารวมของวัน (ผู้ป่วยทั้งหมดในแถบกำลังฉาย / รอฉาย ของห้องที่เลือก) ใต้ตัวเลขผู้ป่วยใหม่
   if (kind === 'sim') { const gs = courseGroups(calRoom === NO_ROOM ? '' : calRoom, calData.hol); calData.load = d => fxDayStat(gs, d, calRoom === NO_ROOM ? '' : calRoom, calData.hol); calData.lim = dayLimit(calRoom === NO_ROOM ? '' : calRoom); }
+  // Start RT (ตั้งค่า → ลงนัด: ต้องเลือกห้องก่อน): ยังไม่เลือกห้อง = ไม่แสดงตัวเลข กดวันที่ไม่ได้
+  const needRoom = calData.need = kind === 'sim' && !calRoom && state.config.appt.cal.simAll === 'pick';
   const { counts, hol } = calData, [y, mo] = calMonth.split('-').map(Number);
   const first = new Date(y, mo - 1, 1), lead = first.getDay(), last = new Date(y, mo, 0).getDate();
   let cells = '', total = 0, totalSp = 0;
@@ -16306,6 +16486,7 @@ function renderCal() {
   for (let i = 1; i <= last; i++) {
     const d = `${y}-${pad(mo)}-${pad(i)}`, raw = counts.get(d), c = calOf(raw), w = parseISO(d).getDay(), we = w === 0 || w === 6, h = hol[d];
     if (c) { total += c.n; totalSp += c.sp; }
+    if (needRoom) { cells += `<button type="button" class="${['dpk-d', 'lock', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel'].filter(Boolean).join(' ')}" data-calday="${d}" disabled title="เลือกห้องฉายก่อน"><b>${i}</b></button>`; continue; }
     const full = !we && !h && (kind === 'ct' ? ctFull(c, calData.doc) : simFullDay(raw, d, calData.room, calData.doc));   // ลงนัดวันนั้นไม่ได้แล้ว: CT (ทั้งวัน / แพทย์) · Start RT (ห้อง / แพทย์ในห้อง ตามฟอร์ม)
     const cls = ['dpk-d', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel', full && 'full'].filter(Boolean).join(' ');
     const rr = kind === 'sim' && !we && !h ? calRoomRows(raw, d, calData.room, calData.doc) : '';   // แถวห้อง / ป้ายแพทย์ของวันนั้น
@@ -16315,14 +16496,14 @@ function renderCal() {
   // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
   const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
   const monthOf = (r, sp) => inMonth.reduce((a, x) => a + (sp ? (r ? x.spBy.get(r) || 0 : x.sp) : r ? x.by.get(r) || 0 : x.n), 0);
-  const roomBar = rooms.length > 1 || (rooms.length && calRoom) ? `<div class="dpk-rooms" role="group" aria-label="ห้องฉาย">${rooms.map(r => `<button type="button" data-calroom="${esc(r)}" aria-pressed="${calRoom === r}" title="${calRoom === r ? 'กดอีกครั้ง = ดูทุกห้องรวมกัน' : `ดูเฉพาะห้อง ${esc(roomLabel(r))}`}">${esc(roomLabel(r))}<small>${calNum(kind, monthOf(r), monthOf(r, true))}</small></button>`).join('')}</div>` : '';
+  const roomBar = rooms.length > 1 || (rooms.length && (calRoom || needRoom)) ? `<div class="dpk-rooms${needRoom ? ' need' : ''}" role="group" aria-label="ห้องฉาย">${rooms.map(r => `<button type="button" data-calroom="${esc(r)}" aria-pressed="${calRoom === r}" title="${calRoom === r ? (state.config.appt.cal.simAll === 'pick' ? 'กดอีกครั้ง = ยกเลิกห้องที่เลือก' : 'กดอีกครั้ง = ดูทุกห้องรวมกัน') : `ดูเฉพาะห้อง ${esc(roomLabel(r))}`}">${esc(roomLabel(r))}${needRoom ? '' : `<small>${calNum(kind, monthOf(r), monthOf(r, true))}</small>`}</button>`).join('')}</div>` : '';
   const rb = calRoom && calRoom !== NO_ROOM && calRoomBox(el), hint = rb && chipValue(rb) !== calRoom ? `<p class="dpk-hint">กดวันที่ = ตั้งห้องฉายเป็น ${esc(roomLabel(calRoom))} ด้วย</p>` : '';
   calPop.setAttribute('aria-label', `ปฏิทิน ${calWhat(kind)}`);
   calPop.innerHTML = `<div class="dpk-head"><button type="button" data-dpknav="-1" aria-label="เดือนก่อน">‹</button><b>${esc(MONTH_FMT.format(first))}</b><button type="button" data-dpknav="1" aria-label="เดือนถัดไป">›</button>${calMonth !== td.slice(0, 7) ? '<button type="button" class="dpk-now" data-calnow>เดือนนี้</button>' : ''}<button type="button" class="dpk-max" data-calfull aria-pressed="${calFull}" title="${calFull ? 'ย่อปฏิทิน' : 'ขยายปฏิทินเต็มจอ'}">${calFull ? '⤡ ย่อ' : '⤢ เต็มจอ'}</button></div>${calWarn ? `<p class="dpk-warn" role="alert">⛔ ${esc(calWarn)}</p>` : ''}
-    <p class="dpk-sub">ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : calSimLegend()}</p>${roomBar}${hint}
+    ${CAL_VIEW_BOX[el.id] ? `<p class="dpk-hint">ปฏิทิน${kind === 'ct' ? 'นัดทำ CT-Sim' : ' Start RT'} · ดูอย่างเดียว · กดวันที่เพื่อดูรายชื่อ</p>` : ''}<p class="dpk-sub">${needRoom ? '<b>เลือกห้องฉายก่อน</b> แล้วจึงเห็นจำนวนผู้ป่วยใหม่ที่เริ่มฉายและเลือกวันได้' : `ตัวเลข = ${kind === 'ct' ? `จำนวน CT ที่นัด (คน)${ctLim().day ? ` · สูงสุด ${ctLim().day} คน/วัน` : ''} · ป้ายแพทย์ = จำนวนของแพทย์แต่ละคน${ctLim().doc ? ` (สูงสุด ${ctLim().doc})` : ''}` : calSimLegend()}`}</p>${roomBar}${hint}
     <div class="dpk-grid">${CAL_WD.map(x => `<span class="dpk-wd">${x}</span>`).join('')}${cells}</div>
     <div class="dpk-info" aria-live="polite">${calInfo(v.startsWith(calMonth) ? v : '')}</div>
-    <div class="dpk-foot"><span>ทั้งเดือน ${total} คน${kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
+    <div class="dpk-foot"><span>${needRoom ? 'เลือกห้องฉายก่อน' : `ทั้งเดือน ${total} คน`}${needRoom ? '' : kind === 'sim' ? ` · <span class="dpk-sp">เทคนิคพิเศษ ${totalSp}</span>` : ''}</span>${v ? '<button type="button" data-calclear>ล้าง</button>' : ''}<button type="button" data-calclose>ปิด</button></div>`;
 }
 // fit = ตอนเปิด / เปลี่ยนเดือนหรือห้อง: จัดให้เห็นทั้งปฏิทิน (เลื่อนเนื้อหาของหน้าต่าง · แบบเตี้ยบนจอเตี้ย) · เลื่อนหน้าหรือเลื่อนหน้าต่าง: แค่ตามช่องไป
 function placeCal(fit) {
@@ -16386,6 +16567,8 @@ function openCal(el) {
 function closeCal() { calBox = null; calWarn = ''; calPop.hidden = true; }
 function pickCal(d) {
   const el = calBox, rb = d && calRoom && calRoom !== NO_ROOM && calRoomBox(el);
+  if (d && calData && calData.need) return toast('เลือกห้องฉายก่อน แล้วจึงเลือกวันได้', { err: true });
+  if (CAL_VIEW_BOX[el.id]) { el.value = d; calWarn = ''; renderCal(); placeCal(); return; }   // ดูอย่างเดียว: วันที่เลือก = ดูรายชื่อ (ปฏิทินไม่ปิด)
   // ลงนัด: วันที่เต็มแล้ว (CT-Sim ทั้งวัน / แพทย์ · Start RT ห้อง / แพทย์ในห้อง / วันทำ CBCT) เลือกไม่ได้ · ปฏิทินยังเปิดให้เลือกวันอื่น · Emergency ลงเกินได้ (ถ้าตั้งไว้)
   const ap = d && editingAp && apDlg.open ? { id: editingAp.id, hn: str($('#a-hn').value), doc: calData.doc } : null;
   const warn = !ap ? '' : el.id === 'a-date' ? ctFullErr({ ...ap, date: d }) : el.id === 'a-sim' ? simFullErr({ ...readApForm(), sim: d, room: rb ? calRoom : chipValue($('#a-room')) }) : '';
@@ -16411,6 +16594,9 @@ function pickCal(d) {
   if (warn) toast(`Emergency: ${warn.split(' · ')[0]} · ลงเกินได้เพราะเป็นเคส Emergency`);
 }
 const isCalBox = el => !!(el && el.id && CAL_BOXES[el.id] && isDateBox(el));
+// ปุ่มปฏิทินบนแถบ CT-SIM: กดอีกครั้ง = ปิด · กดที่อื่น = ปิด
+$$('[data-ctcal]').forEach(b => b.addEventListener('click', () => { if (calBox === b) return closeCal(); b.value = ''; openCal(b); }));
+document.addEventListener('pointerdown', e => { if (calBox && CAL_VIEW_BOX[calBox.id] && !calPop.contains(e.target) && !calBox.contains(e.target)) closeCal(); }, true);
 // เปิดหลังเติมวันที่อัตโนมัติ (focusin แบบ capture ด้านบน) · กดช่องอีกครั้งหลังปิดก็เปิดใหม่
 document.addEventListener('focusin', e => { if (isCalBox(e.target)) openCal(e.target); });
 document.addEventListener('click', e => { if (isCalBox(e.target) && !e.target.disabled && calBox !== e.target) openCal(e.target); });
@@ -16460,7 +16646,7 @@ document.addEventListener('click', e => {
 
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
 $('#ct-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-ctedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCtForm(tr.dataset.ctedit); } });
-const TAB_RENDER = { vac: () => renderJobs(), pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt(), appt: () => renderAppt(), reg: () => renderReg(), dq: () => renderDq(), bq: () => { state.bqPt = ''; renderBq(); } };
+const TAB_RENDER = { consult: () => renderConsult(), vac: () => renderJobs(), pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt(), appt: () => renderAppt(), reg: () => renderReg(), dq: () => renderDq(), bq: () => { state.bqPt = ''; renderBq(); } };
 for (const el of $$('[data-tq]')) {
   let tqTimer = 0;
   el.addEventListener('input', () => {

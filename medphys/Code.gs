@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-10.8';
-const API_LEVEL = 68;
+const CODE_VERSION = '2026-11-11.4';
+const API_LEVEL = 69;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -207,7 +207,8 @@ TABLES.dq = {
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
 TABLES.dqLeave = {
   sheet: 'DocLeaves',
-  fields: [['id', 'id'], ['doc', 'แพทย์'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated']],
+  fields: [['id', 'id'], ['doc', 'แพทย์'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
+    ['kind', 'ประเภทการลา'], ['assign', 'แจกงานตั้งแต่']],   // API 69: kind = long (ลายาว: ไม่แจก ไม่ชดเชย) · ว่าง = ลาปกติ (ชดเชยเมื่อกลับมา) · assign = ลายาวรับเคสได้ตั้งแต่วันนี้
 };
 // แพทย์เวร S1 รายวัน (API 65 · แถบแจกงานแพทย์ ปุ่ม เวร S1): id = วันที่ · เคส Emergency แจกให้แพทย์เวร S1 ของวันนั้น (ไม่มี = ตามวันในสัปดาห์ใน ตั้งค่า) · เขียนผ่าน dqDutySave เท่านั้น
 TABLES.dqDuty = {
@@ -482,13 +483,13 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'],
-  dq: ['dq', 'appt'], dqLeave: ['dq'] };   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
+  ctsim: ['ctsim', 'work', 'appt', 'jobs', 'consult'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq', 'consult'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq', 'consult'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'],
+  dq: ['dq', 'appt', 'consult'], dqLeave: ['dq', 'consult'] };   // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || userAccess_(config, v, user));
@@ -515,7 +516,7 @@ function navAccess_(config, view, role, base) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };   // consult (API 69): ลงนัด CT+RT
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
 const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty'];
@@ -2870,8 +2871,12 @@ function regRemove(id, pin, token) {
  */
 const APPT_FIELDS = ['date', 'hn', 'name', 'cm', 'special', 'dpf', 'fx', 'rx', 'freq', 'sim', 'ct', 'room', 'doc', 'icd', 'dx', 'note', 'order'];
 function apptSave(rec, pin, token) {
-  const u = requireEdit_(token, EDIT_VIEWS.appt);
+  // API 69: แถบ CT-SIM แก้ CT Order ที่มีอยู่แล้วได้ · ลงนัดใหม่ = ตำแหน่งที่บันทึกในแถบ CT Order / Consult ได้
+  const u = requireEdit_(token, EDIT_VIEWS.appt.concat(EDIT_VIEWS.ctsim));
   rec = rec && typeof rec === 'object' ? rec : {};
+  if (u.via !== 'google' && !EDIT_VIEWS.appt.some(v => userAccess_(readConfig_(ss_()) || {}, v, u) === 'edit') && !rowExists_('appt', rec.id)) {
+    throw new Error('แถบ CT-SIM แก้ได้เฉพาะ CT Order ที่มีอยู่แล้ว · ลงนัดใหม่ที่แถบ CT Order');
+  }
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
   if (!cut(rec.hn, 40)) throw new Error('กรอก HN');
@@ -3109,10 +3114,12 @@ function dqLeaveSave(rec, token) {
   const u = dqLeaveUser_(token, doc);
   if (!isDate(from) || !isDate(to)) throw new Error('วันที่ลาไม่ถูกต้อง');
   if (to < from) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา');
+  const kind = rec.kind === 'long' ? 'long' : '', assign = kind ? dqCut_(rec.assign, 10) : '';
+  if (assign && (!isDate(assign) || assign <= from || assign > to)) throw new Error('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย');
   return withLock_(() => {
     const ss = ss_();
     if (dqDocs_(readConfig_(ss) || {}).indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
-    const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '' };
+    const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '', kind: kind, assign: assign };
     appendNew_(ss, 'dqLeave', [r]);
     return r;
   });
@@ -3129,7 +3136,7 @@ function dqLeaveRemove(id, pin, token) {
 }
 /*
  * คิวแจกงานแพทย์ (โค้ดชุดเดียวกับ dqPick ใน index.html · ใช้แค่ HN และชื่อ)
- * o = { docs: รหัสแพทย์ตามลำดับคิว, leaves: [{ doc, from, to }], rows: [{ doc, how, date, created }] (แจกแล้ว),
+ * o = { docs: รหัสแพทย์ตามลำดับคิว, leaves: [{ doc, from, to, kind, assign }], rows: [{ doc, how, date, created }] (แจกแล้ว),
  *       skips: { 'YYYY-MM': { รหัส: n } }, pointer: { code, at } | null, payback: คืนคิวสูงสุดต่อคนต่อรอบ (0 = ไม่จำกัด), date: วันที่แจก ('' = ไม่ดูวันลา), ym: หักคิวรายเดือนนับถึงเดือนนี้,
  *       days: { วันในสัปดาห์ 0–6: [รหัสที่ไม่แจกวันนั้น] }, bonus: [{ code, n, at }] (คิวชดเชย) }
  * - วนตามลำดับแพทย์ · เลือกเอง (how = manual): คิวไม่ขยับ คนที่ได้ถูกข้าม 1 ครั้งเมื่อคิววนมาถึง · หักคิวรายเดือน: ข้ามตามจำนวนครั้ง (ใช้ไม่หมดยกไปเดือนถัดไป)
@@ -3142,7 +3149,10 @@ function dqLeaveRemove(id, pin, token) {
 function dqPick_(o, trace) {
   const docs = o.docs || [], n = docs.length, idx = c => docs.indexOf(c);
   const offDay = (c, d) => { const l = o.days && o.days[new Date(d + 'T00:00:00Z').getUTCDay()]; return Array.isArray(l) && l.indexOf(c) >= 0; };
-  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.from <= d && d <= (l.to || l.from)));
+  // ลาปกติ (และวันที่ไม่แจกตามวัน): แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา · ลายาว (kind = long): ไม่แจก คิวที่ถึงระหว่างนั้นเสียไป ไม่ชดเชย
+  // ลายาว แจกงานตั้งแต่ (assign): รับเคสได้ตั้งแต่วันนั้น (ก่อนกลับมาได้) · ไม่ระบุ = หลังวันลาวันสุดท้าย
+  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.from <= d && d <= (l.to || l.from)));
+  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.kind === 'long' && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
   const lim = Math.max(0, Math.floor(+o.payback) || 0);
   const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
   // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null
@@ -3152,13 +3162,14 @@ function dqPick_(o, trace) {
     const skipped = [];
     for (let k = 0; k < limit; k++) {
       const at = s.pos + k, x = docs[at % n], r = Math.floor(at / n);
+      if (longOff(x, d)) continue;   // ลายาว: คิวนี้เสียไป (หักคิวที่รออยู่เก็บไว้จนกลับมา)
       if (s.credit[x] > 0) { s.credit[x]--; skipped.push(x); continue; }
       if (away(x, d)) {
         // คนรับแทน: แพทย์ที่ไม่ลาที่ติดค้างน้อยที่สุด (รับแทนอยู่ + รอหักคิว) ถัดจากคนลาตามลำดับ (ไม่ให้คนเดียวรับแทนทั้งหมด)
         let y = '', best = 0;
         for (let j = 1; j < n; j++) {
           const c = docs[(at + j) % n];
-          if (away(c, d)) continue;
+          if (away(c, d) || longOff(c, d)) continue;
           let load = Math.max(0, s.credit[c] || 0);
           s.owe.forEach(e => { if (e.by === c) load++; });
           if (!y || load < best) { y = c; best = load; }
@@ -3171,7 +3182,7 @@ function dqPick_(o, trace) {
       let w = -1;
       for (let j = 0; j < s.owe.length && w < 0; j++) {
         const e = s.owe[j], pd = s.paid[e.to];
-        if (e.by === x && idx(e.to) >= 0 && !away(e.to, d) && (!lim || !pd || pd.r !== r || pd.n < lim)) w = j;
+        if (e.by === x && idx(e.to) >= 0 && !away(e.to, d) && !longOff(e.to, d) && (!lim || !pd || pd.r !== r || pd.n < lim)) w = j;
       }
       s.pos = at + 1;
       if (w < 0) return { code: x, owner: x, kind: 'own', skipped: skipped };
