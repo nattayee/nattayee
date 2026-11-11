@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.5';
-const API_LEVEL = 69;
+const CODE_VERSION = '2026-11-11.6';
+const API_LEVEL = 70;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -2977,7 +2977,8 @@ const dqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const dqNow_ = () => new Date().toISOString();
 
 /**
- * แจกงานแพทย์ภายใต้ล็อก (ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ) · recs = [{ id?, hn, name, how: auto | manual, doc (เลือกเอง), note }]
+ * แจกงานแพทย์ภายใต้ล็อก (ผู้ใช้หลายคนกดพร้อมกันก็ไม่ได้คนซ้ำ) · recs = [{ id?, hn, name, how: auto | manual | emer | owner, doc (เลือกเอง), note }]
+ * emer = Emergency (แพทย์เวร S1) · owner = เจ้าของไข้เดิม (API 70) · สองแบบนี้ไม่รันคิว ไม่หักคิว
  * auto = แพทย์ตามคิว (dqPick_) วันที่แจก = วันนี้ · คืนรายการที่บันทึก
  */
 function dqAdd(recs, token) {
@@ -2990,10 +2991,15 @@ function dqAdd(recs, token) {
     let duty = null;
     recs.forEach((r, i) => {
       r = r && typeof r === 'object' ? r : {};
-      const hn = dqCut_(r.hn, 40), how = r.how === 'manual' || r.how === 'emer' ? r.how : 'auto';
+      const hn = dqCut_(r.hn, 40), how = r.how === 'manual' || r.how === 'emer' || r.how === 'owner' ? r.how : 'auto';   // owner (API 70) = เจ้าของไข้เดิม
       if (!hn) throw new Error('กรอก HN');
       let doc = how === 'auto' ? '' : dqCut_(r.doc, 10).toUpperCase();
       if (how === 'emer' && !doc) { doc = dqS1_(q, duty || (duty = readTable_(ss, 'dqDuty')), day); if (!doc) throw new Error('ยังไม่ได้กำหนดแพทย์เวร S1 ของวันนี้ (ปุ่ม เวร S1 ในแถบ) · หรือเลือกแพทย์เอง'); }
+      if (how === 'owner' && !doc) {   // เจ้าของไข้เดิม: หน้าเว็บส่งแพทย์มา · ไม่ส่ง = แพทย์ของการแจกครั้งล่าสุดของ HN นี้
+        const prev = rows.filter(x => x.hn === hn && x.doc).sort((a, b) => String(b.created).localeCompare(String(a.created)))[0];
+        doc = prev ? prev.doc : '';
+        if (!doc) throw new Error('ไม่พบเจ้าของไข้เดิมของ HN ' + hn + ' · เลือกแพทย์เอง');
+      }
       if (how !== 'auto' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
       if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, days: q.days, bonus: q.bonus, date: day });
       if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาหรือวันที่ไม่แจกทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
@@ -3211,7 +3217,7 @@ function dqPick_(o, trace) {
       for (let i = 0; n > 1 && i < m; i++) st.owe.push({ by: docs[(t + 1 + (i % (n - 1))) % n], to: c.bonus.code });
       return;
     }
-    if (c.how === 'import' || c.how === 'emer') { log.push({ row: c, kind: c.how }); return; }   // ดึงจากรายงาน HIS · Emergency (แพทย์เวร S1): ไม่นับในคิว
+    if (c.how === 'import' || c.how === 'emer' || c.how === 'owner') { log.push({ row: c, kind: c.how }); return; }   // ดึงจากรายงาน HIS · Emergency (แพทย์เวร S1) · เจ้าของไข้เดิม: ไม่นับในคิว
     if (idx(c.doc) < 0) { log.push({ row: c, kind: 'out' }); return; }   // แพทย์ที่ไม่อยู่ในคิว
     if (c.how === 'manual') { st.credit[c.doc] = (st.credit[c.doc] || 0) + 1; log.push({ row: c, kind: 'manual' }); return; }
     const s = copy(st), res = walk(s, c.date);
