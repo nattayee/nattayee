@@ -460,6 +460,7 @@ button.duty-line:hover{border-color:var(--accent)}
 .dq-st.leave{background:var(--warn-soft);color:var(--warn)}
 .dq-st.off,.dq-st.back{background:var(--sunken);color:var(--muted)}
 .dq-st.s1{background:var(--accent-soft);color:var(--accent)}
+.rp-tag.rev-done{background:var(--sunken);color:var(--muted)}   /* งานเดิมที่ส่งแก้แผนแล้ว */
 .dup-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:var(--late-soft);color:var(--late);font-size:11px;font-weight:700;line-height:17px;vertical-align:1px;white-space:nowrap;cursor:help}   /* งานวางแผนซ้ำ */
 .vrow .when .dq-st{white-space:normal;margin-left:0}   /* รายการวันลา: ป้ายลายาวขึ้นบรรทัดใหม่ในช่องของมัน */
 .bq-rtst{display:block;width:max-content;max-width:100%;margin-top:3px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* แถบนัดคิวใส่แร่: สถานะในแถบห้องฉาย */
@@ -2531,10 +2532,25 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </div>
     <footer class="dlg-foot">
       <button type="button" class="btn ghost danger" id="case-del">ลบ</button>
+      <button type="button" class="btn" id="case-rev" hidden title="งานยังไม่ Plan complete: แก้ contour / เปลี่ยนแผนหลัง Evaluate = งานใหม่ (นับแต้ม · หักคิวของคนที่รับ)">↻ ส่งแก้แผน</button>
       <span class="spacer"></span>
       <button type="button" class="btn" data-close>ยกเลิก</button>
       <button type="submit" class="btn primary" id="case-save">บันทึก</button>
     </footer>
+  </form>
+</dialog>
+<dialog id="rev-dlg" aria-labelledby="rev-title">
+  <form class="dlg" id="rev-form" novalidate autocomplete="off">
+    <header class="dlg-head"><h2 id="rev-title">ส่งแก้แผน</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <p class="preview" id="rev-what" style="margin:0"></p>
+      <div class="field"><span class="lbl">เหตุผล <b class="req">*</b></span><div class="chips" id="rev-why" role="radiogroup" aria-label="เหตุผล"></div></div>
+      <label class="field"><span class="lbl">รายละเอียด <span class="sub-lbl">อื่นๆ = บังคับ</span></span><input id="rev-note" maxlength="200" autocomplete="off" placeholder="เช่น แพทย์แก้ PTV, เปลี่ยนเป็น 5 fx"></label>
+      <div class="field"><span class="lbl">เทคนิค <span class="sub-lbl">ค่าเริ่มต้น = เทคนิคเดิม · เปลี่ยนได้ถ้าไม่ได้ทำเทคนิคเดิม</span></span><div class="chips" id="rev-cat" role="radiogroup" aria-label="เทคนิค"></div></div>
+      <div class="field"><span class="lbl">Type</span><div class="chips" id="rev-type" role="radiogroup" aria-label="Type"></div></div>
+      <div class="field"><span class="lbl">ผู้รับงาน <span class="sub-lbl">ค่าเริ่มต้น = คนเดิม · นับแต้มเป็นงานใหม่ · หักคิวของคนที่รับ 1 ครั้งเมื่อคิวของเทคนิคนั้นวนมาถึง (เหมือนเลือกเอง)</span></span><div class="chips" id="rev-mp" role="radiogroup" aria-label="ผู้รับงาน"></div></div>
+    </div>
+    <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ยกเลิก</button><button type="submit" class="btn primary" id="rev-save">ส่งแก้แผน</button></footer>
   </form>
 </dialog>
 
@@ -4246,7 +4262,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-11.7';
+const PAGE_VERSION = '2026-11-11.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5060,6 +5076,7 @@ function positionOf(code, ym, cfg = state.config) {
 const roleLabel = (code, ym) => { const p = positionOf(code, ym); return p.id === 'staff' ? '' : p.label; };
 function caseStep(c) {
   if (isSimple(c)) return 'done';
+  if (revisedBy(c)) return 'done';   // ส่งแก้แผนแล้ว: งานใหม่รับช่วงต่อ
   if (c.eval) return 'done';
   if (c.fin) return 'eval';
   return 'plan';
@@ -8922,7 +8939,7 @@ const planReady = c => !!c.pc || !!c.rt || isDirect(c) || (!stepOn({ key: 'pc' }
 // เคสที่แจกแล้วแต่ยังไม่ Plan complete ก็อยู่ในตารางวันฉาย (สถานะ "รอ Plan complete" ยังบันทึกสถานะ fraction ไม่ได้)
 // ไม่นับเคสค้างเก่า: Start RT เลยมาเกิน 14 วัน หรือไม่มี Start RT และแจกมาเกิน 60 วัน
 const pendRecent = c => (isDay(c.sim) ? daysFrom(c.sim) >= -14 : isDay(c.in) && daysFrom(c.in) >= -60);
-const inCourse = c => catOf(c.cat).kind !== 'simple' && !c.replan && (planReady(c) || pendRecent(c));
+const inCourse = c => catOf(c.cat).kind !== 'simple' && (!c.replan || (rpOf(c) || {}).kind === 'revise') && !revisedBy(c) && (planReady(c) || pendRecent(c));   // งานแก้แผน = แผนที่จะฉายแทนงานเดิม
 // ผู้ป่วยจากแถบ CT-SIM ที่ส่งแถบงานแล้วแต่ MP ยังไม่แจก: แถวในตารางวันฉาย "รอ Plan complete" (ยังไม่มีเคส · ctId = id ของรายการ CT)
 function ctCourseRows() {
   return ctOn() ? state.ct.filter(r => ctState(r) === 'wait' && daysFrom(r.date) >= -60).map(r => {
@@ -8943,7 +8960,7 @@ const preRow = c => !!(c.ctId || c.apId);
 // งานวางแผนใหม่ { of: id ของเคสเดิม, date, kind, label, reason }
 const rpOf = c => { if (!c || !c.replan) return null; try { const m = JSON.parse(c.replan); return m && typeof m === 'object' && m.of ? m : null; } catch (e) { return null; } };
 // งานวางแผนที่ยังไม่ Plan complete (กันงานซ้ำ · Code.gs API 71 ตรวจแบบเดียวกันตอนบันทึก): เทคนิควางแผน · งานวางแผนใหม่จากสถานะ fraction · หรือแจกมาไม่เกิน 90 วัน
-const openJob = c => catOf(c.cat).kind !== 'simple' && !c.rt && !planReady(c) && (m => (m ? m.kind !== 'site' : isDay(c.in) && daysFrom(c.in) >= -90))(rpOf(c));   // งานบริเวณเพิ่มเติม = ตั้งใจแยกงาน ไม่นับ
+const openJob = c => catOf(c.cat).kind !== 'simple' && !c.rt && !planReady(c) && !revisedBy(c) && (m => (m ? m.kind !== 'site' : isDay(c.in) && daysFrom(c.in) >= -90))(rpOf(c));   // งานบริเวณเพิ่มเติม = ตั้งใจแยกงาน ไม่นับ
 // fresh = ไล่ทั้งรายการ (ระหว่างบันทึก รายการเพิ่งเปลี่ยน) · ไม่ใส่ = ใช้ดัชนี HN (แสดงผล)
 const openJobsOf = (hn, cat, skip, fresh) => (!hnKey(hn) ? [] : (fresh ? state.cases.filter(c => hnKey(c.hn) === hnKey(hn)) : byHn(state.cases, hn)).filter(c => c.id !== skip && (!cat || c.cat === cat) && openJob(c)));
 const jobText = c => { const m = rpOf(c); return `${m ? `↻ ${m.label}${m.reason ? ` · ${m.reason}` : ''} ` : ''}${catOf(c.cat).label} · MP ${c.mp || '–'} · In ${fmtDay(c.in)}`; };
@@ -9011,7 +9028,7 @@ async function addSiteJobs(parent) {
     toast(`บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดิม: ${saved.map(x => `${(rpOf(x) || {}).label} (${catOf(x.cat).label}) → ${x.mp}`).join(' · ')}`);
   } catch (e) { toast('แจกงานของบริเวณเพิ่มเติมไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
-const rpTag = c => { const m = rpOf(c); return m && m.kind === 'site' ? `<span class="rp-tag site" title="${esc(`งานวางแผนของ${m.label}${m.reason ? ` (${m.reason})` : ''} · บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดิม (หักคิวเมื่อวนมาถึง) · วันฉายนับที่เคสเดิม`)}">＋ ${esc(m.label)}</span>`
+const rpTag = c => { const m = rpOf(c); return m && m.kind === 'revise' ? `<span class="rp-tag" title="${esc(`ส่งแก้แผนจากงานเดิม${(o => (o ? ` (${catOf(o.cat).label} · MP ${o.mp || '–'} · In ${fmtDay(o.in)})` : ''))(state.cases.find(x => x.id === m.of))}${m.reason ? ` · ${m.reason}` : ''} · นับแต้มเป็นงานใหม่`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : m && m.kind === 'site' ? `<span class="rp-tag site" title="${esc(`งานวางแผนของ${m.label}${m.reason ? ` (${m.reason})` : ''} · บริเวณที่ฉายเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดิม (หักคิวเมื่อวนมาถึง) · วันฉายนับที่เคสเดิม`)}">＋ ${esc(m.label)}</span>`
   : m ? `<span class="rp-tag" title="${esc(`งานวางแผนใหม่จาก ${m.label}${m.reason ? ` (${m.reason})` : ''} วันที่ ${fmtDay(m.date)} · ระบบส่งให้ MP คนเดิม`)}">↻ ${esc(m.label)}${m.reason ? ` · ${esc(m.reason)}` : ''}</span>` : ''; };
 // prescription ของงานวางแผนใหม่ = fraction ที่ยังไม่ได้ฉายตั้งแต่วันนั้น แยกตามบริเวณ (นับจากตารางที่ไม่มีสถานะ/การย้ายของวันนั้น)
 function replanRx(c, date) {
@@ -10905,7 +10922,7 @@ function caseRow(c, rcs) {
   const strip = on('steps') && !simple && stampsOn() ? stepStrip(c, k, on('vals')) : '';
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <${canEdit() ? `button type="button" class="c-main" data-edit="${esc(c.id)}"` : 'div class="c-main"'}>
-      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${rpTag(c)}${dupTag(c)}${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
+      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${rpTag(c)}${revTag(c)}${dupTag(c)}${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
     </${canEdit() ? 'button' : 'div'}>
     <div class="c-who">${on('mp') ? av(c.mp) : ''}${on('rc') ? rcHtml(c, rcs) : ''}</div>
@@ -10934,7 +10951,7 @@ function caseLine(c, rcs, cols) {
     if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); return f ? cut(extraText(f, c[key])) : ''; }
     switch (key) {
       case 'cat': return `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>`;
-      case 'hn': return (edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`) + rpTag(c) + dupTag(c);
+      case 'hn': return (edit ? `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="แก้ไขเคส">${esc(c.hn || '—')}</button>` : `<span class="hn">${esc(c.hn || '—')}</span>`) + rpTag(c) + revTag(c) + dupTag(c);
       case 'name': return cut(c.name);
       case 'how': return howChips(c);
       case 'dx': return c.icd || c.dx ? `<span class="cut" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b> ` : ''}${esc(dxShort(c))}</span>` : '';
@@ -14218,7 +14235,7 @@ function renderPendBadge() {
 function pendingOf(key, room) {
   return planCases().filter(c => {
     const k = catOf(c.cat);
-    if (k.kind === 'simple' || (room && !roomsOf(c).includes(room))) return false;
+    if (k.kind === 'simple' || (room && !roomsOf(c).includes(room)) || revisedBy(c)) return false;
     if (key === 'fin') return !c.fin;
     if (key === 'eval') return !!c.fin && !c.eval;
     return !c[key] && stepsOf(k).some(x => x.key === key) && recentCase(c);
@@ -14574,9 +14591,74 @@ function openCase(id) {
   renderSites('f', parseSites(editingCase));
   const del = $('#case-del');
   delete del.dataset.armed; del.textContent = 'ลบ';
+  $('#case-rev').hidden = !revCan(c);
   syncCaseForm();
   caseDlg.showModal();
 }
+/* ---------- ส่งแก้แผน: งานที่ยังไม่ Plan complete (แก้ contour / เปลี่ยนแผนหลัง Evaluate) = งานใหม่ผูกกับงานเดิม ---------- */
+// งานใหม่: นับแต้ม P4P เป็นงานใหม่ (วัน In = วันทำการนี้) · แจกแบบเลือกเอง (คนเดิมหรือคนอื่น) = หักคิวของคนที่รับเมื่อคิวของเทคนิคนั้นวนมาถึง · เทคนิค / Type เปลี่ยนได้
+// งานเดิม: ปิดเป็น "ส่งแก้แผนแล้ว" (ไม่ค้าง · ไม่อยู่ในงานรอ ตารางวันฉาย และการตรวจงานซ้ำ) · ขั้นตอนที่ทำไว้และแต้มของงานเดิมยังอยู่ · ส่งแก้ได้ครั้งเดียว (แก้อีก = ส่งแก้จากงานใหม่)
+const REV_WHY = ['แก้ contour', 'เปลี่ยนแผนการรักษา', 'อื่นๆ'];
+let revMemo = { list: null, n: -1, at: 0, map: new Map() }, revCase = null;
+function revMap() {
+  const now = Date.now();
+  if (revMemo.list === state.cases && revMemo.n === state.cases.length && now - revMemo.at < 3000) return revMemo.map;
+  const map = new Map();
+  for (const c of state.cases) { const m = rpOf(c); if (m && m.kind === 'revise') map.set(m.of, c); }
+  revMemo = { list: state.cases, n: state.cases.length, at: now, map };
+  return map;
+}
+const revisedBy = c => (c && c.id ? revMap().get(c.id) || null : null);
+const revCan = c => !!c && !isDirect(c) && catOf(c.cat).kind !== 'simple' && !planReady(c) && !c.rt && !revisedBy(c) && accessOf('work') === 'edit';
+const revTag = c => { const j = revisedBy(c); return j ? ` <span class="rp-tag rev-done" title="${esc(`ส่งแก้แผนแล้ว: งานใหม่ ${catOf(j.cat).label} · MP ${j.mp || '–'} · In ${fmtDay(j.in)} · งานนี้ปิดแล้ว (ขั้นตอนที่ทำไว้เก็บเป็นประวัติ)`)}">ส่งแก้แผนแล้ว → ${esc(j.mp || '–')}</span>` : ''; };
+const revDlg = $('#rev-dlg');
+function openRev(id) {
+  const c = state.cases.find(x => x.id === id);
+  if (!revCan(c)) return toast(revisedBy(c) ? 'งานนี้ส่งแก้แผนไปแล้ว' : 'ส่งแก้แผนได้เฉพาะงานวางแผนที่ยังไม่ Plan complete (ตำแหน่งที่แจกงานในแถบแจกงานฟิสิกส์ได้)', { err: true });
+  revCase = c;
+  const d = workdayFrom(today()), done = [c.fin && 'Finish', c.eval && 'Evaluate'].filter(Boolean);
+  $('#rev-title').textContent = `ส่งแก้แผน · ${c.hn || ''}`;
+  $('#rev-what').textContent = `งานเดิม: ${catOf(c.cat).label} · MP ${c.mp || '–'} · In ${fmtDay(c.in)}${done.length ? ` · ทำแล้ว ${done.join(', ')}` : ''} → ปิดเป็น "ส่งแก้แผนแล้ว" (ขั้นตอนที่ทำไว้และแต้มของงานเดิมยังอยู่) · งานใหม่ In ${fmtDay(d)}`;
+  chipGroup($('#rev-why'), 'revwhy', REV_WHY, '');
+  $('#rev-cat').innerHTML = state.config.cats.filter(k => k.kind !== 'simple' && (k.on || k.id === c.cat)).map(k => `<label><input type="radio" name="revcat" value="${esc(k.id)}"${k.id === c.cat ? ' checked' : ''}><span>${esc(k.label)}</span></label>`).join('');
+  const types = state.config.types || [];
+  ctChips('#rev-type', 'revtype', types, types.find(t => /^replan$/i.test(t)) || c.type || '');
+  $('#rev-mp').innerHTML = (c.mp ? `<label class="dq-who-q"><input type="radio" name="revmp" value="${esc(c.mp)}" checked><span>คนเดิม · <b>${esc(c.mp)}</b>${onLeave(c.mp, d) ? '<small>ลา</small>' : ''}</span></label>` : '')
+    + activeStaff().filter(s => s.code !== c.mp).map(s => `<label><input type="radio" name="revmp" value="${esc(s.code)}"><span>${esc(s.code)}${onLeave(s.code, d) ? '<small>ลา</small>' : ''}</span></label>`).join('');
+  $('#rev-note').value = '';
+  revDlg.showModal();
+}
+async function submitRev(e) {
+  e.preventDefault();
+  const c = revCase && state.cases.find(x => x.id === revCase.id);
+  if (!revCan(c)) { revDlg.close(); return toast('งานนี้ส่งแก้แผนไม่ได้แล้ว (Plan complete หรือส่งแก้ไปแล้ว)', { err: true }); }
+  const why = chipValue($('#rev-why')), note = str($('#rev-note').value), k = catOf(chipValue($('#rev-cat')) || c.cat), type = chipValue($('#rev-type')), mp = chipValue($('#rev-mp'));
+  if (!why) { focusChips($('#rev-why')); return toast('เลือกเหตุผลที่ส่งแก้แผน', { err: true }); }
+  if (why === 'อื่นๆ' && !note) { $('#rev-note').focus(); return toast('ใส่รายละเอียดเหตุผล', { err: true }); }
+  if (!mp) { focusChips($('#rev-mp')); return toast('เลือกผู้รับงาน', { err: true }); }
+  const d = workdayFrom(today()), extra = Object.fromEntries(Object.keys(c).filter(x => /^x_[\w-]+$/.test(x)).map(x => [x, c[x]]));
+  const rec = normCase({ ...extra, id: uid(), cat: k.id, how: 'manual', mp, n: k.id === c.cat ? c.n : '', hn: c.hn, name: c.name, icd: c.icd, dx: c.dx, doc: c.doc, type, aim: c.aim, tech: k.tech ? c.tech : '',
+    ct: c.ct, in: d, sim: c.sim, room: c.room, area: c.area, sites: c.sites, dpf: c.dpf, fx: c.fx, rx: c.rx, freq: c.freq, note: c.note, batch: '', updated: nowISO(),
+    replan: JSON.stringify({ of: c.id, date: d, kind: 'revise', label: 'แก้แผน', reason: [why === 'อื่นๆ' ? '' : why, note].filter(Boolean).join(' · ') }) });
+  rec.dupOk = 1; rec.planJob = 1;   // ตั้งใจแจก: Code.gs ไม่ถามเรื่องงานซ้ำ (ส่งแก้ซ้ำงานเดิม = Code.gs API 72 ไม่รับ)
+  const btn = $('#rev-save');
+  btn.disabled = true;
+  try {
+    const saved = (await store.addCases([rec])).map(normCase);
+    state.cases.push(...saved);
+    revMemo.at = 0;
+    revDlg.close();
+    if (caseDlg.open) caseDlg.close();
+    state.fresh = saved.map(x => x.id);
+    render();
+    const j = saved[0];
+    toast(`ส่งแก้แผน ${j.hn}: ${catOf(j.cat).label}${j.type ? ` · ${j.type}` : ''} → ${j.mp}${j.mp === c.mp ? ' (คนเดิม)' : ''} · นับแต้มเป็นงานใหม่ · หักคิว ${j.mp} 1 ครั้งเมื่อคิว ${catOf(j.cat).label} วนมาถึง · งานเดิมปิดเป็น "ส่งแก้แผนแล้ว"`);
+    if (store.mode === 'sheet') refresh(true);
+  } catch (err) { toast('ส่งแก้แผนไม่สำเร็จ: ' + errMsg(err), { err: true }); }
+  finally { btn.disabled = false; }
+}
+$('#rev-form').addEventListener('submit', submitRev);
+$('#case-rev').addEventListener('click', () => { if (editingCase) openRev(editingCase.id); });
 async function submitCase(e) {
   e.preventDefault();
   if (ptMode) return submitPatient();
@@ -14675,6 +14757,7 @@ function openPatient(id) {
   renderSites('f', parseSites(editingCase));
   const del = $('#case-del');
   del.hidden = !c || ptPlan;
+  $('#case-rev').hidden = true;
   delete del.dataset.armed; del.textContent = 'ลบ';
   syncCaseForm();
   caseDlg.showModal();

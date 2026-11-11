@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.7';
-const API_LEVEL = 71;
+const CODE_VERSION = '2026-11-11.8';
+const API_LEVEL = 72;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -571,7 +571,11 @@ function addCases(recs, token) {
       const cat = (cfg.cats || []).filter(c => c.id === rec.cat)[0];
       // API 71: HN นี้มีงานเทคนิคเดียวกันที่ยังไม่ Plan complete = ถามยืนยันก่อน (dupOk = ผู้ใช้กดยืนยันแจกเพิ่มแล้ว) · งานบริเวณเพิ่มเติมไม่ตรวจ
       const meta = jobMeta_(rec);
-      if (!rec.dupOk && !(meta && meta.kind === 'site')) {
+      if (meta && meta.kind === 'revise') {   // API 72: ส่งแก้แผน = งานเดิมส่งแก้ได้ครั้งเดียว (กดซ้ำ · สองเครื่องพร้อมกัน)
+        const prev = cases.filter(c => { const m = jobMeta_(c); return m && m.kind === 'revise' && m.of === meta.of; })[0];
+        if (prev) throw new Error('งานนี้ส่งแก้แผนไปแล้ว (' + jobText_(prev, cfg) + ') · โหลดหน้าใหม่');
+      }
+      if (!rec.dupOk && !(meta && (meta.kind === 'site' || meta.kind === 'revise'))) {
         const dup = openJobs_(cases, cfg, rec.hn, rec.cat, '', !!rec.planJob);   // planJob = หน้าเว็บบอกว่าเป็นหมวดวางแผน (ชีตที่ยังไม่เคยบันทึกตั้งค่าหมวด)
         if (dup.length) throw new Error('DUPJOB|HN ' + rec.hn + ' มีงาน ' + dup.map(c => jobText_(c, cfg)).join(' | ') + ' ที่ยังไม่ Plan complete อยู่แล้ว · แจกซ้ำจะนับแต้มซ้ำ · ถ้าต้องการแจกเพิ่มจริง กด "แจกเคส" อีกครั้ง');
       }
@@ -2158,8 +2162,10 @@ function openJobs_(rows, cfg, hn, cat, skip, plan) {
   const key = hnKey_(hn), k = (cfg && Array.isArray(cfg.cats) ? cfg.cats : []).filter(x => x && x.id === cat)[0];
   if (!key || !cat || (k ? k.kind === 'simple' : !plan)) return [];
   const from = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const revised = {};   // API 72: งานที่ส่งแก้แผนแล้ว (มีงานแก้แผนผูกอยู่) = ปิดแล้ว ไม่นับ
+  rows.forEach(c => { const m = jobMeta_(c); if (m && m.kind === 'revise') revised[m.of] = true; });
   return rows.filter(c => {
-    if (!c || c.id === skip || c.cat !== cat || hnKey_(c.hn) !== key || has_(c.pc) || has_(c.rt) || c.how === 'direct') return false;
+    if (!c || c.id === skip || revised[c.id] || c.cat !== cat || hnKey_(c.hn) !== key || has_(c.pc) || has_(c.rt) || c.how === 'direct') return false;
     const m = jobMeta_(c);
     return m ? m.kind !== 'site' : String(c['in'] || '').slice(0, 10) >= from;
   });
