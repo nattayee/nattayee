@@ -4425,7 +4425,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.7';
+const PAGE_VERSION = '2026-11-13.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -18362,6 +18362,476 @@ if (store.mode === 'sheet') {
 })();
 </script>
 <div id="cso-print" aria-hidden="true"></div>
+<!-- ===== โหมด 3D: ภาพ workflow รังสีรักษาแบบเคลื่อนไหว (CSS 3D ล้วน ไม่โหลดไลบรารีภายนอก ใช้ได้แม้เครือข่ายโรงพยาบาลปิด CDN) =====
+     ปุ่ม "3D" ด้านบนเปิด/ปิด (จำไว้ในเบราว์เซอร์นี้) · กดสถานีในฉาก = ไปแถบนั้น · ไม่แตะข้อมูลหรือการทำงานเดิมของระบบ -->
+<style id="rt3d-css">
+@property --rz{syntax:'<angle>';inherits:true;initial-value:-20deg}
+@property --cx{syntax:'<length>';inherits:true;initial-value:0px}
+@property --cy{syntax:'<length>';inherits:true;initial-value:0px}
+@property --cz{syntax:'<length>';inherits:true;initial-value:-420px}
+.rt3d-btn{font:700 12px/1 var(--font);letter-spacing:.02em}
+.rt3d-btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.rt3d{display:none}
+html.rt3d-on .rt3d{
+  --glow:color-mix(in oklab,var(--accent) 50%,#fff);--tilt:58deg;--k:1;
+  display:block;position:relative;height:clamp(230px,28vw,320px);margin:-8px 0 22px;border-radius:18px;overflow:hidden;
+  background:radial-gradient(110% 95% at 50% 0%,color-mix(in oklab,var(--accent) 30%,#0a1517) 0%,#081113 55%,#04090a 100%);
+  box-shadow:inset 0 0 0 1px rgb(255 255 255/.07),0 22px 44px -22px rgb(0 0 0/.55);
+  perspective:1000px;perspective-origin:50% 28%;user-select:none;-webkit-user-select:none;color:#e6f3f1;isolation:isolate;
+  transition:height .5s cubic-bezier(.2,.7,.2,1)
+}
+html.rt3d-on .rt3d.mini{height:132px}
+.rt3d *{box-sizing:border-box}
+.rt3d-cam{position:absolute;left:50%;top:70%;width:0;height:0;transform-style:preserve-3d;
+  transform:translateZ(var(--cz)) rotateX(var(--tilt)) scale3d(var(--k),var(--k),var(--k));
+  transition:top 1.4s cubic-bezier(.25,.7,.2,1),--rz 1.4s cubic-bezier(.25,.7,.2,1),--cx 1.4s cubic-bezier(.25,.7,.2,1),--cy 1.4s cubic-bezier(.25,.7,.2,1),--cz 1.4s cubic-bezier(.25,.7,.2,1)}
+.rt3d.mini .rt3d-cam{top:74%}
+.rt3d.focus .rt3d-cam{top:72%}
+.rt3d:not(.focus):not(.mini) .rt3d-cam{top:75%}
+.rt3d.focus .rt3d-st:not(.on) .rt3d-lbl{opacity:.5;scale:.82}
+.rt3d-world{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;
+  transform:rotateZ(var(--rz)) translate3d(calc(-1 * var(--cx)),calc(-1 * var(--cy)),0)}
+.rt3d-world div,.rt3d-world button{transform-style:preserve-3d}
+.rt3d-floor{position:absolute;left:-1300px;top:-700px;width:2600px;height:1400px;transform:translateZ(-1px);
+  background-image:linear-gradient(rgb(120 230 215/.13) 1px,transparent 1px),linear-gradient(90deg,rgb(120 230 215/.13) 1px,transparent 1px);
+  background-size:60px 60px;-webkit-mask-image:radial-gradient(closest-side,#000 35%,transparent);mask-image:radial-gradient(closest-side,#000 35%,transparent);
+  animation:rt3d-floor 9s linear infinite}
+@keyframes rt3d-floor{to{background-position:60px 60px}}
+.rt3d-track{position:absolute;left:0;top:0;height:12px;transform-origin:0 50%;border-radius:6px;
+  background:repeating-linear-gradient(90deg,var(--glow) 0 14px,transparent 14px 34px),rgb(255 255 255/.05);opacity:.55;
+  box-shadow:0 0 18px color-mix(in srgb,var(--glow) 45%,transparent);animation:rt3d-dash 1.4s linear infinite}
+@keyframes rt3d-dash{to{background-position:34px 0,0 0}}
+/* กล่องสามมิติ: หน้าบน/หน้า/หลัง/ซ้าย/ขวา แรเงาจากสีเดียว */
+.b3{position:absolute;left:0;top:0;width:0;height:0;--c:#33505a}
+.b3>i{position:absolute;left:0;top:0;transform-origin:0 0;backface-visibility:hidden;background:var(--c);box-shadow:inset 0 0 0 1px rgb(255 255 255/.09)}
+.b3>i.t{background:color-mix(in oklab,var(--c),#fff 16%)}
+.b3>i.f{background:linear-gradient(color-mix(in oklab,var(--c),#fff 4%),color-mix(in oklab,var(--c),#000 18%))}
+.b3>i.k{background:color-mix(in oklab,var(--c),#000 35%)}
+.b3>i.r{background:linear-gradient(color-mix(in oklab,var(--c),#000 16%),color-mix(in oklab,var(--c),#000 34%))}
+.b3>i.l{background:color-mix(in oklab,var(--c),#000 28%)}
+.b3.glass>i{background:rgb(120 200 255/.14)!important;box-shadow:inset 0 0 0 1px rgb(150 220 255/.45)}
+.b3.base>i.t{background:radial-gradient(closest-side,color-mix(in oklab,var(--c),#fff 22%),color-mix(in oklab,var(--c),#fff 6%))}
+.rt3d-st.on .b3.base{--c:color-mix(in oklab,var(--accent) 55%,#10282a)}
+.rt3d-st.on .b3.base>i.t{box-shadow:inset 0 0 0 1.5px var(--glow),inset 0 0 26px color-mix(in srgb,var(--glow) 55%,transparent)}
+.rt3d-st{position:absolute;left:0;top:0}
+.rt3d-plane{position:absolute;left:0;top:0;transform-origin:0 0}
+.rt3d-pulse{position:absolute;left:-110px;top:-110px;width:220px;height:220px;border-radius:50%;border:2px solid var(--glow);opacity:0;transform:translateZ(9px) scale(.4)}
+.rt3d-st.on .rt3d-pulse{animation:rt3d-pulse 2.4s ease-out infinite}
+.rt3d-st.on .rt3d-pulse.p2{animation-delay:1.2s}
+@keyframes rt3d-pulse{0%{opacity:.85;transform:translateZ(9px) scale(.35)}100%{opacity:0;transform:translateZ(9px) scale(1.15)}}
+/* ป้ายลอยหันเข้าหากล้องเสมอ */
+.rt3d-bb{position:absolute;left:0;top:0;width:0;height:0}
+.rt3d-bb>*{position:absolute;left:0;top:0;transform:translate(-50%,-100%)}
+.rt3d-lbl{display:grid;justify-items:center;gap:2px;padding:7px 12px 6px;border:1px solid rgb(255 255 255/.16);border-radius:12px;
+  background:rgb(8 20 22/.72);color:#e6f3f1;font:600 14px/1.25 var(--font);white-space:nowrap;cursor:pointer;
+  box-shadow:0 8px 22px -8px rgb(0 0 0/.7);transition:background .3s,border-color .3s,transform .3s}
+.rt3d-lbl small{font:500 10.5px/1.2 var(--font);color:rgb(230 243 241/.62);letter-spacing:.04em;text-transform:uppercase}
+.rt3d-lbl .no{position:absolute;left:-9px;top:-9px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1c3236;border:1px solid rgb(255 255 255/.25);font:700 11px/1 var(--mono)}
+.rt3d-lbl .cnt{position:absolute;right:-9px;top:-9px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:grid;place-items:center;background:var(--late,#d64545);color:#fff;font:700 10.5px/1 var(--mono)}
+.rt3d-lbl .cnt:empty{display:none}
+.rt3d-lbl:hover{border-color:var(--glow)}
+.rt3d-st.on .rt3d-lbl{background:color-mix(in oklab,var(--accent) 70%,#06100f);border-color:var(--glow);box-shadow:0 0 0 3px color-mix(in srgb,var(--glow) 25%,transparent),0 10px 30px -8px color-mix(in srgb,var(--glow) 60%,transparent)}
+.rt3d-st.on .rt3d-lbl .no{background:var(--glow);color:#062421}
+.rt3d-st.off .rt3d-lbl{opacity:.5;cursor:default}
+.rt3d.mini .rt3d-st:not(.on) .rt3d-lbl{opacity:0;pointer-events:none}
+.rt3d-lbl:focus-visible{outline:2px solid var(--glow);outline-offset:3px}
+/* วัตถุเคลื่อนไหวของแต่ละขั้น */
+.rt3d-card{width:62px;height:40px;border-radius:7px;animation:rt3d-spin 4s linear infinite;box-shadow:0 0 22px color-mix(in srgb,var(--glow) 70%,transparent);
+  background:linear-gradient(90deg,rgb(4 30 28/.55) 0 36%,#0000 36%) 5px 7px/22px 26px no-repeat,linear-gradient(135deg,var(--glow),color-mix(in oklab,var(--glow),#000 35%))}
+.rt3d-card::after{content:'';position:absolute;left:28px;right:6px;top:10px;height:4px;border-radius:2px;background:rgb(4 30 28/.6);box-shadow:0 8px 0 rgb(4 30 28/.6),0 16px 0 rgb(4 30 28/.45)}
+@keyframes rt3d-spin{to{rotate:y 360deg}}
+.rt3d-cross{width:46px;height:46px;background:conic-gradient(from 0deg,#0000 0 0);position:relative;filter:drop-shadow(0 0 10px var(--glow));animation:rt3d-spin 5s linear infinite}
+.rt3d-cross::before,.rt3d-cross::after{content:'';position:absolute;inset:16px 0;border-radius:4px;background:var(--glow)}
+.rt3d-cross::after{inset:0 16px}
+.rt3d-cal{width:70px;height:64px;border-radius:4px;background:
+  linear-gradient(#c94b4b 0 13px,#0000 13px),
+  repeating-linear-gradient(90deg,#0000 0 9px,rgb(0 0 0/.18) 9px 10px),repeating-linear-gradient(#0000 0 9px,rgb(0 0 0/.18) 9px 10px),#e9f1f0}
+.rt3d-cal::after{content:'';position:absolute;left:30px;top:33px;width:10px;height:10px;border-radius:2px;background:var(--accent);animation:rt3d-blink 1.6s ease-in-out infinite}
+@keyframes rt3d-blink{50%{opacity:.15}}
+.rt3d-ring{border-radius:50%;background:radial-gradient(closest-side,#0000 calc(100% - 22px),#dfe9ea calc(100% - 21px),#b7c6c9);box-shadow:0 0 0 1px rgb(255 255 255/.2)}
+.rt3d-ring.inner{background:radial-gradient(closest-side,#0000 calc(100% - 22px),#a4b6ba calc(100% - 21px),#7d9094)}
+.rt3d-ring.face{background:radial-gradient(closest-side,#0000 calc(100% - 22px),#eef5f5 calc(100% - 21px),#cfdcde);}
+.rt3d-ring.face::after{content:'';position:absolute;inset:6px;border-radius:50%;border:2px dashed rgb(80 200 190/.0);border-top-color:var(--glow);animation:rt3d-rot 1.1s linear infinite}
+@keyframes rt3d-rot{to{rotate:360deg}}
+.rt3d-slide{animation:rt3d-slide 6s ease-in-out infinite alternate}
+@keyframes rt3d-slide{from{translate:0 34px 0}to{translate:0 -34px 0}}
+.rt3d-laser{background:linear-gradient(90deg,#0000,#ff4d4d,#0000);height:2px!important;box-shadow:0 0 8px #ff4d4d;animation:rt3d-blink 2s ease-in-out infinite}
+.rt3d-screen{border-radius:3px;border:2px solid #22343a;background:
+  radial-gradient(circle at 50% 54%,#ff5a4a 0 5px,#0000 6px),
+  radial-gradient(circle at 50% 54%,#0000 0 8px,#ffb347 8px 9.5px,#0000 10px),
+  radial-gradient(circle at 50% 54%,#0000 0 13px,#e6e05a 13px 14.5px,#0000 15px),
+  radial-gradient(circle at 50% 54%,#0000 0 18px,#4fd18b 18px 19.5px,#0000 20px),
+  radial-gradient(ellipse 44% 40% at 50% 54%,#5f6f72,#2e3a3d 70%,#0b1416 72%),#0b1416}
+.rt3d-screen.b{background:linear-gradient(#0000 70%,rgb(79 209 197/.25) 70% 72%,#0000 72%),repeating-linear-gradient(90deg,#0b1416 0 6px,#102226 6px 7px),
+  linear-gradient(transparent 20%,var(--glow) 20% 23%,transparent 23% 45%,#ffb347 45% 48%,transparent 48% 62%,#4fd18b 62% 65%,transparent 65%),#0b1416;background-size:auto,auto,6px 100%,auto;animation:rt3d-dvh 3s linear infinite}
+@keyframes rt3d-dvh{to{background-position:0 0,0 0,60px 0,0 0}}
+.rt3d-holo{width:96px;height:96px;border-radius:50%;
+  background:radial-gradient(closest-side,#ff5a4a 0 14%,#ffb347 15% 30%,#e6e05a 31% 48%,#4fd18b 49% 66%,rgb(79 160 255/.55) 67% 82%,#0000 84%);
+  opacity:.9;filter:blur(.3px) drop-shadow(0 0 14px rgb(255 180 80/.45));animation:rt3d-breathe 3.2s ease-in-out infinite}
+@keyframes rt3d-breathe{50%{scale:1.08;opacity:.7}}
+.rt3d-fan{width:150px;height:150px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgb(255 255 255/.0) 0 30deg,color-mix(in srgb,var(--glow) 50%,transparent) 30deg 32deg,rgb(255 255 255/0) 32deg 72deg);
+  -webkit-mask:radial-gradient(closest-side,#0000 18%,#000 20% 70%,#0000 100%);mask:radial-gradient(closest-side,#0000 18%,#000 20% 70%,#0000 100%);animation:rt3d-rot 9s linear infinite}
+.rt3d-beam{clip-path:polygon(50% 0,0 100%,100% 100%);background:linear-gradient(rgb(170 140 255/.85),rgb(120 200 255/.35) 75%,rgb(120 255 230/.75));animation:rt3d-beam 1.1s ease-in-out infinite alternate;backface-visibility:visible!important}
+@keyframes rt3d-beam{from{opacity:.4}to{opacity:.95}}
+.rt3d-gantry{animation:rt3d-arc 9s ease-in-out infinite alternate}
+@keyframes rt3d-arc{from{rotate:y -150deg}to{rotate:y 150deg}}
+.rt3d-check{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#2fbf71;color:#fff;font:700 22px/1 var(--font);box-shadow:0 0 18px rgb(47 191 113/.7);animation:rt3d-bob 2.6s ease-in-out infinite}
+@keyframes rt3d-bob{50%{translate:0 -8px}}
+.rt3d-star{width:44px;height:44px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);background:linear-gradient(#ffe08a,#f5b83d);filter:drop-shadow(0 0 12px rgb(255 210 110/.8));animation:rt3d-bob 2.2s ease-in-out infinite,rt3d-spin 6s linear infinite}
+/* ผู้ป่วยเดินตามเส้นทาง workflow */
+.rt3d-tok{position:absolute;left:0;top:0;width:0;height:0;offset-rotate:0deg;animation:rt3d-flow 30s linear infinite}
+@keyframes rt3d-flow{from{offset-distance:0%}to{offset-distance:100%}}
+.rt3d-tok>.rt3d-bb>span{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff,var(--glow) 45%,color-mix(in oklab,var(--glow),#000 40%));box-shadow:0 0 14px var(--glow);animation:rt3d-fade 30s linear infinite;animation-delay:inherit}
+@keyframes rt3d-fade{0%,100%{opacity:0}3%,96%{opacity:1}}
+/* ป้ายบอกขั้น + แถบขั้นด้านล่าง (ใช้กับคีย์บอร์ด/โปรแกรมอ่านจอได้) */
+.rt3d-hud{position:absolute;left:0;top:0;z-index:2;padding:12px 40px 26px 16px;pointer-events:none;text-shadow:0 1px 8px rgb(0 0 0/.6);background:radial-gradient(120% 100% at 0 0,rgb(4 10 11/.78) 40%,transparent 75%)}
+.rt3d-hud small{display:block;font:700 10.5px/1.4 var(--mono);letter-spacing:.18em;color:var(--glow)}
+.rt3d-hud b{display:block;font:600 18px/1.3 var(--font)}
+.rt3d-hud span{font-size:12.5px;color:rgb(230 243 241/.7)}
+.rt3d.mini .rt3d-hud b{font-size:15px}
+.rt3d.mini .rt3d-hud span{display:none}
+.rt3d-tools{position:absolute;right:10px;top:10px;z-index:2;display:flex;gap:6px}
+.rt3d-tools button{display:grid;place-items:center;height:30px;min-width:30px;padding:0 10px;border:1px solid rgb(255 255 255/.18);border-radius:999px;background:rgb(8 20 22/.6);color:#e6f3f1;font:500 12.5px/1 var(--font)}
+.rt3d-tools button:hover{border-color:var(--glow)}
+.rt3d-steps{position:absolute;left:0;right:0;bottom:10px;z-index:2;display:flex;justify-content:center;gap:4px;margin:0;padding:0 10px;list-style:none;counter-reset:s}
+.rt3d-steps button{position:relative;display:flex;align-items:center;gap:6px;height:26px;padding:0 9px 0 4px;border:1px solid rgb(255 255 255/.12);border-radius:999px;background:rgb(8 20 22/.55);color:rgb(230 243 241/.75);font:500 12px/1 var(--font);white-space:nowrap}
+.rt3d-steps button::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:rgb(255 255 255/.12);font:700 10px/1 var(--mono)}
+.rt3d-steps button[aria-current="step"]{background:color-mix(in oklab,var(--accent) 70%,#06100f);border-color:var(--glow);color:#fff}
+.rt3d-steps button[aria-current="step"]::before{background:var(--glow);color:#062421}
+.rt3d-steps button.done{color:#e6f3f1}
+.rt3d-steps button.done::before{background:color-mix(in srgb,var(--glow) 45%,transparent)}
+.rt3d-steps button:disabled{opacity:.45;cursor:default}
+@media (max-width:900px){.rt3d-steps button span{display:none}.rt3d-steps button{padding:0 4px}}
+.rt3d.mini .rt3d-steps{display:none}
+.rt3d.paused *,.rt3d.paused{animation-play-state:paused!important}
+/* ทั้งเว็บ: มีมิติ ลึก และเคลื่อนไหวนุ่ม ๆ */
+html.rt3d-on body::before{content:'';position:fixed;left:-40%;right:-40%;bottom:-6vh;height:62vh;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(color-mix(in srgb,var(--accent) 16%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--accent) 16%,transparent) 1px,transparent 1px);
+  background-size:64px 64px;transform:perspective(520px) rotateX(72deg);transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(to top,#000 10%,transparent 85%);mask-image:linear-gradient(to top,#000 10%,transparent 85%);animation:rt3d-grid 7s linear infinite}
+@keyframes rt3d-grid{to{background-position:0 64px,0 64px}}
+html.rt3d-on .wrap>section:not([hidden]){animation:rt3d-in .6s cubic-bezier(.2,.75,.2,1) both;transform-origin:50% 0}
+@keyframes rt3d-in{from{opacity:0;transform:perspective(1400px) translate3d(0,26px,-90px) rotateX(9deg)}to{opacity:1;transform:none}}
+html.rt3d-on dialog[open]{animation:rt3d-dlg .38s cubic-bezier(.2,.8,.25,1) both}
+@keyframes rt3d-dlg{from{opacity:0;transform:perspective(1200px) translate3d(0,18px,-120px) rotateX(-10deg)}to{opacity:1;transform:none}}
+html.rt3d-on .table-wrap,html.rt3d-on .gate-card{box-shadow:0 1px 0 rgb(255 255 255/.05) inset,0 2px 4px rgb(0 0 0/.05),0 18px 36px -20px rgb(0 0 0/.35)}
+html.rt3d-on .gate-card{transition:transform .25s ease}
+html.rt3d-on .nav button[aria-current="page"]{box-shadow:0 3px 0 -1px color-mix(in srgb,var(--accent) 70%,transparent),0 8px 18px -8px color-mix(in srgb,var(--accent) 70%,transparent)}
+html.rt3d-on .btn.primary{box-shadow:0 3px 0 color-mix(in oklab,var(--accent),#000 35%);transition:transform .08s,box-shadow .08s}
+html.rt3d-on .btn.primary:active{transform:translateY(2px);box-shadow:0 1px 0 color-mix(in oklab,var(--accent),#000 35%)}
+@media (prefers-reduced-motion:reduce){
+  .rt3d *,html.rt3d-on body::before,html.rt3d-on .wrap>section,html.rt3d-on dialog[open]{animation:none!important}
+  .rt3d-cam{transition-duration:.01s}
+}
+@media print{.rt3d,.rt3d-btn{display:none!important}html.rt3d-on body::before{content:none}}
+</style>
+<script id="rt3d-js">
+(function () {
+  'use strict';
+  try {
+    var KEY = 'medphys.rt3d', MINI = 'medphys.rt3d.mini';
+    var mem = {
+      get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+      set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* โหมดส่วนตัว: ไม่จำ */ } }
+    };
+    var root = document.documentElement;
+    var top = document.querySelector('.top'), themeBtn = document.getElementById('theme-btn');
+    if (!top || !themeBtn) return;
+
+    // ขั้นของ workflow รังสีรักษา ↔ แถบของระบบ · x,y = ตำแหน่งบนพื้นฉาก (px)
+    var STEPS = [
+      { name: 'ลงทะเบียน', en: 'Registration', views: ['reg'], x: -690, y: 40 },
+      { name: 'Consult แพทย์', en: 'Consultation', views: ['consult', 'dq'], x: -460, y: -60 },
+      { name: 'ลงนัด · ใส่แร่', en: 'Scheduling', views: ['appt', 'bq'], x: -230, y: 50 },
+      { name: 'CT-SIM', en: 'Simulation', views: ['ctsim'], x: 0, y: -50 },
+      { name: 'วางแผนการรักษา', en: 'Treatment planning', views: ['work', 'pend', 'queue'], x: 230, y: 50 },
+      { name: 'RC และกิจกรรม', en: 'Plan check', views: ['logs'], x: 460, y: -60 },
+      { name: 'ฉายรังสี · Complete', en: 'Treatment delivery', views: ['course'], x: 690, y: 40 }
+    ];
+    var OVERVIEW = { dash: 'แดชบอร์ด', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
+
+    function el(tag, cls, parent, html) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (html != null) e.innerHTML = html;
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+    function px(n) { return n + 'px'; }
+    function t3(x, y, z) { return 'translate3d(' + px(x) + ',' + px(y) + ',' + px(z) + ')'; }
+    function face(b, k, w, h, tf) { var f = el('i', k, b); f.style.width = px(w); f.style.height = px(h); f.style.transform = tf; return f; }
+    // กล่อง w (แกน x) × d (แกน y) × สูง h (แกน z ขึ้นจากพื้น) จุดกลางฐานอยู่ที่ x,y,z
+    function box(parent, w, d, h, o) {
+      o = o || {};
+      var b = el('div', 'b3 ' + (o.cls || ''), parent);
+      b.style.transform = t3(o.x || 0, o.y || 0, o.z || 0);
+      if (o.c) b.style.setProperty('--c', o.c);
+      face(b, 't', w, d, t3(-w / 2, -d / 2, h));
+      face(b, 'f', w, h, t3(-w / 2, d / 2, h) + ' rotateX(-90deg)');
+      face(b, 'k', w, h, t3(w / 2, -d / 2, h) + ' rotateZ(180deg) rotateX(-90deg)');
+      face(b, 'r', d, h, t3(w / 2, d / 2, h) + ' rotateZ(-90deg) rotateX(-90deg)');
+      face(b, 'l', d, h, t3(-w / 2, -d / 2, h) + ' rotateZ(90deg) rotateX(-90deg)');
+      return b;
+    }
+    // แผ่นตั้งหันหน้าไปทาง +y (เข้าหากล้อง) กึ่งกลางที่ x · ขอบล่างที่ z
+    function upright(parent, cls, w, h, x, y, z) {
+      var p = el('div', 'rt3d-plane ' + cls, parent);
+      p.style.width = px(w); p.style.height = px(h);
+      p.style.transform = t3(x - w / 2, y, z + h) + ' rotateX(-90deg)';
+      return p;
+    }
+    // ป้าย/วัตถุที่หันเข้าหากล้องเสมอ
+    function bb(parent, x, y, z, inner) {
+      var b = el('div', 'rt3d-bb', parent);
+      b.style.transform = t3(x, y, z) + ' rotateZ(calc(-1 * var(--rz))) rotateX(calc(-1 * var(--tilt)))';
+      if (inner) b.appendChild(inner);
+      return b;
+    }
+
+    /* ---------- สร้างฉาก ---------- */
+    var scene, cam, world, hud, stations = [], stepBtns = [], built = false;
+    function build() {
+      built = true;
+      scene = el('section', 'rt3d');
+      scene.setAttribute('aria-label', 'ภาพ workflow รังสีรักษาแบบสามมิติ');
+      hud = el('div', 'rt3d-hud', scene, '<small>RT WORKFLOW · 3D</small><b></b><span></span>');
+      var tools = el('div', 'rt3d-tools', scene);
+      var miniBtn = el('button', '', tools, '');
+      miniBtn.type = 'button';
+      var syncMini = function () {
+        var m = scene.classList.contains('mini');
+        miniBtn.textContent = m ? 'ขยาย' : 'ย่อ';
+        miniBtn.title = m ? 'ขยายฉาก 3D' : 'ย่อฉาก 3D ให้เหลือแถบเล็ก';
+      };
+      miniBtn.addEventListener('click', function () {
+        scene.classList.toggle('mini');
+        mem.set(MINI, scene.classList.contains('mini') ? '1' : '0');
+        syncMini(); fit(); sync();
+      });
+      if (mem.get(MINI) === '1') scene.classList.add('mini');
+      syncMini();
+
+      cam = el('div', 'rt3d-cam', scene);
+      world = el('div', 'rt3d-world', cam);
+      el('div', 'rt3d-floor', world);
+
+      // เส้นทาง + ผู้ป่วยที่เดินผ่านทุกขั้น
+      var d = '';
+      STEPS.forEach(function (s, i) {
+        d += (i ? ' L ' : 'M ') + s.x + ' ' + s.y;
+        var n = STEPS[i + 1];
+        if (!n) return;
+        var dx = n.x - s.x, dy = n.y - s.y, tr = el('div', 'rt3d-track', world);
+        tr.style.width = px(Math.hypot(dx, dy));
+        tr.style.transform = t3(s.x, s.y - 6, 1) + ' rotateZ(' + Math.atan2(dy, dx) + 'rad)';
+      });
+      for (var k = 0; k < 6; k++) {
+        var tok = el('div', 'rt3d-tok', world);
+        tok.style.offsetPath = "path('" + d + "')";
+        tok.style.animationDelay = (-k * 5) + 's';
+        bb(tok, 0, 0, 16, el('span'));
+      }
+
+      STEPS.forEach(function (s, i) {
+        var g = el('div', 'rt3d-st', world);
+        g.style.transform = t3(s.x, s.y, 0);
+        el('div', 'rt3d-pulse', g); el('div', 'rt3d-pulse p2', g);
+        box(g, 170, 124, 8, { cls: 'base', c: '#1d3438' });
+        PROPS[i](g);
+        var lbl = el('button', 'rt3d-lbl', null,
+          '<span class="no">' + (i + 1) + '</span><span class="cnt"></span>' + s.name + '<small>' + s.en + '</small>');
+        lbl.type = 'button';
+        lbl.tabIndex = -1;   // คีย์บอร์ดใช้แถบขั้นด้านล่าง
+        lbl.addEventListener('click', function () { go(i); });
+        bb(g, 0, 0, 150, lbl);
+        stations.push({ g: g, cnt: lbl.querySelector('.cnt') });
+      });
+
+      var ol = el('ol', 'rt3d-steps', scene);
+      ol.setAttribute('aria-label', 'ขั้นตอนรังสีรักษา');
+      STEPS.forEach(function (s, i) {
+        var li = el('li', '', ol), b = el('button', '', li, '<span>' + s.name + '</span>');
+        b.type = 'button';
+        b.title = s.name + ' (' + s.en + ')';
+        b.addEventListener('click', function () { go(i); });
+        stepBtns.push(b);
+      });
+
+      top.insertAdjacentElement('afterend', scene);
+      new ResizeObserver(fit).observe(scene);
+      if ('IntersectionObserver' in window) new IntersectionObserver(function (es) {
+        seen = es[es.length - 1].isIntersecting; pauseSync();
+      }).observe(scene);
+      fit();
+    }
+    var seen = true;
+    function pauseSync() { if (scene) scene.classList.toggle('paused', !seen || document.hidden); }
+    document.addEventListener('visibilitychange', pauseSync);
+    function fit() {
+      if (!scene) return;
+      var w = scene.clientWidth || 1000, mini = scene.classList.contains('mini');
+      scene.style.setProperty('--k', String(Math.max(0.42, Math.min(1.1, w / (mini ? 1500 : 1250)))));
+    }
+
+    // อุปกรณ์ของแต่ละขั้น
+    var PROPS = [
+      function reg(g) {   // โต๊ะลงทะเบียน + บัตรผู้ป่วยหมุน
+        box(g, 92, 40, 34, { y: 8, z: 8, c: '#7a5b3f' });
+        box(g, 40, 6, 26, { y: 0, z: 42, c: '#22343a' });
+        upright(g, 'rt3d-screen b', 34, 20, 0, 3.5, 46);
+        bb(g, 0, 0, 108, el('div', 'rt3d-card'));
+      },
+      function consult(g) {   // โต๊ะตรวจ เก้าอี้ 2 ตัว + สัญลักษณ์การแพทย์
+        box(g, 70, 46, 30, { z: 8, c: '#d9e4e3' });
+        box(g, 24, 24, 20, { x: -58, z: 8, c: '#3f6f9a' });
+        box(g, 24, 6, 26, { x: -58, y: -12, z: 28, c: '#3f6f9a' });
+        box(g, 24, 24, 20, { x: 58, z: 8, c: '#3f6f9a' });
+        box(g, 24, 6, 26, { x: 58, y: -12, z: 28, c: '#3f6f9a' });
+        bb(g, 0, 0, 108, el('div', 'rt3d-cross'));
+      },
+      function appt(g) {   // ปฏิทินนัด วันนัดกะพริบ
+        box(g, 78, 22, 70, { y: -10, z: 8, c: '#c9d6d5' });
+        upright(g, 'rt3d-cal', 70, 64, 0, 1.5, 11);
+        bb(g, 0, 0, 120, el('div', 'rt3d-check', null, '✓'));
+      },
+      function ct(g) {   // CT: วงแหวน gantry + เตียงเลื่อนเข้าออก + เลเซอร์จัดท่า
+        var D = 112, z0 = 14;
+        [-14, -5, 4].forEach(function (yy, j) {
+          upright(g, 'rt3d-ring ' + (j === 2 ? 'face' : 'inner'), D, D, 0, yy, z0);
+        });
+        box(g, 132, 30, 18, { y: -5, z: 8, c: '#c9d6d5' });   // ฐาน gantry
+        box(g, 30, 60, 46, { y: 58, z: 8, c: '#9fb0b3' });     // ฐานเตียง
+        var couch = el('div', 'rt3d-slide', g);
+        box(couch, 26, 150, 6, { y: 20, z: 54, c: '#e8eff0' });
+        box(couch, 16, 58, 10, { y: 12, z: 60, c: '#5fa8c8' });   // ผู้ป่วย
+        box(couch, 14, 14, 12, { y: 52, z: 60, c: '#e3b896' });
+        upright(g, 'rt3d-laser', 132, 2, 0, 6, z0 + D / 2);
+      },
+      function plan(g) {   // โต๊ะวางแผน จอ 2 จอ (isodose / DVH) + โฮโลแกรมปริมาณรังสี
+        box(g, 108, 44, 32, { z: 8, c: '#2c3e45' });
+        box(g, 10, 8, 14, { x: -26, y: -8, z: 40, c: '#22343a' });
+        box(g, 10, 8, 14, { x: 26, y: -8, z: 40, c: '#22343a' });
+        upright(g, 'rt3d-screen', 50, 36, -26, -4, 52);
+        upright(g, 'rt3d-screen b', 50, 36, 26, -4, 52);
+        bb(g, 0, 0, 104, el('div', 'rt3d-fan'));
+        bb(g, 0, 0, 126, el('div', 'rt3d-holo'));
+      },
+      function qa(g) {   // phantom น้ำ + เลเซอร์ + เครื่องหมายผ่าน
+        box(g, 56, 56, 56, { z: 8, cls: 'glass' });
+        box(g, 30, 30, 22, { z: 8, c: '#3d8fd1' });
+        upright(g, 'rt3d-laser', 90, 2, 0, 28, 36);
+        bb(g, 0, 0, 124, el('div', 'rt3d-check', null, '✓'));
+      },
+      function tx(g) {   // Linac: stand + gantry หมุนรอบเตียง (arc) + ลำรังสี
+        box(g, 70, 44, 128, { y: -44, z: 8, c: '#dde6e7' });
+        box(g, 26, 76, 50, { y: 46, z: 8, c: '#9fb0b3' });
+        box(g, 28, 150, 6, { y: 34, z: 58, c: '#e8eff0' });
+        box(g, 16, 58, 10, { y: 26, z: 64, c: '#5fa8c8' });
+        box(g, 14, 14, 12, { y: 66, z: 64, c: '#e3b896' });
+        var iso = el('div', '', g);
+        iso.style.transform = t3(0, 4, 74);
+        var gan = el('div', 'rt3d-gantry', iso);
+        box(gan, 40, 30, 60, { y: -36, z: 0, c: '#eef3f3' });           // แขน gantry
+        box(gan, 46, 70, 26, { y: -8, z: 50, c: '#f4f7f7' });           // หัวเครื่อง
+        box(gan, 26, 26, 8, { y: 4, z: 42, c: '#5b6b70' });             // collimator
+        upright(gan, 'rt3d-beam', 34, 42, 0, 4, 0);                     // ลำรังสี หัวเครื่อง → isocenter
+        bb(g, 0, 0, 150, el('div', 'rt3d-star'));
+      }
+    ];
+
+    /* ---------- ซิงก์กับระบบ ---------- */
+    function navBtn(v) { return document.querySelector('.nav [data-view="' + v + '"]'); }
+    function usable(v) { var b = navBtn(v); return !!b && !b.hidden; }
+    function current() { var b = document.querySelector('.nav [data-view][aria-current="page"]'); return b ? b.dataset.view : ''; }
+    function stepOf(v) { for (var i = 0; i < STEPS.length; i++) if (STEPS[i].views.indexOf(v) >= 0) return i; return -1; }
+    function go(i) {
+      var v = STEPS[i].views.filter(usable)[0];
+      if (v) navBtn(v).click();
+      else { tourAt = i; focus(i); }
+    }
+    function count(i) {
+      return STEPS[i].views.reduce(function (n, v) {
+        var dot = navBtn(v) && navBtn(v).querySelector('.nav-dot');
+        return n + (dot ? parseInt(dot.textContent, 10) || 0 : 0);
+      }, 0);
+    }
+    function focus(i) {
+      var mini = scene.classList.contains('mini'), s = STEPS[i];
+      var c = cam.style;
+      if (i < 0 || mini) { c.setProperty('--cx', '0px'); c.setProperty('--cy', '0px'); c.setProperty('--cz', mini ? '-640px' : '-700px'); c.setProperty('--rz', '-12deg'); }
+      var narrow = scene.clientWidth < 640;
+      if (i >= 0 && !mini) { c.setProperty('--cx', px(s.x * (narrow ? 1 : 0.82))); c.setProperty('--cy', px(s.y)); c.setProperty('--cz', narrow ? '160px' : '-260px'); c.setProperty('--rz', (-26 + (i - 3) * 4) + 'deg'); }
+      if (i >= 0 && mini) c.setProperty('--cx', px(s.x * 0.25));
+      scene.classList.toggle('focus', i >= 0 && !mini);
+      stations.forEach(function (st, j) { st.g.classList.toggle('on', j === i); });
+      stepBtns.forEach(function (b, j) {
+        if (j === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+        b.classList.toggle('done', i >= 0 && j < i);
+      });
+    }
+    var tourAt = 0, tourTimer = 0;
+    function sync() {
+      if (!built || !root.classList.contains('rt3d-on')) return;
+      var v = current(), i = stepOf(v), gate = document.getElementById('gate');
+      var locked = !v || (gate && !gate.hidden);
+      clearInterval(tourTimer); tourTimer = 0;
+      STEPS.forEach(function (s, j) {
+        var n = count(j), ok = s.views.some(usable);
+        stations[j].cnt.textContent = n ? String(n) : '';
+        stations[j].g.classList.toggle('off', !ok && !locked);
+        stepBtns[j].disabled = !ok && !locked;
+      });
+      if (locked) {   // ยังไม่เข้าสู่ระบบ: พาชมทีละขั้น
+        hud.querySelector('b').textContent = 'เส้นทางผู้ป่วยรังสีรักษา';
+        hud.querySelector('span').textContent = 'ลงทะเบียน → Consult → ลงนัด → CT-SIM → วางแผน → ตรวจแผน → ฉายรังสี';
+        focus(tourAt);
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) tourTimer = setInterval(function () { tourAt = (tourAt + 1) % STEPS.length; focus(tourAt); }, 3800);
+        return;
+      }
+      if (i >= 0) {
+        hud.querySelector('b').textContent = 'ขั้นที่ ' + (i + 1) + '/' + STEPS.length + ' · ' + STEPS[i].name;
+        var n = count(i);
+        hud.querySelector('span').textContent = STEPS[i].en + (n ? ' · ' + n + ' รายการรอ' : '');
+      } else {
+        hud.querySelector('b').textContent = 'ภาพรวม · ' + (OVERVIEW[v] || (navBtn(v) && navBtn(v).textContent.trim()) || '');
+        hud.querySelector('span').textContent = 'ทุกขั้นตอนของคอร์สรังสีรักษา';
+      }
+      focus(i);
+    }
+
+    /* ---------- ปุ่มเปิด/ปิด ---------- */
+    var btn = el('button', 'theme-btn rt3d-btn', null, '3D');
+    btn.type = 'button';
+    btn.id = 'rt3d-btn';
+    btn.title = 'โหมด 3D: ภาพ workflow รังสีรักษาแบบเคลื่อนไหว (กดเพื่อเปิด/ปิด)';
+    themeBtn.parentNode.insertBefore(btn, themeBtn);
+    function apply(on) {
+      if (on && !built) build();
+      root.classList.toggle('rt3d-on', on);
+      btn.setAttribute('aria-pressed', String(on));
+      if (on) { fit(); sync(); } else { clearInterval(tourTimer); tourTimer = 0; }
+    }
+    btn.addEventListener('click', function () {
+      var on = !root.classList.contains('rt3d-on');
+      mem.set(KEY, on ? '1' : '0');
+      apply(on);
+    });
+
+    var queued = 0;
+    function later() { if (!queued) queued = requestAnimationFrame(function () { queued = 0; sync(); }); }
+    var nav = document.querySelector('.nav');
+    if (nav) new MutationObserver(later).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-current', 'hidden'] });
+    var gateEl = document.getElementById('gate');
+    if (gateEl) new MutationObserver(later).observe(gateEl, { attributes: true, attributeFilter: ['hidden'] });
+
+    apply(mem.get(KEY) !== '0');   // รุ่น 3D: เปิดไว้ก่อน ผู้ใช้ปิดได้
+  } catch (err) {
+    // โหมด 3D ผิดพลาด: ปิดตัวเอง ระบบเดิมใช้ต่อได้ตามปกติ
+    document.documentElement.classList.remove('rt3d-on');
+    if (window.console) console.warn('rt3d', err);
+  }
+})();
+</script>
 <i id="page-end" hidden></i>
 </body>
 </html>
