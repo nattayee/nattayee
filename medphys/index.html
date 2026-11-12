@@ -469,6 +469,10 @@ button.duty-line:hover{border-color:var(--accent)}
 .bq-rtst.wait{background:var(--accent-soft);color:var(--accent)}
 .bq-rtst.done{background:var(--sunken);color:var(--muted)}
 .bq-rtst.stop{background:var(--late-soft);color:var(--late)}
+/* ตรวจสอบแล้ว (หลังคอลัมน์สถานะ) */
+.bq-chk{padding:1px 8px;border:0;border-radius:999px;background:var(--ok-soft);color:var(--ok);font:inherit;font-size:12.5px;font-weight:600;white-space:nowrap}
+button.bq-chk{cursor:pointer}
+.bq-chkb{white-space:nowrap}
 .cp-wait{margin:0 0 14px}   /* แถบแจกงานฟิสิกส์: รอแจก (CP ไม่ทำ CT ใหม่) */
 .cp-wait select{min-width:150px}
 .old-dates{align-self:end;margin:0;padding:8px 12px;border-radius:8px;background:var(--sunken);color:var(--muted);font-size:13px}
@@ -537,6 +541,8 @@ button.duty-line:hover{border-color:var(--accent)}
 .dq-sum .bar{display:inline-block;width:64px;height:6px;margin-left:6px;border-radius:3px;background:var(--line);vertical-align:middle;overflow:hidden}
 .dq-sum .bar i{display:block;height:100%;background:var(--accent)}
 .dq-how{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);font-size:12px;white-space:nowrap}
+.dq-desks{margin:0 0 10px}
+.dq-desk-tag{display:inline-block;padding:0 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:nowrap}
 .dq-how.cover{background:var(--warn-soft)}
 .dq-how.repay{background:var(--ok-soft)}
 .dq-st{font-size:12.5px;white-space:nowrap}
@@ -662,6 +668,12 @@ button.duty-line:hover{border-color:var(--accent)}
 .dpk-d i em.z{color:inherit;opacity:.55}
 .dpk-d u{margin-top:2px;padding:0 5px;border:1px solid var(--line-strong);border-radius:999px;color:var(--muted);font-size:10.5px;font-weight:600;line-height:14px;text-decoration:none;font-variant-numeric:tabular-nums}   /* โควตารวมของวัน (Start RT) */
 .dpk-d u.over{border-color:var(--late);background:var(--late);color:var(--surface)}
+/* ผู้ป่วยทั้งหมดของวัน (มุมขวาล่าง): เขียว = ไม่เกินจำนวนต่อวัน · แดง = เกิน */
+.dpk-tot{position:absolute;right:4px;bottom:3px;padding:0 5px;border-radius:999px;font-size:10.5px;font-weight:700;line-height:15px;font-variant-numeric:tabular-nums}
+.dpk-tot.ok{background:var(--ok-soft);color:var(--ok)}
+.dpk-tot.over{background:var(--late);color:var(--surface)}
+.dpk-wide .dpk-tot{font-size:11.5px;line-height:17px;padding:0 6px}
+.dpk-full .dpk-tot{font-size:13px;line-height:19px;padding:0 7px}
 .dpk-d.sel u{border-color:var(--accent-fg);color:var(--accent-fg)}
 .dpk-d.sel u.over{background:var(--late)}
 .dpk-wide .dpk-d u{font-size:11.5px;line-height:17px;padding:0 7px}
@@ -1947,6 +1959,10 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .bq-d.pick .bq-tl{box-shadow:0 0 0 1px var(--accent-fg)}
 .bq-d.bust{box-shadow:inset 0 0 0 2.5px var(--late)}
 .bq-d.act{outline:2px dashed var(--accent);outline-offset:2px}
+/* หน้าแก้ไขนัด: ปฏิทินแบบเดียวกับตอนลงนัด · Fx อื่นของคอร์สนี้ = กรอบเส้นประ */
+.bq-epick{margin:0 0 14px}
+.bq-d.crs:not(.pick){border-style:dashed;border-color:var(--accent)}
+.bq-d .fxn.fxo{color:var(--accent);font-weight:500}
 .bq-mlegend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 0;color:var(--muted);font-size:12px}
 .bq-mlegend span{display:inline-flex;align-items:center;gap:4px}
 .bq-mlegend .bq-tl{min-width:0;height:16px;padding:0 4px;font-size:10px}
@@ -2223,6 +2239,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   </section>
 
   <section id="view-dq" hidden>
+    <div class="tabs dq-desks" role="tablist" id="dq-desks" aria-label="แถบย่อย" hidden></div>
     <div class="toolbar">
       <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
       <input type="search" class="tab-q" data-tq="dq" placeholder="ค้นหา HN, ชื่อ, แพทย์ (ทุกเดือน)" autocomplete="off" aria-label="ค้นหาในแถบนี้">
@@ -2238,7 +2255,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <p class="notice" id="dq-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบแจกงานแพทย์ต้องใช้ Code.gs รุ่น 2026-11-09.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
     <div class="dq-top">
       <form class="dq-form" id="dq-form" novalidate hidden>
-        <h3>แจกงานแพทย์ <small>ใส่แค่ HN และชื่อ · กดแจก = แพทย์ตามคิว · ไปรอลงนัดในแถบ <span id="dq-ap-lbl">ลงนัด</span></small></h3>
+        <h3>แจกงานแพทย์<span id="dq-desk-lbl"></span> <small>ใส่แค่ HN และชื่อ · กดแจก = แพทย์ตามคิว · ไปรอลงนัดในแถบ <span id="dq-ap-lbl">ลงนัด</span></small></h3>
         <div class="dq-fields">
           <div class="field"><span class="lbl"><label for="dq-hn">HN</label><span class="sub-lbl">พิมพ์ HN หรือชื่อ = เลือกจากแถบลงทะเบียน</span></span><div class="combo"><input id="dq-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dq-hn-list"><ul class="combo-list" id="dq-hn-list" role="listbox" hidden></ul></div></div>
           <label class="field"><span class="lbl">ชื่อ-สกุล</span><input id="dq-name" maxlength="200" autocomplete="off"></label>
@@ -2787,6 +2804,11 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="row2">
         <label class="field"><span class="lbl">วันที่นัด</span><input type="date" id="e-date"></label>
         <div class="field"><span class="lbl">สถานะ</span><div class="chips" id="e-status" role="radiogroup" aria-label="สถานะ"></div></div>
+      </div>
+      <div class="bq-pick bq-epick">
+        <p class="bq-help">กดวันในปฏิทินเพื่อย้ายนัด Fx นี้ · ตัวเลข = นัดที่มีแล้ว / สูงสุด · Fx อื่นของคอร์สนี้มีกรอบเส้นประ</p>
+        <div class="bq-mm" id="e-cal"></div>
+        <div class="bq-mlegend"><span><b class="bq-tl t-F">F</b>Full</span><span><b class="bq-tl t-M">M</b>Mould</span><span><b class="bq-tl t-I">I</b>เสียบเข็ม</span><span><b class="bq-tl t-O">O</b>อื่นๆ</span><span><i class="sw pick"></i>วันที่นัด Fx นี้</span><span><i class="sw over"></i>เกินจำนวนเคส</span><span><i class="sw off"></i>วันหยุด / เสาร์–อาทิตย์ (เลือกไม่ได้)</span></div>
       </div>
       <div class="field"><span class="lbl">แพทย์</span><div class="chips" id="e-doc" role="radiogroup" aria-label="แพทย์"></div></div>
       <div class="field"><span class="lbl">รูปแบบการใส่</span><div class="chips" id="e-tech" role="radiogroup" aria-label="รูปแบบการใส่"></div><input id="e-tech-other" maxlength="100" autocomplete="off" placeholder="ระบุรูปแบบการใส่" aria-label="รูปแบบการใส่อื่น" hidden></div>
@@ -3464,6 +3486,7 @@ const SPQ_API = 59;
 const spqOn = () => serverHas(SPQ_API);
 const REG2_API = 63;   // Code.gs ที่เก็บ วันที่รับ Consult · วันที่นัดมา · ช่องทาง · ส่งตัวจาก · ICD-10 อื่น (Code.gs รุ่นเก่า: ช่องเหล่านี้ไม่แสดงในฟอร์ม)
 const REG2_KEYS = ['consult', 'visit', 'chan', 'refer', 'icds'];
+const DQ_DESKS = [['call', 'Call center'], ['walk', 'ภายใน/Walk in']];   // แจกงานแพทย์: แถบย่อย (ตั้งค่า → แจกงานแพทย์ → แถบย่อย)
 const DQ_PERIODS = [['day', 'ต่อวัน'], ['week', 'ต่อสัปดาห์ (จันทร์–อาทิตย์)'], ['month', 'ต่อเดือน']];   // แจกงานแพทย์: ช่วงที่นับเคสสูงสุดต่อแพทย์
 const REG_API = 40;   // Code.gs ที่มีแถบลงทะเบียน (regSave, regRemove) แบบชื่อ-สกุลช่องเดียว และ HN คำนำหน้า ชื่อ-สกุล บังคับตามตั้งค่า
 const regOn = () => serverHas(REG_API);
@@ -3503,7 +3526,7 @@ const CT_FORM = [
 ];
 const CT_COUNTS = [['coil', 'Coil'], ['ydev', 'Y'], ['inj', 'Syring Injector'], ['nss', 'Normal Saline'], ['syr', 'Syring 50cc']];   // จำนวน 1–4
 const CT_LISTS = [['organs', 'Organ'], ['masks', 'Mask'], ['cms', 'CM (สารทึบรังสี)'], ['pstats', 'สถานะ'], ['hdrs', 'HDR']];
-const PIN_OF_MODE = { vacsave: 'vac', vacdel: 'vac', bqnew: 'bq', bqedit: 'bq', bqcancel: 'bq', stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty', ctsave: 'ct', ctdel: 'ct', apsave: 'appt', apdel: 'appt', jobsave: 'jobs', rgsave: 'reg', rgdel: 'reg' };
+const PIN_OF_MODE = { vacsave: 'vac', vacdel: 'vac', bqnew: 'bq', bqedit: 'bq', bqchk: 'bq', bqcancel: 'bq', stamp: 'steps', vals: 'steps', edit: 'edit', del: 'edit', logadd: 'logs', logedit: 'logs', logdel: 'logs', logbatch: 'logs', course: 'course', fx: 'fx', ptags: 'ptags', mqt: 'mqt', ptadd: 'ptadd', ptdel: 'ptadd', duty: 'duty', ctsave: 'ct', ctdel: 'ct', apsave: 'appt', apdel: 'appt', jobsave: 'jobs', rgsave: 'reg', rgdel: 'reg' };
 // ต้องใส่ PIN ไหม (Code.gs รุ่นเก่า = ต้องใส่ทุกงาน) · ตั้ง/เปลี่ยน PIN ของตัวเองต้องใส่เสมอ
 // กติกาเดียวทุกแถบ ทุกงาน (Code.gs ตรวจแบบเดียวกัน): บันทึกใหม่ = ไม่ต้องใส่ PIN · แก้ไขหรือลบของที่บันทึกไว้แล้ว = ต้องใส่ PIN
 // pinCtx.force = เซิร์ฟเวอร์บอกว่าเป็นการแก้ไข (ข้อมูลเปลี่ยนระหว่างนั้น) หรือกด "ล้าง" ในหน้าต่างที่ยังไม่ได้ขอ PIN
@@ -3516,6 +3539,7 @@ function pinFresh(mode, ctx) {
   const c = ctx.id ? state.cases.find(x => x.id === ctx.id) : null, emp = v => !str(v);
   switch (mode) {
     case 'bqnew': case 'logadd': case 'logbatch': return true;
+    case 'bqchk': return !!ctx.on;   // ตรวจสอบแล้ว = บันทึกใหม่ · เอาออก = แก้
     case 'ptadd': case 'ctsave': case 'apsave': case 'rgsave': case 'jobsave': case 'vacsave': return !!ctx.isNew;
     case 'stamp': case 'vals': { if (!c) return false; const r = ctx.sid ? boostStamps(c)[ctx.sid] || {} : c, k = ctx.step || ctx.key; return emp(r[k]); }
     case 'course': return !!c && emp(c.rt);
@@ -3529,7 +3553,7 @@ function pinFresh(mode, ctx) {
   }
 }
 // งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
-const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rgsave', 'bqnew', 'bqedit', 'bqday', 'vacsave'].includes(mode);
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rgsave', 'bqnew', 'bqedit', 'bqday', 'bqchk', 'vacsave'].includes(mode);
 // ฟอร์มเพิ่มผู้ป่วยในแถบห้องฉาย (ตั้งค่า → ตารางวันฉาย): off = ไม่แสดง · show = แสดง · req = บังคับกรอก · HN และเทคนิคบังคับเสมอ
 const PT_FIELDS = [
   ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'Doc', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
@@ -3661,7 +3685,7 @@ const DEFAULT_CONFIG = {
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4, dayOn: true, docOn: true },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (On = จำกัด)
     simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true,
     cbct: { on: true, def: {} }, spq: { on: false, url: '' },   // cbct: วันทำ CBCT ของเทคนิคพิเศษนับเป็นผู้ป่วยใหม่ · def = รูปแบบเริ่มต้นของแต่ละเทคนิค · spq = นำเข้าจากระบบนัดคิวเทคนิคพิเศษ
-    cal: { calV: 2, simNew: true, simBadge: 'lim', simAll: 'pick', simQ: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน pick = ต้องเลือกห้องก่อน (ไม่แสดงตัวเลข กดวันที่ไม่ได้) · total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
+    cal: { calV: 2, simNew: true, simBadge: 'lim', simAll: 'pick', simQ: true, simTot: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน pick = ต้องเลือกห้องก่อน (ไม่แสดงตัวเลข กดวันที่ไม่ได้) · total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
   reg: { titles: ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'], rights: ['บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ชำระเงินเอง'], form: Object.fromEntries(REG_FORM.map(([k, , v]) => [k, v])),
     chans: ['MOPH Refer', 'E-mail', 'Line'],   // ช่องทางที่รับ Consult · refers = โรงพยาบาลต้นทางที่ส่งตัวบ่อย (ตามรายงาน Consult)
@@ -3675,11 +3699,12 @@ const DEFAULT_CONFIG = {
   // pointer = ตั้งคิวถัดไปเอง { code, at } · payback = คืนคิวหลังลาสูงสุดต่อแพทย์ต่อรอบ (0 = คืนทั้งหมดทันที) · ลำดับคิว = ลำดับใน แพทย์ (Doc)
   // days = วันที่ไม่แจกแพทย์คนนั้น { 0–6: [รหัส] } (0 = อาทิตย์) · max / maxPer = เคสสูงสุดต่อแพทย์ (เกิน = เตือน แจกได้) · s1wd = แพทย์เวร S1 ตามวันในสัปดาห์ (เคส Emergency)
   // bonus = คิวชดเชย [{ code, n, at }] · seqStart = ลำดับเคสแรกของเดือน { 'YYYY-MM': n } (ต่อจากคิวในกระดาษ)
-  dq: { perMonth: 160, off: [], skips: {}, pointer: null, payback: 1, days: {}, max: 10, maxPer: 'week', s1wd: {}, bonus: [], seqStart: {} },
+  dq: { perMonth: 160, off: [], skips: {}, pointer: null, payback: 1, days: {}, max: 10, maxPer: 'week', s1wd: {}, bonus: [], seqStart: {}, desks: { call: ['Refer'], walk: ['Nurse'] } },
   // แถบนัดคิวใส่แร่: จำนวนเคสสูงสุดต่อวัน (เกิน = สีแดง เตือนตอนลงนัด) · รูปแบบการใส่ · ผู้ลงชื่อ MP / RC ได้ (ตำแหน่ง / ชื่อผู้ใช้ LPCH)
   // นัดคิวใส่แร่: docShow = แสดงแพทย์ chip (สัญลักษณ์สีของแพทย์) | name (ชื่อ-สกุล) | both · rtt = RTT เริ่มต้นของนัดใหม่
   // hold = วันที่มีนัดใส่แร่ในแถบห้องฉาย: auto (สถานะชื่อ HDR · ไม่มี = HDR) | id สถานะ fraction | off (ไม่ใช้)
-  bq: { max: 6, techs: ['Full', 'Mould', 'เสียบเข็ม'], signRoles: ['MP'], signUsers: [], docShow: 'chip', rtt: '', hold: 'auto' },
+  bq: { max: 6, techs: ['Full', 'Mould', 'เสียบเข็ม'], signRoles: ['MP'], signUsers: [], docShow: 'chip', rtt: '', hold: 'auto',
+    btn: { chk: ['Nurse'], come: [], rtt: [], ct: [], us: [], mp: ['MP', 'RTT'], rc: ['MP', 'RTT'] } },   // btn = ตำแหน่งที่กดแต่ละปุ่มได้ (ว่าง = ทุกตำแหน่งที่บันทึกในแถบได้ · แอดมินกดได้ทุกปุ่ม)
   // ตัวเลือกของใบสั่ง CT Simulation (ช่องในฟอร์มลงนัด และใบสั่ง PDF) ตามไฟล์ CT Simulation Order Form version2: Examination Part (บรรทัด "หัวข้อ | ข้อย่อย, ..." · ขึ้นต้นด้วย | = ข้อย่อยของหัวข้อบน · {} = ช่องเติมคำ)
   // Immobilization (ข้อคั่นด้วย , · ว่าง = เว้นช่อง) · Position · Gender
   order: {
@@ -4205,7 +4230,8 @@ function mergeConfig(c) {
     payback: dqc.payback == null || dqc.payback === '' ? 1 : Math.max(0, Math.floor(+dqc.payback) || 0),
     days: {}, max: Math.floor(+dqc.max) >= 0 && dqc.max !== '' && dqc.max != null ? Math.min(999, Math.floor(+dqc.max)) : d.dq.max, maxPer: DQ_PERIODS.some(([k]) => k === dqc.maxPer) ? dqc.maxPer : d.dq.maxPer,
     s1wd: {}, bonus: (Array.isArray(dqc.bonus) ? dqc.bonus : []).filter(b => b && str(b.code) && str(b.at)).map(b => ({ code: str(b.code).trim().toUpperCase(), n: Math.max(0, Math.min(50, Math.floor(+b.n) || 0)), at: str(b.at) })).filter(b => b.n),
-    seqStart: {} };
+    seqStart: {}, desks: {} };
+  for (const [k] of DQ_DESKS) { const v = dqc.desks && typeof dqc.desks === 'object' ? dqc.desks[k] : undefined; out.dq.desks[k] = Array.isArray(v) ? [...new Set(v.map(str).filter(Boolean))] : d.dq.desks[k].slice(); }
   for (const [w, l] of Object.entries(dqc.days && typeof dqc.days === 'object' ? dqc.days : {})) if (/^[0-6]$/.test(w) && Array.isArray(l)) { const v = [...new Set(l.map(x => str(x).trim().toUpperCase()).filter(Boolean))]; if (v.length) out.dq.days[w] = v; }
   for (const [w, c] of Object.entries(dqc.s1wd && typeof dqc.s1wd === 'object' ? dqc.s1wd : {})) if (/^[0-6]$/.test(w) && str(c)) out.dq.s1wd[w] = str(c).trim().toUpperCase();
   for (const [ym, n] of Object.entries(dqc.seqStart && typeof dqc.seqStart === 'object' ? dqc.seqStart : {})) if (/^\d{4}-\d{2}$/.test(ym) && Math.floor(+n) > 1) out.dq.seqStart[ym] = Math.min(9999, Math.floor(+n));
@@ -4219,7 +4245,8 @@ function mergeConfig(c) {
   out.bq = { max: Math.min(50, Math.max(1, Math.floor(+bq.max) || d.bq.max)), techs: Array.isArray(bq.techs) ? [...new Set(bq.techs.map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.bq.techs.slice(),
     signRoles: Array.isArray(bq.signRoles) ? [...new Set(bq.signRoles.map(str).filter(Boolean))] : d.bq.signRoles.slice(), signUsers: Array.isArray(bq.signUsers) ? [...new Set(bq.signUsers.map(x => str(x).toLowerCase()).filter(Boolean))] : [],
     docShow: ['chip', 'name', 'both'].includes(bq.docShow) ? bq.docShow : d.bq.docShow, rtt: str(bq.rtt).replace(/\s+/g, ' ').trim().slice(0, 60),
-    hold: bq.hold === 'off' || /^[\w-]{1,40}$/.test(str(bq.hold)) ? str(bq.hold) : d.bq.hold };
+    hold: bq.hold === 'off' || /^[\w-]{1,40}$/.test(str(bq.hold)) ? str(bq.hold) : d.bq.hold,
+    btn: Object.fromEntries(Object.keys(d.bq.btn).map(k => { const v = bq.btn && typeof bq.btn === 'object' ? bq.btn[k] : null; return [k, Array.isArray(v) ? [...new Set(v.map(str).filter(Boolean))] : d.bq.btn[k].slice()]; })) };
   const jb = c.jobs && typeof c.jobs === 'object' ? c.jobs : {}, jnum = (v, dv) => (v === '' || v == null || !isFinite(+v) ? dv : +v);
   const jprof = k => { const x = jb[k] && typeof jb[k] === 'object' ? jb[k] : {}, dv = d.jobs[k]; return { title: str(x.title).slice(0, 80) || dv.title, guar: jnum(x.guar, dv.guar), rate: jnum(x.rate, dv.rate), group: str(x.group).slice(0, 20) || dv.group }; };
   const jmap = (v, dv) => Object.fromEntries(Object.entries(v && typeof v === 'object' && !Array.isArray(v) ? v : dv).filter(([, t]) => ['2D', '3D', 'IMRT', 'SBRT', 'VMAT', '-', ''].includes(t)));
@@ -4354,7 +4381,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.1';
+const PAGE_VERSION = '2026-11-12.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4417,6 +4444,7 @@ const sheetStore = {
   bqEdit: (id, ch, pin) => call('bqEdit', id, ch, pin),
   bqEditDay: (ids, ch, pin) => call('bqEditDay', ids, ch, pin),
   bqCancel: (id, scope, pin) => call('bqCancel', id, scope, pin),
+  bqCheck: (id, on, pin) => call('bqCheck', id, on, pin),
   bqImport: () => call('bqImport'),
   bqImportCheck: () => call('bqImportCheck'),
   jobsSave: (rec, pin) => call('jobsSave', rec, pin),
@@ -4848,6 +4876,16 @@ function localStore() {
       persist();
       return clone(recs);
     },
+    bqCheck: async (id, on, pin) => {   // เหมือน bqCheck ใน Code.gs: ตรวจสอบแล้ว = ไม่ต้องใส่ PIN · เอาออก = ใส่ PIN
+      const a = db.bq.find(x => x.id === id);
+      if (!a) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      if (on ? a.chk : !a.chk) return clone(a);
+      if (!on) demoCheckPin(pin);
+      const by = state.user.name || 'ผู้ใช้ตัวอย่าง';
+      Object.assign(a, { chk: on ? nowStamp() : '', chkBy: on ? by : '', updated: nowISO(), editedBy: by });
+      persist();
+      return clone(a);
+    },
     bqEdit: async (id, ch, pin) => {
       const set = Object.fromEntries(BQ_EDIT.filter(k => k in ch).map(k => [k, str(ch[k])]));
       if ('date' in set && !isDay(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
@@ -4951,7 +4989,9 @@ function localStore() {
         if (how !== 'auto' && !all.includes(doc)) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
         if (how === 'auto') doc = dqPick({ docs: dqDocs(), leaves: db.dqLeave, rows: db.dq, skips: q.skips, pointer: q.pointer, payback: q.payback, days: q.days, bonus: q.bonus, date: today() });
         if (!doc) throw new Error(dqDocs().length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาหรือวันที่ไม่แจกทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
-        const rec = { id: str(r.id) || uid(), hn, name: str(r.name), doc, how, date: today(), st: '', note: str(r.note), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: new Date(t0 + i).toISOString(), updated: '' };
+        const desk = r.desk === 'walk' ? 'walk' : '';
+        if (!dqDeskList().includes(desk || 'call')) throw new Error(`ตำแหน่ง ${state.user.role || '-'} ใช้แถบย่อย ${dqDeskName(desk)} ไม่ได้ (ตั้งค่า → แจกงานแพทย์ → แถบย่อย)`);
+        const rec = { id: str(r.id) || uid(), hn, name: str(r.name), doc, how, date: today(), st: '', note: str(r.note), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: new Date(t0 + i).toISOString(), updated: '', desk };
         db.dq.push(rec);
         out.push(clone(rec));
       });
@@ -5138,7 +5178,7 @@ function demoDb() {
   // แจกงานแพทย์ (ชื่อสมมติ): ตามคิว SC TA PM TC VS · PM ลาเมื่อวาน (TC รับแทน) · ผู้ป่วยที่ลงทะเบียนคนที่ 5 รอแจก
   const dq = [['SC', 'auto', -3], ['TA', 'auto', -3], ['PM', 'auto', -2], ['TC', 'auto', -2], ['VS', 'auto', -1], ['SC', 'auto', -1], ['TA', 'auto', -1], ['TC', 'auto', -1], ['TA', 'manual', 0]]
     .map(([doc, how, k], i) => ({ id: 'demo-d' + (i + 1), hn: i < 2 ? String(999000301 + i) : String(999000600 + i), name: i < 2 ? ['นาย ตัวอย่าง หนึ่ง', 'นาง ตัวอย่าง สอง'][i] : `${['นาย', 'นาง', 'นางสาว'][i % 3]} ตัวอย่าง แจกแพทย์ ${i + 1}`,
-      doc, how, date: d(k), st: '', note: '', by: 'ผู้ใช้ตัวอย่าง', created: new Date(parseISO(d(k)).getTime() + (i + 9) * 36e5).toISOString(), updated: '' }));
+      doc, how, date: d(k), st: '', note: '', by: 'ผู้ใช้ตัวอย่าง', created: new Date(parseISO(d(k)).getTime() + (i + 9) * 36e5).toISOString(), updated: '', desk: i === 3 || i === 6 ? 'walk' : '' }));   // แถบย่อย ภายใน/Walk in 2 คน
   const dqLeave = [{ id: 'demo-dl1', doc: 'PM', from: d(-1), to: d(-1), note: 'ประชุม', by: 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' }, { id: 'demo-dl2', doc: 'VS', from: d(2), to: d(4), note: 'ลาพักร้อน', by: 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' }];
   return { cases, logs, leaves, appt, duty, reg, bq, spq, dq, dqLeave, config: null, demo: true };
 }
@@ -6239,7 +6279,7 @@ const AP_LIMS = [['limits.day', 'CT-Sim ต่อวัน', 'ทุกเคร
   ['simLim.room', 'Start RT ต่อห้องต่อวัน', 'ผู้ป่วยใหม่เริ่มฉายของห้องนั้น ทุกแพทย์รวมกัน (เริ่มต้น 5)'], ['simLim.doc', 'ผู้ป่วยต่อแพทย์ต่อห้องต่อวัน', 'ผู้ป่วยทั้งหมดของแพทย์คนนั้นที่ฉายในห้องนั้นวันนั้น (ใหม่ + ฉายต่อเนื่อง) ทุกวันที่ผู้ป่วยใหม่จะฉาย (เริ่มต้น 16)']];
 const isOnV = v => v === true || v === 'on';
 // ข้อมูลในช่องวันของปฏิทิน (ตั้งค่า → ลงนัด)
-const AP_CAL = [['simNew', 'ตัวเลขผู้ป่วยใหม่ที่เริ่มฉาย'], ['simBadge', 'แบบตัวเลขผู้ป่วยใหม่'], ['simAll', 'ยังไม่เลือกห้อง'], ['simQ', 'โควตารวมของวัน (Q)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
+const AP_CAL = [['simNew', 'ตัวเลขผู้ป่วยใหม่ที่เริ่มฉาย'], ['simBadge', 'แบบตัวเลขผู้ป่วยใหม่'], ['simAll', 'ยังไม่เลือกห้อง'], ['simQ', 'โควตารวมของวัน (Q)'], ['simTot', 'ผู้ป่วยทั้งหมดของวัน (มุมขวาล่าง · เขียว = ไม่เกิน · แดง = เกินจำนวนต่อวันที่ตั้งไว้)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
   ['ctN', 'จำนวน CT ที่นัด'], ['ctDoc', 'ป้ายแพทย์ (จำนวนของแพทย์แต่ละคน)']];
 const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
@@ -7214,10 +7254,26 @@ const DQ_API = 62;
 const dqOn = () => serverHas(DQ_API);
 const DQ_OLD = 'แถบแจกงานแพทย์ต้องใช้ Code.gs รุ่น 2026-11-09.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 const DQ2_OLD = 'เคส Emergency · เวร S1 · วันที่ไม่แจก · คิวชดเชย ต้องใช้ Code.gs รุ่น 2026-11-10.4 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
-const DQ_KEYS = ['id', 'hn', 'name', 'doc', 'how', 'date', 'st', 'note', 'by', 'created', 'updated', 'visit', 'chan', 'refer', 'icd', 'src', 'stNote', 'stBy', 'stAt'];
+const DQ_KEYS = ['id', 'hn', 'name', 'doc', 'how', 'date', 'st', 'note', 'by', 'created', 'updated', 'visit', 'chan', 'refer', 'icd', 'src', 'stNote', 'stBy', 'stAt', 'desk'];
 // Code.gs API 73: ขอเอกสารเพิ่ม / ไม่ RT (แถบ Consult) · แก้วันลาแพทย์ · ประวัติการบันทึก
 const DQM_API = 73;
 const dqMarkOn = () => store.mode !== 'sheet' || serverHas(DQM_API);
+// แถบย่อย (Code.gs API 75): Call center (แถบเดิม · ค่าเริ่มต้น Refer) · ภายใน/Walk in (ค่าเริ่มต้น Nurse) · คิวแพทย์ วันลา เวร S1 รายงาน ใช้ร่วมกัน
+// ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = เห็นเฉพาะแถบย่อยนั้น · ตำแหน่งอื่น แอดมิน และบัญชี Google = ทุกแถบย่อย (ตรงกับ dqDesks_ ใน Code.gs)
+const DQ_DESK_API = 75;
+const dqDeskOn = () => store.mode !== 'sheet' || serverHas(DQ_DESK_API);
+const dqDeskName = k => (k === 'walk' ? 'ภายใน/Walk in' : 'Call center');
+const dqDeskOf = r => (r.desk === 'walk' ? 'walk' : 'call');
+function dqDeskList() {
+  const u = state.user, all = DQ_DESKS.map(([k]) => k);
+  if (u.via === 'google' || u.pending || u.isAdmin) return all;
+  const set = state.config.dq.desks || {}, role = str(u.role).toUpperCase();
+  const mine = all.filter(k => (set[k] || []).some(r => str(r).toUpperCase() === role));
+  return mine.length ? mine : all;
+}
+const dqDesk = () => { const l = dqDeskList(), v = pref.get('dqDesk', l[0]); return l.includes(v) ? v : l[0]; };
+// รายการในแถบย่อยที่เปิดอยู่ (Code.gs รุ่นเก่า = ทุกรายการ)
+const dqInDesk = r => !dqDeskOn() || dqDeskOf(r) === dqDesk();
 function normDq(o) {
   const r = {};
   for (const k of DQ_KEYS) r[k] = str(o[k]);
@@ -7226,6 +7282,7 @@ function normDq(o) {
   r.visit = dateStr(r.visit);
   r.date = dateStr(r.date) || localDay(r.created) || today();
   r.st = ['skip', 'doc', 'nort'].includes(r.st) ? r.st : '';   // doc = รอเอกสารเพิ่ม · nort = ไม่ RT
+  r.desk = r.desk === 'walk' ? 'walk' : '';   // แถบย่อย: '' = Call center · walk = ภายใน/Walk in
   r.id = r.id || uid();
   r.created = r.created || nowISO();
   return r;
@@ -7468,7 +7525,7 @@ function dqDupCheck() {
 }
 // รอเอกสารเพิ่มเติม (ขอจากแถบ Consult): ได้เอกสารแล้ว = กลับไปรอลงนัดในแถบ Consult
 function renderDqDocWait(edit) {
-  const box = $('#dq-docw'), list = state.dq.filter(r => r.st === 'doc').sort((a, b) => b.stAt.localeCompare(a.stAt));
+  const box = $('#dq-docw'), list = state.dq.filter(r => r.st === 'doc' && dqInDesk(r)).sort((a, b) => b.stAt.localeCompare(a.stAt));
   box.hidden = !list.length;
   if (!list.length) { box.innerHTML = ''; return; }
   const row = r => `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b> ${esc(r.name)} · แพทย์ ${esc(dqDocText(r.doc))}<small>ขอ: <b>${esc(r.stNote)}</b>${r.stBy ? ` · โดย ${esc(r.stBy)}` : ''}${r.stAt ? ` ${esc(fmtDay(localDay(r.stAt)))}` : ''}</small></div>`
@@ -7482,7 +7539,11 @@ function renderDq() {
   $('#dq-ap-lbl').textContent = navLabel('consult');
   $('#dq-leave-btn').textContent = accessOf('dq') === 'edit' || myDoctor() ? 'วันลาแพทย์' : 'ดูวันลาแพทย์';
   syncTabQ('dq');
-  $('#dq-import').hidden = !edit || !dqImportOn();
+  const desks = dqDeskOn() ? dqDeskList() : [], desk = dqDesk();
+  $('#dq-desks').hidden = !desks.length;
+  $('#dq-desks').innerHTML = desks.map(k => `<button type="button" class="tab" role="tab" data-dqdesk="${k}" aria-selected="${k === desk}">${esc(dqDeskName(k))}<span class="n">${state.dq.filter(r => r.date.slice(0, 7) === ym && dqDeskOf(r) === k).length}</span></button>`).join('');
+  $('#dq-desk-lbl').textContent = desks.length ? ' · ' + dqDeskName(desk) : '';
+  $('#dq-import').hidden = !edit || !dqImportOn() || (dqDeskOn() && desk !== 'call');   // รายงาน Consult ของ HIS = Call center
   $('#dq-s1-btn').hidden = !edit || !dq2On();
   $('#dq-form').hidden = !edit;
   $('.dq-emer', $('#dq-form')).hidden = !dq2On();
@@ -7523,14 +7584,15 @@ function renderDq() {
   $('#dq-sheet').hidden = view !== 'sheet';
   if (view === 'sheet') renderDqSheet(ym, run);
   if (dqDocF && !state.dq.some(r => r.doc === dqDocF)) dqDocF = '';
-  const words = tabWords('dq'), byDoc = r => !dqDocF || r.doc === dqDocF;
-  const all = (words.length ? state.dq.filter(r => wordsIn(words, dqText(r))) : inMonth.slice()).sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created)).filter(byDoc);   // วันที่ล่าสุดอยู่บนสุด
+  const words = tabWords('dq'), byDoc = r => !dqDocF || r.doc === dqDocF, deskOk = r => dqDeskList().includes(dqDeskOf(r));
+  // แถบย่อย: รายการของแถบย่อยนี้ · ค้นหา = ทุกแถบย่อยที่ตำแหน่งนี้เห็น (ป้ายบอกแถบย่อยอื่น)
+  const all = (words.length ? state.dq.filter(r => (!dqDeskOn() || deskOk(r)) && wordsIn(words, dqText(r))) : inMonth.filter(dqInDesk)).sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created)).filter(byDoc);   // วันที่ล่าสุดอยู่บนสุด
   const list = all.slice(0, 200);
-  const nImp = inMonth.filter(r => r.how === 'import').length;
-  $('#dq-help').textContent = (words.length ? `ค้นหาทุกเดือน · พบ ${all.length} รายการ${all.length > list.length ? ` (แสดง ${list.length})` : ''}` : `${fmtMonth(ym)} · แจกแล้ว ${inMonth.length} / ${per} เคส${nImp ? ` (จากรายงาน HIS ${nImp})` : ''} · รอลงนัด ${inMonth.filter(r => dqState(r) === 'wait').length}${edit ? ' · กดแถวเพื่อแก้หรือเปลี่ยนแพทย์' : ''}`)
+  const nImp = inMonth.filter(r => r.how === 'import').length, nDesk = dqDeskOn() ? inMonth.filter(dqInDesk).length : -1;
+  $('#dq-help').textContent = (words.length ? `ค้นหาทุกเดือน · พบ ${all.length} รายการ${all.length > list.length ? ` (แสดง ${list.length})` : ''}` : `${fmtMonth(ym)} · ${nDesk >= 0 ? `${dqDeskName(dqDesk())} ${nDesk} เคส · ` : ''}แจกแล้ว${nDesk >= 0 ? 'ทั้งหมด' : ''} ${inMonth.length} / ${per} เคส${nImp ? ` (จากรายงาน HIS ${nImp})` : ''} · รอลงนัด ${inMonth.filter(r => dqState(r) === 'wait').length}${edit ? ' · กดแถวเพื่อแก้หรือเปลี่ยนแพทย์' : ''}`)
     + (dqDocF ? ` · เฉพาะแพทย์ ${dqDocText(dqDocF)} ${all.length} รายการ (กดชื่อในสรุปรายเดือนอีกครั้ง = ดูทั้งหมด)` : '');
   const st = r => { const s = dqState(r), a = s === 'done' ? dqAppt(r) : null, v = dqInfo(r).visit; return `<span class="dq-st ${s === 'his' ? 'skip' : s}">${s === 'wait' ? 'รอลงนัด' : s === 'skip' ? 'ไม่ต้องลงนัด' : s === 'doc' ? 'รอเอกสาร' : s === 'nort' ? 'ไม่ RT' : s === 'his' ? (v ? `นัดมา ${esc(fmtDay(v))}` : 'จาก HIS') : `ลงนัดแล้ว${a && isDay(a.date) ? ` · CT ${esc(fmtDay(a.date))}` : ''}`}</span>`; };
-  const row = r => { const h = dqHow(r); return `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-dqedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span></td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td></tr>`; };
+  const row = r => { const h = dqHow(r), other = dqDeskOn() && !dqInDesk(r); return `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-dqedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span>${other ? ` <span class="dq-desk-tag" title="แจกจากแถบย่อย ${esc(dqDeskName(r.desk))}">${esc(dqDeskName(r.desk))}</span>` : ''}</td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td></tr>`; };
   $('#dq-tbl').innerHTML = `<thead><tr><th title="เดือน/ลำดับที่">ลำดับ</th><th>วันที่แจก</th><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>การแจก</th><th>สถานะ</th><th>Note · แจกโดย</th></tr></thead><tbody>${list.map(row).join('') || `<tr><td colspan="8" class="empty-state">${words.length ? 'ไม่พบรายการที่ตรงกับคำค้น' : `ยังไม่มีการแจกงานแพทย์ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
 }
 async function submitDq(e) {
@@ -7550,7 +7612,7 @@ async function submitDq(e) {
   const btn = $('#dq-go');
   btn.disabled = true;
   try {
-    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc }])).map(normDq);
+    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc, ...(dqDeskOn() && dqDesk() === 'walk' ? { desk: 'walk' } : {}) }])).map(normDq);
     for (const r of out) if (!state.dq.some(x => x.id === r.id)) state.dq.push(r);
     dqMemo = null;
     $('#dq-hn').value = '';
@@ -8203,6 +8265,7 @@ dqsForm.addEventListener('submit', async e => {
 });
 
 /* ---------- ตั้งค่า → แจกงานแพทย์ ---------- */
+const dqDeskRoles = d => [...new Set([...d.roles, ...Object.values(d.dq.desks).flat()])];   // คอลัมน์ตาราง แถบย่อย: ตำแหน่งทั้งหมด
 let dqSkipYm = '';   // เดือนที่แสดงในตาราง หักคิวรายเดือนของแพทย์ (ว่าง = เดือนนี้)
 function dqSetSec(d) {
   const docs = [...new Set(d.doctors.map(x => x.code).filter(Boolean))], off = new Set(d.dq.off), ym = dqSkipYm || thisMonth(), sk = d.dq.skips[ym] || {};
@@ -8226,6 +8289,10 @@ function dqSetSec(d) {
       <label class="field"><span class="lbl">เคสสูงสุดต่อแพทย์ <span class="sub-lbl">เกิน = เตือนตอนแจก แต่ยังแจกได้ · 0 = ไม่เตือน</span></span><input type="number" min="0" max="999" step="1" data-k="dq.max" value="${esc(String(d.dq.max))}"></label>
       <label class="field"><span class="lbl">นับเคสสูงสุด</span><select data-k="dq.maxPer">${DQ_PERIODS.map(([k, l]) => opt(k, l, d.dq.maxPer)).join('')}</select></label>
     </div>
+    <h3 class="sub-h">แถบย่อย <small class="muted">ติ๊ก = ตำแหน่งที่เห็นแถบย่อยนั้น · ตำแหน่งที่ไม่ได้ติ๊กแถบย่อยใดเลย (เช่น MP, RO) แอดมิน และบัญชี Google เห็นทุกแถบย่อย · ทุกแถบย่อยใช้คิวแพทย์ วันลา เวร S1 และรายงานร่วมกัน</small></h3>
+    ${dqDeskOn() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบย่อยต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>`}
+    <div class="table-wrap set-table"><table class="dqdesk-t"><thead><tr><th style="text-align:left">แถบย่อย</th>${dqDeskRoles(d).map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${DQ_DESKS.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}${k === 'call' ? '<small class="muted" style="display:block">แถบเดิม · ดึงรายงาน HIS</small>' : ''}</td>${dqDeskRoles(d).map(r => `<td><input type="checkbox" data-dqdeskrole="${k}" value="${esc(r)}"${(d.dq.desks[k] || []).includes(r) ? ' checked' : ''} aria-label="${esc(`${l}: ${r}`)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="muted def-note" style="margin:6px 0 12px">ตำแหน่งต้องเห็นแถบ ${esc(navLabel('dq'))} ด้วย (ตั้งที่ แถบเมนู) · บันทึกได้ = แจกในแถบย่อยที่เห็น</p>
     ${dq2On() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>${esc(DQ2_OLD)}</span></p>`}
     <h3 class="sub-h">วันที่แจก <small class="muted">ติ๊ก = แจกให้แพทย์คนนั้นในวันนั้น · ไม่ติ๊ก = ไม่แจก (เหมือนลา: คนอื่นรับแทน แล้วคืนคิวในวันอื่น ไม่เสียคิว)</small></h3>
     <div class="table-wrap set-table"><table><thead><tr><th style="text-align:left">วัน</th>${inQ.map(c => `<th title="${esc(docName(c))}">${esc(c)}</th>`).join('')}<th style="text-align:left">แพทย์เวร S1 (Emergency)</th></tr></thead><tbody>${[1, 2, 3, 4, 5, 6, 0].map(w => `<tr><th scope="row" style="text-align:left">${esc(WD_TH[w])}</th>${inQ.map(c => `<td><input type="checkbox" data-dqday="${w}|${esc(c)}"${(d.dq.days[w] || []).includes(c) ? '' : ' checked'} aria-label="แจกให้ ${esc(c)} วัน${esc(WD_TH[w])}"></td>`).join('')}<td style="text-align:left"><select data-dqs1wd="${w}" aria-label="แพทย์เวร S1 วัน${esc(WD_TH[w])}">${opt('', '—', d.dq.s1wd[w] || '')}${docs.map(c => opt(c, `${c}${docName(c) ? ' · ' + docName(c) : ''}`, d.dq.s1wd[w] || '')).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -8298,9 +8365,9 @@ function clearAdvance(cases, td = today()) {
   return n;
 }
 const bqNsOn = () => serverHas(BQ_NS_API);
-const BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'note', 'status', 'rtt', 'mp', 'rc', 'hist', 'src', 'by', 'created', 'editedBy', 'updated', 'ct', 'ctRoom', 'us', 'rtRoom'];
+const BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'note', 'status', 'rtt', 'mp', 'rc', 'hist', 'src', 'by', 'created', 'editedBy', 'updated', 'ct', 'ctRoom', 'us', 'rtRoom', 'chk', 'chkBy'];
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
-const BQ_FIELD = { date: 'วันที่', doc: 'แพทย์', tech: 'รูปแบบการใส่', note: 'หมายเหตุ', status: 'สถานะ', rtt: 'RTT', mp: 'MP', rc: 'RC', ct: 'CT', ctRoom: 'ห้อง CT', us: 'US' };
+const BQ_FIELD = { chk: 'ตรวจสอบ', date: 'วันที่', doc: 'แพทย์', tech: 'รูปแบบการใส่', note: 'หมายเหตุ', status: 'สถานะ', rtt: 'RTT', mp: 'MP', rc: 'RC', ct: 'CT', ctRoom: 'ห้อง CT', us: 'US' };
 // CT ของนัดใส่แร่ (CT / Re-CT + ห้อง CT ที่ทำ → นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · US = Ultrasound (บันทึกไว้ ยังไม่นับคะแนน)
 const BQ_IMG_API = 46, BQ_NOCT = 'ไม่ทำ';
 const BQ_CT2_API = 53;   // Code.gs ที่รับ CT / Re-CT1 / Re-CT2 (รุ่นเก่า: CT / Re-CT) และส่งห้องฉายของผู้ป่วย (rtRoom) มากับนัด
@@ -8428,8 +8495,20 @@ function bqRttChips(id, name, v) {
 }
 const bqRttVal = (box, other) => str($(other).value) || chipValue($(box));
 // ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT (ตรงกับ bqCanSign_ ใน Code.gs · RTT ต้องใช้ API 50) · รายชื่อให้เลือก = ทีมนักฟิสิกส์ (MP) ที่ปฏิบัติงาน
-const BQ_SIGN_MSG = 'ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT';
-function bqCanSign() { const u = state.user || {}, r = str(u.role).toUpperCase(); return u.via === 'google' || r === 'MP' || (r === 'RTT' && bqNsOn()); }
+const BQ_SIGN_MSG = 'ตำแหน่งของคุณลงชื่อ MP / RC ไม่ได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)';
+function bqCanSign() { return bqBtnOk('mp'); }
+// ปุ่มของแถบนัดคิวใส่แร่ที่ตำแหน่งของผู้ใช้กดได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม · ตรงกับ bqBtnOk_ ใน Code.gs API 75)
+// ว่าง = ทุกตำแหน่งที่บันทึกในแถบได้ · แอดมินและบัญชี Google กดได้ทุกปุ่ม · Code.gs ก่อน API 50: RTT ลงชื่อ MP / RC ไม่ได้
+const BQ_BTNS = [['chk', 'ตรวจสอบแล้ว', 'คอลัมน์หลังสถานะ · ตำแหน่งที่ดูแถบนี้ได้อย่างเดียวก็กดได้'], ['come', 'มาแล้ว / ไม่มา', ''], ['rtt', 'RTT', ''], ['ct', 'CT / Re-CT', ''], ['us', 'US', ''], ['mp', 'MP', ''], ['rc', 'RC', '']];
+const BQ_CHK_API = 75;
+const bqChkOn = () => serverHas(BQ_CHK_API);
+function bqBtnOk(k) {
+  const u = state.user || {}, r = str(u.role).toUpperCase(), roles = (state.config.bq.btn || {})[k] || [];
+  if (u.via === 'google' || u.isAdmin) return true;
+  if ((k === 'mp' || k === 'rc') && r === 'RTT' && !bqNsOn()) return false;
+  return !roles.length || roles.some(x => str(x).toUpperCase() === r);
+}
+const bqBtnMsg = k => `ตำแหน่ง ${state.user.role || '-'} กดปุ่ม ${(BQ_BTNS.find(x => x[0] === k) || [])[1] || k} ไม่ได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)`;
 function bqMerge(recs) {
   for (const r of recs) { const i = state.bq.findIndex(x => x.id === r.id); if (i < 0) state.bq.push(r); else state.bq[i] = r; }
   bqVer++;
@@ -8494,34 +8573,38 @@ function renderBq() {
   if (w >= 280 && Math.abs(w - state.bqW) > 2) { state.bqW = w; renderBq(); }
 }
 // แถวในตาราง: คิว (นับเฉพาะนัดที่ไม่ยกเลิกของวันนั้น) HN ชื่อ แพทย์ รูปแบบการใส่ Fx หมายเหตุ สถานะ MP RC มาแล้ว · กดแถว = แก้ไข
-const BQ_HEAD = '<thead><tr><th>คิว</th><th>HN</th><th>ชื่อ-สกุล</th><th title="ห้องฉายรังสีภายนอกของผู้ป่วย">ห้องฉาย</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th>RTT</th><th>CT</th><th>US</th><th>MP</th><th>RC</th><th></th></tr></thead>';
-const BQ_COLS = 15;
+const BQ_HEAD = '<thead><tr><th>คิว</th><th>HN</th><th>ชื่อ-สกุล</th><th title="ห้องฉายรังสีภายนอกของผู้ป่วย">ห้องฉาย</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th title="ตรวจสอบนัดแล้ว (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)">ตรวจสอบ</th><th>RTT</th><th>CT</th><th>US</th><th>MP</th><th>RC</th><th></th></tr></thead>';
+const BQ_COLS = 16;
 function bqRowsHtml(rows, edit) {
   let q = 0;
-  const sign = edit && bqCanSign();
+  const canB = k => edit && bqBtnOk(k), chkOk = bqChkOn() && !!accessOf('bq') && bqBtnOk('chk');   // ตรวจสอบแล้ว: ดูแถบนี้ได้อย่างเดียวก็กดได้
   return rows.map(a => {
     const st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : a.status === BQ_ST.noshow ? 'noshow' : '';
-    const who = k => (a[k] ? av(a[k]) : sign && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="${k}" title="ลงชื่อ ${k.toUpperCase()}${bqLinked() ? (k === 'mp' ? ' · นับคะแนน Brachytherapy ของ MP' : ' · นับคะแนน RC') : ''}">+ ${k.toUpperCase()}</button>` : '');
-    const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
+    const who = k => (a[k] ? av(a[k]) : canB(k) && bqLive(a) ? `<button type="button" class="bq-sign" data-bqsign="${esc(a.id)}" data-bqk="${k}" title="ลงชื่อ ${k.toUpperCase()}${bqLinked() ? (k === 'mp' ? ' · นับคะแนน Brachytherapy ของ MP' : ' · นับคะแนน RC') : ''}">+ ${k.toUpperCase()}</button>` : '');
+    const rtt = a.rtt ? `<span class="bq-rtt" title="RTT ${esc(a.rtt)}">${esc(bqRttShort(a.rtt))}</span>` : canB('rtt') && bqLive(a) ? `<button type="button" class="bq-sign${bqRttOn() ? '' : ' old'}" data-bqsign="${esc(a.id)}" data-bqk="rtt" title="${esc(bqRttOn() ? `ลง RTT${state.config.bq.rtt ? ` (เริ่มต้น ${state.config.bq.rtt})` : ''}` : bqRttOld())}">+ RTT</button>` : '';
     const pairs = bqCtPairs(a), ctT = pairs.map(bqCtLabel).join(', '), ctC = ctT ? `<span class="bq-imgc">${esc(ctT)}</span>` : '';
-    const img = edit && bqLive(a) && bqMultiOn() ? `<span class="bq-cts">${[...bqCts(), ...pairs.map(p => p.t).filter(t => !bqCts().includes(t))].map(t => {
+    const ctOk = canB('ct'), usOk = canB('us');
+    const img = ctOk && bqLive(a) && bqMultiOn() ? `<span class="bq-cts">${[...bqCts(), ...pairs.map(p => p.t).filter(t => !bqCts().includes(t))].map(t => {
       const p = pairs.find(x => x.t === t);
       return p ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`${t} ${ctLabel(p.room)} · กดเพื่อเปลี่ยนห้องหรือเอาออก`)}"><span class="bq-imgc">${esc(bqCtLabel(p))}</span></button>`
         : `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับ +1 คะแนนห้อง CT ต่อรอบ (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`;
     }).join('')}</span>`
-      : ctT ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" title="${esc(ctT + ' · กดเพื่อแก้')}">${ctC}</button>` : `<span class="bq-img" title="${esc(ctT)}">${ctC}</span>`)
-      : edit && bqLive(a) ? (bqImgOn() ? `<span class="bq-cts">${bqCts().map(t => `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับคะแนนห้อง CT (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`).join('')}</span>`
+      : ctT ? (ctOk && bqLive(a) ? `<button type="button" class="bq-img" data-bqimg="${esc(a.id)}" title="${esc(ctT + ' · กดเพื่อแก้')}">${ctC}</button>` : `<span class="bq-img" title="${esc(ctT)}">${ctC}</span>`)
+      : ctOk && bqLive(a) ? (bqImgOn() ? `<span class="bq-cts">${bqCts().map(t => `<button type="button" class="bq-sign bq-ctb" data-bqimg="${esc(a.id)}" data-ct="${esc(t)}" title="${esc(`ทำ ${t} · เลือกห้อง CT ที่ทำ · นับคะแนนห้อง CT (ไม่กด = ไม่ได้ทำ)`)}">${esc(t)}</button>`).join('')}</span>`
         : `<button type="button" class="bq-sign old" data-bqimg="${esc(a.id)}" title="${esc(bqImgOld())}">+ CT</button>`) : '';
     const usC = '<span class="bq-imgc us">US</span>';
-    const us = a.us ? (edit && bqLive(a) ? `<button type="button" class="bq-img" data-bqus="${esc(a.id)}" data-v="" title="Ultrasound · กดเพื่อเอาออก">${usC}</button>` : `<span class="bq-img" title="Ultrasound">${usC}</span>`)
-      : edit && bqLive(a) ? `<button type="button" class="bq-sign${bqImgOn() ? '' : ' old'}" data-bqus="${esc(a.id)}" data-v="US" title="${esc(bqImgOn() ? 'บันทึกว่าทำ Ultrasound' : bqImgOld())}">+ US</button>` : '';
+    const us = a.us ? (usOk && bqLive(a) ? `<button type="button" class="bq-img" data-bqus="${esc(a.id)}" data-v="" title="Ultrasound · กดเพื่อเอาออก">${usC}</button>` : `<span class="bq-img" title="Ultrasound">${usC}</span>`)
+      : usOk && bqLive(a) ? `<button type="button" class="bq-sign${bqImgOn() ? '' : ' old'}" data-bqus="${esc(a.id)}" data-v="US" title="${esc(bqImgOn() ? 'บันทึกว่าทำ Ultrasound' : bqImgOld())}">+ US</button>` : '';
+    const chkTip = a.chk ? `ตรวจสอบแล้ว${a.chkBy ? ` โดย ${a.chkBy}` : ''}${a.chk ? ` · ${fmtStamp(a.chk) || a.chk}` : ''}` : '';
+    const chkCell = a.chk ? (chkOk ? `<button type="button" class="bq-chk" data-bqchk="${esc(a.id)}" data-on="0" title="${esc(chkTip + ' · กดเพื่อเอาออก (ใส่ PIN)')}">✓ ตรวจสอบแล้ว</button>` : `<span class="bq-chk" title="${esc(chkTip)}">✓ ตรวจสอบแล้ว</span>`)
+      : chkOk && a.status !== BQ_ST.cancel ? `<button type="button" class="btn ghost sm bq-chkb" data-bqchk="${esc(a.id)}" data-on="1" title="บันทึกว่าตรวจสอบนัดนี้แล้ว">ตรวจสอบแล้ว</button>` : '';
     const rtr = bqRoomOf(a), rst = bqRtStatus(a), dOf = isDay(a.date) && a.date < today() ? a.date : today();
     const room = (rtr ? `<span class="bq-rtroom" title="ฉายรังสีภายนอกที่ห้อง ${esc(roomLabel(rtr))}">${esc(roomLabel(rtr))}</span>` : rst ? '' : '<span class="muted">—</span>')
       + (rst ? `<span class="bq-rtst ${rst.k}" title="${esc(`สถานะในแถบ${navLabel('course')} ณ ${fmtDay(dOf)}`)}">${esc(rst.t)}</span>` : '');
     return `<tr class="ct-row bq-row${st ? ' ' + st : ''}${edit ? ' click' : ''}"${edit ? ` data-bqedit="${esc(a.id)}" tabindex="0"` : ''}>
       <td class="num">${bqLive(a) ? ++q : '–'}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td class="bq-rtc">${room}</td><td>${bqDocHtml(a.doc)}</td>
-      <td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td class="ct-note">${esc(a.note)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td>
-      <td>${rtt}</td><td>${img}</td><td>${us}</td><td>${who('mp')}</td><td>${who('rc')}</td><td class="bq-act">${edit && a.status === BQ_ST.booked ? `<button type="button" class="btn ghost sm bq-okb" data-bqdone="${esc(a.id)}" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>${bqNsOn() ? `<button type="button" class="btn ghost sm bq-nob" data-bqnoshow="${esc(a.id)}" title="ผู้ป่วยไม่มาตามนัด · ไม่นับเคส ไม่นับคะแนน (MP, RC, RTT, แพทย์)">✗ ไม่มา</button>` : ''}` : ''}</td></tr>`;
+      <td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td class="ct-note">${esc(a.note)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td><td class="bq-chkc">${chkCell}</td>
+      <td>${rtt}</td><td>${img}</td><td>${us}</td><td>${who('mp')}</td><td>${who('rc')}</td><td class="bq-act">${canB('come') && a.status === BQ_ST.booked ? `<button type="button" class="btn ghost sm bq-okb" data-bqdone="${esc(a.id)}" title="บันทึกว่ามาตามนัด">✓ มาแล้ว</button>${bqNsOn() ? `<button type="button" class="btn ghost sm bq-nob" data-bqnoshow="${esc(a.id)}" title="ผู้ป่วยไม่มาตามนัด · ไม่นับเคส ไม่นับคะแนน (MP, RC, RTT, แพทย์)">✗ ไม่มา</button>` : ''}` : ''}</td></tr>`;
   }).join('');
 }
 // แถวหัววัน: วันที่ จำนวนเคส · ใต้คอลัมน์ RTT / MP / RC = เลือกครั้งเดียวให้ทุกเคสของวันนั้น (ไม่นับที่ยกเลิก) · ทุกเคสเหมือนกัน = แสดงชื่อ · ต่างกัน = หลายคน
@@ -8531,7 +8614,7 @@ function bqDayHead(d, n, span, rows, edit) {
   if (!rows || !n) return `<tr class="ct-day${d === today() ? ' today' : ''}"><td colspan="${span}">${head}</td></tr>`;
   const cell = k => {
     const v = bqDayVal(rows, k), label = v === null ? 'หลายคน' : v ? (k === 'rtt' ? bqRttShort(v) : v) : `+ ${k.toUpperCase()}`;
-    const can = edit && (k === 'rtt' || bqCanSign());
+    const can = edit && bqBtnOk(k);
     if (!can) return v ? `<span class="bq-dayv">${esc(label)}</span>` : '';
     return `<button type="button" class="bq-dayset${v ? ' set' : ''}${k === 'rtt' && !bqRttOn() ? ' old' : ''}" data-bqdayk="${k}" data-bqdate="${d}" title="${esc(`เลือก ${k.toUpperCase()} ครั้งเดียวให้ทุกเคสของ${bqDay(d)}${v === null ? ' (ตอนนี้แต่ละเคสต่างกัน)' : v ? ` · ตอนนี้ ${v}` : ''}`)}">${esc(label)}</button>`;
   };
@@ -8768,6 +8851,33 @@ function bqPickCal(dates) {
   return `<div class="bq-mm-head"><button type="button" class="icon-btn" data-qmon="-1" aria-label="เดือนก่อน">‹</button><span>${esc(fmtMonth(ym))}</span><button type="button" class="icon-btn" data-qmon="1" aria-label="เดือนถัดไป">›</button></div>
     <div class="bq-mm-grid">${THAI_WD.map(w => `<span class="bq-mm-h">${w}</span>`).join('')}${cells.join('')}</div>`;
 }
+// หน้าแก้ไขนัด: ปฏิทินแบบเดียวกับตอนลงนัด (นัดที่มีแล้ว/สูงสุด · รูปแบบการใส่ · วันหยุดเลือกไม่ได้) · นัดนี้ไม่นับซ้ำที่วันเดิม · Fx อื่นของคอร์สมีกรอบเส้นประ
+let bqeMonth = '';
+function bqEditCal() {
+  const a = editingBq, box = $('#e-cal');
+  if (!a || !box) return;
+  const v = isDay($('#e-date').value) ? $('#e-date').value : '', ym = bqeMonth || (v || a.date || today()).slice(0, 7);
+  const lead = parseISO(ym + '-01').getDay(), last = +monthEnd(ym).slice(8), hol = holidayMap(), td = today(), max = bqMax(), live = bqLive(a);
+  const others = new Map(state.bq.filter(x => x.course && x.course === a.course && x.id !== a.id && bqLive(x)).map(x => [x.date, x]));
+  const cells = Array.from({ length: lead }, () => '<span></span>');
+  for (let i = 1; i <= last; i++) {
+    const d = `${ym}-${pad(i)}`, n = bqCount(d) - (live && a.date === d ? 1 : 0), pick = d === v, off = !isWorkday(d, hol), tot = n + (pick && live ? 1 : 0), o = others.get(d);
+    const lets = {};
+    for (const x of state.bq) if (x.date === d && bqLive(x) && x.id !== a.id) lets[bqLetter(x.tech)] = (lets[bqLetter(x.tech)] || 0) + 1;
+    const cls = [off && 'off', d < td && 'past', d === td && 'today', n >= max && 'full', n > max && 'over', pick && 'pick', pick && tot > max && 'bust', o && 'crs'].filter(Boolean).join(' ');
+    const tip = `${bqDay(d)}${hol[d] ? ` · ${hol[d]}` : off ? ' · วันเสาร์–อาทิตย์' : ''} · มีนัดแล้ว ${n}/${max} เคส${pick ? ` · Fx ${a.fx} (นัดนี้)${tot > max ? ` · จะมี ${tot} เคส เกิน` : ''}` : ''}${o ? ` · Fx ${o.fx} ของคอร์สนี้` : ''}`;
+    cells.push(`<button type="button" class="bq-d ${cls}" data-eday="${d}" title="${esc(tip)}" aria-label="${esc(tip)}" aria-pressed="${pick}"${off ? ' aria-disabled="true"' : ''}>
+      <span class="dn">${i}</span><small class="qc">${n > max || tot > max ? '⚠️ ' : ''}${n}/${max}</small>${Object.keys(lets).length ? `<span class="tls">${Object.entries(lets).map(([k, c]) => bqTl(k, k + c)).join('')}</span>` : ''}${pick ? `<span class="fxn">Fx ${esc(a.fx)}</span>` : o ? `<span class="fxn fxo">Fx ${esc(o.fx)}</span>` : ''}</button>`);
+  }
+  box.innerHTML = `<div class="bq-mm-head"><button type="button" class="icon-btn" data-emon="-1" aria-label="เดือนก่อน">‹</button><span>${esc(fmtMonth(ym))}</span><button type="button" class="icon-btn" data-emon="1" aria-label="เดือนถัดไป">›</button></div>
+    <div class="bq-mm-grid">${THAI_WD.map(w => `<span class="bq-mm-h">${w}</span>`).join('')}${cells.join('')}</div>`;
+}
+function bqePickDay(d) {
+  if (!isWorkday(d, holidayMap())) return toast(`เลือก${bqDay(d)} ไม่ได้ (${holidayMap()[d] || 'วันเสาร์–อาทิตย์'}) กรุณาเลือกวันทำการ`, { err: true });
+  $('#e-date').value = d;
+  bqEditCal();
+}
+$('#e-date').addEventListener('change', () => { if (isDay($('#e-date').value)) bqeMonth = $('#e-date').value.slice(0, 7); bqEditCal(); });
 // กดวันในปฏิทิน (แบบเดียวกับระบบนัดคิวใส่แร่เดิม): เลือกวันเอง = เพิ่ม Fx ถัดไปในวันนั้น (เรียง Fx ตามวัน · กดวันเดิมซ้ำ = วันละ 2 Fx)
 // กดปุ่ม Fx ไว้ก่อน = ย้าย Fx นั้นมาวันนี้ · แบบอื่น = เปลี่ยนวันเริ่ม (กดปุ่ม Fx ไว้ = เปลี่ยนเป็นเลือกวันเอง แล้วย้าย Fx นั้น)
 function bqPickDay(d) {
@@ -8867,6 +8977,8 @@ function openBqEdit(id, focus) {
   $('#bqe-title').textContent = `แก้ไขนัด ${a.hn} · Fx ${a.fx}/${a.total}`;
   $('#e-info').textContent = [a.name, a.by && `ลงนัดโดย ${a.by}${a.created ? ` · ${fmtStamp(isoStamp(a.created))}` : ''}`, a.editedBy && `แก้ไขล่าสุดโดย ${a.editedBy}${a.updated ? ` · ${fmtStamp(isoStamp(a.updated))}` : ''}`].filter(Boolean).join(' · ');
   $('#e-date').value = a.date;
+  bqeMonth = '';
+  bqEditCal();
   $('#e-note').value = a.note;
   chipGroup($('#e-status'), 'estatus', Object.values(BQ_ST).filter(v => v !== BQ_ST.noshow || bqNsOn() || a.status === v), a.status);
   docChipsTo('#e-doc', 'edoc', docCodeOf(a.doc) || a.doc);
@@ -8885,10 +8997,11 @@ function openBqEdit(id, focus) {
   if (bqMultiOn()) { bqCtLines(a); $('#e-ctroom-f').hidden = true; }
   const me = myCrew(), meRtt = me && me.active && crewGroup(me.role) === 'rtt' ? me.name : '';
   bqRttChips('#e-rtt', 'ertt', a.rtt || (focus === 'rtt' ? meRtt || state.config.bq.rtt : ''));   // กด + RTT: RTT ที่เข้าสู่ระบบ = ตัวเอง · อื่น ๆ = RTT เริ่มต้น
-  const sign = bqCanSign();
-  $$('#e-mp input, #e-rc input').forEach(i => { i.disabled = !sign; });
-  $('#e-sign-note').hidden = sign;
-  $('#e-sign-note').textContent = sign ? '' : BQ_SIGN_MSG;
+  // สิทธิ์ของปุ่ม (ตั้งค่า → นัดคิวใส่แร่): ช่องที่ตำแหน่งนี้กดไม่ได้ = ล็อกไว้
+  const off = [['mp', '#e-mp input'], ['rc', '#e-rc input'], ['rtt', '#e-rtt input, #e-rtt-other'], ['ct', '#e-ct input, #e-cts input, #e-cts select, #e-ctroom input'], ['us', '#e-us input']].filter(([k]) => !bqBtnOk(k));
+  $$('#e-mp input, #e-rc input, #e-rtt input, #e-rtt-other, #e-ct input, #e-cts input, #e-cts select, #e-ctroom input, #e-us input').forEach(i => { i.disabled = off.some(([, sel]) => i.matches(sel)); });
+  $('#e-sign-note').hidden = !off.length;
+  $('#e-sign-note').textContent = off.length ? `ตำแหน่งของคุณแก้ ${off.map(([k]) => (BQ_BTNS.find(x => x[0] === k) || [])[1]).join(', ')} ไม่ได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)` : '';
   let hist = [];
   try { hist = JSON.parse(a.hist || '[]'); } catch (e) { hist = []; }
   $('#e-hist-box').hidden = !Array.isArray(hist) || !hist.length;
@@ -8930,7 +9043,7 @@ function openBqSet(ids, k, date) {
   if (accessOf('bq') !== 'edit') return toast(RO_MSG, { err: true });
   if (!bqOn()) return toast(BQ_OLD, { err: true });
   if (k === 'rtt' && !bqRttOn()) return toast(bqRttOld(), { err: true });
-  if (k !== 'rtt' && !bqCanSign()) return toast(BQ_SIGN_MSG, { err: true });
+  if (!bqBtnOk(k)) return toast(bqBtnMsg(k), { err: true });
   const rows = ids.map(id => state.bq.find(a => a.id === id)).filter(Boolean);
   if (!rows.length) return;
   const day = rows.length > 1 || !!date, cur = bqDayVal(rows, k), me = myCrew(), self = myStaff();
@@ -13826,7 +13939,10 @@ function renderSettings() {
         <label class="field"><span class="lbl">RTT เริ่มต้น <span class="sub-lbl">ใส่ให้นัดใหม่ (แก้ในฟอร์มได้) · ปุ่ม + RTT เลือกคนนี้ไว้ก่อน · ว่าง = ไม่ใส่</span></span><input data-k="bq.rtt" list="bq-rtt-names" maxlength="60" value="${esc(d.bq.rtt)}" placeholder="ชื่อ RTT" autocomplete="off"><datalist id="bq-rtt-names">${bqRttNames().map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>
         <label class="field"><span class="lbl">วันนัดใส่แร่ในแถบ${esc(navLabel('course'))} <span class="sub-lbl">HN ตรงกับผู้ป่วยในตารางวันฉาย = วันนั้นไม่ฉาย เลื่อนไปวันทำการถัดไปอัตโนมัติ · บันทึกสถานะเองในวันนั้น = ใช้ที่บันทึก</span></span><select data-k="bq.hold">${opt('auto', `สถานะ ${bqHoldType('auto').label} อัตโนมัติ`, d.bq.hold)}${(d.fxTypes || []).filter(t => t.act === 'skip').map(t => opt(t.id, `สถานะ ${t.label}`, d.bq.hold)).join('')}${opt('off', 'ไม่ใช้ (ฉายตามตาราง)', d.bq.hold)}</select></label>
       </div>
-      <p class="muted def-note" style="margin:0 0 12px">ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT (RTT ต้องใช้ Code.gs รุ่น 2026-11-04.2 ขึ้นไป) · ไม่มา = ไม่นับเคส ไม่นับคะแนน · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
+      <h3 class="sub-h">สิทธิ์ของปุ่ม (ตำแหน่งที่กดได้)</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ไม่ติ๊กเลย = ทุกตำแหน่งที่บันทึกในแถบนี้ได้ (ตั้งค่า → แถบเมนู) · ตรวจสอบแล้ว: ตำแหน่งที่ติ๊กกดได้แม้ดูแถบนี้ได้อย่างเดียว · ใช้กับช่องเดียวกันในหน้าแก้ไขนัดด้วย · แอดมินกดได้ทุกปุ่ม · Code.gs ตรวจซ้ำตอนบันทึก (รุ่น 2026-11-12.2 ขึ้นไป)</p>
+      <div class="table-wrap set-table"><table class="bqbtn-t"><thead><tr><th style="text-align:left">ปุ่ม</th>${[...new Set([...d.roles, ...Object.values(d.bq.btn).flat()])].map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${BQ_BTNS.map(([k, l, sub]) => `<tr><td style="text-align:left">${esc(l)}${sub ? `<small class="muted" style="display:block">${esc(sub)}</small>` : ''}</td>${[...new Set([...d.roles, ...Object.values(d.bq.btn).flat()])].map(r => `<td><input type="checkbox" data-bqbtn="${k}" value="${esc(r)}"${(d.bq.btn[k] || []).includes(r) ? ' checked' : ''} aria-label="${esc(`${l}: ${r}`)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <p class="muted def-note" style="margin:6px 0 12px">ลงชื่อ MP / RC ตามสิทธิ์ของปุ่มด้านบน (ค่าเริ่มต้น MP, RTT (RTT ต้องใช้ Code.gs รุ่น 2026-11-04.2 ขึ้นไป) · ไม่มา = ไม่นับเคส ไม่นับคะแนน · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
       <h3 class="sub-h">นำเข้านัดจากระบบนัดคิวใส่แร่เดิม</h3>
       <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · กด ตรวจก่อนนำเข้า (ยังไม่เขียนอะไร) ดูจำนวนนัดและคอลัมน์ แล้วกด นำเข้า · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
       ${store.mode === 'sheet' && !bqImpOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การนำเข้าต้องใช้ Code.gs รุ่น 2026-11-01.1 ขึ้นไป (ตรวจก่อนนำเข้า และอ่านคอลัมน์ เลขนัด, Fraction ที่, จำนวน Fraction ของระบบเดิม)</span></p>' : ''}
@@ -16137,6 +16253,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'rgsave') { const rec = normReg(await store.regSave(ctx.rec, pin)); pinDlg.close(); rgSaved(rec, ctx.isNew, ctx.thenAp); return; }
     if (ctx.mode === 'rgdel') { await store.regRemove(ctx.id, pin); rgDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'bqnew') { const recs = await store.bqCreate(ctx.rec, pin); pinDlg.close(); bqSaved(recs, `ลงนัด ${ctx.rec.hn} ${recs.length} Fx แล้ว`); return; }
+    if (ctx.mode === 'bqchk') { const rec = await store.bqCheck(ctx.id, ctx.on, pin); pinDlg.close(); bqSaved([rec], `${ctx.row.hn} Fx ${ctx.row.fx}/${ctx.row.total} · ${ctx.on ? 'ตรวจสอบแล้ว' : 'เอาตรวจสอบแล้วออก'}`); return; }
     if (ctx.mode === 'bqedit') { const rec = await store.bqEdit(ctx.id, ctx.ch, pin); pinDlg.close(); bqSaved([rec], `${ctx.row.hn} Fx ${ctx.row.fx}/${ctx.row.total} · ${bqChText(ctx.ch)}`); return; }
     if (ctx.mode === 'bqday') {   // ทุกเคสของวันนั้น: ครั้งเดียว (Code.gs ใหม่) หรือทีละนัด (Code.gs เดิม)
       let recs = [];
@@ -16533,6 +16650,7 @@ document.addEventListener('click', e => {
   const ds = t.dataset;
   if (ds.appdf) return openCsoPreview(state.appt.find(x => x.id === ds.appdf));
   if (ds.jtab) { pref.set('jobsTab', ds.jtab); renderJobs(); return; }
+  if (ds.dqdesk) { pref.set('dqDesk', ds.dqdesk); renderDq(); return; }   // แถบแจกงานแพทย์: แถบย่อย Call center / ภายใน-Walk in
   if (ds.vacedit) return openVacForm(ds.vacedit);
   if (ds.vacnew !== undefined) return openVacForm('', ds.vacnew);
   if (ds.vacoff) { const r = state.vac.find(x => x.id === ds.vacoff); if (r) openVacPin('vacsave', { ...r, off: today() }); return; }
@@ -16566,8 +16684,9 @@ document.addEventListener('click', e => {
   if (ds.bqpt) { state.bqPt = ds.bqpt; return renderBq(); }
   if (ds.bqback) { state.bqPt = ''; return renderBq(); }
   if (ds.bqcopy) return bqCopy(ds.bqcopy);
-  if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); return a && bqQuick(a, { status: BQ_ST.done }); }
-  if (ds.bqnoshow) { const a = state.bq.find(x => x.id === ds.bqnoshow); return a && bqQuick(a, { status: BQ_ST.noshow }); }
+  if (ds.bqchk) { const a = state.bq.find(x => x.id === ds.bqchk); if (!a) return; if (!bqBtnOk('chk')) return toast(bqBtnMsg('chk'), { err: true }); if (!bqChkOn()) return toast('ปุ่มตรวจสอบแล้วต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป', { err: true }); return openBqPin('bqchk', { id: a.id, row: a, on: ds.on === '1', ch: { chk: ds.on === '1' ? 'ตรวจสอบแล้ว' : '' } }); }
+  if (ds.bqdone) { const a = state.bq.find(x => x.id === ds.bqdone); if (a && !bqBtnOk('come')) return toast(bqBtnMsg('come'), { err: true }); return a && bqQuick(a, { status: BQ_ST.done }); }
+  if (ds.bqnoshow) { const a = state.bq.find(x => x.id === ds.bqnoshow); if (a && !bqBtnOk('come')) return toast(bqBtnMsg('come'), { err: true }); return a && bqQuick(a, { status: BQ_ST.noshow }); }
   if (ds.bqus !== undefined) { const a = state.bq.find(x => x.id === ds.bqus); if (!a) return; if (!bqImgOn()) return toast(bqImgOld(), { err: true }); return bqQuick(a, { us: ds.v || '' }); }   // US แยกจาก CT
   if (ds.bqsign) return openBqSet([ds.bqsign], ds.bqk);
   if (ds.bqimg) return openBqImg(ds.bqimg, ds.ct);
@@ -16575,6 +16694,8 @@ document.addEventListener('click', e => {
   if (ds.bqlink) return bqLinkNow(t);
   if (ds.bqimport) return bqImportRun(t, ds.bqimport === 'check');
   if (ds.qday) return bqPickDay(ds.qday);
+  if (ds.eday) return bqePickDay(ds.eday);   // หน้าแก้ไขนัด: ปฏิทินเลือกวัน
+  if (ds.emon) { const v = $('#e-date').value; bqeMonth = shiftMonth(bqeMonth || (isDay(v) ? v : editingBq.date || today()).slice(0, 7), +ds.emon); return bqEditCal(); }
   if (ds.qmon) { bqNew.month = shiftMonth(bqNew.month, +ds.qmon); return bqSync(); }
   if (ds.qdel !== undefined) { const cur = bqGen(); cur.splice(+ds.qdel, 1); bqNew.dates = cur; bqNew.act = -1; if (bqPat() !== 'manual') setChip($('#q-pat'), 'manual'); return bqSync(); }
   if (ds.qact !== undefined) return bqActFx(+ds.qact);
@@ -17192,8 +17313,10 @@ function renderCal() {
     const full = !we && !h && (kind === 'ct' ? ctFull(c, calData.doc) : simFullDay(raw, d, calData.room, calData.doc));   // ลงนัดวันนั้นไม่ได้แล้ว: CT (ทั้งวัน / แพทย์) · Start RT (ห้อง / แพทย์ในห้อง ตามฟอร์ม)
     const cls = ['dpk-d', we && 'we', h && 'hol', d < td && 'past', d === td && 'today', d === v && 'sel', full && 'full'].filter(Boolean).join(' ');
     const rr = kind === 'sim' && !we && !h ? calRoomRows(raw, d, calData.room, calData.doc) : '';   // แถวห้อง / ป้ายแพทย์ของวันนั้น
-    const cal = state.config.appt.cal, ld = kind === 'sim' && !we && !h && cal.simQ ? calData.load(d) : null, lq = ld && ld.all ? `<u class="${calData.lim && ld.q > calData.lim ? 'over' : ''}">Q${ld.q}</u>` : '';
-    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}">${kind === 'sim' && !we && !h && calRoom && calRoom !== NO_ROOM && (c || rr) ? `<span class="dpk-corner${calRoom === calData.room ? ' mine' : ''}">${esc(roomLabel(calRoom))}</span>` : ''}<b>${i}</b>${c && (kind === 'sim' ? cal.simNew : cal.ctN) ? (kind === 'sim' && cal.simBadge !== 'sp' ? (bd => `<i class="dpk-lim${bd.full ? ' over' : ''}">${bd.html}</i>`)(calSimBadge(c)) : `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>`) : ''}${lq}${kind === 'ct' && cal.ctDoc && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${rr}</button>`;
+    const cal = state.config.appt.cal, ld = kind === 'sim' && !we && !h && (cal.simQ || cal.simTot) ? calData.load(d) : null, lq = ld && ld.all && cal.simQ ? `<u class="${calData.lim && ld.q > calData.lim ? 'over' : ''}">Q${ld.q}</u>` : '';
+    // ผู้ป่วยทั้งหมดของวัน (ห้องที่เลือก / ทุกห้อง · นับแบบตารางวันฉาย) มุมขวาล่าง: ไม่เกินจำนวนต่อวัน (ตั้งค่า → ตารางวันฉาย) = เขียว · เกิน = แดง
+    const tot = ld && ld.all && cal.simTot ? `<span class="dpk-tot ${calData.lim && ld.all > calData.lim ? 'over' : 'ok'}">${ld.all}</span>` : '';
+    cells += `<button type="button" class="${cls}" data-calday="${d}"${work && (we || h) ? ' disabled' : ''} title="${esc(calTip(d, raw, h, kind) + (ld && ld.all ? ` · ${fxQuotaTip(ld)} · ผู้ป่วยทั้งหมด ${ld.all} คน${calData.lim ? ` (สูงสุด ${calData.lim}${ld.all > calData.lim ? ' เกิน' : ''})` : ''}` : '') + (work && (we || h) ? ' · ต้องเป็นวันทำการ' : ''))}">${kind === 'sim' && !we && !h && calRoom && calRoom !== NO_ROOM && (c || rr) ? `<span class="dpk-corner${calRoom === calData.room ? ' mine' : ''}">${esc(roomLabel(calRoom))}</span>` : ''}<b>${i}</b>${c && (kind === 'sim' ? cal.simNew : cal.ctN) ? (kind === 'sim' && cal.simBadge !== 'sp' ? (bd => `<i class="dpk-lim${bd.full ? ' over' : ''}">${bd.html}</i>`)(calSimBadge(c)) : `<i${kind === 'ct' && ctLim().day && c.n >= ctLim().day ? ' class="over"' : ''}>${calNum(kind, c.n, c.sp)}</i>`) : ''}${lq}${kind === 'ct' && cal.ctDoc && c && c.doc.size ? `<span class="dpk-docs">${calDocChips(c.doc, calData.doc, ctLim().doc)}</span>` : ''}${rr}${tot}</button>`;
   }
   // ปุ่มห้องฉาย (Start RT): ห้องในตั้งค่า + ไม่ระบุห้อง (ถ้ามี) · ตัวเลขเล็ก = จำนวนทั้งเดือนของห้องนั้น
   const rooms = kind === 'sim' ? [...state.config.rooms, ...([...counts.values()].some(x => x.by.has(NO_ROOM)) ? [NO_ROOM] : [])] : [];
@@ -17557,6 +17680,10 @@ function settingsEdit(el) {
     draft.reg.drive.filter.vals = $$('[data-rdval]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.rdvals !== undefined) {
     draft.reg.drive.filter.vals = [...new Set(el.value.split(',').map(str).filter(Boolean))];
+  } else if (el.dataset.dqdeskrole) {   // แถบแจกงานแพทย์: ตำแหน่งที่เห็นแถบย่อย
+    draft.dq.desks = { ...(draft.dq.desks || {}), [el.dataset.dqdeskrole]: $$(`[data-dqdeskrole="${el.dataset.dqdeskrole}"]:checked`, settingsEl).map(x => x.value) };
+  } else if (el.dataset.bqbtn) {   // สิทธิ์ของปุ่มในแถบนัดคิวใส่แร่
+    draft.bq.btn = { ...(draft.bq.btn || {}), [el.dataset.bqbtn]: $$(`[data-bqbtn="${el.dataset.bqbtn}"]:checked`, settingsEl).map(x => x.value) };
   } else if (el.dataset.bqroles) {
     draft.bq.signRoles = $$('[data-bqroles]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.bqusers) {

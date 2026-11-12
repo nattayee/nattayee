@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-12.1';
-const API_LEVEL = 74;
+const CODE_VERSION = '2026-11-12.2';
+const API_LEVEL = 75;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -138,6 +138,7 @@ const TABLES = {
       ['fx', 'Fx'], ['total', 'จำนวน Fx'], ['note', 'หมายเหตุ'], ['status', 'สถานะ'], ['mp', 'MP'], ['rc', 'RC'],
       ['hist', 'ประวัติการแก้ไข (JSON)'], ['src', 'ที่มา'], ['by', 'ลงนัดโดย'], ['created', 'Created'], ['editedBy', 'แก้ไขโดย'], ['updated', 'Updated'], ['rtt', 'RTT'],
       ['ct', 'CT'], ['ctRoom', 'ห้อง CT'], ['us', 'Ultrasound'],
+      ['chk', 'ตรวจสอบแล้ว'], ['chkBy', 'ตรวจสอบโดย'],   // API 75: ปุ่มตรวจสอบแล้ว (bqCheck)
     ],
   },
   // แถบลงนัด: นัดทำ CT-Sim (date) และ Start RT ของผู้ป่วย · CT = CM / Non-CM · special = เทคนิคพิเศษ (SRS, SRT, SBRT, DIBH คั่นด้วยจุลภาค)
@@ -204,6 +205,8 @@ TABLES.dq = {
     ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icd', 'ICD10'], ['src', 'ที่มา'],
     // API 73: st = doc (ขอเอกสารเพิ่ม · กลับไปแถบแจกงานแพทย์) | nort (ไม่ RT) · รายละเอียด ใคร เมื่อไร (dqMark)
     ['stNote', 'รายละเอียดสถานะ'], ['stBy', 'สถานะโดย'], ['stAt', 'สถานะเมื่อ'],
+    // API 75: แถบย่อยที่แจก · '' = Call center (แถบเดิม · ดึงจากรายงาน HIS) | walk = ภายใน/Walk in · คิวแพทย์ วันลา เวร S1 และรายงานใช้ร่วมกัน
+    ['desk', 'จุดรับเคส'],
   ],
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
@@ -1680,11 +1683,41 @@ function bqCtPairs_(ct, room) {
 }
 const bqWho_ = u => String(u.name || u.username || u.me || '');
 const bqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-// ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP (ตำแหน่งใน LPCH RO Workspace) · บัญชี Google (ไม่ได้เชื่อม LPCH / เปิดจากชีต) ไม่มีตำแหน่ง = ได้
-// ลงชื่อ MP / RC ได้: บัญชี Google ของเจ้าของชีต หรือผู้ใช้ตำแหน่ง MP / RTT ใน LPCH (API 50: RTT บันทึกแทนได้)
-function bqCanSign_(u) {
-  const r = String((u && u.role) || '').toUpperCase();
-  return !!u && (u.via === 'google' || r === 'MP' || r === 'RTT');
+// API 75: ตำแหน่งที่กดแต่ละปุ่มของแถบนัดคิวใส่แร่ได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม · config.bq.btn) · ว่าง = ทุกตำแหน่งที่บันทึกในแถบได้
+// ไม่เคยตั้ง = ค่าเริ่มต้น (ตรวจสอบแล้ว = Nurse · MP / RC = MP, RTT เหมือนเดิม) · แอดมินและบัญชี Google กดได้ทุกปุ่ม
+const BQ_BTN_DEF = { chk: ['Nurse'], come: [], rtt: [], ct: [], us: [], mp: ['MP', 'RTT'], rc: ['MP', 'RTT'] };
+const BQ_BTN_NAME = { chk: 'ตรวจสอบแล้ว', come: 'มาแล้ว / ไม่มา', rtt: 'RTT', ct: 'CT', us: 'US', mp: 'MP', rc: 'RC' };
+function bqBtnRoles_(cfg, k) {
+  const b = cfg && cfg.bq && cfg.bq.btn && typeof cfg.bq.btn === 'object' ? cfg.bq.btn : null;
+  return b && Array.isArray(b[k]) ? b[k].map(String) : BQ_BTN_DEF[k] || [];
+}
+function bqBtnOk_(u, cfg, k) {
+  if (!u || u.via === 'google' || u.isAdmin) return true;
+  const roles = bqBtnRoles_(cfg, k);
+  return !roles.length || roles.map(r => r.toUpperCase()).indexOf(String(u.role || '').toUpperCase()) >= 0;
+}
+const bqBtnMsg_ = (u, k) => 'ตำแหน่ง ' + ((u && u.role) || '-') + ' กดปุ่ม ' + BQ_BTN_NAME[k] + ' ไม่ได้ (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)';
+// ช่องที่แก้ → ปุ่มที่ต้องมีสิทธิ์ (สถานะ มาตามนัด / ไม่มา = ปุ่ม มาแล้ว / ไม่มา · ยกเลิก / กลับเป็นนัดแล้ว = สิทธิ์แก้นัดทั่วไป)
+const bqBtnOf_ = (k, set) => (k === 'status' ? (set.status === BRACHY_ST_DONE || set.status === BQ_NOSHOW ? 'come' : '') : k === 'ctRoom' ? 'ct' : ['rtt', 'ct', 'us', 'mp', 'rc'].indexOf(k) >= 0 ? k : '');
+/**
+ * API 75: ปุ่ม "ตรวจสอบแล้ว" (หลังคอลัมน์สถานะ) · on = true บันทึก (ไม่ต้องใส่ PIN) · false = เอาออก (แก้ = ใส่ PIN)
+ * ผู้ที่เห็นแถบนัดคิวใส่แร่ได้ (ดูอย่างเดียวก็ได้) และตำแหน่งอยู่ในสิทธิ์ของปุ่ม (ค่าเริ่มต้น Nurse) · คืนนัดหลังบันทึก
+ */
+function bqCheck(id, on, pin, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (u.via !== 'google' && !userAccess_(cfg, 'bq', u)) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ไม่มีสิทธิ์ในแถบนัดคิวใส่แร่');
+  if (!bqBtnOk_(u, cfg, 'chk')) throw new Error(bqBtnMsg_(u, 'chk'));
+  on = on === true || on === 'true' || on === 1;
+  return withLock_(() => {
+    const x = openRow_(ss, 'bq', null, String(id || '')), cur = x.cur;
+    if (!x.row) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    if (on ? has_(cur.chk) : !has_(cur.chk)) return cur;   // เป็นอยู่แล้ว (กดซ้ำ / สองเครื่อง)
+    if (on && cur.status === BRACHY_ST_CANCEL) throw new Error('นัดนี้ยกเลิกแล้ว');
+    pinChange_(u, pin, !on);   // เอาออก = แก้ของที่บันทึกไว้
+    const by = bqWho_(u), now = Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm');
+    return saveRow_(x, TABLES.bq.fields, { chk: on ? now : '', chkBy: on ? by : '', updated: new Date().toISOString(), editedBy: by,
+      hist: bqHist_(cur.hist, u, [{ f: 'chk', from: has_(cur.chk) ? 'ตรวจสอบแล้ว' : '', to: on ? 'ตรวจสอบแล้ว' : '' }]) });
+  });
 }
 // เขียนหลายแถวต่อท้ายชีตในครั้งเดียว (ข้อความล้วน)
 function bqAppend_(sh, header, recs) {
@@ -1749,7 +1782,7 @@ function bqEdit(id, ch, pin, token) {
     const cur = x.cur;
     const diff = Object.keys(set).filter(k => String(cur[k] || '') !== set[k]);
     if (!diff.length) return cur;
-    if ((diff.indexOf('mp') >= 0 || diff.indexOf('rc') >= 0) && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
+    diff.forEach(k => { const b = bqBtnOf_(k, set); if (b && !bqBtnOk_(u, cfg, b)) throw new Error(bqBtnMsg_(u, b)); });   // API 75: สิทธิ์ของปุ่ม (MP / RC เดิม = MP, RTT)
     const mp = 'mp' in set ? set.mp : cur.mp, rc = 'rc' in set ? set.rc : cur.rc;
     if (rc && rc === mp) throw new Error('RC ต้องไม่ใช่คนเดียวกับ MP');
     const out = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, diff.map(k => ({ f: k, from: String(cur[k] || ''), to: set[k] }))) };
@@ -1770,7 +1803,7 @@ function bqEditDay(ids, ch, pin, token) {
   ids = (Array.isArray(ids) ? ids : []).map(String).slice(0, 60);
   if (!ids.length) throw new Error('ไม่มีนัดที่จะบันทึก');
   const cfg = readConfig_(ss_()) || {};
-  if (k !== 'rtt' && !bqCanSign_(u, cfg)) throw new Error('ลงชื่อ MP / RC ได้เฉพาะผู้ใช้ตำแหน่ง MP หรือ RTT');
+  if (!bqBtnOk_(u, cfg, k)) throw new Error(bqBtnMsg_(u, k));   // API 75: สิทธิ์ของปุ่ม (MP / RC เดิม = MP, RTT)
   const out = withLock_(() => {
     // เฉพาะแถวของนัดที่เลือก (เดิมอ่านทั้งตารางนัด 2 รอบ และอ่านคอลัมน์ id ซ้ำทุกนัด)
     const ss = ss_(), R = openRows_(ss, 'bq', null, x => ids.indexOf(x) >= 0), recs = [];
@@ -2983,6 +3016,22 @@ function dqSelf_(u, cfg) {
   return hit ? String(hit.code).trim().toUpperCase() : '';
 }
 const dqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+// แถบย่อยของแถบแจกงานแพทย์ (API 75 · ตั้งค่า → แจกงานแพทย์ → แถบย่อย): config.dq.desks = { call: [ตำแหน่ง], walk: [ตำแหน่ง] }
+// ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = ใช้ได้เฉพาะแถบย่อยนั้น · ตำแหน่งอื่น (MP, RO …) แอดมิน และบัญชี Google = ทุกแถบย่อย
+const DQ_DESK_DEF = { call: ['Refer'], walk: ['Nurse'] };
+const DQ_DESK_NAME = { call: 'Call center', walk: 'ภายใน/Walk in' };
+const dqDeskKey_ = v => (v === 'walk' ? 'walk' : '');
+function dqDesks_(u, cfg) {
+  const all = Object.keys(DQ_DESK_DEF);
+  if (!u || u.via === 'google' || u.isAdmin) return all;
+  const set = cfg && cfg.dq && cfg.dq.desks && typeof cfg.dq.desks === 'object' ? cfg.dq.desks : {}, role = String(u.role || '').toUpperCase();
+  const mine = all.filter(k => (Array.isArray(set[k]) ? set[k] : DQ_DESK_DEF[k]).map(r => String(r).toUpperCase()).indexOf(role) >= 0);
+  return mine.length ? mine : all;
+}
+function dqDeskCheck_(u, cfg, desk) {
+  const k = desk === 'walk' ? 'walk' : 'call';
+  if (dqDesks_(u, cfg).indexOf(k) < 0) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ใช้แถบย่อย ' + DQ_DESK_NAME[k] + ' ไม่ได้ (ตั้งค่า → แจกงานแพทย์ → แถบย่อย)');
+}
 const dqNow_ = () => new Date().toISOString();
 
 /**
@@ -3002,6 +3051,8 @@ function dqAdd(recs, token) {
     let duty = null;
     recs.forEach((r, i) => {
       r = r && typeof r === 'object' ? r : {};
+      const desk = dqDeskKey_(r.desk);
+      dqDeskCheck_(u, cfg, desk);
       const hn = dqCut_(r.hn, 40), how = r.how === 'manual' || r.how === 'emer' || r.how === 'owner' ? r.how : 'auto';   // owner (API 70) = เจ้าของไข้เดิม
       if (!hn) throw new Error('กรอก HN');
       let doc = how === 'auto' ? '' : dqCut_(r.doc, 10).toUpperCase();
@@ -3014,7 +3065,7 @@ function dqAdd(recs, token) {
       if (how !== 'auto' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
       if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, days: q.days, bonus: q.bonus, date: day });
       if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาหรือวันที่ไม่แจกทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
-      const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '' };
+      const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '', desk: desk };
       rows.push(rec);
       out.push(rec);
     });
@@ -3031,6 +3082,7 @@ function dqEdit(id, ch, pin, token) {
     const ss = ss_(), cfg = readConfig_(ss) || {}, x = openRow_(ss, 'dq', null, id);
     if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const cur = x.cur, set = {};
+    dqDeskCheck_(u, cfg, cur.desk);
     if ('hn' in ch) { set.hn = dqCut_(ch.hn, 40); if (!set.hn) throw new Error('กรอก HN'); }
     if ('name' in ch) set.name = dqCut_(ch.name, 200);
     if ('note' in ch) set.note = dqCut_(ch.note, 500);
