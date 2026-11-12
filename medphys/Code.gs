@@ -35,7 +35,7 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-11.10';
+const CODE_VERSION = '2026-11-12.1';
 const API_LEVEL = 74;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
@@ -421,7 +421,7 @@ function tz_(doc) {
   // ชีตข้อมูลหลัก: เขตเวลามากับแคชที่อ่านพร้อมผู้ใช้ (เปลี่ยนเขตเวลาของชีต = มีผลภายใน 6 ชั่วโมง)
   const key = doc === SS_ && REQ_.cache ? 'ssTz' : '';
   let v = key && typeof REQ_.cache[key] === 'string' && REQ_.cache[key] ? REQ_.cache[key] : '';
-  if (!v) { v = doc.getSpreadsheetTimeZone(); if (key && key in REQ_.cache) { try { cachePut_(key, v, 21600); } catch (e) { /* อ่านใหม่รอบหน้า */ } } }
+  if (!v) { v = doc.getSpreadsheetTimeZone(); if (key && key in REQ_.cache) { try { reqCachePut_(key, v, 21600); } catch (e) { /* อ่านใหม่รอบหน้า */ } } }
   m.set(doc, v);
   return v;
 }
@@ -436,8 +436,9 @@ function cachePre_(keys) {
     need.forEach(k => { c[k] = got[k] === undefined ? null : got[k]; });
   } catch (e) { /* อ่านทีละค่าแทน */ }
 }
-function cacheGet_(k) { const c = REQ_.cache; return c && k in c ? c[k] : CacheService.getScriptCache().get(k); }
-function cachePut_(k, v, sec) { CacheService.getScriptCache().put(k, v, sec); if (REQ_.cache) REQ_.cache[k] = v; }
+// ชื่อไม่ซ้ำกับ cacheGet_ / cachePut_ (แคชหน้าเว็บแบบแบ่งส่วนของ doGet) · ประกาศชื่อซ้ำ = ฟังก์ชันหลังทับฟังก์ชันแรก
+function reqCacheGet_(k) { const c = REQ_.cache; return c && k in c ? c[k] : CacheService.getScriptCache().get(k); }
+function reqCachePut_(k, v, sec) { CacheService.getScriptCache().put(k, v, sec); if (REQ_.cache) REQ_.cache[k] = v; }
 // fresh = อ่านค่าล่าสุดจริง (ระหว่างล็อก ก่อนเขียน)
 // รุ่น 2026-11-11.10: เก็บรุ่นแยกรายตาราง (property tv_<ตาราง>) = บันทึกแล้วเขียนอย่างเดียว ไม่ต้องอ่านค่ารวมก่อน · ค่ารวมเดิม (tableVer) ยังอ่านได้
 const TABLE_VER_ONE = 'tv_';
@@ -4197,14 +4198,14 @@ function lpchUser_(token) {
   token = String(token || '');
   if (!/^[\w-]{20,200}$/.test(token)) return { error: 'การเข้าสู่ระบบไม่ถูกต้อง กรุณาเข้าสู่ระบบอีกครั้ง' };
   const key = 'lpch_' + token;
-  const hit = cacheGet_(key);
+  const hit = reqCacheGet_(key);
   if (hit) return JSON.parse(hit);
   let p;
   try { p = lpchProfile_(lpchCall_({ action: 'me', token: token }).user); } catch (e) {
     if (e.message !== 'session_expired') throw e;   // LPCH ติดต่อไม่ได้: แจ้งตามจริง ไม่ออกจากระบบ
     p = { error: 'การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' };
   }
-  cachePut_(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  reqCachePut_(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
   return p;
 }
 
@@ -4301,9 +4302,9 @@ function adminInfo_(ss, cfg) {
   try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { /* ไม่ทราบอีเมล */ }
   // เจ้าของไฟล์: ถาม Drive ช้า (ทุกคำขอ ทุกการบันทึก) = จำไว้ 6 ชั่วโมง
   try {
-    const key = 'ssOwner_' + ss.getId(), hit = cacheGet_(key);
+    const key = 'ssOwner_' + ss.getId(), hit = reqCacheGet_(key);
     if (hit !== null && hit !== undefined) owner = hit === '-' ? '' : hit;
-    else { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; cachePut_(key, owner || '-', 21600); }
+    else { const o = ss.getOwner(); owner = o ? String(o.getEmail() || '').toLowerCase() : ''; reqCachePut_(key, owner || '-', 21600); }
   } catch (e) { /* ไม่ทราบเจ้าของ */ }
   const admins = adminList_(cfg);
   const isAdmin = (!!me && (me === owner || admins.indexOf(me) >= 0)) || (!admins.length && !owner);
