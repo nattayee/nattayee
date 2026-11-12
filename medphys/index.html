@@ -2253,6 +2253,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </div>
     <p class="muted" id="dq-help" style="margin:-4px 0 10px;font-size:13px"></p>
     <p class="notice" id="dq-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบแจกงานแพทย์ต้องใช้ Code.gs รุ่น 2026-11-09.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+    <p class="notice" id="dq-desk-api" hidden><b>ยังแจกในแถบย่อยนี้ไม่ได้</b><span>แถบย่อย ภายใน/Walk in ต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy (Manage deployments → แก้ deployment เดิม → New version · ลิงก์เดิม) · ระหว่างนี้แจกในแถบย่อย Call center ได้ตามเดิม</span></p>
     <div class="dq-top">
       <form class="dq-form" id="dq-form" novalidate hidden>
         <h3>แจกงานแพทย์<span id="dq-desk-lbl"></span> <small>ใส่แค่ HN และชื่อ · กดแจก = แพทย์ตามคิว · ไปรอลงนัดในแถบ <span id="dq-ap-lbl">ลงนัด</span></small></h3>
@@ -4381,7 +4382,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.2';
+const PAGE_VERSION = '2026-11-12.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7262,6 +7263,7 @@ const dqMarkOn = () => store.mode !== 'sheet' || serverHas(DQM_API);
 // ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = เห็นเฉพาะแถบย่อยนั้น · ตำแหน่งอื่น แอดมิน และบัญชี Google = ทุกแถบย่อย (ตรงกับ dqDesks_ ใน Code.gs)
 const DQ_DESK_API = 75;
 const dqDeskOn = () => store.mode !== 'sheet' || serverHas(DQ_DESK_API);
+const DQ_DESK_OLD = 'แจกในแถบย่อย ภายใน/Walk in ต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy (Manage deployments → แก้ deployment เดิม → New version)';
 const dqDeskName = k => (k === 'walk' ? 'ภายใน/Walk in' : 'Call center');
 const dqDeskOf = r => (r.desk === 'walk' ? 'walk' : 'call');
 function dqDeskList() {
@@ -7272,8 +7274,8 @@ function dqDeskList() {
   return mine.length ? mine : all;
 }
 const dqDesk = () => { const l = dqDeskList(), v = pref.get('dqDesk', l[0]); return l.includes(v) ? v : l[0]; };
-// รายการในแถบย่อยที่เปิดอยู่ (Code.gs รุ่นเก่า = ทุกรายการ)
-const dqInDesk = r => !dqDeskOn() || dqDeskOf(r) === dqDesk();
+// รายการในแถบย่อยที่เปิดอยู่ (Code.gs รุ่นเก่าไม่เก็บแถบย่อย = ทุกรายการอยู่ใน Call center)
+const dqInDesk = r => dqDeskOf(r) === dqDesk();
 function normDq(o) {
   const r = {};
   for (const k of DQ_KEYS) r[k] = str(o[k]);
@@ -7539,13 +7541,15 @@ function renderDq() {
   $('#dq-ap-lbl').textContent = navLabel('consult');
   $('#dq-leave-btn').textContent = accessOf('dq') === 'edit' || myDoctor() ? 'วันลาแพทย์' : 'ดูวันลาแพทย์';
   syncTabQ('dq');
-  const desks = dqDeskOn() ? dqDeskList() : [], desk = dqDesk();
+  // แถบย่อยแสดงเสมอ · Code.gs ยังไม่ถึง API 75 = แจกใน ภายใน/Walk in ไม่ได้ (บอกให้อัปเดต) · Call center แจกได้ตามเดิม
+  const desks = dqDeskList(), desk = dqDesk(), walkOld = desk === 'walk' && !dqDeskOn();
   $('#dq-desks').hidden = !desks.length;
+  $('#dq-desk-api').hidden = !(walkOld && edit);
   $('#dq-desks').innerHTML = desks.map(k => `<button type="button" class="tab" role="tab" data-dqdesk="${k}" aria-selected="${k === desk}">${esc(dqDeskName(k))}<span class="n">${state.dq.filter(r => r.date.slice(0, 7) === ym && dqDeskOf(r) === k).length}</span></button>`).join('');
   $('#dq-desk-lbl').textContent = desks.length ? ' · ' + dqDeskName(desk) : '';
-  $('#dq-import').hidden = !edit || !dqImportOn() || (dqDeskOn() && desk !== 'call');   // รายงาน Consult ของ HIS = Call center
+  $('#dq-import').hidden = !edit || !dqImportOn() || desk !== 'call';   // รายงาน Consult ของ HIS = Call center
   $('#dq-s1-btn').hidden = !edit || !dq2On();
-  $('#dq-form').hidden = !edit;
+  $('#dq-form').hidden = !edit || walkOld;
   $('.dq-emer', $('#dq-form')).hidden = !dq2On();
   $('.dq-owner', $('#dq-form')).hidden = !dqOwnerOn();
   if (edit) dqWho(run);
@@ -7586,19 +7590,20 @@ function renderDq() {
   if (dqDocF && !state.dq.some(r => r.doc === dqDocF)) dqDocF = '';
   const words = tabWords('dq'), byDoc = r => !dqDocF || r.doc === dqDocF, deskOk = r => dqDeskList().includes(dqDeskOf(r));
   // แถบย่อย: รายการของแถบย่อยนี้ · ค้นหา = ทุกแถบย่อยที่ตำแหน่งนี้เห็น (ป้ายบอกแถบย่อยอื่น)
-  const all = (words.length ? state.dq.filter(r => (!dqDeskOn() || deskOk(r)) && wordsIn(words, dqText(r))) : inMonth.filter(dqInDesk)).sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created)).filter(byDoc);   // วันที่ล่าสุดอยู่บนสุด
+  const all = (words.length ? state.dq.filter(r => deskOk(r) && wordsIn(words, dqText(r))) : inMonth.filter(dqInDesk)).sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created)).filter(byDoc);   // วันที่ล่าสุดอยู่บนสุด
   const list = all.slice(0, 200);
-  const nImp = inMonth.filter(r => r.how === 'import').length, nDesk = dqDeskOn() ? inMonth.filter(dqInDesk).length : -1;
+  const nImp = inMonth.filter(r => r.how === 'import').length, nDesk = inMonth.filter(dqInDesk).length;
   $('#dq-help').textContent = (words.length ? `ค้นหาทุกเดือน · พบ ${all.length} รายการ${all.length > list.length ? ` (แสดง ${list.length})` : ''}` : `${fmtMonth(ym)} · ${nDesk >= 0 ? `${dqDeskName(dqDesk())} ${nDesk} เคส · ` : ''}แจกแล้ว${nDesk >= 0 ? 'ทั้งหมด' : ''} ${inMonth.length} / ${per} เคส${nImp ? ` (จากรายงาน HIS ${nImp})` : ''} · รอลงนัด ${inMonth.filter(r => dqState(r) === 'wait').length}${edit ? ' · กดแถวเพื่อแก้หรือเปลี่ยนแพทย์' : ''}`)
     + (dqDocF ? ` · เฉพาะแพทย์ ${dqDocText(dqDocF)} ${all.length} รายการ (กดชื่อในสรุปรายเดือนอีกครั้ง = ดูทั้งหมด)` : '');
   const st = r => { const s = dqState(r), a = s === 'done' ? dqAppt(r) : null, v = dqInfo(r).visit; return `<span class="dq-st ${s === 'his' ? 'skip' : s}">${s === 'wait' ? 'รอลงนัด' : s === 'skip' ? 'ไม่ต้องลงนัด' : s === 'doc' ? 'รอเอกสาร' : s === 'nort' ? 'ไม่ RT' : s === 'his' ? (v ? `นัดมา ${esc(fmtDay(v))}` : 'จาก HIS') : `ลงนัดแล้ว${a && isDay(a.date) ? ` · CT ${esc(fmtDay(a.date))}` : ''}`}</span>`; };
-  const row = r => { const h = dqHow(r), other = dqDeskOn() && !dqInDesk(r); return `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-dqedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span>${other ? ` <span class="dq-desk-tag" title="แจกจากแถบย่อย ${esc(dqDeskName(r.desk))}">${esc(dqDeskName(r.desk))}</span>` : ''}</td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td></tr>`; };
+  const row = r => { const h = dqHow(r), other = !dqInDesk(r); return `<tr class="ct-row${edit ? ' click' : ''}"${edit ? ` data-dqedit="${esc(r.id)}" tabindex="0"` : ''}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span>${other ? ` <span class="dq-desk-tag" title="แจกจากแถบย่อย ${esc(dqDeskName(r.desk))}">${esc(dqDeskName(r.desk))}</span>` : ''}</td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td></tr>`; };
   $('#dq-tbl').innerHTML = `<thead><tr><th title="เดือน/ลำดับที่">ลำดับ</th><th>วันที่แจก</th><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>การแจก</th><th>สถานะ</th><th>Note · แจกโดย</th></tr></thead><tbody>${list.map(row).join('') || `<tr><td colspan="8" class="empty-state">${words.length ? 'ไม่พบรายการที่ตรงกับคำค้น' : `ยังไม่มีการแจกงานแพทย์ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
 }
 async function submitDq(e) {
   e.preventDefault();
   if (accessOf('dq') !== 'edit') return toast(RO_MSG, { err: true });
   if (!dqOn()) return toast(DQ_OLD, { err: true });
+  if (dqDesk() === 'walk' && !dqDeskOn()) return toast(DQ_DESK_OLD, { err: true });
   const hn = str($('#dq-hn').value), name = str($('#dq-name').value).replace(/\s+/g, ' '), type = chipValue($('#dq-type')), emer = type === 'emer', own = type === 'owner', who = chipValue($('#dq-who')) || (emer ? 's1' : own ? 'owner' : 'auto');
   if (!hn) { $('#dq-hn').focus(); return toast('กรอก HN', { err: true }); }
   if (!name) { $('#dq-name').focus(); return toast('กรอกชื่อ-สกุล', { err: true }); }
@@ -7612,7 +7617,7 @@ async function submitDq(e) {
   const btn = $('#dq-go');
   btn.disabled = true;
   try {
-    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc, ...(dqDeskOn() && dqDesk() === 'walk' ? { desk: 'walk' } : {}) }])).map(normDq);
+    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc, ...(dqDesk() === 'walk' ? { desk: 'walk' } : {}) }])).map(normDq);
     for (const r of out) if (!state.dq.some(x => x.id === r.id)) state.dq.push(r);
     dqMemo = null;
     $('#dq-hn').value = '';
