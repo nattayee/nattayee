@@ -542,6 +542,20 @@ button.bq-chk{cursor:pointer}
 .dq-sum .bar i{display:block;height:100%;background:var(--accent)}
 .dq-how{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);font-size:12px;white-space:nowrap}
 .dq-desks{margin:0 0 10px}
+/* ตั้งค่า → สำรองข้อมูลและความปลอดภัย · แถบเตือนก่อนออกจากระบบอัตโนมัติ */
+.bk-stat{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:14px}
+.bk-stat dt{color:var(--muted)}
+.bk-stat dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.bk-ok{color:var(--ok)}
+.bk-bad{color:var(--late)}
+.bk-form{margin-bottom:8px}
+.bk-num{display:flex;align-items:center;gap:6px}
+.bk-num input{width:90px}
+.bk-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px}
+#bk-box .check{white-space:normal;align-items:flex-start;max-width:100%}
+#bk-box .check span{white-space:normal;min-width:0;overflow-wrap:anywhere}
+.idle-warn{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:12px 16px;border:1px solid var(--warn);border-radius:var(--r);background:var(--warn-soft);color:var(--fg);box-shadow:var(--shadow-sm);font-size:14px}
+.idle-warn[hidden]{display:none}
 /* RTT/RA Jobs → ระบบงาน RTT: ปุ่มเปิดเว็บระบบงาน RTT + ปุ่มลัด */
 .rtt-sys{max-width:980px}
 .rtt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow-sm)}
@@ -3238,6 +3252,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
+<div class="idle-warn" id="idle-warn" role="alert" hidden><span id="idle-warn-t"></span><button type="button" class="btn primary sm" id="idle-stay">ใช้งานต่อ</button></div>
 <div class="save-fails" id="save-fails" role="alert" popover="manual"></div>
 
 <script>
@@ -3720,6 +3735,7 @@ const DEFAULT_CONFIG = {
   // pointer = ตั้งคิวถัดไปเอง { code, at } · payback = คืนคิวหลังลาสูงสุดต่อแพทย์ต่อรอบ (0 = คืนทั้งหมดทันที) · ลำดับคิว = ลำดับใน แพทย์ (Doc)
   // days = วันที่ไม่แจกแพทย์คนนั้น { 0–6: [รหัส] } (0 = อาทิตย์) · max / maxPer = เคสสูงสุดต่อแพทย์ (เกิน = เตือน แจกได้) · s1wd = แพทย์เวร S1 ตามวันในสัปดาห์ (เคส Emergency)
   // bonus = คิวชดเชย [{ code, n, at }] · seqStart = ลำดับเคสแรกของเดือน { 'YYYY-MM': n } (ต่อจากคิวในกระดาษ)
+  security: { idleMin: 30 },   // ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน (นาที · 0 = ไม่ออกเอง) · ผู้ที่เข้าระบบด้วยบัญชี LPCH
   dq: { perMonth: 160, off: [], skips: {}, pointer: null, payback: 1, days: {}, max: 10, maxPer: 'week', s1wd: {}, bonus: [], seqStart: {}, desks: { call: ['Refer'], walk: ['Nurse'] } },
   // แถบนัดคิวใส่แร่: จำนวนเคสสูงสุดต่อวัน (เกิน = สีแดง เตือนตอนลงนัด) · รูปแบบการใส่ · ผู้ลงชื่อ MP / RC ได้ (ตำแหน่ง / ชื่อผู้ใช้ LPCH)
   // นัดคิวใส่แร่: docShow = แสดงแพทย์ chip (สัญลักษณ์สีของแพทย์) | name (ชื่อ-สกุล) | both · rtt = RTT เริ่มต้นของนัดใหม่
@@ -3902,7 +3918,7 @@ const CFG_TABS = {
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm'],
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security'],
 };
 const cfgTabOf = k => Object.keys(CFG_TABS).find(t => CFG_TABS[t].includes(k)) || '';
 const renTab = rk => cfgTabOf(/^x\./.test(rk) ? 'fields' : rk.split('.')[0]);
@@ -4247,6 +4263,7 @@ function mergeConfig(c) {
     filter: { col: str(rdf.col), vals: Array.isArray(rdf.vals) ? [...new Set(rdf.vals.map(str).filter(Boolean))] : [] } };
   out.reg.archiveYears = rg.archiveYears != null && ARCH_YEARS.some(([y]) => y === +rg.archiveYears) ? +rg.archiveYears : d.reg.archiveYears;
   // แจกงานแพทย์ (ตรงกับ dqCfg_ ใน Code.gs)
+  { const sc = c.security && typeof c.security === 'object' ? c.security : {}, n = Math.floor(+sc.idleMin); out.security = { idleMin: sc.idleMin === 0 || sc.idleMin === '0' ? 0 : n >= 5 && n <= 720 ? n : d.security.idleMin }; }
   const dqc = c.dq && typeof c.dq === 'object' ? c.dq : {}, dqDocSet = new Set(out.doctors.map(x => x.code));
   out.dq = { perMonth: Math.floor(+dqc.perMonth) >= 1 ? Math.min(5000, Math.floor(+dqc.perMonth)) : d.dq.perMonth,
     off: (Array.isArray(dqc.off) ? dqc.off : []).map(x => str(x).trim().toUpperCase()).filter((x, i, a) => x && a.indexOf(x) === i),
@@ -4408,7 +4425,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.6';
+const PAGE_VERSION = '2026-11-12.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -4497,6 +4514,10 @@ const sheetStore = {
   spqCheck: set => call('spqCheck', set),
   spqPull: force => call('spqPull', !!force),
   dqAdd: recs => call('dqAdd', recs),
+  // Code.gs API 77: สำรองข้อมูล (แอดมิน)
+  backupStatus: () => call('backupStatus'),
+  backupSave: cfg => call('backupSave', cfg),
+  backupNow: mail => call('backupNow', mail),
   dqEdit: (id, ch, pin) => call('dqEdit', id, ch, pin),
   dqRemove: (id, pin) => call('dqRemove', id, pin),
   dqLeaveSave: rec => call('dqLeaveSave', rec),
@@ -5004,6 +5025,10 @@ function localStore() {
       const pick = rs => dir.users.filter(u => rs.includes(u.role));
       return { rtt: pick(roles.rtt), ra: pick(roles.ra), at: nowISO(), live: true, why: '' };
     },
+    // สำรองข้อมูล: โหมดตัวอย่างจำลองสถานะ (ไม่มีไฟล์จริง ไม่ส่งอีเมล)
+    backupStatus: async () => clone(demoBackup()),
+    backupSave: async cfg => { const b = demoBackup(); b.cfg = bkClean(cfg); b.trigger = true; persistBk(b); return clone(b); },
+    backupNow: async mail => { const b = demoBackup(), at = nowISO(); b.state = { ...b.state, at, ok: true, err: '', why: 'manual', url: '#', name: `backup ${today()} (ตัวอย่าง)`, folder: '#', kept: (b.state.kept || 0) + 1 }; if (mail && b.to) Object.assign(b.state, { mailAt: at, mailTo: b.to, mailErr: '', mailSize: 1250000 }); persistBk(b); return clone(b); },
     // แถบแจกงานแพทย์: กติกาเดียวกับ dqAdd / dqEdit / dqRemove / dqLeaveSave / dqLeaveRemove ใน Code.gs
     dqAdd: async recs => {
       const out = [], q = state.config.dq, all = dqAllDocs(), t0 = Date.now();
@@ -8302,6 +8327,84 @@ dqsForm.addEventListener('submit', async e => {
     toast(`บันทึกเวร S1 แล้ว ${list.length} วัน`);
   } catch (ex) { toast('บันทึกไม่สำเร็จ: ' + errMsg(ex), { err: true }); btn.disabled = false; }
 });
+
+/* ---------- ตั้งค่า → สำรองข้อมูลและความปลอดภัย ---------- */
+// สำรองข้อมูล (Code.gs API 77): ค่าเก็บใน Script properties ของ Code.gs · ไฟล์และการแจ้งเตือนส่งถึงเจ้าของ (บัญชีที่รัน Apps Script) เท่านั้น · แก้ได้เฉพาะแอดมิน
+const BK_API = 77;
+const BK_OLD = 'สำรองข้อมูลต้องใช้ Code.gs รุ่น 2026-11-12.4 ขึ้นไป · วาง Code.gs ใหม่ → กด Run ฟังก์ชัน backupInstall หนึ่งครั้ง (อนุญาต Drive / Gmail) → Deploy (แก้ deployment เดิม → New version)';
+const BK_EVERY = [['day', 'ทุกวัน'], ['week', 'ทุกวันจันทร์'], ['month', 'วันที่ 1 ของเดือน'], ['off', 'ไม่ส่ง (เก็บใน Drive อย่างเดียว)']];
+const IDLE_OPTS = [[0, 'ไม่ออกเอง'], [15, '15 นาที'], [30, '30 นาที'], [60, '1 ชั่วโมง'], [120, '2 ชั่วโมง'], [240, '4 ชั่วโมง']];
+let bkStat = null, bkBusy = '';
+const bkCan = () => state.user.via === 'google' || !!state.user.isAdmin;
+function bkClean(c) {   // เหมือน backupCfg_ ใน Code.gs
+  c = c && typeof c === 'object' ? c : {};
+  const num = (x, lo, hi, d) => (x === '' || x == null || !isFinite(+x) ? d : Math.min(hi, Math.max(lo, Math.floor(+x))));
+  return { hour: num(c.hour, 0, 23, 2), keepDays: num(c.keepDays, 3, 90, 30), keepMonths: num(c.keepMonths, 0, 36, 12), every: BK_EVERY.some(([k]) => k === c.every) ? c.every : 'day', alerts: c.alerts === undefined ? true : !!c.alerts };
+}
+function demoBackup() { let b = null; try { b = JSON.parse(localStorage.getItem('medphys-dispatch:backup') || 'null'); } catch (e) { b = null; } return b && b.cfg ? b : { cfg: bkClean({}), state: {}, trigger: false, auth: true, to: 'owner@example.invalid' }; }
+function persistBk(b) { try { localStorage.setItem('medphys-dispatch:backup', JSON.stringify(b)); } catch (e) { /* storage blocked */ } }
+const bkWhen = v => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? `${fmtDay(localDay(v))} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} น.` : ''; };
+const bkLink = (u, t) => (/^https:\/\/[^\s"'<>]+$/.test(str(u)) ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a>` : '');
+function secSec(d) {
+  const idle = `<h3 class="sub-h">ออกจากระบบอัตโนมัติ</h3>
+      <div class="form-grid" style="margin-bottom:6px"><label class="field"><span class="lbl">เมื่อไม่ได้ใช้งาน</span><select data-k="security.idleMin" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน">${IDLE_OPTS.map(([v, l]) => opt(String(v), l, String(d.security.idleMin))).join('')}</select></label></div>
+      <p class="muted def-note" style="margin:0 0 16px">ใช้กับผู้ที่เข้าระบบด้วยบัญชี LPCH (เครื่องที่ใช้ร่วมกันในแผนก) · ไม่ได้คลิก แตะ พิมพ์ หรือเลื่อนหน้าจอ ครบเวลา = ออกจากระบบ (เตือนก่อน 1 นาที) · ปิดหน้าเว็บค้างไว้แล้วเปิดใหม่หลังเวลานี้ = ต้องเข้าสู่ระบบใหม่</p>`;
+  if (!bkCan()) return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองข้อมูลตั้งได้เฉพาะแอดมิน</p></div>${idle}</div>`;
+  return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองทั้งไฟล์ Google Sheet ทุกวันไปที่โฟลเดอร์ใน Google Drive ของเจ้าของไฟล์ · ส่งไฟล์ .xlsx และแจ้งเตือนทางอีเมลถึงเจ้าของ · ค่าในหัวข้อนี้บันทึกด้วยปุ่มของหัวข้อเอง (ไม่ใช่ปุ่มบันทึกด้านล่าง ยกเว้นออกจากระบบอัตโนมัติ)</p></div>
+      ${idle}
+      <h3 class="sub-h">สำรองข้อมูลอัตโนมัติ</h3>
+      <div id="bk-box">${bkHtml()}</div></div>`;
+}
+function bkHtml() {
+  if (store.mode === 'sheet' && !serverHas(BK_API)) return `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>${esc(BK_OLD)}</span></p>`;
+  if (!bkStat) { if (!bkBusy) bkLoad(); return '<p class="muted">กำลังโหลดสถานะการสำรองข้อมูล…</p>'; }
+  if (bkStat.err) return `<p class="notice"><b>โหลดสถานะไม่ได้</b><span>${esc(bkStat.err)} <button type="button" class="btn sm ghost" data-bk="reload">ลองใหม่</button></span></p>`;
+  const c = bkStat.cfg || bkClean({}), st = bkStat.state || {}, busy = !!bkBusy;
+  const auto = bkStat.auth === false ? '<b class="bk-bad">ยังไม่ได้อนุญาต</b> · เจ้าของไฟล์ต้องเปิด Apps Script แล้วกด Run ฟังก์ชัน <code>backupInstall</code> หนึ่งครั้ง (อนุญาต Drive / Gmail / ทริกเกอร์)'
+    : bkStat.trigger ? `<b class="bk-ok">เปิดอยู่</b> · ทุกวัน ${String(c.hour).padStart(2, '0')}:00 น.` : '<b class="bk-bad">ยังไม่เปิด</b> · กด บันทึกการตั้งค่าสำรอง';
+  const last = !st.at ? 'ยังไม่เคยสำรอง' : st.ok ? [`<b class="bk-ok">✓ สำเร็จ</b> ${esc(bkWhen(st.at))}${st.why === 'manual' ? ' (กดสำรองเอง)' : ''}`, bkLink(st.url, 'เปิดไฟล์สำรอง'), bkLink(st.folder, 'โฟลเดอร์สำรอง'), st.kept ? `เก็บไว้ ${esc(String(st.kept))} ฉบับ` : ''].filter(Boolean).join(' · ')
+    : `<b class="bk-bad">✗ ไม่สำเร็จ</b> ${esc(bkWhen(st.at))} · ${esc(st.err || '')}`;
+  const mail = !st.mailAt ? 'ยังไม่เคยส่ง' : st.mailErr ? `<b class="bk-bad">✗ ส่งไม่สำเร็จ</b> ${esc(bkWhen(st.mailAt))} · ${esc(st.mailErr)}` : `<b class="bk-ok">✓ ส่งแล้ว</b> ${esc(bkWhen(st.mailAt))} ถึง ${esc(st.mailTo || '')}${st.mailLink ? ' (ไฟล์ใหญ่ ส่งเป็นลิงก์)' : st.mailSize ? ` · ${esc((Math.round(st.mailSize / 104857.6) / 10).toFixed(1))} MB` : ''}`;
+  return `<dl class="bk-stat"><dt>สำรองอัตโนมัติ</dt><dd>${auto}</dd><dt>สำรองล่าสุด</dt><dd>${last}</dd><dt>ส่งอีเมลล่าสุด</dt><dd>${mail}</dd><dt>อีเมลถึง</dt><dd>${bkStat.to ? `เจ้าของ · ${esc(bkStat.to)}` : 'เจ้าของ (บัญชีที่รัน Apps Script)'}</dd></dl>
+      <div class="form-grid bk-form">
+        <label class="field"><span class="lbl">ส่งไฟล์ทางอีเมลถึงเจ้าของ</span><select id="bk-every">${BK_EVERY.map(([k, l]) => opt(k, l, c.every)).join('')}</select></label>
+        <label class="field"><span class="lbl">เวลาสำรองทุกวัน</span><select id="bk-hour">${Array.from({ length: 24 }, (_, h) => opt(String(h), `${String(h).padStart(2, '0')}:00 น.`, String(c.hour))).join('')}</select></label>
+        <label class="field"><span class="lbl">เก็บทุกฉบับย้อนหลัง</span><span class="bk-num"><input type="number" id="bk-days" min="3" max="90" step="1" value="${esc(String(c.keepDays))}" aria-label="เก็บทุกฉบับย้อนหลัง (วัน)"> วัน</span></label>
+        <label class="field"><span class="lbl">เก็บฉบับแรกของแต่ละเดือน</span><span class="bk-num"><input type="number" id="bk-months" min="0" max="36" step="1" value="${esc(String(c.keepMonths))}" aria-label="เก็บฉบับแรกของแต่ละเดือน (เดือน)"> เดือน</span></label>
+      </div>
+      <label class="check"><input type="checkbox" id="bk-alerts"${c.alerts ? ' checked' : ''}> <span>แจ้งเตือนทางอีเมลถึงเจ้าของ: สำรองไม่สำเร็จ · รหัส PIN ถูกล็อก (ใส่ผิด 5 ครั้ง) · ลบข้อมูลจำนวนมาก (ครั้งเดียว ≥ 10 รายการ หรือคนเดียวรวม ≥ 30 รายการต่อวัน)</span></label>
+      <div class="bk-acts"><button type="button" class="btn primary" data-bk="save"${busy ? ' disabled' : ''}>${bkBusy === 'save' ? 'กำลังบันทึก…' : 'บันทึกการตั้งค่าสำรอง'}</button>
+        <button type="button" class="btn" data-bk="now"${busy ? ' disabled' : ''}>${bkBusy === 'now' ? 'กำลังสำรอง…' : 'สำรองตอนนี้'}</button>
+        <label class="check"><input type="checkbox" id="bk-nowmail"${c.every !== 'off' ? ' checked' : ''}> <span>ส่งไฟล์ทางอีเมลด้วย</span></label></div>
+      <p class="muted def-note" style="margin:10px 0 0">ไฟล์สำรองมีข้อมูลผู้ป่วย: ส่งถึงอีเมลของเจ้าของเท่านั้น เก็บในที่ที่จำกัดผู้เข้าถึง ห้ามส่งต่อ (พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล) · ไฟล์เกิน 20 MB ส่งเป็นลิงก์แทน · ฉบับเก่าเกินที่ตั้งย้ายไปถังขยะของ Drive (กู้คืนได้ 30 วัน)
+        · <b>กู้คืน</b>: เปิดไฟล์สำรองของวันที่ต้องการ → คลิกขวาที่แท็บ → คัดลอกไปยัง → สเปรดชีตที่มีอยู่ (ไฟล์จริง) แล้วแทนแท็บเดิม</p>`;
+}
+const bkPaint = () => { const box = $('#bk-box'); if (box) box.innerHTML = bkHtml(); };
+async function bkLoad() {
+  if (!bkCan()) return;
+  bkBusy = 'load';
+  try { bkStat = await store.backupStatus(); } catch (ex) { bkStat = { err: errMsg(ex) }; }
+  finally { bkBusy = ''; bkPaint(); }
+}
+async function bkAct(k) {
+  if (k === 'reload') { bkStat = null; return bkPaint(); }
+  if (!bkCan()) return toast('ตั้งค่าสำรองข้อมูลได้เฉพาะแอดมิน', { err: true });
+  let cfg = null;
+  if (k === 'save') {
+    cfg = bkClean({ every: $('#bk-every').value, hour: $('#bk-hour').value, keepDays: $('#bk-days').value, keepMonths: $('#bk-months').value, alerts: $('#bk-alerts').checked });
+  }
+  const mail = k === 'now' && $('#bk-nowmail').checked;
+  bkBusy = k;
+  bkPaint();
+  try {
+    bkStat = k === 'save' ? await store.backupSave(cfg) : await store.backupNow(mail);
+    const st = bkStat.state || {};
+    if (k === 'save') toast('บันทึกการตั้งค่าสำรองแล้ว' + (bkStat.trigger ? ` · สำรองอัตโนมัติทุกวัน ${String(bkStat.cfg.hour).padStart(2, '0')}:00 น.` : ''));
+    else if (st.ok) toast('สำรองข้อมูลแล้ว' + (mail ? (st.mailErr ? ` · ส่งอีเมลไม่สำเร็จ: ${st.mailErr}` : ' · ส่งไฟล์ทางอีเมลแล้ว') : ''), st.mailErr && mail ? { err: true } : {});
+    else toast('สำรองไม่สำเร็จ: ' + (st.err || ''), { err: true });
+  } catch (ex) { toast((k === 'save' ? 'บันทึกการตั้งค่าสำรองไม่สำเร็จ: ' : 'สำรองไม่สำเร็จ: ') + errMsg(ex), { err: true }); }
+  finally { bkBusy = ''; bkPaint(); }
+}
 
 /* ---------- ตั้งค่า → แจกงานแพทย์ ---------- */
 // ตาราง แถบเมนู → แถวย่อยใต้ แจกงานแพทย์: ตำแหน่งที่เห็นแถบย่อย Call center / ภายใน-Walk in (config.dq.desks · ตรงกับ dqDesks_ ใน Code.gs)
@@ -14140,6 +14243,7 @@ function renderSettings() {
         <span class="btns"><button type="button" class="icon-btn" data-boxup="${v}.${i}" aria-label="เลื่อน ${esc((xs.find(x => x[0] === k) || [k, k])[1])} ขึ้น"${i ? '' : ' disabled'}>↑</button></span>
       </div>`).join('')}</div></div>`).join('')}</div></div>
     ${adminSec}
+    ${secSec(d)}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
     </fieldset>
     <div class="savebar" id="savebar" hidden><span>มีการแก้ไขที่ยังไม่บันทึก</span>${subT.length ? '<input id="sub-note" maxlength="500" placeholder="หมายเหตุถึงแอดมินหลัก (ไม่บังคับ)" aria-label="หมายเหตุถึงแอดมินหลัก">' : ''}<button type="button" class="btn" id="cancel-settings">ยกเลิก</button><button type="button" class="btn primary" id="save-settings">${subT.length ? 'ส่งขออนุมัติ' : 'บันทึกการตั้งค่า'}</button></div>`;
@@ -14369,6 +14473,7 @@ async function saveSettings() {
   try {
     await store.saveConfig(next);
     state.config = next; draft = null;
+    idleRemember();
     renameAll();
     render();
     toast('บันทึกการตั้งค่าแล้ว');
@@ -16814,6 +16919,7 @@ document.addEventListener('click', e => {
   if (ds.failx !== undefined) { saveFails.splice(+ds.failx, 1); return renderSaveFails(); }
   if (t.id === 'dqe-back') return dqEditing && dqBack(dqEditing.id);
   if (t.id === 'logout') return logout();
+  if (t.id === 'idle-stay') return idleSeen(true);
   if (t.id === 'theme-btn') return toggleTheme();
   if (ds.lookfs) return lookSet({ fs: ds.lookfs });
   if (ds.lookcolor) return lookSet({ accent: ds.lookcolor });
@@ -16930,6 +17036,7 @@ document.addEventListener('click', e => {
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.add === 'jobpos') { draft.jobs.pos.push({ id: 'jp-' + uid(), label: 'หัวหน้า', kind: 'rtt', guar: '', base: 0, who: '', from: '', to: '' }); renderSettings(); $$('[data-k^="jobs.pos."][data-k$=".label"]').pop().select(); return; }
   if (ds.jposdel !== undefined) { draft.jobs.pos.splice(+ds.jposdel, 1); return renderSettings(); }
+  if (ds.bk) return bkAct(ds.bk);   // ตั้งค่า → สำรองข้อมูล
   if (ds.add === 'rttlink') { draft.jobs.sys.links.push({ label: '', href: '', desc: '' }); renderSettings(); $$('[data-k^="jobs.sys.links."][data-k$=".label"]').pop().focus(); return; }   // ระบบงาน RTT: ปุ่มลัด
   if (ds.rttdel !== undefined) { draft.jobs.sys.links.splice(+ds.rttdel, 1); return renderSettings(); }
   if (ds.rttup !== undefined) { const a = draft.jobs.sys.links, i = +ds.rttup; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; return renderSettings(); }
@@ -18039,6 +18146,43 @@ function showGate(why) {
   const u = $('#g-user');
   if (u && !document.activeElement.closest('#gate-form')) u.focus();
 }
+/* ---------- ออกจากระบบอัตโนมัติ (ตั้งค่า → สำรองข้อมูลและความปลอดภัย) ---------- */
+// ผู้ที่เข้าระบบด้วยบัญชี LPCH ไม่ได้ใช้งาน (คลิก แตะ พิมพ์ เลื่อน) นานเกิน security.idleMin นาที · เวลาใช้งานล่าสุดเก็บใน localStorage ทุกแท็บใช้ร่วมกัน
+// เตือนก่อน 1 นาที · ค่าที่ตั้งจำไว้ในเครื่อง (ใช้ตอนเปิดหน้าเว็บ ก่อนโหลดการตั้งค่า)
+const IDLE_KEY = 'medphys-dispatch:lastActive', IDLE_MIN_KEY = 'medphys-dispatch:idleMin';
+let idleLocal = 0, idleWarned = false;
+const idleMin = () => Math.max(0, Math.floor(+((state.config.security || {}).idleMin) || 0));
+function idleMinCached() { let v = null; try { v = localStorage.getItem(IDLE_MIN_KEY); } catch (e) { v = null; } return v == null || v === '' || !isFinite(+v) ? DEFAULT_CONFIG.security.idleMin : Math.max(0, Math.floor(+v)); }
+function idleRemember() { try { localStorage.setItem(IDLE_MIN_KEY, String(idleMin())); } catch (e) { /* storage blocked */ } }
+function idleLast() { let v = 0; try { v = +localStorage.getItem(IDLE_KEY) || 0; } catch (e) { v = 0; } return Math.max(v, idleLocal); }
+const idleMsg = n => `ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน ${n} นาที · เข้าสู่ระบบอีกครั้ง`;
+function idleSeen(force) {
+  const now = Date.now();
+  if (idleWarned) { idleWarned = false; $('#idle-warn').hidden = true; }
+  if (!force && now - idleLocal < 10000) return;   // ไม่เขียนถี่เกิน
+  idleLocal = now;
+  try { localStorage.setItem(IDLE_KEY, String(now)); } catch (e) { /* storage blocked */ }
+}
+function idleCheck() {
+  const n = state.loaded ? idleMin() : idleMinCached();
+  if (!lpchToken || !n || state.gate != null) { if (idleWarned) { idleWarned = false; $('#idle-warn').hidden = true; } return; }
+  const left = n * 60000 - (Date.now() - idleLast());
+  if (left <= 0) {
+    idleWarned = false;
+    $('#idle-warn').hidden = true;
+    const t = lpchToken;
+    setToken('');
+    call('lpchLogout', t).catch(() => {});
+    for (const d of $$('dialog[open]')) d.close();
+    showGate(idleMsg(n));
+    return;
+  }
+  if (left <= 60000 && !idleWarned) {
+    idleWarned = true;
+    $('#idle-warn-t').textContent = `ไม่ได้ใช้งาน ${n - 1} นาทีแล้ว · จะออกจากระบบอัตโนมัติในอีก 1 นาที`;
+    $('#idle-warn').hidden = false;
+  }
+}
 async function logout() {
   const t = lpchToken;
   setToken('');
@@ -18098,6 +18242,7 @@ async function refresh(quiet) {
     };
     const all = () => true;
     state.config = mergeConfig(d.config);
+    idleRemember();
     // หน้าตั้งค่าที่วาดไว้ก่อนข้อมูลมาถึง (เปิดหน้าเว็บที่หน้าตั้งค่า) ใช้ค่าเริ่มต้นอยู่: ถ้ายังไม่ได้แก้ วาดใหม่จากข้อมูลจริง
     // ไม่อย่างนั้นกดบันทึกจะเอาค่าเริ่มต้นไปทับการตั้งค่าจริง
     if (draft && JSON.stringify(draft) === draftBase) draft = null;
@@ -18195,12 +18340,21 @@ function maybePullBrachy() {
   }
 }
 if (!VIEWS.includes(state.view)) state.view = 'work';
+// ออกจากระบบอัตโนมัติ: เปิดหน้าเว็บใหม่หลังไม่ได้ใช้งานเกินเวลาที่ตั้ง = ต้องเข้าสู่ระบบใหม่ ก่อนโหลดข้อมูล (เครื่องที่ใช้ร่วมกัน)
+if (store.mode === 'sheet' && lpchToken) {
+  const n = idleMinCached(), last = idleLast();
+  if (n > 0 && last && Date.now() - last > n * 60000) { const t = lpchToken; setToken(''); call('lpchLogout', t).catch(() => {}); ssoError = idleMsg(n); }
+}
+idleSeen(true);
 if (store.mode === 'sheet') state.user = { me: '', owner: '', isAdmin: false, canEdit: false, pending: true };
 $('#i-in').value = workdayFrom(today());
 render();
 window.MEDPHYS_STARTED = true;   // ตัวตรวจในส่วนหัวไม่ต้องแสดงข้อผิดพลาด
 refresh();
 if (store.mode === 'sheet') {
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) document.addEventListener(ev, () => idleSeen(), { capture: true, passive: true });
+  setInterval(idleCheck, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); });
   const idle = () => state.gate == null && !document.hidden && !caseDlg.open && !logDlg.open && !leaveDlg.open && !settingsDirty();
   setInterval(() => { if (idle()) refresh(true); }, 60000);
   document.addEventListener('visibilitychange', () => { if (idle()) refresh(true); });

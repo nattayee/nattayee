@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-12.3';
-const API_LEVEL = 76;
+const CODE_VERSION = '2026-11-12.4';
+const API_LEVEL = 77;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -809,7 +809,7 @@ const CFG_TABS = {
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm'],
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes'],
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security'],
 };
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
 const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
@@ -4114,6 +4114,7 @@ function checkPin_(u, pin, act) {
   if (!/^\d{4}$/.test(String(pin == null ? '' : pin)) || pinHash_(rec.s, String(pin)) !== rec.h) {
     cache.put(key, String(tries + 1), PIN_LOCK_SECONDS);
     const left = PIN_TRIES - tries - 1;
+    if (left <= 0) alert_('pin_' + pinKey_(u), 'รหัส PIN ถูกล็อก', String(u.name || u.username || u.me || 'ผู้ใช้') + ' (' + String(u.username || u.me || '-') + ') ใส่รหัส PIN ผิด ' + PIN_TRIES + ' ครั้ง ถูกล็อก 5 นาที · ถ้าไม่ใช่เจ้าของบัญชี อาจมีคนพยายามใช้บัญชีนี้');
     throw new Error('รหัส PIN ไม่ถูกต้อง' + (left > 0 ? ' (ใส่ได้อีก ' + left + ' ครั้ง)' : ' รอ 5 นาทีแล้วลองใหม่'));
   }
   if (tries) cache.remove(key);   // ไม่เคยใส่ผิด = ไม่มีอะไรให้ล้าง
@@ -4624,7 +4625,8 @@ function auditFlush_() {
     let sh = at ? at.sh : sheet_(ss, AUDIT_SHEET);
     if (!sh) { sh = ss.insertSheet(AUDIT_SHEET); sh.getRange(1, 1, 1, AUDIT_HEAD.length).setValues([AUDIT_HEAD]).setFontWeight('bold'); sh.setFrozenRows(1); }
     sh.getRange((at ? at.last : sh.getLastRow()) + 1, 1, rows.length, AUDIT_HEAD.length).setNumberFormat('@').setValues(rows);
-  } catch (e) { console.log('auditFlush_ ' + e); }   // ประวัติเขียนไม่ได้ ไม่ทำให้การบันทึกล้ม
+  } catch (e) { console.log('auditFlush_ ' + e); }
+  alertDeletes_(rows);   // ประวัติเขียนไม่ได้ ไม่ทำให้การบันทึกล้ม
 }
 // แก้ / เพิ่มแถว: เทียบค่าเดิมทีละคอลัมน์ที่เขียน (แถวใหม่ = ค่าที่ไม่ว่าง)
 function auditWrite_(sh, row, header, cells, known) {
@@ -4765,4 +4767,172 @@ function sheetSource_() {
     if (SpreadsheetApp.getActive()) return 'bound';
     return sheetIdProp_() ? 'property' : 'none';
   } catch (e) { return 'error'; }
+}
+
+/* ---------- สำรองข้อมูล (API 77) · แจ้งเตือนทางอีเมล ---------- */
+// สำรองทั้งไฟล์ชีตทุกคืน (ทริกเกอร์ backupDaily) ไปที่โฟลเดอร์ใน Drive ของเจ้าของ · เก็บรายวัน keepDays วัน + ฉบับแรกของแต่ละเดือน keepMonths เดือน (เก่ากว่านั้นย้ายไปถังขยะ)
+// ส่งไฟล์ .xlsx ทางอีเมลถึงเจ้าของ (บัญชีที่รัน Apps Script) เท่านั้น ตาม every (day | week = วันจันทร์ | month = วันที่ 1 | off) · ค่าต่าง ๆ เก็บใน Script properties
+// แจ้งเตือนเจ้าของ (alerts): สำรองไม่สำเร็จ · รหัส PIN ถูกล็อก · ลบข้อมูลจำนวนมาก · ครั้งแรกเจ้าของต้องกด Run ฟังก์ชัน backupInstall ในหน้า Apps Script เพื่ออนุญาต Drive / Gmail / ทริกเกอร์
+const BACKUP_CFG = 'BACKUP_CFG', BACKUP_STATE = 'BACKUP_STATE', BACKUP_FOLDER = 'BACKUP_FOLDER', BACKUP_PREFIX = 'backup ';
+const BACKUP_MAIL_MAX = 20 * 1024 * 1024;   // ไฟล์ใหญ่กว่านี้ส่งลิงก์แทนแนบไฟล์ (อีเมลแนบได้ไม่เกิน 25 MB)
+const DEL_ALERT_ONCE = 10, DEL_ALERT_DAY = 30;   // ลบในคำขอเดียว ≥ 10 รายการ · หรือคนเดียวลบรวมในวันเดียว ≥ 30 รายการ = แจ้งเตือน
+const BACKUP_DEF = { hour: 2, keepDays: 30, keepMonths: 12, every: 'day', alerts: true };
+function backupCfg_(v) {
+  let c = v;
+  if (c === undefined) { try { c = JSON.parse(PropertiesService.getScriptProperties().getProperty(BACKUP_CFG) || '{}'); } catch (e) { c = {}; } }
+  c = c && typeof c === 'object' ? c : {};
+  const num = (x, lo, hi, d) => (x === '' || x == null || !isFinite(+x) ? d : Math.min(hi, Math.max(lo, Math.floor(+x))));
+  return { hour: num(c.hour, 0, 23, BACKUP_DEF.hour), keepDays: num(c.keepDays, 3, 90, BACKUP_DEF.keepDays), keepMonths: num(c.keepMonths, 0, 36, BACKUP_DEF.keepMonths),
+    every: ['day', 'week', 'month', 'off'].indexOf(c.every) >= 0 ? c.every : BACKUP_DEF.every, alerts: c.alerts === undefined ? BACKUP_DEF.alerts : !!c.alerts };
+}
+// ผู้รับอีเมล = เจ้าของ: บัญชีที่รัน Apps Script (ทริกเกอร์ / เว็บแอปที่รันในนามเจ้าของ) · หาไม่ได้ = เจ้าของไฟล์ชีต
+function backupTo_() {
+  let e = '';
+  try { e = String(Session.getEffectiveUser().getEmail() || ''); } catch (x) { e = ''; }
+  if (!e) { try { const o = ss_().getOwner(); e = o ? String(o.getEmail() || '') : ''; } catch (x) { e = ''; } }
+  return e.trim().toLowerCase();
+}
+function backupState_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(BACKUP_STATE) || '{}') || {}; } catch (e) { return {}; } }
+function backupSetState_(o) { const st = Object.assign(backupState_(), o); PropertiesService.getScriptProperties().setProperty(BACKUP_STATE, JSON.stringify(st)); return st; }
+function backupAdmin_(token) {
+  const u = who_(token);
+  if (u.via !== 'google' && !u.isAdmin) throw new Error('ตั้งค่าสำรองข้อมูลได้เฉพาะแอดมิน');
+  return u;
+}
+// โฟลเดอร์สำรอง (สร้างครั้งแรก · ไม่แชร์ให้ใคร)
+function backupFolder_() {
+  const p = PropertiesService.getScriptProperties(), id = p.getProperty(BACKUP_FOLDER);
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* ถูกลบ = สร้างใหม่ */ } }
+  const f = DriveApp.createFolder('สำรองข้อมูล ' + appTitle_());
+  p.setProperty(BACKUP_FOLDER, f.getId());
+  return f;
+}
+// สำเนาทั้งไฟล์ → ย้ายฉบับเก่าไปถังขยะ → ส่งอีเมล (ถ้าถึงรอบหรือสั่ง) · คืนสถานะ
+function backupRun_(why, mailNow) {
+  const ss = ss_(), tz = tz_(ss), now = new Date(), stamp = Utilities.formatDate(now, tz, 'yyyy-MM-dd HHmm');
+  let st;
+  try {
+    SpreadsheetApp.flush();
+    const folder = backupFolder_(), file = DriveApp.getFileById(ss.getId()).makeCopy(BACKUP_PREFIX + stamp + ' · ' + ss.getName(), folder);
+    const cfg = backupCfg_(), size = backupPrune_(folder, cfg, now, tz);
+    st = backupSetState_({ at: now.toISOString(), ok: true, err: '', why: why, file: file.getId(), url: file.getUrl(), name: file.getName(), folder: folder.getUrl(), kept: size.kept, trashed: size.trashed });
+    const day = Utilities.formatDate(now, tz, 'u'), date = Utilities.formatDate(now, tz, 'd');
+    const due = cfg.every === 'day' || (cfg.every === 'week' && day === '1') || (cfg.every === 'month' && date === '1');
+    const to = backupTo_();
+    if (to && (mailNow === true || (mailNow !== false && due))) st = backupMail_(file, to, now, tz);
+  } catch (e) {
+    st = backupSetState_({ at: now.toISOString(), ok: false, err: String(e && e.message || e), why: why });
+    alert_('backup', 'สำรองข้อมูลไม่สำเร็จ', 'สำรองข้อมูลเมื่อ ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm') + ' ไม่สำเร็จ\nสาเหตุ: ' + st.err + '\n\nเปิดหน้าเว็บ → ตั้งค่า → สำรองข้อมูล เพื่อดูสถานะ หรือกด สำรองตอนนี้');
+  }
+  return st;
+}
+// เก็บ: ทุกฉบับใน keepDays วันล่าสุด + ฉบับแรกของแต่ละเดือนใน keepMonths เดือนล่าสุด · ที่เหลือย้ายไปถังขยะ (กู้คืนได้ 30 วัน)
+function backupPrune_(folder, cfg, now, tz) {
+  const list = [], it = folder.getFiles();
+  while (it.hasNext()) {
+    const f = it.next(), m = String(f.getName()).match(/^backup (\d{4}-\d{2}-\d{2}) (\d{4})/);
+    if (m) list.push({ f: f, d: m[1], k: m[1] + m[2] });
+  }
+  list.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+  const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd'), dayMs = 864e5, from = Utilities.formatDate(new Date(now.getTime() - (cfg.keepDays - 1) * dayMs), tz, 'yyyy-MM-dd');
+  const ym = today.slice(0, 7), y = +ym.slice(0, 4), mo = +ym.slice(5, 7), first = {};
+  const monthOk = d => { const n = (y - +d.slice(0, 4)) * 12 + (mo - +d.slice(5, 7)); return n >= 0 && n < cfg.keepMonths; };
+  let kept = 0, trashed = 0;
+  list.forEach(x => {
+    const m = x.d.slice(0, 7), isFirst = !first[m];
+    first[m] = true;
+    if (x.d >= from || (isFirst && monthOk(x.d))) { kept++; return; }
+    try { x.f.setTrashed(true); trashed++; } catch (e) { console.log('backupPrune_ ' + e); }
+  });
+  return { kept: kept, trashed: trashed };
+}
+// ส่งไฟล์ .xlsx ของฉบับที่สำรองถึงเจ้าของ (ใหญ่เกิน = ส่งลิงก์ไฟล์ใน Drive)
+function backupMail_(file, to, now, tz) {
+  const when = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm'), title = appTitle_();
+  try {
+    const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + file.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error('แปลงเป็น .xlsx ไม่ได้ (' + res.getResponseCode() + ')');
+    const blob = res.getBlob().setName(file.getName().replace(/[\\/:*?"<>|]/g, '-') + '.xlsx'), size = blob.getBytes().length, big = size > BACKUP_MAIL_MAX;
+    const body = 'ไฟล์สำรองข้อมูล ' + title + ' เมื่อ ' + when + (big ? '\nไฟล์ใหญ่ ' + Math.round(size / 1048576) + ' MB เกินที่แนบอีเมลได้ · เปิดไฟล์ใน Google Drive: ' + file.getUrl() : '\nแนบไฟล์ .xlsx ' + (Math.round(size / 104857.6) / 10) + ' MB')
+      + '\n\nไฟล์นี้มีข้อมูลผู้ป่วย เก็บในที่ที่จำกัดผู้เข้าถึง ห้ามส่งต่อ (พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล)\nเปลี่ยนความถี่ได้ที่ หน้าเว็บ → ตั้งค่า → สำรองข้อมูล';
+    const o = { to: to, subject: 'สำรองข้อมูล ' + title + ' · ' + when, body: body, name: title };
+    if (!big) o.attachments = [blob];
+    MailApp.sendEmail(o);
+    return backupSetState_({ mailAt: now.toISOString(), mailTo: to, mailErr: '', mailSize: size, mailLink: big });
+  } catch (e) {
+    const st = backupSetState_({ mailAt: now.toISOString(), mailErr: String(e && e.message || e) });
+    alert_('backupmail', 'ส่งไฟล์สำรองทางอีเมลไม่สำเร็จ', 'สำรองข้อมูลใน Drive แล้ว แต่ส่งอีเมลไม่สำเร็จ: ' + st.mailErr);
+    return st;
+  }
+}
+// ทริกเกอร์สำรองทุกวันตามเวลาที่ตั้ง (ลบของเดิมแล้วสร้างใหม่) · คืน true เมื่อมีทริกเกอร์
+function backupTrigger_(cfg) {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'backupDaily').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('backupDaily').timeBased().everyDays(1).atHour(cfg.hour).inTimezone(tz_(ss_())).create();
+  return true;
+}
+// ทริกเกอร์รายวัน (เรียกจากหน้าเว็บได้ด้วย จึงไม่ทำซ้ำถ้าสำรองอัตโนมัติไปแล้วภายใน 12 ชั่วโมง)
+function backupDaily() {
+  const last = backupState_();
+  if (last.why === 'auto' && last.ok && Date.now() - Date.parse(last.at) < 12 * 36e5) return 'skip';
+  backupRun_('auto');
+  return 'ok';
+}
+// ครั้งแรก: เจ้าของกด Run ฟังก์ชันนี้ในหน้า Apps Script เพื่ออนุญาต Drive / Gmail / ทริกเกอร์ · ตั้งทริกเกอร์และสำรองหนึ่งครั้ง (ไม่ส่งอีเมล · ไม่เกินทุก 10 นาที)
+function backupInstall() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('backupInstall')) return 'ทำไปแล้วเมื่อสักครู่';
+  cache.put('backupInstall', '1', 600);
+  const cfg = backupCfg_();
+  backupTrigger_(cfg);
+  const st = backupRun_('install', false);
+  return st.ok ? 'ตั้งสำรองอัตโนมัติทุกวัน ' + cfg.hour + ':00 น. แล้ว · สำรองครั้งแรก: ' + st.url : 'สำรองไม่สำเร็จ: ' + st.err;
+}
+// หน้าตั้งค่า (แอดมิน)
+function backupStatus(token) {
+  backupAdmin_(token);
+  let trigger = null, auth = true;
+  try { trigger = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'backupDaily'); } catch (e) { auth = false; }
+  return { cfg: backupCfg_(), state: backupState_(), trigger: trigger, auth: auth, to: backupTo_() };
+}
+function backupSave(cfg, token) {
+  backupAdmin_(token);
+  const c = backupCfg_(cfg);
+  PropertiesService.getScriptProperties().setProperty(BACKUP_CFG, JSON.stringify(c));
+  try { backupTrigger_(c); } catch (e) { throw new Error('บันทึกแล้ว แต่ตั้งสำรองอัตโนมัติไม่ได้ · เจ้าของต้องเปิด Apps Script แล้วกด Run ฟังก์ชัน backupInstall หนึ่งครั้งเพื่ออนุญาต (' + (e && e.message || e) + ')'); }
+  return backupStatus(token);
+}
+function backupNow(mail, token) {
+  backupAdmin_(token);
+  const cache = CacheService.getScriptCache();
+  if (cache.get('backupNow')) throw new Error('เพิ่งสำรองไปเมื่อไม่ถึง 1 นาทีที่แล้ว');
+  cache.put('backupNow', '1', 60);
+  backupRun_('manual', mail === true);
+  return backupStatus(token);
+}
+// แจ้งเตือนทางอีเมลถึงเจ้าของ (เรื่องเดียวกันไม่เกินชั่วโมงละครั้ง) · ส่งไม่ได้ไม่ทำให้งานหลักล้ม
+function alert_(kind, subject, text) {
+  try {
+    const cfg = backupCfg_(), to = backupTo_();
+    if (!cfg.alerts || !to) return false;
+    const cache = CacheService.getScriptCache(), key = 'alert_' + String(kind).slice(0, 200);
+    if (cache.get(key)) return false;
+    cache.put(key, '1', 3600);
+    const title = appTitle_();
+    MailApp.sendEmail({ to: to, subject: '[แจ้งเตือน] ' + title + ' · ' + subject, body: text + '\n\nปิดการแจ้งเตือนได้ที่ หน้าเว็บ → ตั้งค่า → สำรองข้อมูล', name: title });
+    return true;
+  } catch (e) { console.log('alert_ ' + e); return false; }
+}
+// ลบข้อมูลจำนวนมาก (นับจากประวัติการบันทึกของคำขอนี้)
+function alertDeletes_(rows) {
+  const del = rows.filter(r => r[6] === 'del');
+  if (!del.length) return;
+  const who = String(del[0][1] || del[0][2] || 'ไม่ทราบชื่อ'), acct = String(del[0][2] || who), cache = CacheService.getScriptCache();
+  const dk = 'delday_' + acct + '_' + String(del[0][0]).slice(0, 10), n = +(cache.get(dk) || 0) + del.length;
+  cache.put(dk, String(n), 86400);
+  if (del.length >= DEL_ALERT_ONCE || (n >= DEL_ALERT_DAY && n - del.length < DEL_ALERT_DAY)) {
+    const tables = {};
+    del.forEach(r => { tables[r[3]] = (tables[r[3]] || 0) + 1; });
+    alert_('del_' + acct, 'ลบข้อมูลจำนวนมาก', who + ' (' + acct + ') ลบ ' + del.length + ' รายการในครั้งเดียว · วันนี้รวม ' + n + ' รายการ\nตาราง: ' + Object.keys(tables).map(k => k + ' ' + tables[k]).join(', ') + '\n\nดูรายละเอียดที่ชีต ' + AUDIT_SHEET + ' หรือ ประวัติการบันทึก ในแต่ละแถบ · กู้คืนจากไฟล์สำรองได้');
+  }
 }
