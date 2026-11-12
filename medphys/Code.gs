@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-12.2';
-const API_LEVEL = 75;
+const CODE_VERSION = '2026-11-12.3';
+const API_LEVEL = 76;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -205,7 +205,8 @@ TABLES.dq = {
     ['visit', 'วันที่นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['icd', 'ICD10'], ['src', 'ที่มา'],
     // API 73: st = doc (ขอเอกสารเพิ่ม · กลับไปแถบแจกงานแพทย์) | nort (ไม่ RT) · รายละเอียด ใคร เมื่อไร (dqMark)
     ['stNote', 'รายละเอียดสถานะ'], ['stBy', 'สถานะโดย'], ['stAt', 'สถานะเมื่อ'],
-    // API 75: แถบย่อยที่แจก · '' = Call center (แถบเดิม · ดึงจากรายงาน HIS) | walk = ภายใน/Walk in · คิวแพทย์ วันลา เวร S1 และรายงานใช้ร่วมกัน
+    // API 75: แถบย่อยที่แจก · '' = Call center (แถบเดิม · ดึงจากรายงาน HIS) · คิวแพทย์ วันลา เวร S1 และรายงานใช้ร่วมกัน
+    // API 76: แถบย่อย ภายใน/Walk in เลือกได้ว่า in = ภายใน | walk = Walk in (รุ่น API 75 เก็บ walk อย่างเดียว)
     ['desk', 'จุดรับเคส'],
   ],
 };
@@ -3020,7 +3021,7 @@ const dqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = ใช้ได้เฉพาะแถบย่อยนั้น · ตำแหน่งอื่น (MP, RO …) แอดมิน และบัญชี Google = ทุกแถบย่อย
 const DQ_DESK_DEF = { call: ['Refer'], walk: ['Nurse'] };
 const DQ_DESK_NAME = { call: 'Call center', walk: 'ภายใน/Walk in' };
-const dqDeskKey_ = v => (v === 'walk' ? 'walk' : '');
+const dqDeskKey_ = v => (v === 'walk' || v === 'in' ? v : '');   // '' = Call center · in = ภายใน · walk = Walk in (สองค่าหลังอยู่ในแถบย่อย ภายใน/Walk in)
 function dqDesks_(u, cfg) {
   const all = Object.keys(DQ_DESK_DEF);
   if (!u || u.via === 'google' || u.isAdmin) return all;
@@ -3029,7 +3030,7 @@ function dqDesks_(u, cfg) {
   return mine.length ? mine : all;
 }
 function dqDeskCheck_(u, cfg, desk) {
-  const k = desk === 'walk' ? 'walk' : 'call';
+  const k = desk === 'walk' || desk === 'in' ? 'walk' : 'call';
   if (dqDesks_(u, cfg).indexOf(k) < 0) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ใช้แถบย่อย ' + DQ_DESK_NAME[k] + ' ไม่ได้ (ตั้งค่า → แจกงานแพทย์ → แถบย่อย)');
 }
 const dqNow_ = () => new Date().toISOString();
@@ -3087,6 +3088,11 @@ function dqEdit(id, ch, pin, token) {
     if ('name' in ch) set.name = dqCut_(ch.name, 200);
     if ('note' in ch) set.note = dqCut_(ch.note, 500);
     if ('st' in ch) set.st = ch.st === 'skip' ? 'skip' : '';
+    if ('desk' in ch) {   // API 76: ภายใน ↔ Walk in (ในแถบย่อย ภายใน/Walk in เท่านั้น)
+      const d = dqDeskKey_(ch.desk);
+      if (!d || !(cur.desk === 'in' || cur.desk === 'walk')) throw new Error('เปลี่ยนได้เฉพาะ ภายใน / Walk in ของรายการในแถบย่อย ภายใน/Walk in');
+      if (d !== cur.desk) set.desk = d;
+    }
     if ('doc' in ch) {
       const d = dqCut_(ch.doc, 10).toUpperCase();
       if (dqDocs_(cfg).indexOf(d) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + d);
