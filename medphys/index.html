@@ -542,6 +542,20 @@ button.bq-chk{cursor:pointer}
 .dq-sum .bar i{display:block;height:100%;background:var(--accent)}
 .dq-how{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);font-size:12px;white-space:nowrap}
 .dq-desks{margin:0 0 10px}
+/* RTT/RA Jobs → ระบบงาน RTT: ปุ่มเปิดเว็บระบบงาน RTT + ปุ่มลัด */
+.rtt-sys{max-width:980px}
+.rtt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow-sm)}
+.rtt-head h2{margin:0 0 4px;font-size:19px}
+.rtt-head p{margin:0;font-size:13.5px}
+.rtt-open{text-decoration:none;font-size:15px;padding:10px 18px}
+.rtt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px}
+.rtt-card{position:relative;display:flex;flex-direction:column;gap:4px;min-height:74px;padding:14px 34px 14px 16px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--fg);text-decoration:none}
+.rtt-card:hover,.rtt-card:focus-visible{border-color:var(--accent);background:var(--hover)}
+.rtt-card b{font-size:15px;font-weight:600}
+.rtt-card span{font-size:13px;color:var(--muted)}
+.rtt-card i{position:absolute;top:12px;right:14px;font-style:normal;color:var(--accent)}
+.rtt-note{margin:12px 0 0;font-size:13px}
+.rttl-t input{width:100%;min-width:140px}
 .dq-desk-tag{display:inline-block;padding:0 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:nowrap}
 .dq-how.cover{background:var(--warn-soft)}
 .dq-how.repay{background:var(--ok-soft)}
@@ -2540,6 +2554,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <p class="notice" id="jobs-api" hidden><b>ยังบันทึกไม่ได้</b><span>แถบ RTT/RA Jobs ต้องใช้ Code.gs รุ่น 2026-10-28.6 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
       <div id="jobs-body"></div>
     </div>
+    <div id="jobs-rtt" hidden><div id="rtt-body"></div></div>
     <div id="jobs-vac" hidden>
       <div class="toolbar">
         <input type="search" class="tab-q" data-tq="vac" placeholder="ค้นหา เลข Vac-Lok, HN, ชื่อ, ห้อง" autocomplete="off" aria-label="ค้นหา Vac-Lok">
@@ -3727,6 +3742,9 @@ const DEFAULT_CONFIG = {
     leaveTypes: ['ลาพักผ่อน', 'ลาป่วย', 'ลากิจ', 'ไปราชการ', 'ประชุม/อบรม'],
     // ตำแหน่งหัวหน้า (แบบ P4P ของ MP): ส่วนต่าง = คะแนนที่ทำได้ + แต้มตั้งต้น − แต้มประกัน · guar ว่าง = ของแบบฟอร์ม/ของคนนั้น · who = ผู้ดำรงตำแหน่ง · from / to = เดือน (ว่าง = ทุกเดือน)
     pos: [{ id: 'head', label: 'หัวหน้า', kind: 'rtt', guar: 1200, base: 360, who: '', from: '', to: '' }],
+    // แถบย่อย "ระบบงาน RTT": ปุ่มเปิดเว็บระบบงาน RTT (แท็บใหม่) + ปุ่มลัดไปหน้าต่าง ๆ ของระบบนั้น (ตั้งค่า → RTT/RA Jobs)
+    // links: [{ label, href: ลิงก์เต็ม https หรือ ?… / #… ต่อท้ายลิงก์หลัก, desc }]
+    sys: { title: 'ระบบงาน RTT', url: 'https:\/\/script.google.com/macros/s/AKfycbw8KErV-3-Mw0upkX8aVz49aKWw2h0UnEdhFrB-cCMmcsXA2LB9nlIEKT0G541hthUc/exec', links: [] },
     roomCap: 40,   // งานห้องฉาย: แต่ละข้อที่นับจากผู้ป่วย นับได้สูงสุดกี่รายต่อวัน (0 = ไม่จำกัด)
   },
   // Vac-Lok: เลขและชนิด/สี (ตั้งค่า → RTT/RA Jobs → Vac-Lok) · ลิงก์ชีตเดิมสำหรับนำเข้า
@@ -4254,7 +4272,10 @@ function mergeConfig(c) {
   const jprof = k => { const x = jb[k] && typeof jb[k] === 'object' ? jb[k] : {}, dv = d.jobs[k]; return { title: str(x.title).slice(0, 80) || dv.title, guar: jnum(x.guar, dv.guar), rate: jnum(x.rate, dv.rate), group: str(x.group).slice(0, 20) || dv.group }; };
   const jmap = (v, dv) => Object.fromEntries(Object.entries(v && typeof v === 'object' && !Array.isArray(v) ? v : dv).filter(([, t]) => ['2D', '3D', 'IMRT', 'SBRT', 'VMAT', '-', ''].includes(t)));
   const jlist = (v, dv) => (Array.isArray(v) ? [...new Set(v.map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : dv.slice());
-  out.jobs = { rtt: jprof('rtt'), ra: jprof('ra'), techCat: jmap(jb.techCat, d.jobs.techCat), techTech: jmap(jb.techTech, d.jobs.techTech),
+  const jsy = jb.sys && typeof jb.sys === 'object' ? jb.sys : {}, jtxt = (v, n) => str(v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const jsys = { title: jtxt(jsy.title, 40) || d.jobs.sys.title, url: 'url' in jsy ? str(jsy.url).trim().slice(0, 500) : d.jobs.sys.url,
+    links: (Array.isArray(jsy.links) ? jsy.links : d.jobs.sys.links).filter(x => x && typeof x === 'object').slice(0, 40).map(x => ({ label: jtxt(x.label, 60), href: str(x.href).trim().slice(0, 500), desc: jtxt(x.desc, 160) })) };
+  out.jobs = { sys: jsys, rtt: jprof('rtt'), ra: jprof('ra'), techCat: jmap(jb.techCat, d.jobs.techCat), techTech: jmap(jb.techTech, d.jobs.techTech),
     sit: jlist(jb.sit, d.jobs.sit), lie: jlist(jb.lie, d.jobs.lie), leaveTypes: jlist(jb.leaveTypes, d.jobs.leaveTypes),
     roomCap: Math.max(0, Math.min(500, Math.floor(jnum(jb.roomCap, d.jobs.roomCap)))),
     pos: (Array.isArray(jb.pos) ? jb.pos : d.jobs.pos).filter(x => x && typeof x === 'object').slice(0, 30).map((x, i) => ({ id: str(x.id).slice(0, 40) || 'jp' + i, label: str(x.label).replace(/\s+/g, ' ').trim().slice(0, 60) || 'หัวหน้า', kind: x.kind === 'ra' ? 'ra' : 'rtt',
@@ -4384,7 +4405,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.4';
+const PAGE_VERSION = '2026-11-12.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12574,13 +12595,33 @@ async function vacImportRun(btn, check) {
   renderSettings();
 }
 // แถบ RTT/RA Jobs: แถบย่อย P4P (ภาระงานรายเดือน) / Vac-Lok (จำไว้ในเบราว์เซอร์)
-const jobsTab = () => (pref.get('jobsTab', 'p4p') === 'vac' ? 'vac' : 'p4p');
+const jobsTab = () => { const v = pref.get('jobsTab', 'p4p'); return v === 'vac' || v === 'rtt' ? v : 'p4p'; };
+// แถบย่อย ระบบงาน RTT: ลิงก์หลัก (https เท่านั้น) · ปุ่มลัด = ลิงก์เต็ม https หรือ ?… / #… ต่อท้ายลิงก์หลัก
+const rttUrl = v => (/^https:\/\/[^\s"'<>]+$/i.test(str(v)) ? str(v) : '');
+function rttHref(x, base) {
+  const h = str(x.href);
+  if (!h) return base;
+  if (rttUrl(h)) return h;
+  if (!base || !/^[?#&][^\s"'<>]*$/.test(h)) return '';
+  return h[0] === '#' ? base.replace(/#.*$/, '') + h : base.replace(/#.*$/, '') + (base.includes('?') ? '&' : '?') + h.slice(1);
+}
+function renderRttSys() {
+  const sy = state.config.jobs.sys, base = rttUrl(sy.url), links = sy.links.filter(x => x.label && rttHref(x, base));
+  const where = `ตั้งค่า → RTT/RA Jobs → ${sy.title}`;
+  $('#rtt-body').innerHTML = !base ? `<p class="empty-state">ยังไม่ได้ตั้งลิงก์${esc(sy.title)} · แอดมินตั้งได้ที่ ${esc(where)}</p>`
+    : `<div class="rtt-sys"><div class="rtt-head"><div><h2>${esc(sy.title)}</h2><p class="muted">เปิดในแท็บใหม่ · ระบบนั้นเข้าด้วยบัญชี Google ตามสิทธิ์ของระบบนั้น</p></div>`
+      + `<a class="btn primary rtt-open" href="${esc(base)}" target="_blank" rel="noopener">เปิด${esc(sy.title)} <span aria-hidden="true">↗</span></a></div>`
+      + (links.length ? `<div class="rtt-grid">${links.map(x => `<a class="rtt-card" href="${esc(rttHref(x, base))}" target="_blank" rel="noopener"><b>${esc(x.label)}</b>${x.desc ? `<span>${esc(x.desc)}</span>` : ''}<i aria-hidden="true">↗</i></a>`).join('')}</div>` : '')
+      + (state.user.isAdmin ? `<p class="muted rtt-note">เพิ่ม / แก้ปุ่มลัดไปหน้าต่าง ๆ ของระบบ ได้ที่ ${esc(where)}</p>` : '') + '</div>';
+}
 function renderJobs() {
   const jt = jobsTab(), nv = vacNos().length;
-  $('#jobs-tabs').innerHTML = [['p4p', 'P4P'], ['vac', 'Vac-Lok']].map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacHeld().size}</span>` : ''}</button>`).join('');
+  $('#jobs-tabs').innerHTML = [['p4p', 'P4P'], ['vac', 'Vac-Lok'], ['rtt', state.config.jobs.sys.title]].map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacHeld().size}</span>` : ''}</button>`).join('');
   $('#jobs-p4p').hidden = jt !== 'p4p';
   $('#jobs-vac').hidden = jt !== 'vac';
+  $('#jobs-rtt').hidden = jt !== 'rtt';
   if (jt === 'vac') return renderVac();
+  if (jt === 'rtt') return renderRttSys();
   const ym = state.month, tg = jobsTarget(ym), cur = tg.cur, sel = $('#jobs-who'), kindSel = $('#jobs-kind');
   $('#jobs-api').hidden = jobsOn() || store.mode === 'local' || !canEdit();
   sel.hidden = !state.user.isAdmin;
@@ -13978,6 +14019,17 @@ function renderSettings() {
       <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${CT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'ctcm' || k === 'special' ? `<small class="muted"> · ตัวเลือกตั้งที่ ลงนัด${ctSpOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-11-04.1 ขึ้นไป'}</small>` : ''}</td><td><select data-k="ct.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT-SIM">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.ct.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>
     <div class="sec" data-sec="jobs"><div class="sec-head"><h2>RTT/RA Jobs (แถบ ${esc(navLabel('jobs'))})</h2><p>ภาระงานรายเดือนของ RTT / RA แบบฟอร์มเดียวกับไฟล์ Excel เดิม · งานห้องฉายรังสี Linac1–3 = ห้องฉาย 3 ห้องแรก (${esc(d.rooms.slice(0, 3).join(', ') || '—')}) · งานห้อง CT-sim 1–2 = เครื่อง CT (${esc(d.ct.rooms.slice(0, 2).map(r => r.label || r.id).join(', ') || '—')}) · ชื่อในแถบและในไฟล์ส่งออกใช้ชื่อจากตั้งค่านี้ · Daily QC = คนทำ Daily QC ในผู้ปฏิบัติงานประจำวัน</p></div>
       ${jobsOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบ RTT/RA Jobs ต้องใช้ Code.gs รุ่น 2026-10-28.6 ขึ้นไป</span></p>'}
+      <h3 class="sub-h">แถบย่อย ${esc(d.jobs.sys.title)}</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ปุ่มเปิดเว็บระบบงาน RTT ในแท็บใหม่ · ปุ่มลัด = หน้าต่าง ๆ ของระบบนั้น ลิงก์เต็ม (https:…) หรือส่วนต่อท้ายลิงก์หลัก เช่น ?page=… (ว่าง = ลิงก์หลัก)</p>
+      <div class="form-grid" style="margin-bottom:10px"><label class="field"><span class="lbl">ชื่อแถบย่อย</span><input data-k="jobs.sys.title" value="${esc(d.jobs.sys.title)}" maxlength="40" aria-label="ชื่อแถบย่อย ระบบงาน RTT"></label>
+        <label class="field"><span class="lbl">ลิงก์หลัก <span class="sub-lbl">ลิงก์ /exec ของเว็บ</span></span><input data-k="jobs.sys.url" value="${esc(d.jobs.sys.url)}" maxlength="500" placeholder="https:…/exec" aria-label="ลิงก์หลัก ระบบงาน RTT"${d.jobs.sys.url && !rttUrl(d.jobs.sys.url) ? ' aria-invalid="true"' : ''}></label></div>
+      <div class="table-wrap set-table"><table class="rttl-t"><thead><tr><th style="text-align:left">ปุ่มลัด</th><th style="text-align:left">ลิงก์</th><th style="text-align:left">คำอธิบาย</th><th></th><th></th></tr></thead><tbody>${d.jobs.sys.links.map((x, i) => `<tr>
+        <td><input data-k="jobs.sys.links.${i}.label" value="${esc(x.label)}" maxlength="60" placeholder="ชื่อปุ่ม" aria-label="ชื่อปุ่มลัด ${i + 1}"></td>
+        <td><input data-k="jobs.sys.links.${i}.href" value="${esc(x.href)}" maxlength="500" placeholder="?page=… หรือ https:…" aria-label="ลิงก์ปุ่มลัด ${i + 1}"${x.href && !rttHref(x, rttUrl(d.jobs.sys.url)) ? ' aria-invalid="true"' : ''}></td>
+        <td><input data-k="jobs.sys.links.${i}.desc" value="${esc(x.desc)}" maxlength="160" placeholder="ไม่บังคับ" aria-label="คำอธิบายปุ่มลัด ${i + 1}"></td>
+        <td><button type="button" class="icon-btn" data-rttup="${i}" aria-label="เลื่อนปุ่มลัด ${i + 1} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
+        <td><button type="button" class="icon-btn" data-rttdel="${i}" aria-label="ลบปุ่มลัด ${i + 1}">×</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted" style="text-align:left">ยังไม่มีปุ่มลัด (มีปุ่มเปิดลิงก์หลักเสมอ)</td></tr>'}</tbody></table></div>
+      <div style="margin:8px 0 18px"><button type="button" class="btn ghost sm" data-add="rttlink">+ เพิ่มปุ่มลัด</button></div>
       <h3 class="sub-h">ตำแหน่งเริ่มต้น (หัวไฟล์ Excel)</h3>
       <p class="muted def-note" style="margin:0 0 10px">ใช้กับเดือนแรกที่บันทึกของแต่ละคน · เดือนถัดไปใช้ค่าล่าสุดของคนนั้น · แต่ละคนแก้ของตัวเองได้ในแถบ · แต้ม point ของแต่ละแถว = K × นาที × แต้ม/นาที (ปัดทศนิยม 2 ตำแหน่ง)</p>
       <div class="table-wrap set-table"><table><thead><tr><th style="text-align:left">แบบฟอร์ม</th><th style="text-align:left">ตำแหน่ง</th><th>แต้มประกัน</th><th>แต้ม/นาที</th><th>กลุ่มที่</th></tr></thead><tbody>${['rtt', 'ra'].map(k => `<tr><td style="text-align:left">${esc(JOB_KIND_LABEL[k])}</td>
@@ -16867,6 +16919,9 @@ document.addEventListener('click', e => {
   if (ds.del) { const [list, i] = ds.del.split('.'); draft[list].splice(+i, 1); return renderSettings(); }
   if (ds.add === 'jobpos') { draft.jobs.pos.push({ id: 'jp-' + uid(), label: 'หัวหน้า', kind: 'rtt', guar: '', base: 0, who: '', from: '', to: '' }); renderSettings(); $$('[data-k^="jobs.pos."][data-k$=".label"]').pop().select(); return; }
   if (ds.jposdel !== undefined) { draft.jobs.pos.splice(+ds.jposdel, 1); return renderSettings(); }
+  if (ds.add === 'rttlink') { draft.jobs.sys.links.push({ label: '', href: '', desc: '' }); renderSettings(); $$('[data-k^="jobs.sys.links."][data-k$=".label"]').pop().focus(); return; }   // ระบบงาน RTT: ปุ่มลัด
+  if (ds.rttdel !== undefined) { draft.jobs.sys.links.splice(+ds.rttdel, 1); return renderSettings(); }
+  if (ds.rttup !== undefined) { const a = draft.jobs.sys.links, i = +ds.rttup; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; return renderSettings(); }
   if (ds.boxup) { const [v, n] = ds.boxup.split('.'), i = +n, arr = draft.boxes[v]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; renderSettings(); updateSaveBar(); const b = $(`[data-boxup="${v}.${i - 1}"]`); if (b && !b.disabled) b.focus(); return; }
   if (ds.up) { const [list, n] = ds.up.split('.'), i = +n, arr = draft[list]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return renderSettings(); }
   if (ds.add === 'ctroom') { const ids = draft.ct.rooms.map(r => r.id); let n = ids.length + 1; while (ids.includes('ct' + n)) n++; draft.ct.rooms.push({ id: 'ct' + n, label: `CT-${n}` }); return renderSettings(); }
