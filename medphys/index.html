@@ -1633,6 +1633,8 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .nav-acc .idx{font:12px var(--mono);color:var(--faint)}
 .nav-acc .nav-name{text-align:left;font-weight:500}
 .nav-acc .nav-label{width:150px}
+.nav-acc .nav-sub{font-weight:400;color:var(--muted);padding-left:20px}
+.nav-acc .nav-subnote{text-align:left;font-size:12px;color:var(--muted);white-space:normal}
 .acc-sel{min-height:32px;padding:3px 6px;font-size:13px}
 .acc-sel[data-v="edit"]{border-color:var(--ok);color:var(--ok);font-weight:600}
 .acc-sel[data-v="view"]{color:var(--fg)}
@@ -4382,7 +4384,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-12.3';
+const PAGE_VERSION = '2026-11-12.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8270,7 +8272,20 @@ dqsForm.addEventListener('submit', async e => {
 });
 
 /* ---------- ตั้งค่า → แจกงานแพทย์ ---------- */
-const dqDeskRoles = d => [...new Set([...d.roles, ...Object.values(d.dq.desks).flat()])];   // คอลัมน์ตาราง แถบย่อย: ตำแหน่งทั้งหมด
+// ตาราง แถบเมนู → แถวย่อยใต้ แจกงานแพทย์: ตำแหน่งที่เห็นแถบย่อย Call center / ภายใน-Walk in (config.dq.desks · ตรงกับ dqDesks_ ใน Code.gs)
+// ตำแหน่งที่ไม่อยู่ในรายการของแถบย่อยใดเลย = เห็นทุกแถบย่อย · ตารางแสดงผลจริงของแต่ละตำแหน่ง · ตำแหน่งที่ไม่เห็นแถบแจกงานแพทย์ = –
+const deskSees = (d, r) => { const all = DQ_DESKS.map(([k]) => k), mine = all.filter(k => (d.dq.desks[k] || []).includes(r)); return mine.length ? mine : all; };
+function navDeskCells(d, k) {
+  const x = d.nav.find(n => n.view === 'dq') || {}, lock = subTabs().length > 0 && !subTabs().includes('tabs'), l = dqDeskName(k);
+  const cell = r => {
+    if (!(x.access || {})[r]) return `<span class="acc-fixed" title="ตำแหน่ง ${esc(r)} ไม่เห็นแถบ ${esc(str(x.label) || VIEW_LABEL.dq)}">–</span>`;
+    const on = deskSees(d, r).includes(k) ? 'on' : '';
+    return `<select class="acc-sel" data-navdesk="${k}" data-deskrole="${esc(r)}" data-v="${on ? 'view' : ''}" aria-label="${esc(`${l} · ${r}`)}"${lock ? ' disabled' : ''}>${opt('on', 'เห็น', on)}${opt('', 'ไม่เห็น', on)}</select>`;
+  };
+  return `<td></td><td class="nav-name nav-sub">└ ${esc(l)}</td><td colspan="2" class="nav-subnote">แถบย่อยของ ${esc(str(x.label) || VIEW_LABEL.dq)}${k === 'call' ? ' · แถบเดิม · ดึงรายงาน HIS' : ''}</td>`
+    + `${d.roles.map(r => `<td>${cell(r)}</td>`).join('')}<td class="acc-admin">${(x.access || {})[ADMIN_ROLE] ? '<span class="acc-fixed" title="แอดมินเห็นทุกแถบย่อย">เห็น</span>' : '<span class="acc-fixed">–</span>'}</td><td class="acc-admin"><span class="acc-fixed" title="ใช้ตามตำแหน่งของตัวเอง">ตามตำแหน่ง</span></td><td></td>`;
+}
+const syncNavDesks = () => { for (const tr of $$('[data-navsub]', settingsEl)) tr.innerHTML = navDeskCells(draft, tr.dataset.navsub); };
 let dqSkipYm = '';   // เดือนที่แสดงในตาราง หักคิวรายเดือนของแพทย์ (ว่าง = เดือนนี้)
 function dqSetSec(d) {
   const docs = [...new Set(d.doctors.map(x => x.code).filter(Boolean))], off = new Set(d.dq.off), ym = dqSkipYm || thisMonth(), sk = d.dq.skips[ym] || {};
@@ -8294,10 +8309,9 @@ function dqSetSec(d) {
       <label class="field"><span class="lbl">เคสสูงสุดต่อแพทย์ <span class="sub-lbl">เกิน = เตือนตอนแจก แต่ยังแจกได้ · 0 = ไม่เตือน</span></span><input type="number" min="0" max="999" step="1" data-k="dq.max" value="${esc(String(d.dq.max))}"></label>
       <label class="field"><span class="lbl">นับเคสสูงสุด</span><select data-k="dq.maxPer">${DQ_PERIODS.map(([k, l]) => opt(k, l, d.dq.maxPer)).join('')}</select></label>
     </div>
-    <h3 class="sub-h">แถบย่อย <small class="muted">ติ๊ก = ตำแหน่งที่เห็นแถบย่อยนั้น · ตำแหน่งที่ไม่ได้ติ๊กแถบย่อยใดเลย (เช่น MP, RO) แอดมิน และบัญชี Google เห็นทุกแถบย่อย · ทุกแถบย่อยใช้คิวแพทย์ วันลา เวร S1 และรายงานร่วมกัน</small></h3>
-    ${dqDeskOn() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แถบย่อยต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>`}
-    <div class="table-wrap set-table"><table class="dqdesk-t"><thead><tr><th style="text-align:left">แถบย่อย</th>${dqDeskRoles(d).map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${DQ_DESKS.map(([k, l]) => `<tr><td style="text-align:left">${esc(l)}${k === 'call' ? '<small class="muted" style="display:block">แถบเดิม · ดึงรายงาน HIS</small>' : ''}</td>${dqDeskRoles(d).map(r => `<td><input type="checkbox" data-dqdeskrole="${k}" value="${esc(r)}"${(d.dq.desks[k] || []).includes(r) ? ' checked' : ''} aria-label="${esc(`${l}: ${r}`)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
-    <p class="muted def-note" style="margin:6px 0 12px">ตำแหน่งต้องเห็นแถบ ${esc(navLabel('dq'))} ด้วย (ตั้งที่ แถบเมนู) · บันทึกได้ = แจกในแถบย่อยที่เห็น</p>
+    <h3 class="sub-h">แถบย่อย <small class="muted">Call center · ภายใน/Walk in · ใช้คิวแพทย์ วันลา เวร S1 และรายงานร่วมกัน</small></h3>
+    ${dqDeskOn() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>แจกในแถบย่อย ภายใน/Walk in ต้องใช้ Code.gs รุ่น 2026-11-12.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy (แก้ deployment เดิม → New version)</span></p>`}
+    <p class="muted def-note" style="margin:6px 0 12px">ตำแหน่งที่เห็นแต่ละแถบย่อย ตั้งที่ <b>แถบเมนู</b> (แถว └ Call center และ └ ภายใน/Walk in ใต้แถบ ${esc(navLabel('dq'))}) · ค่าเริ่มต้น Call center = Refer · ภายใน/Walk in = Nurse · ตำแหน่งอื่นและแอดมินเห็นทั้งสอง</p>
     ${dq2On() ? '' : `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>${esc(DQ2_OLD)}</span></p>`}
     <h3 class="sub-h">วันที่แจก <small class="muted">ติ๊ก = แจกให้แพทย์คนนั้นในวันนั้น · ไม่ติ๊ก = ไม่แจก (เหมือนลา: คนอื่นรับแทน แล้วคืนคิวในวันอื่น ไม่เสียคิว)</small></h3>
     <div class="table-wrap set-table"><table><thead><tr><th style="text-align:left">วัน</th>${inQ.map(c => `<th title="${esc(docName(c))}">${esc(c)}</th>`).join('')}<th style="text-align:left">แพทย์เวร S1 (Emergency)</th></tr></thead><tbody>${[1, 2, 3, 4, 5, 6, 0].map(w => `<tr><th scope="row" style="text-align:left">${esc(WD_TH[w])}</th>${inQ.map(c => `<td><input type="checkbox" data-dqday="${w}|${esc(c)}"${(d.dq.days[w] || []).includes(c) ? '' : ' checked'} aria-label="แจกให้ ${esc(c)} วัน${esc(WD_TH[w])}"></td>`).join('')}<td style="text-align:left"><select data-dqs1wd="${w}" aria-label="แพทย์เวร S1 วัน${esc(WD_TH[w])}">${opt('', '—', d.dq.s1wd[w] || '')}${docs.map(c => opt(c, `${c}${docName(c) ? ' · ' + docName(c) : ''}`, d.dq.s1wd[w] || '')).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -14054,7 +14068,7 @@ function renderSettings() {
         <td>${x.view === 'settings' ? '<span class="muted">แถบหลัก</span>' : `<select data-k="nav.${i}.parent" data-navparent aria-label="${esc(VIEW_LABEL[x.view] || x.view)} อยู่ใต้แถบ">${opt('', '— แถบหลัก —', x.parent || '')}${d.nav.filter(p => p.view !== x.view && p.view !== 'settings' && !p.parent).map(p => opt(p.view, `▾ ${str(p.label) || VIEW_LABEL[p.view] || p.view}`, x.parent || '')).join('')}</select>`}</td>
         ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}<td class="acc-admin">${accSel(x, i, ADMIN_ROLE)}</td><td class="acc-admin">${accSel(x, i, SUB_ROLE)}</td>
         <td><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
-      </tr>`).join('')}</tbody></table></div>
+      </tr>${x.view === 'dq' ? DQ_DESKS.map(([k]) => `<tr class="navacc-row navacc-sub" data-navsub="${k}">${navDeskCells(d, k)}</tr>`).join('') : ''}`).join('')}</tbody></table></div>
       <h3 class="sub-h">สมาชิกและตำแหน่งจาก LPCH RO Workspace</h3>
       ${membersHtml(d)}</div>
     <div class="sec"><div class="sec-head"><h2>ลำดับกล่องในแถบ</h2><p>เรียงกล่องในแต่ละแถบ ใช้กับทุกคน · กด ↑ เพื่อเลื่อนขึ้น</p></div>
@@ -17685,8 +17699,6 @@ function settingsEdit(el) {
     draft.reg.drive.filter.vals = $$('[data-rdval]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.rdvals !== undefined) {
     draft.reg.drive.filter.vals = [...new Set(el.value.split(',').map(str).filter(Boolean))];
-  } else if (el.dataset.dqdeskrole) {   // แถบแจกงานแพทย์: ตำแหน่งที่เห็นแถบย่อย
-    draft.dq.desks = { ...(draft.dq.desks || {}), [el.dataset.dqdeskrole]: $$(`[data-dqdeskrole="${el.dataset.dqdeskrole}"]:checked`, settingsEl).map(x => x.value) };
   } else if (el.dataset.bqbtn) {   // สิทธิ์ของปุ่มในแถบนัดคิวใส่แร่
     draft.bq.btn = { ...(draft.bq.btn || {}), [el.dataset.bqbtn]: $$(`[data-bqbtn="${el.dataset.bqbtn}"]:checked`, settingsEl).map(x => x.value) };
   } else if (el.dataset.bqroles) {
@@ -17854,6 +17866,17 @@ settingsEl.addEventListener('change', e => {
     const x = draft.nav[+el.dataset.navacc];
     x.access = { ...x.access, [el.dataset.accrole]: el.value };
     el.dataset.v = el.value;
+    if (x.view === 'dq') syncNavDesks();   // แถวย่อย: ตำแหน่งที่เพิ่งเห็น / ไม่เห็นแถบแจกงานแพทย์
+    updateSaveBar();
+    return;
+  }
+  if (el.dataset.navdesk) {   // แถบเมนู → แถวย่อยของแจกงานแพทย์: ตำแหน่งที่เห็นแถบย่อย
+    const r = el.dataset.deskrole, k = el.dataset.navdesk, all = DQ_DESKS.map(([x]) => x);
+    let e = deskSees(draft, r);
+    e = el.value ? [...new Set([...e, k])] : e.filter(x => x !== k);
+    if (!e.length) toast(`ตำแหน่ง ${r} ต้องเห็นอย่างน้อย 1 แถบย่อย · ไม่ให้เห็นแถบ ${navLabel('dq')} เลย = ตั้งช่องของแถบนั้นเป็น ไม่เห็น`, { err: true });
+    else draft.dq.desks = Object.fromEntries(all.map(x => [x, (draft.dq.desks[x] || []).filter(v => v !== r).concat(e.length < all.length && e.includes(x) ? [r] : [])]));
+    syncNavDesks();
     updateSaveBar();
     return;
   }
