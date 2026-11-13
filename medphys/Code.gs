@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-12.4';
-const API_LEVEL = 77;
+const CODE_VERSION = '2026-11-13.1';
+const API_LEVEL = 78;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -208,13 +208,16 @@ TABLES.dq = {
     // API 75: แถบย่อยที่แจก · '' = Call center (แถบเดิม · ดึงจากรายงาน HIS) · คิวแพทย์ วันลา เวร S1 และรายงานใช้ร่วมกัน
     // API 76: แถบย่อย ภายใน/Walk in เลือกได้ว่า in = ภายใน | walk = Walk in (รุ่น API 75 เก็บ walk อย่างเดียว)
     ['desk', 'จุดรับเคส'],
+    // API 78: Standing order สำหรับผู้ป่วยนัด case call center (JSON ของช่องในแบบฟอร์ม · หน้าเว็บพิมพ์เป็น A4)
+    ['so', 'Standing order'],
   ],
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
 TABLES.dqLeave = {
   sheet: 'DocLeaves',
   fields: [['id', 'id'], ['doc', 'แพทย์'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['created', 'Created'], ['updated', 'Updated'],
-    ['kind', 'ประเภทการลา'], ['assign', 'แจกงานตั้งแต่']],   // API 69: kind = long (ลายาว: ไม่แจก ไม่ชดเชย) · ว่าง = ลาปกติ (ชดเชยเมื่อกลับมา) · assign = ลายาวรับเคสได้ตั้งแต่วันนี้
+    ['kind', 'ประเภทการลา'], ['assign', 'แจกงานตั้งแต่'],
+    ['take', 'รับเคสระหว่างลา']],   // API 78 (แถบ RO Jobs → วันลา): yes = ลงวันลาไว้ แต่ยังแจกเคสตามปกติ · ว่าง = ไม่รับเคส (คนอื่นรับแทน แล้วคืนคิว · วันลาเดิมทั้งหมด)   // API 69: kind = long (ลายาว: ไม่แจก ไม่ชดเชย) · ว่าง = ลาปกติ (ชดเชยเมื่อกลับมา) · assign = ลายาวรับเคสได้ตั้งแต่วันนี้
 };
 // แพทย์เวร S1 รายวัน (API 65 · แถบแจกงานแพทย์ ปุ่ม เวร S1): id = วันที่ · เคส Emergency แจกให้แพทย์เวร S1 ของวันนั้น (ไม่มี = ตามวันในสัปดาห์ใน ตั้งค่า) · เขียนผ่าน dqDutySave เท่านั้น
 TABLES.dqDuty = {
@@ -538,13 +541,13 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue'], duty: ['course', 'ctsim', 'jobs'],
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue', 'mpleave'], duty: ['course', 'ctsim', 'jobs'],
   ctsim: ['ctsim', 'work', 'appt', 'jobs', 'consult'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq', 'consult'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq', 'consult'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'],
-  dq: ['dq', 'appt', 'consult'], dqLeave: ['dq', 'consult'] };   // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
+  dq: ['dq', 'appt', 'consult'], dqLeave: ['dq', 'consult', 'rojobs'] };   // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || userAccess_(config, v, user));
@@ -571,7 +574,7 @@ function navAccess_(config, view, role, base) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };   // consult (API 69): ลงนัด CT+RT
+const EDIT_VIEWS = { cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue', 'mpleave'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'] };   // consult (API 69): ลงนัด CT+RT
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
 const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty'];
@@ -3017,6 +3020,12 @@ function dqSelf_(u, cfg) {
   return hit ? String(hit.code).trim().toUpperCase() : '';
 }
 const dqCut_ = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+// Standing order: JSON ของช่องในแบบฟอร์ม (ไม่ใช่ JSON / ยาวเกิน = ไม่เก็บ)
+function dqSo_(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (!t || t.length > 4000) return '';
+  try { const o = JSON.parse(t); return o && typeof o === 'object' && !Array.isArray(o) ? JSON.stringify(o) : ''; } catch (e) { return ''; }
+}
 // แถบย่อยของแถบแจกงานแพทย์ (API 75 · ตั้งค่า → แจกงานแพทย์ → แถบย่อย): config.dq.desks = { call: [ตำแหน่ง], walk: [ตำแหน่ง] }
 // ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = ใช้ได้เฉพาะแถบย่อยนั้น · ตำแหน่งอื่น (MP, RO …) แอดมิน และบัญชี Google = ทุกแถบย่อย
 const DQ_DESK_DEF = { call: ['Refer'], walk: ['Nurse'] };
@@ -3048,7 +3057,7 @@ function dqAdd(recs, token) {
     const ss = ss_(), cfg = readConfig_(ss) || {}, q = dqCfg_(cfg), all = dqDocs_(cfg), day = today_(ss);
     // คิว (dqPick_) ใช้ doc how date created · เจ้าของไข้เดิมใช้ hn · อ่านทั้งตารางช้าตามจำนวนที่แจกสะสม
     const rows = readCols_(ss, 'dq', null, ['hn', 'doc', 'how', 'date', 'created']), known = rows.map(x => x.id);
-    const leaves = readTable_(ss, 'dqLeave'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];
+    const leaves = readTable_(ss, 'dqLeave').filter(l => l.take !== 'yes'), by = String(u.name || u.username || u.me || ''), t0 = Date.now(), out = [];   // ลาแต่ยังรับเคส = ไม่นับ
     let duty = null;
     recs.forEach((r, i) => {
       r = r && typeof r === 'object' ? r : {};
@@ -3066,7 +3075,7 @@ function dqAdd(recs, token) {
       if (how !== 'auto' && all.indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
       if (how === 'auto') doc = dqPick_({ docs: q.docs, leaves: leaves, rows: rows, skips: q.skips, pointer: q.pointer, payback: q.payback, days: q.days, bonus: q.bonus, date: day });
       if (!doc) throw new Error(q.docs.length ? 'ไม่มีแพทย์ที่รับเคสได้วันนี้ (ลาหรือวันที่ไม่แจกทุกคน)' : 'ยังไม่มีแพทย์ในคิว (ตั้งค่า → แจกงานแพทย์)');
-      const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '', desk: desk };
+      const rec = { id: dqCut_(r.id, 80) || Utilities.getUuid(), hn: hn, name: dqCut_(r.name, 200), doc: doc, how: how, date: day, st: '', note: dqCut_(r.note, 500), by: by, created: new Date(t0 + i).toISOString(), updated: '', desk: desk, so: dqSo_(r.so) };
       rows.push(rec);
       out.push(rec);
     });
@@ -3088,6 +3097,7 @@ function dqEdit(id, ch, pin, token) {
     if ('name' in ch) set.name = dqCut_(ch.name, 200);
     if ('note' in ch) set.note = dqCut_(ch.note, 500);
     if ('st' in ch) set.st = ch.st === 'skip' ? 'skip' : '';
+    if ('so' in ch) set.so = dqSo_(ch.so);
     if ('desk' in ch) {   // API 76: ภายใน ↔ Walk in (ในแถบย่อย ภายใน/Walk in เท่านั้น)
       const d = dqDeskKey_(ch.desk);
       if (!d || !(cur.desk === 'in' || cur.desk === 'walk')) throw new Error('เปลี่ยนได้เฉพาะ ภายใน / Walk in ของรายการในแถบย่อย ภายใน/Walk in');
@@ -3177,11 +3187,12 @@ function dqRemove(id, pin, token) {
   });
 }
 // วันลาแพทย์: ผู้ที่บันทึกในแถบแจกงานแพทย์ได้ (ทุกแพทย์) หรือแพทย์ของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์ และเห็นแถบนี้)
+// API 78: แพทย์เป็นผู้กำหนดวันลาเอง (แถบ RO Jobs → วันลา) · ตำแหน่งอื่นดูได้อย่างเดียว · แอดมินและบัญชี Google ลงให้ได้ทุกแพทย์
 function dqLeaveUser_(token, doc) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
-  if (u.via === 'google' || userAccess_(cfg, 'dq', u) === 'edit') return u;
-  if (doc && userAccess_(cfg, 'dq', u) && dqSelf_(u, cfg) === doc) return u;
-  throw new Error('ลงวันลาแพทย์ได้เฉพาะผู้ที่บันทึกในแถบแจกงานแพทย์ได้ หรือแพทย์ลงของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์)');
+  if (u.via === 'google' || u.isAdmin) return u;
+  if (doc && (userAccess_(cfg, 'rojobs', u) || userAccess_(cfg, 'dq', u)) && dqSelf_(u, cfg) === doc) return u;
+  throw new Error('วันลาแพทย์ลงได้เฉพาะแพทย์ลงของตัวเอง (บัญชีที่เชื่อมใน ตั้งค่า → แพทย์) หรือแอดมิน · ตำแหน่งอื่นดูได้อย่างเดียว');
 }
 function dqLeaveSave(rec, token) {
   rec = rec && typeof rec === 'object' ? rec : {};
@@ -3194,14 +3205,15 @@ function dqLeaveSave(rec, token) {
   return withLock_(() => {
     const ss = ss_();
     if (dqDocs_(readConfig_(ss) || {}).indexOf(doc) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
-    const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '', kind: kind, assign: assign };
+    const take = rec.take === 'yes' ? 'yes' : '';
+    const r = { id: dqCut_(rec.id, 80) || Utilities.getUuid(), doc: doc, from: from, to: to, note: dqCut_(rec.note, 300), by: String(u.name || u.username || u.me || ''), created: dqNow_(), updated: '', kind: kind, assign: assign, take: take };
     // API 73: id ที่มีอยู่แล้ว = แก้วันลา (ยืนยันด้วย PIN · แพทย์แก้ได้เฉพาะของตัวเอง เหมือนลงวันลา)
     const x = rec.id ? openRow_(ss, 'dqLeave', null, r.id) : null, row = x ? x.row : 0;
     if (row) {
       const cur = x.cur;
       if (cur.doc !== doc) dqLeaveUser_(token, cur.doc);   // ย้ายวันลาไปแพทย์อื่น: ต้องแก้ของแพทย์เดิมได้ด้วย
       pinChange_(u, rec.pin, true);
-      const set = { doc: doc, from: from, to: to, note: r.note, kind: kind, assign: assign, updated: dqNow_() };
+      const set = { doc: doc, from: from, to: to, note: r.note, kind: kind, assign: assign, take: take, updated: dqNow_() };
       writeFields_(x.sh, row, x.header, TABLES.dqLeave.fields.filter(f => f[0] in set), set, x.vals);
       return Object.assign(cur, set);
     }
@@ -4667,7 +4679,7 @@ function delRow_(sh, row, head, vals) {
   sh.deleteRow(row);
 }
 // ตารางที่ดูประวัติได้ในแต่ละแถบ (ต้องดูแถบนั้นได้)
-const AUDIT_VIEWS = { reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], consult: ['dq', 'appt'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
+const AUDIT_VIEWS = { reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], mpleave: ['leaves'], rojobs: ['dqLeave'], consult: ['dq', 'appt'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
   course: ['cases', 'duty'], ctsim: ['ctsim', 'vac', 'appt'], dash: ['cases'], logs: ['logs'], p4p: ['logs'], jobs: ['jobs', 'vac'], settings: ['config'] };
 function auditTablesFor_(view, token) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
