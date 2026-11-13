@@ -575,6 +575,8 @@ button.bq-chk{cursor:pointer}
 .so-box>summary{cursor:pointer;font-weight:600;padding:4px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .so-box .so-acts{display:inline-flex;gap:6px;margin-left:auto}
 .so-fields{display:grid;gap:8px;margin-top:8px}
+.so-basic{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+@media (max-width:560px){.so-basic{grid-template-columns:1fr}}
 .so-types{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
 .so-type{padding:8px 10px;border:1px solid var(--line);border-radius:8px;opacity:.6}
 .so-type.on{opacity:1;border-color:var(--accent);background:var(--accent-soft)}
@@ -2394,6 +2396,8 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <div class="dq-fields">
           <div class="field"><span class="lbl"><label for="dq-hn">HN</label><span class="sub-lbl">พิมพ์ HN หรือชื่อ = เลือกจากแถบลงทะเบียน</span></span><div class="combo"><input id="dq-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dq-hn-list"><ul class="combo-list" id="dq-hn-list" role="listbox" hidden></ul></div></div>
           <label class="field"><span class="lbl">ชื่อ-สกุล</span><input id="dq-name" maxlength="200" autocomplete="off"></label>
+          <label class="field" id="dq-dx-f" hidden><span class="lbl">Diag</span><input id="dq-dx" data-so="dx" maxlength="200" autocomplete="off" placeholder="เช่น CA Breast"></label>
+          <label class="field" id="dq-rn-f" hidden><span class="lbl">ชื่อพยาบาล Call center</span><input id="dq-rn" data-so="rn" maxlength="120" autocomplete="off"></label>
         </div>
         <div class="field" id="dq-via-f" hidden><span class="lbl">ผู้ป่วย</span><div class="chips" id="dq-via" role="radiogroup" aria-label="ผู้ป่วยภายใน หรือ Walk in"><label><input type="radio" name="dqvia" value="in" checked><span>ภายใน</span></label><label><input type="radio" name="dqvia" value="walk"><span>Walk in</span></label></div></div>
         <div class="field"><span class="lbl">ประเภทเคส <span class="sub-lbl">Normal = รันคิวและหักคิว · Emergency = ไม่รันคิว ไม่หักคิว แจกให้แพทย์เวร S1 ของวันนี้ · เจ้าของไข้เดิม = ไม่รันคิว ไม่หักคิว แจกให้แพทย์เดิมของผู้ป่วย</span></span><div class="chips" id="dq-type" role="radiogroup" aria-label="ประเภทเคส"><label><input type="radio" name="dqtype" value="normal" checked><span>Normal</span></label><label class="dq-emer"><input type="radio" name="dqtype" value="emer"><span>Emergency</span></label><label class="dq-owner"><input type="radio" name="dqtype" value="owner"><span>เจ้าของไข้เดิม</span></label></div></div>
@@ -4622,7 +4626,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-13.3';
+const PAGE_VERSION = '2026-11-13.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7568,13 +7572,16 @@ const SO_TYPES = [
   ['t4', '4. นัด HDR', [['t4h', 't', 'นัด HDR'], ['t4c', 'c', 'CBC', true]]],
   ['t5', '5. นัดพบแพทย์ประเมินอาการ', [['t5d', 'd', 'นัดพบแพทย์ประเมินอาการวันที่']]],
 ];
-function soFieldsHtml() {
+// 13 พ.ย.: ซ่อนรายละเอียด (ประเภทการนัด รายการตรวจ ความเห็นแพทย์) ไว้ก่อน · กรอกแค่ HN ชื่อ Diag แพทย์ พยาบาล Call center · ใบที่พิมพ์ = แบบฟอร์มกระดาษ ช่องอื่นเว้นว่างให้เขียน
+const SO_DETAIL = false;
+const soBasicHtml = () => '<label class="field"><span class="lbl">Diag</span><input data-so="dx" maxlength="200" placeholder="เช่น CA Breast"></label><label class="field"><span class="lbl">ชื่อพยาบาล Call center</span><input data-so="rn" maxlength="120"></label>';
+function soFieldsHtml(basic) {
   const sub = ([k, t, l, , red]) => t === 'c' ? `<label class="check"><input type="checkbox" data-so="${k}"> <span>${esc(l)}${red ? ` <em class="so-red">${esc(red)}</em>` : ''}</span></label>`
     : `<label class="field so-sub"><span class="lbl">${esc(l)}</span><input ${t === 'd' ? 'type="date"' : 'maxlength="120"'} data-so="${k}"></label>`;
-  return `<label class="field"><span class="lbl">Dx</span><input data-so="dx" maxlength="200" placeholder="เช่น CA Breast"></label>
+  return `${basic ? `<div class="so-basic">${soBasicHtml()}</div>` : ''}<div class="so-detail"${SO_DETAIL ? '' : ' hidden'}>
     <div class="so-types">${SO_TYPES.map(([k, l, subs]) => `<div class="so-type"><label class="so-head"><input type="checkbox" data-so="${k}"> <b>${esc(l)}</b></label><div class="so-subs">${subs.map(sub).join('')}</div></div>`).join('')}</div>
     <div class="field"><span class="lbl">รายการสั่งตรวจเพิ่มเติม</span><div class="so-labs">${SO_LAB.map(([k, l]) => `<label class="check"><input type="checkbox" data-solab="${k}"> <span>${esc(l)}</span></label>`).join('')}<label class="field so-sub"><span class="lbl">อื่นๆระบุ</span><input data-so="labo" maxlength="120"></label></div></div>
-    <label class="field"><span class="lbl">ความเห็นแพทย์</span><textarea data-so="op" rows="2" maxlength="1000"></textarea></label>`;
+    <label class="field"><span class="lbl">ความเห็นแพทย์</span><textarea data-so="op" rows="2" maxlength="1000"></textarea></label></div>`;
 }
 // อ่าน / ใส่ค่า (คีย์ที่ว่างไม่เก็บ) · ว่างทั้งหมด = null
 function soRead(root) {
@@ -7599,8 +7606,8 @@ function soSync(root, changed) {
     box.classList.toggle('on', head.checked);
   }
 }
-function soWire(root) {
-  root.innerHTML = soFieldsHtml();
+function soWire(root, basic) {
+  root.innerHTML = soFieldsHtml(basic);
   root.addEventListener('change', e => {
     const k = e.target.dataset && e.target.dataset.so;
     if (k && SO_TYPES.some(([t]) => t === k)) soSync(root, e.target);
@@ -7627,7 +7634,7 @@ function soSheetHtml(x) {
     <tr><td colspan="2" class="so-op"><div class="so-op-t">${esc(o.op || '')}</div><div class="so-sign">
       <div>ลงชื่อแพทย์${dot('', 55)}</div><div class="so-c">( ${docFull ? esc(docFull) : '<span class="so-dots" style="width:50mm"></span>'} )</div>
       <div>ลงชื่อพยาบาลรังสีรักษา${dot('', 28)}วันที่${dot('', 18)}เวลา${dot('', 14)}</div>
-      <div>ลงชื่อพยาบาลcall center${dot(x.by, 28)}วันที่${dot(day(localDay(at.toISOString())), 18)}เวลา${dot(tm, 14)}</div></div></td></tr>
+      <div>ลงชื่อพยาบาลcall center${dot(o.rn || x.by, 28)}วันที่${dot(day(localDay(at.toISOString())), 18)}เวลา${dot(tm, 14)}</div></div></td></tr>
   </table><div class="so-rev">${esc(SO_REV)}</div></div>`;
 }
 function openSoPreview(x) {
@@ -7639,7 +7646,7 @@ function openSoPreview(x) {
   fitCsoPreview();
 }
 // ข้อมูลสำหรับพิมพ์จากฟอร์มแจก (แพทย์ = ที่เลือกในฟอร์ม / ตามคิว) · จากหน้าแก้ไข (แพทย์ของรายการ)
-const soFromDq = () => ({ hn: str($('#dq-hn').value), name: str($('#dq-name').value), doc: dqChosen(dqRun()), by: state.user.name || '', so: soRead($('#dq-so')) || {} });
+const soFromDq = () => ({ hn: str($('#dq-hn').value), name: str($('#dq-name').value), doc: dqChosen(dqRun()), by: state.user.name || '', so: soRead($('#dq-form')) || {} });
 const soFromEdit = () => ({ hn: str($('#dqe-hn').value), name: str($('#dqe-name').value), doc: chipValue($('#dqe-doc')) || (dqEditing || {}).doc, by: (dqEditing || {}).by || '', at: (dqEditing || {}).created, so: soRead($('#dqe-so')) || {} });
 
 // แถบย่อย ภายใน/Walk in: ผู้ป่วยภายใน (in) หรือ Walk in (walk) · เลือกในฟอร์มแจก ใต้ HN
@@ -7929,7 +7936,9 @@ function renderDq() {
   $('#dq-desk-api').hidden = !(walkOld && edit);
   $('#dq-via-f').hidden = desk !== 'walk';
   const soShow = desk === 'call';
-  $('#dq-so-box').hidden = $('#dq-so-view').hidden = $('#dq-so-print').hidden = !soShow;
+  $('#dq-so-view').hidden = $('#dq-so-print').hidden = $('#dq-dx-f').hidden = $('#dq-rn-f').hidden = !soShow;
+  $('#dq-so-box').hidden = !soShow || !SO_DETAIL;
+  if (soShow && !str($('#dq-rn').value) && document.activeElement !== $('#dq-rn')) $('#dq-rn').value = state.user.name || '';
   $('#dq-so-note').textContent = soShow && !soOn() ? '· พิมพ์ได้ แต่ยังไม่เก็บในระบบ (ต้องใช้ Code.gs รุ่น 2026-11-13.1)' : '· กรอกแล้วกด ดูตัวอย่าง / พิมพ์ · เก็บไว้กับการแจก';
   $('#dq-desks').innerHTML = desks.map(k => `<button type="button" class="tab" role="tab" data-dqdesk="${k}" aria-selected="${k === desk}">${esc(dqDeskName(k))}<span class="n">${state.dq.filter(r => r.date.slice(0, 7) === ym && dqDeskOf(r) === k).length}</span></button>`).join('');
   $('#dq-desk-lbl').textContent = desks.length ? ' · ' + dqDeskName(desk) : '';
@@ -8003,14 +8012,14 @@ async function submitDq(e) {
   const btn = $('#dq-go');
   btn.disabled = true;
   try {
-    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc, ...(dqDesk() === 'walk' ? { desk: chipValue($('#dq-via')) === 'walk' ? 'walk' : 'in' } : {}), ...(dqDesk() === 'call' && soOn() && soRead($('#dq-so')) ? { so: JSON.stringify(soRead($('#dq-so'))) } : {}) }])).map(normDq);
+    const out = (await store.dqAdd([{ id: uid(), hn, name, how: own ? 'owner' : emer ? 'emer' : who === 'auto' ? 'auto' : 'manual', doc: own ? odoc : doc, ...(dqDesk() === 'walk' ? { desk: chipValue($('#dq-via')) === 'walk' ? 'walk' : 'in' } : {}), ...(dqDesk() === 'call' && soOn() && soRead($('#dq-form')) ? { so: JSON.stringify(soRead($('#dq-form'))) } : {}) }])).map(normDq);
     for (const r of out) if (!state.dq.some(x => x.id === r.id)) state.dq.push(r);
     dqMemo = null;
     $('#dq-hn').value = '';
     $('#dq-name').value = '';
     setChip($('#dq-type'), 'normal');
     setChip($('#dq-via'), 'in');
-    soFill($('#dq-so'), {});
+    soFill($('#dq-form'), { rn: str($('#dq-rn').value) });   // คนถัดไป: ล้าง Diag · ชื่อพยาบาลคงไว้
     setChip($('#dq-who'), 'auto');
     $('#dq-dup').hidden = true;
     $('#dq-go').textContent = 'แจก';
@@ -8271,7 +8280,7 @@ function openDqEdit(id) {
   $('#dqe-skip').checked = r.st === 'skip';
   $('#dqe-via-f').hidden = !(r.desk && dqDeskOn());
   $('#dqe-so-box').hidden = !!r.desk || r.how === 'import';   // Call center
-  $('#dqe-so-box').open = !!r.so;
+  $('#dqe-so-box').open = true;
   soFill($('#dqe-so'), soParse(r.so));   // แถบย่อย ภายใน/Walk in: แก้ ภายใน ↔ Walk in (Code.gs API 76)
   setChip($('#dqe-via'), r.desk === 'walk' ? 'walk' : 'in');
   $('#dqe-back').hidden = !(r.st === 'doc' || r.st === 'nort') || !dqMarkOn();
@@ -13719,7 +13728,7 @@ $('#ap-view').addEventListener('click', () => openCsoPreview(readApForm()));
 $('#cso-print-btn').addEventListener('click', e => printCso(csoRec, e.currentTarget));
 // Standing order (Call center): ฟอร์มแจก และหน้าแก้ไขการแจก
 soWire($('#dq-so'));
-soWire($('#dqe-so'));
+soWire($('#dqe-so'), true);
 $('#dq-so-view').addEventListener('click', () => { if (!str($('#dq-hn').value)) { $('#dq-hn').focus(); return toast('กรอก HN', { err: true }); } openSoPreview(soFromDq()); });
 $('#dq-so-print').addEventListener('click', e => { if (!str($('#dq-hn').value)) { $('#dq-hn').focus(); return toast('กรอก HN', { err: true }); } printCso({ __so: soFromDq() }, e.currentTarget); });
 $('#dqe-so-view').addEventListener('click', e => { e.preventDefault(); openSoPreview(soFromEdit()); });
