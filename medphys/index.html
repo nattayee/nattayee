@@ -3232,7 +3232,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <div class="field"><span class="lbl">แพทย์</span><div class="chips" id="dql-doc" role="radiogroup" aria-label="แพทย์"></div></div>
         <label class="field"><span class="lbl">ตั้งแต่</span><input type="date" id="dql-from"></label>
         <label class="field"><span class="lbl">ถึง</span><input type="date" id="dql-to"></label>
-        <label class="check lv-nocase"><input type="checkbox" id="dql-nocase" checked> <span><b>ไม่รับเคส</b> ช่วงที่ลา (ไม่ติ๊ก = ลงวันลาไว้ ยังแจกเคสตามปกติ)</span></label>
+        <label class="check lv-nocase"><input type="checkbox" id="dql-nocase"> <span><b>ไม่รับเคส</b> ช่วงที่ลา (ไม่ติ๊ก = ลงวันลาไว้ ยังแจกเคสตามปกติ)</span></label>
         <div class="field" id="dql-kind-f" hidden><span class="lbl">ประเภทการลา</span><div class="chips" id="dql-kind" role="radiogroup" aria-label="ประเภทการลา">
           <label title="แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา"><input type="radio" name="dqlkind" value="" checked><span>ลาปกติ</span></label>
           <label title="ไม่แจกงาน คิวที่ถึงระหว่างลาเสียไป ไม่ชดเชย"><input type="radio" name="dqlkind" value="long"><span>ลายาว</span></label></div></div>
@@ -4530,7 +4530,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-13.1';
+const PAGE_VERSION = '2026-11-13.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7970,6 +7970,7 @@ function openDqLeaves() {
   $('#dql-from').value = today();
   $('#dql-to').value = today();
   $('#dql-note').value = '';
+  $('#dql-nocase').checked = false;
   setChip($('#dql-kind'), '');
   $('#dql-assign').value = '';
   syncDql();
@@ -8010,7 +8011,7 @@ dqlForm.addEventListener('submit', async e => {
     const rec = normDql(await store.dqLeaveSave({ id: uid(), doc, from, to, note, take }));
     if (!state.dqLeave.some(x => x.id === rec.id)) state.dqLeave.push(rec);
     dqMemo = null;
-    $('#dql-note').value = '';
+    $('#dql-note').value = ''; $('#dql-nocase').checked = false;
     render();
     renderDqLeaves();
     toast(rec.kind === 'long' ? `แพทย์ ${doc} ลายาว ${rangeText(rec)} · ไม่แจกงาน คิวที่ถึงระหว่างลาไม่ชดเชย${rec.assign ? ` · เริ่มแจกงาน ${fmtDay(rec.assign)}` : ''}`
@@ -8020,7 +8021,7 @@ dqlForm.addEventListener('submit', async e => {
 });
 $('#dql-from').addEventListener('change', () => { if (!$('#dql-to').value || $('#dql-to').value < $('#dql-from').value) $('#dql-to').value = $('#dql-from').value; syncDql(); });
 $('#dql-to').addEventListener('change', syncDql);
-$('#dql-cancel').addEventListener('click', () => { dqlEditMode(''); $('#dql-note').value = ''; });
+$('#dql-cancel').addEventListener('click', () => { dqlEditMode(''); $('#dql-note').value = ''; $('#dql-nocase').checked = false; });
 function removeDqLeave(id) {
   const v = state.dqLeave.find(l => l.id === id);
   if (!v) return;
@@ -16696,7 +16697,7 @@ async function submitPin(e, clear) {
       pinDlg.close();
       if (lvDlg.open) lvDlg.close();
       dqlEditMode('');
-      $('#dql-note').value = '';
+      $('#dql-note').value = ''; $('#dql-nocase').checked = false;
       render();
       if (dqlDlg.open) renderDqLeaves();
       toast(`แก้วันลาแพทย์ ${rec.doc} เป็น ${rangeText(rec)} แล้ว`);
