@@ -3935,13 +3935,13 @@ const DEFAULT_CONFIG = {
   // reasons = เหตุผลให้เลือก · need = ต้องเลือกเหตุผล · title = คำอธิบาย
   fxTypes: [
     { id: 'given', label: 'Complete Fraction', title: 'บันทึกว่า fraction นี้ฉายแล้ว', act: 'given', reasons: [], need: false, replan: false },
-    // ฉายแล้วและส่งไปรอ CT Order (Re-CT) เหมือน Re-CT อื่นๆ · ไม่ส่งงานวางแผนใหม่ให้ MP ทันที (15 พ.ย. 2569 · ปิดแถบ CT Order = ใช้ตั้งค่าส่งงาน) · ไม่เลื่อน fraction
+    // ฉายแล้วและส่งไปรอ CT Order (Re-CT) · ไม่เลื่อน fraction · Re-CT ทุกแบบไม่ส่งงานวางแผนใหม่ให้ MP ทันที (15 พ.ย. 2569 · ปิดแถบ CT Order = ใช้ตั้งค่าส่งงาน)
     { id: 'rectg', label: 'Complete Fraction and Re-CT', title: 'ฉาย fraction นี้แล้ว และส่งไปรอ CT Order (Re-CT)', act: 'given', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: false, replan: true },
     // open = ไม่ถามวันกลับมาฉาย (จนกว่าจะกลับมา · กลับมาแล้วกดช่องวันที่กลับมา เลือกสถานะในกลุ่มฉายแล้ว)
     { id: 'hold', label: 'Hold', title: 'พักการฉาย จนกว่าจะกลับมา', act: 'skip', reasons: [], need: false, replan: false, open: true },
     { id: 'hv', label: 'HV', title: 'Home visit กลับบ้าน', act: 'skip', reasons: [], need: false, replan: false, open: true },
     { id: 'rect', label: 'Re-CT', title: 'CT-Sim ใหม่', act: 'skip', reasons: ['Adaptive', 'Tumor change', 'Re-position'], need: true, replan: true },
-    // CP (Change plan): ฉายวันนั้นได้ (เปลี่ยนแผน ลดโดส ฯลฯ ไม่เลื่อน fraction) · ทำ CT ใหม่ = รอลงนัด CT + งานวางแผนใหม่ (เหมือน Re-CT แต่ไม่หยุดฉาย)
+    // CP (Change plan): ฉายวันนั้นได้ (เปลี่ยนแผน ลดโดส ฯลฯ ไม่เลื่อน fraction) · ทำ CT ใหม่ = รอ CT Order (เหมือน Re-CT)
     // ไม่ทำ CT ใหม่ = งานวางแผนใหม่ให้ MP คนเดิม (CT-Sim เดิม) · Start RT ของงาน = วันนั้น
     // pause: ฉายวันนี้ (ค่าเริ่มต้น) หรือเลือกหยุดฉาย วันทำการถัดไป / วันที่ / จนกว่าจะกลับมา ตอนบันทึก
     { id: 'cp', label: 'CP', title: 'Change plan', act: 'treat', reasons: ['ทำ CT ใหม่', 'ไม่ทำ CT ใหม่'], need: true, replan: true, pause: true },
@@ -4700,7 +4700,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-15.4';
+const PAGE_VERSION = '2026-11-15.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -6667,9 +6667,10 @@ const newCtReason = r => /ทำ\s*CT\s*ใหม่/i.test(str(r)) && !/ไม�
 const noNewCt = r => /ไม่ทำ\s*CT/i.test(str(r));   // CP: ไม่ทำ CT ใหม่ = งานวางแผนใหม่ใช้ CT-Sim เดิม
 const isReCt = e => (e.act === 'skip' && (e.type === 'rect' || /^re-?ct\b/i.test(str(e.label)))) || (['given', 'treat'].includes(e.act) && (e.type === 'rectg' || /\bre-?ct\b/i.test(str(e.label))))
   || (['skip', 'treat'].includes(e.act) && newCtReason(e.reason));
-// Complete Fraction and Re-CT (สถานะฉายแล้วที่เป็น Re-CT): ไปรอ CT Order อย่างเดียวเหมือน Re-CT อื่นๆ ไม่ส่งงานวางแผนใหม่ให้ MP ทันที · ปิดแถบ CT Order = ใช้ตั้งค่าส่งงานของสถานะ
-const reCtGiven = t => !!t && t.act === 'given' && isReCt({ act: 'given', type: t.base || t.id, label: t.label });
-const rcOrder = t => reCtGiven(t) && apptOn();
+// Re-CT ทุกแบบ (Re-CT · Complete Fraction and Re-CT · CP ทำ CT ใหม่ · สถานะที่ชื่อขึ้นต้น Re-CT): ไปรอ CT Order อย่างเดียว ไม่ส่งงานวางแผนใหม่ให้ MP ทันที (15 พ.ย. 2569)
+// e = รายการ fraction (act type label reason) · ปิดแถบ CT Order = ใช้ตั้งค่าส่งงานของสถานะเดิม
+const reCtOrder = e => !!e && apptOn() && isReCt(e);
+const reCtType = t => !!t && isReCt({ act: t.act, type: t.id, label: t.label });   // ตั้งค่า: สถานะที่เป็น Re-CT เสมอ (ไม่ขึ้นกับเหตุผล)
 const localDay = v => { const t = Date.parse(str(v)); return Number.isFinite(t) ? iso(new Date(t)) : ''; };
 // Re-CT ที่ส่งจาก ส่งแก้แผน (เหตุผล Re-CT): งานใหม่ที่ส่งแก้ = เหตุการณ์ Re-CT ของผู้ป่วยวันที่ส่ง
 const REV_RECT = 'Re-CT';
@@ -10825,7 +10826,7 @@ function syncFx() {
   // งานวางแผนใหม่ที่จะส่งให้ MP คนเดิม (สถานะที่ตั้งไว้ · ย้ายห้อง)
   // CP ไม่ทำ CT ใหม่ · ย้ายห้อง: งานวางแผนใหม่ไปรอแจกในแถบแจกงานฟิสิกส์ (เคสเดิม) · สถานะอื่นที่ตั้งให้ส่งงาน: ส่งให้ MP คนเดิมเลย
   const cpWait = replanOn() && !!t && !adding && (moving ? !!state.config.moveReplan : !!t.replan && t.act !== 'off' && noNewCt(t.reasons.length ? chipValue(box) : ''));
-  const rpWill = replanOn() && !!t && !cpWait && !moving && !!t.replan && t.act !== 'off' && !adding && !rcOrder(t);   // Complete Fraction and Re-CT: ไปรอ CT Order แทน
+  const rpWill = replanOn() && !!t && !cpWait && !moving && !!t.replan && t.act !== 'off' && !adding && !reCtOrder(fxDraft());   // Re-CT ทุกแบบ: ไปรอ CT Order แทน
   $('#pin-fx-rp').hidden = !rpWill && !cpWait;
   $('#pin-rp-box').hidden = !rpWill || !replanMpOn();
   if (cpWait) {
@@ -10861,7 +10862,7 @@ function syncFx() {
   }
   const d = fxDay(), n = fxNumAt(), back = ctx.ret && d === ctx.ret ? `กลับมาฉาย <b>${esc(fmtDay(d))}</b> · จบ ${esc(ctx.cur.label)} ที่เริ่ม ${esc(fmtDay(ctx.cur.date))} · ` : '';
   if (t.act === 'given') {
-    const reCt = apptOn() && isReCt({ act: t.act, type: t.base || t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) ? ` · ส่งไป<b>รอ CT Order</b> ในแถบ ${esc(navLabel('appt'))}${rcOrder(t) ? ' (ไม่ส่งงานวางแผนใหม่ให้ MP)' : ''}` : '';
+    const reCt = apptOn() && isReCt({ act: t.act, type: t.base || t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) ? ` · ส่งไป<b>รอ CT Order</b> ในแถบ ${esc(navLabel('appt'))} (ไม่ส่งงานวางแผนใหม่ให้ MP)` : '';
     prev.innerHTML = d > today() ? `ยังไม่ถึง ${esc(fmtDay(d))} บันทึกฉายแล้วล่วงหน้าไม่ได้`
       : `${back}บันทึกว่า <b>${n ? `Fx ${esc(n)}` : 'วันนี้'} ฉายแล้ว</b> ${esc(fmtDay(d))}${reCt}${ctx.auto && state.user.hasPin && pinNeed('fx') ? ' · ใส่รหัส PIN ครบ 4 หลักแล้วบันทึกเลย' : ''}`;
     return;
@@ -10881,7 +10882,7 @@ function syncFx() {
   }
   if (t.act === 'off' && courseOn()) { prev.textContent = 'เลือก Complete course หรือ Cancel RT'; return; }
   if (t.act === 'off') { prev.innerHTML = `หยุดฉายตั้งแต่ <b>${esc(fmtDay(ctx.date))}</b> · ฉายไปแล้ว ${fxGiven(sc, ctx.date)}/${sc ? sc.planned : '?'} fx · เคสย้ายไปแถบ Off RT`; return; }
-  const toAp = apptOn() && isReCt({ act: ev.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอ CT Order</b> ในแถบ ${esc(navLabel('appt'))}` : '';
+  const toAp = apptOn() && isReCt({ act: ev.act, type: t.id, label: t.label, reason: chipValue($('#pin-fx-reason')) }) && !(ev.back && ev.back <= td) ? ` · ส่งไป<b>รอ CT Order</b> ในแถบ ${esc(navLabel('appt'))} (ไม่ส่งงานวางแผนใหม่ให้ MP)` : '';
   if (ev.act === 'treat') { prev.innerHTML = `${back}ฉายตามปกติ · บันทึก <b>${esc(t.label)}</b> ไว้ที่วันนี้${end}${toAp}`; return; }
   const n0 = ctx.n0, hit = n0 && sc ? [...sc.fx].find(([d, l]) => d >= ctx.date && l.some(v => (v.site === 0 || v.boost) && v.from <= n0 && n0 <= v.to)) : null;
   let lastOff = ev.back ? plusDays(ev.back, -1) : '';   // วันทำการสุดท้ายที่ไม่ได้ฉาย
@@ -14399,8 +14400,8 @@ function renderSettings() {
         <label class="field"><span class="lbl">คำอธิบาย</span><input data-k="fxTypes.${i}.title" value="${esc(t.title)}" placeholder="ไม่บังคับ"></label>
         <label class="field"><span class="lbl">การทำงาน</span><select data-k="fxTypes.${i}.act">${FX_ACTS.map(([v, l]) => opt(v, l, t.act)).join('')}</select></label>
         <label class="check"><input type="checkbox" data-k="fxTypes.${i}.need"${t.need ? ' checked' : ''}> ต้องเลือกเหตุผล</label>
-        ${reCtGiven(t) && apptOn() ? `<span class="unit" title="Complete Fraction and Re-CT: ผู้ป่วยไปรอ CT Order เหมือน Re-CT อื่นๆ (Re-CT#ครั้งที่) ไม่ส่งงานวางแผนใหม่ให้ MP ทันที">→ รอ CT Order ในแถบ ${esc(navLabel('appt'))}</span>`
-          : `<label class="check" title="บันทึกสถานะนี้แล้วส่งงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ให้ MP คนเดิม แสดงในงานรอ"><input type="checkbox" data-k="fxTypes.${i}.replan"${t.replan ? ' checked' : ''}> ส่งงานวางแผนใหม่ให้ MP คนเดิม</label>`}
+        ${reCtType(t) && apptOn() ? `<span class="unit" title="Re-CT: ผู้ป่วยไปรอ CT Order (Re-CT#ครั้งที่) ไม่ส่งงานวางแผนใหม่ให้ MP ทันที">→ รอ CT Order ในแถบ ${esc(navLabel('appt'))}</span>`
+          : `<label class="check" title="บันทึกสถานะนี้แล้วส่งงานวางแผนใหม่ (prescription = fraction ที่เหลือ) ให้ MP คนเดิม แสดงในงานรอ"><input type="checkbox" data-k="fxTypes.${i}.replan"${t.replan ? ' checked' : ''}> ส่งงานวางแผนใหม่ให้ MP คนเดิม${apptOn() && t.reasons.some(newCtReason) ? ' <span class="sub-lbl">(เหตุผล ทำ CT ใหม่ = รอ CT Order)</span>' : ''}</label>`}
         ${t.act === 'skip' ? `<label class="check" title="ไม่ถามวันกลับมาฉาย: ไม่ได้ฉายจนกว่าจะกลับมา · กลับมาแล้วกดช่องวันที่กลับมา เลือก Complete Fraction"><input type="checkbox" data-k="fxTypes.${i}.open"${t.open ? ' checked' : ''}> จนกว่าจะกลับมาอย่างเดียว</label>` : ''}
         <span class="btns">${DRAG_H}<button type="button" class="icon-btn" data-up="fxTypes.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="fxTypes.${i}" aria-label="ลบสถานะ ${esc(t.label)}">×</button></span>
       </div>
@@ -14505,7 +14506,7 @@ function renderSettings() {
       ${fxCards ? `<div class="cat-list">${fxCards}</div>` : ''}
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="fxtype">+ เพิ่มสถานะ</button></div>
       <label class="check" style="margin-top:12px"><input type="checkbox" data-k="moveReplan"${d.moveReplan ? ' checked' : ''}> <span><b>ย้ายห้อง</b> (มีในตัว): งานวางแผนใหม่ไปรอแจกในแถบ${esc(navLabel('work'))} (เคสเดิม · เลือกผู้รับได้ ค่าเริ่มต้น MP คนเดิม)</span></label>
-      <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}</p></div>
+      <p class="muted" style="margin:6px 0 0;font-size:13px">งานวางแผนใหม่: เคสใหม่ของ MP คนเดิม ข้อมูลผู้ป่วยเหมือนเดิม prescription = fraction ที่เหลือตั้งแต่วันนั้น ขึ้นในงานรอ (รอ Finish) มีป้าย ↻ บอกสาเหตุ · ไม่เพิ่มแถวในตารางวันฉาย ไม่ขยับคิว${replanOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-10-21.2 ขึ้นไป'}${apptOn() ? ` · <b>Re-CT ทุกแบบ</b> (Re-CT · Complete Fraction and Re-CT · CP ทำ CT ใหม่) ไปรอ CT Order ในแถบ ${esc(navLabel('appt'))} ไม่ส่งงานวางแผนใหม่ให้ MP` : ''}</p></div>
     <div class="sec" data-sec="grid"><div class="sec-head"><h2>ตารางวันฉาย (แถบ ${esc(navLabel('course'))})</h2><p>จำนวนผู้ป่วยใต้วันที่ที่เกินกำหนดเป็นสีแดง · ผู้ปฏิบัติงานประจำวัน (RTT / RA) เลือกจากสมาชิก LPCH RO Workspace ตามตำแหน่งที่ติ๊ก · ฟอร์ม "+ เพิ่มผู้ป่วย" บันทึกผู้ป่วยเข้าตารางวันฉายโดยไม่แจกงานให้ MP (ตำแหน่งที่บันทึกในแถบนี้ได้ ตั้งที่ แถบเมนู)</p></div>
       ${directOn() ? '' : '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ปุ่มเพิ่มผู้ป่วยและการเลือก RTT / RA ประจำวันต้องใช้ Code.gs รุ่น 2026-10-22.2 ขึ้นไป (สีแดงเมื่อเกินจำนวนใช้ได้เลย)</span></p>'}
       <div class="field fxg-head-set" style="margin-bottom:12px"><span class="lbl">หัวตาราง (ใต้วันที่) <span class="sub-lbl">ติ๊ก = แสดง · วันที่แสดงเสมอ · ชี้ที่หัววันดูรายละเอียดครบทุกอย่าง</span></span>
@@ -17002,7 +17003,7 @@ async function submitPin(e, clear) {
       // สถานะที่ตั้งให้ส่งงานวางแผนใหม่ (เช่น Re-CT) · เปลี่ยนเป็นสถานะอื่นหรือล้าง = ลบงานที่ยังไม่เริ่ม
       const t = ev && (state.config.fxTypes || []).find(x => x.id === ev.type);
       const cpWait = !!t && t.replan && t.act !== 'off' && noNewCt(ev.reason);   // CP ไม่ทำ CT ใหม่: รอแจกในแถบแจกงานฟิสิกส์ (ลบงานที่ส่งไว้แล้วแต่ยังไม่เริ่ม)
-      const rpTo = t && t.replan && t.act !== 'off' && !cpWait && !rcOrder(t) ? rpTarget(ctx, ctx.date) : null;   // Complete Fraction and Re-CT: ไม่ส่งงาน (บันทึกซ้ำ = ลบงานที่ส่งไว้แต่ยังไม่เริ่ม)
+      const rpTo = t && t.replan && t.act !== 'off' && !cpWait && !reCtOrder(ev) ? rpTarget(ctx, ctx.date) : null;   // Re-CT ทุกแบบ: ไม่ส่งงาน ไปรอ CT Order (บันทึกซ้ำ = ลบงานที่ส่งไว้แต่ยังไม่เริ่ม)
       const rpMeta = rpTo !== null ? { kind: t.id, label: t.label, reason: ev.reason || '', sim: ev.back || (ev.act === 'treat' ? ctx.date : ''), ct: noNewCt(ev.reason) ? '' : ctx.date, mp: rpTo } : null;
       const rx = rpMeta ? Object.fromEntries(ids.map(id => [id, replanRx(state.cases.find(c => c.id === id), ctx.date)])) : {};
       let rec = null, rp = { made: [], removed: 0, kept: 0 };
@@ -17014,7 +17015,7 @@ async function submitPin(e, clear) {
       } finally { if (rec) render(); }
       pinDlg.close();
       if (ctx.mode === 'ptags') { toast(`${rec.hn} · ${rec.ptags ? `รายละเอียดผู้ป่วย: ${rec.ptags}` : 'ล้างรายละเอียดผู้ป่วยแล้ว'}`); return; }
-      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}${replanNote(rp)}${cpWait ? ` · รอแจกงานในแถบ${navLabel('work')}` : ''}${rcOrder(t) ? ` · ไปรอ CT Order ในแถบ ${navLabel('appt')}` : ''}`);
+      toast(`${rec.hn} · ${clear ? `ล้าง ${ctx.cur.label}` : ev.label + (ev.reason ? ` (${ev.reason})` : '')} ${fmtDay(ctx.date)}${ev && ev.act === 'off' ? ' · ย้ายไปแถบ Off RT' : clear && ctx.cur.act === 'off' ? ' · กลับมาอยู่ในตารางวันฉาย' : ''}${replanNote(rp)}${cpWait ? ` · รอแจกงานในแถบ${navLabel('work')}` : ''}${reCtOrder(ev) ? ` · ไปรอ CT Order ในแถบ ${navLabel('appt')}` : ''}`);
       return;
     }
     if (ctx.mode === 'logedit' || ctx.mode === 'logadd') { await store.editLog(ctx.rec, pin); logSaved(ctx.rec, ctx.mode === 'logadd'); pinDlg.close(); return; }   // editLog บันทึกรายการใหม่ได้ด้วย
