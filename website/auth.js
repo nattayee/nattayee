@@ -11,15 +11,25 @@
   var S = window.SITE;
   var CFG = S.auth || {};
   var TOKEN_KEY = "lpch-ro-token";
-  var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
-    ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"],
-    ["Register", "Register"], ["Refer", "Refer"], ["Other", "อื่นๆ"]];
+  // Positions: admins manage them on "ตั้งค่าตำแหน่ง" (rolesGet / rolesSave in Code.gs). Until the list loads,
+  // and with a Code.gs from before, these are used (same as ROLE_DEFAULTS in Code.gs).
+  var DEFAULT_ROLES = [
+    { code: "RO", label: "แพทย์รังสีรักษา (RO)", chat: true }, { code: "MP", label: "นักฟิสิกส์การแพทย์ (MP)", chat: true },
+    { code: "RTT", label: "นักรังสีการแพทย์ (RTT)", chat: true }, { code: "RA", label: "Radiation Assistant (RA)", chat: true },
+    { code: "Nurse", label: "พยาบาล (Nurse)", chat: true }, { code: "NA", label: "Nurse Aids (NA)", chat: true },
+    { code: "Register", label: "Register", chat: true }, { code: "Refer", label: "Refer", chat: true },
+    { code: "Other", label: "อื่นๆ", chat: false },
+  ];
+  var FIXED_ROLES = ["MP"];   // linked apps decide who may record by this code: it cannot be removed
+  var roles = DEFAULT_ROLES.slice(), roleCounts = null;
+  function roleLabel(code) { var r = roles.filter(function (x) { return x.code === code; })[0]; return r ? r.label : code; }
   // Admin rights (same keys as ADMIN_PERMS in Code.gs). admin หลัก has all of them; admin หลัก picks them for each admin รอง.
   var PERMS = [
     ["users", "จัดการสมาชิก", "อนุมัติ ระงับ ลบ และเปลี่ยนตำแหน่งสมาชิกทั่วไป"],
     ["delete", "ลบข้อความ", "ลบข้อความในแชทประกาศและข้อความส่วนตัว"],
     ["menus", "จัดการเมนู", "เพิ่ม แก้ไข เรียงลำดับเมนูและปุ่ม Workspace"],
     ["status", "ตั้งค่าสถานะ", "ตัวเลือกสถานะ รายชื่อเครื่องและห้อง"],
+    ["roles", "จัดการตำแหน่ง", "เพิ่ม แก้ไข เรียงลำดับตำแหน่ง และเลือกกลุ่มในแชท"],
   ];
   function permLabel(k) { return (PERMS.filter(function (p) { return p[0] === k; })[0] || [k, k])[1]; }
   function levelOf(u) { return !u ? "" : u.isAdmin ? "main" : (u.adminLevel === "sub" && (u.perms || []).length ? "sub" : ""); }
@@ -90,6 +100,9 @@
 
     function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
+    function demoRoles(d) { return d.roles && d.roles.length ? d.roles : DEFAULT_ROLES; }
+    function demoCounts(d) { var c = {}; d.users.forEach(function (u) { c[u.role] = (c[u.role] || 0) + 1; }); return c; }
+
     function permsOf(u) {
       return u.isAdmin ? PERMS.map(function (p) { return p[0]; })
         : PERMS.map(function (p) { return p[0]; }).filter(function (k) { return (u.adminPerms || []).indexOf(k) !== -1; });
@@ -156,7 +169,7 @@
         if (!/^[a-z0-9._-]{3,30}$/.test(username)) fail("ชื่อผู้ใช้ต้องเป็นภาษาอังกฤษ ตัวเลข หรือ . _ - ความยาว 3–30 ตัวอักษร");
         if (!r.password || r.password.length < 8) fail("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
         if (!String(r.fullName || "").trim()) fail("กรุณากรอกชื่อ-นามสกุล");
-        if (!ROLES.some(function (x) { return x[0] === r.role; })) fail("กรุณาเลือกตำแหน่ง");
+        if (!demoRoles(d).some(function (x) { return x.code === r.role; })) fail("กรุณาเลือกตำแหน่ง");
         if (find(d, username)) fail("ชื่อผู้ใช้นี้ถูกใช้แล้ว");
         var email = normEmail(r.email);
         if (emailTaken(d, email)) fail("อีเมลนี้ถูกใช้สมัครแล้ว");
@@ -273,9 +286,36 @@
           if (r.status !== "active") d.sessions = d.sessions.filter(function (s) { return s.username !== u.username; });
         }
         if (typeof r.isAdmin === "boolean") { u.isAdmin = r.isAdmin; u.adminPerms = []; }
-        if (r.role) u.role = r.role;
+        if (r.role) {
+          if (!demoRoles(d).some(function (x) { return x.code === r.role; })) fail("ตำแหน่งไม่ถูกต้อง");
+          u.role = r.role;
+        }
         if (fullName) u.fullName = fullName;
         return { user: pub(u) };
+      },
+      rolesGet: function (d, r) {
+        var out = { roles: demoRoles(d), fixed: FIXED_ROLES.slice() };
+        var s = d.sessions.filter(function (x) { return x.token === r.token; })[0], u = s && find(d, s.username);
+        if (u && permsOf(u).indexOf("roles") !== -1) out.counts = demoCounts(d);
+        return out;
+      },
+      rolesSave: function (d, r) {
+        requirePerm(d, r.token, "roles");
+        var list = r.roles || [], seen = {};
+        if (!list.length) fail("ต้องมีอย่างน้อย 1 ตำแหน่ง");
+        var out = list.map(function (x) {
+          var code = String(x.code || "").replace(/\s+/g, " ").trim(), label = String(x.label || "").replace(/\s+/g, " ").trim().slice(0, 60) || code;
+          if (!ROLE_CODE_RE.test(code)) fail('รหัสตำแหน่ง "' + code + '" ใช้ได้เฉพาะตัวอักษร ตัวเลข ช่องว่าง และ . _ - ยาวไม่เกิน 20 ตัว');
+          if (/^all$/i.test(code)) fail('"' + code + '" เป็นคำที่ระบบใช้ (ส่งถึงทุกคน) ตั้งเป็นรหัสตำแหน่งไม่ได้');
+          if (seen[code.toLowerCase()]) fail('รหัสตำแหน่ง "' + code + '" ซ้ำกัน');
+          seen[code.toLowerCase()] = true;
+          return { code: code, label: label, chat: x.chat === true };
+        });
+        FIXED_ROLES.forEach(function (c) { if (!out.some(function (x) { return x.code === c; })) fail("ตำแหน่ง " + c + " ลบไม่ได้ เพราะแอปที่เชื่อมใช้ตัดสินสิทธิ์บันทึกข้อมูล"); });
+        var counts = demoCounts(d), gone = Object.keys(counts).filter(function (c) { return !out.some(function (x) { return x.code === c; }); });
+        if (gone.length) fail("ลบตำแหน่งที่ยังมีสมาชิกอยู่ไม่ได้: " + gone.map(function (c) { return c + " (" + counts[c] + " คน)"; }).join(", "));
+        d.roles = out;
+        return { roles: out, counts: counts, fixed: FIXED_ROLES.slice(), message: "บันทึกตำแหน่งแล้ว (" + out.length + " ตำแหน่ง)" };
       },
       setAdmin: function (d, r) {
         var admin = requireAdmin(d, r.token);
@@ -346,6 +386,16 @@
     });
   }
 
+  // Positions from the server; a Code.gs from before (no rolesGet) or no connection keeps the list above.
+  var ROLE_CODE_RE = /^[A-Za-z0-9\u0E00-\u0E7F][A-Za-z0-9\u0E00-\u0E7F ._-]{0,19}$/;
+  function loadRoles() {
+    return call("rolesGet").then(function (res) {
+      if (res.roles && res.roles.length) roles = res.roles;
+      roleCounts = res.counts || null;
+      return roles;
+    }, function () { return roles; });
+  }
+
   function setSession(t, u) {
     token = t;
     user = u;
@@ -356,8 +406,8 @@
   /* ---------------- Login / register screen ---------------- */
 
   function roleOptions(selected) {
-    return '<option value="">— เลือกตำแหน่ง —</option>' + ROLES.map(function (r) {
-      return '<option value="' + r[0] + '"' + (r[0] === selected ? " selected" : "") + ">" + esc(r[1]) + "</option>";
+    return '<option value="">— เลือกตำแหน่ง —</option>' + roles.map(function (r) {
+      return '<option value="' + esc(r.code) + '"' + (r.code === selected ? " selected" : "") + ">" + esc(r.label) + "</option>";
     }).join("");
   }
 
@@ -554,8 +604,9 @@
         '<div class="toolbar">' + [["pending", "รออนุมัติ"], ["active", "ใช้งาน"], ["disabled", "ระงับ"], ["admin", "admin"], ["all", "ทั้งหมด"]].map(function (f) {
           return '<button class="chip' + (filter === f[0] ? " active" : "") + '" data-filter="' + f[0] + '">' + f[1] + " (" + (counts[f[0]] || 0) + ")</button>";
         }).join("") + "</div>" +
-        (main ? '<p class="admin-help">กด <strong>🛡️ สิทธิ์ admin</strong> เพื่อตั้งเป็น admin หลัก (ทำได้ทุกอย่าง) หรือ admin รอง (เลือกสิทธิ์เอง)</p>'
-          : '<p class="admin-help">คุณเป็น <strong>admin รอง</strong>: จัดการได้เฉพาะสมาชิกทั่วไป บัญชี admin จัดการได้เฉพาะ admin หลัก</p>') +
+        (main ? '<p class="admin-help">กด <strong>🛡️ สิทธิ์ admin</strong> เพื่อตั้งเป็น admin หลัก (ทำได้ทุกอย่าง) หรือ admin รอง (เลือกสิทธิ์เอง)'
+          : '<p class="admin-help">คุณเป็น <strong>admin รอง</strong>: จัดการได้เฉพาะสมาชิกทั่วไป บัญชี admin จัดการได้เฉพาะ admin หลัก') +
+          (window.Auth && window.Auth.can("roles") ? ' · เพิ่มหรือแก้ตำแหน่งได้ที่ <a href="#/roles-settings">ตั้งค่าตำแหน่ง</a>' : "") + "</p>" +
         (msg ? '<div class="note">' + esc(msg) + "</div>" : "") +
         '<div class="table-wrap stack-wrap card flush"><table class="users stack"><thead><tr>' +
         "<th>ชื่อ-นามสกุล</th><th>Username</th><th>ตำแหน่ง</th><th>ติดต่อ</th><th>สถานะ</th><th>สมัครเมื่อ / เข้าล่าสุด</th><th></th></tr></thead><tbody>" +
@@ -578,9 +629,11 @@
           return '<tr data-user="' + esc(u.username) + '">' +
             '<td class="cell-name">' + nameCell + "</td>" +
             '<td data-label="Username">' + esc(u.username) + "</td>" +
-            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" + ROLES.map(function (r) {
-              return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
-            }).join("") + "</select></td>" +
+            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" +
+              // a position no longer in the list still shows for the member who holds it
+              roles.map(function (r) { return r.code; }).concat(roles.some(function (r) { return r.code === u.role; }) ? [] : [u.role]).map(function (c) {
+                return '<option value="' + esc(c) + '"' + (c === u.role ? " selected" : "") + ' title="' + esc(roleLabel(c)) + '">' + esc(c) + "</option>";
+              }).join("") + "</select></td>" +
             '<td class="small" data-label="ติดต่อ">' + (esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") || "—") + "</td>" +
             '<td data-label="สถานะ"><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
             '<td class="small" data-label="สมัคร / เข้าล่าสุด">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
@@ -680,7 +733,7 @@
   /* ---------------- Account: profile + change password ---------------- */
 
   function mountAccount(el) {
-    var roleName = (ROLES.filter(function (r) { return r[0] === user.role; })[0] || [0, user.role])[1];
+    var roleName = roleLabel(user.role);
     el.innerHTML =
       (user.email ? "" : '<div class="note">⚠️ บัญชีของคุณยังไม่มีอีเมล กรุณาเพิ่มอีเมลเพื่อใช้รับรหัสเมื่อลืมรหัสผ่าน</div>') +
       '<div class="grid wide">' +
@@ -855,9 +908,10 @@
     onProfile: function (cb) { profileListeners.push(cb); },
     // Resolves with the signed-in user, or null if a login is needed.
     init: function () {
-      if (!token) return Promise.resolve(null);
-      return call("me").then(function (res) { user = res.user; return user; })
+      var me = !token ? Promise.resolve(null) : call("me").then(function (res) { user = res.user; return user; })
         .catch(function () { setSession(null, null); return null; });
+      // the sign-up form and the chat groups need the positions first
+      return Promise.all([loadRoles(), me]).then(function (r) { return r[1]; });
     },
     showLogin: function (el) { renderAuthScreen(el, "login"); },
     logout: function () {
@@ -869,6 +923,17 @@
     directory: function () { return call("directory").then(function (res) { return res.users; }); },
     mountAdmin: mountAdmin,
     mountAccount: mountAccount,
-    roleName: function (code) { return (ROLES.filter(function (r) { return r[0] === code; })[0] || [0, code])[1]; },
+    roleName: roleLabel,
+    // Positions in order [{code, label, chat}] · codes · the ones that are chat groups ("ส่งถึง")
+    roles: function () { return roles.slice(); },
+    roleCodes: function () { return roles.map(function (r) { return r.code; }); },
+    chatRoles: function () { return roles.filter(function (r) { return r.chat; }).map(function (r) { return r.code; }); },
+    // Heading of a group of members in the pickers: the code ("RO", "MP" …); "Other" reads อื่นๆ
+    groupName: function (code) { return code === "Other" ? roleLabel(code) : code; },
+    // members per position (only for admins with "จัดการตำแหน่ง"), the codes that cannot be removed
+    roleCounts: function () { return roleCounts; },
+    fixedRoles: FIXED_ROLES.slice(),
+    loadRoles: loadRoles,
+    setRoles: function (list, counts) { if (list && list.length) roles = list.slice(); if (counts) roleCounts = counts; },
   };
 })();

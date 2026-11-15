@@ -981,6 +981,27 @@ table.users tr.perm-row td { background: var(--accent-soft); }
 .name-edit input { flex: 1 1 12rem; min-width: 0; padding: 6px 9px; border: 1px solid var(--accent); border-radius: var(--radius);
   background: var(--surface); color: var(--ink); font: 400 .92rem var(--font-body); }
 
+/* ---------------- ตั้งค่าตำแหน่ง (roles.js) ---------------- */
+.roles-card { display: grid; gap: 12px; }
+.roles-card > .muted { margin: 0; font-size: .84rem; }
+.roles-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.role-row { display: grid; grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr) auto 6.8rem auto; align-items: center; gap: 6px 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.role-row input:not([type=checkbox]) { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font: 400 .9rem var(--font-body); }
+.role-code strong { font: 600 .95rem var(--font-body); overflow-wrap: anywhere; }
+.role-chat { white-space: nowrap; margin: 0; }
+.role-count { font-size: .78rem; color: var(--ink); white-space: nowrap; }
+.role-count.none { color: var(--muted); }
+.role-row .menu-acts { margin-left: 0; }
+@media (max-width: 700px) {
+  .role-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .role-row > input { grid-column: 1 / -1; }
+  .role-row .role-chat { grid-column: 1; }
+  .role-row .role-count { grid-column: 2; justify-self: end; }
+  .role-row .menu-acts { grid-column: 1 / -1; justify-self: end; }
+}
+
 </style>
   <script>
   /* Day/night mode: "auto" follows the device; light/dark override it. Runs before paint to avoid a flash. */
@@ -1150,7 +1171,7 @@ window.SITE = {
    * (วิธีตั้งค่าและ Firestore rules ดูใน README.md)
    */
   chat: {
-    roles: ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"],
+    // ตำแหน่ง (และกลุ่ม "ส่งถึง") admin ตั้งเองที่หน้า "ตั้งค่าตำแหน่ง" — ไม่ต้องแก้ที่นี่
     maxImages: 4,
     pollSeconds: 15,    // หน้าแชท/ข้อความส่วนตัวดึงข้อความใหม่ทุกกี่วินาที
     notifySeconds: 20,  // pop up แจ้งเตือนข้อความใหม่ ตรวจทุกกี่วินาที (ทุกหน้า)
@@ -1478,15 +1499,25 @@ window.SITE = {
   var S = window.SITE;
   var CFG = S.auth || {};
   var TOKEN_KEY = "lpch-ro-token";
-  var ROLES = [["RO", "แพทย์รังสีรักษา (RO)"], ["MP", "นักฟิสิกส์การแพทย์ (MP)"], ["RTT", "นักรังสีการแพทย์ (RTT)"],
-    ["RA", "Radiation Assistant (RA)"], ["Nurse", "พยาบาล (Nurse)"], ["NA", "Nurse Aids (NA)"],
-    ["Register", "Register"], ["Refer", "Refer"], ["Other", "อื่นๆ"]];
+  // Positions: admins manage them on "ตั้งค่าตำแหน่ง" (rolesGet / rolesSave in Code.gs). Until the list loads,
+  // and with a Code.gs from before, these are used (same as ROLE_DEFAULTS in Code.gs).
+  var DEFAULT_ROLES = [
+    { code: "RO", label: "แพทย์รังสีรักษา (RO)", chat: true }, { code: "MP", label: "นักฟิสิกส์การแพทย์ (MP)", chat: true },
+    { code: "RTT", label: "นักรังสีการแพทย์ (RTT)", chat: true }, { code: "RA", label: "Radiation Assistant (RA)", chat: true },
+    { code: "Nurse", label: "พยาบาล (Nurse)", chat: true }, { code: "NA", label: "Nurse Aids (NA)", chat: true },
+    { code: "Register", label: "Register", chat: true }, { code: "Refer", label: "Refer", chat: true },
+    { code: "Other", label: "อื่นๆ", chat: false },
+  ];
+  var FIXED_ROLES = ["MP"];   // linked apps decide who may record by this code: it cannot be removed
+  var roles = DEFAULT_ROLES.slice(), roleCounts = null;
+  function roleLabel(code) { var r = roles.filter(function (x) { return x.code === code; })[0]; return r ? r.label : code; }
   // Admin rights (same keys as ADMIN_PERMS in Code.gs). admin หลัก has all of them; admin หลัก picks them for each admin รอง.
   var PERMS = [
     ["users", "จัดการสมาชิก", "อนุมัติ ระงับ ลบ และเปลี่ยนตำแหน่งสมาชิกทั่วไป"],
     ["delete", "ลบข้อความ", "ลบข้อความในแชทประกาศและข้อความส่วนตัว"],
     ["menus", "จัดการเมนู", "เพิ่ม แก้ไข เรียงลำดับเมนูและปุ่ม Workspace"],
     ["status", "ตั้งค่าสถานะ", "ตัวเลือกสถานะ รายชื่อเครื่องและห้อง"],
+    ["roles", "จัดการตำแหน่ง", "เพิ่ม แก้ไข เรียงลำดับตำแหน่ง และเลือกกลุ่มในแชท"],
   ];
   function permLabel(k) { return (PERMS.filter(function (p) { return p[0] === k; })[0] || [k, k])[1]; }
   function levelOf(u) { return !u ? "" : u.isAdmin ? "main" : (u.adminLevel === "sub" && (u.perms || []).length ? "sub" : ""); }
@@ -1557,6 +1588,9 @@ window.SITE = {
 
     function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
+    function demoRoles(d) { return d.roles && d.roles.length ? d.roles : DEFAULT_ROLES; }
+    function demoCounts(d) { var c = {}; d.users.forEach(function (u) { c[u.role] = (c[u.role] || 0) + 1; }); return c; }
+
     function permsOf(u) {
       return u.isAdmin ? PERMS.map(function (p) { return p[0]; })
         : PERMS.map(function (p) { return p[0]; }).filter(function (k) { return (u.adminPerms || []).indexOf(k) !== -1; });
@@ -1623,7 +1657,7 @@ window.SITE = {
         if (!/^[a-z0-9._-]{3,30}$/.test(username)) fail("ชื่อผู้ใช้ต้องเป็นภาษาอังกฤษ ตัวเลข หรือ . _ - ความยาว 3–30 ตัวอักษร");
         if (!r.password || r.password.length < 8) fail("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
         if (!String(r.fullName || "").trim()) fail("กรุณากรอกชื่อ-นามสกุล");
-        if (!ROLES.some(function (x) { return x[0] === r.role; })) fail("กรุณาเลือกตำแหน่ง");
+        if (!demoRoles(d).some(function (x) { return x.code === r.role; })) fail("กรุณาเลือกตำแหน่ง");
         if (find(d, username)) fail("ชื่อผู้ใช้นี้ถูกใช้แล้ว");
         var email = normEmail(r.email);
         if (emailTaken(d, email)) fail("อีเมลนี้ถูกใช้สมัครแล้ว");
@@ -1740,9 +1774,36 @@ window.SITE = {
           if (r.status !== "active") d.sessions = d.sessions.filter(function (s) { return s.username !== u.username; });
         }
         if (typeof r.isAdmin === "boolean") { u.isAdmin = r.isAdmin; u.adminPerms = []; }
-        if (r.role) u.role = r.role;
+        if (r.role) {
+          if (!demoRoles(d).some(function (x) { return x.code === r.role; })) fail("ตำแหน่งไม่ถูกต้อง");
+          u.role = r.role;
+        }
         if (fullName) u.fullName = fullName;
         return { user: pub(u) };
+      },
+      rolesGet: function (d, r) {
+        var out = { roles: demoRoles(d), fixed: FIXED_ROLES.slice() };
+        var s = d.sessions.filter(function (x) { return x.token === r.token; })[0], u = s && find(d, s.username);
+        if (u && permsOf(u).indexOf("roles") !== -1) out.counts = demoCounts(d);
+        return out;
+      },
+      rolesSave: function (d, r) {
+        requirePerm(d, r.token, "roles");
+        var list = r.roles || [], seen = {};
+        if (!list.length) fail("ต้องมีอย่างน้อย 1 ตำแหน่ง");
+        var out = list.map(function (x) {
+          var code = String(x.code || "").replace(/\s+/g, " ").trim(), label = String(x.label || "").replace(/\s+/g, " ").trim().slice(0, 60) || code;
+          if (!ROLE_CODE_RE.test(code)) fail('รหัสตำแหน่ง "' + code + '" ใช้ได้เฉพาะตัวอักษร ตัวเลข ช่องว่าง และ . _ - ยาวไม่เกิน 20 ตัว');
+          if (/^all$/i.test(code)) fail('"' + code + '" เป็นคำที่ระบบใช้ (ส่งถึงทุกคน) ตั้งเป็นรหัสตำแหน่งไม่ได้');
+          if (seen[code.toLowerCase()]) fail('รหัสตำแหน่ง "' + code + '" ซ้ำกัน');
+          seen[code.toLowerCase()] = true;
+          return { code: code, label: label, chat: x.chat === true };
+        });
+        FIXED_ROLES.forEach(function (c) { if (!out.some(function (x) { return x.code === c; })) fail("ตำแหน่ง " + c + " ลบไม่ได้ เพราะแอปที่เชื่อมใช้ตัดสินสิทธิ์บันทึกข้อมูล"); });
+        var counts = demoCounts(d), gone = Object.keys(counts).filter(function (c) { return !out.some(function (x) { return x.code === c; }); });
+        if (gone.length) fail("ลบตำแหน่งที่ยังมีสมาชิกอยู่ไม่ได้: " + gone.map(function (c) { return c + " (" + counts[c] + " คน)"; }).join(", "));
+        d.roles = out;
+        return { roles: out, counts: counts, fixed: FIXED_ROLES.slice(), message: "บันทึกตำแหน่งแล้ว (" + out.length + " ตำแหน่ง)" };
       },
       setAdmin: function (d, r) {
         var admin = requireAdmin(d, r.token);
@@ -1813,6 +1874,16 @@ window.SITE = {
     });
   }
 
+  // Positions from the server; a Code.gs from before (no rolesGet) or no connection keeps the list above.
+  var ROLE_CODE_RE = /^[A-Za-z0-9\u0E00-\u0E7F][A-Za-z0-9\u0E00-\u0E7F ._-]{0,19}$/;
+  function loadRoles() {
+    return call("rolesGet").then(function (res) {
+      if (res.roles && res.roles.length) roles = res.roles;
+      roleCounts = res.counts || null;
+      return roles;
+    }, function () { return roles; });
+  }
+
   function setSession(t, u) {
     token = t;
     user = u;
@@ -1823,8 +1894,8 @@ window.SITE = {
   /* ---------------- Login / register screen ---------------- */
 
   function roleOptions(selected) {
-    return '<option value="">— เลือกตำแหน่ง —</option>' + ROLES.map(function (r) {
-      return '<option value="' + r[0] + '"' + (r[0] === selected ? " selected" : "") + ">" + esc(r[1]) + "</option>";
+    return '<option value="">— เลือกตำแหน่ง —</option>' + roles.map(function (r) {
+      return '<option value="' + esc(r.code) + '"' + (r.code === selected ? " selected" : "") + ">" + esc(r.label) + "</option>";
     }).join("");
   }
 
@@ -2021,8 +2092,9 @@ window.SITE = {
         '<div class="toolbar">' + [["pending", "รออนุมัติ"], ["active", "ใช้งาน"], ["disabled", "ระงับ"], ["admin", "admin"], ["all", "ทั้งหมด"]].map(function (f) {
           return '<button class="chip' + (filter === f[0] ? " active" : "") + '" data-filter="' + f[0] + '">' + f[1] + " (" + (counts[f[0]] || 0) + ")</button>";
         }).join("") + "</div>" +
-        (main ? '<p class="admin-help">กด <strong>🛡️ สิทธิ์ admin</strong> เพื่อตั้งเป็น admin หลัก (ทำได้ทุกอย่าง) หรือ admin รอง (เลือกสิทธิ์เอง)</p>'
-          : '<p class="admin-help">คุณเป็น <strong>admin รอง</strong>: จัดการได้เฉพาะสมาชิกทั่วไป บัญชี admin จัดการได้เฉพาะ admin หลัก</p>') +
+        (main ? '<p class="admin-help">กด <strong>🛡️ สิทธิ์ admin</strong> เพื่อตั้งเป็น admin หลัก (ทำได้ทุกอย่าง) หรือ admin รอง (เลือกสิทธิ์เอง)'
+          : '<p class="admin-help">คุณเป็น <strong>admin รอง</strong>: จัดการได้เฉพาะสมาชิกทั่วไป บัญชี admin จัดการได้เฉพาะ admin หลัก') +
+          (window.Auth && window.Auth.can("roles") ? ' · เพิ่มหรือแก้ตำแหน่งได้ที่ <a href="#/roles-settings">ตั้งค่าตำแหน่ง</a>' : "") + "</p>" +
         (msg ? '<div class="note">' + esc(msg) + "</div>" : "") +
         '<div class="table-wrap stack-wrap card flush"><table class="users stack"><thead><tr>' +
         "<th>ชื่อ-นามสกุล</th><th>Username</th><th>ตำแหน่ง</th><th>ติดต่อ</th><th>สถานะ</th><th>สมัครเมื่อ / เข้าล่าสุด</th><th></th></tr></thead><tbody>" +
@@ -2045,9 +2117,11 @@ window.SITE = {
           return '<tr data-user="' + esc(u.username) + '">' +
             '<td class="cell-name">' + nameCell + "</td>" +
             '<td data-label="Username">' + esc(u.username) + "</td>" +
-            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" + ROLES.map(function (r) {
-              return '<option value="' + r[0] + '"' + (r[0] === u.role ? " selected" : "") + ">" + r[0] + "</option>";
-            }).join("") + "</select></td>" +
+            '<td data-label="ตำแหน่ง"><select data-act="role" aria-label="ตำแหน่ง"' + (manageable(u) ? "" : " disabled") + ">" +
+              // a position no longer in the list still shows for the member who holds it
+              roles.map(function (r) { return r.code; }).concat(roles.some(function (r) { return r.code === u.role; }) ? [] : [u.role]).map(function (c) {
+                return '<option value="' + esc(c) + '"' + (c === u.role ? " selected" : "") + ' title="' + esc(roleLabel(c)) + '">' + esc(c) + "</option>";
+              }).join("") + "</select></td>" +
             '<td class="small" data-label="ติดต่อ">' + (esc(u.phone || "") + (u.email ? "<br>" + esc(u.email) : "") || "—") + "</td>" +
             '<td data-label="สถานะ"><span class="status ' + st[1] + '">' + st[0] + "</span></td>" +
             '<td class="small" data-label="สมัคร / เข้าล่าสุด">' + fmtDate(u.createdAt) + "<br>" + fmtDate(u.lastLogin) + "</td>" +
@@ -2147,7 +2221,7 @@ window.SITE = {
   /* ---------------- Account: profile + change password ---------------- */
 
   function mountAccount(el) {
-    var roleName = (ROLES.filter(function (r) { return r[0] === user.role; })[0] || [0, user.role])[1];
+    var roleName = roleLabel(user.role);
     el.innerHTML =
       (user.email ? "" : '<div class="note">⚠️ บัญชีของคุณยังไม่มีอีเมล กรุณาเพิ่มอีเมลเพื่อใช้รับรหัสเมื่อลืมรหัสผ่าน</div>') +
       '<div class="grid wide">' +
@@ -2322,9 +2396,10 @@ window.SITE = {
     onProfile: function (cb) { profileListeners.push(cb); },
     // Resolves with the signed-in user, or null if a login is needed.
     init: function () {
-      if (!token) return Promise.resolve(null);
-      return call("me").then(function (res) { user = res.user; return user; })
+      var me = !token ? Promise.resolve(null) : call("me").then(function (res) { user = res.user; return user; })
         .catch(function () { setSession(null, null); return null; });
+      // the sign-up form and the chat groups need the positions first
+      return Promise.all([loadRoles(), me]).then(function (r) { return r[1]; });
     },
     showLogin: function (el) { renderAuthScreen(el, "login"); },
     logout: function () {
@@ -2336,7 +2411,18 @@ window.SITE = {
     directory: function () { return call("directory").then(function (res) { return res.users; }); },
     mountAdmin: mountAdmin,
     mountAccount: mountAccount,
-    roleName: function (code) { return (ROLES.filter(function (r) { return r[0] === code; })[0] || [0, code])[1]; },
+    roleName: roleLabel,
+    // Positions in order [{code, label, chat}] · codes · the ones that are chat groups ("ส่งถึง")
+    roles: function () { return roles.slice(); },
+    roleCodes: function () { return roles.map(function (r) { return r.code; }); },
+    chatRoles: function () { return roles.filter(function (r) { return r.chat; }).map(function (r) { return r.code; }); },
+    // Heading of a group of members in the pickers: the code ("RO", "MP" …); "Other" reads อื่นๆ
+    groupName: function (code) { return code === "Other" ? roleLabel(code) : code; },
+    // members per position (only for admins with "จัดการตำแหน่ง"), the codes that cannot be removed
+    roleCounts: function () { return roleCounts; },
+    fixedRoles: FIXED_ROLES.slice(),
+    loadRoles: loadRoles,
+    setRoles: function (list, counts) { if (list && list.length) roles = list.slice(); if (counts) roleCounts = counts; },
   };
 })();
 
@@ -2345,7 +2431,7 @@ window.SITE = {
 /*
  * ประกาศ / ข่าวสาร แบบช่องแชท
  *  - แนบรูปได้ (ปุ่มแนบ, วาง Ctrl+V, ลากไฟล์มาวาง)
- *  - ส่งถึงทุกคน / ตามวิชาชีพ (RO / MP / RTT / RA / Nurse / NA / Register / Refer) / รายบุคคล และส่งต่อได้
+ *  - ส่งถึงทุกคน / ตามวิชาชีพ (ตำแหน่งที่ admin ตั้งเป็นกลุ่มในแชท ที่หน้า "ตั้งค่าตำแหน่ง") / รายบุคคล และส่งต่อได้
  *  - ปุ่ม ✓ ถูก / ✗ ผิด และ ↩ ตอบกลับ ที่ข้อความ — บันทึกผู้กด วันที่ เวลา
  *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ ใครอ่านแล้ว และดาวน์โหลดบันทึกทั้งหมดเป็น CSV
  *
@@ -2362,8 +2448,14 @@ window.SITE = {
 
   var S = window.SITE;
   var C = S.chat || {};
-  var ROLES = C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"];
-  var ROLE_GROUPS = ROLES.concat(["Other"]);
+  // Positions come from the server (Auth, "ตั้งค่าตำแหน่ง"): read them each time, an admin may have changed them.
+  function chatRoles() { return window.Auth.chatRoles(); }   // groups under "ส่งถึง"
+  // member groups in the pickers: every position in order, then any position a member still holds that is no longer listed
+  function groupCodes(list) {
+    var codes = window.Auth.roleCodes();
+    list.forEach(function (p) { if (p.role && codes.indexOf(p.role) === -1) codes.push(p.role); });
+    return codes;
+  }
   var MAX_IMAGES = C.maxImages || 4;
   var useFirebase = !!(C.firebase && C.firebase.projectId);
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
@@ -2868,7 +2960,7 @@ window.SITE = {
     function renderTo() {
       var picked = recipients.filter(function (t) { return t.indexOf("u:") === 0; });
       toEl.innerHTML = "<span>ถึง</span>" +
-        ["ALL"].concat(ROLES).map(function (r) {
+        ["ALL"].concat(chatRoles()).map(function (r) {
           return '<button type="button" class="chip' + (recipients.indexOf(r) !== -1 ? " active" : "") + '" data-to="' + esc(r) + '">' +
             esc(r === "ALL" ? "ทุกคน" : r) + "</button>";
         }).join("") +
@@ -2882,10 +2974,10 @@ window.SITE = {
 
     // Checkbox list of members grouped by profession; usable for composing and forwarding.
     function peopleChecklist(selected, exclude) {
-      var groups = ROLE_GROUPS.map(function (r) {
+      var groups = groupCodes(people).map(function (r) {
         var inRole = people.filter(function (p) { return p.role === r && (!exclude || exclude.indexOf("u:" + p.username) === -1); });
         if (!inRole.length) return "";
-        return '<fieldset><legend>' + esc(r === "Other" ? "อื่นๆ" : r) + "</legend>" + inRole.map(function (p) {
+        return '<fieldset><legend>' + esc(window.Auth.groupName(r)) + "</legend>" + inRole.map(function (p) {
           var v = "u:" + p.username;
           return '<label><input type="checkbox" value="' + esc(v) + '"' + (selected.indexOf(v) !== -1 ? " checked" : "") + "> " + esc(p.name) + "</label>";
         }).join("") + "</fieldset>";
@@ -3220,7 +3312,7 @@ window.SITE = {
 
     function forwardHtml(m) {
       if (forwardOpen !== m.id) return "";
-      var roles = ["ALL"].concat(ROLES).filter(function (r) { return m.to.indexOf(r) === -1; });
+      var roles = ["ALL"].concat(chatRoles()).filter(function (r) { return m.to.indexOf(r) === -1; });
       return '<div class="chat-forward"><div class="fwd-roles"><span>ส่งต่อให้:</span>' + roles.map(function (r) {
         return '<label><input type="checkbox" value="' + esc(r) + '"> ' + esc(r === "ALL" ? "ทุกคน" : r) + "</label>";
       }).join("") + "</div>" +
@@ -3415,7 +3507,12 @@ window.SITE = {
   var MAX_IMAGES = C.maxImages || 4;
   var POLL_MS = (C.pollSeconds || 15) * 1000;
   var BADGE_MS = 30000;
-  var ROLE_GROUPS = (C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"]).concat(["Other"]);
+  // member groups in the new-message picker: every position in order ("ตั้งค่าตำแหน่ง"), then any no longer listed
+  function groupCodes(list) {
+    var codes = window.Auth.roleCodes();
+    list.forEach(function (p) { if (p.role && codes.indexOf(p.role) === -1) codes.push(p.role); });
+    return codes;
+  }
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
   var SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
   var GROUP_MS = 5 * 60000;
@@ -3706,10 +3803,10 @@ window.SITE = {
 
     function renderPeople() {
       var q = $("dmSearch").value.trim().toLowerCase();
-      var html = ROLE_GROUPS.map(function (r) {
+      var html = groupCodes(people).map(function (r) {
         var inRole = people.filter(function (p) { return p.role === r && (!q || (p.name + " " + p.username).toLowerCase().indexOf(q) !== -1); });
         if (!inRole.length) return "";
-        return '<div class="dm-group"><h4>' + esc(r === "Other" ? "อื่นๆ" : r) + "</h4>" + inRole.map(function (p) {
+        return '<div class="dm-group"><h4>' + esc(window.Auth.groupName(r)) + "</h4>" + inRole.map(function (p) {
           return '<button type="button" class="dm-person" data-open="' + esc(p.username) + '"><span class="dm-avatar sm">' + esc(initial(p.name)) + "</span>" + esc(p.name) + "</button>";
         }).join("") + "</div>";
       }).join("");
@@ -5168,6 +5265,125 @@ window.SITE = {
 </script>
   <script>
 /*
+ * ตั้งค่าตำแหน่ง (หน้า #/roles-settings) — admin หลัก หรือ admin รองที่มีสิทธิ์ "จัดการตำแหน่ง"
+ * - เพิ่ม แก้ชื่อที่แสดง เรียงลำดับ และเลือกว่าตำแหน่งไหนเป็นกลุ่ม "ส่งถึง" ในแชท
+ * - รหัสตำแหน่งตั้งได้ตอนเพิ่มเท่านั้น (เป็นค่าที่เก็บในบัญชีสมาชิก) · ลบได้เฉพาะตำแหน่งที่ไม่มีสมาชิก · MP ลบไม่ได้
+ * รายการเดียวนี้ใช้ทุกที่: หน้าสมัครสมาชิก, จัดการสมาชิก, บัญชีของฉัน, กลุ่มในแชท และตัวเลือกคน
+ * เก็บบนเซิร์ฟเวอร์ (Code.gs: rolesGet / rolesSave → ชีต Config แถว "roles"); โหมดทดลองเก็บในเบราว์เซอร์
+ */
+(function () {
+  "use strict";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  var MAX = 30;
+
+  function mountSettings(root) {
+    var list = [], counts = {}, fixed = [];   // working copy · members per code · codes that stay
+
+    function fromServer() {
+      list = window.Auth.roles().map(function (r) { return { code: r.code, label: r.label, chat: !!r.chat, saved: true }; });
+      counts = window.Auth.roleCounts() || {};
+      fixed = window.Auth.fixedRoles || [];
+    }
+
+    function row(r, i, n) {
+      var c = counts[r.code] || 0, locked = fixed.indexOf(r.code) !== -1;
+      var why = locked ? "ตำแหน่ง " + r.code + " ลบไม่ได้: แอปที่เชื่อม (TRS-398, Linac QA, ระบบกระจายงาน) ใช้ตัดสินสิทธิ์บันทึกข้อมูล"
+        : c ? "มีสมาชิก " + c + " คน — เปลี่ยนตำแหน่งของสมาชิกที่หน้าจัดการสมาชิกก่อนจึงจะลบได้" : "";
+      return '<li class="role-row" data-i="' + i + '">' +
+        '<div class="role-code">' + (r.saved ? "<strong>" + esc(r.code) + "</strong>"
+          : '<input data-k="code" maxlength="20" value="' + esc(r.code) + '" placeholder="รหัส เช่น PN" aria-label="รหัสตำแหน่งใหม่">') + "</div>" +
+        '<input data-k="label" maxlength="60" value="' + esc(r.label) + '" placeholder="ชื่อที่แสดง เช่น ผู้ช่วยพยาบาล (PN)" aria-label="ชื่อที่แสดงของ ' + esc(r.code || "ตำแหน่งใหม่") + '">' +
+        '<label class="menu-check role-chat"><input type="checkbox" data-k="chat"' + (r.chat ? " checked" : "") + "> กลุ่มในแชท</label>" +
+        '<span class="role-count' + (c ? "" : " none") + '">' + (r.saved ? (c ? c + " คน" : "ยังไม่มีสมาชิก") : "ใหม่") + (locked ? " · 🔒" : "") + "</span>" +
+        '<span class="menu-acts">' +
+          '<button type="button" class="chip" data-mv="' + i + '" data-d="-1"' + (i === 0 ? " disabled" : "") + ' aria-label="เลื่อนขึ้น">↑</button>' +
+          '<button type="button" class="chip" data-mv="' + i + '" data-d="1"' + (i === n - 1 ? " disabled" : "") + ' aria-label="เลื่อนลง">↓</button>' +
+          '<button type="button" class="chip danger" data-rm="' + i + '"' + (why ? ' disabled title="' + esc(why) + '"' : "") + ' aria-label="ลบ ' + esc(r.code || "ตำแหน่งใหม่") + '">✕</button>' +
+        "</span></li>";
+    }
+
+    function render(msg, bad) {
+      root.innerHTML =
+        '<p class="menus-msg' + (bad ? " bad" : "") + '" role="status"' + (msg ? "" : " hidden") + ">" + esc(msg || "") + "</p>" +
+        '<div class="card roles-card">' +
+          '<p class="muted">' +
+            "<strong>รหัส</strong> เก็บในบัญชีสมาชิกและเป็นชื่อปุ่มกลุ่มในแชท ตั้งได้ตอนเพิ่มเท่านั้น · " +
+            "<strong>ชื่อที่แสดง</strong> ใช้ในหน้าสมัครสมาชิกและบัญชีของฉัน · " +
+            "ติ๊ก <strong>กลุ่มในแชท</strong> ถ้าต้องการส่งข้อความถึงทั้งตำแหน่งได้ · ลบได้เฉพาะตำแหน่งที่ไม่มีสมาชิก</p>" +
+          '<ul class="roles-list">' + list.map(function (r, i) { return row(r, i, list.length); }).join("") + "</ul>" +
+          '<button type="button" class="chip" data-add' + (list.length >= MAX ? " disabled" : "") + ">＋ เพิ่มตำแหน่ง</button>" +
+        "</div>" +
+        '<div class="menu-buttons st-save-row"><button type="button" class="auth-submit" data-save>บันทึก</button>' +
+          '<button type="button" class="chip" data-reset>ยกเลิกการแก้ไข</button>' +
+          '<span class="muted">ลำดับในรายการ = ลำดับในหน้าสมัครสมาชิก ช่องตำแหน่ง และปุ่มกลุ่มในแชท</span></div>';
+    }
+
+    function read() {
+      root.querySelectorAll(".role-row").forEach(function (li) {
+        var r = list[+li.getAttribute("data-i")];
+        li.querySelectorAll("[data-k]").forEach(function (el) {
+          var k = el.getAttribute("data-k");
+          r[k] = el.type === "checkbox" ? el.checked : el.value.replace(/\s+/g, " ").trim();
+        });
+      });
+    }
+
+    root.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("button");
+      if (!b || b.disabled) return;
+      if (b.hasAttribute("data-reset")) { fromServer(); render(); return; }
+      read();
+      if (b.hasAttribute("data-add")) {
+        list.push({ code: "", label: "", chat: true, saved: false });
+        render();
+        var inputs = root.querySelectorAll('.role-row:last-child [data-k="code"]');
+        if (inputs.length) inputs[0].focus();
+      } else if (b.hasAttribute("data-mv")) {
+        var i = +b.getAttribute("data-mv"), x = list.splice(i, 1)[0];
+        list.splice(i + +b.getAttribute("data-d"), 0, x);
+        render();
+      } else if (b.hasAttribute("data-rm")) {
+        list.splice(+b.getAttribute("data-rm"), 1);
+        render();
+      } else if (b.hasAttribute("data-save")) {
+        // the new rows: a code each, none twice (the server checks the same and more)
+        var seen = {}, bad = null;
+        list.some(function (r) {
+          var k = r.code.toLowerCase();
+          if (!r.code) bad = "ตำแหน่งใหม่ต้องมีรหัส";
+          else if (seen[k]) bad = 'รหัสตำแหน่ง "' + r.code + '" ซ้ำกัน';
+          seen[k] = true;
+          return !!bad;
+        });
+        if (bad) { render(bad, true); return; }
+        b.disabled = true;
+        b.textContent = "กำลังบันทึก…";
+        window.Auth.call("rolesSave", { roles: list.map(function (r) { return { code: r.code, label: r.label || r.code, chat: r.chat }; }) })
+          .then(function (res) {
+            window.Auth.setRoles(res.roles, res.counts);
+            fromServer();
+            render(res.message);
+          }, function (err) { render(err.message, true); });
+      }
+    });
+
+    root.innerHTML = '<p class="muted">กำลังโหลด…</p>';
+    // fresh list and member counts (another admin may have changed them)
+    window.Auth.loadRoles().then(function () { fromServer(); render(); });
+  }
+
+  window.Roles = { mountSettings: mountSettings };
+})();
+
+</script>
+  <script>
+/*
  * Pop-up แจ้งเตือนเมื่อมีข้อความส่งถึงผู้ใช้ — ทั้งแชทประกาศ (ส่งถึงทุกคน / วิชาชีพ / รายบุคคล / ส่งต่อมา)
  * และข้อความส่วนตัว ทำงานทุกหน้าหลังเข้าสู่ระบบ
  *
@@ -5492,6 +5708,7 @@ window.SITE = {
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนด admin หลัก / admin รอง", widgets: ["admin"], adminOnly: true, perm: "users" };
   S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true, perm: "status" };
+  S.pages["roles-settings"] = { title: "ตั้งค่าตำแหน่ง", lead: "เพิ่ม แก้ไข และเรียงลำดับตำแหน่งของสมาชิก และเลือกตำแหน่งที่เป็นกลุ่ม \"ส่งถึง\" ในแชท", widgets: ["rolesSettings"], adminOnly: true, perm: "roles" };
   S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true, perm: "menus" };
   var navEl = document.getElementById("nav");
 
@@ -5573,6 +5790,8 @@ window.SITE = {
     team: function () { return '<section class="section team-wrap" id="teamRoot" aria-label="สถานะทีม"></section>'; },
 
     statusSettings: function () { return '<section class="section" id="statusSettingsRoot"></section>'; },
+
+    rolesSettings: function () { return '<section class="section" id="rolesSettingsRoot"></section>'; },
 
     inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
@@ -5859,6 +6078,8 @@ window.SITE = {
     if (teamRoot && window.Status) unmountTeam = window.Status.mountTeam(teamRoot);
     var stSet = document.getElementById("statusSettingsRoot");
     if (stSet && window.Status) window.Status.mountSettings(stSet);
+    var rolesSet = document.getElementById("rolesSettingsRoot");
+    if (rolesSet && window.Roles) window.Roles.mountSettings(rolesSet);
     var menusRoot = document.getElementById("menusRoot");
     if (menusRoot && window.Menus) {
       // #/menus?add=<heading> opens the editor for a new sub-menu, ?edit=<page> for an existing one
@@ -5913,6 +6134,7 @@ window.SITE = {
         (Auth.can("users") ? '<a href="#/admin">👥 จัดการสมาชิก</a>' : "") +
         (Auth.can("menus") ? '<a href="#/menus">🧭 จัดการเมนู</a>' : "") +
         (Auth.can("status") ? '<a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
+        (Auth.can("roles") ? '<a href="#/roles-settings">🪪 ตั้งค่าตำแหน่ง</a>' : "") +
         '<button type="button" id="themeBtn" class="phone-only">' + themeLabel() + "</button>" +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +

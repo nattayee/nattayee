@@ -13,7 +13,12 @@
   var MAX_IMAGES = C.maxImages || 4;
   var POLL_MS = (C.pollSeconds || 15) * 1000;
   var BADGE_MS = 30000;
-  var ROLE_GROUPS = (C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"]).concat(["Other"]);
+  // member groups in the new-message picker: every position in order ("ตั้งค่าตำแหน่ง"), then any no longer listed
+  function groupCodes(list) {
+    var codes = window.Auth.roleCodes();
+    list.forEach(function (p) { if (p.role && codes.indexOf(p.role) === -1) codes.push(p.role); });
+    return codes;
+  }
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
   var SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
   var GROUP_MS = 5 * 60000;
@@ -304,10 +309,10 @@
 
     function renderPeople() {
       var q = $("dmSearch").value.trim().toLowerCase();
-      var html = ROLE_GROUPS.map(function (r) {
+      var html = groupCodes(people).map(function (r) {
         var inRole = people.filter(function (p) { return p.role === r && (!q || (p.name + " " + p.username).toLowerCase().indexOf(q) !== -1); });
         if (!inRole.length) return "";
-        return '<div class="dm-group"><h4>' + esc(r === "Other" ? "อื่นๆ" : r) + "</h4>" + inRole.map(function (p) {
+        return '<div class="dm-group"><h4>' + esc(window.Auth.groupName(r)) + "</h4>" + inRole.map(function (p) {
           return '<button type="button" class="dm-person" data-open="' + esc(p.username) + '"><span class="dm-avatar sm">' + esc(initial(p.name)) + "</span>" + esc(p.name) + "</button>";
         }).join("") + "</div>";
       }).join("");

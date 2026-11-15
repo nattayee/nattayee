@@ -89,7 +89,7 @@ window.SITE = {
    * (วิธีตั้งค่าและ Firestore rules ดูใน README.md)
    */
   chat: {
-    roles: ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"],
+    // ตำแหน่ง (และกลุ่ม "ส่งถึง") admin ตั้งเองที่หน้า "ตั้งค่าตำแหน่ง" — ไม่ต้องแก้ที่นี่
     maxImages: 4,
     pollSeconds: 15,    // หน้าแชท/ข้อความส่วนตัวดึงข้อความใหม่ทุกกี่วินาที
     notifySeconds: 20,  // pop up แจ้งเตือนข้อความใหม่ ตรวจทุกกี่วินาที (ทุกหน้า)

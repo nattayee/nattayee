@@ -1,7 +1,7 @@
 /*
  * ประกาศ / ข่าวสาร แบบช่องแชท
  *  - แนบรูปได้ (ปุ่มแนบ, วาง Ctrl+V, ลากไฟล์มาวาง)
- *  - ส่งถึงทุกคน / ตามวิชาชีพ (RO / MP / RTT / RA / Nurse / NA / Register / Refer) / รายบุคคล และส่งต่อได้
+ *  - ส่งถึงทุกคน / ตามวิชาชีพ (ตำแหน่งที่ admin ตั้งเป็นกลุ่มในแชท ที่หน้า "ตั้งค่าตำแหน่ง") / รายบุคคล และส่งต่อได้
  *  - ปุ่ม ✓ ถูก / ✗ ผิด และ ↩ ตอบกลับ ที่ข้อความ — บันทึกผู้กด วันที่ เวลา
  *  - สถานะแสดงว่าส่งถึงใคร ใครส่งต่อ ใครอ่านแล้ว และดาวน์โหลดบันทึกทั้งหมดเป็น CSV
  *
@@ -18,8 +18,14 @@
 
   var S = window.SITE;
   var C = S.chat || {};
-  var ROLES = C.roles || ["RO", "MP", "RTT", "RA", "Nurse", "NA", "Register", "Refer"];
-  var ROLE_GROUPS = ROLES.concat(["Other"]);
+  // Positions come from the server (Auth, "ตั้งค่าตำแหน่ง"): read them each time, an admin may have changed them.
+  function chatRoles() { return window.Auth.chatRoles(); }   // groups under "ส่งถึง"
+  // member groups in the pickers: every position in order, then any position a member still holds that is no longer listed
+  function groupCodes(list) {
+    var codes = window.Auth.roleCodes();
+    list.forEach(function (p) { if (p.role && codes.indexOf(p.role) === -1) codes.push(p.role); });
+    return codes;
+  }
   var MAX_IMAGES = C.maxImages || 4;
   var useFirebase = !!(C.firebase && C.firebase.projectId);
   var REACT = { ok: { icon: "✓", label: "ถูก" }, no: { icon: "✗", label: "ผิด" } };
@@ -524,7 +530,7 @@
     function renderTo() {
       var picked = recipients.filter(function (t) { return t.indexOf("u:") === 0; });
       toEl.innerHTML = "<span>ถึง</span>" +
-        ["ALL"].concat(ROLES).map(function (r) {
+        ["ALL"].concat(chatRoles()).map(function (r) {
           return '<button type="button" class="chip' + (recipients.indexOf(r) !== -1 ? " active" : "") + '" data-to="' + esc(r) + '">' +
             esc(r === "ALL" ? "ทุกคน" : r) + "</button>";
         }).join("") +
@@ -538,10 +544,10 @@
 
     // Checkbox list of members grouped by profession; usable for composing and forwarding.
     function peopleChecklist(selected, exclude) {
-      var groups = ROLE_GROUPS.map(function (r) {
+      var groups = groupCodes(people).map(function (r) {
         var inRole = people.filter(function (p) { return p.role === r && (!exclude || exclude.indexOf("u:" + p.username) === -1); });
         if (!inRole.length) return "";
-        return '<fieldset><legend>' + esc(r === "Other" ? "อื่นๆ" : r) + "</legend>" + inRole.map(function (p) {
+        return '<fieldset><legend>' + esc(window.Auth.groupName(r)) + "</legend>" + inRole.map(function (p) {
           var v = "u:" + p.username;
           return '<label><input type="checkbox" value="' + esc(v) + '"' + (selected.indexOf(v) !== -1 ? " checked" : "") + "> " + esc(p.name) + "</label>";
         }).join("") + "</fieldset>";
@@ -876,7 +882,7 @@
 
     function forwardHtml(m) {
       if (forwardOpen !== m.id) return "";
-      var roles = ["ALL"].concat(ROLES).filter(function (r) { return m.to.indexOf(r) === -1; });
+      var roles = ["ALL"].concat(chatRoles()).filter(function (r) { return m.to.indexOf(r) === -1; });
       return '<div class="chat-forward"><div class="fwd-roles"><span>ส่งต่อให้:</span>' + roles.map(function (r) {
         return '<label><input type="checkbox" value="' + esc(r) + '"> ' + esc(r === "ALL" ? "ทุกคน" : r) + "</label>";
       }).join("") + "</div>" +

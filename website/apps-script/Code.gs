@@ -14,7 +14,7 @@
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
  * ข้อมูลเก็บใน Google Sheet นี้: Users (รวมระดับ admin หลัก/รอง), Sessions (การเข้าสู่ระบบแต่ละเครื่อง), Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
- *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่)
+ *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่, รายการตำแหน่ง)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -23,8 +23,24 @@
 
 var REQUIRE_APPROVAL = true;   // ผู้สมัครใหม่ต้องรอ admin อนุมัติ
 var SESSION_DAYS = 7;
-var ROLES = ['RO', 'MP', 'RTT', 'RA', 'Nurse', 'NA', 'Register', 'Refer', 'Other'];   // RA = Radiation Assistant, NA = Nurse Aids
-var CHAT_ROLES = ['RO', 'MP', 'RTT', 'RA', 'Nurse', 'NA', 'Register', 'Refer'];
+/*
+ * ตำแหน่ง: admin จัดการเองที่หน้า "ตั้งค่าตำแหน่ง" (ชีต Config แถว "roles") · ค่านี้ใช้จนกว่าจะบันทึกครั้งแรก
+ * code = ค่าที่เก็บในชีต Users และใช้เป็นกลุ่ม "ส่งถึง" ในแชท · label = ชื่อที่แสดง · chat = เป็นกลุ่มในแชทหรือไม่
+ */
+var ROLE_DEFAULTS = [
+  { code: 'RO', label: 'แพทย์รังสีรักษา (RO)', chat: true },
+  { code: 'MP', label: 'นักฟิสิกส์การแพทย์ (MP)', chat: true },
+  { code: 'RTT', label: 'นักรังสีการแพทย์ (RTT)', chat: true },
+  { code: 'RA', label: 'Radiation Assistant (RA)', chat: true },
+  { code: 'Nurse', label: 'พยาบาล (Nurse)', chat: true },
+  { code: 'NA', label: 'Nurse Aids (NA)', chat: true },
+  { code: 'Register', label: 'Register', chat: true },
+  { code: 'Refer', label: 'Refer', chat: true },
+  { code: 'Other', label: 'อื่นๆ', chat: false }
+];
+var FIXED_ROLES = ['MP'];   // แอปที่เชื่อม (TRS-398, Linac QA, ระบบกระจายงาน) ใช้รหัส MP ตัดสินสิทธิ์บันทึกข้อมูล: ลบไม่ได้
+var ROLE_CODE_RE = /^[A-Za-z0-9\u0E00-\u0E7F][A-Za-z0-9\u0E00-\u0E7F ._-]{0,19}$/;
+var ROLES_MAX = 30;
 var MAX_FAILED_LOGINS = 5;     // ต่อ 15 นาที
 var RESET_MINUTES = 15;        // อายุรหัสรีเซ็ตรหัสผ่านที่ส่งทางอีเมล
 var RESET_MAX_TRIES = 5;       // ใส่รหัสรีเซ็ตผิดได้กี่ครั้ง
@@ -51,8 +67,8 @@ var USER_HEADERS = ['username', 'fullName', 'role', 'phone', 'email', 'salt', 'h
  *    "users" จัดการได้เฉพาะสมาชิกทั่วไป ไม่แตะบัญชี admin
  * แอปที่เชื่อม (TRS-398, Linac QA, ระบบกระจายงาน) เห็น isAdmin = admin หลักเท่านั้น
  */
-var ADMIN_PERMS = ['users', 'delete', 'menus', 'status'];
-var PERM_LABEL = { users: 'จัดการสมาชิก', 'delete': 'ลบข้อความ', menus: 'จัดการเมนู', status: 'ตั้งค่าสถานะ' };
+var ADMIN_PERMS = ['users', 'delete', 'menus', 'status', 'roles'];
+var PERM_LABEL = { users: 'จัดการสมาชิก', 'delete': 'ลบข้อความ', menus: 'จัดการเมนู', status: 'ตั้งค่าสถานะ', roles: 'จัดการตำแหน่ง' };
 var SESSION_HEADERS = ['token', 'username', 'expiresAt', 'createdAt', 'device'];
 var MESSAGE_HEADERS = ['id', 'createdAt', 'author', 'json'];
 var DM_HEADERS = ['id', 'convo', 'createdAt', 'json'];
@@ -66,7 +82,7 @@ var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบ�
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, sessionList: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, sessionList: 1, rolesGet: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -184,7 +200,7 @@ ACTIONS.register = function (req) {
   validatePassword_(req.password);
   if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
   if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
-  if (ROLES.indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
+  if (roleCodes_().indexOf(role) === -1) throw new Error('กรุณาเลือกตำแหน่ง');
   if (findUser_(username)) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
   if (emailTaken_(email)) throw new Error('อีเมลนี้ถูกใช้สมัครแล้ว');
 
@@ -421,7 +437,7 @@ ACTIONS.updateUser = function (req) {
     setUserField_(u, 'adminPerms', '');
   }
   if (req.role) {
-    if (ROLES.indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
+    if (roleCodes_().indexOf(req.role) === -1) throw new Error('ตำแหน่งไม่ถูกต้อง');
     setUserField_(u, 'role', req.role);
   }
   if (fullName !== null && fullName !== u.fullName) setUserField_(u, 'fullName', fullName);
@@ -760,6 +776,85 @@ function cleanMenu_(m) {
     return { label: label, url: u, type: text(l.type, 20), sso: !!l.sso };
   });
   return out;
+}
+
+/* ---------------- ตำแหน่ง (หน้า "ตั้งค่าตำแหน่ง") ----------------
+ * rolesGet: ทุกคนอ่านได้ ไม่ต้องเข้าสู่ระบบ (หน้าสมัครสมาชิกใช้) · คนที่มีสิทธิ์จัดการตำแหน่งได้จำนวนสมาชิกแต่ละตำแหน่งด้วย
+ * rolesSave: แทนทั้งรายการ (ลำดับ = ลำดับที่แสดง) · MP ลบไม่ได้ · ตำแหน่งที่ยังมีสมาชิกอยู่ลบไม่ได้ (เปลี่ยนรหัสก็คือลบ)
+ */
+ACTIONS.rolesGet = function (req) {
+  var out = { roles: rolesConfig_(), fixed: FIXED_ROLES.slice() };
+  if (req.token) {
+    var u = null;
+    try { u = requireUser_(req.token); } catch (e) { u = null; }   // the sign-up page may still hold an old token
+    if (u && can_(u, 'roles')) out.counts = roleCounts_();
+  }
+  return out;
+};
+
+ACTIONS.rolesSave = function (req) {
+  var admin = requirePerm_(req.token, 'roles');
+  var list = Array.isArray(req.roles) ? req.roles : [];
+  if (!list.length) throw new Error('ต้องมีอย่างน้อย 1 ตำแหน่ง');
+  if (list.length > ROLES_MAX) throw new Error('ตั้งได้สูงสุด ' + ROLES_MAX + ' ตำแหน่ง');
+  var seen = {}, roles = list.map(function (r) {
+    r = r || {};
+    var code = String(r.code == null ? '' : r.code).replace(/\s+/g, ' ').trim();
+    var label = String(r.label == null ? '' : r.label).replace(/\s+/g, ' ').trim().slice(0, 60) || code;
+    if (!code) throw new Error('ทุกตำแหน่งต้องมีรหัส');
+    if (!ROLE_CODE_RE.test(code)) throw new Error('รหัสตำแหน่ง "' + code + '" ใช้ได้เฉพาะตัวอักษร ตัวเลข ช่องว่าง และ . _ - ยาวไม่เกิน 20 ตัว');
+    if (/^all$/i.test(code)) throw new Error('"' + code + '" เป็นคำที่ระบบใช้ (ส่งถึงทุกคน) ตั้งเป็นรหัสตำแหน่งไม่ได้');
+    if (seen[code.toLowerCase()]) throw new Error('รหัสตำแหน่ง "' + code + '" ซ้ำกัน');
+    seen[code.toLowerCase()] = true;
+    return { code: code, label: label, chat: r.chat === true };
+  });
+  FIXED_ROLES.forEach(function (c) {
+    if (!roles.some(function (r) { return r.code === c; })) throw new Error('ตำแหน่ง ' + c + ' ลบไม่ได้ เพราะแอปที่เชื่อม (TRS-398, Linac QA, ระบบกระจายงาน) ใช้ตัดสินสิทธิ์บันทึกข้อมูล');
+  });
+  var counts = roleCounts_();
+  var gone = Object.keys(counts).filter(function (c) { return counts[c] && !roles.some(function (r) { return r.code === c; }); });
+  if (gone.length) throw new Error('ลบตำแหน่งที่ยังมีสมาชิกอยู่ไม่ได้: ' + gone.map(function (c) { return c + ' (' + counts[c] + ' คน)'; }).join(', ') +
+    ' — เปลี่ยนตำแหน่งของสมาชิกเหล่านั้นที่หน้าจัดการสมาชิกก่อน');
+  configPut_('roles', { roles: roles }, admin.username);
+  return { roles: roles, counts: counts, fixed: FIXED_ROLES.slice(), message: 'บันทึกตำแหน่งแล้ว (' + roles.length + ' ตำแหน่ง)' };
+};
+
+/** The positions in order: [{code, label, chat}] from the Config sheet, or ROLE_DEFAULTS until an admin saves. */
+function rolesConfig_() {
+  var c = configGet_('roles');
+  if (c && Array.isArray(c.roles) && c.roles.length) {
+    return c.roles.filter(function (r) { return r && r.code; }).map(function (r) {
+      return { code: String(r.code), label: String(r.label || r.code), chat: r.chat === true };
+    });
+  }
+  return JSON.parse(JSON.stringify(ROLE_DEFAULTS));
+}
+function roleCodes_() { return rolesConfig_().map(function (r) { return r.code; }); }
+function chatRoleCodes_() { return rolesConfig_().filter(function (r) { return r.chat; }).map(function (r) { return r.code; }); }
+
+/** How many members (any status) hold each position. */
+function roleCounts_() {
+  var out = {};
+  allUsers_().forEach(function (u) { var r = String(u.role || ''); if (r) out[r] = (out[r] || 0) + 1; });
+  return out;
+}
+
+/** One row of the Config sheet by key: the parsed json, or null. */
+function configGet_(key) {
+  var rows = sheet_('Config', CONFIG_HEADERS).getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === key) { try { return JSON.parse(rows[i][1]); } catch (e) { return null; } }
+  }
+  return null;
+}
+
+function configPut_(key, value, by) {
+  var sh = sheet_('Config', CONFIG_HEADERS), rows = sh.getDataRange().getValues();
+  var values = [key, JSON.stringify(value), new Date(), by || ''];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === key) { sh.getRange(i + 1, 1, 1, values.length).setValues([values]); return; }
+  }
+  sh.appendRow(values);
 }
 
 /* ---------------- สถานะของสมาชิก (อยู่ / ลา / ประชุม …) และสถานที่ (เครื่อง) ----------------
@@ -1123,11 +1218,11 @@ function isForUser_(msg, u) {
 function cleanTargets_(list) {
   var users = {};
   allUsers_().forEach(function (u) { if (u.status === 'active') users[u.username] = u; });
-  var to = [], names = {};
+  var to = [], names = {}, chatRoles = chatRoleCodes_();
   (Array.isArray(list) ? list : []).forEach(function (t) {
     t = String(t);
     if (to.indexOf(t) !== -1) return;
-    if (t === 'ALL' || CHAT_ROLES.indexOf(t) !== -1) to.push(t);
+    if (t === 'ALL' || chatRoles.indexOf(t) !== -1) to.push(t);
     else if (t.indexOf('u:') === 0 && users[t.slice(2)]) {
       var u = users[t.slice(2)];
       to.push(t);
