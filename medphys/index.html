@@ -1069,6 +1069,33 @@ div.c-main,div.lrow{cursor:default}
 .tab .n{margin-left:6px;font:12px var(--mono);color:var(--faint)}
 .grow{flex:1 1 180px;min-width:0}
 .tab-q{flex:0 1 230px;min-width:150px}
+/* 17 พ.ย.: HDR Activity หลังช่องค้นหา HN (แถบนัดคิวใส่แร่) */
+.hdr-act{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);min-width:0}
+.hdr-act[hidden]{display:none}
+.hdr-t{font-weight:700;font-size:13px;white-space:nowrap}
+.hdr-calc{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accent)}
+.hdr-act input,.hdr-act select{min-height:32px;padding:3px 8px;width:auto}
+.hdr-act input[type=number]{width:8.5em}
+.hdr-diff{font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hdr-diff.ok{color:var(--ok);font-weight:600}
+.hdr-diff.bad{color:var(--late);font-weight:600}
+.hdr-err{color:var(--late);font-size:12.5px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 17 พ.ย.: TDF Dose Calculator (แถบย่อยของ Planning) */
+.tdf-hn{flex:0 1 260px;min-width:180px}
+.tdf-pt{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 220px}
+.tdf-chip{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;padding:3px 4px 3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--accent-soft)}
+.tdf-chip .icon-btn{min-height:26px;min-width:26px;flex:none}
+.tdf-who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:600px){.tdf-hn,.tdf-pt{flex:1 1 100%}}
+.tdf-sugs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;font-size:13px}
+.tdf-sugs:empty{display:none}
+.tdf-sug{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:2px 10px;font:inherit;cursor:pointer}
+.tdf-sug:hover{background:var(--hover)}
+.tdf-sug.on{border-color:var(--accent);background:var(--accent-soft)}
+#tdf-open{text-decoration:none;color:var(--fg)}
+#tdf-open[hidden]{display:none}
+.tdf-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+#tdf-frame{display:block;width:100%;height:calc(100vh - 200px);min-height:620px;border:0;background:var(--surface)}
 .tab-q.on{border-color:var(--accent);background:var(--accent-soft)}
 @media (max-width:600px){.tab-q{flex:1 1 100%}}
 .spacer{flex:1}
@@ -2542,6 +2569,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <button type="button" data-view="logs">RC และกิจกรรม</button>
         <button type="button" data-view="p4p">สรุป P4P</button>
         <button type="button" data-view="mpleave">วันลา</button>
+        <button type="button" data-view="tdfcalc">TDF Dose Calculator</button>
         <button type="button" data-view="rojobs">RO Jobs (แพทย์)</button>
         <button type="button" data-view="jobs">RTT/RA Jobs</button>
         <button type="button" data-view="settings">ตั้งค่า</button>
@@ -2675,6 +2703,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     <div class="toolbar">
       <div class="cal-opts bq-views" role="group" aria-label="มุมมอง"><button type="button" data-bqv="queue" aria-pressed="true">ตารางนัดคิว</button><button type="button" data-bqv="dash" aria-pressed="false">แดชบอร์ด</button></div>
       <input type="search" class="tab-q" data-tq="bq" placeholder="ค้นหาผู้ป่วย: HN หรือชื่อ (ดูวันนัดทุกคอร์ส)" autocomplete="off" aria-label="ค้นหาผู้ป่วยในแถบนี้">
+      <div class="hdr-act" id="hdr-act" role="group" aria-label="HDR Activity" hidden></div>
       <span class="spacer"></span>
       <button type="button" class="btn primary" id="bq-add" hidden>+ ลงนัดใส่แร่</button>
     </div>
@@ -2900,6 +2929,17 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   <section id="view-mpleave" hidden>
     <div class="toolbar"><div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div><span class="spacer"></span><button type="button" class="btn primary" data-lvnew="mp" hidden>+ เพิ่มวันลา</button></div>
     <div id="mpleave-body"></div>
+  </section>
+  <!-- Planning → TDF Dose Calculator (17 พ.ย.): เว็บ TDF เดิมทั้งหน้าในกรอบ (คำนวณ บันทึก Recheck PDF ในเว็บนั้น) · เลือกผู้ป่วยจากระบบนี้ -->
+  <section id="view-tdfcalc" hidden>
+    <div class="toolbar tdf-bar">
+      <div class="combo tdf-hn"><input id="tdf-hn" inputmode="numeric" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tdf-hn-list" placeholder="เลือกผู้ป่วย: HN หรือชื่อ" aria-label="เลือกผู้ป่วย: HN หรือชื่อ"><ul class="combo-list" id="tdf-hn-list" role="listbox" hidden></ul></div>
+      <div class="tdf-pt" id="tdf-pt"></div>
+      <span class="spacer"></span>
+      <a class="btn sm" id="tdf-open" target="_blank" rel="noopener" hidden>เปิดในแท็บใหม่ ↗</a>
+    </div>
+    <div class="tdf-sugs" id="tdf-sugs"></div>
+    <div id="tdf-body"></div>
   </section>
   <!-- RO Jobs (แพทย์): P4P (กำลังทำ) · วันลาแพทย์ (เชื่อมกับแถบแจกงานแพทย์) -->
   <section id="view-rojobs" hidden>
@@ -3904,6 +3944,7 @@ const ctOn = () => serverHas(CT_API);
 const MEMBER_EMAIL_API = 33;   // Code.gs ที่ส่งอีเมลของสมาชิก LPCH มากับรายชื่อ (lpchMembers)
 const BRACHY_API = 34;   // Code.gs ที่ดึงสถิติ Brachytherapy จากชีตของระบบนัด (brachyCheck, brachyPull, brachyTick)
 const TDF_API = 35;   // Code.gs ที่ดึง RC จาก TDF Dose Calculator (tdfCheck, tdfPull)
+const HDR_API = 82;   // Code.gs ที่อ่าน/บันทึก HDR Activity ในชีตของเว็บนั้น (hdrGet, hdrAdd)
 const APPT_API = 36;   // Code.gs ที่มีแถบลงนัด (apptSave, apptRemove, apptMark) และลง CT-SIM จากนัด (ctSave apptFrom)
 const apptOn = () => serverHas(APPT_API);
 // แถบลงนัด: ช่องในฟอร์ม [คีย์, ชื่อ, ค่าเริ่มต้น, บังคับได้ไหม] (ตั้งค่า → ลงนัด) · HN และวันนัด CT-Sim บังคับเสมอ
@@ -4079,6 +4120,16 @@ function flowNorm(v) {
   const view = FLOW_VIEWS.some(v => v[0] === src.view) ? src.view : 'F';
   if (!Object.values(views).some(Boolean)) views[view] = true;   // ปิดหมด = เปิดแบบเริ่มต้นไว้
   return { cols, doneDays: src.doneDays !== '' && src.doneDays != null && Number.isFinite(dd) ? Math.max(0, Math.min(60, dd)) : 7, views, view };
+}
+// 17 พ.ย.: HDR Activity (ตั้งค่า → นัดคิวใส่แร่): ช่องกรอกหลังช่องค้นหา HN · บันทึกในชีตของเว็บ HDR Activity · tol = เกณฑ์ %Diff (±)
+function hdrNorm(v) {
+  const x = v && typeof v === 'object' ? v : {}, t = +x.tol;
+  return { on: !!x.on, url: str(x.url).trim().slice(0, 500), sheet: str(x.sheet).trim().slice(0, 60), tol: x.tol !== '' && x.tol != null && t > 0 && t <= 20 ? t : 1 };
+}
+// 17 พ.ย.: ลิงก์ /exec ของเว็บ TDF Dose Calculator (Apps Script) · ตัด ?sso= และพารามิเตอร์อื่นทิ้ง · ไม่ใช่ลิงก์ของ Apps Script = ''
+function tdfAppUrl(v) {
+  const m = /^https:\/\/script\.google\.com\/(?:a\/[\w.-]+\/)?macros\/s\/[\w-]{20,}\/(?:exec|dev)(?=$|[?#])/.exec(str(v).trim());
+  return m ? m[0] : '';
 }
 // 16 พ.ย.: ลำดับไอคอนหน้าแถบเมนู (ตั้งค่า → ระบบ → ไอคอนบนแถบเมนู) · ค่าเริ่มต้น ปฏิทินแผนก และ RT Workflow อยู่หน้าแถบลงทะเบียน
 const ICONS = [['home', 'Home (กลับหน้าหลัก RO Workspace)', '#home-slot'], ['search', 'ค้นหาเคส', '#search-btn'], ['look', 'ขนาดตัวอักษรและสี (Aa)', '#look-btn'], ['theme', 'โหมดกลางวัน / กลางคืน', '#theme-btn'],
@@ -4318,12 +4369,12 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['reg', 'dq', 'consult', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'rojobs', 'jobs', 'deptcal', 'flow', 'settings'];
-const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p', 'mpleave'];
+const VIEWS = ['reg', 'dq', 'consult', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'rojobs', 'jobs', 'deptcal', 'flow', 'settings'];
+const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p', 'mpleave', 'tdfcalc'];
 // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: อยู่ใต้แถบเดียวกับแถบนี้ (เช่น วันลา MP อยู่ใต้ Planning เหมือนตารางแจกเคส)
-const NAV_PARENT_LIKE = { mpleave: 'queue' };   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
-const VIEW_LABEL = { deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'Consult', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course' };   // RT Workflow (ข้อมูลผู้ป่วย) = เท่าแถบห้องฉาย   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
+const NAV_PARENT_LIKE = { mpleave: 'queue', tdfcalc: 'queue' };   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
+const VIEW_LABEL = { deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', tdfcalc: 'TDF Dose Calculator', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'Consult', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend' };   // TDF (17 พ.ย.) = เห็นเท่าแถบงานรอ (Planning) · RT Workflow (ข้อมูลผู้ป่วย) = เท่าแถบห้องฉาย   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
 // ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
@@ -4428,7 +4479,7 @@ const CFG_TABS = {
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard'],
-  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow'],
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp'],
   form: ['formRules'],
   cols: ['cols'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'icons'],
@@ -4806,7 +4857,8 @@ function mergeConfig(c) {
     signRoles: Array.isArray(bq.signRoles) ? [...new Set(bq.signRoles.map(str).filter(Boolean))] : d.bq.signRoles.slice(), signUsers: Array.isArray(bq.signUsers) ? [...new Set(bq.signUsers.map(x => str(x).toLowerCase()).filter(Boolean))] : [],
     docShow: ['chip', 'name', 'both'].includes(bq.docShow) ? bq.docShow : d.bq.docShow, rtt: str(bq.rtt).replace(/\s+/g, ' ').trim().slice(0, 60),
     hold: bq.hold === 'off' || /^[\w-]{1,40}$/.test(str(bq.hold)) ? str(bq.hold) : d.bq.hold,
-    btn: Object.fromEntries(Object.keys(d.bq.btn).map(k => { const v = bq.btn && typeof bq.btn === 'object' ? bq.btn[k] : null; return [k, Array.isArray(v) ? [...new Set(v.map(str).filter(Boolean))] : d.bq.btn[k].slice()]; })) };
+    btn: Object.fromEntries(Object.keys(d.bq.btn).map(k => { const v = bq.btn && typeof bq.btn === 'object' ? bq.btn[k] : null; return [k, Array.isArray(v) ? [...new Set(v.map(str).filter(Boolean))] : d.bq.btn[k].slice()]; })), hdr: hdrNorm(bq.hdr) };
+  out.tdfApp = { url: tdfAppUrl(c.tdfApp && c.tdfApp.url) };   // 17 พ.ย.: ลิงก์ /exec ของเว็บ TDF (แถบย่อยของ Planning)
   const jb = c.jobs && typeof c.jobs === 'object' ? c.jobs : {}, jnum = (v, dv) => (v === '' || v == null || !isFinite(+v) ? dv : +v);
   const jprof = k => { const x = jb[k] && typeof jb[k] === 'object' ? jb[k] : {}, dv = d.jobs[k]; return { title: str(x.title).slice(0, 80) || dv.title, guar: jnum(x.guar, dv.guar), rate: jnum(x.rate, dv.rate), group: str(x.group).slice(0, 20) || dv.group }; };
   const jmap = (v, dv) => Object.fromEntries(Object.entries(v && typeof v === 'object' && !Array.isArray(v) ? v : dv).filter(([, t]) => ['2D', '3D', 'IMRT', 'SBRT', 'VMAT', '-', ''].includes(t)));
@@ -4946,7 +4998,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-16.5';
+const PAGE_VERSION = '2026-11-17.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5027,6 +5079,8 @@ const sheetStore = {
   brachyPull: force => call('brachyPull', !!force),
   tdfCheck: set => call('tdfCheck', set),
   tdfPull: force => call('tdfPull', !!force),
+  hdrGet: set => call('hdrGet', set || null),
+  hdrAdd: (date, planning, mp) => call('hdrAdd', date, planning, mp),
   regDriveCheck: set => call('regDriveCheck', set),
   regDrivePull: force => call('regDrivePull', !!force),
   regFind: q => call('regFind', q),
@@ -5237,6 +5291,14 @@ function localStore() {
     brachyPull: async () => null,
     tdfCheck: async () => { throw new Error('ดึงจาก TDF Dose Calculator ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     tdfPull: async () => null,
+    hdrGet: async () => demoHdr(),
+    hdrAdd: async (date, planning, mp) => {
+      const v = +planning;
+      if (!isDay(date)) throw new Error('วันที่ไม่ถูกต้อง');
+      if (!(v > 0)) throw new Error('ค่า Planning ไม่ถูกต้อง');
+      pref.set('demoHdr', [...pref.get('demoHdr', []), { date, planning: v, mp: str(mp) }].slice(-60));
+      return demoHdr();
+    },
     regDriveCheck: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     regDrivePull: async () => { throw new Error('ดึงจาก Google Drive ใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
     spqCheck: async () => { throw new Error('นำเข้าจากระบบนัดคิวเทคนิคพิเศษใช้ได้เมื่อเชื่อมกับ Google Sheet ผ่าน Code.gs'); },
@@ -6479,6 +6541,7 @@ function render() {
   else if (state.view === 'rojobs') renderRoJobs();
   else if (state.view === 'deptcal') renderDeptCal();
   else if (state.view === 'flow') renderFlow();
+  else if (state.view === 'tdfcalc') renderTdf();
   else renderSettings();
 }
 
@@ -8390,6 +8453,7 @@ $('#dq-who').addEventListener('change', () => dqWarn());
 $('#dq-hn').addEventListener('input', dqDupCheck);
 $('#dq-hn').addEventListener('change', dqDupCheck);
 setupRegCombo('dq', (r, f) => { ptFill('dq', r, f); dqDupCheck(); });
+setupRegCombo('tdf', r => tdfPick(r));   // 17 พ.ย.: แถบ TDF Dose Calculator
 
 /* ---------- วันลาแพทย์ ---------- */
 const dqlDlg = $('#dql-dlg'), dqlForm = $('#dql-form');
@@ -9413,11 +9477,135 @@ function renderBq() {
   if (edit && !bqRttOn()) $('#bq-rtt-why').textContent = bqRttOld();
   $('#bq-link-btn').hidden = !state.user.isAdmin;
   syncTabQ('bq');
+  renderHdr();
   $$('[data-bqv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bqv === state.bqView)));
   const words = tabWords('bq');
   $('#bq-body').innerHTML = state.bqPt ? bqPatientHtml(state.bqPt) : words.length ? bqFindHtml(words) : state.bqView === 'dash' ? bqDashHtml(edit) : bqQueueHtml(edit);
   const box = $('#bq-body .bq-svg'), w = box ? Math.round(box.clientWidth) : 0;   // กราฟกว้างเท่าที่มีจริง (ตัวหนังสือไม่ถูกขยาย)
   if (w >= 280 && Math.abs(w - state.bqW) > 2) { state.bqW = w; renderBq(); }
+}
+// 17 พ.ย.: HDR Activity หลังช่องค้นหา HN · ค่าที่คำนวณตามเว็บ HDR Activity เดิม: A = A0 · e^(−0.693/T½ · t), t = จำนวนวันจาก Acceptance date (ปัดเป็นวัน)
+// %Diff = (Planning − Calculation) ÷ Planning × 100 · บันทึก = เพิ่มแถว (วันที่ · Planning · MP) ในชีตของเว็บนั้น ผ่าน Code.gs · ดูอย่างเดียว = เห็นค่าที่คำนวณ
+const hdrCfg = () => (state.config.bq && state.config.bq.hdr) || hdrNorm(null);
+const hdrOn = () => hdrCfg().on && !!accessOf('bq') && (store.mode === 'local' || (serverHas(HDR_API) && !!hdrCfg().url));
+const hdr = { data: null, busy: false, err: '', key: '', sig: '', saving: false, form: { date: '', plan: '', mp: '' } };
+const hdrDay = v => { const [y, m, d] = str(v).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+function hdrCalc(s, day) {
+  if (!s || !isDay(day) || !isDay(s.refDate) || !(s.a0 > 0) || !(s.halfLife > 0)) return null;
+  const t = Math.round((hdrDay(day) - hdrDay(s.refDate)) / 864e5);
+  return s.a0 * Math.pow(s.e > 0 ? s.e : Math.E, -(0.693 / s.halfLife) * t);
+}
+const hdrPct = x => `${x > 0 ? '+' : ''}${x.toFixed(2)}%`;
+// โหมดตัวอย่าง: แหล่งรังสีสมมุติ · รายชื่อ MP = รหัสนักฟิสิกส์ในตั้งค่า
+function demoHdr() {
+  const source = { serial: 'DEMO-01', isotope: 'Ir-192', refDate: plusDays(today(), -40), a0: 370, halfLife: 73.83, e: Math.E };
+  const records = pref.get('demoHdr', []).filter(r => r && isDay(r.date) && +r.planning > 0).map(r => { const c = hdrCalc(source, r.date); return { date: r.date, calc: c, planning: +r.planning, diff: c == null ? null : (r.planning - c) / r.planning * 100, mp: str(r.mp) }; });
+  return { title: 'ตัวอย่าง', tab: 'Record', rows: records.length, source, mpList: state.config.staff.map(x => str(x.code)).filter(Boolean).slice(0, 10), records };
+}
+const hdrSrcText = s => (s ? `Source ${s.serial || '—'}${s.isotope ? ` (${s.isotope})` : ''} · A0 ${s.a0 == null ? '—' : s.a0} GBq · ${s.refDate ? fmtDay(s.refDate) : '—'} · T½ ${s.halfLife == null ? '—' : s.halfLife} วัน` : '');
+async function hdrLoad() {
+  hdr.busy = true; hdr.err = '';
+  try {
+    hdr.data = await store.hdrGet(null);
+    if (hdr.form.mp && !(hdr.data.mpList || []).includes(hdr.form.mp)) hdr.form.mp = '';
+  } catch (e) { hdr.err = errMsg(e); hdr.data = null; }
+  finally { hdr.busy = false; if (state.view === 'bq') renderHdr(); }
+}
+function hdrHtml(edit) {
+  const d = hdr.data, f = hdr.form;
+  if (!d) return hdr.err ? `<span class="hdr-t">HDR Activity</span><span class="hdr-err" title="${esc(hdr.err)}">โหลดไม่ได้: ${esc(hdr.err)}</span><button type="button" class="btn ghost sm" data-hdrretry>ลองใหม่</button>`
+    : '<span class="hdr-t">HDR Activity</span><span class="muted">กำลังโหลด…</span>';
+  const src = hdrSrcText(d.source);
+  return `<span class="hdr-t" title="${esc(src)}">Activity</span>${edit ? `<input type="date" id="hdr-date" value="${esc(f.date)}" aria-label="วันที่">` : `<span class="muted">${esc(fmtDay(f.date))}</span>`}
+    <output class="hdr-calc" id="hdr-calc" title="${esc(src)}"></output>${edit ? `<input type="number" id="hdr-plan" step="any" min="0" inputmode="decimal" value="${esc(f.plan)}" placeholder="Planning (GBq)" aria-label="Planning (GBq)">
+    <select id="hdr-mp" aria-label="MP">${['', ...(d.mpList || [])].map(m => `<option value="${esc(m)}"${m === f.mp ? ' selected' : ''}>${m ? esc(m) : 'MP —'}</option>`).join('')}</select>
+    <span class="hdr-diff" id="hdr-diff"></span><button type="button" class="btn primary sm" id="hdr-save"${hdr.saving ? ' disabled' : ''}>${hdr.saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>` : ''}`;
+}
+// ค่าที่คำนวณ และ %Diff (แก้เฉพาะตัวเลข ไม่วาดช่องกรอกใหม่ระหว่างพิมพ์)
+function hdrOut() {
+  const d = hdr.data, f = hdr.form, out = $('#hdr-calc');
+  if (!d || !out) return;
+  const c = hdrCalc(d.source, f.date), tol = hdrCfg().tol, dif = $('#hdr-diff');
+  out.textContent = c == null ? '— GBq' : `${c.toFixed(4)} GBq`;
+  if (!dif) return;
+  const p = parseFloat(f.plan), had = (d.records || []).filter(r => r.date === f.date);
+  if (c != null && p > 0) {
+    const x = (p - c) / p * 100, ok = Math.abs(x) <= tol;
+    dif.className = 'hdr-diff ' + (ok ? 'ok' : 'bad');
+    dif.textContent = `%Diff ${hdrPct(x)} ${ok ? '✓ ผ่านเกณฑ์' : '▲ เกินเกณฑ์'}`;
+    dif.title = `เกณฑ์ ±${tol}% · (Planning − Calculation) ÷ Planning × 100`;
+  } else if (had.length) {
+    const r = had[had.length - 1];
+    dif.className = 'hdr-diff muted';
+    dif.textContent = `บันทึกแล้ว${r.planning != null ? ` ${r.planning}` : ''}${r.mp ? ` · ${r.mp}` : ''}`;
+    dif.title = 'วันที่นี้มีในชีตของ HDR Activity แล้ว';
+  } else { dif.className = 'hdr-diff'; dif.textContent = ''; dif.title = ''; }
+}
+function renderHdr() {
+  const box = $('#hdr-act');
+  if (!box) return;
+  const on = hdrOn();
+  box.hidden = !on;
+  if (!on) return;
+  const sig = JSON.stringify(hdrCfg());
+  if (sig !== hdr.sig) { hdr.sig = sig; hdr.data = null; hdr.err = ''; }   // แอดมินเปลี่ยนลิงก์/แท็บ = โหลดใหม่
+  if (!hdr.form.date) hdr.form = { date: today(), plan: '', mp: str(pref.get('hdrMp', '')) };
+  if (!hdr.data && !hdr.busy && !hdr.err) hdrLoad();
+  const edit = accessOf('bq') === 'edit';
+  const key = [edit, !!hdr.data, hdr.err, hdr.busy, hdr.saving, ((hdr.data || {}).mpList || []).join(',')].join('|');
+  if (key !== hdr.key) { hdr.key = key; box.innerHTML = hdrHtml(edit); }
+  hdrOut();
+}
+async function hdrSave() {
+  const f = hdr.form, p = parseFloat(f.plan);
+  if (hdr.saving || !hdr.data) return;
+  if (accessOf('bq') !== 'edit') return toast('ตำแหน่งนี้ดู HDR Activity ได้อย่างเดียว', { err: true });
+  if (!isDay(f.date) || !(p > 0)) { toast('กรอกวันที่และค่า Planning (GBq) ก่อนบันทึก', { err: true }); const i = $('#hdr-plan'); if (i) i.focus(); return; }
+  const c = hdrCalc(hdr.data.source, f.date), x = c == null ? null : (p - c) / p * 100;
+  hdr.saving = true; renderHdr();
+  try {
+    hdr.data = await store.hdrAdd(f.date, p, f.mp);
+    hdr.form.plan = '';
+    toast(`บันทึก HDR Activity แล้ว · ${fmtDay(f.date)} · Planning ${p} GBq${x == null ? '' : ` · %Diff ${hdrPct(x)}${Math.abs(x) > hdrCfg().tol ? ' (เกินเกณฑ์)' : ''}`}`);
+  } catch (e) { toast('บันทึก HDR Activity ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { hdr.saving = false; hdr.key = ''; if (state.view === 'bq') renderHdr(); }
+}
+{
+  const box = $('#hdr-act');
+  const edit = e => {
+    const t = e.target;
+    if (t.id === 'hdr-date') hdr.form.date = t.value;
+    else if (t.id === 'hdr-plan') hdr.form.plan = t.value;
+    else if (t.id === 'hdr-mp') { hdr.form.mp = t.value; pref.set('hdrMp', t.value); }
+    else return;
+    hdrOut();
+  };
+  box.addEventListener('input', edit);
+  box.addEventListener('change', edit);
+  box.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'hdr-plan') { e.preventDefault(); hdrSave(); } });
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'hdr-save') hdrSave();
+    else if (b.hasAttribute('data-hdrretry')) { hdr.err = ''; hdr.key = ''; renderHdr(); }
+  });
+}
+// ตั้งค่า: ตรวจชีตของ HDR Activity ด้วยค่าที่กำลังตั้ง (แอดมิน)
+let hdrChk = null;
+function hdrChkHtml() {
+  if (!hdrChk) return '';
+  if (hdrChk.err) return `<span class="acct-warn">${esc(hdrChk.err)}</span>`;
+  const s = hdrChk.source || {}, recs = hdrChk.records || [], last = recs[recs.length - 1], c = hdrCalc(s, today());
+  const miss = !isDay(s.refDate) || !(s.a0 > 0) || !(s.halfLife > 0);
+  return `พบชีต <b>${esc(hdrChk.title)}</b> แท็บ ${esc(hdrChk.tab)} · ${esc(hdrSrcText(s))} · MP: ${esc((hdrChk.mpList || []).join(', ') || '—')} · ${hdrChk.rows} แถว${last ? ` ล่าสุด ${esc(fmtDay(last.date))}` : ''}`
+    + (miss ? ' · <span class="acct-warn">ค่า Source ในเซลล์ K2:K5 ไม่ครบ (Acceptance date, A0, T½) คำนวณไม่ได้</span>' : ` · Activity วันนี้ <b>${c.toFixed(4)} GBq</b>`);
+}
+async function hdrCheck(btn) {
+  btn.disabled = true;
+  try { hdrChk = await store.hdrGet({ ...draft.bq.hdr }); } catch (e) { hdrChk = { err: errMsg(e) }; }
+  finally { btn.disabled = false; }
+  const el = $('#hdr-chk');
+  if (el) el.innerHTML = hdrChkHtml();
 }
 // แถวในตาราง: คิว (นับเฉพาะนัดที่ไม่ยกเลิกของวันนั้น) HN ชื่อ แพทย์ รูปแบบการใส่ Fx หมายเหตุ สถานะ MP RC มาแล้ว · กดแถว = แก้ไข
 const BQ_HEAD = '<thead><tr><th>คิว</th><th>HN</th><th>ชื่อ-สกุล</th><th title="ห้องฉายรังสีภายนอกของผู้ป่วย">ห้องฉาย</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th title="ตรวจสอบนัดแล้ว (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)">ตรวจสอบ</th><th>RTT</th><th>CT</th><th>US</th><th>MP</th><th>RC</th><th></th></tr></thead>';
@@ -14827,6 +15015,16 @@ function renderSettings() {
       <p class="muted def-note" style="margin:0 0 10px">ไม่ติ๊กเลย = ทุกตำแหน่งที่บันทึกในแถบนี้ได้ (ตั้งค่า → แถบเมนู) · ตรวจสอบแล้ว: ตำแหน่งที่ติ๊กกดได้แม้ดูแถบนี้ได้อย่างเดียว · ใช้กับช่องเดียวกันในหน้าแก้ไขนัดด้วย · แอดมินกดได้ทุกปุ่ม · Code.gs ตรวจซ้ำตอนบันทึก (รุ่น 2026-11-12.2 ขึ้นไป)</p>
       <div class="table-wrap set-table"><table class="bqbtn-t"><thead><tr><th style="text-align:left">ปุ่ม</th>${[...new Set([...d.roles, ...Object.values(d.bq.btn).flat()])].map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${BQ_BTNS.map(([k, l, sub]) => `<tr><td style="text-align:left">${esc(l)}${sub ? `<small class="muted" style="display:block">${esc(sub)}</small>` : ''}</td>${[...new Set([...d.roles, ...Object.values(d.bq.btn).flat()])].map(r => `<td><input type="checkbox" data-bqbtn="${k}" value="${esc(r)}"${(d.bq.btn[k] || []).includes(r) ? ' checked' : ''} aria-label="${esc(`${l}: ${r}`)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <p class="muted def-note" style="margin:6px 0 12px">ลงชื่อ MP / RC ตามสิทธิ์ของปุ่มด้านบน (ค่าเริ่มต้น MP, RTT (RTT ต้องใช้ Code.gs รุ่น 2026-11-04.2 ขึ้นไป) · ไม่มา = ไม่นับเคส ไม่นับคะแนน · รายชื่อ MP / RC = ทีมนักฟิสิกส์การแพทย์ที่ติ๊ก "ปฏิบัติงาน" (ตั้งค่า → ทีมนักฟิสิกส์การแพทย์)</p>
+      <h3 class="sub-h">HDR Activity (หลังช่องค้นหา HN)</h3>
+      <p class="muted def-note" style="margin:0 0 10px">ช่องกรอก วันที่ · Planning (GBq) · MP และค่า Activity ที่คำนวณ (A0 · e<sup>−0.693/T½ · t</sup>) แบบเว็บ HDR Activity เดิม · กดบันทึก = เพิ่มแถวในชีตของเว็บนั้น (แท็บ Record) เหมือนกดในเว็บเดิม · Source และรายชื่อ MP อ่านจากชีตนั้น · ตำแหน่งที่บันทึกในแถบนี้ได้เป็นผู้กรอก ตำแหน่งที่ดูอย่างเดียวเห็นเฉพาะค่าที่คำนวณ${store.mode === 'sheet' && !serverHas(HDR_API) ? ' · <b>ต้องอัปเดต Code.gs รุ่น 2026-11-17.1 ขึ้นไป</b>' : ''}</p>
+      <label class="check" style="margin-bottom:10px"><input type="checkbox" data-k="bq.hdr.on"${d.bq.hdr.on ? ' checked' : ''}> แสดง HDR Activity ในแถบ${esc(navLabel('bq'))}</label>
+      <div class="field" style="margin-bottom:10px"><span class="lbl">ลิงก์ Google Sheet ของเว็บ HDR Activity <span class="sub-lbl">ชีตที่เว็บนั้นเก็บข้อมูล (docs.google.com/spreadsheets/d/…) ไม่ใช่ลิงก์หน้าเว็บ · บัญชี Google ที่ Deploy ระบบนี้ต้องแก้ไขชีตนั้นได้</span></span>
+        <span class="br-url" style="display:flex;gap:8px"><input data-k="bq.hdr.url" value="${esc(d.bq.hdr.url)}" placeholder="docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false" aria-label="ลิงก์ Google Sheet ของเว็บ HDR Activity"><button type="button" class="btn ghost" data-hdrchk${store.mode === 'local' || !serverHas(HDR_API) || !state.user.isAdmin ? ' disabled' : ''}>ตรวจชีต</button></span></div>
+      <div class="form-grid" style="margin-bottom:6px">
+        <label class="field"><span class="lbl">แท็บ <span class="sub-lbl">ว่าง = Record</span></span><input data-k="bq.hdr.sheet" value="${esc(d.bq.hdr.sheet)}" placeholder="Record" maxlength="60" autocomplete="off"></label>
+        <label class="field"><span class="lbl">เกณฑ์ %Diff (±%) <span class="sub-lbl">เว็บเดิมใช้ ±1%</span></span><input type="number" min="0.1" max="20" step="0.1" data-k="bq.hdr.tol" value="${esc(d.bq.hdr.tol)}"></label>
+      </div>
+      <p class="br-preview" id="hdr-chk" style="margin:0 0 14px">${hdrChkHtml()}</p>
       <h3 class="sub-h">นำเข้านัดจากระบบนัดคิวใส่แร่เดิม</h3>
       <p class="muted def-note" style="margin:0 0 10px">อ่านชีตของระบบเดิมจากลิงก์ที่ ตั้งค่า → Brachytherapy จากระบบนัด (แท็บและคอลัมน์ตามที่ตรวจชีตไว้) · กด ตรวจก่อนนำเข้า (ยังไม่เขียนอะไร) ดูจำนวนนัดและคอลัมน์ แล้วกด นำเข้า · นำเข้าซ้ำได้ เพิ่มเฉพาะนัดที่ยังไม่มี · เฉพาะแอดมิน · นำเข้าแล้วเปลี่ยน ที่มาของนัด เป็นแถบนี้ แล้วเลิกใช้ระบบเดิม</p>
       ${store.mode === 'sheet' && !bqImpOn() ? '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>การนำเข้าต้องใช้ Code.gs รุ่น 2026-11-01.1 ขึ้นไป (ตรวจก่อนนำเข้า และอ่านคอลัมน์ เลขนัด, Fraction ที่, จำนวน Fraction ของระบบเดิม)</span></p>' : ''}
@@ -14964,6 +15162,10 @@ function renderSettings() {
         <div class="fw-set-views">${FLOW_VIEWS.map(([k, l, sub]) => `<label class="check"><input type="checkbox" data-k="flow.views.${k}"${d.flow.views[k] ? ' checked' : ''}> ${esc(l)} <span class="muted">· ${esc(sub)}</span></label>`).join('')}</div></div>
       <label class="field" style="margin-top:10px;max-width:340px"><span class="lbl">แบบเริ่มต้น <span class="sub-lbl">ผู้ใช้ที่ยังไม่เคยเลือก</span></span><select data-k="flow.view" aria-label="แบบเริ่มต้นของ RT Workflow">${FLOW_VIEWS.map(([k, l]) => opt(k, l, d.flow.view)).join('')}</select></label>
       <label class="field" style="margin-top:10px;max-width:340px"><span class="lbl">Complete: แสดงผู้ป่วยที่จบการฉายย้อนหลัง (วัน)</span><input type="number" min="0" max="60" step="1" data-k="flow.doneDays" value="${esc(d.flow.doneDays)}" aria-label="Complete แสดงย้อนหลังกี่วัน"></label></div>
+    <div class="sec" data-sec="tdfapp"><div class="sec-head"><h2>TDF Dose Calculator (แถบย่อยของ Planning)</h2><p>แถบ ${esc(navLabel('tdfcalc'))} เปิดเว็บ TDF Dose Calculator เดิมทั้งหน้า: คำนวณ บันทึก Recheck และ PDF อยู่ในเว็บนั้น (เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace ในกรอบ) · เลือกผู้ป่วยจากระบบนี้แล้วส่ง HN ชื่อ และแพทย์ให้เว็บ TDF กรอก · ตำแหน่งที่เห็นแถบนี้ตั้งที่ แถบเมนู</p></div>
+      <label class="field" style="max-width:640px"><span class="lbl">ลิงก์เว็บ TDF Dose Calculator <span class="sub-lbl">ลิงก์ /exec ของ Apps Script (script.google.com/macros/s/…/exec) · ตัด ?sso= และพารามิเตอร์อื่นออกเองตอนบันทึก</span></span><input data-k="tdfApp.url" value="${esc(d.tdfApp.url)}" placeholder="script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false" aria-label="ลิงก์เว็บ TDF Dose Calculator"></label>
+      ${d.tdfApp.url && !tdfAppUrl(d.tdfApp.url) ? '<p class="acct-warn" style="margin:6px 0 0">ลิงก์นี้ใช้ไม่ได้: ต้องเป็นลิงก์ https ของ script.google.com ที่ลงท้ายด้วย /exec</p>' : ''}
+    </div>
     ${adminSec}
     ${secSec(d)}
     <div class="sec"><div class="sec-head"><h2>ข้อมูล</h2></div>${dataSec}</div>
@@ -14978,12 +15180,12 @@ function renderSettings() {
 // หัวข้ออยู่หมวดไหนดูจากชื่อหัวข้อ · หัวข้อใหม่ที่ไม่ตรงหมวดไหน = ระบบ
 const SET_TABS = [['team', 'ทีมงาน'], ['case', 'แจกเคส'], ['p4p', 'P4P และกิจกรรม'], ['room', 'ห้องฉาย'], ['tabs', 'แถบงานอื่น'], ['form', 'ฟอร์ม'], ['cols', 'Column แสดงผล'], ['sys', 'ระบบ'], ['all', 'ทั้งหมด']];
 const SET_RULES = [['form', /^ค่าเริ่มต้นของฟอร์ม/], ['cols', /^Column แสดงผล/], ['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
-  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RT Workflow)/]];
+  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RT Workflow|TDF Dose Calculator)/]];
 let setQ = '';
 const secTab = sec => { if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; } return sec.dataset.stab; };
 const SUB_TABS = SET_TABS.filter(([k]) => k !== 'all');
 // ชื่อส่วนของการตั้งค่า (แสดงในคำขอของแอดมินรอง)
-const CFG_KEY_LABEL = { flow: 'RT Workflow', icons: 'ไอคอนบนแถบเมนู', dq: 'แจกงานแพทย์', staff: 'ทีมนักฟิสิกส์', doctors: 'แพทย์', crew: 'RTT, RA และบุคลากรอื่น', skips: 'หักคิวรายเดือน', manualFrom: 'นับเคสเลือกเองตั้งแต่', rate: 'แต้มมาตรฐาน', p4pGroup: 'กลุ่มที่ (P4P)',
+const CFG_KEY_LABEL = { flow: 'RT Workflow', tdfApp: 'TDF Dose Calculator', icons: 'ไอคอนบนแถบเมนู', dq: 'แจกงานแพทย์', staff: 'ทีมนักฟิสิกส์', doctors: 'แพทย์', crew: 'RTT, RA และบุคลากรอื่น', skips: 'หักคิวรายเดือน', manualFrom: 'นับเคสเลือกเองตั้งแต่', rate: 'แต้มมาตรฐาน', p4pGroup: 'กลุ่มที่ (P4P)',
   cats: 'เทคนิคและน้ำหนัก P4P', types: 'Type', aims: 'Aim', techniques: 'Technique', freqs: 'ความถี่', areas: 'บริเวณที่ฉาย', rooms: 'ห้องฉาย', fields: 'หัวข้อเพิ่มเติม', required: 'ช่องบังคับกรอก',
   defaults: 'ค่าเริ่มต้น', icdExtra: 'ICD-10 ที่เพิ่มเอง', qa: 'ค่า QA', qaSee: 'ตำแหน่งที่เห็นค่า QA', caseView: 'รายการเคส', positions: 'ตำแหน่งและแต้ม', guarantee: 'แต้มประกัน', acts: 'กิจกรรมนับครั้ง',
   brachySync: 'Brachytherapy จากระบบนัด', tdfSync: 'RC จาก TDF', ptags: 'รายละเอียดผู้ป่วย', mobility: 'สถานะผู้ป่วย', igrt: 'IGRT', qColors: 'สีคิว', queues: 'ช่วงคิวฉาย', fxTypes: 'สถานะ fraction',
@@ -17578,6 +17780,58 @@ function lvBody(kind) {
   const ym = state.month, can = lvCanAdd(kind), items = lvItems(kind, ym);
   return `<p class="muted lv-help">${esc(lvHelp[kind])}${can ? ' · กดวันในปฏิทินเพื่อเพิ่มวันลา · กดชื่อเพื่อดูหรือแก้' : ' · ดูได้อย่างเดียว'}</p>${lvCalHtml(kind, ym, items, can)}${lvSumHtml(kind, items)}`;
 }
+// 17 พ.ย.: TDF Dose Calculator (แถบย่อยใต้ Planning) · เปิดเว็บ TDF เดิมทั้งหน้าในกรอบ: คำนวณ บันทึก Recheck และ PDF อยู่ในเว็บนั้น (เข้าสู่ระบบ LPCH ในกรอบ)
+// เลือกผู้ป่วยจากระบบนี้ → ส่ง HN คำนำหน้า ชื่อ สกุล แพทย์ ไปกับลิงก์ (?hn=&prefix=&first=&last=&doctor=) ให้เว็บ TDF กรอก · ไม่ส่ง ?sso=
+const tdf = { pt: null, src: '' };
+const TDF_PREFIX = { 'น.ส.': 'นางสาว', 'นส.': 'นางสาว', 'ด.ช.': 'เด็กชาย', 'ด.ญ.': 'เด็กหญิง' };
+function tdfPtOf(r) {
+  const k = hnKey(r.hn), c = state.cases.filter(x => x.hn && hnKey(x.hn) === k).slice(-1)[0] || null;
+  const name = (str(r.name) || str(c && c.name)).replace(/\s+/g, ' ').trim(), i = name.indexOf(' '), t = str(r.title).trim();
+  const doc = str(r.doc) || str(c && c.doc);
+  return { hn: str(r.hn).trim(), prefix: TDF_PREFIX[t] || t, first: i > 0 ? name.slice(0, i) : name, last: i > 0 ? name.slice(i + 1) : '', doctor: docName(doc) || doc };
+}
+function tdfSrc(pt) {
+  const base = tdfAppUrl((state.config.tdfApp || {}).url);
+  if (!base) return '';
+  const q = pt ? [['hn', pt.hn], ['prefix', pt.prefix], ['first', pt.first], ['last', pt.last], ['doctor', pt.doctor]].filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&') : '';
+  return q ? base + '?' + q : base;
+}
+// ผู้ป่วยที่น่าจะคำนวณ: รอวางแผน (Planning, Evaluation, PSQA) และหยุดฉาย (Hold) จาก RT Workflow
+function tdfSuggest() {
+  let rows = [];
+  try { rows = flowData().filter(x => ['plan', 'eval', 'psqa', 'hold'].includes(x.col)); } catch (e) { rows = []; }
+  const seen = new Set();
+  return rows.filter(x => { const k = hnKey(x.hn); if (!k || seen.has(k)) return false; seen.add(k); return true; }).slice(0, 16);
+}
+function renderTdf() {
+  const base = tdfAppUrl((state.config.tdfApp || {}).url), pt = tdf.pt, body = $('#tdf-body'), open = $('#tdf-open');
+  open.hidden = !base;
+  if (base) open.href = tdfSrc(pt);
+  $('#tdf-pt').innerHTML = pt ? `<span class="tdf-chip"><span class="tdf-who"><b>${esc(pt.hn)}</b> ${esc([pt.prefix, pt.first, pt.last].filter(Boolean).join(' '))}${pt.doctor ? ` <span class="muted">· ${esc(pt.doctor)}</span>` : ''}</span><button type="button" class="icon-btn" data-tdfcopy title="คัดลอก HN" aria-label="คัดลอก HN">⧉</button><button type="button" class="icon-btn" data-tdfx title="ล้างผู้ป่วย" aria-label="ล้างผู้ป่วย">×</button></span>`
+    : '<span class="muted">เลือกผู้ป่วยแล้วเว็บ TDF กรอก HN ชื่อ และแพทย์ให้</span>';
+  const sug = tdfSuggest();
+  $('#tdf-sugs').innerHTML = sug.length ? `<span class="muted">Planning / Hold:</span>${sug.map(x => `<button type="button" class="tdf-sug${pt && hnKey(pt.hn) === hnKey(x.hn) ? ' on' : ''}" data-tdfpt="${esc(x.hn)}" title="${esc(x.tip || '')}"><b>${esc(x.hn)}</b> ${esc(x.name || '')}</button>`).join('')}` : '';
+  if (!base) {
+    tdf.src = '';
+    body.innerHTML = `<p class="notice"><b>ยังไม่ได้ตั้งลิงก์เว็บ TDF Dose Calculator</b><span>${state.user.isAdmin ? 'ตั้งค่า → แถบงานอื่น → TDF Dose Calculator: ใส่ลิงก์ /exec ของเว็บ TDF' : 'แจ้งแอดมินให้ใส่ลิงก์เว็บ TDF ที่ ตั้งค่า → แถบงานอื่น'}</span></p>`;
+    return;
+  }
+  let fr = $('#tdf-frame');
+  if (!fr) { body.innerHTML = '<div class="tdf-wrap"><iframe id="tdf-frame" title="TDF Dose Calculator" allow="clipboard-write"></iframe></div>'; fr = $('#tdf-frame'); }
+  const src = tdfSrc(pt);
+  if (tdf.src !== src) { tdf.src = src; fr.src = src; }
+}
+function tdfPick(r) {
+  if (!r || !str(r.hn).trim()) return;
+  tdf.pt = tdfPtOf(r);
+  const i = $('#tdf-hn');
+  if (i) i.value = '';
+  renderTdf();
+}
+async function tdfCopy() {
+  if (!tdf.pt) return;
+  try { await navigator.clipboard.writeText(tdf.pt.hn); toast('คัดลอก HN แล้ว'); } catch (e) { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้', { err: true }); }
+}
 function renderMpLeave() {
   $('[data-lvnew="mp"]').hidden = !lvCanAdd('mp');
   $('#mpleave-body').innerHTML = lvBody('mp');
@@ -17748,6 +18002,10 @@ document.addEventListener('click', e => {
     return;
   }
   const ds = t.dataset;
+  if ('hdrchk' in ds) return hdrCheck(t);
+  if (ds.tdfpt) return tdfPick(ptByHn(ds.tdfpt) || { hn: ds.tdfpt });
+  if ('tdfx' in ds) { tdf.pt = null; return renderTdf(); }
+  if ('tdfcopy' in ds) return tdfCopy();
   if (ds.appdf) return openCsoPreview(state.appt.find(x => x.id === ds.appdf));
   if (ds.jtab) { pref.set('jobsTab', ds.jtab); renderJobs(); return; }
   if (ds.dqdesk) { pref.set('dqDesk', ds.dqdesk); renderDq(); return; }

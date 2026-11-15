@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-16.1';
-const API_LEVEL = 81;   // 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.1';
+const API_LEVEL = 82;   // 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -547,7 +547,7 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course' };   // flow (16 พ.ย.): RT Workflow มีข้อมูลผู้ป่วย = เห็นเท่าแถบห้องฉายจนกว่าแอดมินจะตั้ง   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend' };   // flow (16 พ.ย.): RT Workflow มีข้อมูลผู้ป่วย = เห็นเท่าแถบห้องฉายจนกว่าแอดมินจะตั้ง   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
@@ -848,7 +848,7 @@ const CFG_TABS = {
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard'],
-  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow · tdfApp (17 พ.ย.): ลิงก์เว็บ TDF
   form: ['formRules'],   // 13 พ.ย.: ตั้งค่า → ฟอร์ม (ค่าเริ่มต้นของฟอร์มตามตัวเลือก)
   cols: ['cols'],        // 13 พ.ย.: ตั้งค่า → Column แสดงผล (ค่าเริ่มต้นของคอลัมน์)
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู
@@ -3521,6 +3521,74 @@ function extBook_(s, what) {
   }
 }
 const brachyBook_ = s => extBook_(s, 'ระบบนัด Brachytherapy');
+
+/* ---------- HDR Activity (17 พ.ย.): ช่องกรอกหลังช่องค้นหา HN ในแถบนัดคิวใส่แร่ · อ่าน/บันทึกในชีตของเว็บ HDR Activity ----------
+ * ตั้งค่า → นัดคิวใส่แร่ → HDR Activity (config.bq.hdr = { on, url, sheet, tol }) · ข้อมูลอยู่ที่ชีตของเว็บนั้นที่เดียว
+ * แท็บ Record: A วันที่ · C Calculation (สูตร) · D %Diff (สูตร) · E Planning · F MP · G t (สูตร) · J2 Serial · K2:K5 Isotope, Acceptance date, A0, T½ · K6 e
+ * บันทึกแบบ addRecord ของเว็บนั้น: แถวแรกที่คอลัมน์ A ว่าง · แถวนั้นยังไม่มีสูตร = คัดลอกสูตร C:D และ G จากแถวก่อนหน้า */
+const HDR_FIRST_ROW = 2;
+const hdrCfg_ = cfg => (cfg && cfg.bq && cfg.bq.hdr && typeof cfg.bq.hdr === 'object' ? cfg.bq.hdr : {});
+function hdrSheet_(s) {
+  s = s && typeof s === 'object' ? s : {};
+  const book = extBook_(s, 'HDR Activity'), name = String(s.sheet || '').trim() || 'Record', sh = book.getSheetByName(name);
+  if (!sh) throw new Error('ไม่พบแท็บ "' + name + '" ในชีตของ HDR Activity (' + book.getName() + ')');
+  return sh;
+}
+function hdrRead_(sh) {
+  const book = sh.getParent(), tz = book.getSpreadsheetTimeZone(), iso = d => Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
+  const last = sh.getLastRow(), rows = last >= HDR_FIRST_ROW ? sh.getRange(HDR_FIRST_ROW, 1, last - HDR_FIRST_ROW + 1, 6).getValues() : [];
+  const records = [];
+  rows.forEach(r => { if (r[0] instanceof Date) records.push({ date: iso(r[0]), calc: num(r[2]), diff: num(r[3]), planning: num(r[4]), mp: String(r[5] || '') }); });
+  const v = sh.getRange('J2:K6').getValues(), rule = sh.getRange('F2').getDataValidation();
+  let mpList = [];
+  if (rule && rule.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) mpList = (rule.getCriteriaValues()[0] || []).map(String).filter(String);
+  if (!mpList.length) records.forEach(r => { if (r.mp && mpList.indexOf(r.mp) < 0) mpList.push(r.mp); });   // ไม่มีรายการในเซลล์ F2 = MP ที่เคยบันทึก
+  return {
+    title: book.getName(), tab: sh.getName(), rows: records.length, mpList: mpList, records: records.slice(-60),
+    source: { serial: String(v[0][0] || ''), isotope: String(v[0][1] || ''), refDate: v[1][1] instanceof Date ? iso(v[1][1]) : '', a0: num(v[2][1]), halfLife: num(v[3][1]), e: num(v[4][1]) || Math.E },
+  };
+}
+/** หน้าเว็บ: Source, รายชื่อ MP, บันทึกล่าสุด 60 แถว · s = ค่าที่กำลังตั้ง (แอดมินกดตรวจชีต) · null = ตามที่บันทึกไว้ */
+function hdrGet(s, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (s && typeof s === 'object') {
+    if (!u.isAdmin) throw new Error('ตรวจชีตของ HDR Activity ได้เฉพาะแอดมิน');
+    return hdrRead_(hdrSheet_(s));
+  }
+  if (u.via !== 'google' && !userAccess_(cfg, 'bq', u)) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ไม่เห็นแถบนัดคิวใส่แร่');
+  const h = hdrCfg_(cfg);
+  if (!h.on) throw new Error('ยังไม่ได้เปิด HDR Activity (ตั้งค่า → นัดคิวใส่แร่)');
+  return hdrRead_(hdrSheet_(h));
+}
+/** บันทึก Planning ของวันนั้นลงชีตของเว็บ HDR Activity (ผู้ที่บันทึกในแถบนัดคิวใส่แร่ได้) · คืนข้อมูลล่าสุดแบบ hdrGet */
+function hdrAdd(dateIso, planning, mp, token) {
+  requireEdit_(token, ['bq']);
+  const h = hdrCfg_(readConfig_(ss_()) || {});
+  if (!h.on) throw new Error('ยังไม่ได้เปิด HDR Activity (ตั้งค่า → นัดคิวใส่แร่)');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateIso))) throw new Error('วันที่ไม่ถูกต้อง');
+  const value = Number(planning);
+  if (!isFinite(value) || value <= 0) throw new Error('ค่า Planning ไม่ถูกต้อง');
+  const sh = hdrSheet_(h), book = sh.getParent(), lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const maxRows = sh.getMaxRows(), n = maxRows - HDR_FIRST_ROW + 1, colA = n > 0 ? sh.getRange(HDR_FIRST_ROW, 1, n, 1).getValues() : [];
+    let row = -1;
+    for (let i = 0; i < colA.length; i++) if (colA[i][0] === '' || colA[i][0] === null) { row = HDR_FIRST_ROW + i; break; }
+    if (row < 0) { sh.insertRowAfter(maxRows); row = maxRows + 1; }
+    if (!sh.getRange(row, 3).getFormula() && row > HDR_FIRST_ROW) {   // แถวที่ยังไม่มีสูตร: คัดลอกสูตรจากแถวก่อนหน้า
+      sh.getRange(row - 1, 3, 1, 2).copyTo(sh.getRange(row, 3, 1, 2));
+      sh.getRange(row - 1, 7).copyTo(sh.getRange(row, 7));
+    }
+    sh.getRange(row, 1).setValue(Utilities.parseDate(String(dateIso), book.getSpreadsheetTimeZone(), 'yyyy-MM-dd'));
+    sh.getRange(row, 5).setValue(value);
+    sh.getRange(row, 6).setValue(String(mp || '').trim().slice(0, 40));
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  return hdrRead_(sh);
+}
 
 // หัวคอลัมน์ที่น่าจะเป็นแต่ละคีย์ · แท็บที่ตรงมากสุด (ต้องมี รหัสนัด วันที่ HN MP)
 function brachyGuess_(headers, keys) {
