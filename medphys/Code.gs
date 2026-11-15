@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-15.1';
-const API_LEVEL = 79;
+const CODE_VERSION = '2026-11-15.2';
+const API_LEVEL = 80;
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3239,7 +3239,7 @@ function dqLeaveSave(rec, token) {
   const u = dqLeaveUser_(token, doc);
   if (!isDate(from) || !isDate(to)) throw new Error('วันที่ลาไม่ถูกต้อง');
   if (to < from) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา');
-  const kind = rec.kind === 'long' ? 'long' : '', assign = kind ? dqCut_(rec.assign, 10) : '';
+  const kind = rec.kind === 'long' || rec.kind === 'off' ? rec.kind : '', assign = kind === 'long' ? dqCut_(rec.assign, 10) : '';   // API 80: off = วันไม่รับเคส (ไม่ใช่วันลา) · ไม่แจกเคส คิวเสียไปเหมือน long
   if (assign && (!isDate(assign) || assign <= from || assign > to)) throw new Error('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย');
   return withLock_(() => {
     const ss = ss_();
@@ -3302,8 +3302,8 @@ function dqPick_(o, trace) {
   const offDay = (c, d) => { const l = o.days && o.days[new Date(d + 'T00:00:00Z').getUTCDay()]; return Array.isArray(l) && l.indexOf(c) >= 0; };
   // ลาปกติ (และวันที่ไม่แจกตามวัน): แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา · ลายาว (kind = long): ไม่แจก คิวที่ถึงระหว่างนั้นเสียไป ไม่ชดเชย
   // ลายาว แจกงานตั้งแต่ (assign): รับเคสได้ตั้งแต่วันนั้น (ก่อนกลับมาได้) · ไม่ระบุ = หลังวันลาวันสุดท้าย
-  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.from <= d && d <= (l.to || l.from)));
-  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.kind === 'long' && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
+  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.kind !== 'off' && l.from <= d && d <= (l.to || l.from)));
+  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && (l.kind === 'long' || l.kind === 'off') && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
   const lim = Math.max(0, Math.floor(+o.payback) || 0);
   const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
   // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null

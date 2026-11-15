@@ -1222,6 +1222,11 @@ form.ro-form .dlg-body :disabled{cursor:default}
 .lv-it.nocase{border-color:var(--late);background:color-mix(in srgb,var(--late) 14%,var(--surface))}
 .lv-it.nocase small{color:var(--late);font-weight:600}
 .lv-offmode .dlg-head h2{color:var(--late)}
+.lv-it.lnc{border-color:var(--warn);background:var(--warn-soft)}
+.lv-it.lnc small{color:var(--warn);font-weight:600}
+.lv-type{display:inline-block;padding:1px 9px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;white-space:nowrap}
+.lv-type.lnc{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.lv-type.nocase{border-color:var(--late);color:var(--late);background:color-mix(in srgb,var(--late) 10%,var(--surface))}
 .dq-rep-bar{margin:6px 0 8px}
 .dq-rep .dq-rep-t th,.dq-rep .dq-rep-t td{text-align:center;padding:5px 9px}
 .dq-rep .dq-rep-t th.l,.dq-rep .dq-rep-t td.l{text-align:left}
@@ -4695,7 +4700,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-15.2';
+const PAGE_VERSION = '2026-11-15.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -5379,7 +5384,7 @@ function localStore() {
       if (!isDay(from) || !isDay(to)) throw new Error('วันที่ลาไม่ถูกต้อง');
       if (to < from) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา');
       if (!dqAllDocs().includes(doc)) throw new Error('ไม่พบรหัสแพทย์ ' + doc);
-      const kind = rec.kind === 'long' ? 'long' : '', assign = kind ? str(rec.assign) : '';
+      const kind = rec.kind === 'long' || rec.kind === 'off' ? rec.kind : '', assign = kind === 'long' ? str(rec.assign) : '';
       if (assign && (!isDay(assign) || assign <= from || assign > to)) throw new Error('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย');
       const take = rec.take === 'yes' ? 'yes' : '';
       const v = { id: str(rec.id) || uid(), doc, from, to, note: str(rec.note), by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '', kind, assign, take };
@@ -7765,28 +7770,38 @@ function normDql(o) {
   v.doc = v.doc.toUpperCase();
   v.from = dateStr(v.from);
   v.to = dateStr(v.to) || v.from;
-  v.kind = v.kind === 'long' ? 'long' : '';
+  v.kind = v.kind === 'long' || v.kind === 'off' ? v.kind : '';   // long = ลาไม่รับเคส · off = วันไม่รับเคส (ไม่ใช่วันลา) · ทั้งคู่: ไม่แจกเคส คิวเสียไป
   v.assign = v.kind ? dateStr(v.assign) : '';
   v.take = v.take === 'yes' ? 'yes' : '';   // yes = ลงวันลาไว้ แต่ยังรับเคส (ไม่นับในคิว) · ว่าง = ไม่รับเคส
   v.id = v.id || uid();
   return v;
 }
+// ประเภทของวันลาแพทย์ (15 พ.ย.): ลา (ยังรับเคส) · ลาไม่รับเคส · ไม่รับเคส (ไม่ใช่วันลา) · ลาแบบเดิมที่ลงก่อน 15 พ.ย. (คืนคิว)
+const DQL_OFF_API = 80;
+const dqlOffOn = () => store.mode !== 'sheet' || serverHas(DQL_OFF_API);
+const dqlType = l => (l.kind === 'off' ? 'off' : l.kind === 'long' ? 'lnc' : l.take === 'yes' ? 'leave' : 'old');
+const DQL_T = {
+  leave: { name: 'ลา', chip: 'ลา', cls: 'take', desc: 'ยังรับเคสตามปกติ' },
+  lnc: { name: 'ลาไม่รับเคส', chip: 'ลาไม่รับเคส', cls: 'lnc', desc: 'ไม่แจกเคส คิวที่ถึงเสียไป (ไม่คืนคิว)' },
+  off: { name: 'ไม่รับเคส', chip: 'ไม่รับเคส', cls: 'nocase', desc: 'ไม่ใช่วันลา · ไม่แจกเคส คิวที่ถึงเสียไป (ไม่คืนคิว)' },
+  old: { name: 'ลา (แบบเดิม)', chip: 'ลา·คืนคิว', cls: '', desc: 'ลงก่อน 15 พ.ย. 2569 · คนอื่นรับแทน แล้วคืนคิว' },
+};
 // ลายาว / ลาปกติ (Code.gs API 69 · รุ่นเก่า = ลาปกติอย่างเดียว ให้คิวในหน้าเว็บตรงกับที่ Code.gs แจก)
 const DQL_API = 69;
 const dqlKindOn = () => store.mode !== 'sheet' || serverHas(DQL_API);
 // สถานะของแพทย์วันนี้ (หลังชื่อ): ลายาว · ลา · ไม่แจกวันนี้ (ตามวัน) · เวร S1
 function dqDocStatus(c, d = today()) {
-  const all = state.dqLeave.filter(l => l.doc === c && l.from <= d && d <= (l.to || l.from)), lv = all.filter(l => l.take !== 'yes'), lg = lv.find(l => l.kind === 'long');
+  const all = state.dqLeave.filter(l => l.doc === c && l.from <= d && d <= (l.to || l.from)), lv = all.filter(l => l.take !== 'yes'), lg = lv.find(l => l.kind === 'long' || l.kind === 'off');
   if (!lv.length && all.length) return { t: `ลา${all[0].to > d ? ` ถึง ${fmtDay(all[0].to)}` : 'วันนี้'} · รับเคส`, k: 'take' };   // ลงวันลาไว้ แต่ยังรับเคส
-  if (lg && (!lg.assign || d < lg.assign)) return { t: `ไม่รับเคส ถึง ${fmtDay(lg.to)}${lg.assign ? ` · แจกงานตั้งแต่ ${fmtDay(lg.assign)}` : ''}`, k: 'long' };
-  if (lg) return { t: `ไม่รับเคส ถึง ${fmtDay(lg.to)} · รับเคสแล้ว`, k: 'back' };
+  if (lg && (!lg.assign || d < lg.assign)) return { t: `${DQL_T[dqlType(lg)].name} ถึง ${fmtDay(lg.to)}${lg.assign ? ` · แจกงานตั้งแต่ ${fmtDay(lg.assign)}` : ''}`, k: 'long' };
+  if (lg) return { t: `${DQL_T[dqlType(lg)].name} ถึง ${fmtDay(lg.to)} · รับเคสแล้ว`, k: 'back' };
   if (lv.length) return { t: `ลา${lv[0].to > d ? ` ถึง ${fmtDay(lv[0].to)}` : 'วันนี้'}`, k: 'leave' };
   if (dq2On() && dqDayOff(c, d)) return { t: 'ไม่แจกวันนี้', k: 'off' };
   if (dq2On() && dqS1(d) === c) return { t: 'เวร S1', k: 's1' };
   return null;
 }
 const dqStatusHtml = c => { const x = dqDocStatus(c); return x ? ` <span class="dq-st ${x.k}">${esc(x.t)}</span>` : ''; };
-const dqlKindText = l => (l.kind === 'long' ? `วันไม่รับเคส (คิวเสียไป)${l.assign ? ` · แจกงานตั้งแต่ ${fmtDay(l.assign)}` : ''}` : '');
+const dqlKindText = l => (l.kind === 'off' ? 'ไม่รับเคส (ไม่ใช่วันลา · คิวเสียไป)' : l.kind === 'long' ? `ลาไม่รับเคส (คิวเสียไป)${l.assign ? ` · แจกงานตั้งแต่ ${fmtDay(l.assign)}` : ''}` : '');
 const DQ_PAYBACK = [[1, '1 เคสต่อรอบ (ค่าเริ่มต้น)'], [2, '2 เคสต่อรอบ'], [0, 'คืนทั้งหมดทันที']];
 const DQ_HOW = { own: 'ตามคิว', cover: 'รับแทน', repay: 'คืนคิว', manual: 'เลือกเอง', early: 'นอกคิว', out: 'ไม่อยู่ในคิว', import: 'จากรายงาน HIS', emer: 'Emergency', owner: 'เจ้าของไข้เดิม' };
 // เจ้าของไข้เดิม (Code.gs API 70): แพทย์เดิมของผู้ป่วย ไม่รันคิว ไม่หักคิว
@@ -7821,8 +7836,8 @@ function dqPick(o, trace) {
   const offDay = (c, d) => { const l = o.days && o.days[new Date(d + 'T00:00:00Z').getUTCDay()]; return Array.isArray(l) && l.indexOf(c) >= 0; };
   // ลาปกติ (และวันที่ไม่แจกตามวัน): แพทย์คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา · ลายาว (kind = long): ไม่แจก คิวที่ถึงระหว่างนั้นเสียไป ไม่ชดเชย
   // ลายาว แจกงานตั้งแต่ (assign): รับเคสได้ตั้งแต่วันนั้น (ก่อนกลับมาได้) · ไม่ระบุ = หลังวันลาวันสุดท้าย
-  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.from <= d && d <= (l.to || l.from)));
-  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && l.kind === 'long' && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
+  const away = (c, d) => !!d && (offDay(c, d) || (o.leaves || []).some(l => l.doc === c && l.kind !== 'long' && l.kind !== 'off' && l.from <= d && d <= (l.to || l.from)));
+  const longOff = (c, d) => !!d && (o.leaves || []).some(l => l.doc === c && (l.kind === 'long' || l.kind === 'off') && l.from <= d && (l.assign ? d < l.assign : d <= (l.to || l.from)));
   const lim = Math.max(0, Math.floor(+o.payback) || 0);
   const copy = s => ({ pos: s.pos, credit: Object.assign({}, s.credit), owe: s.owe.slice(), paid: Object.assign({}, s.paid) });
   // หนึ่งเคสวันที่ d (แก้ s): { code, owner: เจ้าของคิว, kind: own | cover (รับแทนคนลา) | repay (คืนคิว), skipped: ข้ามเพราะหักคิว } · ไม่มีใครรับได้ = null
@@ -7976,7 +7991,7 @@ function dqWho(run) {
     : emer
     ? (s1 ? `<label class="dq-who-q"><input type="radio" name="dqwho" value="s1"${cur === 's1' ? ' checked' : ''}><span>เวร S1 · <b>${dqNm(s1)}</b></span></label>` : '<span class="muted dq-nos1">ยังไม่ได้กำหนดแพทย์เวร S1 วันนี้ (ปุ่ม เวร S1) · เลือกแพทย์</span>')
     : `<label class="dq-who-q"><input type="radio" name="dqwho" value="auto"${cur === 'auto' ? ' checked' : ''}><span>ตามคิว${run.code ? ` · <b>${dqNm(run.code)}</b>` : ' · ไม่มีแพทย์ว่าง'}</span></label>`;
-  box.innerHTML = first + dqAllDocs().map(c => `<label title="${esc(docName(c))}"><input type="radio" name="dqwho" value="${esc(c)}"${cur === c ? ' checked' : ''}><span>${dqNm(c)}${dqAway(c, td) ? `<small>${dqAway(c, td).kind === 'long' ? 'ไม่รับเคส' : 'ลา'}</small>` : dq2On() && dqDayOff(c, td) ? '<small>ไม่แจกวันนี้</small>' : ''}</span></label>`).join('');
+  box.innerHTML = first + dqAllDocs().map(c => `<label title="${esc(docName(c))}"><input type="radio" name="dqwho" value="${esc(c)}"${cur === c ? ' checked' : ''}><span>${dqNm(c)}${dqAway(c, td) ? `<small>${({ long: 'ลาไม่รับเคส', off: 'ไม่รับเคส' })[dqAway(c, td).kind] || 'ลา'}</small>` : dq2On() && dqDayOff(c, td) ? '<small>ไม่แจกวันนี้</small>' : ''}</span></label>`).join('');
   dqWarn(run);
 }
 // แพทย์ที่จะได้เคสตามที่เลือกในฟอร์ม
@@ -8047,7 +8062,7 @@ function renderDq() {
     ${offToday.length ? `<p class="dq-line">วันนี้ไม่แจก (ตามวัน): ${offToday.map(c => `<b>${esc(c)}</b>`).join(', ')} · ไม่เสียคิว</p>` : ''}
     ${credit.length ? `<p class="dq-line">รอหักคิว: ${credit.map(([c, n]) => `<b>${esc(c)}</b> ${n} ครั้ง`).join(' · ')}</p>` : ''}
     ${Object.keys(owed).length ? `<p class="dq-line">ค้างคืนคิว (ลาไม่เสียคิว): ${Object.entries(owed).map(([c, by]) => `<b>${esc(c)}</b> อีก ${by.length} เคส (${esc([...new Set(by)].join(', '))} รับแทนไว้)`).join(' · ')}</p>` : ''}
-    ${lv.length ? `<p class="dq-line">ลาวันนี้: ${lv.map(([c, l]) => `<b>${esc(c)}</b>${l.kind === 'long' ? ' ไม่รับเคส (คิวเสียไป)' : ''}${l.to > td ? ` ถึง ${esc(fmtDay(l.to))}` : ''}`).join(' · ')}</p>` : ''}`;
+    ${lv.length ? `<p class="dq-line">ลาวันนี้: ${lv.map(([c, l]) => `<b>${esc(c)}</b>${l.kind === 'off' ? ' ไม่รับเคส (ไม่ใช่วันลา)' : l.kind === 'long' ? ' ลาไม่รับเคส' : ''}${l.to > td ? ` ถึง ${esc(fmtDay(l.to))}` : ''}`).join(' · ')}</p>` : ''}`;
   // สรุปรายแพทย์ของเดือน: ได้แล้ว · คาดทั้งเดือน (เดือนนี้: ที่เหลือจนครบจำนวนต่อเดือน ไม่ดูวันลา) · หักคิวเดือนนี้ · รอหักคิว · ค้างคืนคิว · วันลาในเดือน
   const inMonth = state.dq.filter(r => r.date.slice(0, 7) === ym), per = Math.max(1, Math.floor(+q.perMonth) || 160);
   const cur = ym === thisMonth(), left = cur ? Math.max(0, per - inMonth.length) : 0, fc = {};
@@ -8057,7 +8072,7 @@ function renderDq() {
   const got = c => inMonth.filter(r => r.doc === c);
   const sumRow = c => {
     const g = got(c), man = g.filter(r => r.how === 'manual').length, exp = g.length + (fc[c] || 0), lvs = leaveIn(c), off = !docs.includes(c);
-    return `<tr><td>${docChip(c)} ${esc(docName(c))}${off ? ' <small class="muted">(ไม่อยู่ในคิว)</small>' : dqStatusHtml(c)}</td><td>${g.length}${man ? ` <small class="muted">(เลือกเอง ${man})</small>` : ''}</td>${cur ? `<td>${exp}<span class="bar"><i style="width:${Math.min(100, Math.round((exp / per) * 100 * Math.max(1, docs.length)))}%"></i></span></td>` : ''}<td>${skipM[c] ? esc(String(skipM[c])) : '–'}</td><td>${run.credit[c] > 0 ? run.credit[c] : '–'}</td><td>${(owed[c] || []).length || '–'}</td><td class="l">${lvs.length ? lvs.map(l => esc(rangeText(l) + (l.kind === 'long' ? ' (ไม่รับเคส)' : ''))).join(', ') : '<span class="muted">–</span>'}</td></tr>`;
+    return `<tr><td>${docChip(c)} ${esc(docName(c))}${off ? ' <small class="muted">(ไม่อยู่ในคิว)</small>' : dqStatusHtml(c)}</td><td>${g.length}${man ? ` <small class="muted">(เลือกเอง ${man})</small>` : ''}</td>${cur ? `<td>${exp}<span class="bar"><i style="width:${Math.min(100, Math.round((exp / per) * 100 * Math.max(1, docs.length)))}%"></i></span></td>` : ''}<td>${skipM[c] ? esc(String(skipM[c])) : '–'}</td><td>${run.credit[c] > 0 ? run.credit[c] : '–'}</td><td>${(owed[c] || []).length || '–'}</td><td class="l">${lvs.length ? lvs.map(l => esc(rangeText(l) + (l.kind === 'off' ? ' (ไม่รับเคส)' : l.kind === 'long' ? ' (ลาไม่รับเคส)' : ''))).join(', ') : '<span class="muted">–</span>'}</td></tr>`;
   };
   $('#dq-sum').innerHTML = codes.length ? `<table><thead><tr><th>แพทย์</th><th>ได้ใน${esc(fmtMonth(ym))}</th>${cur ? `<th title="ที่ได้แล้ว + ที่เหลือจนครบ ${per} เคส ตามคิว (ไม่ดูวันลา)">คาดทั้งเดือน</th>` : ''}<th>หักคิวเดือนนี้</th><th title="เลือกเอง / หักคิวที่ยังรอข้าม">รอหักคิว</th><th title="คิวที่ลาไว้ รอได้คืน">ค้างคืนคิว</th><th style="text-align:left">วันลาในเดือน</th></tr></thead><tbody>${codes.map(sumRow).join('')}</tbody></table>` : '';
   // ตาราง: รายการของเดือน (วันที่ล่าสุดอยู่บนสุด · ลำดับ = ลำดับที่แจก) · ค้นหา = ทุกเดือน (ล่าสุดก่อน ไม่เกิน 200)
@@ -8178,7 +8193,7 @@ $('#dql-kind').addEventListener('change', syncDql);
 function renderDqLeaves() {
   const td = today(), up = state.dqLeave.filter(l => l.to >= td).sort((a, b) => a.from.localeCompare(b.from) || a.doc.localeCompare(b.doc)), past = state.dqLeave.length - up.length;
   $('#dql-list').innerHTML = up.length
-    ? up.map(v => `<li class="vrow">${docChip(v.doc)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}${v.kind === 'long' ? '' : v.take === 'yes' ? ' <span class="chip">รับเคส</span>' : ' <span class="chip late">ไม่รับเคส</span>'}${v.kind === 'long' ? ` <span class="dq-st long">${esc(dqlKindText(v))}</span>` : ''}</span><span class="note">${esc([v.note, v.by && `ลงโดย ${v.by}`].filter(Boolean).join(' · '))}</span>${dqLeaveCan(v.doc) && dqOn() && dqMarkOn() ? `<button type="button" class="btn ghost sm" data-dqledit="${esc(v.id)}">แก้ไข</button>` : ''}${dqLeaveCan(v.doc) && dqOn() ? `<button type="button" class="icon-btn" data-dqunleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.doc)} ${esc(rangeText(v))}">×</button>` : ''}</li>`).join('')
+    ? up.map(v => `<li class="vrow">${docChip(v.doc)}<span class="when">${esc(rangeText(v))}${v.from <= td ? ' <span class="chip warn">วันนี้</span>' : ''}${v.kind ? '' : v.take === 'yes' ? ' <span class="chip">รับเคส</span>' : ' <span class="chip">คืนคิว</span>'}${v.kind ? ` <span class="dq-st long">${esc(dqlKindText(v))}</span>` : ''}</span><span class="note">${esc([v.note, v.by && `ลงโดย ${v.by}`].filter(Boolean).join(' · '))}</span>${dqLeaveCan(v.doc) && dqOn() && dqMarkOn() ? `<button type="button" class="btn ghost sm" data-dqledit="${esc(v.id)}">แก้ไข</button>` : ''}${dqLeaveCan(v.doc) && dqOn() ? `<button type="button" class="icon-btn" data-dqunleave="${esc(v.id)}" aria-label="ยกเลิกวันลา ${esc(v.doc)} ${esc(rangeText(v))}">×</button>` : ''}</li>`).join('')
     : '<li class="empty-state" style="padding:20px">ยังไม่มีวันลาแพทย์ที่กำลังจะถึง</li>';
   $('#dql-past').textContent = past ? `วันลาที่ผ่านไปแล้ว ${past} รายการ (ยังใช้คำนวณคิว)` : '';
 }
@@ -8186,7 +8201,7 @@ dqlForm.addEventListener('submit', async e => {
   e.preventDefault();
   const doc = chipValue($('#dql-doc')), from = $('#dql-from').value, to = $('#dql-to').value || from, note = str($('#dql-note').value);
   const nocase = $('#dql-nocase').checked, old = dqlEditing ? state.dqLeave.find(l => l.id === dqlEditing) : null;
-  const kind = nocase ? 'long' : '', assign = nocase && old && old.kind === 'long' ? old.assign : '', take = nocase ? '' : 'yes';   // 15 พ.ย.: ไม่รับเคส = คิวเสียไป (long) · วันแจกงานของลายาวเดิมคงไว้
+  const kind = old && old.kind === 'off' ? 'off' : nocase ? 'long' : '', assign = kind === 'long' && old && old.kind === 'long' ? old.assign : '', take = kind ? '' : 'yes';   // 15 พ.ย.: ไม่รับเคส = คิวเสียไป (long) · วันแจกงานของลายาวเดิมคงไว้
   if (!doc || !isDay(from)) return toast('เลือกแพทย์และวันที่ลา', { err: true });
   if (to < from) return toast('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา', { err: true });
   if (assign && (assign <= from || assign > to)) { $('#dql-assign').focus(); return toast('วันที่เริ่มแจกงานต้องอยู่หลังวันเริ่มลา และไม่เกินวันลาวันสุดท้าย', { err: true }); }
@@ -8204,7 +8219,7 @@ dqlForm.addEventListener('submit', async e => {
     $('#dql-note').value = ''; $('#dql-nocase').checked = false;
     render();
     renderDqLeaves();
-    toast(rec.kind === 'long' ? `แพทย์ ${doc} ไม่รับเคส ${rangeText(rec)} · คิวที่ถึงช่วงนี้เสียไป (ไม่คืนคิว)${rec.assign ? ` · เริ่มแจกงาน ${fmtDay(rec.assign)}` : ''}`
+    toast(rec.kind ? `แพทย์ ${doc} ${DQL_T[dqlType(rec)].name} ${rangeText(rec)} · คิวที่ถึงช่วงนี้เสียไป (ไม่คืนคิว)${rec.assign ? ` · เริ่มแจกงาน ${fmtDay(rec.assign)}` : ''}`
       : `แพทย์ ${doc} ลา ${rangeText(rec)} · ยังรับเคสตามปกติ`);
   } catch (ex) { toast('บันทึกไม่สำเร็จ: ' + errMsg(ex), { err: true }); }
   finally { btn.disabled = false; }
@@ -8621,7 +8636,7 @@ function dqMonths(ym) {
 }
 function dqLeaveDays(code, ym) {
   const hol = holidayMap(), out = [], end = monthEnd(ym);
-  for (const l of state.dqLeave.filter(v => v.doc === code && v.from <= end && (v.to || v.from) >= ym + '-01')) {
+  for (const l of state.dqLeave.filter(v => v.doc === code && v.kind !== 'off' && v.from <= end && (v.to || v.from) >= ym + '-01')) {
     for (let d = l.from < ym + '-01' ? ym + '-01' : l.from; d <= (l.to || l.from) && d <= end; d = nextDate(d)) if (isWorkday(d, hol) && !out.includes(d)) out.push(d);
   }
   return out.sort();
@@ -8856,7 +8871,7 @@ function dqSetSec(d) {
     <ul class="rules">
       <li>แจกตามคิววนตามลำดับใน แพทย์ (Doc) ด้านบน (เฉพาะที่ติ๊ก รับคิว) แบบเดียวกับคิวแจกเคส MP</li>
       <li>เลือกแพทย์เอง หรือเปลี่ยนแพทย์ภายหลัง: คิวไม่ขยับ คนที่ได้ถูกข้าม 1 ครั้งเมื่อคิววนมาถึง · หักคิวรายเดือน: ข้ามตามจำนวนครั้ง ใช้ไม่หมดยกไปเดือนถัดไป</li>
-      <li><b>วันลาแพทย์</b> (ลงที่ RO Jobs → วันลา): ติ๊ก <b>ไม่รับเคส</b> หรือปุ่มแดง วันไม่รับเคส = ไม่แจกเคส และ<b>คิวที่ถึงช่วงนั้นเสียไป ไม่คืนคิว</b> · ไม่ติ๊ก = ลงวันลาไว้ ยังแจกเคสตามปกติ</li>
+      <li><b>วันลาแพทย์</b> (ลงที่ RO Jobs → วันลา): <b>ลา</b> (ไม่ติ๊ก) = ยังแจกเคสตามปกติ · <b>ลาไม่รับเคส</b> (ติ๊ก ไม่รับเคส) และ <b>ไม่รับเคส</b> (ปุ่มแดง · ไม่ใช่วันลา) = ไม่แจกเคส และ<b>คิวที่ถึงช่วงนั้นเสียไป ไม่คืนคิว</b></li>
       <li><b>คืนคิว</b>: ใช้กับวันที่ไม่แจกตามวัน (ด้านล่าง) และวันลาแบบเดิมที่ลงก่อน 15 พ.ย. 2569 (แพทย์ที่ไม่ลารับแทน แล้วคืนคิวให้เมื่อกลับมา)</li>
     </ul>
     <div class="form-grid" style="margin-bottom:12px">
@@ -17251,8 +17266,8 @@ const lvRtId = (j, i) => `${jobKey(j.who, j.ym)}#${i}`;
 function lvItems(kind, ym) {
   const out = [];
   if (kind === 'mp') for (const l of state.leaves) for (const d of lvDays(l.from, l.to, ym)) out.push({ id: l.id, date: d, who: l.mp, chip: `${av(l.mp)}<span>${esc(l.mp)}</span>`, title: `${l.mp} ลา ${rangeText(l)}${l.note ? ' · ' + l.note : ''}` });
-  if (kind === 'ro') for (const l of state.dqLeave) for (const d of lvDays(l.from, l.to, ym)) out.push({ id: l.id, date: d, who: l.doc, cls: l.kind === 'long' ? 'nocase' : l.take === 'yes' ? 'take' : '', chip: `${docChip(l.doc)}${l.kind === 'long' ? '<small>ไม่รับเคส</small>' : l.take === 'yes' ? '<small>รับเคส</small>' : ''}`,
-    title: `${dqDocText(l.doc)} ${l.kind === 'long' ? 'วันไม่รับเคส' : 'ลา'} ${rangeText(l)} · ${l.kind === 'long' ? 'ไม่แจกเคส คิวที่ถึงเสียไป (ไม่คืนคิว)' : l.take === 'yes' ? 'ยังรับเคส' : 'ไม่รับเคส · ลงก่อน 15 พ.ย. (คนอื่นรับแทน แล้วคืนคิว)'}${l.note ? ' · ' + l.note : ''}` });
+  if (kind === 'ro') for (const l of state.dqLeave) for (const d of lvDays(l.from, l.to, ym)) out.push({ id: l.id, date: d, who: l.doc, t: dqlType(l), cls: DQL_T[dqlType(l)].cls, chip: `${docChip(l.doc)}<small>${esc(DQL_T[dqlType(l)].chip)}</small>`,
+    title: `${dqDocText(l.doc)} ${DQL_T[dqlType(l)].name} ${rangeText(l)} · ${DQL_T[dqlType(l)].desc}${l.note ? ' · ' + l.note : ''}` });
   if (kind === 'rtt') for (const j of state.jobs) if (j.ym === ym) j.leaves.forEach((l, i) => { if (isDay(l.date) && l.date.slice(0, 7) === ym) out.push({ id: lvRtId(j, i), date: l.date, who: j.who, half: !!l.half, chip: `<span>${esc(lvShort(j.who))}</span><small>${esc(l.type)}${l.half ? ' ½' : ''}</small>`, title: `${j.who} · ${l.type}${l.half ? ' (ครึ่งวัน)' : ''}` }); });
   return out;
 }
@@ -17270,15 +17285,15 @@ function lvCalHtml(kind, ym, items, can) {
 }
 // สรุปรายคนของเดือน: วันที่ลา · จำนวนวันทำการ (ครึ่งวัน = 0.5)
 function lvSumHtml(kind, items) {
-  const by = new Map(), hol = holidayMap();
-  for (const x of items) { if (!by.has(x.who)) by.set(x.who, []); by.get(x.who).push(x); }
+  const by = new Map(), hol = holidayMap(), ro = kind === 'ro', tOrd = t => Object.keys(DQL_T).indexOf(t);
+  for (const x of items) { const k = ro ? `${x.who}|${x.t}` : x.who; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
   if (!by.size) return '<p class="muted lv-none">ไม่มีวันลาในเดือนนี้</p>';
-  const whoHtml = w => (kind === 'mp' ? `${av(w)} ${esc(w)}` : kind === 'ro' ? `${docChip(w)} ${esc(docName(w))}` : esc(w));
-  const rows = [...by].sort((a, b) => a[0].localeCompare(b[0], 'th')).map(([w, xs]) => {
-    const days = [...new Set(xs.map(x => x.date))].sort(), n = xs.filter(x => isWorkday(x.date, hol)).reduce((a, x) => a + (x.half ? 0.5 : 1), 0);
-    return `<tr><td class="l">${whoHtml(w)}</td><td class="l">${esc(days.map(d => +d.slice(8)).join(', '))}</td><td>${fmtN(n, 1)}</td></tr>`;
+  const whoHtml = w => (kind === 'mp' ? `${av(w)} ${esc(w)}` : ro ? `${docChip(w)} ${esc(docName(w))}` : esc(w));
+  const rows = [...by.values()].sort((a, b) => a[0].who.localeCompare(b[0].who, 'th') || (ro ? tOrd(a[0].t) - tOrd(b[0].t) : 0)).map(xs => {
+    const days = [...new Set(xs.map(x => x.date))].sort(), n = xs.filter(x => isWorkday(x.date, hol)).reduce((a, x) => a + (x.half ? 0.5 : 1), 0), t = ro ? DQL_T[xs[0].t] : null;
+    return `<tr><td class="l">${whoHtml(xs[0].who)}</td>${ro ? `<td class="l"><span class="lv-type ${t.cls}" title="${esc(t.desc)}">${esc(t.name)}</span></td>` : ''}<td class="l">${esc(days.map(d => +d.slice(8)).join(', '))}</td><td>${fmtN(n, 1)}</td></tr>`;
   }).join('');
-  return `<div class="table-wrap lv-sum"><table><thead><tr><th class="l">${esc(LV_KIND[kind])}</th><th class="l">วันที่ลา</th><th>วันทำการ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap lv-sum"><table><thead><tr><th class="l">${esc(LV_KIND[kind])}</th>${ro ? '<th class="l">ประเภท</th><th class="l">วันที่</th>' : '<th class="l">วันที่ลา</th>'}<th>วันทำการ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 // ลงได้: MP = บันทึกในแถบวันลาได้ · แพทย์ = แพทย์ลงของตัวเอง / แอดมิน · RTT/RA = บันทึกในแถบ RTT/RA Jobs ได้ (แอดมิน = ทุกคน · คนอื่น = ของตัวเอง)
 const lvCanAdd = kind => (kind === 'mp' ? accessOf('mpleave') === 'edit' || accessOf('work') === 'edit' : kind === 'ro' ? dqlAdmin() || !!myDoctor() : accessOf('jobs') === 'edit');
@@ -17287,7 +17302,7 @@ function lvWhoList(kind, ym) {
   if (kind === 'ro') return dqlAdmin() ? dqAllDocs() : myDoctor() ? [myDoctor()] : [];
   return state.user.isAdmin || store.mode === 'local' && pref.get('demoRole', 'admin') === 'admin' ? jobPeople(ym).map(x => x.who) : [jobMyName()].filter(Boolean);
 }
-const lvHelp = { mp: 'วันลาของ MP · วันที่ลาระบบไม่แจกเคสให้ (คิวข้ามไปคนถัดไป)', ro: 'วันลาของแพทย์ (เชื่อมกับแถบแจกงานแพทย์) · ติ๊ก ไม่รับเคส หรือปุ่มแดง วันไม่รับเคส = ไม่แจกเคส คิวที่ถึงช่วงนั้นเสียไป (ไม่คืนคิว) · ไม่ติ๊ก = ลงวันลาไว้ ยังแจกเคสตามปกติ', rtt: 'วันลาของ RTT / RA (อยู่ในแบบฟอร์มภาระงานรายเดือน) · ลงได้ทีละเดือน · นับเฉพาะวันทำการ' };
+const lvHelp = { mp: 'วันลาของ MP · วันที่ลาระบบไม่แจกเคสให้ (คิวข้ามไปคนถัดไป)', ro: 'วันลาของแพทย์ (เชื่อมกับแถบแจกงานแพทย์) · ลา = ยังแจกเคส · ลาไม่รับเคส (ติ๊ก ไม่รับเคส) และ ไม่รับเคส (ปุ่มแดง · ไม่ใช่วันลา) = ไม่แจกเคส คิวที่ถึงช่วงนั้นเสียไป (ไม่คืนคิว)', rtt: 'วันลาของ RTT / RA (อยู่ในแบบฟอร์มภาระงานรายเดือน) · ลงได้ทีละเดือน · นับเฉพาะวันทำการ' };
 function lvBody(kind) {
   const ym = state.month, can = lvCanAdd(kind), items = lvItems(kind, ym);
   return `<p class="muted lv-help">${esc(lvHelp[kind])}${can ? ' · กดวันในปฏิทินเพื่อเพิ่มวันลา · กดชื่อเพื่อดูหรือแก้' : ' · ดูได้อย่างเดียว'}</p>${lvCalHtml(kind, ym, items, can)}${lvSumHtml(kind, items)}`;
@@ -17325,11 +17340,12 @@ function lvOpen(kind, date, id, off) {
   const who0 = !old ? '' : kind === 'mp' ? old.mp : kind === 'ro' ? old.doc : old.j.who;
   const can = !old ? lvCanAdd(kind) : kind === 'mp' ? lvCanAdd('mp') : kind === 'ro' ? dqLeaveCan(old.doc) : lvCanAdd('rtt') && lvWhoList('rtt', old.j.ym).some(w => nameKey(w) === nameKey(who0));
   if (!old && !can) return;
-  off = kind === 'ro' && !old && !!off;   // ปุ่มแดง วันไม่รับเคส = ติ๊ก ไม่รับเคสไว้ให้ (ลาแบบ long: ไม่แจกเคส คิวเสียไป)
+  off = kind === 'ro' && (old ? old.kind === 'off' : !!off);   // ปุ่มแดง วันไม่รับเคส: ไม่ใช่วันลา (kind off · ไม่แจกเคส คิวเสียไป)
+  if (off && !old && !dqlOffOn()) return toast('วันไม่รับเคส (แยกจากวันลา) ต้องใช้ Code.gs รุ่น 2026-11-15.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
   lvCtx = { kind, id: id || '', ym: old && kind === 'rtt' ? old.j.ym : ym, can, off };
   const list = lvWhoList(kind, lvCtx.ym), whos = old && !list.includes(who0) ? [...list, who0] : list;
   $('#lv-title').textContent = off ? `${old ? (can ? 'แก้วันไม่รับเคส' : 'วันไม่รับเคส') : 'วันไม่รับเคส'} · ${LV_KIND[kind]}` : `${old ? (can ? 'แก้วันลา' : 'วันลา') : 'เพิ่มวันลา'} · ${LV_KIND[kind]}`;
-  $('#lv-help').textContent = off ? 'วันไม่รับเคส: ระบบไม่แจกเคสให้แพทย์คนนี้ในช่วงนี้ และคิวที่วนมาถึงเสียไป (ไม่คืนคิวภายหลัง) · เหมือนวันลาที่ติ๊ก ไม่รับเคส' : lvHelp[kind];
+  $('#lv-help').textContent = off ? 'วันไม่รับเคส (ไม่ใช่วันลา): ระบบไม่แจกเคสให้แพทย์คนนี้ในช่วงนี้ และคิวที่วนมาถึงเสียไป (ไม่คืนคิว) · ถ้าลาด้วย ให้ใช้ + เพิ่มวันลา แล้วติ๊ก ไม่รับเคส' : lvHelp[kind];
   $('#lv-who-l').textContent = kind === 'ro' ? 'แพทย์' : kind === 'mp' ? 'MP' : 'ผู้ลา';
   chipGroup($('#lv-who'), 'lvwho', whos, who0 || (kind === 'ro' && myDoctor()) || (kind === 'mp' && myStaff()) || (kind === 'rtt' && whos.length === 1 ? whos[0] : '') || '', w => (kind === 'ro' ? docName(w) : kind === 'mp' ? '' : ''));
   const d0 = date || (old ? (kind === 'rtt' ? old.l.date : old.from) : today());
@@ -17337,9 +17353,9 @@ function lvOpen(kind, date, id, off) {
   $('#lv-to').value = old ? (kind === 'rtt' ? old.l.date : old.to) : d0;
   $('#lv-type-f').hidden = $('#lv-half-f').hidden = kind !== 'rtt';
   if (kind === 'rtt') { const types = state.config.jobs.leaveTypes, t = old ? old.l.type : types[0] || ''; chipGroup($('#lv-type'), 'lvtype', [...new Set([...types, t].filter(Boolean))], t); $('#lv-half').checked = !!(old && old.l.half); }
-  $('#lv-nocase-f').hidden = kind !== 'ro';
+  $('#lv-nocase-f').hidden = kind !== 'ro' || off;
   lvDlg.classList.toggle('lv-offmode', !!off);
-  $('#lv-nocase').checked = kind === 'ro' && (off || (!!old && old.take !== 'yes'));
+  $('#lv-nocase').checked = kind === 'ro' && !off && !!old && old.take !== 'yes';
   $('#lv-note-f').hidden = kind === 'rtt';
   $('#lv-note').value = old && kind !== 'rtt' ? old.note || '' : '';
   for (const el of $$('input', $('#lv-form'))) el.disabled = !can;
@@ -17373,9 +17389,9 @@ $('#lv-form').addEventListener('submit', async e => {
   if (to < from) return toast('วันสิ้นสุดต้องไม่ก่อนวันเริ่มลา', { err: true });
   if (c.kind === 'mp') { if (await addLeave(who, from, to, note)) { lvDlg.close(); render(); } return; }
   if (c.kind === 'ro') {
-    const take = $('#lv-nocase').checked ? '' : 'yes', kind = take ? '' : 'long', old = c.id ? lvFind('ro', c.id) : null;   // 15 พ.ย.: ไม่รับเคส = คิวเสียไป
+    const take = c.off || $('#lv-nocase').checked ? '' : 'yes', kind = c.off ? 'off' : take ? '' : 'long', old = c.id ? lvFind('ro', c.id) : null;   // off = วันไม่รับเคส · long = ลาไม่รับเคส · ทั้งคู่คิวเสียไป
     if (!dqLeaveCan(who)) return toast(RO_MSG, { err: true });
-    if (old) return openDqPin('dqledit', old.id, { doc: who, from, to, note, kind, assign: kind && old.kind === 'long' ? old.assign : '', take }, `แก้วันลาแพทย์ ${who} เป็น ${rangeText({ from, to })}${take ? ' · รับเคส' : ' · ไม่รับเคส'}`, `แก้วันลา · ${who}`);
+    if (old) return openDqPin('dqledit', old.id, { doc: who, from, to, note, kind, assign: kind === 'long' && old.kind === 'long' ? old.assign : '', take }, `แก้${c.off ? 'วันไม่รับเคส' : 'วันลา'}แพทย์ ${who} เป็น ${rangeText({ from, to })} · ${DQL_T[dqlType({ kind, take })].name}`, `แก้วันลา · ${who}`);
     const btn = $('#lv-save');
     btn.disabled = true;
     try {
@@ -17384,7 +17400,7 @@ $('#lv-form').addEventListener('submit', async e => {
       dqMemo = null;
       lvDlg.close();
       render();
-      toast(take ? `แพทย์ ${who} ลา ${rangeText(rec)} · ยังรับเคส` : `แพทย์ ${who} ไม่รับเคส ${rangeText(rec)} · คิวที่ถึงช่วงนี้เสียไป (ไม่คืนคิว)`);
+      toast(take ? `แพทย์ ${who} ลา ${rangeText(rec)} · ยังรับเคส` : `แพทย์ ${who} ${DQL_T[dqlType(rec)].name} ${rangeText(rec)} · คิวที่ถึงช่วงนี้เสียไป (ไม่คืนคิว)`);
     } catch (ex) { toast('บันทึกไม่สำเร็จ: ' + errMsg(ex), { err: true }); }
     finally { btn.disabled = false; }
     return;
@@ -19368,9 +19384,9 @@ function dqRepMove(step) {
   else dqRep.at = shiftMonth(at.slice(0, 7), step * (v === 'month' ? 1 : v === '3m' ? 3 : 12)) + '-01';
   renderDqRep(state.month);
 }
-function dqLeaveDaysIn(code, from, to) {
+function dqLeaveDaysIn(code, from, to, off) {   // off = วันไม่รับเคส (ไม่ใช่วันลา) · ไม่ส่ง = วันลา
   const hol = holidayMap(), out = [];
-  for (const l of state.dqLeave.filter(v => v.doc === code && v.from <= to && (v.to || v.from) >= from)) {
+  for (const l of state.dqLeave.filter(v => v.doc === code && (v.kind === 'off') === !!off && v.from <= to && (v.to || v.from) >= from)) {
     for (let d = l.from < from ? from : l.from; d <= (l.to || l.from) && d <= to; d = nextDate(d)) if (isWorkday(d, hol) && !out.includes(d)) out.push(d);
   }
   return out.sort();
@@ -19385,7 +19401,7 @@ function renderDqRep(ym) {
   box.hidden = false;
   const types = DQ_REP_TYPES.filter(([k, , f]) => k !== 'import' || rows.some(f)), w = types.length + 1, num = n => (n ? String(n) : '–');
   const cells = xs => DQ_REP_DESKS.map(([dk]) => { const ys = xs.filter(x => (x.desk || '') === dk); return types.map(([, , f], j) => `<td${j ? '' : ' class="g"'}>${num(ys.filter(f).length)}</td>`).join('') + `<td class="sub">${num(ys.length)}</td>`; }).join('') + `<td class="all"><b>${num(xs.length)}</b></td>`;
-  const leave = codes.map(c => [c, dqLeaveDaysIn(c, r.from, r.to)]).filter(([, ds]) => ds.length), lbl = calLabel(view, r);
+  const leave = codes.map(c => [c, dqLeaveDaysIn(c, r.from, r.to)]).filter(([, ds]) => ds.length), offs = codes.map(c => [c, dqLeaveDaysIn(c, r.from, r.to, true)]).filter(([, ds]) => ds.length), lbl = calLabel(view, r);
   box.innerHTML = `<h3>สรุปการแจก<small>แพทย์ × จุดรับเคส × ประเภทเคส · รวมที่แจกในแถบนี้และที่ดึงจากรายงาน HIS · กดชื่อแพทย์ = ดูเฉพาะคนนั้นในตารางรายการ</small></h3>
     <div class="cal-bar dq-rep-bar"><div class="seg-mini" aria-label="ช่วงเวลาของสรุป">${CAL_VIEWS.map(([v, l]) => `<button type="button" data-dqrview="${v}" aria-pressed="${view === v}">${l}</button>`).join('')}</div>
       <div class="cal-nav"><button type="button" data-dqrnav="-1" aria-label="ช่วงก่อนหน้า">‹</button><span class="dq-rep-lbl">${esc(lbl)}</span><button type="button" data-dqrnav="1" aria-label="ช่วงถัดไป">›</button><button type="button" class="cal-today" data-dqrnav="0">วันนี้</button></div></div>
@@ -19394,7 +19410,7 @@ function renderDqRep(ym) {
       <tr>${DQ_REP_DESKS.map(() => types.map(([, l], j) => `<th${j ? '' : ' class="g"'}>${esc(l)}</th>`).join('') + '<th class="sub">รวม</th>').join('')}</tr></thead><tbody>
       ${codes.map(c => `<tr><td class="l"><button type="button" class="dq-doc-btn" data-dqdoc="${esc(c)}" aria-pressed="${dqDocF === c}">${docChip(c)} ${esc(docName(c) || c)}</button></td>${cells(rows.filter(x => x.doc === c))}</tr>`).join('')}
       <tr class="tot"><td class="l">รวม</td>${cells(rows)}</tr></tbody></table></div>
-    <div class="dq-note"><b>หมายเหตุ ${esc(lbl)}</b> (วันลาแพทย์)${leave.length ? `<ul>${leave.map(([c, ds]) => `<li>${esc(docName(c) || c)}: ${ds.map(dayBE).join(', ')}</li>`).join('')}</ul>` : ' <span class="muted">ไม่มีวันลา</span>'}</div>`;
+    <div class="dq-note"><b>หมายเหตุ ${esc(lbl)}</b> (วันลาแพทย์)${leave.length ? `<ul>${leave.map(([c, ds]) => `<li>${esc(docName(c) || c)}: ${ds.map(dayBE).join(', ')}</li>`).join('')}</ul>` : ' <span class="muted">ไม่มีวันลา</span>'}${offs.length ? `<p><b>ไม่รับเคส</b> (ไม่ใช่วันลา): ${offs.map(([c, ds]) => `${esc(docName(c) || c)} ${ds.map(dayBE).join(', ')}`).join(' · ')}</p>` : ''}</div>`;
 }
 
 /* ---------- 15 พ.ย.: แถบย่อยที่ตำแหน่งนี้เห็น (ตั้งค่า → แถบเมนู · แถว └) · แอดมิน / บัญชี Google เห็นทุกแถบย่อย · ซ่อนหมด = เห็นทั้งหมด (กันหน้าว่าง) ---------- */
