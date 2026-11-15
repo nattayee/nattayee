@@ -1218,18 +1218,24 @@ form.ro-form .dlg-body :disabled{cursor:default}
 .flow-hidden{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;font-size:13px}
 .flow-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:start}
 .flow-col{min-height:120px;padding:8px 8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
-.flow-h{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.flow-h b{font-size:14px}
+.flow-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-bottom:6px}
+.flow-h b{font-size:14px;white-space:nowrap}
 .flow-n{min-width:22px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;text-align:center}
 .flow-ed{display:inline-flex;gap:2px;margin-left:auto}
+.flow-ed .icon-btn{width:26px;height:26px;min-width:0;padding:0}
+/* แถวละแพทย์: ป้ายแพทย์ + จำนวน แล้วไอคอนเรียงต่อ */
+.flow-doc{display:grid;grid-template-columns:54px minmax(0,1fr);gap:0 6px;align-items:start;padding:3px 0}
+.flow-doc+.flow-doc{border-top:1px dotted var(--line)}
+.flow-doc-h{display:inline-flex;align-items:center;gap:4px;padding-top:6px;font-size:12.5px;white-space:nowrap}
+.flow-lg b{color:var(--fg)}
 .flow-sub+.flow-sub{margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)}
 .flow-sub-h{margin-bottom:2px;color:var(--muted);font-size:12px}
 .flow-sub-h .n{font-weight:600}
 .flow-pts{display:flex;flex-wrap:wrap;gap:2px;min-height:30px}
-.flow-pt{display:inline-grid;place-items:center;width:30px;height:32px;padding:0;border:1px solid transparent;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+.flow-pt{display:inline-grid;place-items:center;width:27px;height:30px;padding:0;border:1px solid transparent;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
 .flow-pt:hover,.flow-pt:focus-visible{border-color:var(--line)}
 .flow-pt.today{border-color:var(--accent)}
-.flow-pt svg{width:22px;height:22px}
+.flow-pt svg{width:21px;height:21px}
 .flow-none{padding:6px 2px;font-size:12px}
 .flow-pop{position:fixed;z-index:60;min-width:240px;max-width:min(440px,calc(100vw - 16px));padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:var(--shadow);font-size:13px}
 .flow-pop-h{display:flex;align-items:center;gap:6px}
@@ -4769,7 +4775,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-16.1';
+const PAGE_VERSION = '2026-11-16.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -19578,17 +19584,30 @@ function renderFlow() {
   $('#flow-edit').textContent = flowEdit ? 'จัดคอลัมน์เสร็จ' : 'จัดคอลัมน์';
   $('#flow-api').hidden = !(store.mode === 'sheet' && !serverHas(FLOW_API));
   $('#flow-empty').hidden = !(words.length && !list.length);
-  const docs = [...new Set(list.map(x => x.doc).filter(Boolean))].sort();
-  $('#flow-legend').innerHTML = docs.map(d => `<span class="flow-lg" style="${docHex(d) ? `color:${docHex(d)}` : ''}">${PERSON_SVG}<span style="color:var(--fg)">${esc(d)}${docName(d) ? ` <span class="muted">${esc(docName(d))}</span>` : ''}</span></span>`).join('')
-    + (list.some(x => !x.doc) ? `<span class="flow-lg">${PERSON_SVG}<span>ไม่ระบุแพทย์</span></span>` : '');
+  const docRank = d => { const i = state.config.doctors.findIndex(x => x.code === d); return i >= 0 ? i : d ? 900 : 999; };   // ลำดับตาม ตั้งค่า → แพทย์ · ไม่ระบุแพทย์ท้ายสุด
+  const docSort = (a, b) => docRank(a) - docRank(b) || a.localeCompare(b);
+  const docN = new Map();   // ผู้ป่วย (ไม่ซ้ำ HN) ของแต่ละแพทย์ในบอร์ด
+  for (const x of list) { const d = x.doc || ''; if (!docN.has(d)) docN.set(d, new Set()); docN.get(d).add(hnKey(x.hn)); }
+  $('#flow-legend').innerHTML = [...docN.keys()].sort(docSort).map(d => `<span class="flow-lg" style="${d && docHex(d) ? `color:${docHex(d)}` : ''}" title="${esc(`${d ? `แพทย์ ${d}${docName(d) ? ' · ' + docName(d) : ''}` : 'ไม่ระบุแพทย์'} · ผู้ป่วยในบอร์ด ${docN.get(d).size} คน`)}">${PERSON_SVG}<span style="color:var(--fg)">${esc(d || 'ไม่ระบุแพทย์')}${d && docName(d) ? ` <span class="muted">${esc(docName(d))}</span>` : ''} <b>${docN.get(d).size}</b></span></span>`).join('');
   const shown = cols.filter(c => c.on), hidden = cols.filter(c => !c.on);
   const pt = x => `<button type="button" class="flow-pt${x.today ? ' today' : ''}" data-flowpt="${esc(x.hn)}"${x.doc && docHex(x.doc) ? ` style="color:${docHex(x.doc)}"` : ''} title="${esc(`${x.hn} ${x.name} · ${x.doc ? `แพทย์ ${x.doc}` : 'ไม่ระบุแพทย์'} · ${x.tip}`)}" aria-label="${esc(`${x.hn} ${x.name}`)}">${PERSON_SVG}</button>`;
-  const pts = xs => `<div class="flow-pts">${xs.map(pt).join('') || '<span class="muted flow-none">–</span>'}</div>`;
+  // แถวละแพทย์ (ลำดับตามตั้งค่า) · ป้ายแพทย์ + จำนวน · ในแถวเรียงตาม HN
+  const pts = xs => {
+    if (!xs.length) return '<div class="flow-pts"><span class="muted flow-none">–</span></div>';
+    const by = new Map();
+    for (const x of xs) { const d = x.doc || ''; if (!by.has(d)) by.set(d, []); by.get(d).push(x); }
+    return [...by.keys()].sort(docSort).map(d => { const ys = by.get(d).sort((a, b) => str(a.hn).localeCompare(str(b.hn))); return `<div class="flow-doc" data-flowdoc="${esc(d)}"><span class="flow-doc-h" title="${esc(`${d ? `แพทย์ ${d}${docName(d) ? ' · ' + docName(d) : ''}` : 'ไม่ระบุแพทย์'} · ${ys.length} คน`)}">${d ? docChip(d) : '<span class="doc-chip">?</span>'}<b>${ys.length}</b></span><div class="flow-pts">${ys.map(pt).join('')}</div></div>`; }).join('');
+  };
   const uniq = xs => { const seen = new Set(); return xs.filter(x => { const k = hnKey(x.hn) + '|' + x.subKey; return !seen.has(k) && seen.add(k); }); };
   const body = c => {
     const xs = uniq(list.filter(x => x.col === c.id)), n = new Set(xs.map(x => hnKey(x.hn))).size;
     if (c.id !== 'ctsim' && c.id !== 'tx') return { n, html: pts(xs) };
-    const order = c.id === 'ctsim' ? ctRooms().map(r => r.id) : state.config.rooms.slice(), keys = [...new Set([...order, ...xs.map(x => x.subKey)])];
+    const order = c.id === 'ctsim' ? ctRooms().map(r => r.id) : state.config.rooms.slice();
+    let keys = [...new Set([...order, ...xs.map(x => x.subKey)])];
+    if (c.id === 'ctsim') {   // นัดส่วนใหญ่ไม่ได้เลือกเครื่อง CT: แสดงเฉพาะเครื่องที่มีนัด · มีแต่ไม่ระบุเครื่อง = ไม่แบ่งกลุ่ม
+      keys = keys.filter(k => xs.some(x => x.subKey === k));
+      if (keys.length <= 1 && !keys[0]) return { n, html: pts(xs) };
+    }
     return { n, html: keys.map(k => { const ys = xs.filter(x => x.subKey === k); return `<div class="flow-sub"><div class="flow-sub-h">${esc(c.id === 'ctsim' ? (k ? ctLabel(k) : 'ไม่ระบุเครื่อง') : roomLabel(k || NO_ROOM))} <span class="n">${ys.length}</span></div>${pts(ys)}</div>`; }).join('') };
   };
   $('#flow-board').innerHTML = shown.map((c, i) => {
