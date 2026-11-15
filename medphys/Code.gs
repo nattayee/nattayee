@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.1';
-const API_LEVEL = 82;   // 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.2';
+const API_LEVEL = 83;   // 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3521,6 +3521,184 @@ function extBook_(s, what) {
   }
 }
 const brachyBook_ = s => extBook_(s, 'ระบบนัด Brachytherapy');
+
+/* ---------- TDF Dose Calculator (17 พ.ย. รอบ 2): หน้าเครื่องคำนวณ TDF ฝังในแถบย่อยของ Planning · บันทึกลงชีตเดิมของเว็บ TDF ----------
+ * ทำแบบเดียวกับ tdfList / tdfSave / tdfRecheck / tdfSavePdf / tdfWithdraw ของเว็บ TDF (แถว คอลัมน์ สถานะ เลขที่ ลายเซ็น PDF) · ผู้ใช้ = บัญชีที่เข้าสู่ระบบนี้
+ * ชีต: config.tdfApp.rec (ว่าง = ลิงก์ของ RC จาก TDF · config.tdfSync.url) แท็บ Records · PDF: config.tdfApp.pdf หรือโฟลเดอร์ "TDF Reports (อนุมัติแล้ว)" */
+const TDFX_HEAD = ['id', 'createdAt', 'status', 'type', 'hn', 'patient', 'doctor', 'tdf', 'calcUser', 'calcName', 'calcRole', 'reviewUser', 'reviewName', 'reviewRole',
+  'reviewAt', 'reviewNote', 'recheckTdf', 'sig', 'json', 'pdfFileId', 'pdfUrl'];
+const TDFX_ROLE = 'MP', TDFX_LIMIT = 300, TDFX_PDF_FOLDER = 'TDF Reports (อนุมัติแล้ว)', TDFX_PDF_MAX = 15 * 1024 * 1024, TDFX_TYPES = { frac: 1, gap: 1, brachy: 1 };
+const tdfxUrl_ = cfg => String((cfg.tdfApp || {}).rec || '').trim() || String((cfg.tdfSync || {}).url || '').trim();
+function tdfxSheet_(url) {
+  if (!url) throw new Error('ยังไม่ได้ตั้งลิงก์ชีตบันทึกของ TDF (ตั้งค่า → แถบงานอื่น → TDF Dose Calculator)');
+  const book = extBook_({ url: url }, 'TDF Dose Calculator'), sh = book.getSheetByName('Records');
+  if (!sh) throw new Error('ไม่พบแท็บ Records ในชีต ' + book.getName() + ' (ต้องเป็นชีตที่เว็บ TDF Dose Calculator ใช้เก็บรายการ: TDF Calculator Records)');
+  const head = sh.getRange(1, 1, 1, TDFX_HEAD.length).getValues()[0].map(String);
+  if (head.join('|') !== TDFX_HEAD.join('|')) throw new Error('หัวคอลัมน์ของแท็บ Records ในชีต ' + book.getName() + ' ไม่ตรงกับเว็บ TDF จึงไม่บันทึก (ต้องเป็น ' + TDFX_HEAD.join(', ') + ')');
+  return sh;
+}
+// ผู้ใช้ที่เห็นแถบ TDF · edit = กรอก บันทึก recheck (ตำแหน่ง MP ใน Workspace เหมือนเว็บ TDF)
+function tdfxUser_(token, edit) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (u.via !== 'google' && !userAccess_(cfg, 'tdfcalc', u)) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ไม่เห็นแถบ TDF Dose Calculator');
+  if (edit && u.role !== TDFX_ROLE) throw new Error('ดูได้อย่างเดียว · การกรอกค่า บันทึก และ recheck ทำได้เฉพาะนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + TDFX_ROLE + ' ใน Workspace)');
+  return { cfg: cfg, me: { username: String(u.username || ''), name: String(u.name || u.username || ''), role: String(u.role || '') } };
+}
+function tdfxLocked_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('ระบบกำลังบันทึกข้อมูลของผู้ใช้อื่นอยู่ กรุณาลองใหม่อีกครั้งในอีกสักครู่');
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+function tdfxRecord_(row) {
+  let j = {};
+  try { j = JSON.parse(row[18] || '{}'); } catch (e) { j = {}; }
+  const t = v => (v ? new Date(v).getTime() : null);
+  return {
+    id: String(row[0]), at: t(row[1]), status: String(row[2]), type: String(row[3]), tdf: Number(row[7]), ref: j.ref,
+    title: j.title || '', summary: j.summary || '', sig: String(row[17]), state: j.state, patient: j.patient || {}, doctor: String(row[6]),
+    snap: j.snap || {},
+    calc: { username: String(row[8]), name: String(row[9]), role: String(row[10]), at: t(row[1]) },
+    review: row[11] ? { username: String(row[11]), name: String(row[12]), role: String(row[13]), at: t(row[14]), note: String(row[15] || ''), recheckTdf: row[16] === '' ? null : Number(row[16]) } : null,
+    pdf: row[19] ? { id: String(row[19]), url: String(row[20] || '') } : null,
+  };
+}
+function tdfxBySig_(rows, sig) {
+  const out = { approved: null, pending: null };
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][17] !== sig) continue;
+    if (rows[i][2] === 'approved' && !out.approved) out.approved = { row: i + 1, values: rows[i] };
+    if (rows[i][2] === 'pending' && !out.pending) out.pending = { row: i + 1, values: rows[i] };
+  }
+  return out;
+}
+function tdfxFind_(rows, id) {
+  for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][0]) === String(id)) return { row: i + 1, values: rows[i] };
+  return null;
+}
+const tdfxId_ = date => Utilities.formatDate(date, 'Asia/Bangkok', 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 6);
+const tdfxName_ = p => ((p.prefix && p.prefix !== '-' ? String(p.prefix) : '') + [p.first, p.last].filter(x => x).join(' ')).trim().slice(0, 120);
+function tdfxJson_(rec) {
+  if (!rec || typeof rec !== 'object') throw new Error('ไม่มีข้อมูลการคำนวณ');
+  const p = rec.patient = rec.patient || {};
+  if (!TDFX_TYPES[rec.type]) throw new Error('ชนิดการคำนวณไม่ถูกต้อง');
+  if (!isFinite(rec.tdf) || !isFinite(rec.ref)) throw new Error('ค่า TDF ไม่ถูกต้อง');
+  const blank = v => !String(v || '').trim();
+  if (blank(p.hn) || blank(p.prefix) || blank(p.first) || blank(p.last) || blank(rec.doctor)) throw new Error('กรอก HN คำนำหน้าชื่อ ชื่อ นามสกุล และแพทย์ผู้รักษาให้ครบก่อนบันทึกหรือ recheck');
+  const json = JSON.stringify({ title: rec.title, ref: rec.ref, summary: rec.summary, state: rec.state, patient: p, snap: rec.snap });
+  if (json.length > 45000) throw new Error('ข้อมูลการคำนวณยาวเกินไป');
+  return json;
+}
+const TDFX_DONE = id => 'การคำนวณนี้ recheck แล้ว (เลขที่ ' + id + ') กด “สร้างรายงาน PDF” เพื่อดาวน์โหลดรายงาน';
+/** รายการคำนวณล่าสุด 300 รายการ (ใหม่ก่อน) */
+function tdfxList(token) {
+  const x = tdfxUser_(token, false), rows = tdfxSheet_(tdfxUrl_(x.cfg)).getDataRange().getValues().slice(1);
+  return rows.slice(-TDFX_LIMIT).reverse().map(tdfxRecord_);
+}
+/** บันทึกไว้ก่อน (รอ recheck) · การคำนวณเดิมซ้ำ = คืนรายการที่มีอยู่ */
+function tdfxSave(rec, token) {
+  const x = tdfxUser_(token, true), me = x.me, json = tdfxJson_(rec), p = rec.patient, sh = tdfxSheet_(tdfxUrl_(x.cfg));
+  return tdfxLocked_(() => {
+    const sig = String(rec.sig || ''), found = tdfxBySig_(sh.getDataRange().getValues(), sig);
+    if (found.approved) throw new Error(TDFX_DONE(found.approved.values[0]));
+    if (found.pending) { const kept = tdfxRecord_(found.pending.values); kept.existing = true; return kept; }
+    const now = new Date(), row = [tdfxId_(now), now, 'pending', rec.type, String(p.hn).slice(0, 20), tdfxName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, '', '', '', '', '', '', sig, json, '', ''];
+    sh.appendRow(row);
+    return tdfxRecord_(row);
+  });
+}
+/** Recheck โดยนักฟิสิกส์การแพทย์คนที่ 2 (ชื่อผู้ใช้และรหัสผ่าน Workspace ของคนนั้น · ตรวจแล้วออกจากระบบทันที ไม่เก็บรหัสผ่าน) */
+function tdfxRecheck(rec, username, password, token) {
+  const x = tdfxUser_(token, true), me = x.me, json = tdfxJson_(rec), p = rec.patient;
+  username = String(username || '').trim();
+  if (!username || !password) throw new Error('กรอกชื่อผู้ใช้และรหัสผ่านของนักฟิสิกส์การแพทย์ผู้ recheck');
+  let res;
+  try { res = lpchCall_({ action: 'login', username: username, password: String(password) }); } catch (e) { throw new Error('Recheck ไม่สำเร็จ: ' + (e.message || e)); }
+  try { if (res.token) lpchCall_({ action: 'logout', token: String(res.token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
+  const ru = res.user || {}, v = { username: String(ru.username || ''), name: String(ru.fullName || ru.username || ''), role: String(ru.role || '') };
+  if (v.role !== TDFX_ROLE) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์ (ตำแหน่ง ' + TDFX_ROLE + ' ใน Workspace)');
+  const sh = tdfxSheet_(tdfxUrl_(x.cfg));
+  return tdfxLocked_(() => {
+    const sig = String(rec.sig || ''), found = tdfxBySig_(sh.getDataRange().getValues(), sig), now = new Date();
+    if (found.approved) throw new Error(TDFX_DONE(found.approved.values[0]));
+    if (found.pending) {
+      const row = found.pending.values;
+      if (v.username === row[8]) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (' + row[9] + ')');
+      row[2] = 'approved'; row[11] = v.username; row[12] = v.name; row[13] = v.role; row[14] = now; row[15] = ''; row[16] = Number(rec.tdf);
+      sh.getRange(found.pending.row, 1, 1, row.length).setValues([row]);
+      return tdfxRecord_(row);
+    }
+    if (v.username === me.username) throw new Error('ผู้ recheck ต้องเป็นนักฟิสิกส์การแพทย์คนละคนกับผู้คำนวณ (ผู้ที่เข้าสู่ระบบอยู่)');
+    const fresh = [tdfxId_(now), now, 'approved', rec.type, String(p.hn).slice(0, 20), tdfxName_(p), String(rec.doctor).slice(0, 80), Number(rec.tdf),
+      me.username, me.name, me.role, v.username, v.name, v.role, now, '', Number(rec.tdf), sig, json, '', ''];
+    sh.appendRow(fresh);
+    return tdfxRecord_(fresh);
+  });
+}
+// โฟลเดอร์ PDF (ตั้งค่า หรือชื่อ TDF Reports (อนุมัติแล้ว) ที่ยังไม่ถูกลบ) · date = โฟลเดอร์ย่อยของเดือนนั้น · find = ไม่สร้าง
+function tdfxFolder_(pdf, date, find) {
+  const raw = String(pdf || '').trim(), m = /\/folders\/([\w-]{20,})/.exec(raw) || /^([\w-]{20,})$/.exec(raw);
+  let root = null;
+  if (m) {
+    try { root = DriveApp.getFolderById(m[1]); } catch (e) { throw new Error('เปิดโฟลเดอร์ PDF ของ TDF ไม่ได้ (' + e.message + ') · บัญชีที่ Deploy ระบบนี้ต้องแก้ไขโฟลเดอร์นั้นได้'); }
+  } else if (raw) {
+    throw new Error('ลิงก์โฟลเดอร์ PDF ของ TDF ต้องเป็นลิงก์โฟลเดอร์ Google Drive (drive.google.com/drive/folders/…)');
+  } else {
+    const it = DriveApp.getFoldersByName(TDFX_PDF_FOLDER);
+    while (it.hasNext() && !root) { const f = it.next(); if (!f.isTrashed()) root = f; }
+    if (!root && !find) root = DriveApp.createFolder(TDFX_PDF_FOLDER);
+  }
+  if (!root || !date) return root;
+  const month = Utilities.formatDate(new Date(date), 'Asia/Bangkok', 'yyyy-MM'), sub = root.getFoldersByName(month);
+  return sub.hasNext() ? sub.next() : root.createFolder(month);
+}
+/** เก็บรายงาน PDF ของรายการที่ recheck แล้วใน Google Drive (ผู้คำนวณหรือผู้ recheck · เก็บครั้งเดียว) */
+function tdfxSavePdf(id, base64, fileName, token) {
+  const x = tdfxUser_(token, true), me = x.me;
+  let bytes;
+  try { bytes = Utilities.base64Decode(String(base64 || '')); } catch (e) { throw new Error('ไฟล์ PDF ไม่ถูกต้อง'); }
+  if (!bytes.length || bytes.length > TDFX_PDF_MAX) throw new Error('ไฟล์ PDF ว่างหรือใหญ่เกินไป');
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== '%PDF') throw new Error('ไฟล์ที่ส่งมาไม่ใช่ PDF');
+  const sh = tdfxSheet_(tdfxUrl_(x.cfg));
+  return tdfxLocked_(() => {
+    const found = tdfxFind_(sh.getDataRange().getValues(), id);
+    if (!found) throw new Error('ไม่พบรายการ');
+    const row = found.values;
+    if (row[2] !== 'approved') throw new Error('เก็บ PDF ได้เฉพาะรายการที่ recheck แล้ว');
+    if (me.username !== row[8] && me.username !== row[11]) throw new Error('เก็บ PDF ได้เฉพาะผู้คำนวณหรือผู้ recheck ของรายการนี้');
+    if (row[19]) return tdfxRecord_(row);
+    const name = String(fileName || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').trim().slice(0, 120) || ('Decay Dose_' + row[4] + '.pdf');
+    const file = tdfxFolder_((x.cfg.tdfApp || {}).pdf, row[14] || new Date()).createFile(Utilities.newBlob(bytes, 'application/pdf', name));
+    file.setDescription('TDF ' + Number(row[7]).toFixed(1) + ' · HN ' + row[4] + ' ' + row[5] + ' · แพทย์ ' + row[6] + ' · คำนวณ ' + row[9] + ' · recheck ' + row[12] + ' · เลขที่ ' + row[0]);
+    row[19] = file.getId();
+    row[20] = file.getUrl();
+    sh.getRange(found.row, 1, 1, row.length).setValues([row]);
+    return tdfxRecord_(row);
+  });
+}
+/** ผู้คำนวณถอนรายการของตัวเองที่ยังรอ recheck (recheck แล้วถอนไม่ได้) */
+function tdfxWithdraw(id, token) {
+  const x = tdfxUser_(token, true), sh = tdfxSheet_(tdfxUrl_(x.cfg));
+  return tdfxLocked_(() => {
+    const found = tdfxFind_(sh.getDataRange().getValues(), id);
+    if (!found) return true;
+    if (found.values[8] !== x.me.username) throw new Error('ถอนได้เฉพาะรายการที่คุณเป็นผู้คำนวณ');
+    if (found.values[2] === 'approved') throw new Error('รายการที่ recheck แล้วถอนไม่ได้');
+    sh.deleteRow(found.row);
+    return true;
+  });
+}
+/** แอดมิน: ตรวจชีตบันทึกและโฟลเดอร์ PDF ของ TDF ด้วยค่าที่กำลังตั้ง (ไม่เขียนอะไร) */
+function tdfxCheck(s, token) {
+  const u = who_(token);
+  if (!u.isAdmin) throw new Error('ตรวจชีตของ TDF ได้เฉพาะแอดมิน');
+  s = s && typeof s === 'object' ? s : {};
+  const sh = tdfxSheet_(String(s.rec || '').trim()), rows = sh.getDataRange().getValues().slice(1);
+  const dates = rows.map(r => (r[1] instanceof Date ? Utilities.formatDate(r[1], 'Asia/Bangkok', 'yyyy-MM-dd') : '')).filter(String).sort();
+  const f = tdfxFolder_(s.pdf, null, true);
+  return { title: sh.getParent().getName(), rows: rows.length, pending: rows.filter(r => r[2] === 'pending').length, approved: rows.filter(r => r[2] === 'approved').length,
+    last: dates[dates.length - 1] || '', folder: f ? { name: f.getName(), url: f.getUrl() } : null };
+}
 
 /* ---------- HDR Activity (17 พ.ย.): ช่องกรอกหลังช่องค้นหา HN ในแถบนัดคิวใส่แร่ · อ่าน/บันทึกในชีตของเว็บ HDR Activity ----------
  * ตั้งค่า → นัดคิวใส่แร่ → HDR Activity (config.bq.hdr = { on, url, sheet, tol }) · ข้อมูลอยู่ที่ชีตของเว็บนั้นที่เดียว
