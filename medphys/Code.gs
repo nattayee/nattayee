@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-15.2';
-const API_LEVEL = 80;
+const CODE_VERSION = '2026-11-16.1';
+const API_LEVEL = 81;   // 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -547,13 +547,13 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq' };   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course' };   // flow (16 พ.ย.): RT Workflow มีข้อมูลผู้ป่วย = เห็นเท่าแถบห้องฉายจนกว่าแอดมินจะตั้ง   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
-const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue', 'mpleave', 'deptcal'], duty: ['course', 'ctsim', 'jobs'],
-  ctsim: ['ctsim', 'work', 'appt', 'jobs', 'consult'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq', 'consult'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq', 'consult'], bq: ['bq', 'course', 'dash'], vac: ['jobs', 'ctsim'],
-  dq: ['dq', 'appt', 'consult'], dqLeave: ['dq', 'consult', 'rojobs', 'deptcal'], events: ['deptcal'], jobLeaves: ['deptcal'] };   // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
+const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult', 'flow'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue', 'mpleave', 'deptcal'], duty: ['course', 'ctsim', 'jobs'],
+  ctsim: ['ctsim', 'work', 'appt', 'jobs', 'consult', 'flow'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq', 'consult', 'flow'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq', 'consult'], bq: ['bq', 'course', 'dash', 'flow'], vac: ['jobs', 'ctsim'],
+  dq: ['dq', 'appt', 'consult', 'flow'], dqLeave: ['dq', 'consult', 'rojobs', 'deptcal'], events: ['deptcal'], jobLeaves: ['deptcal', 'jobs'] };   // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 function guestNeeds_(user, config) {
   const out = {};
   const seen = Object.keys(GUEST_TABLES).reduce((a, t) => a.concat(GUEST_TABLES[t]), []).filter(v => user.via === 'google' || userAccess_(config, v, user));
@@ -848,10 +848,10 @@ const CFG_TABS = {
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard'],
-  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac'],
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow
   form: ['formRules'],   // 13 พ.ย.: ตั้งค่า → ฟอร์ม (ค่าเริ่มต้นของฟอร์มตามตัวเลือก)
   cols: ['cols'],        // 13 พ.ย.: ตั้งค่า → Column แสดงผล (ค่าเริ่มต้นของคอลัมน์)
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide'],
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู
 };
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
 const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
