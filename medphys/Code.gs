@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.5';
-const API_LEVEL = 86;   // 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.6';
+const API_LEVEL = 87;   // 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3038,7 +3038,10 @@ function recentRtd_(ss) {
   return readTable_(ss, 'rtd').filter(x => String(x.date) >= from);
 }
 /** แถบห้องฉาย: แพทย์ที่ผู้ป่วยต้องพบก่อนฉาย ของห้องนั้นในวันนั้น (ติ๊ก / เอาติ๊กออก = ส่งรายการทั้งหมดของห้อง) */
-function seeSave(date, room, docs, token) {
+// API 87: แก้ไข (ห้องนั้นวันนั้นมีแพทย์ที่บันทึกไว้แล้ว แล้วรายการเปลี่ยน) ต้องใส่ PIN · บันทึกครั้งแรกของวันไม่ต้อง
+// หน้าเว็บรุ่น 2026-11-17.6 ส่ง 3 ค่า (ไม่มี pin) = pin ว่าง (แก้ไขจะถูกขอ PIN)
+function seeSave(date, room, docs, pin, token) {
+  if (arguments.length < 5) { token = pin; pin = ''; }
   const u = requireEdit_(token, EDIT_VIEWS.see);
   date = String(date || '');
   room = String(room || '').trim().slice(0, 60);
@@ -3049,6 +3052,8 @@ function seeSave(date, room, docs, token) {
   return withLock_(() => {
     const ss = ss_(), id = date + '|' + room, x = openRow_(ss, 'see', null, id);
     const rec = { id: id, date: date, room: room, docs: list.join(','), by: R8_WHO_(u), at: new Date().toISOString() };
+    const was = x.cur ? String(x.cur.docs || '') : '';
+    pinChange_(u, pin, !!was && was !== rec.docs);
     writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.see.fields, rec, x.row ? x.vals : null);
     return rec;
   });
