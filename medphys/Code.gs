@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.2';
-const API_LEVEL = 83;   // 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.3';
+const API_LEVEL = 84;   // 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -215,6 +215,8 @@ TABLES.dq = {
     ['desk', 'จุดรับเคส'],
     // API 78: Standing order สำหรับผู้ป่วยนัด case call center (JSON ของช่องในแบบฟอร์ม · หน้าเว็บพิมพ์เป็น A4)
     ['so', 'Standing order'],
+    // API 84: รับคืนจากแพทย์ (ติ๊กในแถบแจกงานแพทย์ · dqBack) · back = เวลาที่ติ๊ก ('' = ยังไม่รับคืน) · backBy = ผู้ติ๊ก
+    ['back', 'รับคืน'], ['backBy', 'รับคืนโดย'],
   ],
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
@@ -3261,6 +3263,19 @@ function dqLeaveSave(rec, token) {
   });
 }
 // สถานะจากแถบ Consult / แจกงานแพทย์ (API 73 · ไม่ต้องใช้ PIN เหมือนไม่มาทำ CT): doc = ขอเอกสารเพิ่ม (ต้องมีรายละเอียด) · nort = ไม่ RT · '' = กลับไปรอลงนัด
+// API 84: รับคืนจากแพทย์ (คอลัมน์ รับคืน ในแถบแจกงานแพทย์) · on = ติ๊ก / เอาติ๊กออก
+function dqBack(id, on, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.dq);
+  return withLock_(() => {
+    const ss = ss_(), cfg = readConfig_(ss) || {}, x = openRow_(ss, 'dq', null, id);
+    if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    dqDeskCheck_(u, cfg, x.cur.desk);
+    const set = on ? { back: dqNow_(), backBy: String(u.name || u.username || u.me || '') } : { back: '', backBy: '' };
+    set.updated = dqNow_();
+    writeFields_(x.sh, x.row, x.header, TABLES.dq.fields.filter(f => f[0] in set), set, x.vals);
+    return Object.assign(x.cur, set);
+  });
+}
 function dqMark(id, st, text, token) {
   const u = requireEdit_(token, EDIT_VIEWS.dq.concat(['consult']));
   st = st === 'doc' || st === 'nort' ? st : '';

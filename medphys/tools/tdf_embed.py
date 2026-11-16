@@ -84,6 +84,9 @@ for b in blocks(css):
             sys.exit('กฎ CSS ที่ยังไม่รู้วิธีแปลง: ' + sel)
         shadow.append(b)
 shadow.append('.tdfx-body { border-radius: 12px; padding-top: 2px; }')
+# 18 พ.ย.: ไม่มีช่องคำนำหน้าชื่อ (ซ่อนไว้ · บันทึกเป็น "-" = อื่น ๆ / ไม่มี ของเว็บ TDF) · แถบผู้ป่วยเหลือ 4 ช่อง
+shadow.append('.case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.6fr); }')
+shadow.append('@media (max-width: 900px) { .case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }')
 report.insert(0, '.tdfx-report { %s }' % font_vars)
 report.append('@media print { html.tdfx-printing body { background: #FFFFFF !important; margin: 0 !important; padding: 0 !important; }'
               ' html.tdfx-printing body > :not(.tdfx-report) { display: none !important; }'
@@ -95,6 +98,7 @@ report_css = '\n'.join(squash(b) for b in report)
 
 # ---------- HTML ----------
 body = one(body, '<div class="report" id="report" aria-hidden="true"></div>', '', 'report div')
+body = one(body, '<div class="field"><label for="pt-prefix">', '<div class="field" hidden><label for="pt-prefix">', 'prefix field')
 body = '<div class="tdfx-body">' + body.strip() + '\n</div>'
 
 # ---------- สคริปต์ ----------
@@ -110,6 +114,9 @@ if n != 1:
 app = app.replace('document.querySelectorAll(', 'root.querySelectorAll(').replace('document.querySelector(', 'root.querySelector(')
 app = one(app, 'document.activeElement', 'root.activeElement', 'activeElement')
 app = one(app, 'document.body.classList.toggle("view-only", ro);', 'wrap.classList.toggle("view-only", ro);', 'view-only')
+app = one(app, '["pt-prefix", "คำนำหน้าชื่อ"], ', '', 'prefix required')
+app = one(app, '    Object.entries(PT_FIELDS).forEach(([k, id]) => { p[k] = $(id).value.trim(); });\n    return p;',
+          '    Object.entries(PT_FIELDS).forEach(([k, id]) => { p[k] = $(id).value.trim(); });\n    if (!p.prefix) p.prefix = "-";   // ไม่มีช่องคำนำหน้า: "-" = อื่น ๆ / ไม่มี (รายการที่เปิดจากเว็บ TDF ใช้คำนำหน้าเดิม)\n    return p;', 'getPatient')
 app = one(app, 'const r = $("report");', 'const r = $("tdfx-report");', 'report element')
 app = one(app, 'doc.getElementById("report")', 'doc.getElementById("tdfx-report")', 'report clone')
 app = one(app, 'setTimeout(() => window.print(), 300);', 'setTimeout(() => env.print(), 300);', 'print')
@@ -119,14 +126,14 @@ app = one(app, '''  window.addEventListener("hashchange", () => {
     if (tabs.some(([k]) => k === h)) selectTab(h);
   });
 ''', '', 'hashchange')
-app = one(app, '  window.TDFApp = {\n', '''  const api = {
+app = one(app, '  window.TDFApp = {\n', '''  // ผู้ใช้แก้ HN / ชื่อ / สกุลเอง = ผู้ป่วยคนใหม่ · ล้างคำนำหน้า (ที่ซ่อนอยู่) ของรายการที่เปิดไว้
+  ["pt-hn", "pt-first", "pt-last"].forEach((id) => $(id).addEventListener("input", (e) => { if (e.isTrusted) $("pt-prefix").value = ""; }));
+  const api = {
     canEdit: () => canEdit(),
     // ผู้ป่วยจากระบบนี้: กรอกแถบผู้ป่วยให้ (ผู้ใช้แก้ต่อได้)
     prefill(p) {
       if (!p || !p.hn || !canEdit()) return false;
-      const sel = $("pt-prefix");
-      if (p.prefix && ![...sel.options].some((o) => o.value === p.prefix)) sel.add(new Option(p.prefix, p.prefix));
-      setPatient({ hn: p.hn, prefix: p.prefix, first: p.first, last: p.last }, p.doctor || "");
+      setPatient({ hn: p.hn, prefix: "", first: p.first, last: p.last }, p.doctor || "");
       clearPatientErrors();
       $("pt-hn").dispatchEvent(new Event("input"));
       return true;

@@ -1080,6 +1080,12 @@ div.c-main,div.lrow{cursor:default}
 .hdr-diff.ok{color:var(--ok);font-weight:600}
 .hdr-diff.bad{color:var(--late);font-weight:600}
 .hdr-err{color:var(--late);font-size:12.5px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 18 พ.ย.: แจกงานแพทย์ คอลัมน์รับคืน (ติ๊กเมื่อได้รับคืนจากแพทย์) */
+.dq-back-h,.dq-back-c{text-align:center;width:1%;white-space:nowrap}
+.dq-back{display:inline-flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;padding:4px 6px;margin:-4px -6px}
+.dq-back input{width:18px;height:18px;margin:0;accent-color:var(--accent);cursor:pointer}
+.dq-back input:disabled{cursor:default}
+.dq-back small{font-size:11px;color:var(--muted);line-height:1.1}
 /* 17 พ.ย. (รอบ 2): TDF Dose Calculator ฝังทั้งหน้า (แถบย่อยของ Planning) */
 .tdf-bar{align-items:center}
 .tdf-hn{flex:0 1 280px;min-width:180px}
@@ -3179,6 +3185,8 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 .hist-empty { color: var(--muted); font-size: .88rem; padding: 12px 2px; }
 .drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
 .tdfx-body { border-radius: 12px; padding-top: 2px; }
+.case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.6fr); }
+@media (max-width: 900px) { .case-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 </style>
 <div class="tdfx-body"><div class="wrap">
   <header class="top">
@@ -3204,7 +3212,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     </div>
     <fieldset class="case-fields plain" id="fs-case">
       <div class="field"><label for="pt-hn">HN <span class="req" aria-hidden="true">*</span></label><input id="pt-hn" type="text" inputmode="numeric" autocomplete="off" maxlength="20" required aria-required="true"></div>
-      <div class="field"><label for="pt-prefix">คำนำหน้าชื่อ <span class="req" aria-hidden="true">*</span></label>
+      <div class="field" hidden><label for="pt-prefix">คำนำหน้าชื่อ <span class="req" aria-hidden="true">*</span></label>
         <select id="pt-prefix" required aria-required="true"><option value="">— เลือก —</option><option>นาย</option><option>นาง</option><option>นางสาว</option><option>เด็กชาย</option><option>เด็กหญิง</option><option>พระภิกษุ</option><option>สามเณร</option><option value="-">อื่น ๆ / ไม่มี</option></select></div>
       <div class="field"><label for="pt-first">ชื่อ <span class="req" aria-hidden="true">*</span></label><input id="pt-first" type="text" autocomplete="off" maxlength="60" required aria-required="true"></div>
       <div class="field"><label for="pt-last">นามสกุล <span class="req" aria-hidden="true">*</span></label><input id="pt-last" type="text" autocomplete="off" maxlength="60" required aria-required="true"></div>
@@ -5221,6 +5229,7 @@ window.tdfxMount = function (root, wrap, env) {
   function getPatient() {
     const p = {};
     Object.entries(PT_FIELDS).forEach(([k, id]) => { p[k] = $(id).value.trim(); });
+    if (!p.prefix) p.prefix = "-";   // ไม่มีช่องคำนำหน้า: "-" = อื่น ๆ / ไม่มี (รายการที่เปิดจากเว็บ TDF ใช้คำนำหน้าเดิม)
     return p;
   }
   function setPatient(p, doctor) {
@@ -5234,7 +5243,7 @@ window.tdfxMount = function (root, wrap, env) {
   $("ptClear").addEventListener("click", () => { setPatient({}, ""); clearPatientErrors(); $("pt-hn").focus(); });
 
   // Every patient field is required before saving, recheck or making a report.
-  const REQUIRED = [["pt-hn", "HN"], ["pt-prefix", "คำนำหน้าชื่อ"], ["pt-first", "ชื่อ"], ["pt-last", "นามสกุล"], ["pt-doctor", "แพทย์ผู้รักษา"]];
+  const REQUIRED = [["pt-hn", "HN"], ["pt-first", "ชื่อ"], ["pt-last", "นามสกุล"], ["pt-doctor", "แพทย์ผู้รักษา"]];
   function clearPatientErrors() { REQUIRED.forEach(([id]) => $(id).removeAttribute("aria-invalid")); }
   /** Marks empty required fields, focuses the first one and returns false when anything is missing. */
   function checkPatient() {
@@ -5801,14 +5810,14 @@ window.tdfxMount = function (root, wrap, env) {
   $("pdfBtn").addEventListener("click", () => makePdf());
 
   // The Apps Script build signs people in and supplies the shared backend.
+  // ผู้ใช้แก้ HN / ชื่อ / สกุลเอง = ผู้ป่วยคนใหม่ · ล้างคำนำหน้า (ที่ซ่อนอยู่) ของรายการที่เปิดไว้
+  ["pt-hn", "pt-first", "pt-last"].forEach((id) => $(id).addEventListener("input", (e) => { if (e.isTrusted) $("pt-prefix").value = ""; }));
   const api = {
     canEdit: () => canEdit(),
     // ผู้ป่วยจากระบบนี้: กรอกแถบผู้ป่วยให้ (ผู้ใช้แก้ต่อได้)
     prefill(p) {
       if (!p || !p.hn || !canEdit()) return false;
-      const sel = $("pt-prefix");
-      if (p.prefix && ![...sel.options].some((o) => o.value === p.prefix)) sel.add(new Option(p.prefix, p.prefix));
-      setPatient({ hn: p.hn, prefix: p.prefix, first: p.first, last: p.last }, p.doctor || "");
+      setPatient({ hn: p.hn, prefix: "", first: p.first, last: p.last }, p.doctor || "");
       clearPatientErrors();
       $("pt-hn").dispatchEvent(new Event("input"));
       return true;
@@ -7135,7 +7144,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-17.2';
+const PAGE_VERSION = '2026-11-17.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7237,6 +7246,7 @@ const sheetStore = {
   evRemove: (id, pin) => call('evRemove', id, pin),
   dqLeaveRemove: (id, pin) => call('dqLeaveRemove', id, pin),
   dqMark: (id, st, text) => call('dqMark', id, st, text),
+  dqBack: (id, on) => call('dqBack', id, !!on),
   auditRecent: (view, q, before) => call('auditRecent', view, q, before),
   auditFor: (ids, view) => call('auditFor', ids, view),
   casesDo: (fn, ids, args) => call('casesDo', fn, ids, args),
@@ -7840,6 +7850,13 @@ function localStore() {
       return clone(v);
     },
     dqLeaveRemove: async (id, pin) => { demoCheckPin(pin); const n = db.dqLeave.length; db.dqLeave = db.dqLeave.filter(x => x.id !== id); persist(); return db.dqLeave.length < n; },
+    dqBack: async (id, on) => {
+      const r = db.dq.find(x => x.id === id);
+      if (!r) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
+      Object.assign(r, on ? { back: nowISO(), backBy: state.user.name || 'ผู้ใช้ตัวอย่าง' } : { back: '', backBy: '' }, { updated: nowISO() });
+      persist();
+      return clone(r);
+    },
     dqMark: async (id, st, text) => {
       const r = db.dq.find(x => x.id === id);
       if (!r) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
@@ -10089,9 +10106,14 @@ const DQ_API = 62;
 const dqOn = () => serverHas(DQ_API);
 const DQ_OLD = 'แถบแจกงานแพทย์ต้องใช้ Code.gs รุ่น 2026-11-09.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 const DQ2_OLD = 'เคส Emergency · เวร S1 · วันที่ไม่แจก · คิวชดเชย ต้องใช้ Code.gs รุ่น 2026-11-10.4 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
-const DQ_KEYS = ['id', 'hn', 'name', 'doc', 'how', 'date', 'st', 'note', 'by', 'created', 'updated', 'visit', 'chan', 'refer', 'icd', 'src', 'stNote', 'stBy', 'stAt', 'desk', 'so'];
+const DQ_KEYS = ['id', 'hn', 'name', 'doc', 'how', 'date', 'st', 'note', 'by', 'created', 'updated', 'visit', 'chan', 'refer', 'icd', 'src', 'stNote', 'stBy', 'stAt', 'desk', 'so', 'back', 'backBy'];
 // Code.gs API 73: ขอเอกสารเพิ่ม / ไม่ RT (แถบ Consult) · แก้วันลาแพทย์ · ประวัติการบันทึก
 const DQM_API = 73;
+// 18 พ.ย.: รับคืนจากแพทย์ (คอลัมน์ รับคืน ในแถบแจกงานแพทย์) · back = เวลาที่ติ๊ก · backBy = ผู้ติ๊ก
+const DQB_API = 84;
+const dqBackOn = () => store.mode !== 'sheet' || serverHas(DQB_API);
+const DQB_OLD = 'ช่องรับคืนต้องใช้ Code.gs รุ่น 2026-11-17.3 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const dqBackTip = r => (r.back ? `รับคืนแล้ว ${fmtDay(localDay(r.back))} ${new Date(r.back).toTimeString().slice(0, 5)}${r.backBy ? ` · ${r.backBy}` : ''}` : 'ติ๊กเมื่อได้รับคืนจากแพทย์');
 const dqMarkOn = () => store.mode !== 'sheet' || serverHas(DQM_API);
 // แถบย่อย (Code.gs API 75): Call center (แถบเดิม · ค่าเริ่มต้น Refer) · ภายใน/Walk in (ค่าเริ่มต้น Nurse) · คิวแพทย์ วันลา เวร S1 รายงาน ใช้ร่วมกัน
 // ตำแหน่งที่อยู่ในรายการของแถบย่อยใด = เห็นเฉพาะแถบย่อยนั้น · ตำแหน่งอื่น แอดมิน และบัญชี Google = ทุกแถบย่อย (ตรงกับ dqDesks_ ใน Code.gs)
@@ -10543,8 +10565,8 @@ function renderDq() {
   $('#dq-help').textContent = (words.length ? `ค้นหาทุกเดือน · พบ ${all.length} รายการ${all.length > list.length ? ` (แสดง ${list.length})` : ''}` : `${fmtMonth(ym)} · ${nDesk >= 0 ? `${dqDeskName(dqDesk())} ${nDesk} เคส${dqDesk() === 'walk' && nDesk ? ` (${DQ_VIA.map(([k, l]) => `${l} ${inMonth.filter(r => r.desk === k).length}`).join(' · ')})` : ''} · ` : ''}แจกแล้ว${nDesk >= 0 ? 'ทั้งหมด' : ''} ${inMonth.length} / ${per} เคส${nImp ? ` (จากรายงาน HIS ${nImp})` : ''} · รอลงนัด ${inMonth.filter(r => dqState(r) === 'wait').length}${edit ? ' · กดแถวเพื่อแก้หรือเปลี่ยนแพทย์' : ''}`)
     + (dqDocF ? ` · เฉพาะแพทย์ ${dqDocText(dqDocF)} ${all.length} รายการ (กดชื่อในสรุปรายเดือนอีกครั้ง = ดูทั้งหมด)` : '');
   const st = r => { const s = dqState(r), a = s === 'done' ? dqAppt(r) : null, v = dqInfo(r).visit; return `<span class="dq-st ${s === 'his' ? 'skip' : s}">${s === 'wait' ? 'รอลงนัด' : s === 'skip' ? 'ไม่ต้องลงนัด' : s === 'doc' ? 'รอเอกสาร' : s === 'nort' ? 'ไม่ RT' : s === 'his' ? (v ? `นัดมา ${esc(fmtDay(v))}` : 'จาก HIS') : `ลงนัดแล้ว${a && isDay(a.date) ? ` · CT ${esc(fmtDay(a.date))}` : ''}`}</span>`; };
-  const row = r => { const h = dqHow(r), other = !dqInDesk(r); return `<tr class="ct-row click" data-dqedit="${esc(r.id)}" tabindex="0"${roTip(edit)}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span>${r.desk || other ? ` <span class="dq-desk-tag${r.desk === 'walk' ? ' walk' : ''}" title="แจกจากแถบย่อย ${esc(dqDeskName(dqDeskOf(r)))}">${esc(r.desk ? dqViaName(r.desk) : dqDeskName(dqDeskOf(r)))}</span>` : ''}</td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td></tr>`; };
-  $('#dq-tbl').innerHTML = `<thead><tr><th title="เดือน/ลำดับที่">ลำดับ</th><th>วันที่แจก</th><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>การแจก</th><th>สถานะ</th><th>Note · แจกโดย</th></tr></thead><tbody>${list.map(row).join('') || `<tr><td colspan="8" class="empty-state">${words.length ? 'ไม่พบรายการที่ตรงกับคำค้น' : `ยังไม่มีการแจกงานแพทย์ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
+  const row = r => { const h = dqHow(r), other = !dqInDesk(r); return `<tr class="ct-row click" data-dqedit="${esc(r.id)}" tabindex="0"${roTip(edit)}><td class="num" title="เดือน/ลำดับที่">${esc(dqSeqText(r))}</td><td>${esc(fmtDay(r.date))}</td><td class="ct-hn"><b class="hn">${esc(r.hn)}</b></td><td>${esc(r.name)}</td><td>${docChip(r.doc)} ${esc(docName(r.doc))}</td><td><span class="dq-how ${h.kind}" title="${esc(h.title)}">${esc(h.label)}</span>${r.desk || other ? ` <span class="dq-desk-tag${r.desk === 'walk' ? ' walk' : ''}" title="แจกจากแถบย่อย ${esc(dqDeskName(dqDeskOf(r)))}">${esc(r.desk ? dqViaName(r.desk) : dqDeskName(dqDeskOf(r)))}</span>` : ''}</td><td>${st(r)}</td><td class="muted">${esc([r.note, r.by].filter(Boolean).join(' · '))}</td><td class="dq-back-c"><label class="dq-back" title="${esc(dqBackTip(r))}"><input type="checkbox" data-dqback="${esc(r.id)}"${r.back ? ' checked' : ''}${edit ? '' : ' disabled'} aria-label="รับคืนจากแพทย์ HN ${esc(r.hn)}">${r.back ? `<small>${esc(fmtDay(localDay(r.back)))}</small>` : ''}</label></td></tr>`; };
+  $('#dq-tbl').innerHTML = `<thead><tr><th title="เดือน/ลำดับที่">ลำดับ</th><th>วันที่แจก</th><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>การแจก</th><th>สถานะ</th><th>Note · แจกโดย</th><th class="dq-back-h" title="ติ๊กเมื่อได้รับคืนจากแพทย์">รับคืน</th></tr></thead><tbody>${list.map(row).join('') || `<tr><td colspan="9" class="empty-state">${words.length ? 'ไม่พบรายการที่ตรงกับคำค้น' : `ยังไม่มีการแจกงานแพทย์ใน${esc(fmtMonth(ym))}`}</td></tr>`}</tbody>`;
 }
 async function submitDq(e) {
   e.preventDefault();
@@ -10699,7 +10721,7 @@ const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ
 const HIST_FN = { fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
   courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
-  regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
+  regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
   dqDutySave: 'เวร S1', saveConfig: 'ตั้งค่า', cfgDecide: 'อนุมัติคำขอตั้งค่า', editLog: 'กิจกรรม', removeLog: 'ลบกิจกรรม', dutyDay: 'ผู้ปฏิบัติงาน', jobsSave: 'RTT/RA Jobs', vacSave: 'Vac-Lok', vacRemove: 'ลบ Vac-Lok' };
 const histItem = x => (x && typeof x === 'object' ? [x.date && fmtDay(str(x.date).slice(0, 10)), x.label || x.type || x.room || x.kind, x.reason, x.note].filter(Boolean).join(' ') || '·' : str(x));
 function histVal(v) {
@@ -10897,6 +10919,25 @@ function dqLeaveGone(id) {
   if (dqlDlg.open) renderDqLeaves();
   toast(v ? `ยกเลิกวันลาแพทย์ ${v.doc} ${rangeText(v)} แล้ว` : 'ยกเลิกวันลาแล้ว');
 }
+// รับคืนจากแพทย์: ติ๊ก = บันทึกทันที (แสดงผลก่อน · ไม่สำเร็จ = กลับค่าเดิม)
+$('#dq-tbl').addEventListener('change', async e => {
+  const cb = e.target.closest('input[data-dqback]');
+  if (!cb) return;
+  const r = state.dq.find(x => x.id === cb.dataset.dqback);
+  if (!r) return;
+  if (accessOf('dq') !== 'edit') { cb.checked = !!r.back; return toast(RO_MSG, { err: true }); }
+  if (!dqBackOn()) { cb.checked = !!r.back; return toast(DQB_OLD, { err: true }); }
+  const on = cb.checked, was = { back: r.back, backBy: r.backBy };
+  Object.assign(r, on ? { back: nowISO(), backBy: state.user.name || '' } : { back: '', backBy: '' });
+  dqMemo = null; render();
+  try {
+    const rec = normDq(await store.dqBack(r.id, on));
+    const i = state.dq.findIndex(x => x.id === rec.id);
+    if (i >= 0) state.dq[i] = rec;
+    toast(on ? `รับคืน HN ${r.hn} จากแพทย์แล้ว` : `ยกเลิกรับคืน HN ${r.hn}`);
+  } catch (err) { Object.assign(r, was); toast('บันทึกรับคืนไม่สำเร็จ: ' + errMsg(err), { err: true }); }
+  dqMemo = null; render();
+});
 $('#dq-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-dqedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDqEdit(tr.dataset.dqedit); } });
 
 /* ---------- แจกงานแพทย์: ดึงรายงาน Consult ของ HIS · สรุปรายเดือน · ส่งออก Excel (แบบเอกสารคิวแพทย์) ---------- */
@@ -20177,7 +20218,7 @@ document.addEventListener('click', e => {
     const rgr = e.target.closest('tr[data-rgedit]');
     if (rgr) openRgForm(rgr.dataset.rgedit);
     const dqr = e.target.closest('tr[data-dqedit]');
-    if (dqr) openDqEdit(dqr.dataset.dqedit);
+    if (dqr && !e.target.closest('.dq-back')) openDqEdit(dqr.dataset.dqedit);   // ช่องรับคืน: ติ๊กอย่างเดียว
     const rga = e.target.closest('tr[data-rgarch]');
     if (rga) restoreArch(rga.dataset.rgarch, r => openRgForm(r.id));
     const bqr = e.target.closest('tr[data-bqedit]');
