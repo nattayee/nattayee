@@ -7144,7 +7144,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-17.4';
+const PAGE_VERSION = '2026-11-17.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7201,6 +7201,7 @@ const sheetStore = {
   apptSave: (rec, pin) => call('apptSave', rec, pin),
   apptRemove: (id, pin) => call('apptRemove', id, pin),
   apptMark: (id, mark) => call('apptMark', id, mark),
+  apptRelink: id => call('apptRelink', id),
   regSave: (rec, pin) => call('regSave', rec, pin),
   regRemove: (id, pin) => call('regRemove', id, pin),
   bqCreate: (rec, pin) => call('bqCreate', rec, pin),
@@ -7575,7 +7576,7 @@ function localStore() {
       if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return withVac(old); }
       const c = { ...set, id: rec.id || uid(), took: '', tookBy: '', tookAt: '', by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
       db.ctsim.push(c);
-      const ap = rec.apptFrom && db.appt.find(x => x.id === rec.apptFrom);   // ลงจากนัด: นัดนี้ลง CT-SIM แล้ว
+      const ap = rec.apptFrom && db.appt.find(x => x.id === rec.apptFrom && hnKey(x.hn) === hnKey(c.hn) && !x.took);   // ลงจากนัด: นัดนี้ลง CT-SIM แล้ว (HN ตรงกันเท่านั้น)
       if (ap) Object.assign(ap, { took: c.id, tookBy: c.by, tookAt: nowStamp() });
       persist();
       return withVac(c);
@@ -7737,6 +7738,17 @@ function localStore() {
       if (old) Object.assign(old, set); else db.jobs.push(set);
       persist();
       return clone(old || set);
+    },
+    apptRelink: async id => {
+      const a = db.appt.find(x => x.id === id);
+      if (!a) throw new Error('ไม่พบนัดนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      const cur = a.took && a.took !== 'skip' && db.ctsim.find(x => x.id === a.took);
+      if (!a.took || a.took === 'skip' || (cur && hnKey(cur.hn) === hnKey(a.hn))) return clone(a);
+      const taken = new Set(db.appt.filter(x => x.id !== id).map(x => x.took)), day = isDay(a.date) ? a.date : str(a.created).slice(0, 10);
+      const pick = db.ctsim.filter(x => hnKey(x.hn) === hnKey(a.hn) && !taken.has(x.id)).sort((p, q) => Math.abs(Date.parse(p.date) - Date.parse(day)) - Math.abs(Date.parse(q.date) - Date.parse(day)))[0];
+      Object.assign(a, pick ? { took: pick.id } : { took: '', tookBy: '', tookAt: '' });
+      persist();
+      return clone(a);
     },
     apptMark: async (id, mark) => {
       const a = db.appt.find(x => x.id === id);
@@ -8855,8 +8867,9 @@ function openCtForm(id, ap) {
   if (!ctOn()) return toast('แถบ CT-SIM ต้องใช้ Code.gs รุ่น 2026-10-24.1 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
   const cfg = state.config, ct = cfg.ct;
   ctAppt = !r && ap ? ap.id : '';
+  ctNoLink = '';
   editingCt = r ? clone(r) : normCt({ id: uid(), ct: ap && ctRooms().some(x => x.id === ap.ct) ? ap.ct : ctRoomSel(), date: ap && isDay(ap.date) ? ap.date : today(), send: 'yes', ...(ap ? apToCt(ap) : {}) });
-  const c = editingCt, lap = r && state.appt.find(a => a.took === r.id);
+  const c = editingCt, lap = apOfCt(r);
   if (lap && !c.ctcm && !c.special) Object.assign(c, { ctcm: lap.cm, special: lap.special });   // รายการเดิมที่ลงจากนัด (ก่อนมีช่องนี้): ใช้ของนัด
   $('#ct-title').textContent = r ? `แก้ไขผู้ป่วย CT-SIM ${r.hn}` : 'เพิ่มผู้ป่วย CT-SIM';
   $('#ct-tab-form').textContent = r ? 'แก้ไขผู้ป่วย CT-SIM' : 'เพิ่มผู้ป่วย CT-SIM';
@@ -8965,7 +8978,11 @@ function submitCt(e) {
   });
   if (ctSpOn() && ctMode('ctcm') !== 'off') rec.ctcm = chipValue($('#t-ctcm'));
   if (ctSpOn() && ctMode('special') !== 'off') rec.special = chipValues($('#t-special')).join(', ');
-  if (ctAppt && !state.ct.some(x => x.id === rec.id)) rec.apptFrom = ctAppt;   // Code.gs บันทึกว่านัดนี้ลง CT-SIM แล้ว
+  if (ctAppt && !state.ct.some(x => x.id === rec.id)) {   // Code.gs บันทึกว่านัดนี้ลง CT-SIM แล้ว · 18 พ.ย.: เฉพาะนัดที่ HN ตรงกัน
+    const ap = state.appt.find(x => x.id === ctAppt);
+    if (ap && hnKey(ap.hn) === hnKey(rec.hn)) rec.apptFrom = ctAppt;
+    else if (ap) ctNoLink = ap.hn;   // แจ้งหลังบันทึก (ต่อท้ายข้อความบันทึกแล้ว)
+  }
   if (!$('[data-ctf="vac"]', ctForm).classList.contains('pt-off')) rec.vac = chipValue($('#t-vac'));   // Vac-Lok (ไม่แสดง = ไม่แตะ)
   openCtPin('ctsave', rec);
 }
@@ -8989,14 +9006,15 @@ function openCtPin(mode, rec) {
 function ctSaved(rec, isNew, apptFrom) {
   const i = state.ct.findIndex(x => x.id === rec.id);
   if (i < 0) state.ct.push(rec); else state.ct[i] = rec;
-  const ap = isNew && apptFrom && state.appt.find(x => x.id === apptFrom);
+  const ap = isNew && apptFrom && state.appt.find(x => x.id === apptFrom && hnKey(x.hn) === hnKey(rec.hn));
   if (ap && !ap.took) Object.assign(ap, { took: rec.id, tookBy: rec.by || state.user.name || '', tookAt: nowStamp() });
   ctAppt = '';
   ctDlg.close();
   if (rec.date.slice(0, 7) !== state.month) state.month = rec.date.slice(0, 7);
   if (rec.ct !== ctRoomSel()) pref.set('ctRoom', rec.ct);
   render();
-  toast(`${isNew ? 'เพิ่ม' : 'บันทึก'} ${rec.hn} · ${ctLabel(rec.ct)} ${fmtDay(rec.date)}${rec.send && !rec.took ? ' · ส่งไปแถบงานแล้ว' : ''}`);
+  toast(`${isNew ? 'เพิ่ม' : 'บันทึก'} ${rec.hn} · ${ctLabel(rec.ct)} ${fmtDay(rec.date)}${rec.send && !rec.took ? ' · ส่งไปแถบงานแล้ว' : ''}${ctNoLink ? ` · ไม่ผูกกับนัดของ HN ${ctNoLink} (HN ไม่ตรงกัน)` : ''}`, ctNoLink ? { err: true } : undefined);
+  ctNoLink = '';
 }
 function ctDeleted(id) {
   state.ct = state.ct.filter(x => x.id !== id);
@@ -10096,6 +10114,7 @@ function ptFill(pre, r, force, after) {
 setupRegCombo('i', (r, f) => ptFill('i', r, f));
 setupRegCombo('f', (r, f) => ptFill('f', r, f));
 setupRegCombo('t', (r, f) => ptFill('t', r, f, syncCtAppt));
+$('#t-hn').addEventListener('input', () => { if (ctAppt) syncCtAppt(); });   // 18 พ.ย.: แก้ HN หลังใช้ข้อมูลนัด = เตือนทันที
 setupRegCombo('r', (r, f) => ptFill('r', r, f, syncRgForm), null, true);
 setupRegCombo('l', (r, f) => ptFill('l', r, f));
 
@@ -12419,6 +12438,12 @@ setupRegCombo('q', bqFromReg);
 
 // แถบ CT-SIM: นัดที่รอลง CT-SIM (วันนี้ → เลยวันนัด → นัดถัดไป) · ลงข้อมูล = เปิดฟอร์ม CT-SIM พร้อมข้อมูลนัด
 let ctAppt = '';   // id ของนัดที่ใส่ในฟอร์ม CT-SIM อยู่ (บันทึกแล้วผูกกับรายการ CT)
+let ctNoLink = '';   // 18 พ.ย.: HN ของนัดที่ไม่ผูก (HN ในฟอร์มไม่ตรง) · แจ้งในข้อความหลังบันทึก
+// 18 พ.ย.: นัด (CT Order) ของรายการ CT-SIM = นัดที่ผูกไว้และ HN ตรงกัน · ผูกกับ HN อื่น = ผูกผิด (แสดงเตือน + ปุ่มแก้)
+const apOfCt = r => (r ? state.appt.find(a => a.took === r.id && hnKey(a.hn) === hnKey(r.hn)) || null : null);
+const apWrongOfCt = r => (r ? state.appt.filter(a => a.took === r.id && hnKey(a.hn) !== hnKey(r.hn)) : []);
+const APRELINK_API = 85;   // Code.gs แก้การผูกนัดกับรายการ CT-SIM ที่ HN ไม่ตรง (apptRelink)
+const apRelinkOn = () => store.mode !== 'sheet' || serverHas(APRELINK_API);
 const appullDlg = $('#appull-dlg');
 function renderApPullBtn() {
   const n = apWaiting().length, b = $('#ct-apull');
@@ -12487,14 +12512,19 @@ $('#ct-tabs').addEventListener('click', e => { const b = e.target.closest('[data
 function ctOrderOf() {
   if (!editingCt) return null;
   const r = state.ct.find(x => x.id === editingCt.id), hn = str($('#t-hn').value);
-  return (ctAppt && state.appt.find(x => x.id === ctAppt)) || (r && state.appt.find(a => a.took === r.id)) || (!r && hn && apWaiting().find(x => x.hn === hn)) || null;
+  return (ctAppt && state.appt.find(x => x.id === ctAppt)) || apOfCt(r) || (!r && hn && apWaiting().find(x => x.hn === hn)) || null;
 }
 function renderCtOrder() {
   const box = $('#ct-order'), a = ctOrderOf(), isNew = !!editingCt && !state.ct.some(x => x.id === editingCt.id), wait = apWaiting();
   $('#ct-tab-n').textContent = !a && isNew && wait.length ? String(wait.length) : '';
   if (ctTab !== 'order') return;
   if (!a) {
-    if (!isNew) { box.innerHTML = '<p class="empty-state">รายการนี้ไม่ได้ลงจาก CT Order</p>'; return; }
+    if (!isNew) {
+      const r = state.ct.find(x => x.id === editingCt.id), wrong = apWrongOfCt(r);
+      box.innerHTML = wrong.length ? wrong.map(w => `<p class="notice"><b>ผูกกับ CT Order ของ HN อื่น</b><span>CT Order ของ HN ${esc(w.hn)}${w.name ? ` ${esc(w.name)}` : ''} ถูกผูกกับรายการนี้ (HN ${esc(r.hn)}) ตอนบันทึก · กดแก้ = แยกออกจากรายการนี้ แล้วผูกกับรายการ CT-SIM ของ HN ${esc(w.hn)} ถ้ามี (ไม่มี = กลับไปรอลง CT-SIM)${apRelinkOn() ? '' : ' · <b>ต้องอัปเดต Code.gs รุ่น 2026-11-17.4 ขึ้นไป</b>'}</span></p>${canEdit() && apRelinkOn() ? `<p style="margin:8px 0 0"><button type="button" class="btn primary" data-aprelink="${esc(w.id)}">แก้การผูก CT Order ของ HN ${esc(w.hn)}</button></p>` : ''}`).join('')
+        : '<p class="empty-state">รายการนี้ไม่ได้ลงจาก CT Order</p>';
+      return;
+    }
     box.innerHTML = `<p class="muted" style="margin:0">CT Order ที่รอลง CT-SIM ${wait.length} คน · กด <b>ใช้</b> เพื่อใส่ข้อมูลในแท็บ${esc($('#ct-tab-form').textContent)}</p>
       <input type="search" class="ct-order-q" id="ct-order-q" placeholder="ค้นหา HN, ชื่อ, แพทย์" autocomplete="off" aria-label="ค้นหา CT Order">
       <ul class="ct-pull" id="ct-order-list"></ul>`;
@@ -12525,8 +12555,11 @@ function renderCtOrderList() {
 function syncCtAppt() {
   const box = $('#t-appt'), a = ctAppt && state.appt.find(x => x.id === ctAppt);
   if (a) {
+    const hnNow = str($('#t-hn').value), same = !hnNow || hnKey(hnNow) === hnKey(a.hn);
     box.hidden = false;
-    box.innerHTML = `ข้อมูลจากนัด: ${apSummary(a)} · บันทึกแล้วนัดนี้ผูกกับรายการ CT <button type="button" class="link-btn" data-apunlink>ไม่ผูก</button>`;
+    box.innerHTML = same ? `ข้อมูลจากนัด: ${apSummary(a)} · บันทึกแล้วนัดนี้ผูกกับรายการ CT <button type="button" class="link-btn" data-apunlink>ไม่ผูก</button>`
+      : `<b class="acct-warn">HN ไม่ตรงกับนัดที่ใช้ข้อมูล</b> (นัดของ HN ${esc(a.hn)}${a.name ? ` ${esc(a.name)}` : ''}) · บันทึกแล้วจะไม่ผูกกับนัดนั้น · ข้อมูลในฟอร์มยังเป็นของนัดนั้น ตรวจให้ตรงกับผู้ป่วยก่อนบันทึก <button type="button" class="link-btn" data-apunlink>ไม่ใช้ข้อมูลนัด</button>`;
+    renderCtOrder();
     return;
   }
   const hn = str($('#t-hn').value), isNew = editingCt && !state.ct.some(x => x.id === editingCt.id);
@@ -12534,6 +12567,22 @@ function syncCtAppt() {
   box.hidden = !m;
   box.innerHTML = m ? `HN นี้มีนัดรอลง CT-SIM: ${apSummary(m)} <button type="button" class="link-btn" data-apfill="${esc(m.id)}">ใช้ข้อมูลนัด</button>` : '';
   renderCtOrder();
+}
+// 18 พ.ย.: CT Order ที่ผูกกับรายการ CT-SIM ของ HN อื่น → แยกออก แล้วผูกกับรายการ CT-SIM ของ HN นั้น (ถ้ามี · ไม่มี = กลับไปรอลง CT-SIM)
+async function apRelink(id, btn) {
+  if (!canEdit()) return toast(RO_MSG, { err: true });
+  if (!apRelinkOn()) return toast('แก้การผูกต้องใช้ Code.gs รุ่น 2026-11-17.4 ขึ้นไป', { err: true });
+  if (btn) btn.disabled = true;
+  try {
+    const rec = normAppt(await store.apptRelink(id));
+    const i = state.appt.findIndex(x => x.id === rec.id);
+    if (i >= 0) state.appt[i] = rec; else state.appt.push(rec);
+    const ct = rec.took && rec.took !== 'skip' && state.ct.find(x => x.id === rec.took);
+    toast(ct ? `แก้แล้ว · CT Order ของ HN ${rec.hn} ผูกกับรายการ CT-SIM ของ HN นั้น (${fmtDay(ct.date)})` : `แก้แล้ว · CT Order ของ HN ${rec.hn} กลับไปรอลง CT-SIM`);
+    renderCtOrder();
+    render();
+  } catch (e) { toast('แก้การผูกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn && btn.isConnected) btn.disabled = false; }
 }
 async function markAp(id, mark) {
   try {
@@ -20350,6 +20399,7 @@ document.addEventListener('click', e => {
   if (ds.ctunskip) return markCt(ds.ctunskip, '');
   if (ds.ctunlink !== undefined) { intakeCt = ''; return renderCtPullBtn(); }
   if (ds.apuse) return useAp(ds.apuse);
+  if (ds.aprelink) return apRelink(ds.aprelink, t);
   if (ds.apfill) return useAp(ds.apfill);
   if (ds.apskip) return markAp(ds.apskip, 'skip');
   if (ds.apdel) { const r = state.appt.find(x => x.id === ds.apdel); if (!r) return; if (accessOf('appt') !== 'edit') return toast(RO_MSG, { err: true }); return openApPin('apdel', r); }

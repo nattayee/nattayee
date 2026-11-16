@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.3';
-const API_LEVEL = 84;   // 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.4';
+const API_LEVEL = 85;   // 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1656,9 +1656,10 @@ function ctSave(rec, pin, token) {
     // ลงจากนัดในแถบลงนัด (apptFrom = id ของนัด เฉพาะรายการใหม่): บันทึกว่านัดนี้ลง CT-SIM แล้ว ใครลง · อ่านแถวของนัดก่อนเขียน (อ่านหลังเขียน = ชีตต้องบันทึกค้างก่อน)
     const from = row ? '' : cut(rec.apptFrom, 80), a = from ? openRow_(ss, 'appt', null, from) : null;
     const out = saveRow_(x, TABLES.ctsim.fields, set);   // รายการหลังบันทึกจากค่าที่เขียน (เดิมอ่านทั้งตาราง CT-SIM กลับมา)
-    if (from) {
+    // API 85: ผูกเฉพาะนัดที่ HN ตรงกับรายการนี้และยังไม่ได้ลง CT-SIM (เดิมผูกทุกกรณี: ใช้ข้อมูลนัดของคนหนึ่งแล้วแก้ HN เป็นอีกคน = นัดถูกผูกผิดคน)
+    if (from && a.row && hnKey_(a.cur.hn) === hnKey_(set.hn) && !String(a.cur.took || '').trim()) {
       const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') };
-      if (a.row) writeFields_(a.sh, a.row, a.header, TABLES.appt.fields.filter(f => f[0] in mark), mark, a.vals);
+      writeFields_(a.sh, a.row, a.header, TABLES.appt.fields.filter(f => f[0] in mark), mark, a.vals);
     }
     // Vac-Lok ที่เลือกในฟอร์ม (API 48 · ไม่ส่ง vac = ไม่แตะ): ผูกการใช้ Vac-Lok กับรายการนี้ · ว่าง = ไม่ใช้ (ลบการใช้ที่ผูกไว้) · คืนการใช้ทั้งหมด
     if ('vac' in rec) { vacLink_(ss, out, cut(rec.vac, 20), u); out.vacAll = readTable_(ss, 'vac'); }
@@ -3006,6 +3007,24 @@ function apptRemove(id, pin, token) {
 }
 
 // แถบ CT-SIM (หรือลงนัด): นัดที่ผู้ป่วยไม่มาทำ CT · mark = 'skip' (เฉพาะที่ยังรอลง CT-SIM) หรือ '' (คืนกลับเป็นรอ) · คืนรายการ
+// API 85: นัดที่ผูกกับรายการ CT-SIM ของ HN อื่น → ผูกกับรายการ CT-SIM ของ HN ของนัดเอง (ยังไม่มีนัดอื่นผูก · วันใกล้วันนัดที่สุด) · ไม่มี = กลับไปรอลง CT-SIM
+function apptRelink(id, token) {
+  requireEdit_(token, EDIT_VIEWS.ctsim.concat(EDIT_VIEWS.appt));
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'appt', null, id);
+    if (!x.row) throw new Error('ไม่พบนัดนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const cur = x.cur, took = String(cur.took || '').trim();
+    if (!took || took === 'skip') return cur;
+    const cts = readTable_(ss, 'ctsim'), linked = cts.filter(c => c.id === took)[0];
+    if (linked && hnKey_(linked.hn) === hnKey_(cur.hn)) return cur;   // ผูกถูกอยู่แล้ว
+    const taken = {};
+    readTable_(ss, 'appt').forEach(a => { if (a.id !== cur.id && a.took) taken[a.took] = true; });
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(cur.date)) ? String(cur.date) : String(cur.created).slice(0, 10), t0 = Date.parse(day) || 0;
+    const pick = cts.filter(c => hnKey_(c.hn) === hnKey_(cur.hn) && !taken[c.id]).sort((p, q) => Math.abs((Date.parse(p.date) || 0) - t0) - Math.abs((Date.parse(q.date) || 0) - t0))[0];
+    const set = pick ? { took: pick.id } : { took: '', tookBy: '', tookAt: '' };
+    return saveRow_(x, TABLES.appt.fields, set);
+  });
+}
 function apptMark(id, mark, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ctsim.concat(EDIT_VIEWS.appt));
   mark = mark === 'skip' ? 'skip' : '';
