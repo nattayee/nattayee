@@ -14,7 +14,8 @@
  *   5. เปิด Web app URL (.../exec) แล้วสมัครบัญชีแรก (จะได้เป็น admin)
  *
  * ข้อมูลเก็บใน Google Sheet นี้: Users (รวมระดับ admin หลัก/รอง), Sessions (การเข้าสู่ระบบแต่ละเครื่อง), Messages, ChatLog, DirectMessages (ข้อความส่วนตัว), Settings (ข้อความด่วน),
- *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่, รายการตำแหน่ง)
+ *   Menus (เมนูย่อยที่ผู้ดูแลระบบเพิ่มเองจากหน้าเว็บ), Status (สถานะของแต่ละคน), Config (ตัวเลือกสถานะและสถานที่, รายการตำแหน่ง,
+ *   เวลาออกจากระบบอัตโนมัติ)
  * รูปที่แนบในแชทเก็บในโฟลเดอร์ Drive "LPCH RO Workspace Images" (ไม่แชร์สาธารณะ)
  *
  * เว็บแบบ static (GitHub Pages ฯลฯ) ใช้เซิร์ฟเวอร์นี้ได้เช่นกัน: ใส่ URL /exec ที่ auth.apiUrl ใน data.js
@@ -82,7 +83,7 @@ var QUICK_DEFAULTS = ['รับทราบครับ/ค่ะ', 'ขอบ�
 var LOG_HEADERS = ['วันที่เวลา', 'การกระทำ', 'ผู้กระทำ', 'ตำแหน่ง', 'Username', 'รายละเอียด', 'Message ID', 'ข้อความ'];
 
 // Actions that only read data and can skip the script lock.
-var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, sessionList: 1, rolesGet: 1 };
+var READ_ONLY = { me: 1, directory: 1, listUsers: 1, chatList: 1, chatImage: 1, dmList: 1, dmThread: 1, dmImage: 1, notify: 1, quickGet: 1, menuList: 1, statusList: 1, sessionList: 1, rolesGet: 1, securityGet: 1 };
 
 /* ---------------- Entry points ---------------- */
 
@@ -819,6 +820,30 @@ ACTIONS.rolesSave = function (req) {
   return { roles: roles, counts: counts, fixed: FIXED_ROLES.slice(), message: 'บันทึกตำแหน่งแล้ว (' + roles.length + ' ตำแหน่ง)' };
 };
 
+/* ---------------- ตั้งค่าระบบ: ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน (admin หลัก) ----------------
+ * หน้าเว็บนับการใช้งาน (คลิก พิมพ์ เลื่อน ขยับเมาส์) เตือนก่อน 1 นาที แล้วออกจากระบบ (ลบ session ที่เซิร์ฟเวอร์ด้วย)
+ * เปิดเว็บใหม่หลังเกินเวลาก็ออกจากระบบทันที · 0 = ปิด · เก็บในชีต Config แถว "security"
+ */
+var IDLE_CHOICES = [0, 5, 10, 15, 30, 60, 120, 240, 480];   // นาที
+var IDLE_DEFAULT = 30;
+
+ACTIONS.securityGet = function () { return securityConfig_(); };   // no sign-in needed: the sign-in page shows it
+
+ACTIONS.securitySave = function (req) {
+  var admin = requireAdmin_(req.token);
+  var m = Number(req.idleMinutes);
+  if (IDLE_CHOICES.indexOf(m) === -1) throw new Error('เลือกเวลาจากรายการ');
+  configPut_('security', { idleMinutes: m }, admin.username);
+  return { idleMinutes: m, message: m ? 'ตั้งให้ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน ' + idleLabel_(m) + ' แล้ว' : 'ปิดการออกจากระบบอัตโนมัติแล้ว' };
+};
+
+function securityConfig_() {
+  var c = configGet_('security'), m = c ? Number(c.idleMinutes) : IDLE_DEFAULT;
+  return { idleMinutes: IDLE_CHOICES.indexOf(m) !== -1 ? m : IDLE_DEFAULT };
+}
+
+function idleLabel_(m) { return m % 60 === 0 ? (m / 60) + ' ชั่วโมง' : m + ' นาที'; }
+
 /** The positions in order: [{code, label, chat}] from the Config sheet, or ROLE_DEFAULTS until an admin saves. */
 function rolesConfig_() {
   var c = configGet_('roles');
@@ -1004,7 +1029,8 @@ ACTIONS.notify = function (req) {
 
   var byTime = function (a, b) { return a.createdAt - b.createdAt; }, users = usersByName_();
   return { now: Date.now(), chat: freshNames_(chat.sort(byTime).slice(-10), users), chatUnread: chatUnread,
-    dm: freshNames_(dm.sort(byTime).slice(-10), users), dmUnread: dmUnread };
+    dm: freshNames_(dm.sort(byTime).slice(-10), users), dmUnread: dmUnread,
+    idleMinutes: securityConfig_().idleMinutes };   // open pages pick up a changed auto sign-out time
 };
 
 /* ----- private messages: only the sender and the recipient can read a conversation (admins too) ----- */

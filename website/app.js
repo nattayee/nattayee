@@ -12,6 +12,7 @@
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนด admin หลัก / admin รอง", widgets: ["admin"], adminOnly: true, perm: "users" };
   S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true, perm: "status" };
+  S.pages["system-settings"] = { title: "ตั้งค่าระบบ", lead: "ตั้งค่าที่ใช้กับสมาชิกทุกคน (เฉพาะ admin หลัก)", widgets: ["systemSettings"], adminOnly: true };
   S.pages["roles-settings"] = { title: "ตั้งค่าตำแหน่ง", lead: "เพิ่ม แก้ไข และเรียงลำดับตำแหน่งของสมาชิก และเลือกตำแหน่งที่เป็นกลุ่ม \"ส่งถึง\" ในแชท", widgets: ["rolesSettings"], adminOnly: true, perm: "roles" };
   S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true, perm: "menus" };
   var navEl = document.getElementById("nav");
@@ -96,6 +97,8 @@
     statusSettings: function () { return '<section class="section" id="statusSettingsRoot"></section>'; },
 
     rolesSettings: function () { return '<section class="section" id="rolesSettingsRoot"></section>'; },
+
+    systemSettings: function () { return '<section class="section" id="systemSettingsRoot"></section>'; },
 
     inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
@@ -384,6 +387,8 @@
     if (stSet && window.Status) window.Status.mountSettings(stSet);
     var rolesSet = document.getElementById("rolesSettingsRoot");
     if (rolesSet && window.Roles) window.Roles.mountSettings(rolesSet);
+    var sysSet = document.getElementById("systemSettingsRoot");
+    if (sysSet && window.Idle) window.Idle.mountSettings(sysSet);
     var menusRoot = document.getElementById("menusRoot");
     if (menusRoot && window.Menus) {
       // #/menus?add=<heading> opens the editor for a new sub-menu, ?edit=<page> for an existing one
@@ -439,6 +444,7 @@
         (Auth.can("menus") ? '<a href="#/menus">🧭 จัดการเมนู</a>' : "") +
         (Auth.can("status") ? '<a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
         (Auth.can("roles") ? '<a href="#/roles-settings">🪪 ตั้งค่าตำแหน่ง</a>' : "") +
+        (Auth.can() ? '<a href="#/system-settings">⚙️ ตั้งค่าระบบ</a>' : "") +
         '<button type="button" id="themeBtn" class="phone-only">' + themeLabel() + "</button>" +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +

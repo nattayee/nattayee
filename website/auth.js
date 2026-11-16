@@ -317,6 +317,14 @@
         d.roles = out;
         return { roles: out, counts: counts, fixed: FIXED_ROLES.slice(), message: "บันทึกตำแหน่งแล้ว (" + out.length + " ตำแหน่ง)" };
       },
+      securityGet: function (d) { return { idleMinutes: d.security ? d.security.idleMinutes : 30 }; },
+      securitySave: function (d, r) {
+        requireAdmin(d, r.token);
+        var m = Number(r.idleMinutes);
+        if ([0, 5, 10, 15, 30, 60, 120, 240, 480].indexOf(m) === -1) fail("เลือกเวลาจากรายการ");
+        d.security = { idleMinutes: m };
+        return { idleMinutes: m, message: m ? "ตั้งให้ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + (m % 60 ? m + " นาที" : m / 60 + " ชั่วโมง") + " แล้ว" : "ปิดการออกจากระบบอัตโนมัติแล้ว" };
+      },
       setAdmin: function (d, r) {
         var admin = requireAdmin(d, r.token);
         var u = find(d, r.username);
@@ -386,6 +394,17 @@
     });
   }
 
+  // Auto sign-out after this many minutes without use (0 = off) · "ตั้งค่าระบบ" · idle.js keeps the clock
+  var idleMinutes = 0, pendingFlash = null;
+  function loadSecurity() {
+    return call("securityGet").then(function (res) { idleMinutes = Number(res.idleMinutes) || 0; },
+      function () { idleMinutes = 0; });   // Code.gs from before: no auto sign-out
+  }
+  function setIdleMinutes(m) {
+    idleMinutes = Number(m) || 0;
+    if (window.Idle) window.Idle.configure(idleMinutes);
+  }
+
   // Positions from the server; a Code.gs from before (no rolesGet) or no connection keeps the list above.
   var ROLE_CODE_RE = /^[A-Za-z0-9\u0E00-\u0E7F][A-Za-z0-9\u0E00-\u0E7F ._-]{0,19}$/;
   function loadRoles() {
@@ -397,6 +416,7 @@
   }
 
   function setSession(t, u) {
+    if (t) pendingFlash = null;
     token = t;
     user = u;
     store(TOKEN_KEY, t);
@@ -429,7 +449,7 @@
         "</div>" +
         (flash ? '<div class="auth-msg ' + flash.type + '">' + esc(flash.text) + "</div>" : "") +
         forms[tab](state) +
-        '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน</p>' +
+        '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน' + (idleMinutes && window.Idle ? " · ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + window.Idle.label(idleMinutes) : "") + "</p>" +
         (remote ? "" : '<p class="auth-demo">ℹ️ โหมดทดลอง — ข้อมูลสมาชิกเก็บในเบราว์เซอร์นี้เท่านั้น ตั้งค่า <code>auth.apiUrl</code> ใน data.js เพื่อเชื่อม Google Sheets</p>') +
       "</div>";
 
@@ -468,7 +488,7 @@
         : call("resetPassword", { login: f.login.value, code: f.code.value, newPassword: f.newPassword.value });
 
       p.then(function (res) {
-        if (res.token) { setSession(res.token, res.user); return; }
+        if (res.token) { if (window.Idle) window.Idle.touch(); setSession(res.token, res.user); return; }
         if (tab === "forgot") {
           var text = res.message + (res.demoCode ? " — โหมดทดลองส่งอีเมลไม่ได้ รหัสของคุณคือ " + res.demoCode : "");
           renderAuthScreen(el, "reset", { type: "ok", text: text }, { login: f.login.value.trim() });
@@ -856,7 +876,8 @@
         (msg ? (msg.bad ? '<p class="auth-error">' : '<p class="auth-msg ok">') + esc(msg.text) + "</p>" : "") +
         (list ? '<ul class="sess-list">' + list.map(row).join("") + "</ul>" : "") +
         (others ? '<div class="sess-foot"><button type="button" class="chip danger" data-sess-others>ออกจากระบบเครื่องอื่นทั้งหมด (' + others + ")</button></div>" : "") +
-        '<p class="sess-note">แอปที่เปิดจากเว็บนี้ (เช่น TRS-398, Linac QA) นับเป็นการเข้าสู่ระบบ 1 รายการ · หลังกดออกจากระบบ แอปเหล่านั้นอาจยังใช้ต่อได้อีกไม่เกิน 5 นาที</p>';
+        '<p class="sess-note">' + (idleMinutes && window.Idle ? "เว็บนี้ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + window.Idle.label(idleMinutes) + " · " : "") +
+          "แอปที่เปิดจากเว็บนี้ (เช่น TRS-398, Linac QA) นับเป็นการเข้าสู่ระบบ 1 รายการ · หลังกดออกจากระบบ แอปเหล่านั้นอาจยังใช้ต่อได้อีกไม่เกิน 5 นาที</p>";
     }
 
     function load(m) {
@@ -910,15 +931,29 @@
     init: function () {
       var me = !token ? Promise.resolve(null) : call("me").then(function (res) { user = res.user; return user; })
         .catch(function () { setSession(null, null); return null; });
-      // the sign-up form and the chat groups need the positions first
-      return Promise.all([loadRoles(), me]).then(function (r) { return r[1]; });
+      // the sign-up form and the chat groups need the positions first; the auto sign-out time decides below
+      return Promise.all([loadRoles(), loadSecurity(), me]).then(function (r) {
+        var u = r[2], idle = window.Idle;
+        if (idle) idle.configure(idleMinutes);
+        if (u && idle && idle.stale(idleMinutes)) {
+          // left signed in and unused for longer than allowed (e.g. a tab closed yesterday): sign out now
+          window.Auth.logout("ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน " + idle.label(idleMinutes) + " — กรุณาเข้าสู่ระบบอีกครั้ง");
+          return null;
+        }
+        if (u && idle) idle.touch();   // opening the site counts as using it
+        return u;
+      });
     },
-    showLogin: function (el) { renderAuthScreen(el, "login"); },
-    logout: function () {
+    showLogin: function (el) { renderAuthScreen(el, "login", pendingFlash); },   // the reason stays until the next sign-in
+    // reason (optional): shown on the sign-in screen, e.g. after the auto sign-out
+    logout: function (reason) {
       var t = token;
+      pendingFlash = reason ? { type: "info", text: reason } : null;
       setSession(null, null);
       if (t) call("logout", { token: t }).catch(function () { /* already signed out locally */ });
     },
+    idleMinutes: function () { return idleMinutes; },
+    setIdleMinutes: setIdleMinutes,
     // Active members (username, fullName, role) for picking individual chat recipients.
     directory: function () { return call("directory").then(function (res) { return res.users; }); },
     mountAdmin: mountAdmin,

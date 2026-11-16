@@ -1002,6 +1002,24 @@ table.users tr.perm-row td { background: var(--accent-soft); }
   .role-row .menu-acts { grid-column: 1 / -1; justify-self: end; }
 }
 
+/* ---------------- ออกจากระบบอัตโนมัติ (idle.js) ---------------- */
+.auth-msg.info { background: var(--warn-soft); color: var(--ink); border-left: 3px solid var(--warn); }
+.idle-warn { position: fixed; z-index: 90; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(520px, calc(100% - 32px));
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; padding: 12px 16px;
+  border-radius: var(--radius); background: var(--surface); color: var(--ink); border: 1px solid var(--warn);
+  box-shadow: 0 10px 30px rgba(15, 30, 60, .22); font-size: .92rem; }
+.idle-warn .auth-submit { width: auto; padding: 8px 18px; }
+@media (max-width: 600px) { body:not(.chat-page) .idle-warn { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } }   /* above the bottom tab bar */
+.sys-card { display: grid; gap: 12px; max-width: 760px; }
+.sys-card h3, .sys-card p { margin: 0; }
+.sys-card .muted { font-size: .86rem; }
+.sys-card .sys-note { font-size: .8rem; }
+.sys-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.sys-choice { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); cursor: pointer; font-size: .9rem; }
+.sys-choice input { margin: 0; }
+.sys-choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
 </style>
   <script>
   /* Day/night mode: "auto" follows the device; light/dark override it. Runs before paint to avoid a flash. */
@@ -1805,6 +1823,14 @@ window.SITE = {
         d.roles = out;
         return { roles: out, counts: counts, fixed: FIXED_ROLES.slice(), message: "บันทึกตำแหน่งแล้ว (" + out.length + " ตำแหน่ง)" };
       },
+      securityGet: function (d) { return { idleMinutes: d.security ? d.security.idleMinutes : 30 }; },
+      securitySave: function (d, r) {
+        requireAdmin(d, r.token);
+        var m = Number(r.idleMinutes);
+        if ([0, 5, 10, 15, 30, 60, 120, 240, 480].indexOf(m) === -1) fail("เลือกเวลาจากรายการ");
+        d.security = { idleMinutes: m };
+        return { idleMinutes: m, message: m ? "ตั้งให้ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + (m % 60 ? m + " นาที" : m / 60 + " ชั่วโมง") + " แล้ว" : "ปิดการออกจากระบบอัตโนมัติแล้ว" };
+      },
       setAdmin: function (d, r) {
         var admin = requireAdmin(d, r.token);
         var u = find(d, r.username);
@@ -1874,6 +1900,17 @@ window.SITE = {
     });
   }
 
+  // Auto sign-out after this many minutes without use (0 = off) · "ตั้งค่าระบบ" · idle.js keeps the clock
+  var idleMinutes = 0, pendingFlash = null;
+  function loadSecurity() {
+    return call("securityGet").then(function (res) { idleMinutes = Number(res.idleMinutes) || 0; },
+      function () { idleMinutes = 0; });   // Code.gs from before: no auto sign-out
+  }
+  function setIdleMinutes(m) {
+    idleMinutes = Number(m) || 0;
+    if (window.Idle) window.Idle.configure(idleMinutes);
+  }
+
   // Positions from the server; a Code.gs from before (no rolesGet) or no connection keeps the list above.
   var ROLE_CODE_RE = /^[A-Za-z0-9\u0E00-\u0E7F][A-Za-z0-9\u0E00-\u0E7F ._-]{0,19}$/;
   function loadRoles() {
@@ -1885,6 +1922,7 @@ window.SITE = {
   }
 
   function setSession(t, u) {
+    if (t) pendingFlash = null;
     token = t;
     user = u;
     store(TOKEN_KEY, t);
@@ -1917,7 +1955,7 @@ window.SITE = {
         "</div>" +
         (flash ? '<div class="auth-msg ' + flash.type + '">' + esc(flash.text) + "</div>" : "") +
         forms[tab](state) +
-        '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน</p>' +
+        '<p class="gate-note">ระบบจะจำการเข้าสู่ระบบไว้ 7 วัน' + (idleMinutes && window.Idle ? " · ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + window.Idle.label(idleMinutes) : "") + "</p>" +
         (remote ? "" : '<p class="auth-demo">ℹ️ โหมดทดลอง — ข้อมูลสมาชิกเก็บในเบราว์เซอร์นี้เท่านั้น ตั้งค่า <code>auth.apiUrl</code> ใน data.js เพื่อเชื่อม Google Sheets</p>') +
       "</div>";
 
@@ -1956,7 +1994,7 @@ window.SITE = {
         : call("resetPassword", { login: f.login.value, code: f.code.value, newPassword: f.newPassword.value });
 
       p.then(function (res) {
-        if (res.token) { setSession(res.token, res.user); return; }
+        if (res.token) { if (window.Idle) window.Idle.touch(); setSession(res.token, res.user); return; }
         if (tab === "forgot") {
           var text = res.message + (res.demoCode ? " — โหมดทดลองส่งอีเมลไม่ได้ รหัสของคุณคือ " + res.demoCode : "");
           renderAuthScreen(el, "reset", { type: "ok", text: text }, { login: f.login.value.trim() });
@@ -2344,7 +2382,8 @@ window.SITE = {
         (msg ? (msg.bad ? '<p class="auth-error">' : '<p class="auth-msg ok">') + esc(msg.text) + "</p>" : "") +
         (list ? '<ul class="sess-list">' + list.map(row).join("") + "</ul>" : "") +
         (others ? '<div class="sess-foot"><button type="button" class="chip danger" data-sess-others>ออกจากระบบเครื่องอื่นทั้งหมด (' + others + ")</button></div>" : "") +
-        '<p class="sess-note">แอปที่เปิดจากเว็บนี้ (เช่น TRS-398, Linac QA) นับเป็นการเข้าสู่ระบบ 1 รายการ · หลังกดออกจากระบบ แอปเหล่านั้นอาจยังใช้ต่อได้อีกไม่เกิน 5 นาที</p>';
+        '<p class="sess-note">' + (idleMinutes && window.Idle ? "เว็บนี้ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน " + window.Idle.label(idleMinutes) + " · " : "") +
+          "แอปที่เปิดจากเว็บนี้ (เช่น TRS-398, Linac QA) นับเป็นการเข้าสู่ระบบ 1 รายการ · หลังกดออกจากระบบ แอปเหล่านั้นอาจยังใช้ต่อได้อีกไม่เกิน 5 นาที</p>";
     }
 
     function load(m) {
@@ -2398,15 +2437,29 @@ window.SITE = {
     init: function () {
       var me = !token ? Promise.resolve(null) : call("me").then(function (res) { user = res.user; return user; })
         .catch(function () { setSession(null, null); return null; });
-      // the sign-up form and the chat groups need the positions first
-      return Promise.all([loadRoles(), me]).then(function (r) { return r[1]; });
+      // the sign-up form and the chat groups need the positions first; the auto sign-out time decides below
+      return Promise.all([loadRoles(), loadSecurity(), me]).then(function (r) {
+        var u = r[2], idle = window.Idle;
+        if (idle) idle.configure(idleMinutes);
+        if (u && idle && idle.stale(idleMinutes)) {
+          // left signed in and unused for longer than allowed (e.g. a tab closed yesterday): sign out now
+          window.Auth.logout("ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน " + idle.label(idleMinutes) + " — กรุณาเข้าสู่ระบบอีกครั้ง");
+          return null;
+        }
+        if (u && idle) idle.touch();   // opening the site counts as using it
+        return u;
+      });
     },
-    showLogin: function (el) { renderAuthScreen(el, "login"); },
-    logout: function () {
+    showLogin: function (el) { renderAuthScreen(el, "login", pendingFlash); },   // the reason stays until the next sign-in
+    // reason (optional): shown on the sign-in screen, e.g. after the auto sign-out
+    logout: function (reason) {
       var t = token;
+      pendingFlash = reason ? { type: "info", text: reason } : null;
       setSession(null, null);
       if (t) call("logout", { token: t }).catch(function () { /* already signed out locally */ });
     },
+    idleMinutes: function () { return idleMinutes; },
+    setIdleMinutes: setIdleMinutes,
     // Active members (username, fullName, role) for picking individual chat recipients.
     directory: function () { return call("directory").then(function (res) { return res.users; }); },
     mountAdmin: mountAdmin,
@@ -5384,6 +5437,138 @@ window.SITE = {
 </script>
   <script>
 /*
+ * ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน
+ * - การใช้งาน = คลิก แตะ พิมพ์ เลื่อนหน้า หรือขยับเมาส์ในเว็บนี้ · เวลาล่าสุดเก็บในเบราว์เซอร์ ทุกแท็บของเว็บนี้ใช้ร่วมกัน
+ * - เหลือ 1 นาที: แถบเตือนพร้อมปุ่ม "ใช้งานต่อ" · ครบเวลา: ออกจากระบบ (ลบ session ที่เซิร์ฟเวอร์ด้วย) พร้อมบอกเหตุผล
+ * - เปิดเว็บใหม่หลังเกินเวลา (เช่นปิดแท็บทิ้งไว้ข้ามวัน): ออกจากระบบทันที (auth.js ถาม Idle.stale ตอนเริ่ม)
+ * - เวลาตั้งที่หน้า "ตั้งค่าระบบ" (admin หลัก · Code.gs securityGet / securitySave) และส่งมากับการเช็กข้อความใหม่ทุก ~20 วินาที
+ */
+(function () {
+  "use strict";
+
+  var KEY = "lpch-ro-active", WARN_MS = 60000, CHECK_MS = 5000, WRITE_MS = 5000;
+  var CHOICES = [0, 5, 10, 15, 30, 60, 120, 240, 480];   // same as IDLE_CHOICES in Code.gs
+  var minutes = 0, mem = 0, written = 0, warnEl = null, warnTimer = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function label(m) { return !m ? "ปิด" : m % 60 === 0 ? (m / 60) + " ชั่วโมง" : m + " นาที"; }
+  function signedIn() { return !!(window.Auth && window.Auth.user); }
+
+  // last activity: this tab's memory or what another tab wrote, whichever is newer
+  function last() {
+    var v = 0;
+    try { v = Number(localStorage.getItem(KEY)) || 0; } catch (e) { v = 0; }
+    return Math.max(v, mem);
+  }
+  function touch(force) {
+    var t = Date.now();
+    mem = t;
+    if (force || t - written >= WRITE_MS) {
+      written = t;
+      try { localStorage.setItem(KEY, String(t)); } catch (e) { /* private mode: this tab only */ }
+    }
+    if (warnEl) hide();
+  }
+
+  /** Was the last activity in this browser longer ago than m minutes? (No record yet = no.) */
+  function stale(m) { var l = last(); return !!m && !!l && Date.now() - l >= m * 60000; }
+
+  function check() {
+    if (!signedIn() || !minutes) { hide(); return; }
+    var left = minutes * 60000 - (Date.now() - last());
+    if (left <= 0) { expire(); return; }
+    if (left <= WARN_MS) show(left); else hide();
+  }
+
+  function expire() {
+    hide();
+    window.Auth.logout("ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน " + label(minutes) + " — กรุณาเข้าสู่ระบบอีกครั้ง");
+  }
+
+  function show(left) {
+    if (!warnEl) {
+      warnEl = document.createElement("div");
+      warnEl.className = "idle-warn";
+      warnEl.setAttribute("role", "alertdialog");
+      warnEl.setAttribute("aria-live", "assertive");
+      warnEl.innerHTML = '<span class="idle-text"></span><button type="button" class="auth-submit idle-stay">ใช้งานต่อ</button>';
+      warnEl.querySelector(".idle-stay").addEventListener("click", function () { touch(true); });
+      document.body.appendChild(warnEl);
+      warnTimer = setInterval(check, 1000);
+    }
+    warnEl.querySelector(".idle-text").textContent = "⏱️ ไม่ได้ใช้งานมาสักพัก — จะออกจากระบบใน " + Math.max(1, Math.ceil(left / 1000)) + " วินาที";
+  }
+  function hide() {
+    if (warnTimer) { clearInterval(warnTimer); warnTimer = null; }
+    if (warnEl) { warnEl.remove(); warnEl = null; }
+  }
+
+  ["pointerdown", "keydown", "wheel", "touchstart", "mousemove", "scroll"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      // inside the warning only its button counts: removing the banner on the way to it would let the tap fall
+      // through to whatever is underneath
+      if (warnEl && e.target && warnEl.contains(e.target)) return;
+      if (signedIn()) touch(false);
+    }, { capture: true, passive: true });
+  });
+  document.addEventListener("visibilitychange", check);   // back from sleep / another tab: check at once
+  window.addEventListener("storage", function (e) { if (e.key === KEY) check(); });
+  setInterval(check, CHECK_MS);
+
+  /* ---------------- หน้า "ตั้งค่าระบบ" (admin หลัก) ---------------- */
+
+  function mountSettings(root) {
+    var current = window.Auth.idleMinutes();
+
+    function render(msg, bad) {
+      root.innerHTML =
+        '<div class="card sys-card">' +
+          "<h3>⏱️ ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน</h3>" +
+          '<p class="muted">ถ้าไม่ได้คลิก แตะ พิมพ์ เลื่อนหน้า หรือขยับเมาส์ในเว็บนี้ตามเวลาที่ตั้ง ระบบจะออกจากระบบให้ ' +
+            "(เตือนก่อน 1 นาที) กันคนอื่นใช้บัญชีต่อจากเครื่องที่เปิดทิ้งไว้ · ใช้กับสมาชิกทุกคน มีผลภายในไม่ถึงนาที</p>" +
+          '<div class="sys-choices" role="radiogroup" aria-label="เวลาที่ไม่ได้ใช้งาน">' + CHOICES.map(function (m) {
+            return '<label class="sys-choice"><input type="radio" name="idleMinutes" value="' + m + '"' + (m === current ? " checked" : "") + "><span>" + label(m) + "</span></label>";
+          }).join("") + "</div>" +
+          '<p class="muted sys-note">แอปที่เปิดจากเว็บนี้ (TRS-398, Linac QA, ระบบกระจายงาน) มีการเข้าสู่ระบบของตัวเอง ไม่อยู่ในการตั้งค่านี้</p>' +
+          '<p class="menus-msg' + (bad ? " bad" : "") + '" role="status"' + (msg ? "" : " hidden") + ">" + esc(msg || "") + "</p>" +
+          '<div class="menu-buttons"><button type="button" class="auth-submit" data-save>บันทึก</button></div>' +
+        "</div>";
+    }
+
+    root.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("[data-save]");
+      if (!b || b.disabled) return;
+      var picked = root.querySelector('input[name="idleMinutes"]:checked');
+      var m = picked ? Number(picked.value) : current;
+      b.disabled = true;
+      window.Auth.call("securitySave", { idleMinutes: m }).then(function (res) {
+        current = res.idleMinutes;
+        window.Auth.setIdleMinutes(current);
+        render(res.message);
+      }, function (err) { render(err.message, true); });
+    });
+
+    render();
+  }
+
+  window.Idle = {
+    /** minutes: 0 = off. Starts or stops the countdown for the signed-in member. */
+    configure: function (m) { minutes = CHOICES.indexOf(Number(m)) !== -1 ? Number(m) : 0; check(); },
+    minutes: function () { return minutes; },
+    touch: function () { touch(true); },
+    stale: stale,
+    label: label,
+    mountSettings: mountSettings,
+  };
+})();
+
+</script>
+  <script>
+/*
  * Pop-up แจ้งเตือนเมื่อมีข้อความส่งถึงผู้ใช้ — ทั้งแชทประกาศ (ส่งถึงทุกคน / วิชาชีพ / รายบุคคล / ส่งต่อมา)
  * และข้อความส่วนตัว ทำงานทุกหน้าหลังเข้าสู่ระบบ
  *
@@ -5584,6 +5769,8 @@ window.SITE = {
       if (!running || !user() || user().username !== u.username) return;
       since = r.now - OVERLAP_MS;
       setBadges(r);
+      // the auto sign-out time an admin set on "ตั้งค่าระบบ" (Code.gs sends it with every check)
+      if (typeof r.idleMinutes === "number" && r.idleMinutes !== window.Auth.idleMinutes()) window.Auth.setIdleMinutes(r.idleMinutes);
 
       if (first) {
         floor = r.now;
@@ -5708,6 +5895,7 @@ window.SITE = {
   S.pages.inbox = { title: "ข้อความส่วนตัว", bare: true, widgets: ["inbox"] };
   S.pages.admin = { title: "จัดการสมาชิก", lead: "อนุมัติผู้สมัคร ระงับบัญชี และกำหนด admin หลัก / admin รอง", widgets: ["admin"], adminOnly: true, perm: "users" };
   S.pages["status-settings"] = { title: "ตั้งค่าสถานะ", lead: "ตัวเลือกสถานะ (อยู่ ลา ประชุม …) และรายชื่อเครื่องและห้องที่สมาชิกเลือกได้", widgets: ["statusSettings"], adminOnly: true, perm: "status" };
+  S.pages["system-settings"] = { title: "ตั้งค่าระบบ", lead: "ตั้งค่าที่ใช้กับสมาชิกทุกคน (เฉพาะ admin หลัก)", widgets: ["systemSettings"], adminOnly: true };
   S.pages["roles-settings"] = { title: "ตั้งค่าตำแหน่ง", lead: "เพิ่ม แก้ไข และเรียงลำดับตำแหน่งของสมาชิก และเลือกตำแหน่งที่เป็นกลุ่ม \"ส่งถึง\" ในแชท", widgets: ["rolesSettings"], adminOnly: true, perm: "roles" };
   S.pages.menus = { title: "จัดการเมนู", lead: "เพิ่ม แก้ไข เรียงลำดับ และซ่อนเมนูย่อยในแต่ละหัวข้อ", widgets: ["menus"], adminOnly: true, perm: "menus" };
   var navEl = document.getElementById("nav");
@@ -5792,6 +5980,8 @@ window.SITE = {
     statusSettings: function () { return '<section class="section" id="statusSettingsRoot"></section>'; },
 
     rolesSettings: function () { return '<section class="section" id="rolesSettingsRoot"></section>'; },
+
+    systemSettings: function () { return '<section class="section" id="systemSettingsRoot"></section>'; },
 
     inbox: function () { return '<section class="section" id="inboxRoot"></section>'; },
 
@@ -6080,6 +6270,8 @@ window.SITE = {
     if (stSet && window.Status) window.Status.mountSettings(stSet);
     var rolesSet = document.getElementById("rolesSettingsRoot");
     if (rolesSet && window.Roles) window.Roles.mountSettings(rolesSet);
+    var sysSet = document.getElementById("systemSettingsRoot");
+    if (sysSet && window.Idle) window.Idle.mountSettings(sysSet);
     var menusRoot = document.getElementById("menusRoot");
     if (menusRoot && window.Menus) {
       // #/menus?add=<heading> opens the editor for a new sub-menu, ?edit=<page> for an existing one
@@ -6135,6 +6327,7 @@ window.SITE = {
         (Auth.can("menus") ? '<a href="#/menus">🧭 จัดการเมนู</a>' : "") +
         (Auth.can("status") ? '<a href="#/status-settings">🏷️ ตั้งค่าสถานะ</a>' : "") +
         (Auth.can("roles") ? '<a href="#/roles-settings">🪪 ตั้งค่าตำแหน่ง</a>' : "") +
+        (Auth.can() ? '<a href="#/system-settings">⚙️ ตั้งค่าระบบ</a>' : "") +
         '<button type="button" id="themeBtn" class="phone-only">' + themeLabel() + "</button>" +
         (window.Notifier ? window.Notifier.menuHtml() : "") +
         '<button type="button" id="logoutBtn">🚪 ออกจากระบบ</button>' +

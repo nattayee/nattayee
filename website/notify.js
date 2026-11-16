@@ -199,6 +199,8 @@
       if (!running || !user() || user().username !== u.username) return;
       since = r.now - OVERLAP_MS;
       setBadges(r);
+      // the auto sign-out time an admin set on "ตั้งค่าระบบ" (Code.gs sends it with every check)
+      if (typeof r.idleMinutes === "number" && r.idleMinutes !== window.Auth.idleMinutes()) window.Auth.setIdleMinutes(r.idleMinutes);
 
       if (first) {
         floor = r.now;
