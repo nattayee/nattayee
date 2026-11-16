@@ -6972,7 +6972,7 @@ function mergeConfig(c) {
     filter: { col: str(rdf.col), vals: Array.isArray(rdf.vals) ? [...new Set(rdf.vals.map(str).filter(Boolean))] : [] } };
   out.reg.archiveYears = rg.archiveYears != null && ARCH_YEARS.some(([y]) => y === +rg.archiveYears) ? +rg.archiveYears : d.reg.archiveYears;
   // แจกงานแพทย์ (ตรงกับ dqCfg_ ใน Code.gs)
-  { const sc = c.security && typeof c.security === 'object' ? c.security : {}, n = Math.floor(+sc.idleMin); out.security = { idleMin: sc.idleMin === 0 || sc.idleMin === '0' ? 0 : n >= 5 && n <= 720 ? n : d.security.idleMin }; }
+  { const sc = c.security && typeof c.security === 'object' ? c.security : {}, n = Math.floor(+sc.idleMin); out.security = { idleMin: sc.idleMin === 0 || sc.idleMin === '0' ? 0 : n > 0 ? Math.min(IDLE_MAX, Math.max(5, n)) : d.security.idleMin }; }
   out.formRules = fdNorm(c.formRules);
   out.subHide = subHideNorm(c.subHide);
   out.flow = flowNorm(c.flow);
@@ -7144,7 +7144,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-17.3';
+const PAGE_VERSION = '2026-11-17.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -11267,7 +11267,10 @@ dqsForm.addEventListener('submit', async e => {
 const BK_API = 77;
 const BK_OLD = 'สำรองข้อมูลต้องใช้ Code.gs รุ่น 2026-11-12.4 ขึ้นไป · วาง Code.gs ใหม่ → กด Run ฟังก์ชัน backupInstall หนึ่งครั้ง (อนุญาต Drive / Gmail) → Deploy (แก้ deployment เดิม → New version)';
 const BK_EVERY = [['day', 'ทุกวัน'], ['week', 'ทุกวันจันทร์'], ['month', 'วันที่ 1 ของเดือน'], ['off', 'ไม่ส่ง (เก็บใน Drive อย่างเดียว)']];
-const IDLE_OPTS = [[0, 'ไม่ออกเอง'], [15, '15 นาที'], [30, '30 นาที'], [60, '1 ชั่วโมง'], [120, '2 ชั่วโมง'], [240, '4 ชั่วโมง']];
+const IDLE_OPTS = [[0, 'ไม่ออกเอง'], [15, '15 นาที'], [30, '30 นาที'], [60, '1 ชั่วโมง'], [120, '2 ชั่วโมง'], [240, '4 ชั่วโมง'], [480, '8 ชั่วโมง']];
+const IDLE_MAX = 1440;   // 18 พ.ย.: กำหนดเองได้ 5 นาที ถึง 24 ชั่วโมง
+let idleCustom = false;  // หน้าตั้งค่า: เลือก "กำหนดเอง…" (แสดงช่องกรอกชั่วโมง)
+const idleText = n => (n < 60 ? `${n} นาที` : n % 60 ? `${Math.floor(n / 60)} ชั่วโมง ${n % 60} นาที` : `${n / 60} ชั่วโมง`);
 let bkStat = null, bkBusy = '';
 const bkCan = () => state.user.via === 'google' || !!state.user.isAdmin;
 function bkClean(c) {   // เหมือน backupCfg_ ใน Code.gs
@@ -11280,8 +11283,10 @@ function persistBk(b) { try { localStorage.setItem('medphys-dispatch:backup', JS
 const bkWhen = v => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? `${fmtDay(localDay(v))} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} น.` : ''; };
 const bkLink = (u, t) => (/^https:\/\/[^\s"'<>]+$/.test(str(u)) ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a>` : '');
 function secSec(d) {
+  const idleCur = Math.max(0, Math.floor(+d.security.idleMin) || 0), idlePreset = IDLE_OPTS.some(([v]) => v === idleCur), idleSel = idleCustom && idlePreset ? 'custom' : String(idleCur);   // ค่าที่กรอกเอง (ไม่อยู่ในรายการ) = แสดงเป็นตัวเลือกของตัวเอง
   const idle = `<h3 class="sub-h">ออกจากระบบอัตโนมัติ</h3>
-      <div class="form-grid" style="margin-bottom:6px"><label class="field"><span class="lbl">เมื่อไม่ได้ใช้งาน</span><select data-k="security.idleMin" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน">${IDLE_OPTS.map(([v, l]) => opt(String(v), l, String(d.security.idleMin))).join('')}</select></label></div>
+      <div class="form-grid" style="margin-bottom:6px"><label class="field"><span class="lbl">เมื่อไม่ได้ใช้งาน</span><select data-k="security.idleMin" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน">${IDLE_OPTS.map(([v, l]) => opt(String(v), l, idleSel)).join('')}${idlePreset ? '' : opt(String(idleCur), `${idleText(idleCur)} (กำหนดเอง)`, idleSel)}<option value="custom"${idleSel === 'custom' ? ' selected' : ''}>กำหนดเอง…</option></select></label>
+        <label class="field"${idleCustom || !idlePreset ? '' : ' hidden'}><span class="lbl">กำหนดเอง (ชั่วโมง) <span class="sub-lbl">ทศนิยมได้ เช่น 1.5 = 1 ชั่วโมง 30 นาที · ตั้งแต่ 5 นาที ถึง 24 ชั่วโมง</span></span><input type="number" min="0.1" max="24" step="any" inputmode="decimal" data-k="security.idleMin" data-unit="h" value="${idleCur ? +(idleCur / 60).toFixed(2) : ''}" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน (ชั่วโมง)"></label></div>
       <p class="muted def-note" style="margin:0 0 16px">ใช้กับผู้ที่เข้าระบบด้วยบัญชี LPCH (เครื่องที่ใช้ร่วมกันในแผนก) · ไม่ได้คลิก แตะ พิมพ์ หรือเลื่อนหน้าจอ ครบเวลา = ออกจากระบบ (เตือนก่อน 1 นาที) · ปิดหน้าเว็บค้างไว้แล้วเปิดใหม่หลังเวลานี้ = ต้องเข้าสู่ระบบใหม่</p>`;
   if (!bkCan()) return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองข้อมูลตั้งได้เฉพาะแอดมิน</p></div>${idle}</div>`;
   return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองทั้งไฟล์ Google Sheet ทุกวันไปที่โฟลเดอร์ใน Google Drive ของเจ้าของไฟล์ · ส่งไฟล์ .xlsx และแจ้งเตือนทางอีเมลถึงเจ้าของ · ค่าในหัวข้อนี้บันทึกด้วยปุ่มของหัวข้อเอง (ไม่ใช่ปุ่มบันทึกด้านล่าง ยกเว้นออกจากระบบอัตโนมัติ)</p></div>
@@ -21200,8 +21205,10 @@ settingsEl.addEventListener('drop', e => {
 settingsEl.addEventListener('dragend', () => { dragFrom = ''; dragClean(); });
 // แก้ค่าในหน้าตั้งค่า (ใช้ได้ทั้ง input และ change: เบราว์เซอร์บางตัว เช่น Safari รุ่นเก่า ไม่ส่ง input ตอนติ๊กช่อง)
 function settingsEdit(el) {
+  if (el.dataset.k === 'security.idleMin' && el.value === 'custom') return;   // เลือก "กำหนดเอง…": รอกรอกชั่วโมง
   if (el.dataset.k) {
     let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
+    if (el.dataset.unit === 'h' && v !== '') v = Math.round(v * 60);   // ช่องกรอกเป็นชั่วโมง เก็บเป็นนาที
     if (el.dataset.k === 'defaults.dpf' && v !== '') v = +toGy(v);   // Dose/fx เริ่มต้น: กรอก cGy เก็บ Gy
     setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase().trim() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
     const qaRow = /^qa\.(\w+)\./.exec(el.dataset.k);
@@ -21460,7 +21467,14 @@ settingsEl.addEventListener('change', e => {
   }
   if (el.id === 'logo-file') { pickLogo(el); return; }
   if (el.dataset.acct) { pickAcct(el.dataset.acct, el.value); return; }
-  if (el.dataset.k === 'brachySync.src') { settingsEdit(el); renderSettings(); return; }   // ที่มาของนัด: แสดงคำอธิบายตามที่มา
+  if (el.dataset.k === 'brachySync.src') { settingsEdit(el); renderSettings(); return; }
+  if (el.dataset.k === 'security.idleMin' && el.tagName === 'SELECT') {   // 18 พ.ย.: กำหนดเอง… = แสดงช่องกรอกชั่วโมง
+    idleCustom = el.value === 'custom';
+    if (!idleCustom) settingsEdit(el);
+    renderSettings();
+    if (idleCustom) { const i = settingsEl.querySelector('input[data-unit="h"][data-k="security.idleMin"]'); if (i) i.focus(); }
+    return;
+  }   // ที่มาของนัด: แสดงคำอธิบายตามที่มา
   if (/^appt\.(limits|simLim)\.\w+On$/.test(el.dataset.k || '')) { settingsEdit(el); renderSettings(); return; }
   if (el.dataset.navparent !== undefined) { settingsEdit(el); for (const x of draft.nav) if (x.parent && draft.nav.some(n => n.view === x.parent && n.parent)) x.parent = ''; renderSettings(); return; }
   const rdK = /^reg\.drive\.(url|map\.hn|filter\.col)$/.exec(el.dataset.k || '');
@@ -22602,7 +22616,7 @@ const idleMin = () => Math.max(0, Math.floor(+((state.config.security || {}).idl
 function idleMinCached() { let v = null; try { v = localStorage.getItem(IDLE_MIN_KEY); } catch (e) { v = null; } return v == null || v === '' || !isFinite(+v) ? DEFAULT_CONFIG.security.idleMin : Math.max(0, Math.floor(+v)); }
 function idleRemember() { try { localStorage.setItem(IDLE_MIN_KEY, String(idleMin())); } catch (e) { /* storage blocked */ } }
 function idleLast() { let v = 0; try { v = +localStorage.getItem(IDLE_KEY) || 0; } catch (e) { v = 0; } return Math.max(v, idleLocal); }
-const idleMsg = n => `ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน ${n} นาที · เข้าสู่ระบบอีกครั้ง`;
+const idleMsg = n => `ออกจากระบบอัตโนมัติ เพราะไม่ได้ใช้งานเกิน ${idleText(n)} · เข้าสู่ระบบอีกครั้ง`;
 function idleSeen(force) {
   const now = Date.now();
   if (idleWarned) { idleWarned = false; $('#idle-warn').hidden = true; }
@@ -22626,7 +22640,7 @@ function idleCheck() {
   }
   if (left <= 60000 && !idleWarned) {
     idleWarned = true;
-    $('#idle-warn-t').textContent = `ไม่ได้ใช้งาน ${n - 1} นาทีแล้ว · จะออกจากระบบอัตโนมัติในอีก 1 นาที`;
+    $('#idle-warn-t').textContent = `ไม่ได้ใช้งาน ${idleText(n - 1)}แล้ว · จะออกจากระบบอัตโนมัติในอีก 1 นาที`;
     $('#idle-warn').hidden = false;
   }
 }
