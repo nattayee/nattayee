@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.6';
-const API_LEVEL = 87;   // 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.7';
+const API_LEVEL = 88;   // 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -601,7 +601,7 @@ function navAccess_(config, view, role, base) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { see: ['course'], rtd: ['consult'], nurse: ['nurse'],   // API 86: พบแพทย์ = แถบห้องฉาย · คำสั่งแพทย์ = ห้องตรวจ · ยืนยัน = แถบ Nurse
+const EDIT_VIEWS = { see: ['nurse'], rtd: ['consult'], nurse: ['nurse'],   // API 86: คำสั่งแพทย์ = ห้องตรวจ · ยืนยัน = แถบ Nurse · API 88: ตารางพบแพทย์ย้ายจากแถบห้องฉายมาแถบ Nurse
   cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue', 'mpleave'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'], events: ['deptcal'] };   // consult (API 69): ลงนัด CT+RT
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
@@ -3047,8 +3047,7 @@ function seeSave(date, room, docs, pin, token) {
   room = String(room || '').trim().slice(0, 60);
   if (!R8_DAY_(date)) throw new Error('วันที่ไม่ถูกต้อง');
   if (!room) throw new Error('เลือกห้องฉายก่อน');
-  const known = dqDocs_(readConfig_(ss_()) || {});
-  const list = (Array.isArray(docs) ? docs : String(docs || '').split(',')).map(x => String(x).trim().toUpperCase()).filter((x, i, a) => x && known.indexOf(x) >= 0 && a.indexOf(x) === i);
+  const list = seeDocs_(docs, dqDocs_(readConfig_(ss_()) || {}));
   return withLock_(() => {
     const ss = ss_(), id = date + '|' + room, x = openRow_(ss, 'see', null, id);
     const rec = { id: id, date: date, room: room, docs: list.join(','), by: R8_WHO_(u), at: new Date().toISOString() };
@@ -3056,6 +3055,35 @@ function seeSave(date, room, docs, pin, token) {
     pinChange_(u, pin, !!was && was !== rec.docs);
     writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.see.fields, rec, x.row ? x.vals : null);
     return rec;
+  });
+}
+const seeDocs_ = (docs, known) => (Array.isArray(docs) ? docs : String(docs || '').split(',')).map(x => String(x).trim().toUpperCase()).filter((x, i, a) => x && known.indexOf(x) >= 0 && a.indexOf(x) === i);
+/** API 88 (18 พ.ย.): แถบ Nurse → นัดพบแพทย์ (ตารางพบแพทย์รายสัปดาห์) บันทึกหลายช่อง (วัน·ห้อง) ในครั้งเดียว · items = [{ date, room, docs }]
+ *  ช่องที่มีแพทย์บันทึกไว้แล้วและรายการเปลี่ยน = แก้ไข ต้องใส่ PIN (ครั้งเดียวทั้งชุด) · คืนรายการที่บันทึก */
+function seeSaveMany(items, pin, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.see);
+  if (!Array.isArray(items) || !items.length) throw new Error('ไม่มีช่องที่จะบันทึก');
+  if (items.length > 300) throw new Error('บันทึกได้ครั้งละไม่เกิน 300 ช่อง');
+  const known = dqDocs_(readConfig_(ss_()) || {}), by = {};
+  items.forEach(it => {
+    it = it && typeof it === 'object' ? it : {};
+    const date = String(it.date || ''), room = String(it.room || '').trim().slice(0, 60);
+    if (!R8_DAY_(date)) throw new Error('วันที่ไม่ถูกต้อง');
+    if (!room) throw new Error('ไม่มีห้องฉาย');
+    by[date + '|' + room] = { id: date + '|' + room, date: date, room: room, docs: seeDocs_(it.docs, known).join(',') };
+  });
+  return withLock_(() => {
+    const ss = ss_(), x = openRows_(ss, 'see', null, id => !!by[id]);
+    const was = id => { const a = x.at[id]; return a && a.vals ? String(x.cv.conv(a.vals).docs || '') : ''; };
+    pinChange_(u, pin, Object.keys(by).some(id => was(id) && was(id) !== by[id].docs));
+    const now = new Date().toISOString(), who = R8_WHO_(u), out = [];
+    let next = Math.max(x.last, 1) + 1;
+    Object.keys(by).forEach(id => {
+      const a = x.at[id], rec = Object.assign({}, by[id], { by: who, at: now });
+      writeFields_(x.sh, a ? a.row : next++, x.header, TABLES.see.fields, rec, a ? a.vals : null);
+      out.push(rec);
+    });
+    return out;
   });
 }
 /** ห้องตรวจ → ระหว่างฉาย: คำสั่งแพทย์ของเคสในวันนั้น · RT Alone = RT · CCRT = RT และ CMT (หมวดละ 1) · แก้คำสั่ง = รอพยาบาลยืนยันใหม่ */
@@ -5080,7 +5108,7 @@ function delRow_(sh, row, head, vals) {
   sh.deleteRow(row);
 }
 // ตารางที่ดูประวัติได้ในแต่ละแถบ (ต้องดูแถบนั้นได้)
-const AUDIT_VIEWS = { nurse: ['appt', 'dq', 'rtd'],   // API 86
+const AUDIT_VIEWS = { nurse: ['appt', 'dq', 'rtd', 'see'],   // API 86 · 88: ตารางพบแพทย์
   deptcal: ['events', 'leaves', 'dqLeave'], reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], mpleave: ['leaves'], rojobs: ['dqLeave'], consult: ['dq', 'appt', 'rtd'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
   course: ['cases', 'duty', 'see'], ctsim: ['ctsim', 'vac', 'appt'], dash: ['cases'], logs: ['logs'], p4p: ['logs'], jobs: ['jobs', 'vac'], settings: ['config'] };
 function auditTablesFor_(view, token) {
