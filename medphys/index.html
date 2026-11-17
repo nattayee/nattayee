@@ -1739,6 +1739,12 @@ tr.col-head > th[draggable="true"]{cursor:grab}
 .prio-chips input[value="Emergency"]:checked+span{border-color:var(--late);background:var(--late);color:var(--surface)}
 .emerg-tag{margin-left:4px}
 .cso-emerg{display:inline-block;margin-left:6mm;padding:0 2.5mm;border:1.6px solid #c00;color:#c00;font-weight:700;letter-spacing:.5px}
+.speed-wrap{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin:0 0 16px}
+.speed-tbl{border-collapse:collapse;width:100%;font-size:13px}
+.speed-tbl th,.speed-tbl td{padding:4px 10px;border-bottom:1px solid var(--line);text-align:left}
+.speed-tbl td.num{text-align:right;white-space:nowrap}
+.speed-warn{color:var(--warn);font-weight:600}
+.cso-emerg.cso-rect{border-color:#6a3ab0;color:#6a3ab0;margin-left:3mm}
 .dpk-wide.dpk-short{padding-top:8px}   /* จอเตี้ย: ช่องวันเตี้ยลงให้เห็นทั้งเดือน */
 .dpk-wide.dpk-short .dpk-sub,.dpk-wide.dpk-short .dpk-rooms{margin-bottom:4px}
 .dpk-wide.dpk-short .dpk-rooms button{line-height:22px}
@@ -6545,7 +6551,7 @@ const DEFAULT_CONFIG = {
   // ตัวเลือกของใบสั่ง CT Simulation (ช่องในฟอร์มลงนัด และใบสั่ง PDF) ตามไฟล์ CT Simulation Order Form version2: Examination Part (บรรทัด "หัวข้อ | ข้อย่อย, ..." · ขึ้นต้นด้วย | = ข้อย่อยของหัวข้อบน · {} = ช่องเติมคำ)
   // Immobilization (ข้อคั่นด้วย , · ว่าง = เว้นช่อง) · Position · Gender
   order: {
-    exam: ['Brain', 'Head and Neck | Extended', 'Chest | Normal', '| 4D, MIP, AIP, MINIP', 'Abdomen | Normal', '| 4D, MIP, AIP, MINIP', '| NPO {} hrs. before RT', 'Breast | Look upward, Head tilt', '| 4D, MIP, AIP, MINIP',
+    exam: ['Brain', 'Head and Neck | Extended', 'Chest', '| 4D, MIP, AIP, MINIP', 'Abdomen', '| 4D, MIP, AIP, MINIP', '| NPO {} hrs. before RT', 'Breast | Look upward, Head tilt', '| 4D, MIP, AIP, MINIP',
       'Pelvis | Frog leg', '| Empty Bladder', '| Full Bladder', '| Control Bladder {} min.', '| Void before RT', '| Don\u2019t Void before RT', '| Protocol MED'],
     immob: ['SRS Mask, Short Mask, Long Mask', ', , Add cork', 'Vac-lok'],
     positions: ['HFS', 'FFS', 'HFP', 'FFP'],
@@ -7118,7 +7124,8 @@ function mergeConfig(c) {
     bags: (Array.isArray(vc.bags) ? vc.bags : []).map(b => ({ no: str(b && b.no).trim().slice(0, 10), type: str(b && b.type).trim().slice(0, 40) })).filter(b => b.no && !vseen.has(b.no) && vseen.add(b.no)) };
   const ob = c.order && typeof c.order === 'object' ? c.order : {};
   const olines = (v, dv) => (Array.isArray(v) ? v.map(x => str(x).slice(0, 200)).filter(Boolean).slice(0, 60) : dv.slice());
-  out.order = { exam: olines(ob.exam, d.order.exam), immob: olines(ob.immob, d.order.immob), positions: jlist(ob.positions, d.order.positions), genders: jlist(ob.genders, d.order.genders) };
+  // 18 พ.ย.: แบบฟอร์ม version 21 ไม่มี Normal ของ Chest / Abdomen (ค่าที่บันทึกในตั้งค่าเดิมแปลงให้)
+  out.order = { exam: olines(ob.exam, d.order.exam).map(x => x.replace(/^(\s*(?:Chest|Abdomen))\s*\|\s*Normal\s*$/i, '$1')), immob: olines(ob.immob, d.order.immob), positions: jlist(ob.positions, d.order.positions), genders: jlist(ob.genders, d.order.genders) };
   out.required = Object.fromEntries(REQ_FIELDS.map(f => [f.key, !!(c.required && c.required[f.key])]));
   const ftypes = FIELD_TYPES.map(t => t[0]);
   // หัวข้อเพิ่มเติมที่ใช้คอลัมน์เดียวกับช่องของระบบ (เช่นเคยตั้ง "ห้องฉาย" เอง) ให้ช่องของระบบอ่านคอลัมน์นั้นแทน
@@ -7239,7 +7246,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-17.8';
+const PAGE_VERSION = '2026-11-17.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7257,13 +7264,17 @@ if (IN_SHEET && (window.MEDPHYS_LPCH_TOKEN || window.MEDPHYS_LPCH_ERROR)) {   //
   try { google.script.history.replace(null, {}, ''); } catch (e) { /* runtime เก่า */ }
 }
 const LOGIN_MARK = 'LOGIN|';
-const call = (fn, ...args) => new Promise((ok, fail) => google.script.run.withSuccessHandler(ok).withFailureHandler(err => {
+// 18 พ.ย.: เวลาของการเรียก Code.gs แต่ละครั้ง (เครื่องนี้ ล่าสุด 40 ครั้ง · ตั้งค่า → สำรองข้อมูลและความปลอดภัย → ความเร็ว)
+const speedLog = [];
+const speedAdd = (fn, t0, ok) => { speedLog.unshift({ fn, ms: Math.round(performance.now() - t0), ok, at: Date.now() }); if (speedLog.length > 40) speedLog.length = 40; };
+const call = (fn, ...args) => { const t0 = performance.now(); return new Promise((ok, fail) => google.script.run.withSuccessHandler(v => { speedAdd(fn, t0, true); ok(v); }).withFailureHandler(err => {
+  speedAdd(fn, t0, false);
   const m = errMsg(err), i = m.indexOf(LOGIN_MARK);
   if (i < 0) return fail(err);
   const why = m.slice(i + LOGIN_MARK.length);
   showGate(why);
   fail(Object.assign(new Error(why), { login: true }));
-})[fn](...args, lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : '')));
+})[fn](...args, lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : ''))); };
 const sheetStore = {
   mode: 'sheet',
   load: have => (have ? call('getData', have) : call('getData')),   // have = รุ่นของข้อมูลที่มี (Code.gs API 61 · ส่งเฉพาะที่เปลี่ยน)
@@ -9247,6 +9258,8 @@ const isOnV = v => v === true || v === 'on';
 const AP_CAL = [['simNew', 'ตัวเลขผู้ป่วยใหม่ที่เริ่มฉาย'], ['simBadge', 'แบบตัวเลขผู้ป่วยใหม่'], ['simAll', 'ยังไม่เลือกห้อง'], ['simQ', 'โควตารวมของวัน (Q)'], ['simTot', 'ผู้ป่วยทั้งหมดของวัน (มุมขวาล่าง · เขียว = ไม่เกิน · แดง = เกินจำนวนต่อวันที่ตั้งไว้)'], ['simRoom', 'ผู้ป่วยใหม่ต่อห้อง/ลิมิต (ชื่อเครื่องฉาย)'], ['simDoc', 'ป้ายแพทย์'],
   ['ctN', 'จำนวน CT ที่นัด'], ['ctDoc', 'ป้ายแพทย์ (จำนวนของแพทย์แต่ละคน)']];
 const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
+// 18 พ.ย.: นัด Re-CT = Note มี Re-CT#ครั้งที่ (ฟอร์มจาก Re-CT ใส่ให้) หรือคำว่า Re-CT · คืนข้อความตรา เช่น RE-CT #2
+const apReCt = r => { const m = /\bRe-?CT\s*(#\s*\d+)?/i.exec(str(r && r.note)); return m ? `RE-CT${m[1] ? ' ' + m[1].replace(/\s+/g, '') : ''}` : ''; };
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
 // สถานะ: wait = รอลง CT-SIM · took = ลง CT-SIM แล้ว · skip = ไม่มาทำ CT
 const apState = r => (r.took === 'skip' ? 'skip' : r.took ? 'took' : 'wait');
@@ -11430,12 +11443,20 @@ function demoBackup() { let b = null; try { b = JSON.parse(localStorage.getItem(
 function persistBk(b) { try { localStorage.setItem('medphys-dispatch:backup', JSON.stringify(b)); } catch (e) { /* storage blocked */ } }
 const bkWhen = v => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? `${fmtDay(localDay(v))} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} น.` : ''; };
 const bkLink = (u, t) => (/^https:\/\/[^\s"'<>]+$/.test(str(u)) ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a>` : '');
+// ความเร็วของเครื่องนี้: เวลาตั้งแต่กดจนได้คำตอบจาก Code.gs (รวมเครือข่าย) · เกิน 1 วินาที = สีส้ม · เกิน 3 วินาที = สีแดง
+const SPEED_NAME = { getData: 'โหลดข้อมูล', lpchLogin: 'เข้าสู่ระบบ' };
+function speedHtml() {
+  const sec = ms => (ms / 1000).toFixed(ms < 10000 ? 2 : 1);
+  const rows = speedLog.map(x => `<tr><td>${esc(bkWhen(new Date(x.at).toISOString()))}</td><td>${esc(SPEED_NAME[x.fn] || HIST_FN[x.fn] || x.fn)}<small class="muted"> ${esc(x.fn)}</small></td><td class="num${x.ms > 3000 ? ' bk-bad' : x.ms > 1000 ? ' speed-warn' : ''}">${sec(x.ms)} วิ</td><td>${x.ok ? '✓' : '<span class="bk-bad">✗</span>'}</td></tr>`).join('');
+  return `<h3 class="sub-h">ความเร็ว (เครื่องนี้)</h3><p class="muted def-note" style="margin:0 0 6px">เวลาตั้งแต่ส่งคำขอจนได้คำตอบจาก Code.gs ล่าสุด 40 ครั้ง (รวมเวลาเครือข่าย) · ใช้ดูว่างานไหนช้า · ไม่ได้เก็บไว้ที่ไหน (ปิดหน้าเว็บ = ล้าง) <button type="button" class="btn ghost sm" data-speed="r">รีเฟรช</button></p>
+      ${rows ? `<div class="speed-wrap"><table class="speed-tbl"><thead><tr><th>เวลา</th><th>งาน</th><th>ใช้เวลา</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">ยังไม่มีการเรียก Code.gs ในหน้านี้</p>'}`;
+}
 function secSec(d) {
   const idleCur = Math.max(0, Math.floor(+d.security.idleMin) || 0), idlePreset = IDLE_OPTS.some(([v]) => v === idleCur), idleSel = idleCustom && idlePreset ? 'custom' : String(idleCur);   // ค่าที่กรอกเอง (ไม่อยู่ในรายการ) = แสดงเป็นตัวเลือกของตัวเอง
   const idle = `<h3 class="sub-h">ออกจากระบบอัตโนมัติ</h3>
       <div class="form-grid" style="margin-bottom:6px"><label class="field"><span class="lbl">เมื่อไม่ได้ใช้งาน</span><select data-k="security.idleMin" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน">${IDLE_OPTS.map(([v, l]) => opt(String(v), l, idleSel)).join('')}${idlePreset ? '' : opt(String(idleCur), `${idleText(idleCur)} (กำหนดเอง)`, idleSel)}<option value="custom"${idleSel === 'custom' ? ' selected' : ''}>กำหนดเอง…</option></select></label>
         <label class="field"${idleCustom || !idlePreset ? '' : ' hidden'}><span class="lbl">กำหนดเอง (ชั่วโมง) <span class="sub-lbl">ทศนิยมได้ เช่น 1.5 = 1 ชั่วโมง 30 นาที · ตั้งแต่ 5 นาที ถึง 24 ชั่วโมง</span></span><input type="number" min="0.1" max="24" step="any" inputmode="decimal" data-k="security.idleMin" data-unit="h" value="${idleCur ? +(idleCur / 60).toFixed(2) : ''}" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน (ชั่วโมง)"></label></div>
-      <p class="muted def-note" style="margin:0 0 16px">ใช้กับผู้ที่เข้าระบบด้วยบัญชี LPCH (เครื่องที่ใช้ร่วมกันในแผนก) · ไม่ได้คลิก แตะ พิมพ์ หรือเลื่อนหน้าจอ ครบเวลา = ออกจากระบบ (เตือนก่อน 1 นาที) · ปิดหน้าเว็บค้างไว้แล้วเปิดใหม่หลังเวลานี้ = ต้องเข้าสู่ระบบใหม่</p>`;
+      <p class="muted def-note" style="margin:0 0 16px">ใช้กับผู้ที่เข้าระบบด้วยบัญชี LPCH (เครื่องที่ใช้ร่วมกันในแผนก) · ไม่ได้คลิก แตะ พิมพ์ หรือเลื่อนหน้าจอ ครบเวลา = ออกจากระบบ (เตือนก่อน 1 นาที) · ปิดหน้าเว็บค้างไว้แล้วเปิดใหม่หลังเวลานี้ = ต้องเข้าสู่ระบบใหม่</p>${speedHtml()}`;
   if (!bkCan()) return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองข้อมูลตั้งได้เฉพาะแอดมิน</p></div>${idle}</div>`;
   return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองทั้งไฟล์ Google Sheet ทุกวันไปที่โฟลเดอร์ใน Google Drive ของเจ้าของไฟล์ · ส่งไฟล์ .xlsx และแจ้งเตือนทางอีเมลถึงเจ้าของ · ค่าในหัวข้อนี้บันทึกด้วยปุ่มของหัวข้อเอง (ไม่ใช่ปุ่มบันทึกด้านล่าง ยกเว้นออกจากระบบอัตโนมัติ)</p></div>
       ${idle}
@@ -16781,7 +16802,7 @@ function csoSheetHtml(a) {
   return `<div class="cso-page">
   <div class="cso-banner"><img data-cso="banner" alt=""></div><div class="cso-dept">DEPARTMENT OF RADIATION ONCOLOGY</div><div class="cso-logo"><img data-cso="logo" alt=""></div>
   <table class="cso-info"><colgroup><col style="width:20.69mm"><col style="width:69.71mm"><col style="width:27.89mm"><col style="width:62.52mm"></colgroup>
-    <tr><td colspan="4" class="cso-title">CT Simulation Order Form${apEmerg(a) ? '<span class="cso-emerg">EMERGENCY</span>' : ''}</td></tr>
+    <tr><td colspan="4" class="cso-title">CT Simulation Order Form${apEmerg(a) ? '<span class="cso-emerg">EMERGENCY</span>' : ''}${apReCt(a) ? `<span class="cso-emerg cso-rect">${esc(apReCt(a))}</span>` : ''}</td></tr>
     <tr><th>Name</th><td>${v(a.name)}</td><th>Diagnosis</th><td>${v(dxValue(a))}</td></tr>
     <tr><th>HN</th><td>${v(a.hn)}</td><th>Oncologist</th><td>${v(doc)}</td></tr>
     <tr><th>Age</th><td>${v(o.age)}</td><th>CT Room</th><td>${v(a.ct ? ctLabel(a.ct) : '')}</td></tr>
@@ -20854,6 +20875,7 @@ document.addEventListener('click', e => {
   if (ds.ctunlink !== undefined) { intakeCt = ''; return renderCtPullBtn(); }
   if (ds.apuse) return useAp(ds.apuse);
   if (ds.aprelink) return apRelink(ds.aprelink, t);
+  if (ds.speed) return renderSettings();   // ตั้งค่า → ความเร็ว: อ่านรายการล่าสุด
   if (ds.cstab) { pref.set('csTab', ds.cstab); return renderConsult(); }   // 18 พ.ย.: ห้องตรวจ แถบย่อย
   if (ds.ontxk) { const c = state.cases.find(x => x.id === ds.ontxc); if (c) { const f = { ...ontxForm(c), [ds.ontxk]: ds.ontxv }; if (ds.ontxk === 'kind' && ds.ontxv === 'alone') f.cmt = ''; ontxDraft.set(c.id, f); renderOntx(); } return; }
   if (ds.ontxsave) return ontxSave(ds.ontxsave, t);
@@ -23175,10 +23197,11 @@ $('#gate-form').addEventListener('submit', async e => {
   btn.disabled = true;
   err.hidden = true;
   try {
-    const r = await call('lpchLogin', user, pass);
+    const r = await call('lpchLogin', user, pass, { pack: 1 });   // Code.gs API 89: ส่งข้อมูลมาพร้อมผลเข้าสู่ระบบ (รุ่นเก่าไม่สนค่านี้)
     setToken(r.token);
     $('#g-pass').value = '';
     state.gate = null;
+    preData = r.data && typeof r.data === 'object' && !r.data.gate ? r.data : null;
     await refresh();
     if (state.gate == null) toast(`เข้าสู่ระบบแล้ว · ${r.name}`);
   } catch (ex) { err.textContent = errMsg(ex); err.hidden = false; }
@@ -23189,7 +23212,7 @@ let movedOnce = false;
 // เทียบรหัสทั้งตารางกับเซิร์ฟเวอร์: ไม่ตรง (มีแถวถูกลบ) = ขอทั้งตารางใหม่ทันที · ขอทั้งหมดใหม่ทุก FULL_EVERY (กันแก้ในชีตโดยตรง)
 const VER_API = 61;
 const FULL_EVERY = 60 * 60000;   // ทั้งหมดทุก 1 ชั่วโมง (และตอนเปิดหน้าเว็บ / กด F5) · ระหว่างนั้นได้เฉพาะที่เปลี่ยน
-let lastFull = 0, fixAsk = 0;
+let lastFull = 0, fixAsk = 0, preData = null;   // preData = ข้อมูลที่มากับผลเข้าสู่ระบบ (ใช้ครั้งเดียว)
 const unpackRows = x => (x && Array.isArray(x.c) && Array.isArray(x.r) ? x.r.map(a => { const o = {}; x.c.forEach((k, i) => { o[k] = i < a.length ? a[i] : ''; }); return o; }) : Array.isArray(x) ? x : []);
 function idsHash(list) {   // เหมือน idsHash_ ใน Code.gs
   const t = list.map(x => str(x.id)).filter(Boolean).sort().join('|');
@@ -23202,7 +23225,9 @@ async function refresh(quiet) {
   try {
     const api = state.loaded ? state.api : +window.MEDPHYS_API || 0, vOk = store.mode === 'sheet' && api >= VER_API;
     const part = vOk && state.loaded && quiet && Date.now() - lastFull < FULL_EVERY;
-    const d = await store.load(vOk ? (part ? { pack: 1, v: state.tv, t: state.tt } : { pack: 1 }) : null);
+    const pre = !state.loaded && vOk && preData ? preData : null;
+    preData = null;
+    const d = pre || await store.load(vOk ? (part ? { pack: 1, v: state.tv, t: state.tt } : { pack: 1 }) : null);
     if (!part) lastFull = Date.now();
     const same = new Set(d.same || []), delta = d.delta || {};
     let bad = '';

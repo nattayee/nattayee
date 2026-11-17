@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.7';
-const API_LEVEL = 88;   // 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-17.8';
+const API_LEVEL = 89;   // 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -496,6 +496,100 @@ function pack_(rows) {
   return { c: c, r: rows.map(o => { const r = c.map(k => (o[k] == null ? '' : o[k])); while (r.length && r[r.length - 1] === '') r.pop(); return r; }) };
 }
 const idsHash_ = ids => strHash_(ids.slice().sort().join('|'));
+/* ---------- API 89 (18 พ.ย.): สำเนาตารางในแคชของสคริปต์ (โหลดข้อมูล / เข้าสู่ระบบเร็วขึ้น) ----------
+ * ตารางที่อ่านจากชีตแล้ว (แบบย่อ pack_) เก็บในแคช (แบ่งเป็นชิ้น) พร้อมรุ่นของตาราง · คำขอถัดไปที่รุ่นเดิม = ใช้สำเนา ไม่อ่านชีต
+ * ตารางที่แก้บ่อย (Cases Logs DocQueue Registry · มีคอลัมน์เวลาแก้): สำเนา + อ่านเฉพาะแถวที่แก้หลังเวลาสำเนา (แบบเดียวกับหน้าเว็บ)
+ * อ่านชีตเต็มใหม่เมื่อสำเนาเก่ากว่า 1 ชั่วโมง / วันใหม่ / มีแถวถูกลบ (แก้ในชีตด้วยมือยังเห็นภายใน 1 ชั่วโมง เหมือนเดิม)
+ * แคชเต็มหรือหาย = อ่านชีตตามเดิม (ผลเหมือนกัน แค่ช้ากว่า) */
+const SNAP_TTL = 21600, SNAP_FULL_MS = 60 * 60000, SNAP_PIECE = 95000, SNAP_MAX = 3000000;   // ชิ้นละไม่เกิน 100KB (base64 ของข้อมูลที่บีบอัด) · ใหญ่เกิน = ไม่เก็บ (อ่านชีตเหมือนเดิม)
+const SNAP_SKIP = ['jobs'];   // ภาระงาน: ของแต่ละคน
+// อ่านสำเนาหลายตารางในครั้งเดียว (คำขอละ 2 ครั้ง: หัวข้อ แล้วชิ้นข้อมูล) · want(key, meta) = จะใช้สำเนานี้ไหม · เก็บไว้ที่ REQ_.snap
+function snapPreload_(keys, want) {
+  const pre = REQ_.snap = {};
+  try {
+    const c = CacheService.getScriptCache(), metas = c.getAll(keys.map(k => 'snap.' + k)), ks = [];
+    keys.forEach(k => {
+      let m = null;
+      try { m = JSON.parse(metas['snap.' + k] || 'null'); } catch (e) { m = null; }
+      if (!m || !m.n || !want(k, m)) return;
+      pre[k] = { meta: m, ks: [] };
+      for (let i = 0; i < m.n; i++) { pre[k].ks.push('snap.' + k + '.' + m.id + '.' + i); ks.push('snap.' + k + '.' + m.id + '.' + i); }
+    });
+    if (ks.length) { const got = c.getAll(ks); Object.keys(pre).forEach(k => { pre[k].got = got; }); }
+  } catch (e) { REQ_.snap = {}; }
+}
+function snapGet_(key) {
+  try {
+    const c = CacheService.getScriptCache(), pre = REQ_.snap && REQ_.snap[key];
+    const meta = pre ? pre.meta : JSON.parse(c.get('snap.' + key) || 'null');
+    if (!meta || !meta.n) return null;
+    const ks = [];
+    for (let i = 0; i < meta.n; i++) ks.push('snap.' + key + '.' + meta.id + '.' + i);
+    const got = pre && pre.got ? pre.got : c.getAll(ks);
+    if (ks.some(k => typeof got[k] !== 'string')) return null;
+    const s = ks.map(k => got[k]).join('');
+    meta.p = JSON.parse(meta.z ? Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(s), 'application/x-gzip')).getDataAsString() : s);
+    return meta;
+  } catch (e) { return null; }
+}
+function snapPut_(key, meta, packed) {
+  try {
+    const raw = JSON.stringify(packed), z = typeof Utilities.gzip === 'function';
+    const s = z ? Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(raw, 'application/json')).getBytes()) : raw;
+    if (s.length > SNAP_MAX || (!z && raw.length > SNAP_MAX / 3)) return;
+    const c = CacheService.getScriptCache(), id = Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), o = {};
+    let n = 0;
+    for (let i = 0; i < s.length; i += SNAP_PIECE) o['snap.' + key + '.' + id + '.' + (n++)] = s.slice(i, i + SNAP_PIECE);
+    c.putAll(o, SNAP_TTL);
+    let old = null;
+    try { old = JSON.parse(c.get('snap.' + key) || 'null'); } catch (e) { old = null; }
+    c.put('snap.' + key, JSON.stringify({ v: meta.v, t: meta.t, b: meta.b, td: meta.td, n: n, id: id, z: z ? 1 : 0 }), SNAP_TTL);
+    if (old && old.id && old.n && c.removeAll) { const ks = []; for (let i = 0; i < old.n; i++) ks.push('snap.' + key + '.' + old.id + '.' + i); c.removeAll(ks); }
+  } catch (e) { console.log('snapPut_ ' + key + ' ' + e); }
+}
+// แถวที่แก้ (แบบ readTable_) ใส่ลงในสำเนาแบบย่อ: แทนแถว id เดิม / ต่อท้าย · คืนสำเนาใหม่และ id ทั้งหมด
+function snapMerge_(p, rows) {
+  const c = p.c.slice(), r = p.r.slice(), idc = c.indexOf('id');
+  if (idc < 0) return null;
+  const at = {};
+  r.forEach((a, i) => { at[String(a[idc])] = i; });
+  rows.forEach(o => {
+    Object.keys(o).forEach(k => { if (c.indexOf(k) < 0) c.push(k); });
+    const a = c.map(k => (o[k] == null ? '' : o[k]));
+    while (a.length && a[a.length - 1] === '') a.pop();
+    const id = String(o.id);
+    if (id in at) r[at[id]] = a; else { at[id] = r.length; r.push(a); }
+  });
+  return { c: c, r: r, ids: r.map(a => String(a[idc] == null ? '' : a[idc])).filter(Boolean) };
+}
+// ตาราง k แบบย่อจากสำเนา (ถ้าใช้ได้) หรืออ่านชีต · key = ชื่อในแคช · v = รุ่นของตาราง · read = อ่านชีต (คืนแถวแบบ readTable_)
+// after(rows) = งานกับแถวที่อ่านใหม่ (เช่น ล้างวันล่วงหน้าของ Cases) คืนจำนวนที่ล้าง
+function snapRows_(ss, config, k, key, v, read, after) {
+  const td = today_(ss), now = Date.now(), t0 = new Date(now).toISOString();
+  const s = snapGet_(key);
+  let cleared = 0;
+  if (s && s.td === td && now - s.b < (REQ_.snapAge || SNAP_FULL_MS)) {
+    if (s.v === v) return { p: s.p, cleared: 0, from: 'cache' };
+    if (DELTA_TABLES.indexOf(k) >= 0 && s.t) {
+      const dl = readDelta_(ss, k, k === 'cases' ? config : null, new Date(Date.parse(s.t) - DELTA_MARGIN_MS).toISOString());
+      if (dl) {
+        if (k === 'reg') regFixNames_(ss, dl.rows);
+        if (after) cleared += after(dl.rows);
+        const mg = snapMerge_(s.p, dl.rows);
+        if (mg && idsHash_(mg.ids) === dl.hash) {
+          const p = { c: mg.c, r: mg.r };
+          snapPut_(key, { v: v, t: t0, b: s.b, td: td }, p);
+          return { p: p, cleared: cleared, from: 'delta' };
+        }
+      }
+    }
+  }
+  const rows = read();
+  if (after) cleared += after(rows);
+  const p = pack_(rows);
+  snapPut_(key, { v: v, t: t0, b: now, td: td }, p);
+  return { p: p, cleared: cleared, from: 'sheet' };
+}
 function tablesFor_(ss, config, user, need, have) {
   const vers = tableVers_();
   let init = false;
@@ -507,6 +601,13 @@ function tablesFor_(ss, config, user, need, have) {
   const hv = have && have.v && typeof have.v === 'object' ? have.v : {}, ht = have && have.t && typeof have.t === 'object' ? have.t : {}, pk = !!(have && have.pack);
   const out = { ver: {}, now: new Date().toISOString(), same: [], delta: {}, advanceCleared: 0 };
   let cases = null;
+  // API 89: สำเนาในแคชของทุกตารางที่จะส่ง อ่านในครั้งเดียว (ใช้เฉพาะสำเนาวันนี้ที่ยังไม่เก่ากว่า 1 ชั่วโมง และรุ่นตรง หรือเป็นตารางที่อ่านเฉพาะแถวที่แก้ได้)
+  const snapKey = k => k + (k === 'bq' && bqRoom ? '.r' : '') + (k === 'cases' ? '.' + strHash_(JSON.stringify(extraFields_(config || {}))) : '');
+  if (pk) {
+    const now = Date.now(), byKey = {};
+    Object.keys(OUT_TABLES).forEach(k => { if (SNAP_SKIP.indexOf(k) < 0 && !(have && hv[k] === verOf(k))) byKey[snapKey(k)] = k; });
+    snapPreload_(Object.keys(byKey), (key, m) => m.td === td && now - m.b < SNAP_FULL_MS && (m.v === verOf(byKey[key]) || DELTA_TABLES.indexOf(byKey[key]) >= 0));
+  }
   const read = {
     cases: () => (cases = readTable_(ss, 'cases', config)), logs: () => readTable_(ss, 'logs'), leaves: () => readTable_(ss, 'leaves'), duty: () => recentDuty_(ss), ctsim: () => recentCt_(ss),
     appt: () => recentAppt_(ss), reg: () => regRows_(ss), bq: () => recentBq_(ss, config, cases, !bqRoom), jobs: () => jobsFor_(ss, user, config), vac: () => readTable_(ss, 'vac'), spq: () => readTable_(ss, 'spq'),
@@ -528,6 +629,14 @@ function tablesFor_(ss, config, user, need, have) {
         out.delta[k] = { rows: pk ? pack_(dl.rows) : dl.rows, hash: dl.hash, n: dl.n };
         return;
       }
+    }
+    // API 89: หน้าเว็บที่รับแบบย่อ = ใช้สำเนาในแคช (ไม่อ่านชีตถ้าไม่เปลี่ยน)
+    if (pk && SNAP_SKIP.indexOf(k) < 0) {
+      const sn = snapRows_(ss, config, k, snapKey(k), v, read[k], k === 'cases' ? rows => clearAdvance_(ss, config, rows) : null);
+      out.advanceCleared += sn.cleared;
+      out[k] = sn.p;
+      (out.src = out.src || {})[k] = sn.from;
+      return;
     }
     const rows = read[k]();
     if (k === 'cases') out.advanceCleared += clearAdvance_(ss, config, rows);
@@ -4718,8 +4827,11 @@ function lpchFinish_(out) {
 }
 
 // ช่องเข้าสู่ระบบในหน้าเว็บ: ชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านตรวจที่ LPCH ไม่เก็บที่นี่
-function lpchLogin(username, password) {
-  return lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
+// API 89: have = { pack } (หน้าเว็บรุ่นใหม่) = ส่งข้อมูลทั้งหมดมาพร้อมผลเข้าสู่ระบบ (ไม่ต้องเรียก getData อีกรอบ)
+function lpchLogin(username, password, have) {
+  const r = lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
+  if (have && typeof have === 'object' && have.pack && r.token) { try { r.data = getData({ pack: 1 }, r.token); } catch (e) { console.log('lpchLogin data ' + e); } }
+  return r;
 }
 
 function lpchLogout(token) {
@@ -4907,7 +5019,7 @@ function findRow_(sh, col, id) {
 // คืนค่าของแถวหลังเขียน (อาร์เรย์ตามหัวคอลัมน์) ใช้แทนการอ่านแถวกลับมา
 function writeFields_(sh, row, header, fields, rec, old) {
   const cells = fields
-    .map(f => ({ col: header.indexOf(f[1]) + 1, value: safeText_(rec[f[0]]) }))
+    .map(f => ({ col: header.indexOf(f[1]) + 1, value: f[1] === REV_HEAD ? new Date().toISOString() : safeText_(rec[f[0]]) }))   // API 89: เวลาแก้ = ตอนเขียนเสมอ (แถวใหม่เดิมได้ค่าว่าง → หน้าเว็บ / สำเนาในแคชต้องอ่านทั้งตาราง)
     .filter(c => c.col > 0);
   const was = auditWrite_(sh, row, header, cells, old);
   const rv = header.indexOf(REV_HEAD);   // Cases / Logs: เวลาแก้ล่าสุดของแถว (ส่งเฉพาะแถวที่เปลี่ยน)
@@ -4974,7 +5086,7 @@ function appendNew_(ss, table, records, known) {
   const stamp = new Date().toISOString();
   const rows = fresh.map(rec => header.map(h => {
     const f = def.fields.find(x => x[1] === h);
-    return !f ? '' : f[0] === 'rev' ? stamp : safeText_(rec[f[0]]);
+    return h === REV_HEAD ? stamp : !f ? '' : f[0] === 'rev' ? stamp : safeText_(rec[f[0]]);   // API 89: แถวใหม่มีเวลาแก้ (หน้าเว็บ / สำเนาในแคชได้เฉพาะแถวที่เพิ่ม ไม่ต้องอ่านทั้งตาราง)
   }));
   sh.getRange(last + 1, 1, rows.length, header.length).setNumberFormat('@').setValues(rows);
   return fresh.length;
@@ -5311,10 +5423,27 @@ function backupMail_(file, to, now, tz) {
 function backupTrigger_(cfg) {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'backupDaily').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('backupDaily').timeBased().everyDays(1).atHour(cfg.hour).inTimezone(tz_(ss_())).create();
+  try { snapTrigger_(); } catch (e) { console.log('snapTrigger_ ' + e); }   // API 89: อุ่นแคช (ตั้งไม่ได้ = ไม่กระทบการสำรอง)
   return true;
+}
+// API 89: อุ่นสำเนาตารางในแคชทุกชั่วโมง (06–20 น.) · ผู้ใช้ที่เข้าระบบ / โหลดข้อมูลไม่ต้องรออ่านชีตเต็ม · ตั้งพร้อมสำรองข้อมูลอัตโนมัติ
+function snapTrigger_() {
+  const ts = ScriptApp.getProjectTriggers();
+  if (ts.some(t => t.getHandlerFunction() === 'snapWarm')) return false;
+  ScriptApp.newTrigger('snapWarm').timeBased().everyHours(1).create();
+  return true;
+}
+function snapWarm() {
+  const ss = ss_(), h = +Utilities.formatDate(new Date(), tz_(ss), 'H');
+  if (h < 6 || h > 20) return 'night';
+  const config = readConfig_(ss), user = { via: 'google', isAdmin: true, name: 'snapWarm', username: '', role: '' };
+  REQ_.snapAge = 40 * 60000;   // สำเนาที่อายุเกิน 40 นาที = อ่านชีตใหม่ (ผู้ใช้ใช้ได้ถึง 1 ชั่วโมง จึงไม่เจอสำเนาเก่า)
+  const out = tablesFor_(ss, config, user, guestNeeds_(user, config), { pack: 1 });
+  return JSON.stringify(out.src || {});
 }
 // ทริกเกอร์รายวัน (เรียกจากหน้าเว็บได้ด้วย จึงไม่ทำซ้ำถ้าสำรองอัตโนมัติไปแล้วภายใน 12 ชั่วโมง)
 function backupDaily() {
+  try { regArchive_(ss_(), readConfig_(ss_()) || {}, false); } catch (e) { console.log('backupDaily regArchive_ ' + e); }   // API 89: ย้ายผู้ป่วยเก่าตอนกลางคืน
   const last = backupState_();
   if (last.why === 'auto' && last.ok && Date.now() - Date.parse(last.at) < 12 * 36e5) return 'skip';
   backupRun_('auto');
@@ -5335,6 +5464,7 @@ function backupStatus(token) {
   backupAdmin_(token);
   let trigger = null, auth = true;
   try { trigger = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'backupDaily'); } catch (e) { auth = false; }
+  if (trigger) { try { snapTrigger_(); } catch (e) { /* ครั้งหน้า */ } }   // API 89: ระบบที่ตั้งสำรองไว้ก่อน = ตั้งอุ่นแคชให้เมื่อแอดมินเปิดหน้าตั้งค่า
   return { cfg: backupCfg_(), state: backupState_(), trigger: trigger, auth: auth, to: backupTo_() };
 }
 function backupSave(cfg, token) {
