@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-17.8';
-const API_LEVEL = 89;   // 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-18.1';
+const API_LEVEL = 90;   // 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -227,6 +227,11 @@ TABLES.see = {
   sheet: 'DocSee',
   fields: [['id', 'id'], ['date', 'วันที่'], ['room', 'ห้องฉาย'], ['docs', 'แพทย์'], ['by', 'บันทึกโดย'], ['at', 'บันทึกเมื่อ']],
 };
+// API 90 (18 พ.ย.): พบแพทย์นอกตารางนัด (แถบ Nurse → นัดพบแพทย์) · ไปรอที่ ห้องตรวจ → ระหว่างฉาย ตามแพทย์ที่เลือก · seen = เวลาที่แพทย์กดพบแล้ว
+TABLES.visit = {
+  sheet: 'DocVisit',
+  fields: [['id', 'id'], ['date', 'วันที่'], ['hn', 'HN'], ['name', 'Name'], ['doc', 'แพทย์'], ['note', 'Note'], ['by', 'บันทึกโดย'], ['at', 'บันทึกเมื่อ'], ['seen', 'พบแพทย์แล้ว'], ['seenBy', 'พบแพทย์โดย']],
+};
 // API 86: คำสั่งแพทย์ระหว่างฉาย (ห้องตรวจ → ระหว่างฉาย) ต่อเคสต่อวัน · id = วันที่|id เคส · kind = alone (RT Alone) | ccrt
 // rt / cmt = continue | hold · src = see (พบแพทย์วันนี้) / hold (Hold RT อยู่) · nurse = เวลาที่พยาบาลยืนยัน · เขียนผ่าน rtdSave / nurseMark
 TABLES.rtd = {
@@ -416,7 +421,7 @@ const DELTA_TABLES = ['cases', 'logs', 'dq', 'reg'];   // ตารางให�
 const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
 const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
 // ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
-const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'], dqDuty: ['dqDuty'], events: ['events'], jobLeaves: ['jobs'], see: ['see'], rtd: ['rtd'] };   // jobLeaves (API 79) = วันลาในแบบฟอร์ม RTT/RA Jobs ของทุกคน (ปฏิทินแผนก)
+const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'], dqDuty: ['dqDuty'], events: ['events'], jobLeaves: ['jobs'], see: ['see'], rtd: ['rtd'], visit: ['visit'] };   // jobLeaves (API 79) = วันลาในแบบฟอร์ม RTT/RA Jobs ของทุกคน (ปฏิทินแผนก)
 const OUT_WINDOWED = ['duty', 'ctsim', 'appt', 'bq', 'jobs'];
 let DIRTY_ = null;
 // ตารางที่บันทึกในคำขอนี้ · นอกล็อก = เก็บรุ่นใหม่ทันที
@@ -614,8 +619,9 @@ function tablesFor_(ss, config, user, need, have) {
     dq: () => readTable_(ss, 'dq'), dqLeave: () => readTable_(ss, 'dqLeave'), dqDuty: () => readTable_(ss, 'dqDuty'),
     events: () => readTable_(ss, 'events'), jobLeaves: () => jobLeaves_(ss),
     see: () => recentSee_(ss), rtd: () => recentRtd_(ss),   // API 86
+    visit: () => recentVisit_(ss),   // API 90
   };
-  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave, dqDuty: need.dqLeave, events: need.events, jobLeaves: need.jobLeaves, see: need.see, rtd: need.rtd };
+  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave, dqDuty: need.dqLeave, events: need.events, jobLeaves: need.jobLeaves, see: need.see, rtd: need.rtd, visit: need.visit };
   Object.keys(want).forEach(k => {
     if (!want[k]) { out[k] = []; return; }
     const v = verOf(k);
@@ -681,7 +687,7 @@ const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: '
 const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p', 'appt', 'jobs', 'consult', 'flow'], logs: ['work', 'pend', 'logs', 'p4p'], leaves: ['work', 'queue', 'mpleave', 'deptcal'], duty: ['course', 'ctsim', 'jobs'],
   ctsim: ['ctsim', 'work', 'appt', 'jobs', 'consult', 'flow'], appt: ['appt', 'ctsim', 'course', 'reg', 'jobs', 'dq', 'consult', 'flow'], jobs: ['jobs'], reg: ['reg', 'appt', 'bq', 'dq', 'consult'], bq: ['bq', 'course', 'dash', 'flow'], vac: ['jobs', 'ctsim'],
   dq: ['dq', 'appt', 'consult', 'flow'], dqLeave: ['dq', 'consult', 'rojobs', 'deptcal'], events: ['deptcal'], jobLeaves: ['deptcal', 'jobs'],
-  see: ['course', 'consult', 'nurse'], rtd: ['consult', 'nurse', 'course'] };   // API 86: พบแพทย์วันนี้ · คำสั่งแพทย์ระหว่างฉาย
+  see: ['course', 'consult', 'nurse'], rtd: ['consult', 'nurse', 'course'], visit: ['nurse', 'consult'] };   // API 86: พบแพทย์วันนี้ · คำสั่งแพทย์ระหว่างฉาย
 // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 ['cases', 'appt', 'dq', 'ctsim'].forEach(t => { if (GUEST_TABLES[t].indexOf('nurse') < 0) GUEST_TABLES[t].push('nurse'); });   // แถบ Nurse (API 86): CT Order · คำสั่งแพทย์ · Call center
 function guestNeeds_(user, config) {
@@ -710,11 +716,12 @@ function navAccess_(config, view, role, base) {
   return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'edit' : x.guest !== false ? 'view' : '';
 }
 // แถบที่ใช้แต่ละตาราง (สิทธิ์บันทึก = บันทึกได้อย่างน้อยหนึ่งแถบในนี้)
-const EDIT_VIEWS = { see: ['nurse'], rtd: ['consult'], nurse: ['nurse'],   // API 86: คำสั่งแพทย์ = ห้องตรวจ · ยืนยัน = แถบ Nurse · API 88: ตารางพบแพทย์ย้ายจากแถบห้องฉายมาแถบ Nurse
+const EDIT_VIEWS = { see: ['nurse'], rtd: ['consult'], nurse: ['nurse'], visit: ['nurse'],   // API 90: พบแพทย์นอกตารางนัด = แถบ Nurse
+    // API 86: คำสั่งแพทย์ = ห้องตรวจ · ยืนยัน = แถบ Nurse · API 88: ตารางพบแพทย์ย้ายจากแถบห้องฉายมาแถบ Nurse
   cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue', 'mpleave'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'], events: ['deptcal'] };   // consult (API 69): ลงนัด CT+RT
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty', 'see', 'rtd'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty', 'see', 'rtd', 'visit'];
 function saveRecord(table, rec, token) { return saveRecord_(table, rec, token, null); }
 // edit = { pin }: แก้รายการที่มีอยู่ต้องยืนยัน PIN (ตรวจหลังอ่านแถวภายใต้ล็อก · เดิมอ่านคอลัมน์ id ก่อนล็อกอีกรอบ)
 function saveRecord_(table, rec, token, edit) {
@@ -3225,6 +3232,48 @@ function nurseMark(table, id, on, token) {
     return Object.assign(x.cur, set);
   });
 }
+/* ---------- API 90 (18 พ.ย.): พบแพทย์นอกตารางนัด ---------- */
+function recentVisit_(ss) {
+  const from = Utilities.formatDate(new Date(Date.now() - 60 * 864e5), tz_(ss), 'yyyy-MM-dd');
+  return readTable_(ss, 'visit').filter(x => String(x.date) >= from);
+}
+/** แถบ Nurse → นัดพบแพทย์: เพิ่ม / แก้ผู้ป่วยที่พบแพทย์นอกตารางนัด (HN ชื่อ แพทย์ วันที่ เหตุผล) */
+function visitSave(rec, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.visit);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const r = { date: cut(rec.date, 10), hn: cut(rec.hn, 40), name: cut(rec.name, 200), doc: cut(rec.doc, 10).toUpperCase(), note: cut(rec.note, 300) };
+  if (!R8_DAY_(r.date)) throw new Error('วันที่ไม่ถูกต้อง');
+  if (!r.hn) throw new Error('กรอก HN');
+  if (!r.name) throw new Error('กรอกชื่อ-สกุล');
+  if (dqDocs_(readConfig_(ss_()) || {}).indexOf(r.doc) < 0) throw new Error('เลือกแพทย์');
+  return withLock_(() => {
+    const ss = ss_(), id = cut(rec.id, 80) || Utilities.getUuid(), x = openRow_(ss, 'visit', null, id), cur = x.cur || {};
+    Object.assign(r, { id: id, by: x.row ? String(cur.by || '') : R8_WHO_(u), at: x.row ? String(cur.at || '') : new Date().toISOString(), seen: x.row ? String(cur.seen || '') : '', seenBy: x.row ? String(cur.seenBy || '') : '' });
+    writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.visit.fields, r, x.row ? x.vals : null);
+    return r;
+  });
+}
+/** ห้องตรวจ (หรือแถบ Nurse): พบแพทย์แล้ว (on) / ยกเลิก */
+function visitMark(id, on, token) {
+  const u = requireEdit_(token, ['consult', 'nurse']);
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'visit', null, String(id || ''));
+    if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกยกเลิกไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const set = on ? { seen: new Date().toISOString(), seenBy: R8_WHO_(u) } : { seen: '', seenBy: '' };
+    writeFields_(x.sh, x.row, x.header, TABLES.visit.fields.filter(f => f[0] in set), set, x.vals);
+    return Object.assign(x.cur, set);
+  });
+}
+/** แถบ Nurse: ยกเลิกรายการ (ลบแถว · มีประวัติการบันทึก) */
+function visitRemove(id, token) {
+  requireEdit_(token, EDIT_VIEWS.visit);
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'visit', null, String(id || ''));
+    if (x.row) delRow_(x.sh, x.row, x.header, x.vals);
+    return true;
+  });
+}
 // API 85: นัดที่ผูกกับรายการ CT-SIM ของ HN อื่น → ผูกกับรายการ CT-SIM ของ HN ของนัดเอง (ยังไม่มีนัดอื่นผูก · วันใกล้วันนัดที่สุด) · ไม่มี = กลับไปรอลง CT-SIM
 function apptRelink(id, token) {
   requireEdit_(token, EDIT_VIEWS.ctsim.concat(EDIT_VIEWS.appt));
@@ -5220,8 +5269,8 @@ function delRow_(sh, row, head, vals) {
   sh.deleteRow(row);
 }
 // ตารางที่ดูประวัติได้ในแต่ละแถบ (ต้องดูแถบนั้นได้)
-const AUDIT_VIEWS = { nurse: ['appt', 'dq', 'rtd', 'see'],   // API 86 · 88: ตารางพบแพทย์
-  deptcal: ['events', 'leaves', 'dqLeave'], reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], mpleave: ['leaves'], rojobs: ['dqLeave'], consult: ['dq', 'appt', 'rtd'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
+const AUDIT_VIEWS = { nurse: ['appt', 'dq', 'rtd', 'see', 'visit'],   // API 86 · 88: ตารางพบแพทย์
+  deptcal: ['events', 'leaves', 'dqLeave'], reg: ['reg'], dq: ['dq', 'dqLeave', 'dqDuty'], mpleave: ['leaves'], rojobs: ['dqLeave'], consult: ['dq', 'appt', 'rtd', 'visit'], appt: ['appt'], bq: ['bq'], work: ['cases'], pend: ['cases'], queue: ['cases', 'leaves'],
   course: ['cases', 'duty', 'see'], ctsim: ['ctsim', 'vac', 'appt'], dash: ['cases'], logs: ['logs'], p4p: ['logs'], jobs: ['jobs', 'vac'], settings: ['config'] };
 function auditTablesFor_(view, token) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
