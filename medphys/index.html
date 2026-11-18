@@ -1132,6 +1132,7 @@ div.c-main,div.lrow{cursor:default}
 .ontx-tag{font-size:11.5px;padding:0 7px;border-radius:999px;font-weight:600;line-height:1.6}
 .ontx-tag.see{background:var(--accent-soft);color:var(--accent)}
 .ontx-tag.hold{background:var(--warn-soft);color:var(--warn)}
+.cs-n.hold{background:var(--warn);color:var(--surface)}
 .ontx-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .ontx-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .ontx-seg>i{font-style:normal;font-size:11.5px;color:var(--muted);padding:0 8px;align-self:center}
@@ -6428,7 +6429,7 @@ function colNorm(v) {
 }
 // 15 พ.ย.: แถบย่อยที่ตั้งได้ว่าตำแหน่งไหนเห็น (ตั้งค่า → แถบเมนู · แถว └) · config.subHide['<แถบ>.<แถบย่อย>'] = ตำแหน่งที่ไม่เห็น · แจกงานแพทย์ใช้ config.dq.desks แบบเดิม
 const SUB_VIEWS = { jobs: [['p4p', 'P4P'], ['leave', 'วันลา'], ['vac', 'Vac-Lok'], ['rtt', 'ระบบงาน RTT']], rojobs: [['p4p', 'P4P'], ['leave', 'วันลา']],
-  consult: [['cs', 'Consult'], ['ontx', 'ระหว่างฉาย']],   // 18 พ.ย.: ห้องตรวจ
+  consult: [['cs', 'Consult'], ['ontx', 'ระหว่างฉาย'], ['hold', 'Hold RT']],   // 18 พ.ย.: ห้องตรวจ · Hold RT = แถบย่อยแยกจากระหว่างฉาย (ซ่อนแถบนี้ = ผู้ป่วย Hold รวมในระหว่างฉาย)
   nurse: [['ct', 'CT Order'], ['rtd', 'คำสั่งแพทย์ระหว่างฉาย'], ['cc', 'Call center'], ['see', 'นัดพบแพทย์']],   // 18 พ.ย.: แถบ Nurse แยกงาน (ผู้ใช้จัดลำดับเองได้)
   deptcal: [['ev', 'กิจกรรม'], ['mp', 'วันลา MP'], ['ro', 'วันลาแพทย์'], ['rtt', 'วันลา RTT/RA']] };   // ปฏิทินแผนก: ตำแหน่งไหนเห็นข้อมูลชั้นไหน (16 พ.ย.)
 // 16 พ.ย.: RT Workflow (ไอคอนหน้าแถบเมนู) · คอลัมน์ [id, ชื่อ, แสดงเริ่มต้น] · ซ่อน CT Order = รวมใน Consult · ซ่อน PSQA = รวมใน Evaluation
@@ -7348,7 +7349,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-18.6';
+const PAGE_VERSION = '2026-11-18.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -11835,11 +11836,14 @@ function renderConsult() {
   const edit = canEdit() && apptOn() && apEditVia('consult');
   syncTabQ('consult');
   // 18 พ.ย.: แถบย่อย Consult · ระหว่างฉาย (ตั้งค่า → แถบเมนู เลือกตำแหน่งที่เห็นแต่ละแถบย่อย)
-  const subs = subVisible('consult'), want = pref.get('csTab', 'cs'), cur = subs.includes(want) ? want : subs[0] || 'cs', nOn = subs.includes('ontx') ? ontxAll().filter(x => x.c || !x.visit.seen).length : 0;
-  $('#cs-tabs').innerHTML = subs.length > 1 ? subs.map(k => `<button type="button" class="tab" role="tab" data-cstab="${k}" aria-selected="${k === cur}">${k === 'cs' ? 'Consult' : `ระหว่างฉาย${nOn ? `<b class="cs-n">${nOn}</b>` : ''}`}</button>`).join('') : '';
+  const subs = subVisible('consult'), want = pref.get('csTab', 'cs'), cur = subs.includes(want) ? want : subs[0] || 'cs';
+  const all = subs.includes('ontx') || subs.includes('hold') ? ontxAll() : [], sep = subs.includes('hold');
+  const nOn = all.filter(x => !(sep && x.hold) && (x.c || !x.visit.seen)).length, nHold = sep ? all.filter(x => x.hold).length : 0;
+  const lbl = { cs: 'Consult', ontx: `ระหว่างฉาย${nOn ? `<b class="cs-n">${nOn}</b>` : ''}`, hold: `Hold RT${nHold ? `<b class="cs-n hold">${nHold}</b>` : ''}` };
+  $('#cs-tabs').innerHTML = subs.length > 1 ? subs.map(k => `<button type="button" class="tab" role="tab" data-cstab="${k}" aria-selected="${k === cur}">${lbl[k]}</button>`).join('') : '';
   $('#cs-main').hidden = cur !== 'cs';
-  $('#cs-ontx').hidden = cur !== 'ontx';
-  if (cur === 'ontx') return renderOntx();
+  $('#cs-ontx').hidden = cur === 'cs';
+  if (cur !== 'cs') return renderOntx(cur);
   $('#cs-api').hidden = !(store.mode === 'sheet' && canEdit() && (!apptOn() || !apEditVia('consult')));
   renderApDq(edit);
   $('#cs-empty').hidden = !$('#ap-dq').hidden;
@@ -11930,17 +11934,19 @@ function ontxCard(x, edit) {
       <button type="button" class="btn primary sm" data-ontxsave="${esc(c.id)}">${dec ? 'บันทึกการแก้ไข' : 'บันทึก'}</button>${rectBtn}</div>` : rectBtn ? `<div class="ontx-form">${rectBtn}</div>` : ''}
   </li>`;
 }
-function renderOntx() {
+// tab: 'ontx' = ระหว่างฉาย (ไม่รวม Hold เมื่อเห็นแถบย่อย Hold RT) · 'hold' = แถบย่อย Hold RT (ผู้ป่วยที่ Hold อยู่)
+function renderOntx(tab = 'ontx') {
   const box = $('#cs-ontx'), words = tabWords('consult'), td = today(), edit = accessOf('consult') === 'edit' && r8On(), me = myDoctor();
-  let list = ontxAll();   // 18 พ.ย.: + พบแพทย์นอกตารางนัดวันนี้
+  const isHold = tab === 'hold', sep = isHold || subVisible('consult').includes('hold');
+  let list = ontxAll().filter(x => (isHold ? x.hold : !(sep && x.hold)));   // 18 พ.ย.: + พบแพทย์นอกตารางนัดวันนี้
   const pt = x => x.c || x.visit;
   if (words.length) list = list.filter(x => wordsIn(words, `${pt(x).hn} ${pt(x).name} ${pt(x).doc} ${docName(pt(x).doc)} ${x.room}`.toLowerCase()));
   const old = store.mode === 'sheet' && !r8On() ? `<p class="notice"><b>ยังบันทึกไม่ได้</b><span>${esc(R8_OLD)}</span></p>` : '';
-  if (!list.length) { box.innerHTML = `${old}<p class="empty-state">ยังไม่มีผู้ป่วยระหว่างฉายที่ต้องพบแพทย์วันนี้ · ติ๊กที่แถบ ${esc(navLabel('nurse'))} → นัดพบแพทย์ (ตารางพบแพทย์) · ผู้ป่วยที่ Hold RT อยู่มารอที่นี่ด้วย</p>`; return; }
+  if (!list.length) { box.innerHTML = `${old}<p class="empty-state">${isHold ? 'ไม่มีผู้ป่วยที่ Hold RT อยู่' : `ยังไม่มีผู้ป่วยระหว่างฉายที่ต้องพบแพทย์วันนี้ · นัดที่แถบ ${esc(navLabel('nurse'))} → นัดพบแพทย์${sep ? ' · ผู้ป่วยที่ Hold RT อยู่ดูที่แถบย่อย Hold RT' : ' · ผู้ป่วยที่ Hold RT อยู่มารอที่นี่ด้วย'}`}</p>`; return; }
   const order = dqAllDocs(), at = c => (order.includes(c) ? order.indexOf(c) : 999), docOf = x => str(x.visit ? x.visit.doc : x.c.doc).toUpperCase();
   const codes = [...new Set(list.map(docOf))].sort((a, b) => (b === me) - (a === me) || at(a) - at(b) || a.localeCompare(b));
   const done = list.filter(x => (x.c ? state.rtd.some(r => r.id === `${td}|${x.c.id}`) : !!x.visit.seen)).length;
-  box.innerHTML = `${old}<h3 class="ontx-h">ระหว่างฉาย · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${done})<small>พบแพทย์วันนี้ (ตารางพบแพทย์ในแถบ ${esc(navLabel('nurse'))}) · พบแพทย์นอกตารางนัด · ผู้ป่วยที่ Hold RT อยู่ · RT Alone: Continue RT / Hold RT · CCRT: เลือกทั้ง RT และ CMT · บันทึกแล้วไปรอพยาบาลยืนยันที่แถบ ${esc(navLabel('nurse'))}${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
+  box.innerHTML = `${old}<h3 class="ontx-h">${isHold ? 'Hold RT' : 'ระหว่างฉาย'} · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${done})<small>${isHold ? 'ผู้ป่วยที่ Hold RT อยู่ (ทุกห้องฉาย) · สั่ง Continue RT เมื่อพร้อมฉายต่อ' : `พบแพทย์วันนี้ (นัดพบแพทย์ / ตารางพบแพทย์ในแถบ ${esc(navLabel('nurse'))}) · พบแพทย์นอกตารางนัด${sep ? '' : ' · ผู้ป่วยที่ Hold RT อยู่'}`} · RT Alone: Continue RT / Hold RT · CCRT: เลือกทั้ง RT และ CMT · บันทึกแล้วไปรอพยาบาลยืนยันที่แถบ ${esc(navLabel('nurse'))}${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
     + codes.map(code => { const rs = list.filter(x => docOf(x) === code).sort((a, b) => !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn))); return `<details class="ontx-g${code === me ? ' mine' : ''}" open><summary>${docChip(code)} ${esc(docName(code) || code)} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => (x.c ? ontxCard(x, edit) : visitCard(x.visit))).join('')}</ul></details>`; }).join('');
 }
 /* ---------- 18 พ.ย. (Code.gs API 90): พบแพทย์นอกตารางนัด ----------
@@ -21678,7 +21684,7 @@ document.addEventListener('click', e => {
   if (ds.viewasSum) { viewAsSum = !viewAsSum; return renderViewAs(); }
   if (ds.speed) return renderSettings();   // ตั้งค่า → ความเร็ว: อ่านรายการล่าสุด
   if (ds.cstab) { pref.set('csTab', ds.cstab); return renderConsult(); }   // 18 พ.ย.: ห้องตรวจ แถบย่อย
-  if (ds.ontxk) { const c = state.cases.find(x => x.id === ds.ontxc); if (c) { const f = { ...ontxForm(c), [ds.ontxk]: ds.ontxv }; if (ds.ontxk === 'kind' && ds.ontxv === 'alone') f.cmt = ''; if (ds.ontxk === 'kind' && ds.ontxv === 'ccrt' && !f.cmt) f.cmt = 'continue'; if (!f.rt) f.rt = 'continue'; ontxDraft.set(c.id, f); renderOntx(); } return; }
+  if (ds.ontxk) { const c = state.cases.find(x => x.id === ds.ontxc); if (c) { const f = { ...ontxForm(c), [ds.ontxk]: ds.ontxv }; if (ds.ontxk === 'kind' && ds.ontxv === 'alone') f.cmt = ''; if (ds.ontxk === 'kind' && ds.ontxv === 'ccrt' && !f.cmt) f.cmt = 'continue'; if (!f.rt) f.rt = 'continue'; ontxDraft.set(c.id, f); renderConsult(); } return; }
   if (ds.ontxsave) return ontxSave(ds.ontxsave, t);
   if (ds.nursetab) { pref.set('nurseTab', ds.nursetab); return renderNurse(); }   // 18 พ.ย.: แถบย่อยของ Nurse
   if (ds.nurseord) { nurseOrdOpen = !nurseOrdOpen; return renderNurse(); }
