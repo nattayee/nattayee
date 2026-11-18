@@ -2561,8 +2561,12 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .mem-u{display:inline-flex;flex-direction:column;line-height:1.25}
 .mem-u small{font-size:11px;color:var(--accent)}
 .mem-u.nolink{color:var(--muted)}
-.set-row.crew-row{grid-template-columns:30px minmax(0,1fr) 170px auto auto;grid-template-areas:"idx name pos act btns" ". acct acct acct ."}
-@media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". acct acct"}}
+.set-row.crew-row{grid-template-columns:30px minmax(0,1fr) 170px 130px auto auto;grid-template-areas:"idx name pos tpos act btns" ". acct acct acct acct ."}
+.set-row.doc-row{grid-template-columns:30px 84px 118px minmax(0,1fr) 130px auto;grid-template-areas:"idx code color name tpos btns" ". acct acct acct acct ."}
+.set-row .pos.team-pos{grid-area:tpos}   /* R9: ตำแหน่งในทีม (หัวหน้า / ลูกน้อง) */
+.team-grp + .team-grp{margin-top:14px}
+@media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". tpos tpos" ". acct acct"}
+  .set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". tpos tpos tpos" ". acct acct acct"}}
 .bq-sign.old{opacity:.6}
 /* CT / US ของนัดใส่แร่ */
 .bq-img{display:inline-flex;flex-wrap:wrap;gap:3px;padding:0;border:0;background:none;font:inherit;cursor:default}
@@ -3573,10 +3577,20 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 </template>
 <!-- TDF-EMBED:END tpl -->
   </section>
-  <!-- RO Jobs (แพทย์): P4P (กำลังทำ) · วันลาแพทย์ (เชื่อมกับแถบแจกงานแพทย์) -->
+  <!-- RO Jobs (แพทย์): P4P (แบบเก็บภาระงานรายบุคคล · ไฟล์ Excel เดิม) · วันลาแพทย์ (เชื่อมกับแถบแจกงานแพทย์) -->
   <section id="view-rojobs" hidden>
     <div class="tabs" role="tablist" id="ro-tabs"></div>
-    <div id="ro-p4p" hidden><p class="empty-state">P4P ของแพทย์ · อยู่ระหว่างจัดทำ</p></div>
+    <div id="ro-p4p" hidden>
+      <div class="toolbar">
+        <div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div>
+        <select id="ro-who" aria-label="แพทย์" hidden></select>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="ro-xlsx" hidden>ส่งออก Excel</button>
+        <button type="button" class="btn primary" id="ro-save" hidden>บันทึก</button>
+      </div>
+      <p class="notice" id="ro-api" hidden><b>ยังบันทึกไม่ได้</b><span>P4P แพทย์ต้องใช้ Code.gs รุ่น 2026-11-18.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</span></p>
+      <div id="ro-body"></div>
+    </div>
     <div id="ro-leave" hidden>
       <div class="toolbar"><div class="month-nav"><button type="button" data-month="-1" aria-label="เดือนก่อน">‹</button><span class="month-label"></span><button type="button" data-month="1" aria-label="เดือนถัดไป">›</button></div><span class="spacer"></span><button type="button" class="btn lv-offbtn" data-lvoff="ro" hidden title="ไม่แจกเคสให้แพทย์ในวันที่เลือก และคิวที่ถึงเสียไป (ไม่คืนคิว)">วันไม่รับเคส</button><button type="button" class="btn primary" data-lvnew="ro" hidden>+ เพิ่มวันลา</button></div>
       <div id="roleave-body"></div>
@@ -6324,7 +6338,7 @@ function pinFresh(mode, ctx) {
   switch (mode) {
     case 'bqnew': case 'logadd': case 'logbatch': return true;
     case 'bqchk': return !!ctx.on;   // ตรวจสอบแล้ว = บันทึกใหม่ · เอาออก = แก้
-    case 'ptadd': case 'ctsave': case 'apsave': case 'rgsave': case 'jobsave': case 'vacsave': return !!ctx.isNew;
+    case 'ptadd': case 'ctsave': case 'apsave': case 'rgsave': case 'jobsave': case 'rojobsave': case 'vacsave': return !!ctx.isNew;
     case 'stamp': case 'vals': { if (!c) return false; const r = ctx.sid ? boostStamps(c)[ctx.sid] || {} : c, k = ctx.step || ctx.key; return emp(r[k]); }
     case 'course': return !!c && emp(c.rt);
     case 'fx': return !ctx.cur && !ctx.mvDay && !ctx.addCur && !(fxAdding() && fxAdjN() > 0 && addReopen(ctx).length);   // เพิ่ม fraction ให้เคสที่ Complete course แล้ว = แก้ (ล้าง Complete)
@@ -6338,7 +6352,7 @@ function pinFresh(mode, ctx) {
   }
 }
 // งานที่ไม่ต้องใส่ PIN และหน้าต่างมีไว้ยืนยันอย่างเดียว: บันทึกเลยไม่ต้องเปิดหน้าต่าง (การลบยังถามยืนยัน)
-const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rgsave', 'bqnew', 'bqedit', 'bqday', 'bqchk', 'vacsave'].includes(mode);
+const pinSkipDialog = mode => !pinNeed(mode) && ['edit', 'logadd', 'logedit', 'logbatch', 'mqt', 'ptadd', 'ctsave', 'apsave', 'jobsave', 'rojobsave', 'rgsave', 'bqnew', 'bqedit', 'bqday', 'bqchk', 'vacsave'].includes(mode);
 // ฟอร์มเพิ่มผู้ป่วยในแถบห้องฉาย (ตั้งค่า → ตารางวันฉาย): off = ไม่แสดง · show = แสดง · req = บังคับกรอก · HN และเทคนิคบังคับเสมอ
 const PT_FIELDS = [
   ['name', 'Name', 'show'], ['dx', 'Diag (ICD-10)', 'off'], ['doc', 'Doc', 'show'], ['type', 'Type', 'off'], ['aim', 'Aim', 'off'],
@@ -6629,7 +6643,14 @@ const DEFAULT_CONFIG = {
   // ชื่อระบบและบรรทัดรองมุมซ้ายบน (แอดมินแก้ได้ที่ ตั้งค่า → ชื่อระบบและโลโก้)
   appName: 'Treatment Planning Management',
   appSub: 'กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง',
+  // 18 พ.ย. (R9): ตำแหน่งหัวหน้า / ลูกน้องของแต่ละทีม (แบบทีมนักฟิสิกส์ · ประวัติตำแหน่งอยู่ที่ roles ของแต่ละคน) · คีย์ = ทีม: RO = แพทย์ · ตำแหน่งใน LPCH ของรายชื่อ RTT, RA และบุคลากรอื่น
+  // head / staff = ชื่อตำแหน่ง (ว่าง = หัวหน้า / ลูกน้อง) · guar / base = แต้มประกัน / แต้มตั้งต้นของหัวหน้าในแบบฟอร์ม RTT/RA Jobs (ทีม RTT, RA · guar ว่าง = ตามแบบฟอร์ม)
+  teams: {},
+  // P4P แพทย์ (RO Jobs → P4P): หัวไฟล์เริ่มต้น · pts = แต้มต่อครั้งที่แก้ (แถวในแบบฟอร์ม → แต้ม · ไม่มี = ตามไฟล์เดิม) · aca = งานวิชาการ (แถว → { label, min (นาที), w (แต้ม/นาที) })
+  roP4p: { title: 'นายแพทย์ชำนาญการ', guar: 2200, rate: 0.26, pts: {}, aca: {} },
 };
+// 18 พ.ย. (R9): แถวของแบบเก็บภาระงานรายบุคคลของแพทย์ (ไฟล์ Excel เดิม แผ่น "ฟอร์ม") · [แถว, head | item, ข้อ, ชื่องาน, ส่วน (svc บริการ · adm บริหาร · aca วิชาการ), หน่วยนับ, เวลา (นาที), แต้ม]
+const RO_MODEL = {"sheet":"xl/worksheets/sheet1.xml","day0":8,"rows":[[5,"head","","1.งานบริการ/องค์กรแพทย์","svc"],[6,"item","1","รับผูป่วยใหม่","svc","","",15.0],[7,"item","2","ตรวจติดตามหลังฉายรังสี/ระยะฉายรังสี","svc","","",5.0],[8,"item","3","รับปรึกษา","svc","","",15.0],[9,"item","4","ผู้ป่วยให้เคมีบำบัด","svc","","",15.0],[10,"item","5","round ward","svc","","",5.0],[11,"item","6","จำลองการฉาย 2 มิติ","svc","","",15.0],[12,"item","7","จำลองการฉายรังสี 3มิติ","svc","","",15.0],[13,"item","8","ใส่แร่","svc","","",30.0],[14,"item","9","round ICU","svc","","",10.0],[15,"item","10","ผู้ป่วยนอนโรงพยาบาล(admit)","svc","","",5.0],[16,"item","11","admit ICU","svc","","",5.0],[17,"item","12","สรุป chart ผู้ป่วยใน","svc","","",5.0],[18,"item","13","CPR","svc","","",15.0],[19,"item","14","FNA","svc","","",10.0],[20,"item","15","contuoring 3D /IMRT","svc","","",30.0],[21,"item","16","plan evaluation","svc","","",10.0],[22,"item","17","ตรวจภายใน","svc","","",5.0],[23,"item","18","port verification","svc","","",5.0],[24,"head","","2.งานบริหาร","adm"],[25,"item","1","หัวหน้ากลุ่มงานรังสีรักษา","adm","ครั้ง","",1320.0],[26,"head","","3. งานวิชาการ","aca"],[27,"item","1","ประชุมองค์กรแพทย์","aca","เวลาจริง",120.0,0.262],[28,"item","2","ประชุมทีมนำ HA","aca","เวลาจริง",120.0,0.262],[29,"item","3","RCA (Enoxaparin)","aca","เวลาจริง",180.0,0.262],[30,"item","4","คณะกรรมการวิจัย","aca","เวลาจริง",120.0,0.262],[31,"item","5","ทีมระบบ HA","aca","เวลาจริง",120.0,0.262],[32,"item","6","DHS","aca","เวลาจริง","",""],[33,"item","7","ประชุม PCT","aca","เวลาจริง","",""],[34,"item","8","ประชุม DHS","aca","เวลาจริง","",""],[35,"item","9","ประชุม PTC","aca","เวลาจริง","",""],[36,"item","","","aca","","",""],[37,"item","","","aca","","",""],[38,"item","","","aca","","",""],[39,"item","","","aca","","",""]]};
 // ประเภทบันทึกในหน้า RC และกิจกรรม: RC, กิจกรรมนับครั้ง (ยกเว้น New MU ที่นับจากเคส), วิชาการ, บริหาร
 function logKinds() {
   const acts = state.config.acts;
@@ -6769,11 +6790,11 @@ const RENAME_TARGETS = {
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // แอดมินรอง: หมวดในหน้าตั้งค่า → คีย์ของ Config (ตรงกับ CFG_TABS ใน Code.gs) · คีย์ที่ไม่อยู่ในหมวดใด (แอดมิน แอดมินรอง) = แอดมินหลักเท่านั้น
 const CFG_TABS = {
-  team: ['staff', 'doctors', 'crew'],
+  team: ['staff', 'doctors', 'crew', 'teams'],   // teams (R9): ตำแหน่งหัวหน้า/ลูกน้องของแต่ละทีม
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard'],
-  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp'],
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p'],   // roP4p (R9): P4P แพทย์
   form: ['formRules'],
   cols: ['cols'],
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'icons'],
@@ -6978,9 +6999,21 @@ function mergeConfig(c) {
   // สีแพทย์: ยังไม่เคยตั้ง (ไม่มีช่อง color) = สีเริ่มต้นตามรหัส · ตั้งเป็นไม่มีสี ('') แล้วคงไว้
   const docColor = (code, x) => (x && typeof x === 'object' && x.color !== undefined ? hexOf(x.color) : DOC_COLORS[code] || '');
   const seenCrew = new Set();
-  out.crew = (Array.isArray(c.crew) ? c.crew : []).filter(x => x && typeof x === 'object').map(x => ({ name: str(x.name).replace(/\s+/g, ' ').trim().slice(0, 120), role: ROLE_RE.test(str(x.role)) ? str(x.role) : '', active: x.active !== false, ...acctOf(x) }))
+  // 18 พ.ย. (R9): ตำแหน่งหัวหน้า / ลูกน้อง (roles = [{ from: 'YYYY-MM', role: head | staff }] เหมือนทีมนักฟิสิกส์) ของแพทย์และรายชื่อ RTT, RA และบุคลากรอื่น
+  const teamRoles = v => (Array.isArray(v) ? v.filter(r => r && /^\d{4}-\d{2}$/.test(str(r.from)) && (r.role === 'head' || r.role === 'staff')).map(r => ({ from: str(r.from), role: r.role })).sort((a, b) => a.from.localeCompare(b.from)) : []);
+  out.crew = (Array.isArray(c.crew) ? c.crew : []).filter(x => x && typeof x === 'object').map(x => ({ name: str(x.name).replace(/\s+/g, ' ').trim().slice(0, 120), role: ROLE_RE.test(str(x.role)) ? str(x.role) : '', active: x.active !== false, roles: teamRoles(x.roles), ...acctOf(x) }))
     .filter(x => (x.name || x.user) && !(x.user && seenCrew.has(x.user)) && (!x.user || seenCrew.add(x.user)));
-  if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => { const code = str(x && typeof x === 'object' ? x.code : x).toUpperCase(); return { code, name: x && typeof x === 'object' ? str(x.name) : '', color: docColor(code, x), ...acctOf(x) }; }).filter(x => x.code);
+  if (Array.isArray(c.doctors)) out.doctors = c.doctors.map(x => { const code = str(x && typeof x === 'object' ? x.code : x).toUpperCase(); return { code, name: x && typeof x === 'object' ? str(x.name) : '', color: docColor(code, x), roles: teamRoles(x && x.roles), ...acctOf(x) }; }).filter(x => x.code);
+  out.doctors = (out.doctors || d.doctors).map(x => ({ ...x, roles: x.roles || [] }));
+  const tm = c.teams && typeof c.teams === 'object' && !Array.isArray(c.teams) ? c.teams : {}, tnum = v => (v === '' || v == null || !isFinite(+v) ? '' : Math.max(0, +v));
+  out.teams = Object.fromEntries(Object.entries(tm).filter(([k, x]) => ROLE_RE.test(k) && x && typeof x === 'object').map(([k, x]) => [k, { head: str(x.head).replace(/\s+/g, ' ').trim().slice(0, 60), staff: str(x.staff).replace(/\s+/g, ' ').trim().slice(0, 60), guar: tnum(x.guar), base: isFinite(+x.base) ? +x.base : 0 }]));
+  // P4P แพทย์: แต้มที่แก้ (ว่าง = ตามไฟล์เดิม) · งานวิชาการทุกแถวในแบบฟอร์ม (ยังไม่เคยตั้ง = ตามไฟล์เดิม · แถวที่ไม่มีแต้ม/นาที ใช้ค่าของข้อแรก)
+  const rp = c.roP4p && typeof c.roP4p === 'object' ? c.roP4p : {}, rpPts = rp.pts && typeof rp.pts === 'object' ? rp.pts : {}, rpAca = rp.aca && typeof rp.aca === 'object' ? rp.aca : {};
+  const roItems = RO_MODEL.rows.filter(x => x[1] === 'item'), aca0 = (roItems.find(x => x[4] === 'aca' && x[7] !== '') || [])[7] || '';
+  out.roP4p = { title: str(rp.title).replace(/\s+/g, ' ').trim().slice(0, 80) || d.roP4p.title, guar: tnum(rp.guar) === '' ? d.roP4p.guar : tnum(rp.guar), rate: tnum(rp.rate) === '' ? d.roP4p.rate : tnum(rp.rate),
+    pts: Object.fromEntries(roItems.filter(x => x[4] !== 'aca' && tnum(rpPts[x[0]]) !== '').map(x => [String(x[0]), tnum(rpPts[x[0]])])),
+    aca: Object.fromEntries(roItems.filter(x => x[4] === 'aca').map(x => { const a = rpAca[x[0]] && typeof rpAca[x[0]] === 'object' ? rpAca[x[0]] : {};
+      return [String(x[0]), { label: 'label' in a ? str(a.label).replace(/\s+/g, ' ').trim().slice(0, 80) : x[3], min: 'min' in a ? tnum(a.min) : x[6], w: 'w' in a ? tnum(a.w) : x[7] === '' ? aca0 : x[7] }]; })) };
   const moved = {}; // ค่าที่เคยตั้งให้เทคนิค Brachy/Hyperthermia ใช้ต่อเป็นค่าของกิจกรรม
   if (Array.isArray(c.cats)) c.cats.forEach(x => { if (x && MOVED_CATS.includes(x.id)) moved[x.id] = { label: x.label, group: x.group, min: x.min, w: x.w }; });
   if (Array.isArray(c.cats) && c.cats.some(x => x && x.id && !MOVED_CATS.includes(x.id))) {
@@ -7294,7 +7327,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-18.2';
+const PAGE_VERSION = '2026-11-18.3';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7372,6 +7405,7 @@ const sheetStore = {
   bqImport: () => call('bqImport'),
   bqImportCheck: () => call('bqImportCheck'),
   jobsSave: (rec, pin) => call('jobsSave', rec, pin),
+  roJobsSave: (rec, pin) => call('roJobsSave', rec, pin),   // 18 พ.ย. (API 91): P4P แพทย์
   vacSave: (rec, pin) => call('vacSave', rec, pin),
   vacRemove: (id, pin) => call('vacRemove', id, pin),
   vacImport: () => call('vacImport'),
@@ -7435,6 +7469,7 @@ function localStore() {
   if (!Array.isArray(db.see)) db.see = [];   // 18 พ.ย.: พบแพทย์วันนี้
   if (!Array.isArray(db.rtd)) db.rtd = [];   // คำสั่งแพทย์ระหว่างฉาย
   if (!Array.isArray(db.visit)) db.visit = [];   // พบแพทย์นอกตารางนัด
+  if (!Array.isArray(db.roJobs)) db.roJobs = [];   // P4P แพทย์ (RO Jobs)
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* โหมดส่วนตัว: เก็บในหน่วยความจำ */ } };
   const old = db.cases.filter(c => c && MOVED_CATS.includes(c.cat));
   if (old.length) {
@@ -7899,6 +7934,18 @@ function localStore() {
       const id = nameKey(who) + '|' + ym, old = db.jobs.find(x => x.id === id);
       const set = { id, ym, who, user: str(rec.user), kind: rec.kind === 'ra' ? 'ra' : 'rtt', prof: str(rec.prof), cells: str(rec.cells), leaves: str(rec.leaves), by: state.user.name || 'ผู้ใช้ตัวอย่าง', updated: nowISO() };
       if (old) Object.assign(old, set); else db.jobs.push(set);
+      persist();
+      return clone(old || set);
+    },
+    // RO Jobs → P4P แพทย์: กติกาเดียวกับ roJobsSave ใน Code.gs (ผู้ใช้ตัวอย่าง = แอดมิน บันทึกแทนได้ทุกคน)
+    roJobsSave: async (rec, pin) => {
+      const ym = str(rec.ym), doc = str(rec.doc).toUpperCase();
+      if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('เดือนไม่ถูกต้อง');
+      if (!state.config.doctors.some(x => x.code === doc)) throw new Error('ไม่พบแพทย์รหัสนี้ใน ตั้งค่า → ทีมงาน');
+      demoCheckPin(pin);
+      const id = doc + '|' + ym, old = db.roJobs.find(x => x.id === id);
+      const set = { id, ym, doc, name: str(rec.name), prof: str(rec.prof), cells: str(rec.cells), by: state.user.name || 'ผู้ใช้ตัวอย่าง', updated: nowISO() };
+      if (old) Object.assign(old, set); else db.roJobs.push(set);
       persist();
       return clone(old || set);
     },
@@ -9572,6 +9619,27 @@ function myStaff() { const x = linkOf('staff'); return x ? x.code : ''; }
 const myCrew = () => linkOf('crew');
 // กลุ่มในผู้ปฏิบัติงานประจำวันของตำแหน่ง (ตั้งค่า → ตารางวันฉาย): rtt · ra · '' = ไม่อยู่ในกลุ่ม
 const crewGroup = role => (state.config.dutyRoles.rtt.includes(role) ? 'rtt' : state.config.dutyRoles.ra.includes(role) ? 'ra' : '');
+/* ---------- 18 พ.ย. (R9): ตำแหน่งหัวหน้า / ลูกน้องของทุกทีม (แบบทีมนักฟิสิกส์ · ตั้งค่า → ทีมงาน) ---------- */
+// ทีม: RO = แพทย์ · รายชื่อ RTT, RA และบุคลากรอื่น = ตำแหน่งใน LPCH (RTT, RA, Nurse, Register, Refer …) · หัวหน้า → P4P ของทีม
+const TEAM_RO = 'RO';
+const TEAM_NAMES = { RO: 'แพทย์', Nurse: 'พยาบาล (Nurse)' };
+const TEAM_ORDER = ['RO', 'RTT', 'RA', 'Nurse', 'Register', 'Refer'];
+const teamName = k => TEAM_NAMES[k] || k || 'ไม่ระบุตำแหน่ง';
+const teamSort = (a, b) => (a === '' ? 1 : b === '' ? -1 : 0) || ((TEAM_ORDER.indexOf(a) + 1 || 99) - (TEAM_ORDER.indexOf(b) + 1 || 99)) || a.localeCompare(b);
+const teamCfg = (k, cfg = state.config) => { const x = (cfg.teams || {})[k] || {}; return { head: x.head || 'หัวหน้า', staff: x.staff || 'ลูกน้อง', guar: x.guar === undefined ? '' : x.guar, base: +x.base || 0 }; };
+// ตำแหน่งของเดือนนั้น: แถวที่เริ่มล่าสุดก่อนหรือในเดือนนั้น · ไม่มี = ลูกน้อง (เหมือน teamRole_ ใน Code.gs)
+function teamRole(x, ym) { const r = ((x && x.roles) || []).filter(y => y.from <= ym).sort((a, b) => b.from.localeCompare(a.from))[0]; return r && r.role === 'head' ? 'head' : 'staff'; }
+const teamHist = (k, x, cfg) => ((x && x.roles) || []).map(r => `${teamCfg(k, cfg)[r.role]} ตั้งแต่ ${fmtMonth(r.from)}`).join(' → ');
+// ผู้ใช้ที่เข้าระบบเป็นหัวหน้าทีมแพทย์ / ทีม RTT, RA (เดือนนี้) = เห็น P4P ของทุกคนในทีม
+const roHeadNow = () => { const d = linkOf('doctors'); return !!d && teamRole(d, thisMonth()) === 'head'; };
+const crewHeadNow = () => { const c = myCrew(); return !!c && !!crewGroup(c.role) && teamRole(c, thisMonth()) === 'head'; };
+// RTT/RA Jobs: หัวหน้าทีม (ตั้งค่า → ทีมงาน) ใช้แต้มประกัน / แต้มตั้งต้นของทีม เมื่อไม่มีแถวใน ตั้งค่า → RTT/RA Jobs → ตำแหน่งหัวหน้า
+function teamJobPos(who, kind, ym) {
+  const x = (state.config.crew || []).find(c => nameKey(c.name) === nameKey(who) && crewGroup(c.role) === kind);
+  if (!x || teamRole(x, ym) !== 'head') return null;
+  const t = teamCfg(x.role);
+  return { id: 'team:' + x.role, label: t.head, kind, guar: t.guar, base: t.base, who: x.name, from: '', to: '', team: x.role };
+}
 // รายชื่อ RTT / RA ที่เลือกได้ทุกแถบ (ผู้ปฏิบัติงานประจำวัน · RTT/RA Jobs · RTT ของนัดใส่แร่): ตั้งค่า → RTT, RA และบุคลากรอื่น (ปฏิบัติงาน) ก่อน
 // แล้วสมาชิก LPCH ตามตำแหน่งที่ยังไม่อยู่ในรายการ · g = rtt | ra | qc (Daily QC เลือกจาก RTT)
 function crewNames(g) {
@@ -11030,13 +11098,13 @@ function removeDqLeave(id) {
 const AUDIT_TABS = { deptcal: 1, reg: 1, dq: 1, consult: 1, nurse: 1, appt: 1, bq: 1, work: 1, pend: 1, queue: 1, course: 1, ctsim: 1, dash: 1, logs: 1, p4p: 1, jobs: 1, settings: 1 };
 const auditShown = view => !!AUDIT_TABS[view] && !!accessOf(view) && (store.mode !== 'sheet' || serverHas(DQM_API));
 const histLink = (ids, view, title) => (auditShown(view) ? `<button type="button" class="linkish hist-link" data-hist="${esc(ids.join(','))}" data-hist-view="${esc(view)}" data-hist-title="${esc(title || '')}">ประวัติ</button>` : '');
-const HIST_TABLE = { visit: 'พบแพทย์นอกตารางนัด', see: 'พบแพทย์วันนี้', rtd: 'คำสั่งแพทย์ระหว่างฉาย', events: 'กิจกรรมแผนก', cases: 'เคส', logs: 'กิจกรรม', leaves: 'วันลา MP', duty: 'ผู้ปฏิบัติงาน', ctsim: 'CT-SIM', appt: 'นัด', jobs: 'RTT/RA Jobs', reg: 'ลงทะเบียน', bq: 'นัดคิวใส่แร่', vac: 'Vac-Lok', dq: 'แจกงานแพทย์', dqLeave: 'วันลาแพทย์', dqDuty: 'เวร S1', config: 'ตั้งค่า' };
+const HIST_TABLE = { roJobs: 'P4P แพทย์', visit: 'พบแพทย์นอกตารางนัด', see: 'พบแพทย์วันนี้', rtd: 'คำสั่งแพทย์ระหว่างฉาย', events: 'กิจกรรมแผนก', cases: 'เคส', logs: 'กิจกรรม', leaves: 'วันลา MP', duty: 'ผู้ปฏิบัติงาน', ctsim: 'CT-SIM', appt: 'นัด', jobs: 'RTT/RA Jobs', reg: 'ลงทะเบียน', bq: 'นัดคิวใส่แร่', vac: 'Vac-Lok', dq: 'แจกงานแพทย์', dqLeave: 'วันลาแพทย์', dqDuty: 'เวร S1', config: 'ตั้งค่า' };
 const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ' };
 const HIST_FN = { fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
   courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
   regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', seeSave: 'พบแพทย์วันนี้', seeSaveMany: 'ตารางพบแพทย์', visitSave: 'พบแพทย์นอกตารางนัด', visitMark: 'พบแพทย์แล้ว (นอกตารางนัด)', visitRemove: 'ยกเลิกพบแพทย์นอกตารางนัด', rtdSave: 'คำสั่งแพทย์ระหว่างฉาย', nurseMark: 'Nurse ยืนยัน', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
-  dqDutySave: 'เวร S1', saveConfig: 'ตั้งค่า', cfgDecide: 'อนุมัติคำขอตั้งค่า', editLog: 'กิจกรรม', removeLog: 'ลบกิจกรรม', dutyDay: 'ผู้ปฏิบัติงาน', jobsSave: 'RTT/RA Jobs', vacSave: 'Vac-Lok', vacRemove: 'ลบ Vac-Lok' };
+  dqDutySave: 'เวร S1', saveConfig: 'ตั้งค่า', cfgDecide: 'อนุมัติคำขอตั้งค่า', editLog: 'กิจกรรม', removeLog: 'ลบกิจกรรม', dutyDay: 'ผู้ปฏิบัติงาน', jobsSave: 'RTT/RA Jobs', roJobsSave: 'P4P แพทย์', vacSave: 'Vac-Lok', vacRemove: 'ลบ Vac-Lok' };
 const histItem = x => (x && typeof x === 'object' ? [x.date && fmtDay(str(x.date).slice(0, 10)), x.label || x.type || x.room || x.kind, x.reason, x.note].filter(Boolean).join(' ') || '·' : str(x));
 function histVal(v) {
   const t = str(v);
@@ -16102,7 +16170,7 @@ const jobRec = (who, ym) => state.jobs.find(j => j.ym === ym && nameKey(j.who) =
 // ตำแหน่งหัวหน้าของคนนั้นในเดือนนั้น (ตั้งค่า → RTT/RA Jobs) · หลายแถว = แถวที่เริ่มล่าสุด
 function jobPosOf(who, kind, ym) {
   return (state.config.jobs.pos || []).filter(p => p.who && nameKey(p.who) === nameKey(who) && p.kind === kind && (!p.from || p.from <= ym) && (!p.to || ym <= p.to))
-    .sort((a, b) => (b.from || '').localeCompare(a.from || ''))[0] || null;
+    .sort((a, b) => (b.from || '').localeCompare(a.from || ''))[0] || teamJobPos(who, kind, ym);   // R9: หัวหน้าทีม (ตั้งค่า → ทีมงาน)
 }
 // แต้มประกัน (ตำแหน่งหัวหน้าที่ตั้งแต้มประกันไว้ก่อน) · แต้มตั้งต้นของตำแหน่ง
 const jobGuar = (pos, prof) => (pos && pos.guar !== '' ? +pos.guar || 0 : +prof.guar || 0);
@@ -16138,7 +16206,7 @@ function jobsTarget(ym) {
   const u = state.user, cr = myCrew(), myName = jobMyName(), people = jobPeople(ym), mine = myName ? people.find(p => nameKey(p.who) === nameKey(myName)) : null;
   const meKind = (cr && crewGroup(cr.role)) || jobKindOfRole(u.role) || (mine && mine.kind) || '';
   const me = myName && u.via !== 'google' && meKind ? { who: myName, kind: meKind } : null;
-  if (!u.isAdmin) return { list: me ? [me] : [], cur: me };
+  if (!u.isAdmin && !crewHeadNow()) return { list: me ? [me] : [], cur: me };   // R9: หัวหน้าทีม RTT / RA ดูของทุกคนได้ (บันทึกได้เฉพาะของตัวเอง)
   const list = [...(me ? [me] : []), ...people.filter(p => !me || nameKey(p.who) !== nameKey(me.who))];
   if (jobsSel.who && !list.some(p => nameKey(p.who) === nameKey(jobsSel.who))) list.push({ who: jobsSel.who, kind: (jobRec(jobsSel.who, ym) || {}).kind || 'rtt' });
   const cur = list.find(p => nameKey(p.who) === nameKey(jobsSel.who)) || list[0] || null;
@@ -16590,8 +16658,9 @@ function renderJobs() {
   if (jt === 'rtt') return renderRttSys();
   const ym = state.month, tg = jobsTarget(ym), cur = tg.cur, sel = $('#jobs-who'), kindSel = $('#jobs-kind');
   $('#jobs-api').hidden = jobsOn() || store.mode === 'local' || !canEdit();
-  sel.hidden = !state.user.isAdmin;
-  if (state.user.isAdmin) sel.innerHTML = tg.list.length ? tg.list.map(p => `<option value="${esc(p.who)}"${cur && nameKey(cur.who) === nameKey(p.who) ? ' selected' : ''}>${esc(p.who)}${p.kind ? ` (${p.kind.toUpperCase()})` : ''}</option>`).join('') : '<option value="">ยังไม่มีผู้ปฏิบัติงานในเดือนนี้</option>';
+  const pick = !!state.user.isAdmin || crewHeadNow();
+  sel.hidden = !pick;
+  if (pick) sel.innerHTML = tg.list.length ? tg.list.map(p => `<option value="${esc(p.who)}"${cur && nameKey(cur.who) === nameKey(p.who) ? ' selected' : ''}>${esc(p.who)}${p.kind ? ` (${p.kind.toUpperCase()})` : ''}</option>`).join('') : '<option value="">ยังไม่มีผู้ปฏิบัติงานในเดือนนี้</option>';
   if (!cur) {
     jobsCur = null;
     kindSel.hidden = true;
@@ -16977,6 +17046,300 @@ async function exportJobs(btn) {
     const { blob, sheet } = await jobsWorkbook(jobsTotals(v));
     const [y, m] = v.ym.split('-').map(Number), mon = MON_FMT.format(new Date(y, m - 1, 1)).replace(/\./g, '');
     if (await saveBlob(blob, `${sheet} ${mon} ${String(y + 543).slice(-2)}.xlsx`)) toast(`ส่งออก ${sheet} · ${fmtMonth(v.ym)} แล้ว`);
+  } catch (e) { toast('ส่งออกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+/* ---------- 18 พ.ย. (R9 · Code.gs API 91): RO Jobs → P4P แพทย์ (แบบเก็บภาระงานรายบุคคล ตามไฟล์ Excel เดิม) ---------- */
+// แถวตามแบบฟอร์ม (RO_MODEL): งานบริการ (ครั้ง × แต้ม) · งานบริหาร (หัวหน้าทีมแพทย์ = 1 ครั้งต่อเดือน) · งานวิชาการ (ครั้ง × เวลา (นาที) × แต้ม/นาที)
+// ตัวเลขรายวันที่ระบบนับให้ (ถึงวันนี้) แก้ทับได้ทุกช่อง · เก็บเฉพาะช่องที่กรอก/แก้ (cells) · ส่งออก Excel ใช้แบบฟอร์มจริงที่ลบชื่อและตัวเลขออกแล้ว (RO_TPL)
+const RO_API = 91;
+const roJobsOn = () => serverHas(RO_API);
+const RO_OLD = 'P4P แพทย์ต้องใช้ Code.gs รุ่น 2026-11-18.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const RO_TPL = "UEsDBBQAAAAIABgwcl37-XNzSwEAAI8EAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbK2UTW7CMBCF9z1F5C1KDF1UVUVg0Z9li1R6ADeeEAvHtjwDhdt3YmhVVZRQwSZWMvPe92JrPJ5uWputIaLxrhSjYigycJXXxi1K8TZ_ym9FhqScVtY7KMUWUEwnV-P5NgBmLHZYioYo3EmJVQOtwsIHcFypfWwV8WtcyKCqpVqAvB4Ob2TlHYGjnDoPMRk_QK1WlrLHDX_eBYlgUWT3u8aOVQoVgjWVIq7LtdO_KPmeULAy9WBjAg64QciDhK7yN2Cve-GdiUZDNlORnlXLXXJj5YePy3fvl8VxkwMpfV2bCrSvVi1LCgwRlMYGgFpbpLVolXGDfn5qRpmW0YWDfPv35CA-b9g9z4-QbHqASFsLeOltT6Z95EZF0K8UeTAuHuCn97EcrJ9FH5AnKML_Q3yNSKfOAxtBJAOnEdn67L-Gbvo06ANsme6TySdQSwMEFAAAAAgAGDByXbVVMCPrAAAATAIAAAsAAABfcmVscy8ucmVsc62SzWrDMAyA74O9g9G9UdrBGKNOL2PQ2xjZA2i28kMSy9hul779vMPYAl3pYUfL0qdPQtvdPI3qyCH24jSsixIUOyO2d62Gt_p59QAqJnKWRnGs4cQRdtXtzfaVR0q5KHa9jypTXNTQpeQfEaPpeKJYiGeXfxoJE6X8DC16MgO1jJuyvMfwmwHVgqn2VkPY2ztQ9cnzNWxpmt7wk5jDxC6daYE8J3aW7cqHXB9Sn6dRNYWWkwYr5iWHI5L3RUYDnjfaXG_097Q4cSJLidBI4Ms-XxmXhNb_uaJlxo_NPOKHhOFdZPh2wcUNVJ9QSwMEFAAAAAgAGDByXQFPcm1zAQAAAAMAABAAAABkb2NQcm9wcy9hcHAueG1snVJBTsMwELzzish36rQghCrHCJWiHkBUaoBjZZxNY-HakXeJWl6Pk6ohBU7cZmdH4_HY4ma3tUkDAY13GRuPUpaA074wbpOx5_z-_JolSMoVynoHGdsDsht5JpbB1xDIACbRwWHGKqJ6yjnqCrYKR3Ht4qb0YasojmHDfVkaDXdef2zBEZ-k6RWHHYEroDive0N2cJw29F_Twus2H77k-zr6SXFb19ZoRfGS8tHo4NGXlMx3Gqzgw6WIRivQH8HQXqaCD0ex0srCLBrLUlkEwb8JsQDVdrZUJqAUDU0b0ORDguYztjZhyZtCaONkrFHBKEfsIDsMHbY1UpCvPrxjBUAoeE92cKgdYnMpx50gglMh74NEfBoxN2QBn8qlCvRH4vEwcZeBDTKu16vFfJ6v178iHg_7Yf9g3Ds-17m_UwTH-k5JsapUgCI23tfbE2IRcwTb6meVchsojprfi_axXw4fWo6vRulFmnZvfOQE__678gtQSwMEFAAAAAgAGDByXTXOGDMiAQAAUAIAABEAAABkb2NQcm9wcy9jb3JlLnhtbJ2SX2uDMBTF3_cpJO8aY6EUUQvb6NMKgzk29haSWxtm_pBks377pVZtCz4N8pKcc3_33EuK7Um20S9YJ7QqEUlSFIFimgvVlOi93sUbFDlPFaetVlCiHhzaVg8FMznTFl6tNmC9ABcFkHI5MyU6em9yjB07gqQuCQ4VxIO2kvpwtQ02lH3TBnCWpmsswVNOPcVnYGxmIhqRnM1I82PbAcAZhhYkKO8wSQi-ej1Y6RYLBuXGKYXvDSxaJ3F2n5yYjV3XJd1qsIb8BH_uX96GUWOhzqtigKqCs5xZoF7bqsC3l7C4ljq_Dys-COCPfdAX3sZBLnXAoxAgv8SdlI_V03O9Q1WWZuuYkJhs6jTNh_N1bnlXfwXKscm_iRPgkvv-E1R_UEsDBBQAAAAIABgwcl1-LsGEEwEAAL4BAAAPAAAAeGwvd29ya2Jvb2sueG1sjZDLbsIwEEX3_Qpr9sUBVQUiEhYtFUiVilRalpEbT4iFH5FtGvj7ToJ4LLuaO9eeo5k7mx-NZr_og3I2g-EgAYa2dFLZXQZfm7fHCbAQhZVCO4sZnDDAPH-Ytc7vf5zbM5q3IYM6xiblPJQ1GhEGrkFLL5XzRkRq_Y6HxqOQoUaMRvNRkjxzI5SFMyH1_2G4qlIlvrryYNDGM8SjFpG2D7VqAuTXzdae57NOfCtsw83vWnbcKitdmwHde7rTbS-3Ssaa0hg_Ta_eEtWujhmMJ-QRmd-h-6MulVlhKKii-FwuFpuioPw6eyUJCMynioRfyWEPuUyWQpdrz7rSf5wOk9EUWHXQ-oW8D_vuRA_ohi6X5H9QSwMEFAAAAAgAGDByXUR1W_DoAAAAuQIAABoAAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc62SwWrDMBBE7_0KsfdadhJKKZFzKYVc2_QDhLS2TGxJaLdp_fcRCU0dCKEHn8SM2JkHu-vNz9CLAybqgldQFSUI9CbYzrcKPndvj88giLW3ug8eFYxIsKkf1u_Ya84z5LpIIod4UuCY44uUZBwOmooQ0eefJqRBc5aplVGbvW5RLsrySaZpBtRXmWJrFaStrUDsxoj_yQ5N0xl8DeZrQM83KuR3SHtyiJxDdWqRFVwskqenKnIqyNswizlhOM_iH8hJns27DMs5GYjHPi_0AnHW9-pXs9Y7ndB-cMrXNqWY2r8w8uri6iNQSwMEFAAAAAgAGDByXZ6wLhb_FgAAJaIAABgAAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWyt3Vlz29h6heH7VOU_qHSVnFTb3HsDIqly-9RnTjLnebpT27StOpblSOqpUvnvIcQJwLskywq7zum2H4AgiYVFUNJH6M0__7r-evLH6vbu6ubbr6fuVeH0ZPXtw83Hq2-ffz2djOu_lE5P7u4vv328_HrzbfXr6d-ru9N_vv33f3vz583tv-6-rFb3J-stfLv79fTL_f3389ev7z58WV1f3r26-b76tl7y6eb2-vJ-_dfbz6_vvt-uLj8-3Oj662tfKJy9vr68-na62cL57XO2cfPp09WHVfXmw-_Xq2_3m43crr5e3q8f_92Xq-93u61df3jO5q4vb__1-_dfPtxcf19v4rerr1f3fz9s9PTk-sP5-8_fbm4vf_u6ft5_uejyw8lft-v_-fX_w-5uHhz3dH314fbm7ubT_av1lrePmU-__Lr8-vLDfku3L9uMi9Y74I-rJMDDpvwLtxXvt-UPGwsv3NjZfmPJ7ro9__3q46-n_1PY_vPL-v_ul82fKpu_7v_539O3bz5erRNObnxyu_r06-k7d27dyJ--fvvm4S6mV6s_71J_Prm__G20-rr6cL9a34s7PUkO0N9ubv6VLHy_psJ6m3cPKyTbvFz_549VZfX1a7Lp9TH-3_t76Tzcyev9ltN_3t1j_eEY6t-efFx9uvz96_3w5s-L1dXnL_fru45e-Xj9fJMD4_zj39XV3Yf1kbq-_1cP2_1w8_Xu4d8n11ffHh7o9eVfmwd89fH-S_I414X7Oznm1hF8ufr4cbVZ7cPvd_c317PNSm67qc1G_HYjfr8R_6oYp7fzxI3D9sbhcGP36sw_9-bR9ubR_ubxK_fsW8fbW8f7W589_5GfbW9cTN04PPvWpd2eL6T22vMfudsn5x-5fSl6egO7He-KL3sA-ydQftkD8IXdYRO96AH4XXj-7IUPoLg79NyLHkDYHfchvOwBhN3BG0ovewDl3e0PERR_5gFEuwiiw0FYfPaNd0dgdNh9pee2drfr3FkoHeIvp26evAZuXqweXvGql_eXb9_c3vx5cvvwcnT3_TI56_vz5KEnr3v-7PHXvfU9Jzd7eKFNqrP-73rJ3dr_eFt48_qP5K6261R262xeLROqkmqkOqlBuiC9JzVJLVKb1CF1ST1SnzQgDUkj0pg0IU1JM9KctCAtSWbC3gkTgZtI3ETkJjI3EbqJ1E3EbiJ3E8GbSN5E9LbL_qFM6-7sC-RFgeLCQ4E2rd2_m_hBozzutEKqkmqkOqlBuiC9JzVJLVKb1CF1ST1SnzQgDUkj0pg0IU1JM9KctCAtvSiQMJG3icBNJG4ichOZmwjdROomYjeRu4ngTSRvInrbZY8ChVyB7h7OfZvubN6cP3QnqVA4-0GHwsPNQ-qc5HLnpM0aUWoNn12jGraPPb2VkF2ntlsnOlRuR_GhchuKU9uJstu52Kxxph7p-_Sy3GNsppflHlsrvSx3f-30sji7rJNedpZd1k0vK2aX9dLLStll_fSycnbZIPPcc28dhpmFuT0zyizM7ZpxZmFu30wyC3M7Z5pZmNs7s8zC3O6ZZxbm9s8iszC3g5aZhbk9ZJY5BHK7yN5llub2kVUyS3M7yaqZpbm9ZLXM0txusnpmaW4_WSOzNLejLHPA-9yesuwhn9tVljnofX5fZQ77kN9XmQM_5PfV9tAvpoqaf1pdrnJ4bpmXs-h5L2dPvoxF29eSs8NbgR0VD28FSDVSndQgXZDek5qkFqlN6pC6pB6pTxqQhqQRaUyakKakGWlOWpCWJDNh74SJwE0kbiJyE5mbCN1E6iZiN5G7ieBNJG_76EuptwIbK6-P909vR5POf1g3_q_1G4Qo-dfZf755_Un0KmavklO0fJ_gij_-AjbebKKQanTu9aiyXcUdKgepQeqQBuQC8h7ShLQgbUgH0oX0IH3IADKEjCBjyAQyhcwgc8gCsoSYkd6RGKsxV2OwxmSN0RqzNYZrTNcYrzFf2wWcfmcdo05n5-smhUeadCaa9Ng7bvejGp1tbh_JN9vbhel3wLmzenWzSjl1DtvK4fWivpXyoVHZe82drC-2Sw9nz_eQJqQFaUM6kC6kB-lDBpAhZAQZQyaQKWQGmUMWkOVW0mcurGTvSBVSlVQj1UkNEpM0RmnM0him7dI8FOdi3Zt26gS07Vd6vYcj-cvl7erj6eanWbuyrde5evjR1Hq7_2icPWxj_SaxXNBvE4vHLGExXYfce_1KkSXMvXmuFlHCIkpYRAkz95rvYBEdhDQhLUgb0oF0IT1IHzKADCEjyBgygUwhM8gcsoAsi-xgkR0kVUhVUo1UJzVIzNYYrjFdY7zGfG0XcKqWxXUti6hl8ZFabnr4enNqKD7Sv9Ix-1dKNyH31XSlxP7lv91RLaGAJRSwhAKWnjwLltBASBPSgrQhHUgX0oP0IQPIEDKCjCETyBQyg8whC8iyxAaW2EBShVQl1Uh1UoPEbI3hGtM1xmvM13YBpxpYWjewhAaWftzAR-pXPmb9yuke5L5dVSmL-uXep1bLqF8Z9SujfuUn61dG_SBNSAvShnQgXUgP0ocMIEPICDKGTCBTyAwyhywgyzLrV2b9SBVSlVQj1UkNErM1hmtM1xivMV_bBZyqX3ldvzLqV35x_ZJvezyrf0_PABSeeAdY2S3NNC__w5btSunq7SjVvR2lyvfkfV_slqbaR2qSWqQ2qUPqknqkPmlAGpJGpDFpQpqSZqQ5aUFa7ijdR65m74RVhFWF1YTVhTWEidRNxG4idxPBm0je9tGnyukK58m6qGdm1Uf6WXqsoO6YJ0jn0mU5yxfViaKGfFEdi-pYVMeiuidPk7vF6aY6NtWxqY5NdWyqY1Mdm-rYVMemOjbVsamOTXVsqmNTHZvq2FTHpjo21YmmOtFUJ5rqRFOdaKoTTXWiqU401YmmOtFUJ5rqRFOdaKpjU13SVMemupefSf1Ri-rTZcn_PGK3NFPUKF9Uz6J6FtWzqP7ponoW1bOonkX1LKpnUT2L6llUz6J6FtWzqJ5F9SyqZ1E9i-pZVM-iehbVs6heFNWLonpRVC-K6kVRvSiqF0X1oqheFNWLonpRVC-K6kVRPYvqk6J6FtW_vKjhqEUN6bKU8kUNoqhxvqiBRQ0samBRM_edn3W42C1OFzWwqIFFDSxqYFEDixpY1MCiBhY1sKiBRQ0samBRA4saWNTAogYWNbCoQRQ1iKIGUdQgihpEUYMoahBFDaKoQRQ1iKIGUdQgihpEUQOLGpKiBhY1vLyo0VG-No3SJSnnCxqJgp7lCxqxoBELGrGgmft2KGjEgkYsaMSCRixoxIJGLGjEgkYsaMSCRixoxIJGLGjEgkYsaMSCRixoxIJGLGgkChqJgkaioJEoaCQKGomCRqKgkShoJAoaiYJGoqCRKGgkChqxoFFS0IgFjV5e0PioZ9L4qbJUdoszTS3mmxqzqTGbGrOp8ZPfRYpZ1JhFjVnUmEWNWdSYRY1Z1JhFjVnUmEWNWdSYRY1Z1JhFjVnUmEWNWdSYRY1FUWNR1FgUNRZFjUVRY1HUWBQ1FkWNRVFjUdRYFDUWRY1FUWMWNU6KGrOo8TN-zFmOH6nq2VHOpdlxm_yUjxNjPvlB56rjoI_jpI_jqE_2zlFRzvqQmqQWqU3qkLqkHqlPGpCGpBFpTJqQpqQZaU5akJZOTP84Mf4jrCKsKqwmrC6sIUykbiJ2E7mbCN5E8raPPl3RZDzIcT7Inb38XHqEOaAQH5qamcnJ_7Slsl3s00Ov-U8dVHfbKBRSVd1Zas51b-lPaW7vwOmyciiI1CS1SG1Sh9Ql9Uh90oA0JI1IY9KENCXNSHPSgrR0YkzIiTkhYRVhVWE1YXVhDWEidROxm8jdRPAmkrd99OmyJkNDjlNDrvj_OZ-WjnI-zQ7u5AeGnJgYyn_6p-o4MuQ4M-Q4NOSenhpyHBsiNUktUpvUIXVJPVKfNCANSSPSmDQhTUkz0py0IC2dGCRyYpJIWEVYVVhNWF1YQ5hI3UTsJnI3EbyJ5G0ffbqjyViR41yRe_lgkSsfpaHZ2Z78TJETQ0X5T-BVHaeKHMeKHOeKcneObx9xsojUJLVIbVKH1CX1SH3SgDQkjUhj0oQ0Jc1Ic9KCtHRi1siJYSNhFWFVYTVhdWENYSJ1E7GbyN1E8CaSt3306YYmk0eOo0fu5bNH_iizR77w1Gmssl3sfbqh-eEjz-Ejz-Ejz-Gj3dad_gmM5_QRqUlqkdqkDqlL6pH6pAFpSBqRxqQJaUqakeakBWnpxfSRF9NHwirCqsJqwurCGsJE6iZiN5G7ieBNJG_76FMN9cn0kef0kS-8vKHuKA3NDv7kp468mDrKfxK96jl15Dl15Dl1lLtzNJRTR6QmqUVqkzqkLqlH6pMGpCFpRBqTJqQpaUaakxakpRdTR15MHQmrCKsKqwmrC2sIE6mbiN1E7iaCN5G87aNPNzSZOvKcOvIvnzryR5068tnJn_zYkRdjR_mrQlS3K_mQauqWUhdJ2VHqIinZO89_Oeo5dURqklqkNqlD6pJ6pD5pQBqSRqQxaUKakmakOWlBWnoxdeTF1JGwirCqsJqwurCGMJG6idhN5G4ieBPJ2z76dFGTqSPPqaPsqslN_9FI3kyqD1f7cJRzZ2bEJ__DlIoX80X5K7FUPeeLPOeLPOeLsneORnK8iNQktUhtUofUJfVIfdKANCSNSGPShDQlzUhz0oK09GK8yIvxImEVYVVhNWF1YQ1hInUTsZvI3UTwJpK3ffTpRibjRZ7jRf4Z40XOPfJNXB_9zMnzGZcS8dtZikL6kmEeb3h3a0Wpq_nRasLqwhrCLoS9F9YU1hLWFtYR1hXWE9YXNhA2FDYSNhY2ETYVNhM2F7YQthS27qvAdwrVoWDqWDB1MJg6GkwdDqaOB1MHhKkjwtQhYeqYsMNBEaev-Mfr_Pg4uVhC_MiVSfxRJ4t8_NS1SbwYLMpfkay6Wym5ivxhrdzpuLZfK3XZrb2VUo3dmN9dnM7jy1IOHJGapBapTeqQuqQeqU8akIakEWlMmpCmpBlpTlqQlrvdnjm3ioEjYRVhVWE1YXVhDWEidROxm8jdRPAmkrd99OV0PePc29p4_bY2fqSZP3PRIF969cikwqGb25GJQjldrPyY7m4tV0idMjfmS-nLcxbyjdyulN56_rJ_9e1KIT0NEXLfI26oLeWv4rnbUOpyXqQmqUVqkzqkLqlH6pMGpCFpRBqTJqQpaUaakxakJWldW9o7YRVhVWE1YXVhDWEidROxm8jdRPAmkrd99Jnr6J7xrFpcn1VD-bGz6lGvNeSLT55VxdWGAr6ru1kpZK6wG-UrvN_SZpSpkG_v_nEczq-Z6aP1gz7z6V9FUnD53nIeidQktUhtUofUJfVIfdKANCSNSGPShDQlzUhz0oK03KWQOd2KeSRhFWFVYTVhdWENYSJ1E7GbyN1E8CaSt3306S9lk3kkz3kkX3z66mKbbsebL219cnkxX1yfp4v_qCXvVj899U3io17jyJeeusiYFzNLAd-RKj2n96Uf9L7E3pd-sveccSI1SS1Sm9QhdUk9Up80IA1JI9KYNCFNSTPSnLQgLXcpZHovZpyEVYRVhdWE1YU1hInUTcRuIncTwZtI3vbRp3ufzDh5zjj5p2ac_NM__Tnq1ZN8-amrl3kx6hTyn5TbrvSDYpczxS6h2GUWu_yTxeZoFKlJapHapA6pS-qR-qQBaUgakcakCWlKmpHmpAVpuUshU2wxGiWsIqwqrCasLqwhTKRuInYTuZsI3kTyto8-XexkNMpzNMqXX1zsUDhmsUPhqeuiBXF5ppD__td2paeLfdiSPmMfHsfhN2MUfq7YgRNVpCapRWqTOqQuqUfqkwakIWlEGpMmpClpRpqTFqTlLoV0sYOYqBJWEVYVVhNWF9YQJlI3EbuJ3E0EbyJ520efKnZIJqoCJ6pC4eXFPurlnIJ76rprQQxWhfzH8bYr_aDY7gfFdiy2-8licxCL1CS1SG1Sh9Ql9Uh90oA0JI1IY9KENCXNSHPSgrTcpZApthjEElYRVhVWE1YX1hAmUjcRu4ncTQRvInnbR58udjKIFTiIFdzLi33UQazgn7pOWxBzWCH_6b3tSj8o9n5Lh19f5dll0EXgOBapSWqR2qQOqUvqkfqkAWlIGpHGpAlpSpqR5qQFabmlbF3FOJawirCqsJqwurCGMJG6idhN5G4ieBPJ2z76dF2TcazAcazgX17Xo14EKoSnrtYWxJBWlP8Y33alH9Q1sK6BdQ2sK2e1SE1Si9QmdUhdUo_UJw1IQ9KINCZNSFPSjDQnLUjLLWXrKma1hFWEVYXVhNWFNYSJ1E3EbiJ3E8GbSN720afrmsxqBc5qhfDyukZHrWv01DXbgrgkVJT_TN92pR_UNWJdI9Y1Yl15YShSk9QitUkdUpfUI_VJA9KQNCKNSRPSlDQjzUkL0nJL2bqKC0MJqwirCqsJqwtrCBOpm4jdRO4mgjeRvO2jT9c1uTBU4IWhQvTyuh51fCvET13BLYjxrQi_yjV-Tl1j1jVmXWPWldNapCapRWqTOqQuqUfqkwakIWlEGpMmpClpRpqTFqRlENNaQUxrCasIqwqrCasLawgTqZuI3UTuJoI3kbzto0_XNbk8VODloUL88roe9RfBhbN8QSrhLN-sKqlGqnNbDdJF4LWfSE1Si9QmdUhdUo_UJw1IQ9KINCZNSFPSjDQnLUjLLWX7J679JKwirCqsJqwurCFMpG4idhO5mwjeRPK2jz49LZmxbI-OOl8ViuxRkT0qskdF9ogzUqSLwDEoUpPUIrVJHVKX1CP1SQPSkDQijUkT0pQ0I81JC9IyiDGoIMaghFWEVYXVhNWFNYSJ1E3EbiJ3E8GbSN720Wd6VHy0R0edVwol9qjEHpXYoxJ7xJkj0kXgWBGpSWqR2qQOqUvqkfqkAWlIGpHGpAlpSpqR5qQFaRnEWFEQY0XCKsKqwmrC6sIawkTqJmI3kbuJ4E0kb_voMz0qPdqjo44HhTJ7VGaPyuxRmT3iiA_pInCKh9QktUhtUofUJfVIfdKANCSNSGPShDQlzUhz0oK0DGKKJ4gpHmEVYVVhNWF1YQ1hInUTsZvI3UTwJpK3ffSZHpUf61H0U9M4_lXxR1XabqN0-EhYZUeHR1Ql1Uh1UoN0QXpPapJapDapQ-qSeqQ-aUAakkakMWlCmpJmpDlpQVqSzIS9EyYCN5G4ichNZG4idBOpm4jdRO4mgjeRvInobZd9ucAquWNXaXvJH5eq0pZ8qkqgGqlOapAuSO9JTVKL1CZ1SF1Sj9QnDUhD0og0Jk1IU9KMNCctSEvSukq0d8JE4CYSNxG5icxNhG4idROxm8jdRPAmkjcRve2zD6ySP3aVtr8KLPUGb0epN3ikGqlOapAuSO9JTVKL1CZ1SF1Sj9QnDUhD0og0Jk1IU9KMNCctSEvSukq0d8JE4CYSNxG5icxNhG4idROxm8jdRPAmkjcRve2zPztU6fXdl9Xqvnp5f_n2zfXq9vOqsvr69e7kw83vSTl88hOnPW8-h1V10Xl980VKbsk7d24dLxZUw3k9qBtE6xuoLVXPzutnyovn9aLy0nm9pLx8Xi8rd4Xz-uaj1FjizpPf3aiW-PPkl8WpJevn5_QTLJw_7HZ1o_i8vvmKEEvWz97Jp-_Wz9_JHeDWe8DJXeDW-8DJneDXO8HLneDXO8HLneDXT9XLp-qTML1M06-fqo_ljc7Ok08oJ4fj4eh7--b75edV5_L289W3u5Ovq08PL9PF05Pbq89fdn--v_n-8Kf1a_pvN_fr1_vd376sLj-ubjefsT_5dHNzv_tLcid_3tz-6-GIf_t_UEsDBBQAAAAIABgwcl2Lgm5Y6AUAAI4aAAATAAAAeGwvdGhlbWUvdGhlbWUxLnhtbO1ZT48bNRS_I_EdrLmn838mWTVbJZOkhe62VXdb1KMzcTLuesbR2NndqKqE2iMSEqIgLkjcOCCgUitxKZ9moQiK1K-Ax5M_nsRhW0ilIppIyfj5955_fs9-zzNz8dJpSsAxyhmmWdOwL1gGQFlMBzgbNY1bh71a3QCMw2wACc1Q05giZlzaff-9i3CHJyhFQOhnbAc2jYTz8Y5psliIIbtAxygTfUOap5CLZj4yBzk8EXZTYjqWFZgpxJkBMpgKs9eHQxwjcFiYNHbnxrtE_GScFYKY5AexHFHVkNjBkV38sSmLSA6OIWkaYpwBPTlEp9wABDIuOpqGJT-GuXvRXCgRvkFX0evJz0xvpjA4cqRePuovFD3P94LWwr5T2l_HdcNu0A0W9iQAxrGYqb2G9duNdsefYRVQeamx3Qk7rl3BK_bdNXzLL74VvLvEe2v4Xi9a-lABlZe-xiehE3kVvL_EB2v40Gp1vLCCl6CE4OxoDW35gRvNZ7uADCm5ooU3fK8XOjP4EmUqq6vUz_imtZbCuzTvCYAMLuQ4A3w6RkMYC1wECe7nGOzhUSIW3hhmlAmx5Vg9yxW_xdeTV9IjcAdBRbsUxWxNVPABLM7xmDeND4VVQ4G8fPb9y2dPwMtnj88ePD178NPZw4dnD37UKF6B2UhVfPHtZ39-_TH448k3Lx59occzFf_rD5_88vPneiBXgc-_fPzb08fPv_r09-8eaeCtHPZV-CFOEQPX0Am4SVMxN80AqJ-_nsZhAnFFAyYCqQF2eVIBXptCosO1UdV5t3ORJHTAy5O7Fa4HST7hWAO8mqQV4D6lpE1z7XSuFmOp05lkI_3g-UTF3YTwWDd2tBLa7mQsVjvWmYwSVKF5g4howxHKEAdFHz1CSKN2B-OKX_dxnFNGhxzcwaANsdYlh7jP9UpXcCriMoX6UFd8s38btCnRme-g4ypSbAhIdCYRqbjxMpxwmGoZw5SoyD3IEx3Jg2keVxzOuIj0CBEKugPEmE7nej6t0L0qkos-7PtkmlaROcdHOuQepFRFduhRlMB0rOWMs0TFfsCOxBKF4AblWhK0ukOKtogDzDaG-zZG_PW29S2RV_ULpOiZ5LotgWh1P07JEKJsVgMq2TzF2bmpfSWp---Suj6pt3Ks3VqrqXwT7j-YwDtwkt1AYs-8y9_v8vf_MX9v2svbz9rLRG2qp3VpJt14dB9iQg74lKA9JlM8E9Mb9IRQNqTS4k5hnIjL2XAV3CiH8hrklH-EeXKQwLEYxpYjjNjM9IiBMWWiSBgbbcsiM0n36aCU2vb85lQoQL6UiyIzl4uSxEtpEC7vwhbmZWvEVAK-NPrqJJTBqiRcDYnQfTUStrUtFg0Ni7r9dyxMJSpi_wFYPNfwvZKRWG-QoEERp1J_Ht2tR3qTM6vTdjTTa3hbi3SFhLLcqiSUZZjAAVoVbznWjYY-1I6WRlh_E7E213MDyaotcCL2nOsLMzEcN42hOB6Ky3Qs7LEib0IyyppGzGeO_ieZZZwz3oEsKWGyq5x_ijnKAcGpWOtqGEi25GY7ofX2kmtYb5_nzNUgo-EQxXyDZNkUfaURbe-_BBcNOhGkD5LBCeiTSX4TCkf5oV04cIAZX3hzgHNlcS-9uJKuZlux8tBsuUUhGSdwVlHUZF7C5fWCjjIPyXR1VqbOhf1RbxtV93yllaS5oYCEG7PYmyvyCitXz8rX5rpG_Zwq8e8LgkKtrqfm6qltqh1bPBAowwXuOTVi29VgddWayrlSttbeTtD-XbHyO-K4OiGclY8BTsU9QjR_rlxmAimdZ5dTDiY5bhr3LL_lRY4f1ay63615rmfV6n7LrbV837W7vm112s594RSepLZfjt0T9zNkOnv5IuVrL2DS-TH7QkxTk8pzsCmV5QsY29n8AgZg4Zl7gdNruI12UGu4rV7N67TrtUYUtGudIAo7vU7k1xu9-wY4lmCv5UZe0K3XAjuKal5gFfTrjVroOU7LC1v1rte6P_O1mPn8f-5eyWv3L1BLAwQUAAAACAAYMHJdW2Hj-4MHAACJbQAADQAAAHhsL3N0eWxlcy54bWztXc2L4zYUvxf6Pxgv9FDqkSV_jD2bzHQ-NrCwXRZ2FnooDI6jJGL9kdrObGbLHgqFXnorPZRCKe2lx1J6yP43-VMq2U7i7CQTJ2MnlncGMpbkp6ffe3p6T5K_Gicj1xGucRAS32uK8EAWBezZfod4vab46rIlGaIQRpbXsRzfw03xBofiyfGnnzTC6MbBL_sYRwJl4YVNsR9FgyMAQruPXSs88AfYo2e6fuBaEc0GPRAOAmx1QlbJdQCSZR24FvHEhMORa-dh4lrB6-FAsn13YEWkTRwS3cS8RMG1j572PD-w2g6FOoKqZQsjqAdIGAXTRuLSW-24xA780O9GB5Qv8LtdYuPbcE1gAsuec6Kct-MENSCjBdlHwZacVBDga8K6TzxueEO35UahYPtDL2qKyqxISA5PO01RVUQh0ee536FqupI-Fx598eiRfCDLV9Ljbxaz7Oxn3w796LGUHE5O4tIvryQRLOEOjcNF9imvFcTGCixZIOtRgFTu40bX9-biI0i1y7r76LXnv_Fa7BxtVEzIjhvhW-HacmgJZExs3_EDIaK6x4yI4bVcnFBcWn3ftVhZ13KJc5OUorha3wpCOgiSEhSXxT2YVnUJNcgYZNJodZpWFxs694MOsYTn-M3SxhZ4tEGGDyqIj7EXPMuUuJq3XCzvVZhPA2I568UuogsWLbEA9cPisWyqDrkACGX1tLyVaPcwwiJ6O9cgGZY4CHfN99TrhZZnvXpx_iFfuBlftSi88YFFOOI4swiniUnBcYPOhSIceC2aEdL05c2AhhOPTtsSNjHdGupeYN1ApOWvEPoO6TAUvfNsEItNtJ2WEa-DR5jGez3WBsgwu2czpihEhClCPlBM0zzUNEODJlLpD5aMIOi1m2Ir_pM3ljY-0M5sU3Ogc-9pd0JdnJYdNxzcjWj9gPT67Bj5A9aIH0V0MnjcoFbU8z3LYS1Ma2RrCvH8vClGfcImhvZSaIwwbSEXfUwZQ8lFTummiHPRJ6TFywb2DxlUD8pDj38IGZTdj6AyvQPK0jkoX1awOyFK9AGgSoMbVGLUTuk7lD_u8OKT1qD9COWrakRJE3TeZWPHecm4fd2dTb5UynPUzexOyWxvypsl6YwtTSZskgz4oFKyu5bUgitrCdZg4NywDalMjpLOc2cx9Tx_6pCe5-JshReBH2E7ijdubwPJoEe50eetBLIKTNSZ0SSE5la6FEbdtbDUeW20tDZaUC5cUC68rUy4RJlsh9Cakgh9PyBvKTO2JLNpAQ5EtmEeETtTQhEPZhwEx7df45muRt1cykArlLEowB2qUVbwgpuoZmp3S1W1jVruFF97gFwAZOFNYA0u8ShKDeRO_PqK4Vcc_t0PqPSiw4Yd9HzotnHQii8_ZAStjKUd5vYNSyGDu5RkznkrXCsJyiskQaWMx43xrVK0Um14ajXgQVjsGMiyRuv8hLI7Y6ez3M28OFR2ir4gpLUJOCvsaLl8cvWcplpiaFk_sLiJLcreXARbVecYZ2gbf7Y3tVfdy93ugDKwI67ji8I1erWy6NNbofKOZVgRF7pZt6jFhsq7ZnfaugVOpe13_-g5g3tPw9TWrdIqM5vW1i3YqjjvR1waxUoBlJqsXDICqgsCqvUTENVdQLU2JppzNanxtpw0ud5w0rnZcNLr7rf1uvttve5-W6-93zZr47YN_q5Rw8N1mEvekz6nOeIN_WF431m4URtJoFH3uGTUPS4ZdY9LRu3jksF3XMonS13udNnjJdSCXHspAvAdUUufEVR6GW3wsozev5orrNdirxSb9bZoeVea38pwTM7dobY3_PGTHKXDR6Vaz7bw0McOj5fNkwq4r-UrnmJXoIgrtDvzrdsuPFBVAMKCBxC4j21VtqnquwWw61FS4QG8CC3fI4gFPetX-M5FuRC32BPKDWjzPaGSNSnX9slO9b5Pdj7cS_xwL_GW6Ff5A41r9DrX6A-5Rm9wjV7mGr3JNXrIt_Ih5Bs-35OFh6nOw1Sn6pbDmalwZhuFPCeDOLgeqK57Gkne60WHlfjUiuBDXIcQxHUIQVyHkOp4jUKdnsoFfGX_27284a389eHiICv8QVarC9nY6VuzSoWs8Ae5AoYB0nd2Zt6FuvAm1FmpwD5ewD5c4LpW5u0T7SFxIuIlooHb9M_ZhSUnMyHMVJCXVZiMf5uMv5-Mf5mM_7tqSc9OzzJKGgVHQ0KT38npn0R_mjRNJf9klJx7t5b9ZPzHZPzvZPzXZPzPZPxjnP51Mv57Mn4fJ_6cvP9pMv5hMh5Pxj9PiX_PBNF8eJQMnvkbU6nKO6P5y1JjZUTsi1WLnUBV1sFda-hEl7OT7GtA0_RXuEOGLppRvSDXfpRSzdPP2D1aUGdt0Kj2LIziozAMCAX_5OzQvHjSQpIhnxmSqmBNMrWzC0lTz88uLlomVej5u8x3s-7x1az4U1d0oED1KHQoVZAKm4J_OS9riplMAj_WH4WdxW4iXT7VoCy1FBlKqm4ZkqErmtTSILrQ1bMnWkvLYNe2_LqWDCCcg9eOIuJih3h4Ef5ltpR2Es3eIQSY9gSYf0Pt-H9QSwMEFAAAAAgAGDByXaK6-Ip4AwAAwgkAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbJVWXU_aYBS-J_E_vOkVXoz6sSyLAQxBnV74EcTrpoEqTaDt2uLc3dhIQOPFEjULuCwCIWQaExXc2n_z_pSd99QXKi1Mk6Zpz3vOc57z0XMaXz4qFcmhYlqqriWE-dicQBQtp-dV7SAh7GXX3rwXiGXLWl4u6pqSED4rlrCcjMQtyyZgqlkJoWDbxpIoWrmCUpKtmG4oGpzs62ZJtuHVPBAtw1TkvFVQFLtUFBfm5t6JJVnVBJLTy5qdEN4uCqSsqR_LSnooSMYtNRlHJ0uWIefAN6BYinmoCEnqVqjTZJf7hToV6tbw9Yo6D9TpUOeOOjV8buArPLRRwaFOFa9uRJK2UpurkkQIdS6o00fIG2bh1sFakna2dyUpgtp3eNjAwwpTd4-p06LOJXcGwns4JZL0YS-V8UCf2zH1B_QEFt85txDHgJFJZRkxvy8R1cHoB3UeI9zzgMOeDeMlUV_EPY-W6BNdowjMz1FyQ91T3zHLJhz8pc4t2M2SJTImAnab21vZdUmKi3YyLrIaYZ2SHjWIIXgwKgvBVAHtOr4DYi2oPsxFDxk3kHEzoOfLzkwkauiqZs8GwToI0wplC6mvsuDc4_Hj-ZivgZo81xUvDtEjzirsnqK0g2R-ISgk8TSUxj0i_aSOy_I_jM_9hhG3QjN3wQOo4_MAS3GBNFpo1kVc4HLMC9zhEqj0o8gbtI33cKUpbL02-4NB_gbjoCrGw4oQCAmErHeqSPUR4fp4B-jzcSATvvs8-SSb-aCLOhp2edYrvJueoiELBF0MvBS92n4sG2RxKhqL7ZqF6np1r4dHspHee1muWIPdYsN_RSI17KM2UmvivRuV8yU12NsoDXd0jVAw7C5JriCbNplcp8a4dXonMy5a20qNi3K6Zpd1E7YEWVwh4sZmJjuuYhRljSiHcrEs27Bcpjf3FR9AYZQMHUKAHaXuq7lQrIXQz_XGK3TogLlHx96k8fqggi3iYHZaz9fHqDn468TPofqkwUADo20xRnzAPSR5wp1PpDqahTORKdPwC-pACA8ExqF_XYRMRS_q_hM-RhRUGm63E-yl1uvHno8UH_mD0JEfdIXLhD0AvT5ZDzRgJp0i0VVNP5INGdpwNrQUZ3w5d_Bq-T7-Hl9DEHt7wi5jBh4t9qsRQmJlfff_sZCddPYFWi_EyqZHWiL8hCX_AVBLAQIUAxQAAAAIABgwcl37-XNzSwEAAI8EAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAgAGDByXbVVMCPrAAAATAIAAAsAAAAAAAAAAAAAAIABfAEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAgAGDByXQFPcm1zAQAAAAMAABAAAAAAAAAAAAAAAIABkAIAAGRvY1Byb3BzL2FwcC54bWxQSwECFAMUAAAACAAYMHJdNc4YMyIBAABQAgAAEQAAAAAAAAAAAAAAgAExBAAAZG9jUHJvcHMvY29yZS54bWxQSwECFAMUAAAACAAYMHJdfi7BhBMBAAC-AQAADwAAAAAAAAAAAAAAgAGCBQAAeGwvd29ya2Jvb2sueG1sUEsBAhQDFAAAAAgAGDByXUR1W_DoAAAAuQIAABoAAAAAAAAAAAAAAIABwgYAAHhsL19yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsBAhQDFAAAAAgAGDByXZ6wLhb_FgAAJaIAABgAAAAAAAAAAAAAAIAB4gcAAHhsL3dvcmtzaGVldHMvc2hlZXQxLnhtbFBLAQIUAxQAAAAIABgwcl2Lgm5Y6AUAAI4aAAATAAAAAAAAAAAAAACAARcfAAB4bC90aGVtZS90aGVtZTEueG1sUEsBAhQDFAAAAAgAGDByXVth4_uDBwAAiW0AAA0AAAAAAAAAAAAAAIABMCUAAHhsL3N0eWxlcy54bWxQSwECFAMUAAAACAAYMHJdorr4ingDAADCCQAAFAAAAAAAAAAAAAAAgAHeLAAAeGwvc2hhcmVkU3RyaW5ncy54bWxQSwUGAAAAAAoACgCAAgAAiDAAAAAA";
+// วิธีนับของแต่ละแถว (แถวในแบบฟอร์ม → กติกา) · ไม่มี = กรอกเอง
+const RO_RULE = { 6: 'new', 7: 'fu', 9: 'chemo', 11: 'sim2d', 12: 'sim3d', 13: 'brachy', 20: 'contour', 21: 'eval' };
+const RO_RULE_TEXT = {
+  new: 'ผู้ป่วยที่แจกให้แพทย์คนนี้ในแถบแจกงานแพทย์ (วันที่แจก · ไม่นับที่ข้ามคิว)',
+  fu: 'ผู้ป่วยที่สั่ง Continue / Hold RT ในห้องตรวจ → ระหว่างฉาย และผู้ป่วยนอกตารางนัดที่กดพบแพทย์แล้ว (คนละครั้งต่อวัน)',
+  chemo: 'ผู้ป่วย CCRT ที่สั่งให้เคมีบำบัดต่อ (CMT Continue) ในห้องตรวจ → ระหว่างฉาย',
+  sim2d: 'ผู้ป่วยของแพทย์ในแถบ CT-SIM ที่เป็นเทคนิค 2D',
+  sim3d: 'ผู้ป่วยของแพทย์ในแถบ CT-SIM ที่ไม่ใช่ 2D (ไม่นับ CT ใส่แร่)',
+  brachy: 'นัดใส่แร่ของแพทย์ (ไม่นับยกเลิก / ไม่มา)',
+  contour: 'เคสของแพทย์ที่ไม่ใช่ 2D นับวัน In (วันที่ส่งเคสให้ MP · ไม่นับส่งแก้แผน)',
+  eval: 'เคสของแพทย์ที่กด Evaluate วันนั้น',
+  head: 'หัวหน้าทีมแพทย์ของเดือนนั้น (ตั้งค่า → ทีมงาน → แพทย์) = 1 ครั้ง',
+};
+function normRoJob(o) {
+  const parse = v => { if (v && typeof v === 'object' && !Array.isArray(v)) return v; try { const x = JSON.parse(str(v) || 'null'); return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; } catch (e) { return {}; } };
+  const r = { id: str(o.id), doc: str(o.doc).toUpperCase(), name: str(o.name), by: str(o.by), updated: str(o.updated), cells: parse(o.cells), prof: parse(o.prof) };
+  r.ym = /^\d{4}-\d{2}$/.test(str(o.ym).slice(0, 7)) ? str(o.ym).slice(0, 7) : (r.id.split('|')[1] || '').slice(0, 7);
+  if (!r.doc) r.doc = (r.id.split('|')[0] || '').toUpperCase();
+  return r;
+}
+const roKey = (code, ym) => code + '|' + ym;
+const roRec = (code, ym) => (state.roJobs || []).find(x => x.doc === code && x.ym === ym) || null;
+const roPts = (r, g) => { const p = state.config.roP4p.pts[r]; return p === undefined || p === '' ? +g || 0 : +p; };
+// หัวไฟล์ของเดือนนี้: ที่บันทึกไว้ → เดือนล่าสุดที่เคยบันทึก → ค่าเริ่มต้น (ตั้งค่า → แถบงานอื่น → RO Jobs)
+function roProfDefault(code, ym) {
+  const prev = (state.roJobs || []).filter(x => x.doc === code && x.ym < ym && x.prof && x.prof.title).sort((a, b) => b.ym.localeCompare(a.ym))[0], c = state.config.roP4p;
+  return prev ? clone(prev.prof) : { name: docName(code) || code, title: c.title, guar: c.guar, rate: c.rate };
+}
+const roDrafts = {};
+function roDraft(code, ym) {
+  const k = roKey(code, ym), r = roRec(code, ym), cur = roDrafts[k];
+  if (!cur || (!cur.dirty && cur.rev !== (r ? r.updated || r.id : ''))) {
+    roDrafts[k] = { code, ym, cells: clone(r ? r.cells : {}), prof: r && r.prof && r.prof.title ? clone(r.prof) : roProfDefault(code, ym), dirty: false, rev: r ? r.updated || r.id : '' };
+  }
+  return roDrafts[k];
+}
+// ผู้ป่วยที่นับได้ของแพทย์คนนั้นในเดือนนั้น (ถึงวันนี้): { กติกา: { วันที่: [{ k, hn, name, note }] } }
+function roStats(code, ym) {
+  const first = ym + '-01', last = monthEnd(ym), td = today(), out = {};
+  const inM = d => isDay(d) && d >= first && d <= last && d <= td, mine = v => str(v).toUpperCase() === code;
+  const add = (rule, d, k, hn, name, note) => { const m = out[rule] || (out[rule] = {}), l = m[d] || (m[d] = []); if (!l.some(x => x.k === k)) l.push({ k, hn: str(hn), name: str(name), note: note || '' }); };
+  for (const r of state.dq) if (mine(r.doc) && r.st !== 'skip' && inM(r.date)) add('new', r.date, r.id, r.hn, r.name, '');
+  for (const r of state.rtd || []) {
+    if (!mine(r.doc) || !inM(r.date)) continue;
+    const k = 'hn:' + (str(r.hn) || r.case);
+    add('fu', r.date, k, r.hn, r.name, r.rt === 'hold' ? 'Hold RT' : r.rt === 'continue' ? 'Continue' : '');
+    if (r.kind === 'ccrt' && r.cmt === 'continue') add('chemo', r.date, k, r.hn, r.name, 'CMT Continue');
+  }
+  for (const r of state.visit || []) if (mine(r.doc) && r.seen && inM(r.date)) add('fu', r.date, 'hn:' + str(r.hn), r.hn, r.name, 'นอกตารางนัด');
+  for (const r of state.ct) {
+    if (!mine(r.doc) || !inM(r.date) || str(r.hdr)) continue;
+    const t = splitList(r.cats).map(id => jobTechOf(id, r.tech)).find(Boolean) || (r.tech ? jobTechOf('', r.tech) : '');
+    add(t === '2D' ? 'sim2d' : 'sim3d', r.date, r.id, r.hn, r.name, t);
+  }
+  for (const a of state.bq) if (mine(a.doc) && bqLive(a) && inM(a.date)) add('brachy', a.date, a.id, a.hn, a.name, a.tech || '');
+  for (const c of state.cases) {
+    if (!mine(c.doc)) continue;
+    if (inM(c.in) && !c.replan && catOf(c.cat).kind !== 'simple' && jobTechOf(c.cat, c.tech) !== '2D') add('contour', c.in, c.id, c.hn, c.name, catOf(c.cat).label);
+    const ev = str(c.eval).slice(0, 10);
+    if (inM(ev)) add('eval', ev, c.id, c.hn, c.name, catOf(c.cat).label);
+  }
+  return out;
+}
+// ข้อมูลทั้งเดือนของแพทย์คนนั้น: แถวตามแบบฟอร์ม ค่ารายวัน (ที่แก้ทับค่าที่นับได้) และผลรวมแบบสูตรในไฟล์
+function roView(code, ym) {
+  const dr = roDraft(code, ym), cfg = state.config.roP4p;
+  const [y, m] = ym.split('-').map(Number), n = new Date(y, m, 0).getDate(), hol = holidayMap(), td = today();
+  const days = Array.from({ length: n }, (_, i) => `${ym}-${pad(i + 1)}`);
+  const stats = roStats(code, ym), doc = state.config.doctors.find(x => x.code === code) || null, head = !!doc && teamRole(doc, ym) === 'head';
+  const rows = [];
+  for (const [r, type, no, text, part, unit, min, g] of RO_MODEL.rows) {
+    if (type === 'head') { rows.push({ r, type, text, part }); continue; }
+    if (part === 'adm') { rows.push({ r, type: 'fixed', no, text, part, unit, f: roPts(r, g), auto: head ? 1 : null, rule: 'head' }); continue; }
+    if (part === 'aca') {
+      const a = cfg.aca[r] || { label: text, min, w: g };
+      rows.push({ r, type: 'item', no, text: a.label, part, unit, min: +a.min || 0, w: +a.w || 0, f: round2((+a.min || 0) * (+a.w || 0)), rule: '', src: {}, auto: days.map(() => null) });
+      continue;
+    }
+    const rule = RO_RULE[r] || '', src = rule ? stats[rule] || {} : {};
+    rows.push({ r, type: 'item', no, text, part, unit, f: roPts(r, g), rule, src, auto: days.map(d => (rule && d <= td && src[d] && src[d].length ? src[d].length : null)) });
+  }
+  return roTotals({ code, ym, dr, prof: dr.prof, days, hol, td, rows, doc, head });
+}
+function roTotals(v) {
+  for (const x of v.rows) {
+    const ov = v.dr.cells[x.r] || {}, has = k => Object.prototype.hasOwnProperty.call(ov, k);
+    if (x.type === 'fixed') { x.val = has('n') ? jobNum(ov.n) : x.auto; x.am = round2((x.val || 0) * x.f); continue; }
+    if (x.type !== 'item') continue;
+    x.vals = x.auto.map((a, i) => (has(i + 1) ? jobNum(ov[i + 1]) : a));
+    x.al = x.vals.reduce((a, val) => a + (val || 0), 0);
+    x.am = round2(x.al * x.f);
+  }
+  const sum = p => round2(v.rows.filter(x => x.part === p && (x.type === 'item' || x.type === 'fixed')).reduce((a, x) => a + x.am, 0));
+  v.tot = { svc: sum('svc'), adm: sum('adm'), aca: sum('aca') };
+  v.tot.all = round2(v.tot.svc + v.tot.adm + v.tot.aca);
+  v.guar = +v.dr.prof.guar || 0;
+  v.diff = round2(v.tot.all - v.guar);
+  return v;
+}
+// แพทย์ที่แสดง: ตัวเอง · แอดมิน หัวหน้าทีมแพทย์ และบัญชี Google เลือกได้ทุกคน
+const roSel = { code: '' };
+function roTarget() {
+  const me = myDoctor(), all = !!state.user.isAdmin || state.user.via === 'google' || roHeadNow();
+  const list = all ? [...(me ? [me] : []), ...state.config.doctors.map(x => x.code).filter(c => c !== me)] : me ? [me] : [];
+  return { list, all, cur: list.includes(roSel.code) ? roSel.code : list[0] || '' };
+}
+let roCur = null;
+const roCanEdit = v => canEdit() && (roJobsOn() || store.mode === 'local') && (!!state.user.isAdmin || v.code === myDoctor());
+function roSumHtml(v) {
+  const card = (l, val, cls = '') => `<div class="${cls}"><small>${esc(l)}</small><b>${esc(val)}</b></div>`;
+  return [card('คะแนนแต้มประกัน', fmtN(v.guar)), card('งานบริการ', fmtN(v.tot.svc)), card('งานบริหาร', fmtN(v.tot.adm)), card('งานวิชาการ', fmtN(v.tot.aca)),
+    card('รวมคะแนนที่ทำได้', fmtN(v.tot.all)), card('ส่วนต่างคะแนน', (v.diff > 0 ? '+' : '') + fmtN(v.diff), v.diff < 0 ? 'neg' : 'pos')].join('');
+}
+function syncRoSave() {
+  const b = $('#ro-save'), d = roCur && roCur.dr;
+  b.textContent = d && d.dirty ? 'บันทึก •' : 'บันทึก';
+  b.disabled = !(d && d.dirty);
+}
+function renderRoP4p() {
+  const ym = state.month, tg = roTarget(), sel = $('#ro-who');
+  $('#ro-api').hidden = roJobsOn() || store.mode === 'local' || !canEdit();
+  sel.hidden = !tg.all;
+  if (tg.all) sel.innerHTML = tg.list.map(c => `<option value="${esc(c)}"${c === tg.cur ? ' selected' : ''}>${esc(c)}${docName(c) ? ' · ' + esc(docName(c)) : ''}</option>`).join('');
+  if (!tg.cur) {
+    roCur = null;
+    $('#ro-save').hidden = $('#ro-xlsx').hidden = true;
+    $('#ro-body').innerHTML = `<p class="notice"><b>ยังไม่มี P4P ให้แสดง</b><span>แถบนี้แสดง P4P ของแพทย์ที่เชื่อมบัญชีไว้ใน ตั้งค่า → ทีมงาน → แพทย์ · บัญชีของคุณยังไม่ได้เชื่อมกับแพทย์คนใด${state.user.role ? ` (ตำแหน่ง ${esc(state.user.role)})` : ''}</span></p>`;
+    return;
+  }
+  roSel.code = tg.cur;
+  const v = roCur = roView(tg.cur, ym), edit = roCanEdit(v), ro = edit ? '' : ' disabled', rec = roRec(v.code, ym), t = teamCfg(TEAM_RO);
+  $('#ro-xlsx').hidden = false;
+  $('#ro-save').hidden = !edit;
+  syncRoSave();
+  const head = `<div class="jobs-head"><h2>${esc(v.prof.name || docName(v.code) || v.code)} <small class="muted">${esc(v.code)}</small></h2><span class="muted">P4P แพทย์ · ${esc(fmtMonth(ym))}${rec ? ` · บันทึกล่าสุด ${esc(fmtStamp(isoStamp(rec.updated)) || '')}${rec.by ? ` โดย ${esc(rec.by)}` : ''}` : ' · ยังไม่ได้บันทึก'}</span>`
+    + `${v.head ? `<span class="chip" title="ตั้งค่า → ทีมงาน → แพทย์">${esc(t.head)}</span>` : ''}${edit || state.user.isAdmin ? '' : '<span class="chip">ดูอย่างเดียว</span>'}</div>`;
+  const prof = `<div class="jobs-box"><h3>หัวไฟล์ Excel</h3><div class="jobs-prof">
+      <label class="field"><span class="lbl">ชื่อ-สกุล (มีคำนำหน้า)</span><input data-roprof="name" value="${esc(v.prof.name)}" maxlength="120"${ro}></label>
+      <label class="field"><span class="lbl">ตำแหน่ง</span><input data-roprof="title" value="${esc(v.prof.title)}" maxlength="80"${ro}></label>
+      <label class="field"><span class="lbl">แต้มประกัน</span><input type="number" data-roprof="guar" value="${esc(v.prof.guar)}" min="0" step="1"${ro}></label>
+      <label class="field"><span class="lbl">แต้ม/นาที</span><input type="number" data-roprof="rate" value="${esc(v.prof.rate)}" min="0" step="0.001"${ro}></label></div></div>`;
+  const dayHead = v.days.map((d, i) => `<th class="jd${isWorkday(d, v.hol) ? '' : ' off'}${d === v.td ? ' today' : ''}" title="${esc(LONG_DAY_FMT.format(parseISO(d)) + (v.hol[d] ? ' · ' + v.hol[d] : ''))}">${i + 1}<small>${esc(WD_FMT.format(parseISO(d)).replace('.', ''))}</small></th>`).join('');
+  const span = v.days.length + 3;
+  const body = v.rows.map(x => {
+    if (x.type === 'head') return `<tr class="jp"><td class="jt" colspan="${span}">${esc(x.text)} <span class="muted" data-ropart="${x.part}">${fmtN(v.tot[x.part])} แต้ม</span></td></tr>`;
+    if (x.type === 'fixed') {
+      const ovr = Object.prototype.hasOwnProperty.call(v.dr.cells[x.r] || {}, 'n');
+      return `<tr data-rorow="${x.r}"><td class="jt">${x.no ? `${esc(x.no)}. ` : ''}${esc(x.text)}<small>${esc(fmtN(x.f))} แต้มต่อ${esc(x.unit || 'ครั้ง')} · <span class="jauto">อัตโนมัติ: ${esc(RO_RULE_TEXT.head)}</span> · ใส่จำนวนที่ช่องรวม</small></td>${v.days.map(d => `<td class="jd${isWorkday(d, v.hol) ? '' : ' off'}"></td>`).join('')}`
+        + `<td class="jsum"><input class="jc${ovr ? ' ovr' : x.auto != null ? ' auto' : ''}" data-ror="${x.r}" data-rod="n" value="${x.val == null ? '' : x.val}" inputmode="decimal" aria-label="${esc(x.text)} จำนวน"${ro}></td><td class="jsum" data-roam="${x.r}">${fmtN(x.am)}</td></tr>`;
+    }
+    if (x.part === 'aca' && !x.text && !x.al) return '';   // แถวว่างในแบบฟอร์ม (ตั้งชื่อได้ที่ ตั้งค่า → แถบงานอื่น → RO Jobs)
+    const meta = x.part === 'aca' ? `${x.unit || 'เวลาจริง'} · ${fmtN(x.min, 0)} นาที × ${fmtN(x.w, 3)} แต้ม/นาที = ${fmtN(x.f)} แต้มต่อครั้ง` : `${fmtN(x.f)} แต้มต่อครั้ง`;
+    const how = x.rule ? ` · <span class="jauto">อัตโนมัติ: ${esc(RO_RULE_TEXT[x.rule])}</span> · <button type="button" class="linkish jsrc-link" data-rosrc="${x.r}">ที่มา</button>` : ' · กรอกเอง';
+    const ov = v.dr.cells[x.r] || {};
+    const cells = v.days.map((d, i) => {
+      const val = x.vals[i], a = x.auto[i], ovr = Object.prototype.hasOwnProperty.call(ov, i + 1);
+      const tip = `${LONG_DAY_FMT.format(parseISO(d))}${a != null ? ` · นับได้ ${a}` : ''}${ovr ? ' · แก้เอง (ลบให้ว่าง = ใช้ค่าที่นับได้ ถ้ามี)' : ''}`;
+      return `<td class="jd${isWorkday(d, v.hol) ? '' : ' off'}"><input class="jc${ovr ? ' ovr' : val != null && a != null ? ' auto' : ''}" data-ror="${x.r}" data-rod="${i + 1}" value="${val == null ? '' : val}" inputmode="decimal" title="${esc(tip)}" aria-label="${esc(x.text)} วันที่ ${i + 1}"${ro}></td>`;
+    }).join('');
+    return `<tr data-rorow="${x.r}"><td class="jt">${x.no ? `${esc(x.no)}. ` : ''}${esc(x.text || '(ไม่มีชื่อ)')}<small>${esc(meta)}${how}</small></td>${cells}<td class="jsum" data-roal="${x.r}">${fmtN(x.al)}</td><td class="jsum" data-roam="${x.r}">${fmtN(x.am)}</td></tr>`;
+  }).join('');
+  const key = `<div class="jobs-key"><span><i style="background:var(--ok)"></i>ตัวเลขสีเขียว = นับจากข้อมูลในระบบ (ถึงวันนี้)</span><span><i style="background:var(--warn-soft);border:1px solid var(--warn)"></i>แก้เอง (ลบให้ว่าง = กลับไปใช้ค่าที่นับได้)</span><span>แต้มต่อครั้งและงานวิชาการแก้ได้ที่ ตั้งค่า → แถบงานอื่น → RO Jobs</span></div>`;
+  $('#ro-body').innerHTML = head + `<div class="jobs-sum" id="ro-sum">${roSumHtml(v)}</div><div class="jobs-side">${prof}</div>`
+    + `<div class="jobs-wrap"><table class="jobs-tbl ro-tbl"><thead><tr><th class="jt">รายละเอียดงาน</th>${dayHead}<th class="jsum">รวม</th><th class="jsum">ทำได้</th></tr></thead><tbody>${body}</tbody></table></div>` + key;
+}
+// พิมพ์ในช่อง: เท่าค่าที่นับได้ = ไม่เก็บ · ว่างในวันที่นับได้ = เก็บว่าง (ไม่นับ) · คำนวณผลรวมใหม่
+function roCellInput(el) {
+  const v = roCur;
+  if (!v) return;
+  const r = el.dataset.ror, dkey = el.dataset.rod, raw = str(el.value).trim(), row = v.rows.find(x => String(x.r) === r);
+  const ok = raw === '' || (/^\d+(\.\d+)?$/.test(raw) && +raw <= 999);
+  el.classList.toggle('bad', !ok);
+  if (!ok || !row) return;
+  const cells = v.dr.cells, ov = cells[r] || (cells[r] = {}), a = dkey === 'n' ? row.auto : row.auto[+dkey - 1];
+  if (raw === '' ? a == null : a != null && +raw === a) delete ov[dkey];
+  else ov[dkey] = raw === '' ? '' : +raw;
+  el.classList.toggle('ovr', Object.prototype.hasOwnProperty.call(ov, dkey));
+  el.classList.toggle('auto', !Object.prototype.hasOwnProperty.call(ov, dkey) && a != null);
+  if (!Object.keys(ov).length) delete cells[r];
+  v.dr.dirty = true;
+  roRecalc();
+  syncRoSave();
+}
+function roRecalc() {
+  const v = roTotals(roCur);
+  for (const x of v.rows) {
+    const set = (k, val) => { const el = $(`[data-${k}="${x.r}"]`); if (el) el.textContent = val; };
+    if (x.type === 'item') set('roal', fmtN(x.al));
+    if (x.type === 'item' || x.type === 'fixed') set('roam', fmtN(x.am));
+  }
+  for (const p of ['svc', 'adm', 'aca']) { const el = $(`[data-ropart="${p}"]`); if (el) el.textContent = `${fmtN(v.tot[p])} แต้ม`; }
+  $('#ro-sum').innerHTML = roSumHtml(v);
+}
+// ที่มาของคะแนน: ผู้ป่วยที่นับในแต่ละวัน
+function openRoSrc(r) {
+  const v = roCur, x = v && v.rows.find(y => String(y.r) === String(r));
+  if (!x || !x.rule) return;
+  const days = v.days.filter(d => x.src[d] && x.src[d].length);
+  $('#jsrc-title').textContent = `ที่มาของคะแนน · ${x.text}`;
+  $('#jsrc-body').innerHTML = `<p class="muted">${esc(RO_RULE_TEXT[x.rule])} · ${esc(v.code)} · ${esc(fmtMonth(v.ym))}</p>`
+    + (days.length ? `<div class="table-wrap"><table class="ro-src"><thead><tr><th>วันที่</th><th>นับได้</th><th style="text-align:left">ผู้ป่วย</th></tr></thead><tbody>${days.map(d => `<tr><td>${esc(fmtDay(d))}</td><td>${x.src[d].length}</td><td style="text-align:left">${x.src[d].map(p => `${esc(p.hn)} ${esc(p.name)}${p.note ? ` <small class="muted">(${esc(p.note)})</small>` : ''}`).join('<br>')}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="muted">เดือนนี้ยังไม่มีรายการที่นับได้</p>');
+  jsrcDlg.showModal();
+}
+// บันทึก: บันทึกใหม่ไม่ต้องใส่ PIN · บันทึกทับของเดิมต้องใส่ PIN
+function openRoPin() {
+  const v = roCur;
+  if (!v || !v.dr.dirty) return;
+  if (!roJobsOn() && store.mode !== 'local') return toast(RO_OLD, { err: true });
+  const rec = { ym: v.ym, doc: v.code, name: str(v.prof.name) || docName(v.code), prof: JSON.stringify(v.dr.prof), cells: JSON.stringify(v.dr.cells) };
+  pinCtx = { mode: 'rojobsave', rec, isNew: !roRec(v.code, v.ym), forgot: false, auto: true };
+  $('#pin-title').textContent = `บันทึก P4P แพทย์ · ${v.code} · ${fmtMonth(v.ym)}`;
+  $('#pin-what').innerHTML = `รวม ${esc(fmtN(v.tot.all))} แต้ม · ยืนยันด้วยรหัส PIN ของ <b>${esc(state.user.name || state.user.me || '')}</b>`;
+  $('#pin-val-field').hidden = true;
+  $('#pin-note-field').hidden = true;
+  $('#pin-clear').hidden = true;
+  syncPinForm();
+  if (pinSkipDialog('rojobsave')) return submitPin(null);
+  pinDlg.showModal();
+  firstPinInput().focus();
+}
+function roSaved(rec) {
+  const r = normRoJob(rec), list = state.roJobs || (state.roJobs = []), i = list.findIndex(x => x.id === r.id || (x.doc === r.doc && x.ym === r.ym));
+  if (i < 0) list.push(r); else list[i] = r;
+  delete roDrafts[roKey(r.doc, r.ym)];
+  renderRoJobs();
+  toast(`บันทึก P4P ${r.doc} · ${fmtMonth(r.ym)} แล้ว`);
+}
+$('#ro-body').addEventListener('input', e => {
+  const el = e.target;
+  if (el.matches('input.jc')) return roCellInput(el);
+  const v = roCur;
+  if (!v || !el.dataset.roprof) return;
+  v.dr.prof[el.dataset.roprof] = el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
+  v.dr.dirty = true;
+  roRecalc();
+  syncRoSave();
+});
+$('#ro-who').addEventListener('change', e => { roSel.code = e.target.value; renderRoP4p(); });
+$('#ro-save').addEventListener('click', openRoPin);
+$('#ro-xlsx').addEventListener('click', e => exportRo(e.currentTarget));
+// ส่งออก Excel แบบฟอร์มเดิม (แผ่นเดียวของเดือนนั้น ชื่อแผ่นแบบไฟล์เดิม เช่น พ.ย.69) · ใส่ผลรวมที่คำนวณไว้ในช่องสูตรด้วย (โปรแกรมดูไฟล์ที่ไม่คำนวณสูตรก็เห็นตัวเลข)
+const roFirstName = v => str(v).trim().replace(/^(นายแพทย์|แพทย์หญิง|นพ\.|พญ\.|นางสาว|นาง|นาย|น\.ส\.|ดร\.)\s{0,9}/, '').trim().split(/\s+/)[0] || '';
+const TH_MONTH_LONG = new Intl.DateTimeFormat('th-TH', { month: 'long' });
+async function roWorkbook(v) {
+  const files = await unzipParts(b64uBytes(RO_TPL)), dec = new TextDecoder(), enc = new TextEncoder(), txt = p => dec.decode(files[p]);
+  const [y, m] = v.ym.split('-').map(Number), mon = MON_FMT.format(new Date(y, m - 1, 1)), yy = String(y + 543).slice(-2), sheet = mon + yy;
+  const tok = { __NAME__: str(v.prof.name).replace(/\s+/g, ' ').trim() || docName(v.code) || v.code, __POS__: str(v.prof.title), __GUAR__: String(+v.prof.guar || 0), __RATE__: String(+v.prof.rate || 0),
+    __MONTH__: `${TH_MONTH_LONG.format(new Date(y, m - 1, 1))} ${y + 543}` };
+  files['xl/sharedStrings.xml'] = enc.encode(txt('xl/sharedStrings.xml').replace(/__[A-Z]+__/g, t => (t in tok ? xmlEsc(tok[t]) : t)));
+  files['xl/workbook.xml'] = enc.encode(txt('xl/workbook.xml').split('__SHEET__').join(xmlEsc(sheet)));
+  files['docProps/app.xml'] = enc.encode(txt('docProps/app.xml').split('__SHEET__').join(xmlEsc(sheet)));
+  const ps = xlSheet(txt(RO_MODEL.sheet)), cfg = state.config.roP4p, cached = {};
+  for (const x of v.rows) {
+    if (x.type === 'fixed') {
+      ps.set('AM' + x.r, x.val || null);
+      if (cfg.pts[x.r] !== undefined) ps.set('G' + x.r, x.f);
+      cached['AN' + x.r] = x.am;
+      continue;
+    }
+    if (x.type !== 'item') continue;
+    for (let i = 0; i < 31; i++) ps.set(xlCol(8 + i) + x.r, x.vals[i] || null);
+    if (x.part === 'aca') { ps.set('C' + x.r, x.text || null); ps.set('E' + x.r, x.text && x.min || null); ps.set('G' + x.r, x.text && x.w || null); }   // แถวว่าง = ว่างทั้งแถวเหมือนไฟล์เดิม
+    else if (cfg.pts[x.r] !== undefined) ps.set('G' + x.r, x.f);
+    cached['AM' + x.r] = x.al;
+    cached['AN' + x.r] = x.am;
+  }
+  Object.assign(cached, { AN4: v.tot.all, AN5: v.tot.svc, AN24: v.tot.adm, AN26: v.tot.aca });
+  let xml = ps.toString();
+  for (const [ref, val] of Object.entries(cached)) xml = xml.replace(new RegExp(`(<c r="${ref}"[^>]*>)(<f>[^<]*</f>)(?:<v>[^<]*</v>)?(</c>)`), `$1$2<v>${val}</v>$3`);
+  files[RO_MODEL.sheet] = enc.encode(xml);
+  const order = Object.keys(files).sort((a, b) => (a === '[Content_Types].xml' ? -1 : b === '[Content_Types].xml' ? 1 : 0));
+  return { blob: await zipParts(order.map(k => [k, files[k]])), sheet, file: `P4P แพทย์${roFirstName(tok.__NAME__) || v.code} ${mon.replace(/\./g, '')} ${yy}.xlsx` };
+}
+async function exportRo(btn) {
+  const v = roCur;
+  if (!v) return;
+  if (typeof DecompressionStream !== 'function') return toast('เบราว์เซอร์นี้สร้างไฟล์ Excel ไม่ได้ · ใช้ Chrome, Edge, Safari หรือ Firefox รุ่นใหม่', { err: true });
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้างไฟล์…';
+  try {
+    const { blob, file } = await roWorkbook(roTotals(v));
+    if (await saveBlob(blob, file)) toast(`ส่งออก P4P ${v.code} · ${fmtMonth(v.ym)} แล้ว`);
   } catch (e) { toast('ส่งออกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { btn.disabled = false; btn.textContent = label; }
 }
@@ -17710,18 +18073,40 @@ function renderSettings() {
   if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); }
   const d = draft, el = $('#view-settings');
   const ymNow = thisMonth();
+  // R9: ตำแหน่งในทีม หัวหน้า / ลูกน้อง แบบทีมนักฟิสิกส์ (มีผลตั้งแต่เดือนนี้ · เก็บประวัติ) · ใช้กับแพทย์และรายชื่อ RTT, RA และบุคลากรอื่น
+  const teamSel = (list, i, x, team) => { const t = teamCfg(team, d); return `<select class="pos team-pos" data-teamrole="${list}.${i}" aria-label="ตำแหน่งในทีมของ ${esc(x.name || x.code || '')}" title="${esc(teamHist(team, x, d) || 'ยังไม่เคยเปลี่ยนตำแหน่ง')}">${opt('staff', t.staff, teamRole(x, ymNow))}${opt('head', t.head, teamRole(x, ymNow))}</select>`; };
+
   const since = from => (from <= '2000-12' ? 'เริ่มต้น' : fmtMonth(from));
   // ตำแหน่งให้เลือก (ไม่รวม MP / RO ที่มีรายชื่อของตัวเอง) · บอกกลุ่ม RTT / RA ตาม ตั้งค่า → ตารางวันฉาย
   const grpOf = r => (d.dutyRoles.rtt.includes(r) ? 'RTT' : d.dutyRoles.ra.includes(r) ? 'RA' : '');
   const crewRoles = [...new Set([...d.roles, ...d.dutyRoles.rtt, ...d.dutyRoles.ra, ...(state.lpchDir ? state.lpchDir.roles : []), ...d.crew.map(x => x.role)])].filter(r => r && r !== 'MP' && r !== 'RO');
-  const crewRows = d.crew.map((x, i) => `<div class="set-row crew-row">
-      <span class="idx">${i + 1}</span>
+  // R9: แยกตามทีม (ตำแหน่งใน LPCH) · ตำแหน่งในทีม หัวหน้า / ลูกน้อง แบบทีมนักฟิสิกส์ (มีผลตั้งแต่เดือนนี้ · เก็บประวัติ)
+  const crewTeams = [...new Set(d.crew.map(x => x.role || ''))].sort(teamSort);
+  const crewRows = crewTeams.map(team => {
+    const ms = d.crew.map((x, i) => [x, i]).filter(([x]) => (x.role || '') === team), heads = ms.filter(([x]) => teamRole(x, ymNow) === 'head').map(([x]) => x.name);
+    return `<div class="team-grp" data-team="${esc(team)}"><h3 class="sub-h">ทีม${/^[A-Za-z]/.test(teamName(team)) ? ' ' : ''}${esc(teamName(team))} <small class="muted">${ms.length} คน${team ? ` · ${esc(teamCfg(team, d).head)}เดือนนี้: ${esc(heads.join(', ') || '—')}` : ''}</small></h3>` + ms.map(([x, i], j) => `<div class="set-row crew-row">
+      <span class="idx">${j + 1}</span>
       <input class="name" data-k="crew.${i}.name" value="${esc(x.name)}" maxlength="120" aria-label="ชื่อ-สกุล" placeholder="ชื่อ-สกุล">
       <select class="pos" data-k="crew.${i}.role" aria-label="ตำแหน่งของ ${esc(x.name || 'บุคลากร')}">${opt('', 'ไม่ระบุตำแหน่ง', x.role)}${crewRoles.map(r => opt(r, grpOf(r) && grpOf(r) !== r ? `${r} (${grpOf(r)})` : r, x.role)).join('')}</select>
+      ${team ? teamSel('crew', i, x, team) : ''}
       <label class="check"><input type="checkbox" data-k="crew.${i}.active"${x.active ? ' checked' : ''}> ปฏิบัติงาน</label>
-      <span class="btns"><button type="button" class="icon-btn" data-up="crew.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="crew.${i}" aria-label="ลบ ${esc(x.name)}">×</button></span>
+      <span class="btns"><button type="button" class="icon-btn" data-crewup="${i}|${j ? ms[j - 1][1] : ''}" aria-label="เลื่อนขึ้น"${j ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="crew.${i}" aria-label="ลบ ${esc(x.name)}">×</button></span>
       ${acctHtml('crew', i)}
-    </div>`).join('');
+    </div>`).join('') + '</div>';
+  }).join('');
+  // ตำแหน่งในทีม: ชื่อตำแหน่ง · หัวหน้าเดือนนี้ · เชื่อมกับ P4P ของทีม
+  const teamKeys = [TEAM_RO, ...new Set([...crewTeams.filter(Boolean), ...d.dutyRoles.rtt, ...d.dutyRoles.ra])].filter(k => ROLE_RE.test(k)).sort(teamSort);
+  const teamRows = teamKeys.map(k => {
+    const t = teamCfg(k, d), tv = d.teams[k] || { head: '', staff: '', guar: '', base: 0 }, grp = k === TEAM_RO ? '' : grpOf(k).toLowerCase(), list = k === TEAM_RO ? d.doctors : d.crew.filter(x => (x.role || '') === k);
+    const heads = list.filter(x => teamRole(x, ymNow) === 'head').map(x => (k === TEAM_RO ? x.code : x.name));
+    const link = k === TEAM_RO ? `P4P แพทย์ (RO Jobs): งานบริหาร "${esc((RO_MODEL.rows.find(x => x[4] === 'adm' && x[1] === 'item') || [])[3] || 'หัวหน้า')}" +${esc(fmtN(roPts(25, (RO_MODEL.rows.find(x => x[0] === 25) || [])[7])))} แต้มต่อเดือนอัตโนมัติ · เห็น P4P ของแพทย์ทุกคน`
+      : grp ? `RTT/RA Jobs: แต้มประกัน <input type="number" class="num" min="0" step="any" data-teamk="${esc(k)}|guar" value="${esc(tv.guar)}" placeholder="${esc(d.jobs[grp].guar)}" aria-label="แต้มประกันของ${esc(t.head)} ${esc(k)}" style="width:80px"> แต้มตั้งต้น <input type="number" class="num" step="any" data-teamk="${esc(k)}|base" value="${esc(tv.base)}" aria-label="แต้มตั้งต้นของ${esc(t.head)} ${esc(k)}" style="width:80px"> · เห็นภาระงานของทุกคนในทีม`
+        : '<span class="muted">ยังไม่มีแบบ P4P ของทีมนี้ (เก็บตำแหน่งไว้ใช้เมื่อมี)</span>';
+    return `<tr><td style="text-align:left"><b>${esc(teamName(k))}</b></td>
+      <td><input data-teamk="${esc(k)}|head" value="${esc(tv.head)}" placeholder="หัวหน้า" maxlength="60" aria-label="ชื่อตำแหน่งหัวหน้าทีม ${esc(teamName(k))}"></td>
+      <td><input data-teamk="${esc(k)}|staff" value="${esc(tv.staff)}" placeholder="ลูกน้อง" maxlength="60" aria-label="ชื่อตำแหน่งลูกน้องทีม ${esc(teamName(k))}"></td>
+      <td style="text-align:left" class="${heads.length ? '' : 'zero'}">${esc(heads.join(', ') || '–')}</td><td style="text-align:left">${link}</td></tr>`;
+  }).join('');
   const staffRows = d.staff.map((s, i) => {
     const cur = positionOf(s.code, ymNow, d).id;
     const hist = (s.roles || []).map(r => `${(d.positions.find(x => x.id === r.role) || { label: r.role }).label} ตั้งแต่ ${since(r.from)}`).join(' → ');
@@ -17742,6 +18127,7 @@ function renderSettings() {
       <input class="code" data-k="doctors.${i}.code" value="${esc(x.code)}" maxlength="6" aria-label="รหัสแพทย์" placeholder="รหัส" style="text-transform:uppercase;font-family:var(--mono)">
       ${colorPick(`doctors.${i}.color`, x.color, `สีของแพทย์ ${x.code || ''}`.trim())}
       <input class="name" data-k="doctors.${i}.name" value="${esc(x.name)}" aria-label="ชื่อ-สกุลแพทย์" placeholder="ชื่อ-สกุล (ไม่บังคับ)">
+      ${teamSel('doctors', i, x, TEAM_RO)}
       <span class="btns"><button type="button" class="icon-btn" data-up="doctors.${i}" aria-label="เลื่อนขึ้น"${i ? '' : ' disabled'}>↑</button><button type="button" class="icon-btn" data-del="doctors.${i}" aria-label="ลบแพทย์ ${esc(x.code)}">×</button></span>
       ${acctHtml('doctors', i)}
     </div>`).join('');
@@ -17880,6 +18266,9 @@ function renderSettings() {
       ${acctBar('crew')}
       <div class="set-list">${crewRows || '<p class="muted" style="margin:0">ยังไม่มีรายชื่อ · กดดึงรายชื่อจาก LPCH แล้วกด เพิ่ม หรือเพิ่มเอง</p>'}</div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="crew">+ เพิ่มรายชื่อ</button></div></div>
+    <div class="sec" data-sec="teams"><div class="sec-head"><h2>ตำแหน่งในทีม (หัวหน้า / ลูกน้อง)</h2><p>ทุกทีมเลือกตำแหน่งของแต่ละคนได้แบบทีมนักฟิสิกส์ (ช่องตำแหน่งหลังชื่อในรายชื่อด้านบน · มีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคงตำแหน่งเดิม) · ทีม = แพทย์ และตำแหน่งใน LPCH ของรายชื่อ RTT, RA และบุคลากรอื่น (RTT, RA, พยาบาล, Register, Refer …)
+      · หัวหน้าเชื่อมกับ P4P ของทีม: แพทย์ = งานบริหารในแบบเก็บภาระงานของแพทย์ (RO Jobs → P4P) · RTT / RA = แต้มประกัน / แต้มตั้งต้นในแบบฟอร์ม RTT/RA Jobs (ว่าง = ตามแบบฟอร์ม · แถวใน ตั้งค่า → RTT/RA Jobs → ตำแหน่งหัวหน้า มาก่อน) · หัวหน้าทีมเห็น P4P ของทุกคนในทีม (บันทึกได้เฉพาะของตัวเอง)</p></div>
+      <div class="table-wrap set-table"><table class="team-t"><thead><tr><th style="text-align:left">ทีม</th><th>ชื่อตำแหน่งหัวหน้า</th><th>ชื่อตำแหน่งลูกน้อง</th><th style="text-align:left">หัวหน้าเดือนนี้</th><th style="text-align:left">เชื่อมกับ P4P</th></tr></thead><tbody>${teamRows}</tbody></table></div></div>
     <div class="sec"><div class="sec-head"><h2>ตำแหน่งและแต้ม</h2><p>ทุกคนเริ่มเดือนที่แต้มประกัน (ติดลบ) บวกแต้มตั้งต้นของตำแหน่ง (ในไฟล์เดิมคือ "แต้มต่อ") แล้วบวกแต้มที่ทำได้ ถึง 0 คือครบแต้มประกัน · เปลี่ยนตำแหน่งมีผลตั้งแต่เดือนนี้ เดือนก่อนหน้าคิดตามตำแหน่งเดิม</p></div>
       <div class="table-wrap set-table"><table><thead><tr><th>ตำแหน่ง</th><th>แต้มประกัน/เดือน</th><th>แต้มตั้งต้น/เดือน</th><th>เริ่มเดือนที่</th><th style="text-align:left">เดือนนี้</th><th></th></tr></thead><tbody>${posRows}</tbody></table></div>
       <div style="margin-top:8px"><button type="button" class="btn ghost" data-add="position">+ เพิ่มตำแหน่ง</button></div></div>
@@ -18045,7 +18434,7 @@ function renderSettings() {
         <td><input type="number" class="num" min="0" step="0.001" data-k="jobs.${k}.rate" value="${esc(d.jobs[k].rate)}" aria-label="แต้มต่อนาที ${k.toUpperCase()}"></td>
         <td><input class="num" data-k="jobs.${k}.group" value="${esc(d.jobs[k].group)}" maxlength="20" aria-label="กลุ่มที่ ${k.toUpperCase()}"></td></tr>`).join('')}</tbody></table></div>
       <h3 class="sub-h">ตำแหน่งหัวหน้า (แต้มประกัน · แต้มตั้งต้น แบบ P4P ของ MP)</h3>
-      <p class="muted def-note" style="margin:0 0 10px">ส่วนต่างคะแนน = คะแนนที่ทำได้ + แต้มตั้งต้น − แต้มประกัน (เหมือนตำแหน่งหัวหน้าในแถบ P4P ของ MP) · แต้มประกันว่าง = ใช้ของแบบฟอร์ม / ของคนนั้น · เดือนว่าง = ทุกเดือน (เปลี่ยนหัวหน้า: ใส่ "ถึงเดือน" ของคนเดิม แล้วเพิ่มแถวคนใหม่) · ไฟล์ Excel ใส่แต้มประกันสุทธิ (แต้มประกัน − แต้มตั้งต้น)</p>
+      <p class="muted def-note" style="margin:0 0 10px">หัวหน้าทีม RTT / RA ที่เลือกใน ตั้งค่า → ทีมงาน ใช้แต้มของทีม (ตำแหน่งในทีม) เมื่อไม่มีแถวในตารางนี้ · ส่วนต่างคะแนน = คะแนนที่ทำได้ + แต้มตั้งต้น − แต้มประกัน (เหมือนตำแหน่งหัวหน้าในแถบ P4P ของ MP) · แต้มประกันว่าง = ใช้ของแบบฟอร์ม / ของคนนั้น · เดือนว่าง = ทุกเดือน (เปลี่ยนหัวหน้า: ใส่ "ถึงเดือน" ของคนเดิม แล้วเพิ่มแถวคนใหม่) · ไฟล์ Excel ใส่แต้มประกันสุทธิ (แต้มประกัน − แต้มตั้งต้น)</p>
       <div class="table-wrap set-table"><table class="jpos-t"><thead><tr><th style="text-align:left">ตำแหน่ง</th><th>แบบฟอร์ม</th><th style="text-align:left">ผู้ดำรงตำแหน่ง</th><th>ตั้งแต่เดือน</th><th>ถึงเดือน</th><th>แต้มประกัน</th><th>แต้มตั้งต้น</th><th>เริ่มต้น</th><th></th></tr></thead><tbody>${d.jobs.pos.map((x, i) => {
         const names = [...new Set([...(d.crew || []).filter(c => c.active && c.name).map(c => c.name), x.who].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th'));
         const g = x.guar === '' ? +d.jobs[x.kind].guar || 0 : +x.guar || 0;
@@ -18069,6 +18458,7 @@ function renderSettings() {
       <label class="field" style="max-width:420px;margin-top:12px"><span class="lbl">งานห้องฉาย: นับได้สูงสุดต่อวัน (ราย) <span class="sub-lbl">แต่ละข้อที่นับจากผู้ป่วยของห้อง (เอกสาร เทคนิค CBCT / Port Film เปลนั่ง เปลนอน) · 0 = ไม่จำกัด</span></span><input type="number" class="num" min="0" max="500" step="1" data-k="jobs.roomCap" value="${esc(d.jobs.roomCap)}" aria-label="งานห้องฉาย นับได้สูงสุดต่อวัน"></label>
       <div class="form-grid" style="margin-top:12px">${optEditor('jobs.sit', 'นับเป็นเปลนั่ง <span class="sub-lbl">รายละเอียดผู้ป่วย (ตารางวันฉาย) หรือสถานะผู้ป่วย (CT-SIM) ที่มีคำนี้</span>')}${optEditor('jobs.lie', 'นับเป็นเปลนอน / เปลนอน O2 <span class="sub-lbl">รายละเอียดหรือสถานะผู้ป่วยที่มีคำนี้</span>')}${optEditor('jobs.leaveTypes', 'ประเภทวันลา / กิจกรรม')}</div>
       ${vacSetHtml(d)}</div>
+    ${roSetHtml(d)}
     ${SRC_KEYS.map(k => srcSec(d, k)).join('')}
     ${fdSecHtml(d)}${colSecHtml(d)}
     <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>กติกาเดียวทุกแถบ ทุกงาน · ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบทุกครั้ง</p></div>
@@ -18166,8 +18556,8 @@ function renderSettings() {
 // ตั้งค่าแบ่งเป็นแถบย่อยตามหมวด (จำไว้ในเบราว์เซอร์) · ทั้งหมด = ทุกหัวข้อในหน้าเดียว · ค้นหา = หัวข้อที่มีคำนั้นจากทุกหมวด (รวมค่าในช่อง)
 // หัวข้ออยู่หมวดไหนดูจากชื่อหัวข้อ · หัวข้อใหม่ที่ไม่ตรงหมวดไหน = ระบบ
 const SET_TABS = [['team', 'ทีมงาน'], ['case', 'แจกเคส'], ['p4p', 'P4P และกิจกรรม'], ['room', 'ห้องฉาย'], ['tabs', 'แถบงานอื่น'], ['form', 'ฟอร์ม'], ['cols', 'Column แสดงผล'], ['sys', 'ระบบ'], ['all', 'ทั้งหมด']];
-const SET_RULES = [['form', /^ค่าเริ่มต้นของฟอร์ม/], ['cols', /^Column แสดงผล/], ['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
-  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RT Workflow|TDF Dose Calculator)/]];
+const SET_RULES = [['form', /^ค่าเริ่มต้นของฟอร์ม/], ['cols', /^Column แสดงผล/], ['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|ตำแหน่งในทีม|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
+  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RO Jobs|RT Workflow|TDF Dose Calculator)/]];
 let setQ = '';
 const secTab = sec => { if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; } return sec.dataset.stab; };
 const SUB_TABS = SET_TABS.filter(([k]) => k !== 'all');
@@ -18289,6 +18679,27 @@ function applySetTabs() {
 const settingsDirty = () => !!draft && JSON.stringify(draft) !== JSON.stringify(state.config);
 function updateSaveBar() { const b = $('#savebar'); if (b) b.hidden = !settingsDirty(); }
 const getPath = (obj, path) => path.split('.').reduce((o, k) => o[k], obj);
+// 18 พ.ย. (R9): ตั้งค่า → แถบงานอื่น → RO Jobs (P4P แพทย์): หัวไฟล์เริ่มต้น · แต้มต่อครั้ง · งานวิชาการ
+function roSetHtml(d) {
+  const rp = d.roP4p, items = RO_MODEL.rows.filter(x => x[1] === 'item');
+  const ptsRows = items.filter(x => x[4] !== 'aca').map(([r, , no, text, part, unit, , g]) => `<tr><td style="text-align:left">${esc(no)}. ${esc(text)}</td><td><input type="number" class="num" min="0" step="any" data-k="roP4p.pts.${r}" value="${esc(rp.pts[r] === undefined ? '' : rp.pts[r])}" placeholder="${esc(g)}" aria-label="แต้มต่อ${esc(unit || 'ครั้ง')} ${esc(text)}"></td>`
+    + `<td style="text-align:left" class="muted">${esc(part === 'adm' ? RO_RULE_TEXT.head : RO_RULE[r] ? RO_RULE_TEXT[RO_RULE[r]] : 'กรอกเอง')}</td></tr>`).join('');
+  const acaRows = items.filter(x => x[4] === 'aca').map(([r], i) => { const a = rp.aca[r] || { label: '', min: '', w: '' };
+    return `<tr><td>${i + 1}</td><td><input data-k="roP4p.aca.${r}.label" value="${esc(a.label)}" maxlength="80" aria-label="ชื่องานวิชาการข้อ ${i + 1}"></td><td><input type="number" class="num" min="0" step="1" data-k="roP4p.aca.${r}.min" value="${esc(a.min)}" aria-label="เวลา (นาที) ข้อ ${i + 1}"></td><td><input type="number" class="num" min="0" step="0.001" data-k="roP4p.aca.${r}.w" value="${esc(a.w)}" aria-label="แต้มต่อนาที ข้อ ${i + 1}"></td></tr>`; }).join('');
+  return `<div class="sec" data-sec="rojobs"><div class="sec-head"><h2>RO Jobs → P4P แพทย์ (แถบ ${esc(navLabel('rojobs'))})</h2><p>แบบเก็บภาระงานรายบุคคลของแพทย์ ตามไฟล์ Excel เดิม (ส่งออก Excel ได้รูปแบบเดียวกัน) · ตัวเลขรายวันที่ระบบนับให้ แพทย์แก้ทับได้ในแถบ · หัวหน้าทีมแพทย์ (ตั้งค่า → ทีมงาน → ตำแหน่งในทีม) ได้งานบริหารอัตโนมัติ</p></div>
+    <h3 class="sub-h">หัวไฟล์เริ่มต้น</h3>
+    <p class="muted def-note" style="margin:0 0 10px">ใช้กับเดือนแรกที่บันทึกของแพทย์แต่ละคน · เดือนถัดไปใช้ค่าล่าสุดของคนนั้น · แต่ละคนแก้ของตัวเองได้ในแถบ</p>
+    <div class="form-grid">
+      <label class="field"><span class="lbl">ตำแหน่ง</span><input data-k="roP4p.title" value="${esc(rp.title)}" maxlength="80"></label>
+      <label class="field"><span class="lbl">คะแนนแต้มประกัน</span><input type="number" class="num" min="0" step="1" data-k="roP4p.guar" value="${esc(rp.guar)}"></label>
+      <label class="field"><span class="lbl">คะแนนมาตรฐานตำแหน่ง (แต้ม/นาที)</span><input type="number" class="num" min="0" step="0.001" data-k="roP4p.rate" value="${esc(rp.rate)}"></label></div>
+    <h3 class="sub-h">แต้มต่อครั้ง (งานบริการ · งานบริหาร)</h3>
+    <p class="muted def-note" style="margin:0 0 10px">ว่าง = ตามไฟล์เดิม (ตัวเลขจาง)</p>
+    <div class="table-wrap set-table"><table><thead><tr><th style="text-align:left">งาน</th><th>แต้ม</th><th style="text-align:left">นับอัตโนมัติ</th></tr></thead><tbody>${ptsRows}</tbody></table></div>
+    <h3 class="sub-h">งานวิชาการ (ครั้ง × เวลา × แต้ม/นาที)</h3>
+    <p class="muted def-note" style="margin:0 0 10px">ชื่อว่าง = ไม่แสดงในแถบ (แถวว่างในไฟล์เดิม) · แพทย์กรอกจำนวนครั้งเองในแถบ</p>
+    <div class="table-wrap set-table"><table><thead><tr><th>ข้อ</th><th style="text-align:left">ชื่องาน</th><th>เวลา (นาที)</th><th>แต้ม/นาที</th></tr></thead><tbody>${acaRows}</tbody></table></div></div>`;
+}
 function setPath(obj, path, val) {
   const ks = path.split('.');
   let o = obj;
@@ -20376,6 +20787,7 @@ async function submitPin(e, clear) {
       return;
     }
     if (ctx.mode === 'jobsave') { const rec = await store.jobsSave(ctx.rec, pin); jobsSaved(rec); pinDlg.close(); return; }
+    if (ctx.mode === 'rojobsave') { const rec = await store.roJobsSave(ctx.rec, pin); roSaved(rec); pinDlg.close(); return; }
     if (ctx.mode === 'course') {
       const status = clear ? '' : ctx.status;
       let rec = null;
@@ -20878,6 +21290,7 @@ function renderRoJobs() {
   $('#ro-tabs').innerHTML = [['p4p', 'P4P'], ['leave', 'วันลา']].filter(([k]) => subVisible('rojobs').includes(k)).map(([k, l]) => `<button type="button" class="tab" role="tab" data-rotab="${k}" aria-selected="${t === k}">${l}</button>`).join('');
   $('#ro-p4p').hidden = t !== 'p4p';
   $('#ro-leave').hidden = t !== 'leave';
+  if (t === 'p4p') return renderRoP4p();
   if (t !== 'leave') return;
   $('[data-lvnew="ro"]').hidden = $('[data-lvoff="ro"]').hidden = !lvCanAdd('ro');
   $('#roleave-body').innerHTML = lvBody('ro');
@@ -21127,6 +21540,8 @@ document.addEventListener('click', e => {
   if (ds.viewas) { state.viewAs = ''; state.viewAsReal = null; pref.set('demoRole', ds.viewas); state.user = demoUser(); draft = null; render(); return refresh(true).then(() => render()); }   // โหลดใหม่: คำขอของแอดมินรองตามมุมมอง
   if (ds.histView) return openHist(t);   // ประวัติการบันทึก
   if (ds.jsrc !== undefined) return openJobSrc(ds.jsrc);   // RTT/RA Jobs: ที่มาของคะแนน
+  if (ds.rosrc !== undefined) return openRoSrc(ds.rosrc);   // RO Jobs → P4P แพทย์: ที่มาของคะแนน
+  if (ds.crewup) { const [a, b] = ds.crewup.split('|').map(Number); if (draft && draft.crew[a] && draft.crew[b]) { [draft.crew[a], draft.crew[b]] = [draft.crew[b], draft.crew[a]]; renderSettings(); } return; }   // R9: เลื่อนขึ้นในทีมเดียวกัน
   if (ds.failx !== undefined) { saveFails.splice(+ds.failx, 1); return renderSaveFails(); }
   if (t.id === 'dqe-back') return dqEditing && dqBack(dqEditing.id);
   if (t.id === 'logout') return logout();
@@ -22032,12 +22447,18 @@ settingsEl.addEventListener('drop', e => {
 settingsEl.addEventListener('dragend', () => { dragFrom = ''; dragClean(); });
 // แก้ค่าในหน้าตั้งค่า (ใช้ได้ทั้ง input และ change: เบราว์เซอร์บางตัว เช่น Safari รุ่นเก่า ไม่ส่ง input ตอนติ๊กช่อง)
 function settingsEdit(el) {
+  if (el.dataset.teamk) {   // R9: ตำแหน่งในทีม (แถวของทีมสร้างเมื่อแก้ครั้งแรก · เปิดหน้าเฉย ๆ ไม่นับว่าแก้)
+    const [k, f] = el.dataset.teamk.split('|'), t = draft.teams[k] || (draft.teams[k] = { head: '', staff: '', guar: '', base: 0 });
+    t[f] = el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
+    return updateSaveBar();
+  }
   if (el.dataset.k === 'security.idleMin' && el.value === 'custom') return;   // เลือก "กำหนดเอง…": รอกรอกชั่วโมง
   if (el.dataset.k) {
     let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : +el.value) : el.value;
     if (el.dataset.unit === 'h' && v !== '') v = Math.round(v * 60);   // ช่องกรอกเป็นชั่วโมง เก็บเป็นนาที
     if (el.dataset.k === 'defaults.dpf' && v !== '') v = +toGy(v);   // Dose/fx เริ่มต้น: กรอก cGy เก็บ Gy
     setPath(draft, el.dataset.k, el.dataset.k.endsWith('.code') ? String(v).toUpperCase().trim() : el.dataset.k.endsWith('.guarantee') && v !== '' ? Math.abs(v) : v);
+    if (/^crew\.\d+\.role$/.test(el.dataset.k) && el.tagName === 'SELECT') return renderSettings();   // R9: เปลี่ยนตำแหน่ง = ย้ายไปทีมนั้น
     const qaRow = /^qa\.(\w+)\./.exec(el.dataset.k);
     if (qaRow) {   // สีของค่า QA: อัปเดตเครื่องหมายและคำอธิบายของแถวนั้น
       const r = draft.qa[qaRow[1]];
@@ -22338,6 +22759,17 @@ settingsEl.addEventListener('change', e => {
   if (el.dataset.retype !== undefined) {   // ปุ่มเลือก = มีช่องตัวเลือก · ค่าเริ่มต้นเดิมใช้กับชนิดใหม่ไม่ได้
     setPath(draft, el.dataset.k, el.value);
     delete draft.defaults['x_' + getPath(draft, el.dataset.k.replace(/\.type$/, '')).id];
+    renderSettings();
+    return;
+  }
+  if (el.dataset.teamrole !== undefined) {
+    // R9: ตำแหน่งในทีม (หัวหน้า / ลูกน้อง) มีผลตั้งแต่เดือนนี้ เก็บของเดือนก่อนหน้าไว้ · ยังไม่เคยเป็นหัวหน้า = ไม่ต้องเก็บประวัติ
+    const [list, i] = el.dataset.teamrole.split('.'), x = draft[list] && draft[list][+i];
+    if (!x) return;
+    const roles = x.roles = x.roles || [], ym = thisMonth(), last = roles[roles.length - 1];
+    if (last && last.from === ym) last.role = el.value; else roles.push({ from: ym, role: el.value });
+    while (roles.length > 1 && roles[roles.length - 1].role === roles[roles.length - 2].role) roles.pop();
+    if (roles.length === 1 && roles[0].role === 'staff') x.roles = [];
     renderSettings();
     return;
   }
@@ -23555,6 +23987,7 @@ async function refresh(quiet) {
     state.see = take('see', state.see || [], normSee, x => isDay(x.date) && x.room);   // 18 พ.ย. (API 86): พบแพทย์วันนี้
     state.rtd = take('rtd', state.rtd || [], normRtd, x => isDay(x.date) && x.case);   // คำสั่งแพทย์ระหว่างฉาย
     state.visit = take('visit', state.visit || [], normVisit, x => isDay(x.date) && x.hn);   // 18 พ.ย. (API 90): พบแพทย์นอกตารางนัด
+    state.roJobs = take('roJobs', state.roJobs || [], normRoJob, x => /^\d{4}-\d{2}$/.test(x.ym) && x.doc);   // 18 พ.ย. (API 91): P4P แพทย์
     const tv = d.ver || {};
     state.tt = Object.fromEntries(Object.keys(tv).map(k => [k, same.has(k) && state.tt[k] ? state.tt[k] : d.now || '']));
     state.tv = { ...tv };
