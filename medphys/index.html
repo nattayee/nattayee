@@ -7327,7 +7327,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-18.3';
+const PAGE_VERSION = '2026-11-18.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -11883,7 +11883,9 @@ const csSrcTag = r => `<span class="cs-dq-src${r.desk ? ' ' + r.desk : ''}" titl
 const ontxDraft = new Map();
 function ontxForm(c) {
   const td = today(), dec = state.rtd.find(r => r.id === `${td}|${c.id}`), prev = dec || state.rtd.filter(r => r.case === c.id).sort((a, b) => b.date.localeCompare(a.date))[0];
-  return ontxDraft.get(c.id) || { kind: prev ? prev.kind : 'alone', rt: dec ? dec.rt : '', cmt: dec ? dec.cmt : '', note: dec ? dec.note : '' };
+  // 18 พ.ย. (R10): ค่าเริ่มต้น RT Alone = Continue RT · CCRT = Continue RT + Continue CMT (สั่งแล้ววันนี้ = ตามที่สั่ง)
+  const kind = prev ? prev.kind : 'alone';
+  return ontxDraft.get(c.id) || { kind, rt: dec ? dec.rt : 'continue', cmt: dec ? dec.cmt : kind === 'ccrt' ? 'continue' : '', note: dec ? dec.note : '' };
 }
 function ontxCard(x, edit) {
   const c = x.c, td = today(), dec = state.rtd.find(r => r.id === `${td}|${c.id}`), f = ontxForm(c);
@@ -17059,14 +17061,14 @@ const RO_TPL = "UEsDBBQAAAAIABgwcl37-XNzSwEAAI8EAAATAAAAW0NvbnRlbnRfVHlwZXNdLnht
 // วิธีนับของแต่ละแถว (แถวในแบบฟอร์ม → กติกา) · ไม่มี = กรอกเอง
 const RO_RULE = { 6: 'new', 7: 'fu', 9: 'chemo', 11: 'sim2d', 12: 'sim3d', 13: 'brachy', 20: 'contour', 21: 'eval' };
 const RO_RULE_TEXT = {
-  new: 'ผู้ป่วยที่แจกให้แพทย์คนนี้ในแถบแจกงานแพทย์ (วันที่แจก · ไม่นับที่ข้ามคิว)',
+  new: 'ผู้ป่วยของแพทย์ที่ทำ CT-SIM รวม Re-CT (แถบ CT-SIM · ไม่นับ CT ใส่แร่)',
   fu: 'ผู้ป่วยที่สั่ง Continue / Hold RT ในห้องตรวจ → ระหว่างฉาย และผู้ป่วยนอกตารางนัดที่กดพบแพทย์แล้ว (คนละครั้งต่อวัน)',
-  chemo: 'ผู้ป่วย CCRT ที่สั่งให้เคมีบำบัดต่อ (CMT Continue) ในห้องตรวจ → ระหว่างฉาย',
+  chemo: 'ผู้ป่วยที่กด Continue CMT ในห้องตรวจ → ระหว่างฉาย',
   sim2d: 'ผู้ป่วยของแพทย์ในแถบ CT-SIM ที่เป็นเทคนิค 2D',
   sim3d: 'ผู้ป่วยของแพทย์ในแถบ CT-SIM ที่ไม่ใช่ 2D (ไม่นับ CT ใส่แร่)',
   brachy: 'นัดใส่แร่ของแพทย์ (ไม่นับยกเลิก / ไม่มา)',
-  contour: 'เคสของแพทย์ที่ไม่ใช่ 2D นับวัน In (วันที่ส่งเคสให้ MP · ไม่นับส่งแก้แผน)',
-  eval: 'เคสของแพทย์ที่กด Evaluate วันนั้น',
+  contour: 'CT-SIM + Re-CT (แถบ CT-SIM) + CT ของ Brachytherapy (นัดคิวใส่แร่ · CT-SIM ที่เป็น HDR · ผู้ป่วยคนเดียวกันวันเดียวกันนับครั้งเดียว)',
+  eval: 'Evaluation ของ MP (เคสของแพทย์ที่กด Evaluate วันนั้น) + Brachytherapy (นัดใส่แร่ของแพทย์ ไม่นับยกเลิก / ไม่มา)',
   head: 'หัวหน้าทีมแพทย์ของเดือนนั้น (ตั้งค่า → ทีมงาน → แพทย์) = 1 ครั้ง',
 };
 function normRoJob(o) {
@@ -17097,25 +17099,36 @@ function roStats(code, ym) {
   const first = ym + '-01', last = monthEnd(ym), td = today(), out = {};
   const inM = d => isDay(d) && d >= first && d <= last && d <= td, mine = v => str(v).toUpperCase() === code;
   const add = (rule, d, k, hn, name, note) => { const m = out[rule] || (out[rule] = {}), l = m[d] || (m[d] = []); if (!l.some(x => x.k === k)) l.push({ k, hn: str(hn), name: str(name), note: note || '' }); };
-  for (const r of state.dq) if (mine(r.doc) && r.st !== 'skip' && inM(r.date)) add('new', r.date, r.id, r.hn, r.name, '');
   for (const r of state.rtd || []) {
     if (!mine(r.doc) || !inM(r.date)) continue;
     const k = 'hn:' + (str(r.hn) || r.case);
     add('fu', r.date, k, r.hn, r.name, r.rt === 'hold' ? 'Hold RT' : r.rt === 'continue' ? 'Continue' : '');
-    if (r.kind === 'ccrt' && r.cmt === 'continue') add('chemo', r.date, k, r.hn, r.name, 'CMT Continue');
+    if (r.cmt === 'continue') add('chemo', r.date, k, r.hn, r.name, 'Continue CMT');
   }
   for (const r of state.visit || []) if (mine(r.doc) && r.seen && inM(r.date)) add('fu', r.date, 'hn:' + str(r.hn), r.hn, r.name, 'นอกตารางนัด');
+  // CT ของ Brachytherapy: แถบ CT-SIM (ช่อง HDR) และนัดคิวใส่แร่ (CT / Re-CT ของนัด) · ผู้ป่วยคนเดียวกันวันเดียวกัน = จำนวนที่มากกว่า (ไม่นับซ้ำ)
+  const brCt = new Map(), br = (r, hn, name) => { const k = hnKey(hn) + '|' + r; if (!brCt.has(k)) brCt.set(k, { d: r, hn, name, sim: 0, bq: 0 }); return brCt.get(k); };
   for (const r of state.ct) {
-    if (!mine(r.doc) || !inM(r.date) || str(r.hdr)) continue;
-    const t = splitList(r.cats).map(id => jobTechOf(id, r.tech)).find(Boolean) || (r.tech ? jobTechOf('', r.tech) : '');
+    if (!mine(r.doc) || !inM(r.date)) continue;
+    if (str(r.hdr)) { br(r.date, r.hn, r.name).sim++; continue; }
+    const t = splitList(r.cats).map(id => jobTechOf(id, r.tech)).find(Boolean) || (r.tech ? jobTechOf('', r.tech) : ''), re = /Re-?CT/i.test(r.note) ? 'Re-CT' : 'CT-SIM';
+    add('new', r.date, r.id, r.hn, r.name, re);
     add(t === '2D' ? 'sim2d' : 'sim3d', r.date, r.id, r.hn, r.name, t);
+    add('contour', r.date, r.id, r.hn, r.name, re);
   }
-  for (const a of state.bq) if (mine(a.doc) && bqLive(a) && inM(a.date)) add('brachy', a.date, a.id, a.hn, a.name, a.tech || '');
+  for (const a of state.bq) {
+    if (!mine(a.doc) || !bqLive(a) || !inM(a.date)) continue;
+    const fx = a.fx ? ` Fx ${a.fx}${a.total ? '/' + a.total : ''}` : '';
+    add('brachy', a.date, a.id, a.hn, a.name, a.tech || '');
+    add('eval', a.date, 'bq:' + a.id, a.hn, a.name, 'Brachytherapy' + fx);
+    const n = bqCtPairs(a).length;
+    if (n) br(a.date, a.hn, a.name).bq += n;
+  }
+  for (const [k, o] of brCt) for (let i = 0; i < Math.max(o.sim, o.bq); i++) add('contour', o.d, `br:${k}:${i}`, o.hn, o.name, 'CT ใส่แร่');
   for (const c of state.cases) {
     if (!mine(c.doc)) continue;
-    if (inM(c.in) && !c.replan && catOf(c.cat).kind !== 'simple' && jobTechOf(c.cat, c.tech) !== '2D') add('contour', c.in, c.id, c.hn, c.name, catOf(c.cat).label);
     const ev = str(c.eval).slice(0, 10);
-    if (inM(ev)) add('eval', ev, c.id, c.hn, c.name, catOf(c.cat).label);
+    if (inM(ev)) add('eval', ev, c.id, c.hn, c.name, 'Evaluate · ' + catOf(c.cat).label);
   }
   return out;
 }
@@ -21576,7 +21589,7 @@ document.addEventListener('click', e => {
   if (ds.viewasSum) { viewAsSum = !viewAsSum; return renderViewAs(); }
   if (ds.speed) return renderSettings();   // ตั้งค่า → ความเร็ว: อ่านรายการล่าสุด
   if (ds.cstab) { pref.set('csTab', ds.cstab); return renderConsult(); }   // 18 พ.ย.: ห้องตรวจ แถบย่อย
-  if (ds.ontxk) { const c = state.cases.find(x => x.id === ds.ontxc); if (c) { const f = { ...ontxForm(c), [ds.ontxk]: ds.ontxv }; if (ds.ontxk === 'kind' && ds.ontxv === 'alone') f.cmt = ''; ontxDraft.set(c.id, f); renderOntx(); } return; }
+  if (ds.ontxk) { const c = state.cases.find(x => x.id === ds.ontxc); if (c) { const f = { ...ontxForm(c), [ds.ontxk]: ds.ontxv }; if (ds.ontxk === 'kind' && ds.ontxv === 'alone') f.cmt = ''; if (ds.ontxk === 'kind' && ds.ontxv === 'ccrt' && !f.cmt) f.cmt = 'continue'; if (!f.rt) f.rt = 'continue'; ontxDraft.set(c.id, f); renderOntx(); } return; }
   if (ds.ontxsave) return ontxSave(ds.ontxsave, t);
   if (ds.nursetab) { pref.set('nurseTab', ds.nursetab); return renderNurse(); }   // 18 พ.ย.: แถบย่อยของ Nurse
   if (ds.nurseord) { nurseOrdOpen = !nurseOrdOpen; return renderNurse(); }
