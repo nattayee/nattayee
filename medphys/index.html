@@ -2565,6 +2565,18 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .set-row.doc-row{grid-template-columns:30px 84px 118px minmax(0,1fr) 130px auto;grid-template-areas:"idx code color name tpos btns" ". acct acct acct acct ."}
 .set-row .pos.team-pos{grid-area:tpos}   /* R9: ตำแหน่งในทีม (หัวหน้า / ลูกน้อง) */
 .team-grp + .team-grp{margin-top:14px}
+/* R11: Nurse → นัดพบแพทย์ */
+.see-box{margin:14px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.see-box > summary{cursor:pointer;padding:10px 14px;list-style:revert}
+.see-box[open] > summary{border-bottom:1px solid var(--line)}
+.see-box > :not(summary){margin-left:12px;margin-right:12px}
+.see-aptools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.see-aproom h4{margin:8px 14px 2px;font-size:13px}
+.see-ap{display:inline-flex;align-items:center;gap:2px;font-size:12px;padding:1px 4px 1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap}
+.see-ap.seen{background:var(--ok-soft,#e6f4ea);color:var(--ok)}
+.see-ap .icon-btn{width:20px;height:20px;font-size:13px}
+.see-apbtn{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto}
+.see-apbtn input[type=date]{width:auto;padding:3px 6px;font-size:12.5px}
 @media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". tpos tpos" ". acct acct"}
   .set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". tpos tpos tpos" ". acct acct acct"}}
 .bq-sign.old{opacity:.6}
@@ -2723,7 +2735,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
       <div class="acct" id="home-slot"></div>
       <button type="button" class="theme-btn dc-btn" id="deptcal-btn" data-view="deptcal" hidden aria-pressed="false" aria-label="ปฏิทินแผนก" title="ปฏิทินแผนก (Department calendar) · วันลาของทุกแถบและกิจกรรมของแผนก"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"></rect><path d="M16 2.5v4M8 2.5v4M3 10h18"></path><path d="M7.5 14h2M11 14h2M14.5 14h2M7.5 17.5h2M11 17.5h2"></path></svg></button>
       <button type="button" class="theme-btn dc-btn" id="flow-btn" data-view="flow" hidden aria-pressed="false" aria-label="RT Workflow" title="Radiation Therapy Workflow · ผู้ป่วยวันนี้อยู่ขั้นตอนไหน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="15.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="9" y="14.5" width="6" height="6" rx="1.5"/><path d="M8.5 6.5h7M5.5 9.5v2.5a1.5 1.5 0 0 0 1.5 1.5h2M18.5 9.5v2.5a1.5 1.5 0 0 1-1.5 1.5h-2"/></svg></button>
-      <button type="button" class="theme-btn" id="search-btn" aria-label="ค้นหาเคส" title="ค้นหาเคส (กด /)"></button>
+      <button type="button" class="theme-btn" id="search-btn" aria-label="ค้นหาผู้ป่วย (RT Workflow)" title="ค้นหาผู้ป่วยแบบ RT Workflow (กด /)"></button>
       <button type="button" class="theme-btn look-btn" id="look-btn" popovertarget="look-pop" title="ขนาดตัวอักษรและสีของเว็บ" aria-label="ขนาดตัวอักษรและสีของเว็บ">Aa</button>
       <button type="button" class="theme-btn" id="theme-btn"></button>
       <nav class="nav" aria-label="เมนู">
@@ -6640,6 +6652,7 @@ const DEFAULT_CONFIG = {
   ptags: ['NPO', 'BD protocol', 'Empty BD'],
   roles: LPCH_ROLES.slice(),   // ตำแหน่งที่ตั้งสิทธิ์รายแถบได้ (ตั้งค่า → แถบเมนู)
   fxAdj: { roles: ['MP'] },   // ตำแหน่งที่ เพิ่ม / ลบ fraction ได้ (สถานะ fraction ในตารางวันฉาย)
+  seeTbl: 'collapse',   // 18 พ.ย. (R11): Nurse → นัดพบแพทย์ ตารางพบแพทย์รายสัปดาห์ show = เปิดไว้ · collapse = ยุบ (กดเปิดเอง) · hide = ซ่อน (แอดมินหลัก)
   // ชื่อระบบและบรรทัดรองมุมซ้ายบน (แอดมินแก้ได้ที่ ตั้งค่า → ชื่อระบบและโลโก้)
   appName: 'Treatment Planning Management',
   appSub: 'กลุ่มงานรังสีรักษา · โรงพยาบาลมะเร็งลำปาง',
@@ -7075,6 +7088,7 @@ function mergeConfig(c) {
   }
   out.fxSeen = d.fxTypes.map(t => t.id);
   const fa = c.fxAdj && typeof c.fxAdj === 'object' ? c.fxAdj : {};
+  out.seeTbl = ['show', 'collapse', 'hide'].includes(c.seeTbl) ? c.seeTbl : d.seeTbl;
   out.fxAdj = { roles: Array.isArray(fa.roles) ? [...new Set(fa.roles.map(str).filter(r => ROLE_RE.test(r)))] : d.fxAdj.roles.slice() };
   if (!c.cpTreat) { const cp = out.fxTypes.find(x => x.id === 'cp'); if (cp && cp.act === 'skip') cp.act = 'treat'; }   // CP รุ่นแรก (ไม่ได้ฉาย) → ฉายวันนั้น
   out.cpTreat = true;
@@ -7327,7 +7341,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-18.4';
+const PAGE_VERSION = '2026-11-18.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9098,6 +9112,13 @@ function caseStatus(c) {
 const SEARCH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>';
 const searchDlg = $('#search-dlg');
 function openSearch() {
+  // 18 พ.ย. (R11): ผลลัพธ์เดียวกับช่องค้นหาของ RT Workflow · เปิด RT Workflow แล้ววางเคอร์เซอร์ที่ช่องค้นหา (เปิดแถบนั้นไม่ได้ = หน้าต่างค้นหาเคสแบบเดิม)
+  if (navOn('flow') && !$('#flow-btn').hidden) {
+    if (state.view !== 'flow') { state.view = 'flow'; pref.set('view', 'flow'); draft = null; render(); }
+    const q = $('[data-tq="flow"]');
+    if (q) { q.focus(); q.select(); }
+    return;
+  }
   if (searchDlg.open) return $('#sq').select();
   searchDlg.showModal();
   $('#sq').select();
@@ -11895,7 +11916,7 @@ function ontxCard(x, edit) {
   const rcAp = state.appt.filter(a => hnKey(a.hn) === hnKey(c.hn) && apState(a) !== 'skip' && /\bRe-CT/i.test(a.note) && localDay(a.created) >= plusDays(td, -30)).sort((a, b) => b.created.localeCompare(a.created))[0];
   const rectBtn = apptOn() && apEditVia('consult') ? `<button type="button" class="btn sm ontx-rect" data-ontxrect="${esc(c.id)}" title="Re-CT: ลง CT Order ใหม่ของผู้ป่วยนี้ (ฟอร์มเดียวกับ + CT Order)">Re-CT</button>` : '';
   return `<li class="ontx-card" data-ontx="${esc(c.id)}">
-    <div class="ontx-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')} <span class="muted">· ห้อง ${esc(roomLabel(x.room))}${x.hold ? '' : ` · ${esc(x.st.short || x.st.t)}`}</span>${x.see ? '<span class="ontx-tag see">พบแพทย์วันนี้</span>' : ''}${x.visit ? `<span class="ontx-tag walk" title="${esc([x.visit.note, `ส่งโดย ${x.visit.by}`].filter(Boolean).join(' · '))}">นอกตารางนัด${x.visit.note ? ` · ${esc(x.visit.note)}` : ''}</span>` : ''}${st}${rcAp ? `<span class="ontx-tag rect" title="${esc(rcAp.note)}">Re-CT: ลง CT Order แล้ว ${esc(isDay(rcAp.date) ? `นัด CT ${fmtDay(rcAp.date)}` : 'นัด CT on call')}</span>` : ''}</div>
+    <div class="ontx-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')} <span class="muted">· ห้อง ${esc(roomLabel(x.room))}${x.hold ? '' : ` · ${esc(x.st.short || x.st.t)}`}</span>${x.see ? '<span class="ontx-tag see">พบแพทย์วันนี้</span>' : ''}${x.visit ? `<span class="ontx-tag walk" title="${esc([x.visit.note, `ส่งโดย ${x.visit.by}`].filter(Boolean).join(' · '))}">${visitTag(x.visit)}${x.visit.note && x.visit.note !== VISIT_APPT ? ` · ${esc(x.visit.note)}` : ''}</span>` : ''}${st}${rcAp ? `<span class="ontx-tag rect" title="${esc(rcAp.note)}">Re-CT: ลง CT Order แล้ว ${esc(isDay(rcAp.date) ? `นัด CT ${fmtDay(rcAp.date)}` : 'นัด CT on call')}</span>` : ''}</div>
     ${dec ? `<div class="ontx-dec">สั่งแล้ว: <b>${esc(decText(dec))}</b>${dec.note ? ` · ${esc(dec.note)}` : ''} · ${esc(dec.by)} ${esc(whenText(dec.at))} · ${dec.nurse ? `<span class="nurse-ok">Nurse ยืนยันแล้ว (${esc(dec.nurseBy)})</span>` : 'รอ Nurse ยืนยัน'}</div>` : ''}
     ${edit ? `<div class="ontx-form">${seg('kind', [['alone', 'RT Alone'], ['ccrt', 'CCRT']], f.kind, 'ชนิดการรักษา')}${seg('rt', [['continue', 'Continue RT'], ['hold', 'Hold RT']], f.rt, 'RT')}${f.kind === 'ccrt' ? seg('cmt', [['continue', 'Continue CMT'], ['hold', 'Hold CMT']], f.cmt, 'CMT') : ''}
       <input class="ontx-note" data-ontxnote="${esc(c.id)}" value="${esc(f.note)}" maxlength="500" placeholder="หมายเหตุ (ไม่บังคับ)" aria-label="หมายเหตุ HN ${esc(c.hn)}">
@@ -11924,6 +11945,9 @@ const VISIT_OLD = 'พบแพทย์นอกตารางนัดต้�
 const VISIT_KEYS = ['id', 'date', 'hn', 'name', 'doc', 'note', 'by', 'at', 'seen', 'seenBy'];
 function normVisit(o) { const r = {}; for (const k of VISIT_KEYS) r[k] = str(o[k]); r.date = dateStr(r.date); r.doc = r.doc.toUpperCase(); return r; }
 const vsDlg = $('#vs-dlg');
+// 18 พ.ย. (R11): นัดพบแพทย์ล่วงหน้าจากรายชื่อผู้ป่วยระหว่างฉาย (Nurse → นัดพบแพทย์) = รายการพบแพทย์ที่ Note "นัดพบแพทย์"
+const VISIT_APPT = 'นัดพบแพทย์';
+const visitTag = v => (v && v.note === VISIT_APPT ? 'นัดพบแพทย์' : 'นอกตารางนัด');
 let vsEditing = null;
 function openVisit(id) {
   if (accessOf('nurse') !== 'edit') return toast(RO_MSG, { err: true });
@@ -12011,7 +12035,7 @@ function ontxAll() {
 function visitCard(v) {
   const seen = !!v.seen, can = accessOf('consult') === 'edit' && visitOn();
   return `<li class="ontx-card" data-visit="${esc(v.id)}">
-    <div class="ontx-who"><b class="hn">${esc(v.hn)}</b> ${esc(v.name)} <span class="ontx-tag walk">นอกตารางนัด</span>${seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)} ${esc(whenText(v.seen))}</span>` : ''}</div>
+    <div class="ontx-who"><b class="hn">${esc(v.hn)}</b> ${esc(v.name)} <span class="ontx-tag walk">${visitTag(v)}</span>${seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)} ${esc(whenText(v.seen))}</span>` : ''}</div>
     <div class="ontx-dec">${v.note ? `เหตุผล: <b>${esc(v.note)}</b> · ` : ''}ส่งโดย ${esc(v.by)} ${esc(whenText(v.at))} · ไม่ได้ฉายอยู่ (ไม่มีคำสั่ง Continue / Hold)</div>
     ${can ? `<div class="ontx-form"><button type="button" class="btn ${seen ? 'ghost' : 'primary'} sm" data-vsmark="${esc(v.id)}" data-on="${seen ? '' : 1}">${seen ? 'ยกเลิก (ยังไม่ได้พบ)' : 'พบแพทย์แล้ว'}</button></div>` : ''}
   </li>`;
@@ -12045,6 +12069,7 @@ async function ontxSave(caseId, btn) {
   } catch (e) { toast('บันทึกคำสั่งไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { if (btn && btn.isConnected) btn.disabled = false; }
 }
+$('#nurse-body').addEventListener('toggle', e => { if (e.target.matches && e.target.matches('[data-seebox]')) pref.set('seeTblOpen', e.target.open); }, true);
 $('#cs-ontx').addEventListener('input', e => { const id = e.target.dataset.ontxnote; if (!id) return; const c = state.cases.find(x => x.id === id); if (c) ontxDraft.set(id, { ...ontxForm(c), note: e.target.value }); });
 // แถบ Nurse: ยืนยัน (บันทึกผู้ยืนยัน เวลา) · ยกเลิกได้ · 18 พ.ย. (รอบ 2): แถบย่อยต่องาน (ผู้ใช้จัดลำดับเอง) · จัดกลุ่มตามแพทย์ · กรองแพทย์ · เรียงลำดับ
 const NURSE_SORTS = [['old', 'วันที่ เก่า → ใหม่'], ['new', 'วันที่ ใหม่ → เก่า'], ['hn', 'HN'], ['name', 'ชื่อ']];
@@ -12167,7 +12192,7 @@ function renderSeeWeek(words) {
       return `<td class="${d === seeDay ? 'sel' : ''}${hol[d] ? ' hol' : ''}"><label class="see-cell${on ? ' on' : ''}${dirty ? ' draft' : ''}${n ? '' : ' see-zero'}" title="${esc(code)} · ${esc(roomLabel(room))} · ${esc(fmtDay(d))} · ผู้ป่วยฉายวันนั้น ${n} คน"><input type="checkbox" data-sd="${d}" data-sr="${esc(room)}" data-sc="${esc(code)}"${on ? ' checked' : ''}${edit ? '' : ' disabled'} aria-label="${esc(code)} ห้อง ${esc(roomLabel(room))} ${esc(fmtDay(d))}"><small>${n || '–'}</small></label></td>`;
     }).join('')}</tr>`).join('')).join('');
   const nDirty = seeDraft.size, vedit = accessOf('nurse') === 'edit' && r8On() && visitOn();
-  const nav = `<div class="see-nav"><div class="month-nav"><button type="button" data-seewk="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-seewk="1" aria-label="สัปดาห์ถัดไป">›</button></div><button type="button" class="btn ghost sm" data-seewk="0"${mon === weekMon(td) ? ' disabled' : ''}>สัปดาห์นี้</button><label class="muted" style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" data-seeall="1"${showAll ? ' checked' : ''}> แสดงแพทย์ทุกคน</label>${vedit ? '<button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในตารางพบแพทย์ · ส่งไปรอที่ห้องตรวจ">+ พบแพทย์นอกตารางนัด</button>' : ''}`
+  const nav = `<div class="see-nav"><div class="month-nav"><button type="button" data-seewk="-1" aria-label="สัปดาห์ก่อน">‹</button><span class="month-label">${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}</span><button type="button" data-seewk="1" aria-label="สัปดาห์ถัดไป">›</button></div><button type="button" class="btn ghost sm" data-seewk="0"${mon === weekMon(td) ? ' disabled' : ''}>สัปดาห์นี้</button><label class="muted" style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" data-seeall="1"${showAll ? ' checked' : ''}> แสดงแพทย์ทุกคน</label>`
     + (nDirty ? `<span class="see-save" role="status">แก้ไว้ ${nDirty} ช่อง (วัน·ห้อง) ยังไม่บันทึก<button type="button" class="btn primary sm" data-seesave="1">บันทึก</button><button type="button" class="btn ghost sm" data-seeundo="1">ยกเลิก</button></span>` : '') + '</div>';
   // รายชื่อผู้ป่วยของวันที่เลือก: ห้อง → แพทย์ที่ติ๊ก
   const hit = c => !words.length || wordsIn(words, `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)}`.toLowerCase());
@@ -12179,14 +12204,64 @@ function renderSeeWeek(words) {
   const tot = groups.reduce((n, x) => n + x.cs.length, 0);
   // พบแพทย์นอกตารางนัดของวันที่เลือก
   const vs = (state.visit || []).filter(v => v.date === seeDay && (!words.length || wordsIn(words, `${v.hn} ${v.name} ${v.doc} ${docName(v.doc)}`.toLowerCase()))).sort((a, b) => str(a.at).localeCompare(str(b.at)));
-  const vsHtml = vs.length || vedit ? `<section class="nurse-sec"><h3>พบแพทย์นอกตารางนัด · ${esc(fmtDay(seeDay))} <span class="muted">(${vs.length})</span></h3><p>ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย ตามแพทย์ที่เลือก${vedit ? ' · เพิ่มด้วยปุ่ม "+ พบแพทย์นอกตารางนัด" ด้านบน' : ''}</p>
+  const vsHtml = vs.length || vedit ? `<section class="nurse-sec"><h3>นัดพบแพทย์ / พบแพทย์นอกตารางนัด · ${esc(fmtDay(seeDay))} <span class="muted">(${vs.length})</span></h3><p>ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย ตามแพทย์ที่เลือก${vedit ? ' · เพิ่มด้วยปุ่ม "+ พบแพทย์นอกตารางนัด" ด้านบน' : ''}</p>
     ${vs.length ? `<ul class="nurse-list">${vs.map(v => `<li><span class="nurse-who"><b class="hn">${esc(v.hn)}</b> ${esc(v.name)} · ${docChip(v.doc)} ${esc(docName(v.doc) || v.doc)}<small>${[v.note, `ส่งโดย ${v.by} ${whenText(v.at)}`].filter(Boolean).map(esc).join(' · ')}</small></span>${v.seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว</span>` : '<span class="muted" style="font-size:12.5px">รอพบแพทย์</span>'}${vedit ? `<button type="button" class="btn ghost sm" data-vsedit="${esc(v.id)}">แก้ไข</button><button type="button" class="btn ghost sm" data-vsdel="${esc(v.id)}">ยกเลิก</button>` : ''}</li>`).join('')}</ul>` : '<p class="muted" style="margin:4px 0">ยังไม่มี</p>'}</section>` : '';
   const list = groups.length ? groups.map(x => `<details class="ontx-g nurse-g${x.code === me ? ' mine' : ''}" open><summary>${esc(roomLabel(x.room))} · ${docChip(x.code)} ${esc(docName(x.code) || x.code)} <span class="n">${x.cs.length} คน</span></summary>${x.cs.length ? `<ul class="nurse-list">${x.cs.map(c => `<li><span class="nurse-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')}<small>${[c.sim && `Start RT ${fmtDay(c.sim)}`, c.fx && `${c.fx} Fx`, c.dx && c.dx].filter(Boolean).map(esc).join(' · ')}</small></span></li>`).join('')}</ul>` : '<p class="muted" style="margin:0 14px 10px">ไม่มีผู้ป่วยของแพทย์ท่านนี้ฉายในห้องนี้วันนั้น</p>'}</details>`).join('')
     : `<section class="nurse-sec"><p class="muted" style="margin:4px 0">วันนี้ยังไม่ได้ติ๊กแพทย์ในห้องใด · ติ๊กช่องในตารางด้านบน</p></section>`;
   const old = store.mode === 'sheet' && !seeWkOn() ? `<p class="notice"><b>ยังบันทึกไม่ได้</b><span>${esc(SEE_WK_OLD)}</span></p>` : '';
-  box.innerHTML = old + `<h3 class="ontx-h">ตารางพบแพทย์<small>ติ๊กว่าแต่ละห้องฉาย ผู้ป่วยของแพทย์คนไหนต้องพบแพทย์วันไหน (ตัวเลข = ผู้ป่วยที่ฉายในห้องนั้นวันนั้นตามตารางวันฉาย) · ติ๊กได้หลายช่องแล้วกดบันทึก · แก้ช่องที่บันทึกแล้วต้องใส่ PIN · วันนี้: ผู้ป่วยไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย</small></h3>`
+  const mode = state.config.seeTbl, tblOpen = mode === 'show' ? pref.get('seeTblOpen', true) !== false : !!pref.get('seeTblOpen', false);
+  const tbl = mode === 'hide' ? '' : `<details class="see-box" data-seebox="1"${tblOpen ? ' open' : ''}><summary><b>ตารางพบแพทย์รายสัปดาห์</b> <span class="muted">ห้องฉาย × แพทย์ × วัน · ${esc(fmtDay(days[0]))} – ${esc(fmtDay(days[days.length - 1]))}${nDirty ? ` · แก้ไว้ ${nDirty} ช่องยังไม่บันทึก` : ''}</span></summary>`;
+  box.innerHTML = old + seeApptHtml(words, vedit) + vsHtml + tbl + (mode === 'hide' ? '' : `<h3 class="ontx-h">ตารางพบแพทย์<small>ติ๊กว่าแต่ละห้องฉาย ผู้ป่วยของแพทย์คนไหนต้องพบแพทย์วันไหน (ตัวเลข = ผู้ป่วยที่ฉายในห้องนั้นวันนั้นตามตารางวันฉาย) · ติ๊กได้หลายช่องแล้วกดบันทึก · แก้ช่องที่บันทึกแล้วต้องใส่ PIN · วันนี้: ผู้ป่วยไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย</small></h3>`
     + nav + `<div class="see-wrap"><table class="see-tbl"><thead>${head}</thead><tbody>${body || `<tr><td colspan="${days.length + 1}" class="empty-state">ยังไม่มีห้องฉายหรือแพทย์ (ตั้งค่า)</td></tr>`}</tbody></table></div>`
-    + `<h3 class="ontx-h">ผู้ป่วยที่ต้องพบแพทย์ · ${esc(LONG_DAY_FMT.format(parseISO(seeDay)))} · ${tot} คน${nDirty ? ' <span class="muted">(รวมช่องที่ยังไม่บันทึก)</span>' : ''}<small>กดวันที่หัวตารางเพื่อดูวันอื่น · รายชื่อจากตารางวันฉายในแถบ ${esc(navLabel('course'))}</small></h3>` + vsHtml + list;
+    + `<h3 class="ontx-h">ผู้ป่วยที่ต้องพบแพทย์ · ${esc(LONG_DAY_FMT.format(parseISO(seeDay)))} · ${tot} คน${nDirty ? ' <span class="muted">(รวมช่องที่ยังไม่บันทึก)</span>' : ''}<small>กดวันที่หัวตารางเพื่อดูวันอื่น · รายชื่อจากตารางวันฉายในแถบ ${esc(navLabel('course'))}</small></h3>` + list + '</details>');
+}
+// 18 พ.ย. (R11): ผู้ป่วยระหว่างฉายวันนี้ (แถบห้องฉาย) แยกแพทย์ → ห้องฉาย · นัดพบแพทย์วันถัดไป / วันที่เลือก (วันนั้นไปรอที่ห้องตรวจ → ระหว่างฉาย)
+// รายชื่อคำนวณจากสถานะการฉายของวันนี้ทุกครั้ง (ข้ามวันแล้วไม่ค้างรายชื่อเดิม) · นัดที่ลงไว้ = รายการพบแพทย์ Note "นัดพบแพทย์"
+function seeApptHtml(words, vedit) {
+  const td = today(), nx = nextWorkday(plusDays(td, 1), holidayMap()), me = myDoctor(), order = dqAllDocs(), at = c => (order.includes(c) ? order.indexOf(c) : 999);
+  const hit = c => !words.length || wordsIn(words, `${c.hn} ${c.name} ${c.doc} ${docName(c.doc)}`.toLowerCase());
+  const rows = txCasesOn(td).filter(x => hit(x.c)).map(x => ({ ...x, doc: str(x.c.doc).toUpperCase(), room: roomOnDay(x.c, td) }));
+  const appts = hn => (state.visit || []).filter(v => hnKey(v.hn) === hnKey(hn) && v.date >= td).sort((a, b) => a.date.localeCompare(b.date));
+  const nxLbl = nx === plusDays(td, 1) ? 'พรุ่งนี้' : 'วันทำการถัดไป';
+  const row = x => {
+    const c = x.c, ap = appts(c.hn), hasNx = ap.some(v => v.date === nx), can = vedit && !!x.doc;
+    const chips = ap.map(v => `<span class="see-ap${v.seen ? ' seen' : ''}" title="${esc(`${visitTag(v)} · แพทย์ ${v.doc} · ${v.by ? 'โดย ' + v.by : ''}`)}">${v.seen ? '✓ ' : ''}นัด ${esc(fmtDay(v.date))}${vedit && !v.seen ? `<button type="button" class="icon-btn" data-vsdel="${esc(v.id)}" aria-label="ยกเลิกนัดพบแพทย์ ${esc(fmtDay(v.date))}">×</button>` : ''}</span>`).join('');
+    const btns = can ? `<span class="see-apbtn"><button type="button" class="btn sm" data-seeappt="${esc(c.id)}" data-d="${nx}"${hasNx ? ' disabled title="นัดวันนี้ไว้แล้ว"' : ''}>${nxLbl} · ${esc(fmtDay(nx))}</button>`
+      + `<input type="date" data-seeapd="${esc(c.id)}" min="${td}" value="" aria-label="เลือกวันนัดพบแพทย์ HN ${esc(c.hn)}"><button type="button" class="btn ghost sm" data-seeappt="${esc(c.id)}" data-pick="1">นัดวันที่เลือก</button></span>` : '';
+    const fx = x.st && (x.st.short || x.st.t);
+    return `<li><span class="nurse-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')}<small>${[fx, x.st && x.st.k === 'hold' ? 'Hold RT' : ''].filter(Boolean).map(esc).join(' · ')}${x.doc ? '' : ' · ไม่ได้ระบุแพทย์ (นัดไม่ได้)'}</small></span>${chips}${btns}</li>`;
+  };
+  const docs = [...new Set(rows.map(x => x.doc))].sort((a, b) => (b === me) - (a === me) || (a === '') - (b === '') || at(a) - at(b) || a.localeCompare(b));
+  const body = docs.map(code => {
+    const rs = rows.filter(x => x.doc === code), rooms = [...new Set(rs.map(x => x.room))].sort((a, b) => roomLabel(a).localeCompare(roomLabel(b)));
+    return `<details class="ontx-g nurse-g${code && code === me ? ' mine' : ''}" open><summary>${code ? `${docChip(code)} ${esc(docName(code) || code)}` : 'ไม่ระบุแพทย์'} <span class="n">${rs.length} คน</span></summary>`
+      + rooms.map(room => { const xs = rs.filter(x => x.room === room).sort((a, b) => str(a.c.hn).localeCompare(str(b.c.hn))); return `<div class="see-aproom"><h4>${esc(roomLabel(room))} <span class="muted">${xs.length} คน</span></h4><ul class="nurse-list">${xs.map(row).join('')}</ul></div>`; }).join('')
+      + '</details>';
+  }).join('');
+  const add = vedit ? '<button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในรายชื่อ · ส่งไปรอที่ห้องตรวจ">+ พบแพทย์นอกตารางนัด</button>' : '';
+  return `<h3 class="ontx-h">นัดพบแพทย์ · ผู้ป่วยระหว่างฉาย <span class="muted">(${rows.length})</span><small>รายชื่อจากแถบ ${esc(navLabel('course'))} วันนี้ แยกแพทย์ → ห้องฉาย · กด "${nxLbl}" หรือเลือกวัน แล้ววันนั้นผู้ป่วยไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย · ข้ามวันแล้วรายชื่อเป็นของวันใหม่ (ไม่ค้างรายชื่อเดิม)</small></h3>`
+    + `<div class="see-aptools">${add}</div>`
+    + (body || `<section class="nurse-sec"><p class="muted" style="margin:4px 0">${words.length ? 'ไม่พบผู้ป่วยระหว่างฉายที่ตรงกับคำค้น' : 'วันนี้ไม่มีผู้ป่วยระหว่างฉาย'}</p></section>`);
+}
+async function seeAppt(caseId, date, btn) {
+  if (accessOf('nurse') !== 'edit') return toast(RO_MSG, { err: true });
+  if (!visitOn()) return toast(VISIT_OLD, { err: true });
+  const c = state.cases.find(x => x.id === caseId), td = today();
+  if (!c) return toast('ไม่พบผู้ป่วยนี้แล้ว', { err: true });
+  if (!isDay(date)) return toast('เลือกวันนัดพบแพทย์ก่อน', { err: true });
+  if (date < td) return toast('เลือกวันนี้หรือวันหลังจากนี้', { err: true });
+  const doc = str(c.doc).toUpperCase();
+  if (!doc) return toast(`HN ${c.hn} ยังไม่ได้ระบุแพทย์`, { err: true });
+  if ((state.visit || []).some(v => hnKey(v.hn) === hnKey(c.hn) && v.date === date)) return toast(`HN ${c.hn} มีนัดพบแพทย์วันที่ ${fmtDay(date)} อยู่แล้ว`);
+  if (btn) btn.disabled = true;
+  try {
+    const r = normVisit(await store.visitSave({ id: '', date, hn: c.hn, name: c.name || '', doc, note: VISIT_APPT }));
+    state.visit = state.visit || [];
+    const i = state.visit.findIndex(x => x.id === r.id);
+    if (i >= 0) state.visit[i] = r; else state.visit.push(r);
+    toast(`นัด HN ${c.hn} พบแพทย์ ${doc} ${date === td ? 'วันนี้' : 'วันที่ ' + fmtDay(date)} · วันนั้นไปรอที่ ${navLabel('consult')} → ระหว่างฉาย`);
+    render();
+  } catch (e) { toast('นัดไม่สำเร็จ: ' + errMsg(e), { err: true }); if (btn && btn.isConnected) btn.disabled = false; }
 }
 function seeCellToggle(cb) {
   if (accessOf('nurse') !== 'edit') { cb.checked = !cb.checked; return toast(RO_MSG, { err: true }); }
@@ -18472,6 +18547,8 @@ function renderSettings() {
       <div class="form-grid" style="margin-top:12px">${optEditor('jobs.sit', 'นับเป็นเปลนั่ง <span class="sub-lbl">รายละเอียดผู้ป่วย (ตารางวันฉาย) หรือสถานะผู้ป่วย (CT-SIM) ที่มีคำนี้</span>')}${optEditor('jobs.lie', 'นับเป็นเปลนอน / เปลนอน O2 <span class="sub-lbl">รายละเอียดหรือสถานะผู้ป่วยที่มีคำนี้</span>')}${optEditor('jobs.leaveTypes', 'ประเภทวันลา / กิจกรรม')}</div>
       ${vacSetHtml(d)}</div>
     ${roSetHtml(d)}
+    <div class="sec" data-sec="nurse" data-main><div class="sec-head"><h2>แถบ Nurse → นัดพบแพทย์ (แถบ ${esc(navLabel('nurse'))})</h2><p>ตารางพบแพทย์รายสัปดาห์ (ห้องฉาย × แพทย์ × วัน) · รายชื่อผู้ป่วยระหว่างฉายสำหรับนัดพบแพทย์แสดงเสมอ · แอดมินหลักตั้งได้</p></div>
+      <div class="ontx-seg" role="radiogroup" aria-label="ตารางพบแพทย์รายสัปดาห์">${[['collapse', 'ยุบไว้ (กดเปิดเอง)'], ['show', 'เปิดไว้'], ['hide', 'ซ่อน']].map(([v, l]) => `<label class="check" style="margin-right:14px"><input type="radio" name="seeTbl" data-k="seeTbl" value="${v}"${d.seeTbl === v ? ' checked' : ''}> ${l}</label>`).join('')}</div></div>
     ${SRC_KEYS.map(k => srcSec(d, k)).join('')}
     ${fdSecHtml(d)}${colSecHtml(d)}
     <div class="sec" data-sec="pin"><div class="sec-head"><h2>รหัส PIN</h2><p>กติกาเดียวทุกแถบ ทุกงาน · ยังบันทึกชื่อคนทำจากบัญชีที่เข้าระบบทุกครั้ง</p></div>
@@ -18570,7 +18647,7 @@ function renderSettings() {
 // หัวข้ออยู่หมวดไหนดูจากชื่อหัวข้อ · หัวข้อใหม่ที่ไม่ตรงหมวดไหน = ระบบ
 const SET_TABS = [['team', 'ทีมงาน'], ['case', 'แจกเคส'], ['p4p', 'P4P และกิจกรรม'], ['room', 'ห้องฉาย'], ['tabs', 'แถบงานอื่น'], ['form', 'ฟอร์ม'], ['cols', 'Column แสดงผล'], ['sys', 'ระบบ'], ['all', 'ทั้งหมด']];
 const SET_RULES = [['form', /^ค่าเริ่มต้นของฟอร์ม/], ['cols', /^Column แสดงผล/], ['team', /^(ทีมนักฟิสิกส์|แพทย์ \(Doc\)|RTT, RA และบุคลากรอื่น|ตำแหน่งในทีม|แอดมิน)/], ['case', /^(คิวหมุนเวียน|เทคนิคและน้ำหนัก|ตัวเลือกในฟอร์ม|หัวข้อเพิ่มเติม|ค่าเริ่มต้นและช่อง|Diag|ค่า QA|รายการเคส)/],
-  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RO Jobs|RT Workflow|TDF Dose Calculator)/]];
+  ['p4p', /^(ตำแหน่งและแต้ม|กิจกรรมนับครั้ง|Brachytherapy จาก|RC จาก)/], ['room', /^(สถานะ fraction|ตารางวันฉาย)/], ['tabs', /^(ลงทะเบียน|แจกงานแพทย์|ลงนัด|นัดคิวใส่แร่|CT-SIM|RTT\/RA Jobs|RO Jobs|แถบ Nurse|RT Workflow|TDF Dose Calculator)/]];
 let setQ = '';
 const secTab = sec => { if (!sec.dataset.stab) { const h = str(($('h2', sec) || {}).textContent); sec.dataset.stab = (SET_RULES.find(([, re]) => re.test(h)) || ['sys'])[0]; } return sec.dataset.stab; };
 const SUB_TABS = SET_TABS.filter(([k]) => k !== 'all');
@@ -21599,6 +21676,7 @@ document.addEventListener('click', e => {
   if (ds.seeday) { seeDay = ds.seeday; return renderNurse(); }
   if (ds.seesave) return seeSaveDraft();
   if (ds.vsnew) return openVisit('');   // 18 พ.ย.: พบแพทย์นอกตารางนัด
+  if (ds.seeappt) { const d = ds.pick ? (($(`[data-seeapd="${CSS.escape(ds.seeappt)}"]`) || {}).value || '') : ds.d; return seeAppt(ds.seeappt, d, t); }   // R11: นัดพบแพทย์จากรายชื่อระหว่างฉาย
   if (ds.vsedit) return openVisit(ds.vsedit);
   if (ds.vsdel) return visitRemoveDo(ds.vsdel, t);
   if (ds.vsmark) return visitMarkDo(ds.vsmark, !!ds.on, t);
