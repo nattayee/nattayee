@@ -2571,12 +2571,19 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .see-box[open] > summary{border-bottom:1px solid var(--line)}
 .see-box > :not(summary){margin-left:12px;margin-right:12px}
 .see-aptools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
-.see-aproom h4{margin:8px 14px 2px;font-size:13px}
+.see-aproom{margin:10px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--rc) 30%,transparent);border-left:6px solid var(--rc);background:color-mix(in srgb,var(--rc) 9%,var(--surface));padding:2px 0 6px}
+.see-aproom h4{margin:10px 14px 4px;font-size:17px;font-weight:700;color:var(--rc)}
+.see-aproom h4 span{font-size:13px;font-weight:500;color:var(--muted);margin-left:6px}
+.see-aproom .nurse-list li{background:transparent}
 .see-ap{display:inline-flex;align-items:center;gap:2px;font-size:12px;padding:1px 4px 1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap}
 .see-ap.seen{background:var(--ok-soft,#e6f4ea);color:var(--ok)}
 .see-ap .icon-btn{width:20px;height:20px;font-size:13px}
 .see-apbtn{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto}
 .see-apbtn input[type=date]{width:auto;padding:3px 6px;font-size:12.5px}
+.see-apbtn .see-nx{font-weight:700;padding-inline:14px}
+.see-apbtn .see-nx:disabled{background:var(--ok-soft,#e6f4ea);color:var(--ok);border-color:transparent;opacity:1}
+.nurse-who .see-rx{color:var(--ink,inherit)}
+.nurse-who .see-rx b{color:var(--accent);margin-right:4px}
 @media (max-width:640px){.set-row.crew-row{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"idx name btns" ". pos act" ". tpos tpos" ". acct acct"}
   .set-row.doc-row{grid-template-columns:24px 64px minmax(0,1fr) auto;grid-template-areas:"idx code name btns" ". color color color" ". tpos tpos tpos" ". acct acct acct"}}
 .bq-sign.old{opacity:.6}
@@ -7341,7 +7348,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-18.5';
+const PAGE_VERSION = '2026-11-18.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12226,16 +12233,18 @@ function seeApptHtml(words, vedit) {
   const row = x => {
     const c = x.c, ap = appts(c.hn), hasNx = ap.some(v => v.date === nx), can = vedit && !!x.doc;
     const chips = ap.map(v => `<span class="see-ap${v.seen ? ' seen' : ''}" title="${esc(`${visitTag(v)} · แพทย์ ${v.doc} · ${v.by ? 'โดย ' + v.by : ''}`)}">${v.seen ? '✓ ' : ''}นัด ${esc(fmtDay(v.date))}${vedit && !v.seen ? `<button type="button" class="icon-btn" data-vsdel="${esc(v.id)}" aria-label="ยกเลิกนัดพบแพทย์ ${esc(fmtDay(v.date))}">×</button>` : ''}</span>`).join('');
-    const btns = can ? `<span class="see-apbtn"><button type="button" class="btn sm" data-seeappt="${esc(c.id)}" data-d="${nx}"${hasNx ? ' disabled title="นัดวันนี้ไว้แล้ว"' : ''}>${nxLbl} · ${esc(fmtDay(nx))}</button>`
+    const btns = can ? `<span class="see-apbtn"><button type="button" class="btn primary sm see-nx" data-seeappt="${esc(c.id)}" data-d="${nx}"${hasNx ? ' disabled title="นัดวันนี้ไว้แล้ว"' : ''}>${hasNx ? '✓ นัดแล้ว' : nxLbl} · ${esc(fmtDay(nx))}</button>`
       + `<input type="date" data-seeapd="${esc(c.id)}" min="${td}" value="" aria-label="เลือกวันนัดพบแพทย์ HN ${esc(c.hn)}"><button type="button" class="btn ghost sm" data-seeappt="${esc(c.id)}" data-pick="1">นัดวันที่เลือก</button></span>` : '';
-    const fx = x.st && (x.st.short || x.st.t);
-    return `<li><span class="nurse-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')}<small>${[fx, x.st && x.st.k === 'hold' ? 'Hold RT' : ''].filter(Boolean).map(esc).join(' · ')}${x.doc ? '' : ' · ไม่ได้ระบุแพทย์ (นัดไม่ได้)'}</small></span>${chips}${btns}</li>`;
+    const fx = x.st && (x.st.short || x.st.t), ss = sitesOf(c);
+    // Prescription: เทคนิค · บริเวณ · Dose/fx × Fx (รวม) · ความถี่ (หลายบริเวณ = ทุกบริเวณ)
+    const rx = [catOf(c.cat).label || c.tech, ss.length > 1 ? ss.map(siteText).join(' | ') : [c.area, doseText(c)].filter(Boolean).join(' · ')].filter(Boolean).join(' · ');
+    return `<li><span class="nurse-who"><b class="hn">${esc(c.hn)}</b> ${esc(c.name || '')}<small>${[fx, x.st && x.st.k === 'hold' ? 'Hold RT' : ''].filter(Boolean).map(esc).join(' · ')}${x.doc ? '' : ' · ไม่ได้ระบุแพทย์ (นัดไม่ได้)'}</small>${rx ? `<small class="see-rx"><b>Rx</b> ${esc(rx)}</small>` : ''}</span>${chips}${btns}</li>`;
   };
   const docs = [...new Set(rows.map(x => x.doc))].sort((a, b) => (b === me) - (a === me) || (a === '') - (b === '') || at(a) - at(b) || a.localeCompare(b));
   const body = docs.map(code => {
     const rs = rows.filter(x => x.doc === code), rooms = [...new Set(rs.map(x => x.room))].sort((a, b) => roomLabel(a).localeCompare(roomLabel(b)));
     return `<details class="ontx-g nurse-g${code && code === me ? ' mine' : ''}" open><summary>${code ? `${docChip(code)} ${esc(docName(code) || code)}` : 'ไม่ระบุแพทย์'} <span class="n">${rs.length} คน</span></summary>`
-      + rooms.map(room => { const xs = rs.filter(x => x.room === room).sort((a, b) => str(a.c.hn).localeCompare(str(b.c.hn))); return `<div class="see-aproom"><h4>${esc(roomLabel(room))} <span class="muted">${xs.length} คน</span></h4><ul class="nurse-list">${xs.map(row).join('')}</ul></div>`; }).join('')
+      + rooms.map(room => { const xs = rs.filter(x => x.room === room).sort((a, b) => str(a.c.hn).localeCompare(str(b.c.hn))); return `<div class="see-aproom" style="--rc:${roomTint(room)}"><h4>${esc(roomLabel(room))} <span>${xs.length} คน</span></h4><ul class="nurse-list">${xs.map(row).join('')}</ul></div>`; }).join('')
       + '</details>';
   }).join('');
   const add = vedit ? '<button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในรายชื่อ · ส่งไปรอที่ห้องตรวจ">+ พบแพทย์นอกตารางนัด</button>' : '';
@@ -12243,6 +12252,9 @@ function seeApptHtml(words, vedit) {
     + `<div class="see-aptools">${add}</div>`
     + (body || `<section class="nurse-sec"><p class="muted" style="margin:4px 0">${words.length ? 'ไม่พบผู้ป่วยระหว่างฉายที่ตรงกับคำค้น' : 'วันนี้ไม่มีผู้ป่วยระหว่างฉาย'}</p></section>`);
 }
+// สีของห้องฉาย (ตามลำดับห้องใน ตั้งค่า · ห้องเดิมสีเดิมทุกแพทย์): หัวข้อห้องและพื้นหลังของห้องนั้น
+const ROOM_TINTS = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0891b2', '#65a30d'];
+const roomTint = room => ROOM_TINTS[Math.max(0, dashRooms().indexOf(room)) % ROOM_TINTS.length];
 async function seeAppt(caseId, date, btn) {
   if (accessOf('nurse') !== 'edit') return toast(RO_MSG, { err: true });
   if (!visitOn()) return toast(VISIT_OLD, { err: true });
