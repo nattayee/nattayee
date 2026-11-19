@@ -459,6 +459,10 @@ button.duty-line:hover{border-color:var(--accent)}
 .dq-st.off,.dq-st.back{background:var(--sunken);color:var(--muted)}
 .dq-st.s1{background:var(--accent-soft);color:var(--accent)}
 .rp-tag.rev-done{background:var(--sunken);color:var(--muted)}   /* งานเดิมที่ส่งแก้แผนแล้ว */
+.ap-dupwhy{color:var(--late);font-weight:600}
+.ap-dupbox>summary{color:var(--late);font-weight:600}
+#ct-apull .n.dup{background:var(--late-soft);color:var(--late)}
+#a-dup{margin:0 0 10px}
 .dup-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:var(--late-soft);color:var(--late);font-size:11px;font-weight:700;line-height:17px;vertical-align:1px;white-space:nowrap;cursor:help}   /* งานวางแผนซ้ำ */
 .vrow .when .dq-st{white-space:normal;margin-left:0}   /* รายการวันลา: ป้ายลายาวขึ้นบรรทัดใหม่ในช่องของมัน */
 .bq-rtst{display:block;width:max-content;max-width:100%;margin-top:3px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* แถบนัดคิวใส่แร่: สถานะในแถบห้องฉาย */
@@ -4239,6 +4243,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
             <label class="field" data-apf="name"><span class="lbl">Name</span><input id="a-name" autocomplete="off"></label>
           </div>
           <p class="ap-reg" id="a-reg" hidden></p>
+          <p class="notice" id="a-dup" hidden></p>
           <div class="row2">
             <label class="field" data-apf="age"><span class="lbl">Age</span><input id="a-age" inputmode="numeric" maxlength="20" autocomplete="off"></label>
             <div class="field" data-apf="sex"><span class="lbl">Gender</span><div class="chips" id="a-sex" role="radiogroup" aria-label="Gender"></div></div>
@@ -4328,6 +4333,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       <p class="muted" style="margin:0;font-size:13px">นัดจากแถบลงนัดที่ยังไม่ได้ลง CT-SIM · "ลงข้อมูล CT-SIM" = เปิดฟอร์มเพิ่มผู้ป่วย CT-SIM พร้อมข้อมูลนัด บันทึกแล้วนัดนี้ผูกกับรายการ CT · "ไม่มาทำ CT" = เอาออกจากรายการ</p>
       <input type="search" id="appull-q" class="appull-q" placeholder="ค้นหา HN, ชื่อ, แพทย์, ห้องฉาย, เทคนิค" autocomplete="off" aria-label="ค้นหานัดรอลง CT-SIM">
       <div class="table-wrap appull-wrap"><table class="appull-tbl" id="appull-list"></table></div>
+      <details class="ct-skipped ap-dupbox" id="appull-dup-box" hidden open><summary>นัดซ้ำ (<span id="appull-dup-n"></span>) · ไม่นับเป็นรอทำ CT</summary><p class="muted" style="margin:4px 0 6px;font-size:12.5px">ผู้ป่วยหนึ่งคนมีนัดเดียว: นัดเก่าของ HN ที่มีนัดลงทีหลัง หรือทำ CT ไปแล้วโดยไม่ได้ผูกกับนัดนี้ · ตรวจแล้ว <b>ลบนัดซ้ำ</b> (ถ้านัดที่ถูกคือนัดนี้ ให้ลบอีกนัดแทน)</p><div class="table-wrap appull-wrap"><table class="appull-tbl" id="appull-dup"></table></div></details>
       <details class="ct-skipped" id="appull-skip-box" hidden><summary>ไม่มาทำ CT (<span id="appull-skip-n"></span>)</summary><div class="table-wrap appull-wrap"><table class="appull-tbl" id="appull-skip"></table></div></details>
     </div>
     <footer class="dlg-foot"><span class="spacer"></span><button type="button" class="btn" data-close>ปิด</button></footer>
@@ -6934,7 +6940,7 @@ const DEFAULT_CONFIG = {
   },
   // แถบลงนัด: ตัวเลือกของช่อง CT · เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยกจากเทคนิคอื่นๆ) · ช่องในฟอร์ม
   appt: { cms: ['CM', 'Non-CM'], specials: ['SRS', 'SRT', 'SBRT', 'DIBH'], form: Object.fromEntries(APPT_FORM.map(([k, , v]) => [k, v])), limits: { day: 16, doc: 4, dayOn: true, docOn: true },   // limits: CT-Sim สูงสุดต่อวัน / ต่อแพทย์ต่อวัน (On = จำกัด)
-    simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true,
+    simLim: { room: 5, doc: 16, roomOn: true, docOn: true }, emergOver: true, noDup: true,   // noDup (20 พ.ย.): ห้ามลงนัดซ้ำ
     cbct: { on: true, def: {} }, spq: { on: false, url: '' },   // cbct: วันทำ CBCT ของเทคนิคพิเศษนับเป็นผู้ป่วยใหม่ · def = รูปแบบเริ่มต้นของแต่ละเทคนิค · spq = นำเข้าจากระบบนัดคิวเทคนิคพิเศษ
     cal: { calV: 2, simNew: true, simBadge: 'lim', simAll: 'pick', simQ: true, simTot: true, simRoom: true, simDoc: 'pick', ctN: true, ctDoc: true } },   // simAll: ยังไม่เลือกห้องในปฏิทิน pick = ต้องเลือกห้องก่อน (ไม่แสดงตัวเลข กดวันที่ไม่ได้) · total = ตัวเลขรวมอย่างเดียว · rooms = แถวรายห้อง (แบบเดิม)   // simBadge: lim = ผู้ป่วยใหม่/ลิมิต · sp = เทคนิคพิเศษ/เทคนิคอื่นๆ (แบบเดิม)   // cal: ข้อมูลในช่องวันของปฏิทิน (simDoc: pick = เมื่อเลือกห้องหรือเต็มจอ · always · off)   // simLim: ผู้ป่วยใหม่เริ่มฉาย (Start RT) ต่อห้องต่อวัน / ต่อแพทย์ต่อห้องต่อวัน · emergOver: Emergency ลงเกินได้
   // แถบลงทะเบียน: ตัวเลือกคำนำหน้า สิทธิการรักษา · ช่องในฟอร์ม
@@ -7499,6 +7505,7 @@ function mergeConfig(c) {
   out.appt.limits = limOf(al, d.appt.limits);
   out.appt.simLim = limOf(ap.simLim, d.appt.simLim);
   out.appt.emergOver = ap.emergOver == null ? d.appt.emergOver : ap.emergOver === true || ap.emergOver === 'on';
+  out.appt.noDup = ap.noDup == null ? true : ap.noDup === true || ap.noDup === 'on';
   const acb = ap.cbct && typeof ap.cbct === 'object' ? ap.cbct : {}, adef = acb.def && typeof acb.def === 'object' ? acb.def : {};
   out.appt.cbct = { on: acb.on == null ? true : acb.on === true || acb.on === 'on', def: Object.fromEntries(out.appt.specials.map(x => [x, cbctPatOk(adef[x]) && adef[x] !== 'custom' ? adef[x] : cbctTechDef(x)])) };
   const asq = ap.spq && typeof ap.spq === 'object' ? ap.spq : {};
@@ -7694,7 +7701,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.3';
+const PAGE_VERSION = '2026-11-20.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9747,6 +9754,7 @@ function openCtForm(id, ap) {
   const cfg = state.config, ct = cfg.ct;
   ctAppt = !r && ap ? ap.id : '';
   ctNoLink = '';
+  ctUnlinked = false;
   editingCt = r ? clone(r) : normCt({ id: uid(), ct: ap && ctRooms().some(x => x.id === ap.ct) ? ap.ct : ctRoomSel(), date: ap && isDay(ap.date) ? ap.date : today(), send: 'yes', ...(ap ? apToCt(ap) : {}) });
   const c = editingCt, lap = apOfCt(r);
   if (lap && !c.ctcm && !c.special) Object.assign(c, { ctcm: lap.cm, special: lap.special });   // รายการเดิมที่ลงจากนัด (ก่อนมีช่องนี้): ใช้ของนัด
@@ -9861,6 +9869,11 @@ function submitCt(e) {
     const ap = state.appt.find(x => x.id === ctAppt);
     if (ap && hnKey(ap.hn) === hnKey(rec.hn)) rec.apptFrom = ctAppt;
     else if (ap) ctNoLink = ap.hn;   // แจ้งหลังบันทึก (ต่อท้ายข้อความบันทึกแล้ว)
+  } else if (!state.ct.some(x => x.id === rec.id)) {
+    // 20 พ.ย.: เพิ่มเอง (ไม่ได้กดจากนัด) แต่ HN นี้มีนัดรอลง CT-SIM = ผูกกับนัดล่าสุดของ HN นั้น (นัดไม่ค้าง "รอทำ CT") · กด "ไม่ผูก" / CT ของ HDR / งานวิจัย = ไม่ผูก
+    const ap = ctUnlinked || rec.hdr || rec.research ? null : apWaiting().filter(x => hnKey(x.hn) === hnKey(rec.hn)).sort((a, b) => str(a.created).localeCompare(str(b.created))).pop();
+    rec.apptFrom = ap ? ap.id : ctUnlinked ? '-' : '';   // '-' = Code.gs API 99 ไม่ผูกให้เอง
+    if (!rec.apptFrom) delete rec.apptFrom;
   }
   if (!$('[data-ctf="vac"]', ctForm).classList.contains('pt-off')) rec.vac = chipValue($('#t-vac'));   // Vac-Lok (ไม่แสดง = ไม่แตะ)
   openCtPin('ctsave', rec);
@@ -10005,7 +10018,19 @@ const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 const apReCt = r => { const m = /\bRe-?CT\s*(#\s*\d+)?/i.exec(str(r && r.note)); return m ? `RE-CT${m[1] ? ' ' + m[1].replace(/\s+/g, '') : ''}` : ''; };
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
 // สถานะ: wait = รอลง CT-SIM · took = ลง CT-SIM แล้ว · skip = ไม่มาทำ CT
-const apState = r => (r.took === 'skip' ? 'skip' : r.took ? 'took' : 'wait');
+// 20 พ.ย.: dup = นัดซ้ำ · นัดที่ยังรอลง CT-SIM แต่ (1) HN เดียวกันมีนัดที่ลงทีหลัง (ไม่นับนัดที่ไม่มาทำ CT) หรือ (2) มีรายการ CT-SIM ของ HN นั้นที่ลงหลังนัดนี้ (ไม่ใช่ CT ของ HDR / งานวิจัย)
+// = ไม่นับเป็นนัดรอทำ CT (ผู้ป่วยหนึ่งคนมีสถานะเดียว) · อยู่ในกล่อง "นัดซ้ำ" ของหน้าต่างนัดรอลง CT-SIM ให้ลบ
+function apDupOf(r) {
+  if (!r || r.took || !hnKey(r.hn)) return null;
+  const cr = str(r.created);
+  const ap = byHn(state.appt, r.hn).find(a => a.id !== r.id && a.took !== 'skip' && (str(a.created) > cr || (str(a.created) === cr && str(a.id) > str(r.id))));
+  if (ap) return { ap };
+  const ct = cr ? byHn(state.ct, r.hn).find(x => !x.hdr && !x.research && str(x.created) >= cr) : null;
+  return ct ? { ct } : null;
+}
+const apDupWhy = r => { const d = apDupOf(r); return !d ? '' : d.ap ? `HN นี้มีนัดที่ลงทีหลัง (${isDay(d.ap.date) ? `นัด CT ${fmtDay(d.ap.date)}` : 'นัด CT On Call'}${d.ap.room ? ` · ห้อง ${d.ap.room}` : ''}${d.ap.took ? ' · ลง CT-SIM แล้ว' : ''})` : `HN นี้ลงข้อมูล CT-SIM แล้ว (${ctLabel(d.ct.ct)} ${fmtDay(d.ct.date)}) โดยไม่ได้ผูกกับนัดนี้`; };
+const apState = r => (r.took === 'skip' ? 'skip' : r.took ? 'took' : apDupOf(r) ? 'dup' : 'wait');
+const apDups = () => (apptOn() ? state.appt.filter(r => apState(r) === 'dup') : []);
 const apWaiting = () => (apptOn() ? state.appt.filter(r => apState(r) === 'wait') : []);
 const spTags = list => list.map(x => `<span class="sp-tag">${esc(x)}</span>`).join('');
 const apSimText = r => (r.sim === 'on call' ? 'on call' : r.sim ? fmtDay(r.sim) : '');
@@ -10013,6 +10038,7 @@ function apStateChip(r) {
   const st = apState(r), c = st === 'took' && state.ct.find(x => x.id === r.took);
   if (st === 'took') return `<span class="chip ok" title="${esc(`ลง CT-SIM แล้ว${r.tookBy ? ` โดย ${r.tookBy}` : ''} ${r.tookAt || ''}`.trim())}">ลง CT-SIM แล้ว${c ? ` · ${esc(ctLabel(c.ct))} ${esc(fmtDay(c.date))}` : ''}</span>`;
   if (st === 'skip') return `<span class="chip" title="${esc(`ไม่มาทำ CT${r.tookBy ? ` (${r.tookBy})` : ''}`)}">ไม่มาทำ CT</span>`;
+  if (st === 'dup') return `<span class="chip rect-tag" title="${esc(`${apDupWhy(r)} · ไม่นับเป็นนัดรอทำ CT · ลบนัดนี้ได้ (ผู้ป่วยหนึ่งคนมีนัดเดียว)`)}">นัดซ้ำ</span>`;
   return '<span class="chip warn">รอลง CT-SIM</span>';
 }
 // ข้อมูลนัดแบบบรรทัดเดียว (หน้าต่างนัดรอลง CT และฟอร์ม CT-SIM)
@@ -10311,7 +10337,7 @@ function openApForm(id, rg, rc, dqId, mode) {
   $('#a-api').hidden = orderOn();
   const st = apState(a), c = st === 'took' && state.ct.find(x => x.id === a.took);
   $('#a-took').hidden = !r || st === 'wait';
-  $('#a-took').textContent = st === 'took' ? `ลง CT-SIM แล้ว${c ? ` (${ctLabel(c.ct)} ${fmtDay(c.date)})` : ''}${a.tookBy ? ` โดย ${a.tookBy}` : ''} · แก้ที่นี่ไม่เปลี่ยนรายการใน CT-SIM` : st === 'skip' ? `ตั้งว่าไม่มาทำ CT${a.tookBy ? ` (${a.tookBy})` : ''} · คืนกลับได้ที่แถบ CT-SIM → นัดรอลง CT` : '';
+  $('#a-took').textContent = st === 'took' ? `ลง CT-SIM แล้ว${c ? ` (${ctLabel(c.ct)} ${fmtDay(c.date)})` : ''}${a.tookBy ? ` โดย ${a.tookBy}` : ''} · แก้ที่นี่ไม่เปลี่ยนรายการใน CT-SIM` : st === 'skip' ? `ตั้งว่าไม่มาทำ CT${a.tookBy ? ` (${a.tookBy})` : ''} · คืนกลับได้ที่แถบ CT-SIM → นัดรอลง CT` : st === 'dup' ? `นัดซ้ำ: ${apDupWhy(a)} · ไม่นับเป็นนัดรอทำ CT · ลบนัดนี้ได้ (ผู้ป่วยหนึ่งคนมีนัดเดียว)` : '';
   $('#ap-del').hidden = !r || !!mode;   // แถบ Consult / CT-SIM: ลบนัดไม่ได้ (ลบที่แถบ CT Order)
   $('#ap-hist').hidden = !r || !auditShown('appt');
   if (r) Object.assign($('#ap-hist').dataset, { hist: r.id, histTitle: `นัด ${r.hn}` });
@@ -10487,6 +10513,8 @@ function submitAp(e) {
     return toast(`${verb} ${miss[1]} ก่อนบันทึก (ช่องบังคับ)`, { err: true });
   }
   const rec = readApForm();
+  const dupAp = apDupBlock(rec);
+  if (dupAp) { syncApDup(); $('#a-dup').scrollIntoView({ block: 'center' }); return toast(apDupMsg(dupAp), { err: true }); }
   if (chipValues($('#a-special')).length && $('#a-cbct').value === 'custom' && !$('#a-cbct').disabled && !cbctFxList($('#a-cbfx').value).length) { $('#a-cbfx').focus(); return toast('ใส่ Fx ที่ทำ CBCT (คั่นด้วย , เช่น 1, 2, 3, 8) หรือเลือกรูปแบบ CBCT อื่น', { err: true }); }
   if (rec.order && !orderOn()) rec.order = '';   // Code.gs รุ่นเก่ายังไม่มีช่องใบสั่ง (เก็บเฉพาะช่องเดิม)
   const sl = simLim();
@@ -10504,6 +10532,21 @@ function submitAp(e) {
   const orig = editingAp && state.appt.find(x => x.id === editingAp.id);
   apMvn = orig ? [['ct', '#a-mvn-ct', orig.date, rec.date], ['sim', '#a-mvn-sim', orig.sim, rec.sim]].filter(([, el, f, t]) => $(el).checked && str(f) !== str(t)).map(([what, , from, to]) => ({ what, from, to })) : [];
   openApPin('apsave', rec);
+}
+// 20 พ.ย.: ห้ามลงนัดซ้ำ (ตั้งค่า → ลงนัด · เริ่มต้น เปิด · Code.gs API 99 ตรวจซ้ำตอนบันทึก): HN นี้มีนัดที่ยังรอทำ CT อยู่แล้ว = แก้นัดเดิม (เปลี่ยนวัน CT / ห้องฉาย) แทนการลงนัดใหม่
+function apDupBlock(rec) {
+  if (state.config.appt.noDup === false || !hnKey(rec.hn)) return null;
+  const old = state.appt.find(x => x.id === rec.id);
+  if (old && hnKey(old.hn) === hnKey(rec.hn)) return null;   // แก้นัดเดิมของ HN เดิม
+  return byHn(state.appt, rec.hn).filter(a => a.id !== rec.id && apState(a) === 'wait').sort((a, b) => str(a.created).localeCompare(str(b.created))).pop() || null;
+}
+const apDupMsg = a => `ลงนัดซ้ำไม่ได้: HN ${a.hn} มีนัดที่ยังไม่ได้ทำ CT อยู่แล้ว (${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${a.room ? ` · ห้อง ${a.room}` : ''}) · เปิดนัดเดิมแล้วแก้วัน CT / ห้องฉายในนัดนั้น`;
+function syncApDup() {
+  const p = $('#a-dup');
+  if (!p) return;
+  const a = editingAp ? apDupBlock({ id: editingAp.id, hn: str($('#a-hn').value) }) : null;
+  p.hidden = !a;
+  p.innerHTML = a ? `<b>⛔ ลงนัดซ้ำไม่ได้</b><span>HN นี้มีนัดที่ยังไม่ได้ทำ CT อยู่แล้ว: ${apSummary(a)} · เปลี่ยนวัน CT หรือห้องฉาย = แก้ในนัดเดิม <button type="button" class="btn sm" data-apdupopen="${esc(a.id)}">เปิดนัดเดิม</button></span>` : '';
 }
 // ข้อความใต้ช่อง CT-Sim / Start RT เมื่อวันที่ในฟอร์มเต็มแล้ว (เลือกแพทย์ ห้อง หรือพิมพ์วันที่ทีหลังก็เห็นทันที) · Emergency ลงเกินได้ = ข้อความเตือนสีส้ม
 let apFullT = 0;
@@ -10660,7 +10703,7 @@ const RG_MAX = 200, RG_MAX_MONTH = 500;   // แถวสูงสุดใน�
 const rgText = r => [r.hn, regName(r), r.name, r.phone, r.right, r.sex, r.doc, ctDocText(r.doc), dxValue(r), r.icds, r.chan, r.refer, r.note].join(' ').toLowerCase();
 // นัดของผู้ป่วย (แถบลงนัด) ล่าสุดก่อน
 const regAppts = r => byHn(state.appt, r.hn).slice().sort((a, b) => (isDay(b.date) ? b.date : '9').localeCompare(isDay(a.date) ? a.date : '9') || b.created.localeCompare(a.created));
-const apShort = a => `${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${apState(a) === 'took' ? ' · ลง CT-SIM แล้ว' : apState(a) === 'skip' ? ' · ไม่มาทำ CT' : ''}`;
+const apShort = a => `${isDay(a.date) ? `นัด CT ${fmtDay(a.date)}` : 'นัด CT On Call'}${apState(a) === 'took' ? ' · ลง CT-SIM แล้ว' : apState(a) === 'skip' ? ' · ไม่มาทำ CT' : apState(a) === 'dup' ? ' · นัดซ้ำ' : ''}`;
 const RG_OLD = 'แถบลงทะเบียนต้องใช้ Code.gs รุ่น 2026-10-30.2 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
 // คอลัมน์ในตาราง · ช่องที่ตั้งไม่แสดงในฟอร์มไม่มีคอลัมน์ (อายุ ตามช่องวันเกิด)
 const RG_COLS = [['hn', 'HN'], ['name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['birth', 'อายุ'], ['phone', 'เบอร์โทร'], ['right', 'สิทธิการรักษา'], ['consult', 'รับ Consult'], ['visit', 'นัดมา'], ['chan', 'ช่องทาง'], ['refer', 'ส่งตัวจาก'], ['doc', 'แพทย์'], ['dx', 'Diag'], ['note', 'Note']];
@@ -10925,6 +10968,7 @@ function apFromReg(rg, force) {
 }
 // บรรทัดใต้ HN: ผู้ป่วยที่ลงทะเบียนไว้ (ชื่อ อายุ เพศ)
 function apRegNote(picked) {
+  syncApDup();
   // นัดใหม่ที่ยังไม่ได้เลือกประเภทเคสเอง: ตาม HN ที่พิมพ์ (แจกงานแพทย์เป็น Emergency = Emergency)
   if (editingAp && !state.appt.some(x => x.id === editingAp.id) && !apPrioTouched) { const pr = dqPrioOf($('#a-hn').value); if (pr) { setChip($('#a-prio'), pr); syncApSee(); } }
   const rg = regByHn($('#a-hn').value) || (picked && !picked.hn ? picked : null), el = $('#a-reg');
@@ -13094,7 +13138,7 @@ async function ncMarkDo(id, st, btn) {
 // นัดวันนี้: CT-Sim (นัด CT วันนี้) · Start RT วันแรก (เคสที่ Start RT วันนี้ · นัดที่ Start RT วันนี้ของผู้ป่วยที่ยังไม่มีเคส)
 function ncTodayList() {
   const td = today(), out = [], seen = new Set();
-  for (const a of state.appt) if (a.date === td) out.push({ what: 'ct', ref: a.id, date: td, hn: a.hn, name: a.name, doc: a.doc, where: a.ct ? ctLabel(a.ct) : '', done: apState(a) === 'took' });
+  for (const a of state.appt) if (a.date === td && apState(a) !== 'dup') out.push({ what: 'ct', ref: a.id, date: td, hn: a.hn, name: a.name, doc: a.doc, where: a.ct ? ctLabel(a.ct) : '', done: apState(a) === 'took' });
   for (const c of state.cases) if (c.sim === td && c.hn && !isSimple(c) && !seen.has(hnKey(c.hn))) { seen.add(hnKey(c.hn)); out.push({ what: 'sim', ref: c.id, date: td, hn: c.hn, name: c.name || '', doc: c.doc, where: roomLabel(roomOf(c)) }); }
   for (const a of state.appt) if (a.sim === td && a.hn && !seen.has(hnKey(a.hn))) { seen.add(hnKey(a.hn)); out.push({ what: 'sim', ref: a.id, date: td, hn: a.hn, name: a.name, doc: a.doc, where: a.room ? roomLabel(a.room) : '' }); }
   for (const x of out) x.att = ncAtt(x.what, x.ref, td);
@@ -14993,6 +15037,7 @@ setupRegCombo('q', bqFromReg);
 
 // แถบ CT-SIM: นัดที่รอลง CT-SIM (วันนี้ → เลยวันนัด → นัดถัดไป) · ลงข้อมูล = เปิดฟอร์ม CT-SIM พร้อมข้อมูลนัด
 let ctAppt = '';   // id ของนัดที่ใส่ในฟอร์ม CT-SIM อยู่ (บันทึกแล้วผูกกับรายการ CT)
+let ctUnlinked = false;   // 20 พ.ย.: กด "ไม่ผูก" ในฟอร์ม CT-SIM (ไม่ผูกกับนัดให้เอง)
 let ctNoLink = '';   // 18 พ.ย.: HN ของนัดที่ไม่ผูก (HN ในฟอร์มไม่ตรง) · แจ้งในข้อความหลังบันทึก
 // 18 พ.ย.: นัด (CT Order) ของรายการ CT-SIM = นัดที่ผูกไว้และ HN ตรงกัน · ผูกกับ HN อื่น = ผูกผิด (แสดงเตือน + ปุ่มแก้)
 const apOfCt = r => (r ? state.appt.find(a => a.took === r.id && hnKey(a.hn) === hnKey(r.hn)) || null : null);
@@ -15003,7 +15048,8 @@ const appullDlg = $('#appull-dlg');
 function renderApPullBtn() {
   const n = apWaiting().length, b = $('#ct-apull');
   b.hidden = !apptOn() || !canEdit() || !(n || state.appt.length);
-  b.innerHTML = `นัดรอลง CT${n ? ` <span class="n">${n}</span>` : ''}`;
+  const nd = apDups().length;
+  b.innerHTML = `นัดรอลง CT${n ? ` <span class="n">${n}</span>` : ''}${nd ? ` <span class="n dup" title="นัดซ้ำ ${nd} นัด (ไม่นับเป็นรอทำ CT) · เปิดดูแล้วลบนัดที่ซ้ำ">ซ้ำ ${nd}</span>` : ''}`;
 }
 // ตารางนัดรอลง CT-SIM: คอลัมน์ตรงกันทุกแถว · คนละ 2 บรรทัด (HN / ห้องฉาย · ชื่อ / แพทย์) · Note ยาวตัดท้าย (ชี้ดูทั้งหมด)
 const AP_PULL_HEAD = ['HN / ห้องฉาย', 'ชื่อ / แพทย์', 'นัด CT', 'CT', 'เทคนิคพิเศษ', 'Prescription', 'Start RT', 'Note', ''];
@@ -15016,14 +15062,18 @@ const apPullRow = (r, skip) => `<tr title="${esc([r.ct && `เครื่อง
   <td>${spTags(splitList(r.special))}</td>
   <td>${esc(doseText(r))}</td>
   <td>${esc(apSimText(r))}</td>
-  <td class="ap-note">${esc(r.note || '')}</td>
-  <td class="acts"><span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-apunskip="${esc(r.id)}">คืนกลับรอ</button>` : `<button type="button" class="btn ghost sm danger" data-apdel="${esc(r.id)}" title="ลบนัดนี้ (ยืนยันด้วยรหัส PIN)">ลบนัด</button><button type="button" class="btn ghost sm" data-apskip="${esc(r.id)}">ไม่มาทำ CT</button><button type="button" class="btn primary sm" data-apuse="${esc(r.id)}">ลงข้อมูล CT-SIM</button>`}</span></td></tr>`;
+  <td class="ap-note">${skip === 'dup' ? `<b class="ap-dupwhy">${esc(apDupWhy(r))}</b> ` : ''}${esc(r.note || '')}</td>
+  <td class="acts"><span class="ct-pull-acts">${skip === 'dup' ? `<button type="button" class="btn ghost sm danger" data-apdel="${esc(r.id)}" title="ลบนัดที่ซ้ำ (ยืนยันด้วยรหัส PIN)">ลบนัดซ้ำ</button><button type="button" class="btn ghost sm" data-apuse="${esc(r.id)}" title="ยังต้องทำ CT ตามนัดนี้: ลงข้อมูล CT-SIM จากนัดนี้">ลงข้อมูล CT-SIM</button>` : skip ? `<button type="button" class="btn ghost sm" data-apunskip="${esc(r.id)}">คืนกลับรอ</button>` : `<button type="button" class="btn ghost sm danger" data-apdel="${esc(r.id)}" title="ลบนัดนี้ (ยืนยันด้วยรหัส PIN)">ลบนัด</button><button type="button" class="btn ghost sm" data-apskip="${esc(r.id)}">ไม่มาทำ CT</button><button type="button" class="btn primary sm" data-apuse="${esc(r.id)}">ลงข้อมูล CT-SIM</button>`}</span></td></tr>`;
 function openApPull() {
   if (!appullDlg.open) $('#appull-q').value = '';
   const td = today(), words = str($('#appull-q').value).toLowerCase().split(/\s+/).filter(Boolean), hit = r => wordsIn(words, apText(r)), list = apWaiting().filter(hit);
   const groups = [['วันนี้', list.filter(r => r.date === td)], ['เลยวันนัด', list.filter(r => r.date < td).sort((a, b) => b.date.localeCompare(a.date))], ['นัดถัดไป', list.filter(r => r.date > td).sort((a, b) => a.date.localeCompare(b.date))]];
   const from = plusDays(td, -60), skipped = state.appt.filter(r => apState(r) === 'skip' && r.date >= from && hit(r)).sort((a, b) => b.date.localeCompare(a.date));
   $('#appull-list').innerHTML = apPullHead() + `<tbody>${list.length ? groups.filter(g => g[1].length).map(([l, rs]) => `<tr class="ap-grp${l === 'เลยวันนัด' ? ' late' : ''}"><th colspan="${AP_PULL_HEAD.length}">${l === 'เลยวันนัด' ? `⚠️ เลยวันนัด · ผู้ป่วยไม่มาตามนัด (${rs.length}) <small>พยาบาลติดตามที่แถบ ${esc(navLabel('nurse'))} → ผู้ป่วยไม่มาตามนัด</small>` : `${esc(l)} (${rs.length})`}</th></tr>${rs.map(r => apPullRow(r)).join('')}`).join('') : `<tr><td colspan="${AP_PULL_HEAD.length}" class="empty-state">${words.length ? 'ไม่พบนัดที่ตรงกับคำค้น' : 'ไม่มีนัดรอลง CT-SIM'}</td></tr>`}</tbody>`;
+  const dups = apDups().filter(hit).sort((a, b) => str(b.created).localeCompare(str(a.created)));
+  $('#appull-dup-box').hidden = !dups.length;
+  $('#appull-dup-n').textContent = dups.length;
+  $('#appull-dup').innerHTML = apPullHead() + `<tbody>${dups.map(r => apPullRow(r, 'dup')).join('')}</tbody>`;
   $('#appull-skip-box').hidden = !skipped.length;
   $('#appull-skip-n').textContent = skipped.length;
   $('#appull-skip').innerHTML = apPullHead() + `<tbody>${skipped.map(r => apPullRow(r, true)).join('')}</tbody>`;
@@ -20155,6 +20205,7 @@ function renderSettings() {
       </div>
       <p class="muted def-note" style="margin:-4px 0 12px">ใช้กับปฏิทินทุกฟอร์ม (แจกเคส แก้ไขเคส CT-SIM ลงนัด) · ช่องที่ปิดยังดูได้ในบรรทัดใต้ปฏิทินเมื่อชี้หรือเลือกวัน · ลายขีดแดง (วันเต็ม) แสดงเสมอ</p>
       <label class="check" style="margin:10px 0 4px"><input type="checkbox" data-k="appt.emergOver"${isOnV(d.appt.emergOver) ? ' checked' : ''}> เคส <b>Emergency</b> ลงเกินลิมิตได้ (แจ้งเตือนแต่ไม่ห้าม)</label>
+      <label class="check" style="margin:4px 0"><input type="checkbox" data-k="appt.noDup"${d.appt.noDup !== false ? ' checked' : ''}> <b>ห้ามลงนัดซ้ำ</b>: HN ที่มีนัดรอทำ CT อยู่แล้ว ลงนัดใหม่ไม่ได้ (เปลี่ยนวัน CT / ห้องฉาย = แก้ในนัดเดิม) · นัดซ้ำที่มีอยู่ไม่นับเป็นรอทำ CT</label>
       ${cbctSec(d)}
       ${spqSec(d)}
       <p class="muted def-note" style="margin:12px 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
@@ -22563,7 +22614,7 @@ async function submitPin(e, clear) {
     if (ctx.mode === 'ptadd') { const rec = normCase(await store.courseAdd(ctx.rec, pin)); patientSaved(rec, ctx.isNew); pinDlg.close(); return; }
     if (ctx.mode === 'ptdel') { await store.courseRemove(ctx.id, pin); caseDeleted(ctx.id, `ลบ ${ctx.rec.hn || 'ผู้ป่วย'} ออกจากตารางวันฉายแล้ว`); pinDlg.close(); return; }
     if (ctx.mode === 'duty') { await saveDuty(ctx, pin); pinDlg.close(); return; }
-    if (ctx.mode === 'ctsave') { const res = await store.ctSave(ctx.rec, pin); if (res && Array.isArray(res.vacAll)) state.vac = res.vacAll.map(normVac).filter(x => x.no && x.hn); ctSaved(normCt(res), ctx.isNew, ctx.rec.apptFrom); pinDlg.close(); return; }
+    if (ctx.mode === 'ctsave') { const res = await store.ctSave(ctx.rec, pin); if (res && Array.isArray(res.vacAll)) state.vac = res.vacAll.map(normVac).filter(x => x.no && x.hn); ctSaved(normCt(res), ctx.isNew, ctx.rec.apptFrom && ctx.rec.apptFrom !== '-' ? ctx.rec.apptFrom : str(res && res.apLinked)); pinDlg.close(); return; }
     if (ctx.mode === 'vacsave') { const rec = normVac(await store.vacSave(ctx.rec, pin)); vacSaved(rec, ctx.isNew); pinDlg.close(); return; }
     if (ctx.mode === 'vacdel') { await store.vacRemove(ctx.id, pin); vacDeleted(ctx.id); pinDlg.close(); return; }
     if (ctx.mode === 'ctdel') { await store.ctRemove(ctx.id, pin); ctDeleted(ctx.id); pinDlg.close(); return; }
@@ -23022,7 +23073,7 @@ function tdfPtOf(r) {
 // ผู้ป่วยที่น่าจะคำนวณ: รอวางแผน (Planning, Evaluation, PSQA) และหยุดฉาย (Hold) จาก RT Workflow
 function tdfSuggest() {
   let rows = [];
-  try { rows = flowData().filter(x => ['plan', 'eval', 'psqa', 'hold'].includes(x.col)); } catch (e) { rows = []; }
+  try { rows = flowData(true).filter(x => ['plan', 'eval', 'psqa', 'hold'].includes(x.col)); } catch (e) { rows = []; }
   const seen = new Set();
   return rows.filter(x => { const k = hnKey(x.hn); if (!k || seen.has(k)) return false; seen.add(k); return true; }).slice(0, 16);
 }
@@ -23444,7 +23495,8 @@ document.addEventListener('click', e => {
   if (ds.preap) { if (accessOf('appt') !== 'edit') return toast(RO_MSG, { err: true }); return openApForm(ds.preap); }   // ตารางวันฉาย: แถวรอ CT-Sim = นัดในแถบลงนัด
   if (ds.prect) { if (accessOf('ctsim') !== 'edit') return toast(RO_MSG, { err: true }); return openCtForm(ds.prect); }   // แถวรอ Plan complete จากแถบ CT-SIM
   if (ds.apunskip) return markAp(ds.apunskip, '');
-  if (ds.apunlink !== undefined) { ctAppt = ''; return syncCtAppt(); }
+  if (ds.apunlink !== undefined) { ctAppt = ''; ctUnlinked = true; return syncCtAppt(); }
+  if (ds.apdupopen) { const id = ds.apdupopen; if (apDlg.open) apDlg.close(); return openApForm(id); }
   if (ds.step) return stepCase(ds.id, ds.step);
   if (ds.stamp) return openStamp(ds.id, ds.stamp, ds.sid || '');
   if (ds.course) return openCourse(ds.id, ds.course);
@@ -23582,7 +23634,7 @@ document.addEventListener('click', e => {
     case 'ct-del': return openCtPin('ctdel', editingCt);
     case 'ct-pull': return ctPulled().length || state.ct.some(r => ctState(r) === 'skip') ? openCtPull() : toast('ไม่มีผู้ป่วยรอแจกจาก CT-SIM');
     case 'ct-xlsx': return exportCt(t);
-    case 'ct-apull': return apWaiting().length || state.appt.some(r => apState(r) === 'skip') ? openApPull() : toast('ไม่มีนัดรอลง CT-SIM');
+    case 'ct-apull': return apWaiting().length || state.appt.some(r => ['skip', 'dup'].includes(apState(r))) ? openApPull() : toast('ไม่มีนัดรอลง CT-SIM');
     case 'ap-add': return openApForm('');
     case 'rg-add': return openRgForm('');
     case 'rg-drive': return rdPullNow(t);
@@ -25317,7 +25369,10 @@ function flowCourse(c, td, hol) {
   if (sc && sc.end && !sc.pending && sc.end < td && c.rt !== 'complete') return { k: 'done', d: sc.end, t: 'ฉายครบ' };
   return { k: 'tx', t: `On Treatment${sc && sc.planned ? ` · Fx ${fxGiven(sc, td)}/${sc.planned}` : ''}`, short: sc && sc.planned ? `ฉายอยู่ · Fx ${fxGiven(sc, td)}/${sc.planned}` : 'ฉายอยู่' };
 }
-function flowData() {
+// 20 พ.ย.: ผู้ป่วยหนึ่งคน = สถานะเดียวบนบอร์ด · ขั้นที่ไปไกลที่สุด (ใส่แร่วันนี้ก่อน) · Complete course ท้ายสุด (เริ่มรอบใหม่แล้ว = สถานะของรอบใหม่)
+// all = ทุกรายการของผู้ป่วย (หน้าต่างขั้นตอนของผู้ป่วย · ผู้ป่วยที่น่าจะคำนวณ TDF)
+const FLOW_RANK = ['done', 'consult', 'ctorder', 'ctsim', 'contour', 'plan', 'eval', 'psqa', 'tx', 'hold', 'bq'];
+function flowData(all) {
   const td = today(), hol = holidayMap(), on = new Set(flowCols().filter(c => c.on).map(c => c.id)), out = [];
   const colOf = id => (on.has(id) ? id : FLOW_FALL[id] && on.has(FLOW_FALL[id]) ? FLOW_FALL[id] : '');
   const nameOf = new Map();   // ชื่อผู้ป่วย: จากรายการนั้น · ไม่มี = จากแถบลงทะเบียน / รายการอื่นของ HN เดียวกัน
@@ -25351,7 +25406,11 @@ function flowData() {
   }
   for (const a of state.bq) if (a.date === td && bqLive(a)) add('bq', { hn: a.hn, name: a.name, doc: a.doc, go: 'bq', tip: `${a.tech || 'Brachytherapy'}${a.fx ? ` · Fx ${a.fx}${a.total ? '/' + a.total : ''}` : ''} วันนี้`, meta: `${a.tech || 'Brachy'}${a.fx ? ` Fx ${a.fx}${a.total ? '/' + a.total : ''}` : ''}` });
   for (const x of out) if (!str(x.name)) { const r = regByHn(x.hn); x.name = nameOf.get(hnKey(x.hn)) || (r ? regName(r) : ''); }
-  return out;
+  if (all) return out;
+  const best = new Map();
+  for (const x of out) { const k = hnKey(x.hn), r = FLOW_RANK.indexOf(x.stage), c = best.get(k); if (!c || r > c.r) best.set(k, { r, x }); }
+  const keep = new Set([...best.values()].map(v => v.x));
+  return out.filter(x => keep.has(x));
 }
 let flowEdit = false;
 // 16 พ.ย. (รอบ 2): รูปแบบการแสดงผล · fw = ตัวกรองแพทย์ (code · '-' = ไม่ระบุ) · ขั้นที่เลือก (A, B) · แพทย์ของวงกลมที่เลือก (B) · แถวที่กาง (E) · จำนวนแถว (C)
@@ -25547,7 +25606,7 @@ function flowSave(cols, msg) {
   renderFlow();
 }
 function flowPop(btn) {
-  const pop = $('#flow-pop'), hn = btn.dataset.flowpt, k = hnKey(hn), xs = flowData().filter(x => hnKey(x.hn) === k), x0 = xs[0] || {};
+  const pop = $('#flow-pop'), hn = btn.dataset.flowpt, k = hnKey(hn), xs = flowData(true).filter(x => hnKey(x.hn) === k).sort((a, b) => FLOW_RANK.indexOf(b.stage) - FLOW_RANK.indexOf(a.stage)), x0 = xs[0] || {};   // สถานะบนบอร์ด (ขั้นที่ไปไกลที่สุด) ก่อน แล้วรายการอื่นของผู้ป่วย
   pop.innerHTML = `<div class="flow-pop-h"><b class="hn">${esc(hn)}</b> ${esc(x0.name || '')} ${x0.doc ? docChip(x0.doc) : ''}<button type="button" class="icon-btn" data-flowclose aria-label="ปิด">×</button></div>
     <ul>${xs.map(x => `<li><b>${esc(flowLabel(flowCols().find(c => c.id === x.col)))}</b>${x.sub ? ` · ${esc(x.sub)}` : ''} <span class="muted">${esc(x.tip)}</span>${navOn(x.go) ? ` <button type="button" class="linkish" data-flowgo="${x.go}|${esc(hn)}">ไปที่แถบ ${esc(navLabel(x.go))}</button>` : ''}</li>`).join('')}</ul>`;
   pop.hidden = false;

@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.1';
-const API_LEVEL = 98;   // 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.2';
+const API_LEVEL = 99;   // 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1819,12 +1819,21 @@ function ctSave(rec, pin, token) {
     if (row) set.updated = now;
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
     // ลงจากนัดในแถบลงนัด (apptFrom = id ของนัด เฉพาะรายการใหม่): บันทึกว่านัดนี้ลง CT-SIM แล้ว ใครลง · อ่านแถวของนัดก่อนเขียน (อ่านหลังเขียน = ชีตต้องบันทึกค้างก่อน)
-    const from = row ? '' : cut(rec.apptFrom, 80), a = from ? openRow_(ss, 'appt', null, from) : null;
+    let from = row ? '' : cut(rec.apptFrom, 80);
+    // API 99: เพิ่มเอง (ไม่ได้ลงจากนัด) และไม่ใช่ CT ของ HDR / งานวิจัย: HN นี้มีนัดรอลง CT-SIM = ผูกกับนัดล่าสุดนั้น (นัดไม่ค้างรอทำ CT) · '-' = ผู้ใช้กดไม่ผูก
+    let auto = '';
+    if (!row && !from && !set.hdr && !set.research) {
+      const open = rowsOfHn_(ss, 'appt', set.hn).filter(p => !String(p.took || '').trim());
+      if (open.length) auto = from = String(open.reduce((p, q) => (String(q.created) > String(p.created) ? q : p)).id);
+    }
+    if (from === '-') from = '';
+    const a = from ? openRow_(ss, 'appt', null, from) : null;
     const out = saveRow_(x, TABLES.ctsim.fields, set);   // รายการหลังบันทึกจากค่าที่เขียน (เดิมอ่านทั้งตาราง CT-SIM กลับมา)
     // API 85: ผูกเฉพาะนัดที่ HN ตรงกับรายการนี้และยังไม่ได้ลง CT-SIM (เดิมผูกทุกกรณี: ใช้ข้อมูลนัดของคนหนึ่งแล้วแก้ HN เป็นอีกคน = นัดถูกผูกผิดคน)
     if (from && a.row && hnKey_(a.cur.hn) === hnKey_(set.hn) && !String(a.cur.took || '').trim()) {
       const mark = { took: set.id, tookBy: set.by, tookAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') };
       writeFields_(a.sh, a.row, a.header, TABLES.appt.fields.filter(f => f[0] in mark), mark, a.vals);
+      if (auto) out.apLinked = auto;
     }
     // Vac-Lok ที่เลือกในฟอร์ม (API 48 · ไม่ส่ง vac = ไม่แตะ): ผูกการใช้ Vac-Lok กับรายการนี้ · ว่าง = ไม่ใช้ (ลบการใช้ที่ผูกไว้) · คืนการใช้ทั้งหมด
     if ('vac' in rec) { vacLink_(ss, out, cut(rec.vac, 20), u); out.vacAll = readTable_(ss, 'vac'); }
@@ -3222,6 +3231,11 @@ function apptSave(rec, pin, token) {
   return withLock_(() => {
     const ss = ss_(), id = cut(rec.id, 80), x = openRow_(ss, 'appt', null, id), row = x.row;
     if (ctOnly && !row) throw new Error('แถบ CT-SIM แก้ได้เฉพาะ CT Order ที่มีอยู่แล้ว · ลงนัดใหม่ที่แถบ CT Order');
+    // API 99: ห้ามลงนัดซ้ำ (นัดใหม่ หรือเปลี่ยน HN ของนัดเดิม) · ปิดได้ที่ ตั้งค่า → ลงนัด
+    if (!row || hnKey_(x.cur.hn) !== hnKey_(rec.hn)) {
+      const d = apptDup_(ss, cfg0, cut(rec.hn, 40), row ? id : '');
+      if (d) throw new Error('ลงนัดซ้ำไม่ได้: HN ' + cut(rec.hn, 40) + ' มีนัดที่ยังไม่ได้ทำ CT อยู่แล้ว (นัด CT ' + (isDate(String(d.date)) ? d.date : 'On Call') + (d.room ? ' · ห้อง ' + d.room : '') + ') · เปิดนัดเดิมแล้วแก้วัน CT / ห้องฉายในนัดนั้น (หรือลบนัดเดิมก่อน)');
+    }
     pinChange_(u, pin, !!row);
     const set = {};
     APPT_FIELDS.forEach(k => { set[k] = cut(rec[k], k === 'order' ? 20000 : k === 'note' || k === 'dx' ? 2000 : 200); });
@@ -3230,6 +3244,37 @@ function apptSave(rec, pin, token) {
     else Object.assign(set, { id: id || Utilities.getUuid(), by: String(u.name || u.username || u.me || ''), created: now, updated: '' });
     return saveRow_(x, TABLES.appt.fields, set);   // เดิมอ่านทั้งตารางนัดกลับมาเพื่อคืนแถวเดียว
   });
+}
+
+// API 99: นัดของ HN นี้ที่ยังรอทำ CT (ไม่นับนัด except) · นัดล่าสุดของ HN (ไม่นับไม่มาทำ CT) ที่ยังไม่ได้ลง CT-SIM
+// และยังไม่มีรายการ CT-SIM ของ HN นั้น (ไม่ใช่ CT ของ HDR / งานวิจัย) ที่ลงหลังนัด · เหมือน apDupOf / apDupBlock ในหน้าเว็บ · ปิดใน ตั้งค่า = null
+// แถวของ HN ในตาราง แบบ readTable_ เฉพาะแถวนั้น · หาในคอลัมน์ HN ด้วย TextFinder (ไม่อ่านทั้งตาราง · ตารางหลายพันแถว) แล้วอ่านเฉพาะแถวที่ตรง
+function rowsOfHn_(ss, table, hn) {
+  const def = tableDef_(table), sh = sheet_(ss, def.sheet), k = hnKey_(hn);
+  if (!sh || !k) return [];
+  const last = sh.getLastRow(), header = headerOf_(sh), cv = rowConv_(def, header, tz_(ss));
+  let hc = -1;
+  def.fields.forEach((f, i) => { if (f[0] === 'hn') hc = cv.cols[i]; });
+  if (last < 2 || hc < 0) return [];
+  const col = sh.getRange(2, hc + 1, last - 1, 1);
+  let rows = [];
+  if (typeof col.createTextFinder === 'function') rows = col.createTextFinder(String(hn).trim()).matchEntireCell(true).findAll().map(c => c.getRow());
+  else col.getValues().forEach((v, i) => { if (hnKey_(v[0]) === k) rows.push(i + 2); });
+  const w = Math.max(1, header.length);
+  return rows.map(r => cv.conv(sh.getRange(r, 1, 1, w).getValues()[0])).filter(x => hnKey_(x.hn) === k);
+}
+function apptDup_(ss, cfg, hn, except) {
+  const v = cfg && cfg.appt ? cfg.appt.noDup : null;
+  if (!(v == null || v === true || v === 'on')) return null;
+  const k = hnKey_(hn);
+  if (!k) return null;
+  const mine = rowsOfHn_(ss, 'appt', hn).filter(a => String(a.id) !== String(except || '') && String(a.took || '') !== 'skip');
+  if (!mine.length) return null;
+  const last = mine.reduce((a, b) => (String(b.created) > String(a.created) || (String(b.created) === String(a.created) && String(b.id) > String(a.id)) ? b : a));
+  if (String(last.took || '').trim()) return null;   // นัดล่าสุดลง CT-SIM แล้ว = นัดเก่าที่ค้างเป็นนัดซ้ำ ไม่กันนัดใหม่
+  const cr = String(last.created || '');
+  const done = cr && rowsOfHn_(ss, 'ctsim', hn).some(c => !String(c.hdr || '').trim() && !String(c.research || '').trim() && String(c.created || '') >= cr);
+  return done ? null : last;
 }
 
 // ลบนัดในแถบลงนัด ยืนยันด้วยรหัส PIN (รายการ CT-SIM ที่ลงจากนัดนี้แล้วไม่ถูกลบ) · คืน true เมื่อลบแล้ว
