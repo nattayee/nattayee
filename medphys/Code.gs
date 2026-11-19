@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-19.1';
-const API_LEVEL = 92;   // 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-19.2';
+const API_LEVEL = 93;   // 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -5375,8 +5375,115 @@ function delRow_(sh, row, head, vals) {
     const header = head || headerOf_(sh), v = vals || sh.getRange(row, 1, 1, Math.max(1, header.length)).getValues()[0], what = {};
     header.forEach((h, i) => { if (h && AUDIT_SKIP.indexOf(h) < 0 && h !== 'id' && String(v[i] == null ? '' : v[i]) !== '') what[h] = auditCut_(v[i] instanceof Date ? Utilities.formatDate(v[i], tz_(ss_()), 'yyyy-MM-dd') : v[i]); });
     audit_(auditTable_(sheetName_(sh)), v[header.indexOf('id')], v[header.indexOf('HN')], 'del', what);
+    try { trashAdd_(sh, header, v); } catch (e) { console.log('trashAdd_ ' + e); }   // API 93: ถังขยะ
   } catch (e) { console.log('delRow_ ' + e); }
   sh.deleteRow(row);
+}
+/* ---------- API 93: ถังขยะ ----------
+ * รายการที่ผู้ใช้กดลบ (ฟังก์ชันใน TRASH_FNS) เก็บทั้งแถว (ทุกคอลัมน์ ไม่ตัดข้อความ) ในชีต Trash ก่อนลบ · เก็บ 90 วัน (ล้างทุกคืนตอนสำรองข้อมูล)
+ * กู้คืน = ใส่แถวกลับชีตเดิม รหัสเดิม (ไม่ต้องใส่ PIN · ต้องบันทึกในแถบนั้นได้) · ลบถาวร = แอดมิน · การลบอัตโนมัติของระบบ (ย้ายเคส แก้แผน sync) ไม่เข้าถังขยะ */
+const TRASH_SHEET = 'Trash';
+const TRASH_HEAD = ['tid', 'ลบเมื่อ', 'ลบโดย', 'บัญชี', 'ตาราง', 'ชีต', 'id', 'HN', 'สรุป', 'ฟังก์ชัน', 'ข้อมูล 1', 'ข้อมูล 2', 'ข้อมูล 3', 'ข้อมูล 4'];
+const TRASH_DAYS = 90, TRASH_CHUNK = 45000;
+// ฟังก์ชันที่ผู้ใช้กดลบ → สิทธิ์ที่ใช้กู้คืน (null = ตามตาราง: เคส กิจกรรม วันลา กิจกรรมแผนก)
+const TRASH_FNS = { deleteRecord: null, courseRemove: 'course', ctRemove: 'ctsim', vacRemove: 'vac', regRemove: 'reg', apptRemove: 'appt', visitRemove: 'visit', dqRemove: 'dq', dqLeaveRemove: 'dqLeave' };
+const TRASH_EDIT = { dqLeave: ['dq', 'rojobs'] };
+const trashViews_ = (fn, table) => { const k = TRASH_FNS[fn] || table; return TRASH_EDIT[k] || EDIT_VIEWS[k] || []; };
+function trashVal_(v, tz) {
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v)) return '';
+    return Utilities.formatDate(v, tz, Utilities.formatDate(v, tz, 'HH:mm:ss') === '00:00:00' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm:ss');
+  }
+  return v == null ? '' : v;
+}
+function trashSum_(header, vals) {
+  const out = [];
+  header.forEach((h, i) => {
+    const t = String(vals[i] == null ? '' : vals[i]).trim();
+    if (!h || h === 'id' || h === 'HN' || AUDIT_SKIP.indexOf(h) >= 0 || !t || /^[\[{]/.test(t) || t.length > 60 || out.length >= 6) return;
+    out.push(h + ': ' + t);
+  });
+  return out.join(' · ').slice(0, 400);
+}
+function trashAdd_(sh, header, v) {
+  const fn = auditFn_();
+  if (!(fn in TRASH_FNS)) return;
+  const ss = ss_(), tz = tz_(ss), vals = header.map((h, i) => trashVal_(v[i], tz)), id = String(vals[header.indexOf('id')] || '');
+  if (!id) return;
+  const json = JSON.stringify({ h: header, v: vals }), parts = [];
+  for (let i = 0; i < json.length; i += TRASH_CHUNK) parts.push(json.slice(i, i + TRASH_CHUNK));
+  if (parts.length > 4) { console.log('trashAdd_ ข้อมูลยาวเกิน ' + json.length); return; }   // ยังมีในประวัติการบันทึก
+  const u = AUDIT_U_ || {}, hi = header.indexOf('HN'), name = sheetName_(sh);
+  let t = sheet_(ss, TRASH_SHEET);
+  if (!t) { t = ss.insertSheet(TRASH_SHEET); t.getRange(1, 1, 1, TRASH_HEAD.length).setValues([TRASH_HEAD]); t.setFrozenRows(1); }
+  const row = ['T' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), new Date().toISOString(), String(u.name || u.username || u.me || ''), String(u.username || u.me || ''), auditTable_(name), name, id,
+    hi >= 0 ? String(vals[hi]) : '', trashSum_(header, vals), fn, parts[0] || '', parts[1] || '', parts[2] || '', parts[3] || ''];
+  t.getRange(t.getLastRow() + 1, 1, 1, row.length).setNumberFormat('@').setValues([row]);
+}
+// รายการในถังขยะ (ใหม่ก่อน · 90 วัน · สูงสุด 500) ของตารางในแถบที่ผู้ใช้เห็น · view = เฉพาะแถบนั้น · คืน { rows, days, admin }
+function trashList(view, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg), all = u.via === 'google' || !!u.isAdmin;
+  const tables = {};
+  (view ? [String(view)] : Object.keys(AUDIT_VIEWS)).forEach(v => { if (AUDIT_VIEWS[v] && (all || userAccess_(cfg, v, u))) AUDIT_VIEWS[v].forEach(t => { tables[t] = 1; }); });
+  if (view && !Object.keys(tables).length) throw new Error('ดูถังขยะของแถบนี้ไม่ได้');
+  const sh = sheet_(ss, TRASH_SHEET), last = sh ? sh.getLastRow() : 0;
+  if (last < 2) return { rows: [], days: TRASH_DAYS, admin: all };
+  const vals = sh.getRange(2, 1, last - 1, 10).getValues(), from = new Date(Date.now() - TRASH_DAYS * 864e5).toISOString(), ok = {}, out = [];
+  const can = (fn, table) => { const k = fn + '|' + table; if (!(k in ok)) ok[k] = u.via === 'google' || trashViews_(fn, table).some(v => userAccess_(cfg, v, u) === 'edit'); return ok[k]; };
+  for (let i = vals.length - 1; i >= 0 && out.length < 500; i--) {
+    const r = vals[i], at = String(r[1]), table = String(r[4]);
+    if (!tables[table] || at < from) continue;
+    out.push({ tid: String(r[0]), at: at, by: String(r[2]), user: String(r[3]), table: table, id: String(r[6]), hn: String(r[7]), sum: String(r[8]), fn: String(r[9]), canRestore: can(String(r[9]), table) });
+  }
+  return { rows: out, days: TRASH_DAYS, admin: all };
+}
+// กู้คืน: ใส่แถวกลับชีตเดิม รหัสเดิม (คอลัมน์ตามหัวตารางปัจจุบัน) · มีรหัสนี้อยู่แล้ว / HN ลงทะเบียนใหม่แล้ว = กู้ไม่ได้ · คืน { table, id, hn }
+function trashRestore(tid, token) {
+  const ss = ss_();
+  return withLock_(() => {
+    const t = sheet_(ss, TRASH_SHEET), row = t ? findRow_(t, 1, String(tid || '')) : 0;
+    if (!row) throw new Error('ไม่พบรายการนี้ในถังขยะ (อาจกู้คืนหรือลบถาวรไปแล้ว)');
+    const r = t.getRange(row, 1, 1, TRASH_HEAD.length).getValues()[0], table = String(r[4]), fn = String(r[9]), id = String(r[6]);
+    requireEdit_(token, trashViews_(fn, table));
+    let data;
+    try { data = JSON.parse([r[10], r[11], r[12], r[13]].map(x => String(x == null ? '' : x)).join('')); } catch (e) { throw new Error('ข้อมูลในถังขยะเสียหาย กู้คืนไม่ได้'); }
+    const sh = tableSheet_(ss, table), header = headerOf_(sh), at = {};
+    (data.h || []).forEach((h, i) => { if (h) at[h] = (data.v || [])[i]; });
+    if (findRow_(sh, header.indexOf('id') + 1, id)) throw new Error('มีรายการนี้อยู่แล้ว (กู้คืนไปแล้ว) ไม่ต้องกู้ซ้ำ');
+    if (table === 'reg') {
+      const hc = header.indexOf('HN') + 1, hn = String(at.HN || '');
+      if (hc && hn && findRow_(sh, hc, hn)) throw new Error('HN ' + hn + ' ลงทะเบียนใหม่แล้ว กู้คืนไม่ได้ (แก้ไขรายการที่มีอยู่แทน)');
+    }
+    const stamp = new Date().toISOString(), vals = header.map(h => (h === REV_HEAD ? stamp : h in at ? safeText_(at[h]) : ''));
+    sh.getRange(sh.getLastRow() + 1, 1, 1, header.length).setNumberFormat('@').setValues([vals]);
+    t.deleteRow(row);
+    audit_(table, id, String(r[7]), 'restore', { 'กู้คืนจากถังขยะ': 'ลบเมื่อ ' + String(r[1]).slice(0, 16).replace('T', ' ') + (r[2] ? ' โดย ' + String(r[2]) : '') });
+    return { table: table, id: id, hn: String(r[7]) };
+  });
+}
+// ลบถาวร (แอดมิน)
+function trashPurge(tid, token) {
+  const ss = ss_(), u = who_(token, ss, readConfig_(ss) || {});
+  if (u.via !== 'google' && !u.isAdmin) throw new Error('ลบถาวรได้เฉพาะแอดมิน');
+  return withLock_(() => {
+    const t = sheet_(ss, TRASH_SHEET), row = t ? findRow_(t, 1, String(tid || '')) : 0;
+    if (!row) return false;
+    const r = t.getRange(row, 1, 1, 10).getValues()[0];
+    t.deleteRow(row);
+    audit_(String(r[4]), String(r[6]), String(r[7]), 'purge', { 'ลบถาวรจากถังขยะ': String(r[8]).slice(0, 200) });
+    return true;
+  });
+}
+// ล้างรายการเกิน 90 วัน (แถวเก่าอยู่บน) · ทุกคืนตอนสำรองข้อมูล
+function trashPrune_(ss) {
+  const t = sheet_(ss, TRASH_SHEET), last = t ? t.getLastRow() : 0;
+  if (last < 2) return 0;
+  const from = new Date(Date.now() - TRASH_DAYS * 864e5).toISOString(), at = t.getRange(2, 2, last - 1, 1).getValues().map(x => String(x[0]));
+  let k = 0;
+  while (k < at.length && at[k] < from) k++;
+  if (!k) return 0;
+  if (typeof t.deleteRows === 'function') t.deleteRows(2, k); else for (let i = k; i >= 1; i--) t.deleteRow(i + 1);
+  return k;
 }
 // ตารางที่ดูประวัติได้ในแต่ละแถบ (ต้องดูแถบนั้นได้)
 const AUDIT_VIEWS = { nurse: ['appt', 'dq', 'rtd', 'see', 'visit'],   // API 86 · 88: ตารางพบแพทย์
@@ -5603,6 +5710,7 @@ function snapWarm() {
 // ทริกเกอร์รายวัน (เรียกจากหน้าเว็บได้ด้วย จึงไม่ทำซ้ำถ้าสำรองอัตโนมัติไปแล้วภายใน 12 ชั่วโมง)
 function backupDaily() {
   try { regArchive_(ss_(), readConfig_(ss_()) || {}, false); } catch (e) { console.log('backupDaily regArchive_ ' + e); }   // API 89: ย้ายผู้ป่วยเก่าตอนกลางคืน
+  try { trashPrune_(ss_()); } catch (e) { console.log('backupDaily trashPrune_ ' + e); }   // API 93: ถังขยะเกิน 90 วัน
   const last = backupState_();
   if (last.why === 'auto' && last.ok && Date.now() - Date.parse(last.at) < 12 * 36e5) return 'skip';
   backupRun_('auto');
