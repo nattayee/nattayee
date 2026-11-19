@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-19.6';
-const API_LEVEL = 97;   // 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.1';
+const API_LEVEL = 98;   // 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -283,7 +283,7 @@ function doGet(e) {
   const vars = { MEDPHYS_PAGE_SOURCE: page.source, MEDPHYS_API: API_LEVEL };   // API: หน้าเว็บขอข้อมูลแบบย่อได้ตั้งแต่โหลดครั้งแรก
   // กดจากปุ่มใน LPCH RO Workspace: บัตรผ่านใช้ได้ครั้งเดียว แลกเป็นการเข้าสู่ระบบที่นี่
   if (p.sso && lpchUrl_()) {
-    try { vars.MEDPHYS_LPCH_TOKEN = String(lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(p.sso) })).token); } catch (err) {
+    try { const r = lpchFinish_(lpchCall_({ action: 'ssoRedeem', ticket: String(p.sso) })); vars.MEDPHYS_LPCH_TOKEN = String(r.token); txsLoginLog_(r, 'ปุ่มจาก LPCH RO Workspace'); } catch (err) {
       vars.MEDPHYS_LPCH_ERROR = String(err.message);
     }
   }
@@ -414,15 +414,18 @@ function getData(a, b) {
   const out = { user: user, api: API_LEVEL, codeVersion: CODE_VERSION, homeUrl: lpchUrl_() };
   if (need.reg) { try { regArchive_(ss, config || {}, false); } catch (e) { /* ครั้งหน้า */ } }   // ผู้ป่วยเก่า → ที่เก็บถาวร (วันละครั้ง)
   Object.assign(out, tablesFor_(ss, config, user, need, have));
+  let tw = null;
+  try { tw = txsWho_(config || {}, user); if (tw.ok) txsOut_(ss, config || {}, tw, need, have, out); } catch (e) { console.log('txs ' + e); }   // API 98
+  const outer = !!(tw && tw.outer);   // API 98: หน่วยงานภายนอก = ไม่ได้สถานะการดึงข้อมูลจากระบบอื่น และ URL ของชีต
   return Object.assign(out, {
     regDrive: need.reg ? regDriveStatus_() : null,
     regArch: need.reg ? regArchStatus_() : null,
-    spqSync: config && config.appt && config.appt.spq && (config.appt.spq.on || user.isAdmin) ? spqStatus_() : null,
-    brachy: config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
-    tdf: config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
-    config: config,
+    spqSync: !outer && config && config.appt && config.appt.spq && (config.appt.spq.on || user.isAdmin) ? spqStatus_() : null,
+    brachy: !outer && config && config.brachySync && (config.brachySync.on || user.isAdmin) ? brachyStatus_() : null,
+    tdf: !outer && config && config.tdfSync && (config.tdfSync.on || user.isAdmin) ? extStatus_('tdf') : null,
+    config: outer ? txsCfgOut_(config) : config,   // API 98: หน่วยงานภายนอกไม่ได้รายชื่อแอดมิน บัญชีของบุคลากร และรหัสชีต/โฟลเดอร์ของระบบอื่น
     cfgReqs: user.isAdmin || (user.sub && user.sub.length) ? cfgReqs_(ss, config || {}, user) : [],
-    sheetUrl: ss.getUrl(),
+    sheetUrl: outer ? '' : ss.getUrl(),
     practice: PRACTICE_ ? { at: String(propRead_(PRACTICE_AT) || '') } : null,
     practiceOn: practiceOn_(),
   });
@@ -726,6 +729,8 @@ function guestNeeds_(user, config) {
  * ตำแหน่งอื่นดูได้ถ้าติ๊ก "ตำแหน่งอื่น" (แบบเดิม) · แถบใหม่ที่การตั้งค่าเดิมยังไม่มี ทำตามแถบก่อนหน้า (NAV_PREV) หรือแถบที่ระบุ (NAV_LIKE) เหมือนหน้าเว็บ
  */
 function navAccess_(config, view, role, base) {
+  if (view === TXS_VIEW) return txsNav_(config, role, base);   // API 98
+  if (txsOuter_(config, role)) return '';   // API 98: หน่วยงานภายนอก (ตารางหน่วยงานของ Treatment Summary · ไม่ใช่ตำแหน่งของแผนก) เห็นเฉพาะแถบ Treatment Summary
   const nav = config && Array.isArray(config.nav) ? config.nav : [];
   const find = v => nav.filter(x => x && x.view === v)[0];
   let x = find(view);
@@ -5134,8 +5139,278 @@ function lpchFinish_(out) {
 // API 89: have = { pack } (หน้าเว็บรุ่นใหม่) = ส่งข้อมูลทั้งหมดมาพร้อมผลเข้าสู่ระบบ (ไม่ต้องเรียก getData อีกรอบ)
 function lpchLogin(username, password, have) {
   const r = lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
+  txsLoginLog_(r, 'กรอกชื่อผู้ใช้และรหัสผ่าน');   // API 98
   if (have && typeof have === 'object' && have.pack && r.token) { try { r.data = getData({ pack: 1 }, r.token); } catch (e) { console.log('lpchLogin data ' + e); } }
   return r;
+}
+
+/* ---------- Treatment Summary (API 98): หน่วยงานภายนอกดูสรุปการรักษาของผู้ป่วยกำลังฉายและ Complete course ----------
+ * หน่วยงาน = ตำแหน่ง (role) ในบัญชีกลาง LPCH RO Workspace · ตารางหน่วยงาน (config.txs.units): ดูอย่างเดียว / ดูและพิมพ์ · ขอบเขต ผู้ป่วยทั้งหมด / ผู้ป่วยที่ส่งต่อ
+ * ตำแหน่งที่ไม่ใช่ของแผนก (ไม่อยู่ใน LPCH_ROLES) ที่อยู่ในตาราง = หน่วยงานภายนอก เห็นเฉพาะแถบนี้ ได้ข้อมูลเฉพาะที่ใช้ทำสรุป (ชื่อผู้ป่วยแบบย่อ · ผู้ป่วยในขอบเขต)
+ * หน่วยงานที่ไม่อยู่ในตาราง = เข้าแถบนี้ไม่ได้ (ตำแหน่งของแผนกตาม ตั้งค่า → แถบเมนู · ค่าเริ่มต้น MP และแอดมินดูได้)
+ * ทุกการเข้าสู่ระบบของหน่วยงาน การดู การพิมพ์ การเปิด PDF และการปฏิเสธ = หนึ่งแถวในชีต TxsLog (เพิ่มอย่างเดียว ไม่มีฟังก์ชันแก้หรือลบ · ป้องกันชีตให้เจ้าของไฟล์เท่านั้น)
+ * ผู้ป่วยที่ส่งต่อ (ชีต TxsRefer) แอดมินเพิ่ม / ลบ · ชื่อเต็มของผู้ป่วยส่งเฉพาะตอนพิมพ์ (หน่วยงานที่พิมพ์ได้) */
+const TXS_VIEW = 'txsum';
+const TXS_UNITS = [
+  { role: 'Chemo', label: 'เคมีบำบัด', print: false, scope: 'all' },
+  { role: 'WardM', label: 'หอผู้ป่วยชาย', print: false, scope: 'all' },
+  { role: 'WardF', label: 'หอผู้ป่วยหญิง', print: false, scope: 'all' },
+  { role: 'ICU', label: 'ICU', print: false, scope: 'all' },
+  { role: 'QLU', label: 'QLU (หอผู้ป่วย)', print: false, scope: 'all' },
+  { role: 'NM', label: 'เวชศาสตร์นิวเคลียร์', print: false, scope: 'all' },
+  { role: 'Refer', label: 'ศูนย์ refer (ภายใน รพ.)', print: true, scope: 'refer' },
+];
+const TXS_DAYS = 180;   // Complete course แสดงถึงกี่วันหลังฉายครั้งสุดท้าย (ตั้งได้ 7–730)
+const TXS_LOG = 'TxsLog';
+const TXS_LOG_HEAD = ['เวลา', 'การทำ', 'หน่วยงาน', 'ตำแหน่ง', 'ผู้ใช้', 'ชื่อผู้ใช้', 'เลขที่เอกสาร', 'HN', 'รายละเอียด'];
+const TXS_REFER = 'TxsRefer';
+const TXS_REFER_HEAD = ['HN', 'หมายเหตุ', 'เพิ่มโดย', 'เวลา'];
+const TXS_ACTS = { login: 'เข้าสู่ระบบ', open: 'เปิดหน้าเว็บ', view: 'ดูเอกสาร', print: 'พิมพ์', pdf: 'เปิด PDF ที่จัดเก็บ', deny: 'ปฏิเสธ', 'refer+': 'เพิ่มผู้ป่วยที่ส่งต่อ', 'refer-': 'ลบผู้ป่วยที่ส่งต่อ', cfg: 'ตั้งค่าหน่วยงาน' };
+const TXS_CASE_KEYS = ['id', 'cat', 'how', 'mp', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'sim', 'in', 'ct', 'pc', 'eval', 'rt', 'rtDate', 'fxlog', 'rmove', 'fxadd', 'bsteps', 'replan', 'type', 'created'];
+const TXS_BQ_KEYS = ['id', 'course', 'date', 'hn', 'name', 'doc', 'tech', 'fx', 'total', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us', 'rtRoom', 'created'];
+const TXS_ROLE_RE = /^[\w -]{1,20}$/;
+const txsLow_ = v => String(v == null ? '' : v).trim().toLowerCase();
+function txsCfg_(config) {
+  const t = config && config.txs && typeof config.txs === 'object' ? config.txs : {}, seen = {};
+  const units = (Array.isArray(t.units) ? t.units : TXS_UNITS).filter(u => u && TXS_ROLE_RE.test(String(u.role || '').trim()))
+    .map(u => ({ role: String(u.role).trim(), label: String(u.label || u.role).replace(/\s+/g, ' ').trim().slice(0, 60), print: u.print === true, scope: u.scope === 'refer' ? 'refer' : 'all' }))
+    .filter(u => { const k = u.role.toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; });
+  return { units: units, days: Math.min(730, Math.max(7, Math.floor(+t.days) || TXS_DAYS)), folder: /^[\w-]{10,120}$/.test(String(t.folder || '').trim()) ? String(t.folder).trim() : '' };
+}
+function txsUnit_(config, role) { const r = txsLow_(role); return r ? txsCfg_(config).units.filter(u => u.role.toLowerCase() === r)[0] || null : null; }
+// หน่วยงานภายนอก: อยู่ในตารางหน่วยงาน และไม่ใช่ตำแหน่งของแผนก (LPCH_ROLES · Admin · แอดมินรอง)
+function txsOuter_(config, role) {
+  const r = txsLow_(role);
+  return !!r && r !== ADMIN_ROLE.toLowerCase() && r !== SUB_ROLE.toLowerCase() && !LPCH_ROLES.some(x => x.toLowerCase() === r) && !!txsUnit_(config, role);
+}
+// สิทธิ์แถบ Treatment Summary: แอดมิน และหน่วยงานในตาราง = ดูได้ · ตำแหน่งอื่นตาม ตั้งค่า → แถบเมนู (ดูได้อย่างมาก · ยังไม่ตั้ง = MP ดูได้)
+function txsNav_(config, role, base) {
+  if (role === ADMIN_ROLE) return 'view';
+  if (txsUnit_(config, role === SUB_ROLE ? base : role)) return 'view';
+  const nav = config && Array.isArray(config.nav) ? config.nav : [], x = nav.filter(n => n && n.view === TXS_VIEW)[0];
+  const acc = x && x.access && typeof x.access === 'object' ? x.access : null;
+  if (acc && Object.prototype.hasOwnProperty.call(acc, role) && ['edit', 'view', ''].indexOf(acc[role]) >= 0) return acc[role] ? 'view' : '';
+  if (role === SUB_ROLE) return txsNav_(config, base || '', '');
+  if (x && x.on === false) return '';
+  return LPCH_EDIT_ROLES.indexOf(role) >= 0 ? 'view' : '';
+}
+// ผู้ใช้กับแถบนี้: ok = เข้าได้ · print = พิมพ์ได้ · scope = all / refer · admin = จัดการรายชื่อ ประวัติ ตารางหน่วยงาน
+function txsWho_(config, u) {
+  const google = !!u && u.via === 'google', admin = google || !!(u && u.isAdmin);
+  const unit = google || !u ? null : txsUnit_(config, u.role);
+  return {
+    ok: admin || !!(u && userAccess_(config, TXS_VIEW, u)), admin: admin, unit: unit, outer: !google && !!u && txsOuter_(config, u.role),
+    print: admin || !!(unit && unit.print), scope: !admin && unit ? unit.scope : 'all',
+    label: unit ? unit.label : google ? 'บัญชี Google' : u && u.isAdmin ? 'แอดมิน' : 'ตำแหน่ง ' + ((u && u.role) || '-'),
+  };
+}
+// ชื่อผู้ป่วยแบบย่อ (มุมมองทั่วไป): ไม่มีคำนำหน้า · ชื่อ + อักษรแรกของนามสกุล (สระหน้าไทยรวมพยัญชนะตัวถัดไป) · เหมือน txsShort ในหน้าเว็บ
+const TXS_TITLE_RE = /^(?:นางสาว|นาง|นาย|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|น\.ส\.|mrs\.?|mr\.?|ms\.?|miss)\s*/i;
+function txsShort_(name) {
+  const t = String(name == null ? '' : name).replace(/\s+/g, ' ').trim().replace(TXS_TITLE_RE, '').trim(), p = t.split(' ');
+  if (p.length < 2) return t;
+  const last = p.slice(1).join(' ');
+  return p[0] + ' ' + (/^[เแโใไ]/.test(last) ? last.slice(0, 2) : last.slice(0, 1)) + '.';
+}
+// ชีตบันทึกการเข้าถึง: สร้างครั้งแรก (หัวคอลัมน์ · ข้อความล้วน · ป้องกันให้เจ้าของไฟล์แก้ได้คนเดียว)
+function txsLogSheet_(ss) {
+  const sh = sheet_(ss, TXS_LOG);
+  if (sh) return sh;
+  return withLock_(() => {
+    let x = ss.getSheetByName(TXS_LOG);
+    if (x) return x;
+    x = ss.insertSheet(TXS_LOG);
+    x.getRange(1, 1, Math.max(2, x.getMaxRows()), TXS_LOG_HEAD.length).setNumberFormat('@');
+    x.getRange(1, 1, 1, TXS_LOG_HEAD.length).setValues([TXS_LOG_HEAD]).setFontWeight('bold');
+    x.setFrozenRows(1);
+    try {
+      const pr = x.protect().setDescription('บันทึกการเข้าถึง Treatment Summary: ระบบเพิ่มแถวอย่างเดียว ห้ามแก้หรือลบ');
+      const me = Session.getEffectiveUser();
+      pr.addEditor(me);
+      pr.removeEditors(pr.getEditors().filter(e => e.getEmail() !== me.getEmail()));
+      if (pr.canDomainEdit()) pr.setDomainEdit(false);
+    } catch (e) { console.log('txsLogSheet_ protect ' + e); }
+    return x;
+  });
+}
+// หนึ่งแถว (appendRow = ต่อท้ายเสมอ ไม่ทับแถวของคำขออื่น · ไม่ถือล็อกบันทึก)
+function txsAppend_(ss, cfg, u, act, doc, hn, detail) {
+  const w = u ? txsWho_(cfg, u) : null;
+  const row = [new Date().toISOString(), TXS_ACTS[act] || act, w ? w.label : '', u ? String(u.role || (u.via === 'google' ? 'Google' : '')) : '',
+    u ? String(u.username || u.me || '') : '', u ? String(u.name || '') : '', String(doc || ''), String(hn || ''), String(detail || '').slice(0, 300)];
+  txsLogSheet_(ss).appendRow(row);
+}
+function txsLoginLog_(p, how) {
+  try {
+    if (!p || !p.role) return;
+    const ss = ss_(), cfg = readConfig_(ss) || {};
+    if (txsUnit_(cfg, p.role)) txsAppend_(ss, cfg, { via: 'lpch', role: p.role, username: p.username, name: p.name }, 'login', '', '', how);
+  } catch (e) { console.log('txsLoginLog_ ' + e); }
+}
+function txsReferSheet_(ss, make) {
+  let sh = sheet_(ss, TXS_REFER);
+  if (!sh && make) {
+    sh = ss.insertSheet(TXS_REFER);
+    sh.getRange(1, 1, Math.max(2, sh.getMaxRows()), TXS_REFER_HEAD.length).setNumberFormat('@');
+    sh.getRange(1, 1, 1, TXS_REFER_HEAD.length).setValues([TXS_REFER_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function txsReferMap_(ss) {
+  if (REQ_.txsRef) return REQ_.txsRef;
+  const sh = txsReferSheet_(ss, false), m = {}, last = sh ? sh.getLastRow() : 0;
+  if (last > 1) sh.getRange(2, 1, last - 1, TXS_REFER_HEAD.length).getValues().forEach(r => { const k = hnKey_(r[0]); if (k) m[k] = { hn: k, note: String(r[1] || ''), by: String(r[2] || ''), at: String(r[3] || '') }; });
+  return (REQ_.txsRef = m);
+}
+const txsHn_ = v => hnKey_(v).replace(/[^0-9A-Z]/g, '').slice(0, 15);
+const txsDoc_ = v => String(v || '').replace(/[^\w.-]/g, '').slice(0, 40);
+// getData: ข้อมูลของแถบนี้ (รุ่นเดียวกับที่หน้าเว็บมี = ไม่ส่งซ้ำ) · ตารางที่ผู้ใช้ได้รับอยู่แล้วไม่ส่งซ้ำ
+function txsOut_(ss, cfg, w, need, have, out) {
+  const vers = tableVers_(), lack = ['cases', 'duty', 'bq', 'reg'].filter(k => !need[k]), refer = w.admin || !w.unit || w.scope === 'refer';
+  const v = lack.concat(refer ? [TXS_REFER] : []).map(t => t + ':' + (vers[t] || '')).join('.') + '@' + today_(ss) + '|' + [w.scope, w.print ? 1 : 0, w.admin ? 1 : 0].join('') + '|' + strHash_(JSON.stringify(txsCfg_(cfg)));
+  out.ver = out.ver || {};
+  out.same = out.same || [];
+  out.ver.txs = v;
+  if (have && have.v && have.v.txs === v) { out.same.push('txs'); return; }
+  out.txs = txsData_(ss, cfg, w, lack, refer);
+}
+// การตั้งค่าที่ส่งให้หน่วยงานภายนอก: ตัดรายชื่อแอดมิน บัญชี LPCH / อีเมลของบุคลากร รหัสชีตและโฟลเดอร์ของระบบอื่น และการตั้งค่า P4P / งานของแผนก
+const TXS_CFG_DROP = ['admins', 'subAdmins', 'brachySync', 'tdfSync', 'tdfApp', 'roP4p', 'reg', 'appt', 'dq', 'jobs', 'vac', 'teams', 'crew', 'positions', 'guarantee', 'rate', 'carry', 'acts', 'order'];
+function txsCfgOut_(c) {
+  if (!c || typeof c !== 'object') return c;
+  const out = {};
+  Object.keys(c).forEach(k => { if (TXS_CFG_DROP.indexOf(k) < 0) out[k] = c[k]; });
+  ['staff', 'doctors'].forEach(k => { if (Array.isArray(out[k])) out[k] = out[k].map(x => { if (!x || typeof x !== 'object') return x; const y = Object.assign({}, x); delete y.user; delete y.email; return y; }); });
+  return out;
+}
+function txsPick_(o, keys) { const r = {}; keys.forEach(k => { if (o[k] != null && o[k] !== '') r[k] = o[k]; }); return r; }
+// สถานะ fraction: ไม่ส่งหมายเหตุและผู้บันทึก (เอกสารไม่มีช่องหมายเหตุ)
+function txsFxlog_(v) {
+  let a = [];
+  try { a = JSON.parse(String(v || '[]')); } catch (e) { a = []; }
+  return Array.isArray(a) ? JSON.stringify(a.filter(x => x && typeof x === 'object').map(x => { const y = Object.assign({}, x); delete y.note; delete y.by; delete y.at; return y; })) : '';
+}
+function txsData_(ss, cfg, w, lack, sendRefer) {
+  const t = txsCfg_(cfg), td = today_(ss), day = n => Utilities.formatDate(new Date(Date.parse(td + 'T12:00:00Z') + n * 864e5), 'UTC', 'yyyy-MM-dd');
+  const cut = day(-t.days), old = day(-t.days - 120), isD = x => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ''));
+  const ref = sendRefer || w.scope === 'refer' ? txsReferMap_(ss) : {};
+  const ok = hn => !!hnKey_(hn) && (w.scope !== 'refer' || !!ref[hnKey_(hn)]);
+  const want = k => lack.indexOf(k) >= 0, hns = {}, out = { refer: sendRefer ? Object.keys(ref).map(k => ref[k]) : [] };
+  let from = want('cases') || want('bq') ? td : old;
+  if (want('cases')) {
+    out.cases = readTable_(ss, 'cases', cfg).filter(c => ok(c.hn) && isD(c.sim) && String(c.sim) <= td && c.rt !== 'cancel' && (c.rt === 'complete' ? !isD(c.rtDate) || String(c.rtDate) >= cut : String(c.sim) >= old))
+      .map(c => {
+        const r = txsPick_(c, TXS_CASE_KEYS);
+        r.name = txsShort_(c.name);
+        if (r.fxlog) r.fxlog = txsFxlog_(r.fxlog);
+        if (/DIBH/i.test([c.tech, c.note, c.ptags].join(' '))) r.brth = 'DIBH';
+        hns[hnKey_(c.hn)] = 1;
+        if (String(c.sim) < from) from = String(c.sim);
+        return r;
+      });
+  }
+  if (want('bq')) {
+    out.bq = readTable_(ss, 'bq').filter(b => ok(b.hn) && isD(b.date) && String(b.date) >= old)
+      .map(b => { const r = txsPick_(b, TXS_BQ_KEYS); r.name = txsShort_(b.name); hns[hnKey_(b.hn)] = 1; if (String(b.date) < from) from = String(b.date); return r; });
+  }
+  if (want('duty')) out.duty = readTable_(ss, 'duty').filter(x => isD(x.date) && String(x.date) >= from && String(x.date) <= td).map(x => ({ id: x.id, date: x.date, room: x.room, rtt: x.rtt }));
+  if (want('reg')) out.reg = readTable_(ss, 'reg').filter(x => hns[hnKey_(x.hn)]).map(x => txsPick_(x, ['hn', 'sex', 'birth', 'icd', 'dx']));
+  return out;
+}
+// หน้าเว็บแจ้ง: เปิดหน้าเว็บ (เข้าสู่ระบบค้างไว้) · ดูเอกสาร · พิมพ์ (คืนชื่อเต็ม) · ปฏิเสธ
+// info = { hn, doc: เลขที่เอกสาร, id: รหัสเคส / นัดใส่แร่, kind: rt / bq, detail }
+function txsLog(act, info, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg), w = txsWho_(cfg, u);
+  info = info && typeof info === 'object' ? info : {};
+  if (['open', 'view', 'print', 'deny'].indexOf(act) < 0) throw new Error('การทำไม่ถูกต้อง');
+  const hn = txsHn_(info.hn), doc = txsDoc_(info.doc), detail = String(info.detail || '').replace(/\s+/g, ' ').slice(0, 200);
+  if (act === 'open') { if (w.unit) txsAppend_(ss, cfg, u, 'open', '', '', detail); return { ok: true }; }
+  if (act === 'deny') { txsAppend_(ss, cfg, u, 'deny', doc, hn, detail); return { ok: true }; }
+  const why = !w.ok ? 'หน่วยงาน / ตำแหน่งนี้ไม่มีสิทธิ์ดู Treatment Summary' : !hn ? 'ไม่มี HN'
+    : act === 'print' && !w.print ? 'หน่วยงานนี้ดูได้อย่างเดียว พิมพ์ไม่ได้'
+    : w.scope === 'refer' && !txsReferMap_(ss)[hn] ? 'ผู้ป่วยไม่อยู่ในรายชื่อผู้ป่วยที่ส่งต่อ' : '';
+  if (why) { txsAppend_(ss, cfg, u, 'deny', doc, hn, TXS_ACTS[act] + ': ' + why); throw new Error('TXS_DENY|' + why); }
+  if (act === 'view') { txsAppend_(ss, cfg, u, 'view', doc, hn, detail); return { ok: true }; }
+  // พิมพ์: ชื่อเต็มจากรายการเดียว (เคส / นัดใส่แร่) ต้องเป็น HN เดียวกัน
+  const id = String(info.id || '').slice(0, 80), table = info.kind === 'bq' ? 'bq' : 'cases';
+  const cur = id ? openRow_(ss, table, cfg, id).cur : null;
+  if (!cur || hnKey_(cur.hn) !== hn) { txsAppend_(ss, cfg, u, 'deny', doc, hn, 'พิมพ์: ไม่พบรายการ'); throw new Error('TXS_DENY|ไม่พบรายการของ HN นี้ (อาจถูกลบหรือแก้ HN) · โหลดหน้าใหม่แล้วลองอีกครั้ง'); }
+  txsAppend_(ss, cfg, u, 'print', doc, hn, detail);
+  return { ok: true, name: String(cur.name || '').replace(/\s+/g, ' ').trim() };
+}
+// แอดมิน: ประวัติการเข้าถึง (ล่าสุดก่อน) · q = { n: จำนวนแถว (สูงสุด 5000), skip: ข้ามแถวล่าสุดกี่แถว }
+function txsLogRead(q, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (!txsWho_(cfg, u).admin) throw new Error('ดูประวัติการเข้าถึงได้เฉพาะแอดมิน');
+  const sh = sheet_(ss, TXS_LOG), last = sh ? sh.getLastRow() : 0;
+  q = q && typeof q === 'object' ? q : {};
+  const n = Math.min(5000, Math.max(1, Math.floor(+q.n) || 500)), end = last - Math.max(0, Math.floor(+q.skip) || 0);
+  if (!sh || end < 2) return { rows: [], total: Math.max(0, last - 1), more: false };
+  const start = Math.max(2, end - n + 1);
+  const rows = sh.getRange(start, 1, end - start + 1, TXS_LOG_HEAD.length).getValues().reverse().map(r => r.map(v => (v instanceof Date ? v.toISOString() : String(v == null ? '' : v))));
+  return { rows: rows, total: last - 1, more: start > 2 };
+}
+// แอดมิน: เพิ่ม (on) / ลบ ผู้ป่วยที่ส่งต่อ (ขอบเขตของหน่วยงานแบบ "ผู้ป่วยที่ส่งต่อ") · คืนรายชื่อทั้งหมด
+function txsRefer(hn, on, note, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (!txsWho_(cfg, u).admin) throw new Error('จัดการรายชื่อผู้ป่วยที่ส่งต่อได้เฉพาะแอดมิน');
+  const k = txsHn_(hn);
+  if (!/^[0-9A-Z]{3,15}$/.test(k)) throw new Error('HN ไม่ถูกต้อง');
+  note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  withLock_(() => {
+    const sh = txsReferSheet_(ss, true), last = sh.getLastRow(), rows = [];
+    (last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues() : []).forEach((r, i) => { if (hnKey_(r[0]) === k) rows.push(i + 2); });
+    if (on) {
+      const vals = [note, String(u.name || u.username || u.me || ''), new Date().toISOString()];
+      if (rows.length) sh.getRange(rows[0], 2, 1, 3).setNumberFormat('@').setValues([vals]);
+      else sh.getRange(last + 1, 1, 1, TXS_REFER_HEAD.length).setNumberFormat('@').setValues([[k].concat(vals)]);
+    } else if (rows.length) deleteRowsAt_(sh, rows);
+    markDirty_(TXS_REFER);
+  });
+  REQ_.txsRef = null;
+  txsAppend_(ss, cfg, u, on ? 'refer+' : 'refer-', '', k, note);
+  const m = txsReferMap_(ss);
+  return { list: Object.keys(m).map(x => m[x]) };
+}
+// แอดมิน: ตารางหน่วยงาน · จำนวนวันที่แสดง Complete course · โฟลเดอร์ PDF ที่จัดเก็บ
+function txsSetup(t, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
+  if (!txsWho_(cfg, u).admin) throw new Error('ตั้งค่าหน่วยงานได้เฉพาะแอดมิน');
+  const nw = txsCfg_({ txs: t });
+  withLock_(() => {
+    const c = readConfig_(ss_()) || {};
+    c.txs = nw;
+    writeConfig_(ss_(), c);
+    audit_('config', '', '', 'edit', { 'หัวข้อที่แก้': 'txs' });
+  });
+  txsAppend_(ss, cfg, u, 'cfg', '', '', nw.units.map(x => x.role + ' ' + (x.print ? 'ดูและพิมพ์' : 'ดูอย่างเดียว') + (x.scope === 'refer' ? ' ผู้ป่วยที่ส่งต่อ' : '')).join(', ') + ' · ' + nw.days + ' วัน' + (nw.folder ? ' · มีโฟลเดอร์ PDF' : ''));
+  return nw;
+}
+// PDF ที่สร้างไว้แล้วในโฟลเดอร์ (config.txs.folder) ชื่อ RT_summary_<HN>[_vN].pdf / Brachy_summary_<HN>[_vN].pdf · รุ่นสูงสุด (เท่ากัน = แก้ล่าสุด)
+// เฉพาะหน่วยงานที่พิมพ์ได้ · opt.meta = ถามว่ามีไหม (ไม่บันทึก) · ไม่ใช่ meta = ส่งไฟล์ (base64) และบันทึกการเปิด
+function txsPdf(hn, kind, opt, token) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg), w = txsWho_(cfg, u), t = txsCfg_(cfg);
+  opt = opt && typeof opt === 'object' ? opt : {};
+  const k = txsHn_(hn), pre = kind === 'bq' ? 'Brachy' : 'RT', meta = !!opt.meta, doc = txsDoc_(opt.doc);
+  const why = !w.ok ? 'หน่วยงาน / ตำแหน่งนี้ไม่มีสิทธิ์ดู Treatment Summary' : !w.print ? 'PDF ที่จัดเก็บไว้เปิดได้เฉพาะหน่วยงานที่พิมพ์ได้' : !k ? 'ไม่มี HN'
+    : w.scope === 'refer' && !txsReferMap_(ss)[k] ? 'ผู้ป่วยไม่อยู่ในรายชื่อผู้ป่วยที่ส่งต่อ' : '';
+  if (why) { if (!meta) txsAppend_(ss, cfg, u, 'deny', doc, k, 'เปิด PDF: ' + why); throw new Error('TXS_DENY|' + why); }
+  if (!t.folder) return null;
+  const re = new RegExp('^' + pre + '_summary_' + k + '(?:_v(\\d+))?\\.pdf$', 'i');
+  let best = null;
+  const it = DriveApp.getFolderById(t.folder).searchFiles('title contains "' + pre + '_summary_' + k + '" and trashed = false');
+  while (it.hasNext()) {
+    const f = it.next(), m = re.exec(f.getName());
+    if (!m) continue;
+    const v = +(m[1] || 0), up = f.getLastUpdated().getTime();
+    if (!best || v > best.v || (v === best.v && up > best.up)) best = { f: f, v: v, up: up };
+  }
+  if (!best) return null;
+  const info = { name: best.f.getName(), v: best.v, updated: new Date(best.up).toISOString(), size: best.f.getSize() };
+  if (meta) return info;
+  txsAppend_(ss, cfg, u, 'pdf', doc, k, info.name);
+  return Object.assign(info, { b64: Utilities.base64Encode(best.f.getBlob().getBytes()) });
 }
 
 function lpchLogout(token) {
@@ -5745,7 +6020,7 @@ const PRACTICE_PROP = 'PRACTICE_SHEET_ID', PRACTICE_AT = 'PRACTICE_AT';
 // API 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (Script property PRACTICE_ON = '1' · ไม่ได้ตั้ง = ปิด) · ปิด = ทุกการเรียกในโหมดฝึกถูกปฏิเสธ (หน้าเว็บกลับระบบจริง · ไม่ส่งต่อไปบันทึกในระบบจริง)
 const PRACTICE_ON = 'PRACTICE_ON', PRACTICE_OFF_MSG = 'PRACTICE_OFF|แอดมินปิดโหมดฝึกใช้อยู่ · ตอนนี้กลับเป็นระบบจริงแล้ว (สิ่งที่เพิ่งกดในโหมดฝึกไม่ได้บันทึก)';
 const practiceOn_ = () => String(propRead_(PRACTICE_ON) || '') === '1';
-const PRACTICE_NO = ['doGet', 'onOpen', 'openApp', 'practiceCall', 'importLegacy', 'bqImportCheck', 'bqImport', 'vacImportCheck', 'vacImport',
+const PRACTICE_NO = ['doGet', 'onOpen', 'openApp', 'practiceCall', 'importLegacy', 'txsPdf', 'bqImportCheck', 'bqImport', 'vacImportCheck', 'vacImport',
   'regDriveCheck', 'regDrivePull', 'regDriveTick', 'tdfxList', 'tdfxSave', 'tdfxRecheck', 'tdfxSavePdf', 'tdfxWithdraw', 'tdfxCheck', 'tdfCheck', 'tdfPull',
   'hdrGet', 'hdrAdd', 'brachyCheck', 'brachyPull', 'brachyTick', 'spqCheck', 'spqPull', 'setPin', 'setupLpch', 'snapWarm', 'snapTick',
   'backupDaily', 'backupInstall', 'backupStatus', 'backupSave', 'backupNow'];
