@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-19.4';
-const API_LEVEL = 95;   // 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-19.5';
+const API_LEVEL = 96;   // 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -424,6 +424,7 @@ function getData(a, b) {
     cfgReqs: user.isAdmin || (user.sub && user.sub.length) ? cfgReqs_(ss, config || {}, user) : [],
     sheetUrl: ss.getUrl(),
     practice: PRACTICE_ ? { at: String(propRead_(PRACTICE_AT) || '') } : null,
+    practiceOn: practiceOn_(),
   });
 }
 
@@ -5706,6 +5707,9 @@ function sheetSource_() {
  * ไฟล์จริงไม่ถูกเปิดเพื่อเขียนเลย (ยกเว้นอ่านชีต Config ตอนสร้าง / ล้างไฟล์ฝึก และตรวจแอดมินตอนล้าง) */
 let PRACTICE_ = false;
 const PRACTICE_PROP = 'PRACTICE_SHEET_ID', PRACTICE_AT = 'PRACTICE_AT';
+// API 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (Script property PRACTICE_ON = '1' · ไม่ได้ตั้ง = ปิด) · ปิด = ทุกการเรียกในโหมดฝึกถูกปฏิเสธ (หน้าเว็บกลับระบบจริง · ไม่ส่งต่อไปบันทึกในระบบจริง)
+const PRACTICE_ON = 'PRACTICE_ON', PRACTICE_OFF_MSG = 'PRACTICE_OFF|แอดมินปิดโหมดฝึกใช้อยู่ · ตอนนี้กลับเป็นระบบจริงแล้ว (สิ่งที่เพิ่งกดในโหมดฝึกไม่ได้บันทึก)';
+const practiceOn_ = () => String(propRead_(PRACTICE_ON) || '') === '1';
 const PRACTICE_NO = ['doGet', 'onOpen', 'openApp', 'practiceCall', 'importLegacy', 'bqImportCheck', 'bqImport', 'vacImportCheck', 'vacImport',
   'regDriveCheck', 'regDrivePull', 'regDriveTick', 'tdfxList', 'tdfxSave', 'tdfxRecheck', 'tdfxSavePdf', 'tdfxWithdraw', 'tdfxCheck', 'tdfCheck', 'tdfPull',
   'hdrGet', 'hdrAdd', 'brachyCheck', 'brachyPull', 'brachyTick', 'spqCheck', 'spqPull', 'setPin', 'setupLpch', 'snapWarm', 'snapTick',
@@ -5715,6 +5719,7 @@ function practiceCall(fn, args) {
   fn = String(fn || '');
   const f = /^[a-z][A-Za-z0-9]{1,60}$/.test(fn) && PRACTICE_NO.indexOf(fn) < 0 ? globalThis[fn] : null;
   if (typeof f !== 'function') throw new Error(PRACTICE_MSG + ' · ' + fn);
+  if (fn !== 'practiceSet' && !practiceOn_()) throw new Error(PRACTICE_OFF_MSG);
   PRACTICE_ = true;
   SS_ = null;
   CFG_MEMO_ = null;
@@ -5771,6 +5776,22 @@ function practiceSeed_(ss, seed) {
     out[t] = vals.length;
   });
   return out;
+}
+// แอดมิน (ตามการตั้งค่าของระบบจริง): เปิด / ปิดโหมดฝึกใช้ของทุกคน · ข้อมูลฝึกเก็บไว้ (เปิดอีกครั้งใช้ต่อได้) · บันทึกในประวัติของระบบจริง
+function practiceSet(on, token) {
+  PRACTICE_ = false;
+  SS_ = null;
+  CFG_MEMO_ = null;
+  const real = ss_(), u = who_(token, real, readConfig_(real) || {});
+  if (u.via !== 'google' && !u.isAdmin) throw new Error('เปิด / ปิดโหมดฝึกใช้ได้เฉพาะแอดมิน');
+  on = on === true;
+  return withLock_(() => {
+    if (practiceOn_() !== on) {
+      propSave_(PRACTICE_ON, on ? '1' : '');
+      audit_('config', '', '', 'edit', { 'โหมดฝึกใช้': on ? 'เปิด' : 'ปิด' });
+    }
+    return { on: on };
+  });
 }
 const practiceEmpty_ = ss => PRACTICE_CORE.every(t => { const sh = sheet_(ss, TABLES[t].sheet); return !sh || sh.getLastRow() < 2; });
 // ล้างข้อมูลฝึกเริ่มใหม่ (แอดมินของระบบจริง): ไฟล์ฝึกใหม่ + Config ล่าสุดจากระบบจริง + ผู้ป่วยตัวอย่าง · ไฟล์ฝึกเดิมไปถังขยะของ Drive
