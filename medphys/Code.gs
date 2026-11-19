@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-18.2';
-const API_LEVEL = 91;   // 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-19.1';
+const API_LEVEL = 92;   // 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1863,6 +1863,7 @@ function recentCt_(ss) {
  * จำนวนเคสต่อวันและ HN ซ้ำวันเดียวกัน หน้าเว็บเตือนก่อนลงนัด (ลงต่อได้เหมือนระบบนัดคิวใส่แร่เดิม)
  */
 const BQ_BOOKED = 'นัดแล้ว';
+const BQ_PP = 'เลื่อนนัดไม่มีกำหนด';   // API 92 · เลื่อนไปก่อนยังไม่ลงวัน = ไม่นับเคส ไม่นับคะแนน (เหมือนยกเลิก) จนกว่าจะลงวันนัดใหม่ (bqMove)
 const BQ_NOSHOW = 'ไม่มา';   // API 50 · ผู้ป่วยไม่มาตามนัด = ไม่นับเคส ไม่นับคะแนน (MP, RC และอื่น ๆ) เหมือนยกเลิก
 const BQ_EDIT = ['date', 'doc', 'tech', 'note', 'status', 'rtt', 'mp', 'rc', 'ct', 'ctRoom', 'us'];
 // CT ของนัดใส่แร่ (API 46): ct = CT / Re-CT · ctRoom = รหัสเครื่อง CT ที่ทำ (นับคะแนนห้อง CT ในแถบ RTT/RA Jobs) · us = US (Ultrasound)
@@ -1950,7 +1951,7 @@ function bqEdit(id, ch, pin, token) {
   const set = {};
   BQ_EDIT.forEach(k => { if (k in ch) set[k] = bqCut_(ch[k], k === 'note' ? 2000 : 200); });
   if ('date' in set && !/^\d{4}-\d{2}-\d{2}$/.test(set.date)) throw new Error('วันที่นัดไม่ถูกต้อง');
-  if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BQ_NOSHOW, BRACHY_ST_CANCEL].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+  if ('status' in set && [BQ_BOOKED, BRACHY_ST_DONE, BQ_NOSHOW, BRACHY_ST_CANCEL, BQ_PP].indexOf(set.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   if ('tech' in set && !set.tech) throw new Error('เลือกรูปแบบการใส่');
   if ('us' in set && ['', 'US'].indexOf(set.us) < 0) throw new Error('Ultrasound ไม่ถูกต้อง');
   const cfg = readConfig_(ss_()) || {};
@@ -2002,13 +2003,49 @@ function bqEditDay(ids, ch, pin, token) {
     pinChange_(u, pin, ids.some(id => { const x = curOf(id); return x && has_(x[k]) && String(x[k]) !== v; }));
     ids.forEach(id => {
       const cur = curOf(id);
-      if (!cur || cur.status === BRACHY_ST_CANCEL || cur.status === BQ_NOSHOW) return;
+      if (!cur || cur.status === BRACHY_ST_CANCEL || cur.status === BQ_NOSHOW || cur.status === BQ_PP) return;
       if (v && ((k === 'rc' && cur.mp === v) || (k === 'mp' && cur.rc === v))) return;
       if (String(cur[k] || '') === v) { recs.push(cur); return; }
       const set = { updated: new Date().toISOString(), editedBy: bqWho_(u), hist: bqHist_(cur.hist, u, [{ f: k, from: String(cur[k] || ''), to: v }]) };
       set[k] = v;
       writeFields_(R.sh, R.at[id].row, R.header, TABLES.bq.fields.filter(f => f[0] in set), set, R.at[id].vals);
       recs.push(Object.assign({}, cur, set));
+    });
+    return recs;
+  });
+  bqStats_();
+  return out;
+}
+/**
+ * API 92: เลื่อนนัดใส่แร่ (แถบนัดคิวใส่แร่: ผลการค้นหา · คอลัมน์ท้ายตาราง · แถบเลื่อนนัดไม่มีกำหนด)
+ * date '' = เลื่อนนัดไม่มีกำหนด (สถานะ เลื่อนนัดไม่มีกำหนด · วันนัดเดิมเก็บไว้ · ไม่นับเคส) · scope 'rest' = Fx นี้และ Fx ที่ยังนัดอยู่หลังจากนี้ของคอร์ส
+ * date = วันนัดใหม่ (นัดที่ยังนัดอยู่ หรือเลื่อนนัดไม่มีกำหนด → นัดแล้ว วันนั้น) · ไม่ต้องใส่ PIN (ยกเลิกใช้ bqCancel = ใส่ PIN) · เก็บประวัติ · คืนนัดที่เปลี่ยน
+ */
+function bqMove(id, date, scope, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.bq);
+  date = bqCut_(date, 10);
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('วันที่นัดไม่ถูกต้อง');
+  const out = withLock_(() => {
+    const ss = ss_(), t0 = openRow_(ss, 'bq', null, String(id || '')), tg = t0.cur;
+    if (!t0.row || !tg) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    if ([BQ_BOOKED, BQ_PP].indexOf(tg.status) < 0) throw new Error('เลื่อนได้เฉพาะนัดที่ยังนัดอยู่ หรือเลื่อนนัดไม่มีกำหนด (นัดนี้: ' + tg.status + ')');
+    const pick = [{ row: t0.row, vals: t0.vals, cur: tg }];
+    if (!date && scope === 'rest' && tg.course) {   // Fx ที่ยังนัดอยู่หลังจากนี้ของคอร์สเดียวกัน
+      const want = readCols_(ss, 'bq', null, ['course', 'status', 'fx']).filter(r => r.course === tg.course && r.status === BQ_BOOKED && r.id !== tg.id && Number(r.fx) > Number(tg.fx)).map(r => r.id);
+      if (want.length) {
+        const R = openRows_(ss, 'bq', null, v => want.indexOf(v) >= 0);
+        want.filter(k => R.at[k]).forEach(k => pick.push({ row: R.at[k].row, vals: R.at[k].vals, cur: R.cv.conv(R.at[k].vals) }));
+      }
+    }
+    const now = new Date().toISOString(), by = bqWho_(u), recs = [];
+    pick.forEach(t => {
+      const x = t.cur, set = date ? { date: date, status: BQ_BOOKED } : { status: BQ_PP };
+      const diff = Object.keys(set).filter(k => String(x[k] || '') !== set[k]);
+      if (!diff.length) { recs.push(x); return; }
+      const o = { updated: now, editedBy: by, hist: bqHist_(x.hist, u, diff.map(k => ({ f: k, from: String(x[k] || ''), to: set[k] }))) };
+      diff.forEach(k => { o[k] = set[k]; });
+      writeFields_(t0.sh, t.row, t0.header, TABLES.bq.fields.filter(f => f[0] in o), o, t.vals);
+      recs.push(Object.assign({}, x, o));
     });
     return recs;
   });
@@ -2023,7 +2060,7 @@ function bqHist_(old, u, ch) {
   list.push({ at: Utilities.formatDate(new Date(), tz_(ss_()), 'yyyy-MM-dd HH:mm'), by: bqWho_(u), ch: ch });
   return JSON.stringify(list.slice(-40));
 }
-// ยกเลิกนัด: scope 'course' = ทุก Fx ที่ยังนัดอยู่ของคอร์สนี้ · อื่น ๆ = เฉพาะ Fx นี้ · คืน { changed, ids }
+// ยกเลิกนัด: scope 'course' = ทุก Fx ที่ยังนัดอยู่ (และเลื่อนนัดไม่มีกำหนด) ของคอร์สนี้ · อื่น ๆ = เฉพาะ Fx นี้ · คืน { changed, ids }
 function bqCancel(id, scope, pin, token) {
   const u = requireEdit_(token, EDIT_VIEWS.bq);
   pinChange_(u, pin, true);
@@ -2032,7 +2069,7 @@ function bqCancel(id, scope, pin, token) {
     if (!tg) throw new Error('ไม่พบนัดนี้ (อาจถูกเปลี่ยนไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     let pick;   // [{ row, vals, cur }] · ทั้งคอร์ส: หา id จากคอลัมน์ คอร์ส + สถานะ แล้วอ่านเฉพาะแถวนั้น (เดิมอ่านทั้งตารางนัด)
     if (scope === 'course') {
-      const want = !tg.course ? [] : readCols_(ss, 'bq', null, ['course', 'status']).filter(r => r.course === tg.course && r.status === BQ_BOOKED).map(r => r.id);
+      const want = !tg.course ? [] : readCols_(ss, 'bq', null, ['course', 'status']).filter(r => r.course === tg.course && (r.status === BQ_BOOKED || r.status === BQ_PP)).map(r => r.id);
       const R = want.length ? openRows_(ss, 'bq', null, v => want.indexOf(v) >= 0) : { at: {} };
       pick = want.filter(k => R.at[k]).map(k => ({ row: R.at[k].row, vals: R.at[k].vals, cur: R.cv.conv(R.at[k].vals) }));
     } else pick = tg.status !== BRACHY_ST_CANCEL ? [{ row: t0.row, vals: t0.vals, cur: tg }] : [];
@@ -2106,7 +2143,7 @@ function bqImportRead_(cfg) {
   const docs = (Array.isArray(cfg.doctors) ? cfg.doctors : []).filter(x => x && x.code);
   const docOf = v => { const t = String(v || '').trim(), hit = t && docs.filter(x => String(x.code).toUpperCase() === t.toUpperCase() || (x.name && docKey(x.name) === docKey(t)))[0]; return hit ? String(hit.code).toUpperCase() : t; };
   const staffOf = brachyStaff_(cfg), unknownDoc = {}, unknownStaff = {};
-  const stOf = v => (/ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /ไม่มา|no.?show/i.test(v) ? BQ_NOSHOW : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
+  const stOf = v => (/เลื่อนนัดไม่มีกำหนด/.test(v) ? BQ_PP : /ยกเลิก|cancel/i.test(v) ? BRACHY_ST_CANCEL : /ไม่มา|no.?show/i.test(v) ? BQ_NOSHOW : /มาตามนัด|มาแล้ว|done|complete/i.test(v) ? BRACHY_ST_DONE : BQ_BOOKED);
   const now = new Date().toISOString();
   const rows = values.map(r => {
     const g = k => { const i = at(k); return i < 0 ? '' : cellText_(r[i], tz); };
@@ -4240,7 +4277,7 @@ function brachyWanted_(rows, s, cfg) {
   rows.forEach(r => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || (from && r.date < from)) return;
     const st = String(r.status).trim();
-    if (st === BRACHY_ST_CANCEL || st === BQ_NOSHOW || (s.count === 'done' && st !== BRACHY_ST_DONE)) return;   // ยกเลิก / ไม่มา ไม่นับ
+    if (st === BRACHY_ST_CANCEL || st === BQ_NOSHOW || st === BQ_PP || (s.count === 'done' && st !== BRACHY_ST_DONE)) return;   // ยกเลิก / ไม่มา / เลื่อนนัดไม่มีกำหนด ไม่นับ
     counted++;
     const mp = staffOf(r.mp), rc = staffOf(r.rc);
     if (r.mp && !mp) unknown[r.mp] = (unknown[r.mp] || 0) + 1;
