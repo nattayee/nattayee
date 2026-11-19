@@ -7514,7 +7514,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-19.9';
+const PAGE_VERSION = '2026-11-20.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9463,11 +9463,17 @@ const ctRoomSel = () => { const v = pref.get('ctRoom', ''); return ctRooms().som
 const ctMode = k => (k === 'dose' ? (DOSE_SET.some(x => (state.config.ct.form[x] || 'off') !== 'off') ? 'show' : 'off') : state.config.ct.form[k] || 'off');   // dose = ช่องใดช่องหนึ่งของ Dose/fx, Fx, Prescription, ความถี่
 // สถานะการแจกเคสของรายการ CT: wait = รอ MP แจก · took = แจกแล้ว · skip = ไม่ต้องแจก · none = ไม่ได้ส่งแถบงาน
 const ctState = r => (r.took === 'skip' ? 'skip' : r.took ? 'took' : r.send ? 'wait' : 'none');
+// 20 พ.ย.: ส่งแถบงานแล้ว (รอ MP แจก) แต่ MP แจกเคสของ HN นี้แบบกรอกเอง (ไม่ได้ดึงจากรายการนี้) = ถือว่าแจกแล้ว
+// เคสวางแผน (ไม่ใช่กิจกรรม) ของ HN เดียวกันที่แจกหลังบันทึกรายการ CT-SIM หรือ In ตั้งแต่วันทำ CT · เดิมค้างเป็นแถว "รอ Plan complete" ในตารางวันฉาย 60 วัน
+const ctCaseAfter = r => (ctState(r) === 'wait' ? byHn(state.cases, r.hn).find(c => !isSimple(c) && !preRow(c) && ((str(c.created) && str(c.created) >= str(r.created)) || (isDay(c.in) && c.in >= r.date))) || null : null);
+const ctWaitOpen = r => ctState(r) === 'wait' && !ctCaseAfter(r);
 const ctCases = r => (ctState(r) === 'took' ? splitList(r.took).map(id => state.cases.find(c => c.id === id)).filter(Boolean) : []);
 function ctStateChip(r) {
   const st = ctState(r), cs = ctCases(r);
   if (st === 'took') return `<span class="chip ok" title="${esc(`แจกเคสแล้ว${r.tookBy ? ` โดย ${r.tookBy}` : ''} ${fmtStamp(r.tookAt) || ''}`.trim())}">แจกแล้ว${cs.length ? ' · ' + esc([...new Set(cs.map(c => c.mp))].join(', ')) : ''}</span>`;
   if (st === 'skip') return `<span class="chip" title="${esc(`MP ตั้งว่าไม่ต้องแจก${r.tookBy ? ` (${r.tookBy})` : ''}`)}">ไม่ต้องแจก</span>`;
+  const after = st === 'wait' ? ctCaseAfter(r) : null;
+  if (after) return `<span class="chip ok" title="${esc(`MP แจกเคสของ HN นี้แล้ว (กรอกเอง ไม่ได้ดึงจากรายการนี้) · ${catOf(after.cat).label} · In ${fmtDay(after.in)}`)}">แจกแล้ว · ${esc(after.mp || '')}</span>`;
   return st === 'wait' ? '<span class="chip warn">รอ MP แจก</span>' : '<span class="chip muted-chip">ไม่ส่ง</span>';
 }
 const ctCatLabels = r => splitList(r.cats).map(id => catOf(id).label).join(', ');
@@ -9492,7 +9498,7 @@ function renderCt() {
   const list = words.length ? all.filter(r => wordsIn(words, [r.hn, r.name, r.doc, ctDocText(r.doc), r.organ, r.note, r.mask, r.cm, r.ctcm, r.special, ctCatLabels(r)].join(' ').toLowerCase())) : all;
   const cols = CT_COLS.filter(([k]) => k === 'hn' || (ctMode(k) !== 'off' && (ctSpOn() || !['ctcm', 'special'].includes(k))));
   const td = today(), days = [...new Set([...list.map(r => r.date), ...state.duty.filter(x => x.room === 'CT:' + room && x.date.slice(0, 7) === ym && !words.length).map(x => x.date), ...(td.slice(0, 7) === ym && !words.length ? [td] : [])])].sort().reverse();
-  const nWait = all.filter(r => ctState(r) === 'wait').length;
+  const nWait = all.filter(ctWaitOpen).length;
   $('#ct-help').textContent = `${ctLabel(room)} · ${fmtMonth(ym)} · ${all.length} คน${nWait ? ` · รอ MP แจก ${nWait}` : ''}${edit ? ' · กดแถวเพื่อแก้ · "ผู้ปฏิบัติงาน" ใต้วันที่ = RTT, RA, Daily QC ของวันนั้น' : ''}`;
   const span = cols.length + 3;
   const head = `<thead><tr><th>No.</th><th>N/D</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>แถบงาน</th></tr></thead>`;
@@ -9687,7 +9693,7 @@ ctForm.addEventListener('input', e => { doseInput(e); clearMissing(e); if (e.tar
 
 // แถบงาน: ดึงผู้ป่วยจาก CT-SIM มาใส่ฟอร์มแจกเคส · แจกแล้วผูกรายการกับเคส (Code.gs บันทึกใน addCases) · ไม่ต้องแจก = ctMark
 let intakeCt = '';   // id ของรายการ CT ที่ดึงมาใส่ฟอร์มอยู่
-const ctPulled = () => state.ct.filter(r => ctState(r) === 'wait').sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created));
+const ctPulled = () => state.ct.filter(ctWaitOpen).sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created));
 const ctpullDlg = $('#ctpull-dlg');
 function renderCtPullBtn() {
   const n = ctPulled().length, b = $('#ct-pull');
@@ -14513,7 +14519,7 @@ const pendRecent = c => (isDay(c.sim) ? daysFrom(c.sim) >= -14 : isDay(c.in) && 
 const inCourse = c => catOf(c.cat).kind !== 'simple' && (!c.replan || (rpOf(c) || {}).kind === 'revise') && !revisedBy(c) && (planReady(c) || pendRecent(c));   // งานแก้แผน = แผนที่จะฉายแทนงานเดิม
 // ผู้ป่วยจากแถบ CT-SIM ที่ส่งแถบงานแล้วแต่ MP ยังไม่แจก: แถวในตารางวันฉาย "รอ Plan complete" (ยังไม่มีเคส · ctId = id ของรายการ CT)
 function ctCourseRows() {
-  return ctOn() ? state.ct.filter(r => ctState(r) === 'wait' && daysFrom(r.date) >= -60).map(r => {
+  return ctOn() ? state.ct.filter(r => ctWaitOpen(r) && daysFrom(r.date) >= -60).map(r => {
     const v = ctToIntake(r), c = normCase({ ...v, id: 'ct:' + r.id, cat: v.cats[0] || '', in: r.date, created: r.created });
     return Object.assign(c, { how: 'ctsim', mp: '', ctId: r.id, ctDate: r.date, ctRoom: r.ct });
   }) : [];
@@ -21598,7 +21604,9 @@ async function submitIntake(e) {
   });
   if (intake.dataset.dupOk === dupKey) recs.forEach(r => { r.dupOk = 1; });   // ยืนยันแจกเพิ่มแล้ว (Code.gs API 71 ไม่ถามซ้ำ)
   recs.forEach(r => { if (catOf(r.cat).kind !== 'simple') r.planJob = 1; });   // หมวดวางแผน: Code.gs ตรวจงานซ้ำแม้ชีตยังไม่มีตั้งค่าหมวด
-  const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : '';
+  // 20 พ.ย.: กรอกเอง (ไม่ได้ดึงจากรายการ CT-SIM) แต่ HN ตรงกับรายการที่รอ MP แจก = ผูกกับรายการล่าสุดของ HN นั้น (60 วัน · เคสวางแผนเท่านั้น)
+  const ctSame = !intakeCt && ctOn() && recs.some(r => catOf(r.cat).kind !== 'simple') ? ctPulled().filter(r => hnKey(r.hn) === hnKey(hn) && daysFrom(r.date) >= -60).pop() : null;
+  const ctFrom = intakeCt && ctOn() && state.ct.some(r => r.id === intakeCt && !r.took) ? intakeCt : ctSame ? ctSame.id : '';
   if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
   const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in, true);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดียวกับเคสแรก
   recs.push(...siteJobs);
