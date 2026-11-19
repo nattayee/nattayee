@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-19.5';
-const API_LEVEL = 96;   // 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-19.6';
+const API_LEVEL = 97;   // 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -2816,7 +2816,7 @@ function knownHns_(ss) { const seen = hnSeen_(ss), o = {}; Object.keys(seen).for
 // รายการที่ดึงจาก Google Drive และยังไม่มีใครแก้ (Updated ว่าง) · ทำทุกครั้งที่ดึง:
 // · HN มีในแถบอื่นตั้งแต่ก่อนดึง = ลบ (ดึงด้วย Code.gs รุ่นก่อน 2026-11-08.4 ที่ตรวจเฉพาะแถบลงทะเบียน) · HN ที่เพิ่งมีในแถบอื่นหลังดึง (เช่นลงนัดต่อ) ไม่ลบ
 // · แพทย์ที่เคยจับคู่ไม่ได้ (Note "แพทย์: …") ตรงกับ ทีม → แพทย์ แล้ว = ใส่รหัสแพทย์ และเอาออกจาก Note
-function regDriveTidy_(ss, cfg, seen) {
+function regDriveTidy_(ss, cfg, seen, dry) {
   const sh = sheet_(ss, TABLES.reg.sheet), out = { removed: 0, docs: 0, gone: [] };
   if (!sh || sh.getLastRow() < 2) return out;
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), hdr = values[0].map(v => String(v).trim()), c = {};
@@ -2836,6 +2836,8 @@ function regDriveTidy_(ss, cfg, seen) {
       if (code) { docs[i - 1] = [code]; notes[i - 1] = [note.slice(0, m.index)]; out.docs++; }
     }
   }
+  out.removed = del.length;
+  if (dry) return out;   // API 97: ดูก่อนว่ามีอะไรต้องทำ (นอกล็อก)
   if (out.docs || del.length) markDirty_('reg');
   if (out.docs) {
     sh.getRange(2, c.doc + 1, docs.length, 1).setNumberFormat('@').setValues(docs);
@@ -2891,18 +2893,23 @@ function regDriveSync_(ss, cfg, force, by) {
   if (!d.url) { if (force) throw new Error('ยังไม่ได้ตั้งลิงก์โฟลเดอร์ (ตั้งค่า → ลงทะเบียน → ดึงจาก Google Drive)'); return out(load()); }
   const due = st => force || (d.on && !(st.at && Date.now() - Date.parse(st.at) < Math.max(5, +d.every || 60) * 60000 - 30000));
   if (!due(load())) return out(load());
-  return withLock_(() => {
+  // API 97: อ่านโฟลเดอร์ ไฟล์ และ HN ทั้งระบบ (ช้า: หลายวินาที) ทำนอกล็อกบันทึก · เดิมถือล็อกตลอด = ทุกคนที่กดบันทึกช่วงนั้นต้องรอ
+  // กันดึงซ้อนกันด้วยธงในแคช (5 นาที) · ล็อกเฉพาะตอนเขียนลงแถบลงทะเบียน (และเฉพาะเมื่อมีอะไรต้องเขียน)
+  const BUSY = 'regDrive_busy';
+  let cache = null, busy = null;
+  try { cache = CacheService.getScriptCache(); busy = cache.get(BUSY); } catch (e) { cache = null; busy = null; }   // แคชใช้ไม่ได้: ดึงต่อโดยไม่มีธง
+  if (busy) { if (force) throw new Error('กำลังดึงจาก Google Drive อยู่ (เริ่มเมื่อไม่ถึง 5 นาทีที่แล้ว) · รอสักครู่แล้วลองใหม่'); return out(load()); }
+  try { if (cache) cache.put(BUSY, '1', 300); } catch (e) { /* แคชใช้ไม่ได้: ดึงต่อ */ }
+  try {
     let st = load();
-    if (!due(st)) return out(st);   // อีกคนเพิ่งดึงระหว่างรอล็อก
+    if (!due(st)) return out(st);   // อีกคนเพิ่งดึงเสร็จ
     // เปลี่ยนโฟลเดอร์ คอลัมน์ หรือตัวกรอง = อ่านทุกไฟล์ใหม่ (แถวที่เคยไม่ตรงตัวกรองอาจตรงแล้ว)
-    const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : st.files || {};
+    const now = new Date().toISOString(), sig = JSON.stringify([d.url, d.map || {}, d.filter || {}]), all = force || st.sig !== sig, seen = all ? {} : Object.assign({}, st.files || {});
     try {
-      const files = regDriveFiles_(regDriveFolder_(d.url)), seenHn = hnSeen_(ss), tidy = regDriveTidy_(ss, cfg, seenHn), have = {}, add = [], errs = [];
+      // ---- นอกล็อก: รายชื่อไฟล์ · อ่านไฟล์ที่เปลี่ยน · HN ที่มีในระบบ ----
+      const files = regDriveFiles_(regDriveFolder_(d.url)), errs = [], gots = [];
       if (!files.length) errs.push('ไม่พบไฟล์ .xlsx / .xls / .csv / Google ชีต ในโฟลเดอร์' + (files.others.length ? ' (มีแต่ไฟล์ที่อ่านไม่ได้: ' + files.others.slice(0, 5).join(', ') + ')' : ''));
       else if (files.others.length) errs.push('ไฟล์ชนิดที่อ่านไม่ได้ (ข้าม): ' + files.others.slice(0, 5).join(', ') + (files.others.length > 5 ? ' …' : '') + ' · บันทึกเป็น .xlsx หรือ Google ชีต');
-      Object.keys(seenHn).forEach(k => { have[k] = seenHn[k].t; });
-      const arch = regArchHns_(ss), back = {};   // HN ในที่เก็บถาวร (ยังไม่อยู่ในแถบลงทะเบียน) = ย้ายกลับ
-      tidy.gone.forEach(k => { have[k] = 'other'; });   // เพิ่งลบออกจากแถบลงทะเบียน: ยังมีในแถบอื่น
       let skipped = 0, inSys = 0, filtered = 0, read = 0, rows = 0;
       files.forEach(f => {
         const id = f.getId(), mod = f.getLastUpdated().toISOString();
@@ -2914,26 +2921,50 @@ function regDriveSync_(ss, cfg, force, by) {
         filtered += got.filtered;
         rows += got.recs.length + got.filtered;
         if (!got.recs.length && !got.filtered) errs.push(f.getName() + ': ไม่มีแถวที่มี HN ใต้หัวตาราง');
-        got.recs.forEach(r => {
-          const k = hnLoose_(r.hn);
-          if (have[k] && have[k] !== 'reg' && have[k] !== 'drive' && arch[k]) { back[k] = 1; have[k] = 'reg'; return; }
-          if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
-          have[k] = 'drive';
-          add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + f.getName()).slice(0, 120), created: now, updated: '' }));
-        });
+        gots.push({ name: f.getName(), recs: got.recs });
         seen[id] = mod;
       });
-      if (add.length) appendNew_(ss, 'reg', add);
-      const restored = Object.keys(back).length ? regMoveBack_(ss, r => back[hnLoose_(r.hn)]).length : 0;
+      const seenHn = hnSeen_(ss), arch = regArchHns_(ss), need = regDriveTidy_(ss, cfg, seenHn, true);   // need = มีแถวต้องเก็บกวาดไหม (ยังไม่เขียน)
+      const have = {}, add = [], back = {};
+      Object.keys(seenHn).forEach(k => { have[k] = seenHn[k].t; });
+      need.gone.forEach(k => { have[k] = 'other'; });   // จะลบออกจากแถบลงทะเบียน: ยังมีในแถบอื่น
+      gots.forEach(g => g.recs.forEach(r => {
+        const k = hnLoose_(r.hn);
+        if (have[k] && have[k] !== 'reg' && have[k] !== 'drive' && arch[k]) { back[k] = 1; have[k] = 'reg'; return; }
+        if (have[k]) { skipped++; if (have[k] !== 'reg' && have[k] !== 'drive') inSys++; return; }   // HN มีในระบบแล้ว (inSys = ในแถบอื่น ยังไม่ได้ลงทะเบียน)
+        have[k] = 'drive';
+        add.push(Object.assign(r, { id: Utilities.getUuid(), by: ('Google Drive · ' + g.name).slice(0, 120), created: now, updated: '' }));
+      }));
+      // ---- ในล็อก (สั้น): เฉพาะเมื่อมีแถวใหม่ / ย้ายกลับ / เก็บกวาด · HN ที่มีคนลงทะเบียนระหว่างอ่านไฟล์ = ไม่เพิ่มซ้ำ ----
+      let tidy = { removed: 0, docs: 0, gone: [] }, restored = 0, added = 0;
+      if (add.length || Object.keys(back).length || need.removed || need.docs) {
+        withLock_(() => {
+          if (need.removed || need.docs) tidy = regDriveTidy_(ss, cfg, seenHn);
+          const nowHn = add.length ? sheetHns_(ss, 'reg') : {}, fresh = add.filter(r => !nowHn[hnLoose_(r.hn)]);
+          skipped += add.length - fresh.length;
+          added = fresh.length;
+          if (fresh.length) appendNew_(ss, 'reg', fresh);
+          restored = Object.keys(back).length ? regMoveBack_(ss, r => back[hnLoose_(r.hn)]).length : 0;
+        });
+      }
       const keep = {};   // จำเฉพาะไฟล์ที่ยังอยู่ในโฟลเดอร์ (ล่าสุด 100 ไฟล์ · Script property เก็บได้ราว 9 KB)
       files.slice(0, 100).forEach(f => { if (seen[f.getId()]) keep[f.getId()] = seen[f.getId()]; });
-      st = { at: now, by: by, added: add.length, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, rows: rows, restored: restored, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
+      st = { at: now, by: by, added: added, skipped: skipped, inSys: inSys, removed: tidy.removed, docFix: tidy.docs, filtered: filtered, read: read, rows: rows, restored: restored, nFiles: files.length, files: keep, sig: sig, err: errs.join(' · ').slice(0, 400) };
     } catch (e) {
       st = { at: now, by: by, added: 0, skipped: 0, filtered: 0, read: 0, nFiles: 0, files: st.files || {}, sig: st.sig, err: String(e.message || e).slice(0, 400) };
     }
     propSave_(REG_DRIVE_PROP, JSON.stringify(st));
     return out(st);
-  });
+  } finally { try { if (cache) cache.remove(BUSY); } catch (e) { /* หมดอายุเองใน 5 นาที */ } }
+}
+// HN ทั้งหมดของตาราง (อ่านคอลัมน์ HN คอลัมน์เดียว) → { hn แบบหลวม: true }
+function sheetHns_(ss, table) {
+  const sh = sheet_(ss, TABLES[table].sheet), o = {};
+  if (!sh || sh.getLastRow() < 2) return o;
+  const c = headerOf_(sh).indexOf((TABLES[table].fields.filter(f => f[0] === 'hn')[0] || [])[1]);
+  if (c < 0) return o;
+  sh.getRange(2, c + 1, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = hnLoose_(r[0]); if (k) o[k] = true; });
+  return o;
 }
 
 function regSave(rec, pin, token) {
@@ -3082,30 +3113,34 @@ function regArchive_(ss, cfg, force) {
   const years = regArchYears_(cfg), months = regArchDriveMonths_(cfg), last = regArchStatus_() || {}, td = today_(ss);
   if ((!years && !months) || (!force && last.day === td)) return last;
   const res = { day: td, at: new Date().toISOString(), years: years, months: months, moved: 0, drive: 0, total: last.total || 0, error: '' };
-  if (!force) {   // เปิดหน้าเว็บ: ไม่รอคนที่กำลังบันทึก
-    const lock = LockService.getScriptLock();
-    if (!lock.tryLock(500)) return last;
-    lock.releaseLock();
-  }
   try {
-    withLock_(() => {
-      const sh = sheet_(ss, TABLES.reg.sheet);
-      if (sh && sh.getLastRow() > 1) {
-        const tz = tz_(ss), latest = hnLatest_(ss);
-        const cutY = years ? Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), tz, 'yyyy-MM-dd') : '';
-        const cutM = months ? Utilities.formatDate(new Date(Date.now() - months * 30.44 * 864e5), tz, 'yyyy-MM-dd') : '';
-        res.moved = regMoveRows_(ss, 'reg', 'regArch', r => {
-          const at = [String(r.created).slice(0, 10), String(r.updated).slice(0, 10)].filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)).sort().pop();   // ลงทะเบียน / แก้ / ย้ายกลับ ล่าสุด
-          const k = hnLoose_(r.hn), used = !!(k && latest[k]);
-          if (!at || !String(r.name).trim()) return false;   // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) ไม่ย้าย
-          if (cutY && at < cutY && !(used && latest[k] >= cutY)) return true;
-          if (cutM && at < cutM && !used && String(r.by).indexOf('Google Drive') === 0) { res.drive++; return true; }   // ดึงจาก Drive แล้วไม่เคยใช้
-          return false;
-        }, { 'ย้ายเข้าที่เก็บเมื่อ': res.at }).length;
+    // API 97: หาแถวที่ต้องย้าย (อ่านหลายแถบ: ช้า) นอกล็อกบันทึก · ล็อกเฉพาะวันที่มีแถวต้องย้ายจริง (เดิมถือล็อกทุกเช้า)
+    const sh = sheet_(ss, TABLES.reg.sheet);
+    if (sh && sh.getLastRow() > 1) {
+      const tz = tz_(ss), latest = hnLatest_(ss);
+      const cutY = years ? Utilities.formatDate(new Date(Date.now() - years * 365.25 * 864e5), tz, 'yyyy-MM-dd') : '';
+      const cutM = months ? Utilities.formatDate(new Date(Date.now() - months * 30.44 * 864e5), tz, 'yyyy-MM-dd') : '';
+      const kind = r => {   // 'y' = เก่าเกินจำนวนปี · 'm' = ดึงจาก Drive แล้วไม่เคยใช้ · '' = ไม่ย้าย
+        const at = [String(r.created).slice(0, 10), String(r.updated).slice(0, 10)].filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)).sort().pop();   // ลงทะเบียน / แก้ / ย้ายกลับ ล่าสุด
+        const k = hnLoose_(r.hn), used = !!(k && latest[k]);
+        if (!at || !String(r.name).trim()) return '';   // ชื่อว่าง (ชีตรุ่นเก่าที่แยกชื่อ/สกุล) ไม่ย้าย
+        if (cutY && at < cutY && !(used && latest[k] >= cutY)) return 'y';
+        if (cutM && at < cutM && !used && String(r.by).indexOf('Google Drive') === 0) return 'm';
+        return '';
+      };
+      if (readTable_(ss, 'reg').some(r => kind(r))) {
+        if (!force) {   // เปิดหน้าเว็บ: ไม่รอคนที่กำลังบันทึก (ลองใหม่ครั้งหน้า)
+          const lock = LockService.getScriptLock();
+          if (!lock.tryLock(500)) return last;
+          lock.releaseLock();
+        }
+        withLock_(() => {
+          res.moved = regMoveRows_(ss, 'reg', 'regArch', r => { const k = kind(r); if (k === 'm') res.drive++; return !!k; }, { 'ย้ายเข้าที่เก็บเมื่อ': res.at }).length;
+        });
       }
-      const ah = sheet_(ss, TABLES.regArch.sheet);
-      res.total = ah ? Math.max(0, ah.getLastRow() - 1) : 0;
-    });
+    }
+    const ah = sheet_(ss, TABLES.regArch.sheet);
+    res.total = ah ? Math.max(0, ah.getLastRow() - 1) : 0;
   } catch (e) { res.error = String(e.message || e).slice(0, 200); }
   try { propSave_(pk_(REG_ARCH_PROP), JSON.stringify(res)); } catch (e) { /* ครั้งหน้า */ }
   return res;
@@ -5741,19 +5776,26 @@ const realIds_ = () => {
 function practiceSs_() {
   const id = String(propRead_(PRACTICE_PROP) || '');
   if (id && realIds_().indexOf(id) < 0) { try { return SpreadsheetApp.openById(id); } catch (e) { /* ถูกลบ = สร้างใหม่ */ } }
+  // API 97: สร้างไฟล์ (หลายวินาที) นอกล็อกบันทึก · สองคนเปิดพร้อมกันครั้งแรก = ใช้ไฟล์ของคนที่ตั้งค่าก่อน อีกไฟล์ไปถังขยะ
+  const made = practiceMake_(true);
   return withLock_(() => {
     const again = String(PropertiesService.getScriptProperties().getProperty(PRACTICE_PROP) || '');
-    if (again && again !== id && realIds_().indexOf(again) < 0) { try { return SpreadsheetApp.openById(again); } catch (e) { /* สร้างใหม่ */ } }
-    return practiceMake_();
+    if (again && again !== id && again !== made.getId() && realIds_().indexOf(again) < 0) {
+      try { const other = SpreadsheetApp.openById(again); try { DriveApp.getFileById(made.getId()).setTrashed(true); } catch (e) { /* ทิ้งไว้ */ } return other; } catch (e) { /* ใช้ไฟล์ที่สร้าง */ }
+    }
+    propSave_(PRACTICE_PROP, made.getId());
+    propSave_(PRACTICE_AT, new Date().toISOString());
+    return made;
   });
 }
 // ไฟล์ฝึกใหม่: Config จากระบบจริง · ไม่มีข้อมูลผู้ป่วย (หน้าเว็บส่งผู้ป่วยตัวอย่างมาใส่ด้วย practiceReset)
-function practiceMake_() {
+function practiceMake_(hold) {
   const real = realSs_(), ss = SpreadsheetApp.create('ฝึกใช้ (ข้อมูลทดลอง ไม่ใช่ข้อมูลจริง) — ' + real.getName());
   try { ss.setSpreadsheetTimeZone(real.getSpreadsheetTimeZone()); } catch (e) { /* ใช้เขตเวลาเริ่มต้น */ }
   const first = ss.getSheets()[0], cfg = real.getSheetByName(CONFIG_SHEET);
   if (cfg) cfg.copyTo(ss).setName(CONFIG_SHEET);
   if (first && first.getName() !== CONFIG_SHEET) first.setName(TABLES.cases.sheet);
+  if (hold) return ss;   // ผู้เรียกตั้ง property เอง (ในล็อก)
   propSave_(PRACTICE_PROP, ss.getId());
   propSave_(PRACTICE_AT, new Date().toISOString());
   return ss;
@@ -5804,17 +5846,23 @@ function practiceReset(seed, fresh, token) {
   PRACTICE_ = true;
   SS_ = null;
   CFG_MEMO_ = null;
-  return withLock_(() => {
-    if (fresh === true) {
-      if (!admin) throw new Error('ล้างข้อมูลฝึกได้เฉพาะแอดมิน');
+  if (fresh === true) {   // API 97: ไฟล์ใหม่ + ผู้ป่วยตัวอย่าง เตรียมนอกล็อกบันทึก (ยังไม่มีใครใช้ไฟล์นี้) · ล็อกเฉพาะตอนสลับไฟล์
+    if (!admin) throw new Error('ล้างข้อมูลฝึกได้เฉพาะแอดมิน');
+    const ss = practiceMake_(true);
+    SS_ = ss;
+    const seeded = practiceSeed_(ss, seed);
+    SpreadsheetApp.flush();
+    return withLock_(() => {
       const old = String(PropertiesService.getScriptProperties().getProperty(PRACTICE_PROP) || '');
-      const ss = practiceMake_();
-      SS_ = ss;
+      propSave_(PRACTICE_PROP, ss.getId());
+      propSave_(PRACTICE_AT, new Date().toISOString());
       if (old && old !== ss.getId() && realIds_().indexOf(old) < 0) { try { DriveApp.getFileById(old).setTrashed(true); } catch (e) { /* ลบไม่ได้: ไม่เป็นไร */ } }
       Object.keys(TABLES).forEach(t => markDirty_(t));   // รุ่นตารางใหม่ทั้งหมด (สำเนาในแคชของไฟล์เดิมใช้ไม่ได้)
-      return { fresh: true, seeded: practiceSeed_(ss, seed) };
-    }
-    const ss = ss_();
+      return { fresh: true, seeded: seeded };
+    });
+  }
+  const ss = ss_();   // ไฟล์ฝึกยังไม่มี = สร้างนอกล็อก
+  return withLock_(() => {
     if (!practiceEmpty_(ss)) return { fresh: false, seeded: {}, skipped: true };   // มีข้อมูลฝึกอยู่แล้ว (คนอื่นใส่ไปก่อน)
     return { fresh: false, seeded: practiceSeed_(ss, seed) };
   });

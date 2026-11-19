@@ -2335,6 +2335,14 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));top:auto;right:auto;margin:0;border:0;overflow:visible;z-index:50;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:14px;opacity:0;pointer-events:none;transform:translate(-50%,16px);transition:opacity .18s,transform .18s}
 .toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+/* 19 พ.ย.: กดบันทึกแล้วหน้าต่างหายทันที · ป้ายกำลังบันทึก (เกิน 3 วินาที หน้าต่างกลับมาพร้อมตัวนับเวลา) */
+dialog.bg-hide{visibility:hidden}
+dialog.bg-hide::backdrop{opacity:0}
+.save-chip{position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom,0px));top:auto;right:auto;margin:0;border:0;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--fg);color:var(--bg);font-size:13.5px;box-shadow:0 6px 20px rgba(0,0,0,.25);pointer-events:none}
+.save-chip.show{display:inline-flex}
+.save-spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:save-spin .7s linear infinite}
+@keyframes save-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.save-spin{animation:none}}
 .toast.err{background:var(--late);color:var(--accent-fg)}
 /* บันทึกเบื้องหลังไม่สำเร็จ: ค้างไว้จนกดปิด (ไม่หายเองเหมือนข้อความด้านล่าง) · ช่องที่กำลังบันทึก = กรอบเส้นประ */
 .save-fails{position:fixed;inset:auto auto calc(70px + env(safe-area-inset-bottom,0px)) 16px;margin:0;padding:0;border:0;background:none;overflow:visible;display:none;flex-direction:column;gap:6px;max-width:min(560px,calc(100vw - 32px));z-index:60}
@@ -4545,6 +4553,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   </form>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
+<div class="save-chip" id="save-chip" role="status" aria-live="polite" popover="manual"><span class="save-spin" aria-hidden="true"></span><span>กำลังบันทึก…</span></div>
 <div class="idle-warn" id="idle-warn" role="alert" hidden><span id="idle-warn-t"></span><button type="button" class="btn primary sm" id="idle-stay">ใช้งานต่อ</button></div>
 <div class="save-fails" id="save-fails" role="alert" popover="manual"></div>
 
@@ -7505,7 +7514,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-19.8';
+const PAGE_VERSION = '2026-11-19.9';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -21650,6 +21659,31 @@ let pinCtx = null;
 function pinErr(msg) { $('#pin-err').textContent = msg || ''; $('#pin-err').hidden = !msg; }
 // ระหว่างรอเซิร์ฟเวอร์: ปุ่มเขียนว่า "กำลังบันทึก…" · เกิน 5 วินาทีนับเวลาให้เห็น (เดิมปุ่มจางเฉย ๆ ดูเหมือนค้าง กดซ้ำก็ไม่มีอะไรเกิดขึ้น)
 let pinBusyOn = false, pinBusyT = 0;
+// 19 พ.ย.: ระหว่างรอ Code.gs หน้าต่างรหัส PIN (และฟอร์มที่จะปิดเมื่อบันทึกสำเร็จ) ซ่อนทันที = ไม่ต้องมองหน้าต่างค้าง · มีป้าย "กำลังบันทึก…"
+// หน้าต่างยังเปิดอยู่ (แค่มองไม่เห็น): ผิดพลาด / รหัส PIN ไม่ถูก = กลับมาแสดงพร้อมข้อความ ข้อมูลที่กรอกอยู่ครบ · เกิน 3 วินาที = กลับมาแสดงพร้อมตัวนับเวลา
+const dlgStack = [];
+{
+  const sm = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () { sm.call(this); const i = dlgStack.indexOf(this); if (i >= 0) dlgStack.splice(i, 1); dlgStack.push(this); };
+}
+const BG_FORM = ['edit', 'apsave', 'ctsave', 'rgsave', 'vacsave', 'ptadd', 'bqnew', 'bqedit', 'dqedit', 'logedit', 'logadd', 'evsave'];   // บันทึกสำเร็จ = ฟอร์มปิด
+const BG_SHOW_MS = 3000;
+let bgEls = [], bgT = 0, bgChipT = 0;
+function bgSave(on, mode) {
+  const chip = $('#save-chip');
+  clearTimeout(bgT);
+  clearTimeout(bgChipT);
+  for (const d of bgEls) d.classList.remove('bg-hide');
+  bgEls = [];
+  chip.classList.remove('show');
+  try { if (chip.matches(':popover-open')) chip.hidePopover(); } catch (e) { /* เบราว์เซอร์เก่า */ }
+  if (!on) return;
+  const form = BG_FORM.includes(mode) ? dlgStack.filter(d => d.open && d !== pinDlg).pop() : null;
+  bgEls = [pinDlg, form].filter(d => d && d.open);
+  for (const d of bgEls) d.classList.add('bg-hide');
+  bgChipT = setTimeout(() => { chip.classList.add('show'); try { chip.showPopover(); } catch (e) { /* แสดงแบบเดิม */ } }, 150);   // บันทึกเสร็จทันที (โหมดตัวอย่าง) = ไม่ต้องกะพริบ
+  bgT = setTimeout(() => { for (const d of bgEls) d.classList.remove('bg-hide'); bgEls = []; chip.classList.remove('show'); try { if (chip.matches(':popover-open')) chip.hidePopover(); } catch (e) { /* ไม่มี popover */ } }, BG_SHOW_MS);
+}
 function pinSaveLabel(l) { const b = $('#pin-save'); b.dataset.label = l; b.textContent = pinBusyOn ? 'กำลังบันทึก…' : l; }
 function pinBusy(on) {
   const b = $('#pin-save'), w = $('#pin-wait'), t0 = Date.now();
@@ -21857,6 +21891,7 @@ async function submitPin(e, clear) {
   btn.disabled = true;
   pinErr('');
   pinBusy(true);
+  bgSave(true, ctx.mode);
   try {
     if (needNew) {
       await store.setPin(newPin, ctx.mode === 'set' && has ? (ctx.forgot ? { password: $('#pin-proof').value } : { pin: $('#pin-proof').value }) : null);
@@ -22041,7 +22076,7 @@ async function submitPin(e, clear) {
     pinErr(m.replace(/^Error:\s{0,}/, ''));
     for (const id of ['#pin', '#pin-proof']) $(id).value = '';
     const f = firstPinInput(); if (f) f.focus();
-  } finally { btn.disabled = false; pinBusy(false); }
+  } finally { btn.disabled = false; pinBusy(false); bgSave(false); }
 }
 // "ฉายแล้ว" ครั้งแรกของวันนั้น (งานที่กดบ่อยที่สุดของห้องฉาย): ไม่ต้องใส่ PIN · ไม่ใช่สถานะที่ส่งงานวางแผนใหม่ · ไม่ได้อยู่ในช่วง Hold
 // = ปิดหน้าต่าง ขึ้น ✓ ทันที แล้วบันทึกเบื้องหลัง (กดคนถัดไปต่อได้เลย) · ช่องมีกรอบเส้นประจนเซิร์ฟเวอร์ตอบ · ไม่สำเร็จ = เอา ✓ ออกและแจ้งค้างไว้
