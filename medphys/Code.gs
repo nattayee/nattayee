@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-19.3';
-const API_LEVEL = 94;   // 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-19.4';
+const API_LEVEL = 95;   // 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -423,6 +423,7 @@ function getData(a, b) {
     config: config,
     cfgReqs: user.isAdmin || (user.sub && user.sub.length) ? cfgReqs_(ss, config || {}, user) : [],
     sheetUrl: ss.getUrl(),
+    practice: PRACTICE_ ? { at: String(propRead_(PRACTICE_AT) || '') } : null,
   });
 }
 
@@ -466,7 +467,7 @@ function tz_(doc) {
   const m = reqMap_('tz');
   if (m.has(doc)) return m.get(doc);
   // ชีตข้อมูลหลัก: เขตเวลามากับแคชที่อ่านพร้อมผู้ใช้ (เปลี่ยนเขตเวลาของชีต = มีผลภายใน 6 ชั่วโมง)
-  const key = doc === SS_ && REQ_.cache ? 'ssTz' : '';
+  const key = doc === SS_ && REQ_.cache ? pk_('ssTz') : '';
   let v = key && typeof REQ_.cache[key] === 'string' && REQ_.cache[key] ? REQ_.cache[key] : '';
   if (!v) { v = doc.getSpreadsheetTimeZone(); if (key && key in REQ_.cache) { try { reqCachePut_(key, v, 21600); } catch (e) { /* อ่านใหม่รอบหน้า */ } } }
   m.set(doc, v);
@@ -489,10 +490,13 @@ function reqCachePut_(k, v, sec) { CacheService.getScriptCache().put(k, v, sec);
 // fresh = อ่านค่าล่าสุดจริง (ระหว่างล็อก ก่อนเขียน)
 // รุ่น 2026-11-11.10: เก็บรุ่นแยกรายตาราง (property tv_<ตาราง>) = บันทึกแล้วเขียนอย่างเดียว ไม่ต้องอ่านค่ารวมก่อน · ค่ารวมเดิม (tableVer) ยังอ่านได้
 const TABLE_VER_ONE = 'tv_';
+// API 95: โหมดฝึกใช้ใช้ชื่อแยก (รุ่นตาราง · สำเนาตารางในแคช · สถานะที่เก็บถาวร) ไม่ปนกับระบบจริง
+const pk_ = k => (PRACTICE_ ? 'p' + k : k);
 function tableVers_() {
   let v = {};
-  try { v = JSON.parse(propRead_(TABLE_VER_PROP) || '{}') || {}; } catch (e) { v = {}; }
-  Object.keys(PROPS_ || {}).forEach(k => { if (k.indexOf(TABLE_VER_ONE) === 0 && PROPS_[k]) v[k.slice(TABLE_VER_ONE.length)] = PROPS_[k]; });
+  const one = pk_(TABLE_VER_ONE);
+  try { v = JSON.parse(propRead_(pk_(TABLE_VER_PROP)) || '{}') || {}; } catch (e) { v = {}; }
+  Object.keys(PROPS_ || {}).forEach(k => { if (k.indexOf(one) === 0 && PROPS_[k]) v[k.slice(one.length)] = PROPS_[k]; });
   return v;
 }
 function saveDirty_() {
@@ -501,7 +505,7 @@ function saveDirty_() {
   DIRTY_ = null;
   try {
     const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 5), set = {}, props = PropertiesService.getScriptProperties();
-    Object.keys(d).forEach(t => { set[TABLE_VER_ONE + t] = stamp; });
+    Object.keys(d).forEach(t => { set[pk_(TABLE_VER_ONE) + t] = stamp; });
     if (Object.keys(set).length > 1 && typeof props.setProperties === 'function') props.setProperties(set);
     else Object.keys(set).forEach(k => props.setProperty(k, set[k]));
     if (PROPS_) Object.assign(PROPS_, set);
@@ -525,13 +529,13 @@ const SNAP_SKIP = ['jobs', 'roJobs'];   // ภาระงาน: ของแ�
 function snapPreload_(keys, want) {
   const pre = REQ_.snap = {};
   try {
-    const c = CacheService.getScriptCache(), metas = c.getAll(keys.map(k => 'snap.' + k)), ks = [];
+    const c = CacheService.getScriptCache(), metas = c.getAll(keys.map(k => pk_('snap.') + k)), ks = [];
     keys.forEach(k => {
       let m = null;
-      try { m = JSON.parse(metas['snap.' + k] || 'null'); } catch (e) { m = null; }
+      try { m = JSON.parse(metas[pk_('snap.') + k] || 'null'); } catch (e) { m = null; }
       if (!m || !m.n || !want(k, m)) return;
       pre[k] = { meta: m, ks: [] };
-      for (let i = 0; i < m.n; i++) { pre[k].ks.push('snap.' + k + '.' + m.id + '.' + i); ks.push('snap.' + k + '.' + m.id + '.' + i); }
+      for (let i = 0; i < m.n; i++) { pre[k].ks.push(pk_('snap.') + k + '.' + m.id + '.' + i); ks.push(pk_('snap.') + k + '.' + m.id + '.' + i); }
     });
     if (ks.length) { const got = c.getAll(ks); Object.keys(pre).forEach(k => { pre[k].got = got; }); }
   } catch (e) { REQ_.snap = {}; }
@@ -539,10 +543,10 @@ function snapPreload_(keys, want) {
 function snapGet_(key) {
   try {
     const c = CacheService.getScriptCache(), pre = REQ_.snap && REQ_.snap[key];
-    const meta = pre ? pre.meta : JSON.parse(c.get('snap.' + key) || 'null');
+    const meta = pre ? pre.meta : JSON.parse(c.get(pk_('snap.') + key) || 'null');
     if (!meta || !meta.n) return null;
     const ks = [];
-    for (let i = 0; i < meta.n; i++) ks.push('snap.' + key + '.' + meta.id + '.' + i);
+    for (let i = 0; i < meta.n; i++) ks.push(pk_('snap.') + key + '.' + meta.id + '.' + i);
     const got = pre && pre.got ? pre.got : c.getAll(ks);
     if (ks.some(k => typeof got[k] !== 'string')) return null;
     const s = ks.map(k => got[k]).join('');
@@ -557,12 +561,12 @@ function snapPut_(key, meta, packed) {
     if (s.length > SNAP_MAX || (!z && raw.length > SNAP_MAX / 3)) return;
     const c = CacheService.getScriptCache(), id = Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), o = {};
     let n = 0;
-    for (let i = 0; i < s.length; i += SNAP_PIECE) o['snap.' + key + '.' + id + '.' + (n++)] = s.slice(i, i + SNAP_PIECE);
+    for (let i = 0; i < s.length; i += SNAP_PIECE) o[pk_('snap.') + key + '.' + id + '.' + (n++)] = s.slice(i, i + SNAP_PIECE);
     c.putAll(o, SNAP_TTL);
     let old = null;
-    try { old = JSON.parse(c.get('snap.' + key) || 'null'); } catch (e) { old = null; }
-    c.put('snap.' + key, JSON.stringify({ v: meta.v, t: meta.t, b: meta.b, td: meta.td, n: n, id: id, z: z ? 1 : 0 }), SNAP_TTL);
-    if (old && old.id && old.n && c.removeAll) { const ks = []; for (let i = 0; i < old.n; i++) ks.push('snap.' + key + '.' + old.id + '.' + i); c.removeAll(ks); }
+    try { old = JSON.parse(c.get(pk_('snap.') + key) || 'null'); } catch (e) { old = null; }
+    c.put(pk_('snap.') + key, JSON.stringify({ v: meta.v, t: meta.t, b: meta.b, td: meta.td, n: n, id: id, z: z ? 1 : 0 }), SNAP_TTL);
+    if (old && old.id && old.n && c.removeAll) { const ks = []; for (let i = 0; i < old.n; i++) ks.push(pk_('snap.') + key + '.' + old.id + '.' + i); c.removeAll(ks); }
   } catch (e) { console.log('snapPut_ ' + key + ' ' + e); }
 }
 // แถวที่แก้ (แบบ readTable_) ใส่ลงในสำเนาแบบย่อ: แทนแถว id เดิม / ต่อท้าย · คืนสำเนาใหม่และ id ทั้งหมด
@@ -612,7 +616,7 @@ function tablesFor_(ss, config, user, need, have) {
   const vers = tableVers_();
   let init = false;
   Object.keys(OUT_TABLES).forEach(k => OUT_TABLES[k].forEach(t => { if (!vers[t]) { vers[t] = 'i' + Date.now().toString(36); init = true; } }));
-  if (init) { try { propSave_(TABLE_VER_PROP, JSON.stringify(vers)); } catch (e) { /* ครั้งหน้า */ } }
+  if (init) { try { propSave_(pk_(TABLE_VER_PROP), JSON.stringify(vers)); } catch (e) { /* ครั้งหน้า */ } }
   // ห้องฉายของนัดใส่แร่ (rtRoom) มาจาก Cases: หน้าเว็บที่ได้ Cases คำนวณเอง (API 61) · ไม่ได้ Cases = เซิร์ฟเวอร์ใส่ให้ (รุ่นของ bq ขึ้นกับ Cases ด้วย)
   const bqRoom = !(have && need.cases), deps = k => (k === 'bq' && !bqRoom ? ['bq'] : OUT_TABLES[k]);
   const td = today_(ss), verOf = k => deps(k).map(t => vers[t]).join('.') + (OUT_WINDOWED.indexOf(k) >= 0 ? '@' + td : '');
@@ -3013,7 +3017,7 @@ const REG_ARCH_PROP = 'regArch';
 const regArchYears_ = cfg => { const y = cfg && cfg.reg && cfg.reg.archiveYears; return y === 0 || y === '0' ? 0 : [1, 2, 3, 5].indexOf(+y) >= 0 ? +y : 3; };
 // ผู้ป่วยที่ดึงจาก Google Drive แล้วไม่เคยมีรายการในแถบอื่นเลย (ไม่มีนัด เคส CT-SIM ฯลฯ): ย้ายเมื่อดึงมา/แก้ล่าสุดเกิน N เดือน (0 = ใช้กติกาปกติ · ไม่ตั้ง = 6 เดือน)
 const regArchDriveMonths_ = cfg => { const m = cfg && cfg.reg && cfg.reg.archiveDriveMonths; return m === 0 || m === '0' ? 0 : [1, 3, 6, 12].indexOf(+m) >= 0 ? +m : 6; };
-function regArchStatus_() { try { return JSON.parse(propRead_(REG_ARCH_PROP) || 'null'); } catch (e) { return null; } }
+function regArchStatus_() { try { return JSON.parse(propRead_(pk_(REG_ARCH_PROP)) || 'null'); } catch (e) { return null; } }
 // HN → วันล่าสุดที่มีรายการในแถบอื่น (yyyy-MM-dd · วันที่ของรายการ / Start RT / วันทำ CT / Created)
 function hnLatest_(ss) {
   const out = {}, skip = ['reg', 'regArch', 'spq'];
@@ -3102,7 +3106,7 @@ function regArchive_(ss, cfg, force) {
       res.total = ah ? Math.max(0, ah.getLastRow() - 1) : 0;
     });
   } catch (e) { res.error = String(e.message || e).slice(0, 200); }
-  try { propSave_(REG_ARCH_PROP, JSON.stringify(res)); } catch (e) { /* ครั้งหน้า */ }
+  try { propSave_(pk_(REG_ARCH_PROP), JSON.stringify(res)); } catch (e) { /* ครั้งหน้า */ }
   return res;
 }
 // แอดมิน: ย้ายตอนนี้ (หลังเปลี่ยนจำนวนปี)
@@ -4975,7 +4979,7 @@ function who_(token, ss, cfg) {
 function who0_(token, ss, cfg) {
   ss = ss || ss_();
   cfg = cfg || readConfig_(ss) || {};
-  if (token && token !== SHEET_DIALOG && /^[\w-]{20,200}$/.test(String(token))) cachePre_(['ssOwner_' + ss.getId(), 'lpch_' + token, 'ssTz']);
+  if (token && token !== SHEET_DIALOG && /^[\w-]{20,200}$/.test(String(token))) cachePre_(['ssOwner_' + ss.getId(), 'lpch_' + token, pk_('ssTz')]);
   const g = adminInfo_(ss, cfg);
   const google = { via: 'google', name: g.me, username: '', role: '', me: g.me, owner: g.owner, canEdit: true, isAdmin: g.isAdmin, lpchAdmin: false };
   AUDIT_U_ = google;
@@ -5653,6 +5657,7 @@ function withLock_(fn) {
 let SS_ = null;
 function ss_() {
   if (SS_) return SS_;
+  if (PRACTICE_) return (SS_ = practiceSs_());   // API 95: โหมดฝึกใช้
   const bound = SpreadsheetApp.getActive();
   if (bound) return (SS_ = bound);
   const id = sheetIdProp_();
@@ -5692,6 +5697,106 @@ function sheetSource_() {
     if (SpreadsheetApp.getActive()) return 'bound';
     return sheetIdProp_() ? 'property' : 'none';
   } catch (e) { return 'error'; }
+}
+
+/* ---------- API 95 (19 พ.ย.): โหมดฝึกใช้ ----------
+ * หน้าเว็บในโหมดฝึกเรียกทุกฟังก์ชันผ่าน practiceCall → ss_() = ไฟล์ข้อมูลฝึก (Google Sheet แยก · Script property PRACTICE_SHEET_ID)
+ * ไฟล์ฝึกสร้างเองครั้งแรกใน Drive ของบัญชีที่ Deploy · ชีต Config คัดลอกจากระบบจริง (ห้อง แพทย์ สิทธิ์ ฟอร์ม ลิมิต) · แก้ตั้งค่าในโหมดฝึก = แก้ในไฟล์ฝึก
+ * รุ่นตาราง / สำเนาตารางในแคช / สถานะที่เก็บถาวร ใช้ชื่อแยก (pk_) · ไม่ส่งอีเมล · ฟังก์ชันที่เชื่อมระบบภายนอก สำรองข้อมูล ตั้ง PIN ใช้ไม่ได้
+ * ไฟล์จริงไม่ถูกเปิดเพื่อเขียนเลย (ยกเว้นอ่านชีต Config ตอนสร้าง / ล้างไฟล์ฝึก และตรวจแอดมินตอนล้าง) */
+let PRACTICE_ = false;
+const PRACTICE_PROP = 'PRACTICE_SHEET_ID', PRACTICE_AT = 'PRACTICE_AT';
+const PRACTICE_NO = ['doGet', 'onOpen', 'openApp', 'practiceCall', 'importLegacy', 'bqImportCheck', 'bqImport', 'vacImportCheck', 'vacImport',
+  'regDriveCheck', 'regDrivePull', 'regDriveTick', 'tdfxList', 'tdfxSave', 'tdfxRecheck', 'tdfxSavePdf', 'tdfxWithdraw', 'tdfxCheck', 'tdfCheck', 'tdfPull',
+  'hdrGet', 'hdrAdd', 'brachyCheck', 'brachyPull', 'brachyTick', 'spqCheck', 'spqPull', 'setPin', 'setupLpch', 'snapWarm', 'snapTick',
+  'backupDaily', 'backupInstall', 'backupStatus', 'backupSave', 'backupNow'];
+const PRACTICE_MSG = 'ใช้ในโหมดฝึกใช้ไม่ได้ (เชื่อมระบบภายนอก / สำรองข้อมูล / ตั้งรหัส PIN) · ออกจากโหมดฝึกใช้แล้วทำในระบบจริง';
+function practiceCall(fn, args) {
+  fn = String(fn || '');
+  const f = /^[a-z][A-Za-z0-9]{1,60}$/.test(fn) && PRACTICE_NO.indexOf(fn) < 0 ? globalThis[fn] : null;
+  if (typeof f !== 'function') throw new Error(PRACTICE_MSG + ' · ' + fn);
+  PRACTICE_ = true;
+  SS_ = null;
+  CFG_MEMO_ = null;
+  return f.apply(null, Array.isArray(args) ? args.slice(0, 20) : []);
+}
+// ไฟล์ของระบบจริง (ไม่ใช่โหมดฝึก) · ใช้อ่าน Config / ตรวจแอดมิน
+function realSs_() {
+  const keep = PRACTICE_, s0 = SS_;
+  PRACTICE_ = false;
+  SS_ = null;
+  try { return ss_(); } finally { PRACTICE_ = keep; SS_ = s0; }
+}
+const realIds_ = () => {
+  const ids = [];
+  try { const b = SpreadsheetApp.getActive(); if (b) ids.push(b.getId()); } catch (e) { /* ไม่ได้ผูกชีต */ }
+  try { const p = sheetIdProp_(); if (p) ids.push(p); } catch (e) { /* ไม่ได้ตั้ง */ }
+  return ids;
+};
+function practiceSs_() {
+  const id = String(propRead_(PRACTICE_PROP) || '');
+  if (id && realIds_().indexOf(id) < 0) { try { return SpreadsheetApp.openById(id); } catch (e) { /* ถูกลบ = สร้างใหม่ */ } }
+  return withLock_(() => {
+    const again = String(PropertiesService.getScriptProperties().getProperty(PRACTICE_PROP) || '');
+    if (again && again !== id && realIds_().indexOf(again) < 0) { try { return SpreadsheetApp.openById(again); } catch (e) { /* สร้างใหม่ */ } }
+    return practiceMake_();
+  });
+}
+// ไฟล์ฝึกใหม่: Config จากระบบจริง · ไม่มีข้อมูลผู้ป่วย (หน้าเว็บส่งผู้ป่วยตัวอย่างมาใส่ด้วย practiceReset)
+function practiceMake_() {
+  const real = realSs_(), ss = SpreadsheetApp.create('ฝึกใช้ (ข้อมูลทดลอง ไม่ใช่ข้อมูลจริง) — ' + real.getName());
+  try { ss.setSpreadsheetTimeZone(real.getSpreadsheetTimeZone()); } catch (e) { /* ใช้เขตเวลาเริ่มต้น */ }
+  const first = ss.getSheets()[0], cfg = real.getSheetByName(CONFIG_SHEET);
+  if (cfg) cfg.copyTo(ss).setName(CONFIG_SHEET);
+  if (first && first.getName() !== CONFIG_SHEET) first.setName(TABLES.cases.sheet);
+  propSave_(PRACTICE_PROP, ss.getId());
+  propSave_(PRACTICE_AT, new Date().toISOString());
+  return ss;
+}
+// ตารางที่ผู้ป่วยตัวอย่างใส่ได้ · HN ต้องขึ้นต้น 999 (ผู้ป่วยสมมติ) · ตารางละไม่เกิน 500 แถว
+const PRACTICE_SEED = ['cases', 'logs', 'leaves', 'appt', 'duty', 'reg', 'bq', 'spq', 'dq', 'dqLeave'];
+const PRACTICE_CORE = ['cases', 'reg', 'appt', 'dq', 'bq', 'ctsim'];
+function practiceSeed_(ss, seed) {
+  const out = {};
+  if (!seed || typeof seed !== 'object') return out;
+  const now = new Date().toISOString();
+  PRACTICE_SEED.forEach(t => {
+    if (!TABLES[t] || !Array.isArray(seed[t])) return;
+    const rows = seed[t].filter(r => r && typeof r === 'object' && r.id && (!r.hn || /^999\d{6}$/.test(String(r.hn)))).slice(0, 500);
+    if (!rows.length) return;
+    const sh = tableSheet_(ss, t), header = headerOf_(sh), def = tableDef_(t), by = {};
+    def.fields.forEach(f => { by[f[1]] = f[0]; });
+    const vals = rows.map(r => header.map(h => (h === REV_HEAD ? now : h in by ? safeText_(r[by[h]]) : '')));
+    sh.getRange(Math.max(2, sh.getLastRow() + 1), 1, vals.length, header.length).setNumberFormat('@').setValues(vals);
+    out[t] = vals.length;
+  });
+  return out;
+}
+const practiceEmpty_ = ss => PRACTICE_CORE.every(t => { const sh = sheet_(ss, TABLES[t].sheet); return !sh || sh.getLastRow() < 2; });
+// ล้างข้อมูลฝึกเริ่มใหม่ (แอดมินของระบบจริง): ไฟล์ฝึกใหม่ + Config ล่าสุดจากระบบจริง + ผู้ป่วยตัวอย่าง · ไฟล์ฝึกเดิมไปถังขยะของ Drive
+// ไฟล์ฝึกยังว่าง (ยังไม่มีผู้ป่วย) = ใครก็ใส่ผู้ป่วยตัวอย่างได้ (ครั้งแรกที่เปิดโหมดฝึก)
+function practiceReset(seed, fresh, token) {
+  PRACTICE_ = false;   // แอดมิน = ตามการตั้งค่าของระบบจริง (ไม่ใช่ Config ในไฟล์ฝึกที่แก้ได้)
+  SS_ = null;
+  CFG_MEMO_ = null;
+  const real = ss_(), u = who_(token, real, readConfig_(real) || {}), admin = u.via === 'google' || !!u.isAdmin;
+  PRACTICE_ = true;
+  SS_ = null;
+  CFG_MEMO_ = null;
+  return withLock_(() => {
+    if (fresh === true) {
+      if (!admin) throw new Error('ล้างข้อมูลฝึกได้เฉพาะแอดมิน');
+      const old = String(PropertiesService.getScriptProperties().getProperty(PRACTICE_PROP) || '');
+      const ss = practiceMake_();
+      SS_ = ss;
+      if (old && old !== ss.getId() && realIds_().indexOf(old) < 0) { try { DriveApp.getFileById(old).setTrashed(true); } catch (e) { /* ลบไม่ได้: ไม่เป็นไร */ } }
+      Object.keys(TABLES).forEach(t => markDirty_(t));   // รุ่นตารางใหม่ทั้งหมด (สำเนาในแคชของไฟล์เดิมใช้ไม่ได้)
+      return { fresh: true, seeded: practiceSeed_(ss, seed) };
+    }
+    const ss = ss_();
+    if (!practiceEmpty_(ss)) return { fresh: false, seeded: {}, skipped: true };   // มีข้อมูลฝึกอยู่แล้ว (คนอื่นใส่ไปก่อน)
+    return { fresh: false, seeded: practiceSeed_(ss, seed) };
+  });
 }
 
 /* ---------- สำรองข้อมูล (API 77) · แจ้งเตือนทางอีเมล ---------- */
@@ -5856,6 +5961,7 @@ function backupNow(mail, token) {
 }
 // แจ้งเตือนทางอีเมลถึงเจ้าของ (เรื่องเดียวกันไม่เกินชั่วโมงละครั้ง) · ส่งไม่ได้ไม่ทำให้งานหลักล้ม
 function alert_(kind, subject, text) {
+  if (PRACTICE_) return false;   // API 95: โหมดฝึกใช้ไม่ส่งอีเมล
   try {
     const cfg = backupCfg_(), to = backupTo_();
     if (!cfg.alerts || !to) return false;
@@ -5869,6 +5975,7 @@ function alert_(kind, subject, text) {
 }
 // ลบข้อมูลจำนวนมาก (นับจากประวัติการบันทึกของคำขอนี้)
 function alertDeletes_(rows) {
+  if (PRACTICE_) return;
   const del = rows.filter(r => r[6] === 'del');
   if (!del.length) return;
   const who = String(del[0][1] || del[0][2] || 'ไม่ทราบชื่อ'), acct = String(del[0][2] || who), cache = CacheService.getScriptCache();

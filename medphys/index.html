@@ -1795,6 +1795,16 @@ tr.col-head > th[draggable="true"]{cursor:grab}
 .dpk-full .dpk-foot{font-size:14px}
 .prio-chips input[value="Emergency"]:checked+span{border-color:var(--late);background:var(--late);color:var(--surface)}
 .emerg-tag{margin-left:4px}
+/* 19 พ.ย.: โหมดฝึกใช้ · กรอบแดงรอบหน้าจอ + แถบแดงด้านบน */
+body.practice::before{content:"";position:fixed;inset:0;border:4px solid #c62828;pointer-events:none;z-index:2147483000}
+.practice-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:#c62828;color:#fff;padding:10px 14px;border-radius:10px;margin:0 0 12px;font-size:13.5px}
+.practice-bar b{font-size:15px}
+.practice-bar.warn{background:var(--warn-soft);color:var(--warn)}
+.practice-bar .practice-acts{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.practice-bar .btn{background:#fff;color:#b71c1c;border-color:#fff}
+.practice-bar .btn.primary{background:#7f0000;color:#fff;border-color:#7f0000}
+.practice-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;border:1px solid #c62828;background:transparent;color:#c62828;font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px}
+.practice-btn.on{background:#c62828;color:#fff}
 .sp-tag.rect-tag{background:var(--late-soft);color:var(--late);margin-left:4px;font-weight:700}
 /* 19 พ.ย.: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด */
 .nc-list li{align-items:center}
@@ -2913,6 +2923,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   <p class="notice err" id="load-notice" role="alert" hidden><b>โหลดข้อมูลไม่สำเร็จ</b><span id="load-text"></span><button type="button" class="btn" id="retry-top">ลองใหม่</button></p>
   <p class="notice warn" id="api-notice" hidden><b>Code.gs รุ่นเก่า</b><span id="api-text"></span></p>
 
+  <div class="practice-bar" id="practice-bar" role="status" hidden></div>
   <p class="notice" id="demo-notice" hidden><b>ข้อมูลตัวอย่าง</b><span>ทุกอย่างบันทึกไว้ในเบราว์เซอร์นี้เท่านั้น เชื่อมกับ Google Sheet เพื่อใช้ร่วมกันทั้งทีม</span></p>
 
   <!-- งาน -->
@@ -7491,7 +7502,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-19.6';
+const PAGE_VERSION = '2026-11-19.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7512,6 +7523,16 @@ const LOGIN_MARK = 'LOGIN|';
 // 18 พ.ย.: เวลาของการเรียก Code.gs แต่ละครั้ง (เครื่องนี้ ล่าสุด 40 ครั้ง · ตั้งค่า → สำรองข้อมูลและความปลอดภัย → ความเร็ว)
 const speedLog = [];
 const speedAdd = (fn, t0, ok) => { speedLog.unshift({ fn, ms: Math.round(performance.now() - t0), ok, at: Date.now() }); if (speedLog.length > 40) speedLog.length = 40; };
+// 19 พ.ย. (Code.gs API 95): โหมดฝึกใช้ · ทุกการเรียก Code.gs ผ่าน practiceCall = ไฟล์ข้อมูลฝึกแยก (ไม่กระทบระบบจริง) · เลือกต่อเบราว์เซอร์
+// Code.gs บนลิงก์ไม่มี practiceCall (รุ่นเก่า) = ปิดโหมดฝึก แล้วบอกชัด ๆ ว่าตอนนี้เป็นระบบจริง (ไม่ปล่อยให้เข้าใจผิดว่ากำลังฝึก)
+const PRACTICE_API = 95;
+const practiceCan = () => IN_SHEET && !!google.script.run && typeof google.script.run.practiceCall === 'function';
+const PRACTICE = { on: false, warned: '', seedTried: false };
+if (pref.get('practice', false) === true) {
+  PRACTICE.on = practiceCan();
+  if (!PRACTICE.on) { pref.set('practice', false); PRACTICE.warned = 'ออกจากโหมดฝึกใช้แล้ว: Code.gs บนลิงก์นี้ยังไม่รองรับ (ต้องรุ่น 2026-11-19.4 ขึ้นไป) · ตอนนี้เป็นระบบจริง'; }
+}
+const callTok = () => lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : '');
 const call = (fn, ...args) => { if (state.viewAs && !VIEWAS_CALL_READ.test(fn)) return Promise.reject(new Error(viewAsMsg())); const t0 = performance.now(); return new Promise((ok, fail) => google.script.run.withSuccessHandler(v => { speedAdd(fn, t0, true); ok(v); }).withFailureHandler(err => {
   speedAdd(fn, t0, false);
   const m = errMsg(err), i = m.indexOf(LOGIN_MARK);
@@ -7519,7 +7540,7 @@ const call = (fn, ...args) => { if (state.viewAs && !VIEWAS_CALL_READ.test(fn)) 
   const why = m.slice(i + LOGIN_MARK.length);
   showGate(why);
   fail(Object.assign(new Error(why), { login: true }));
-})[fn](...args, lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : ''))); };
+})[PRACTICE.on ? 'practiceCall' : fn](...(PRACTICE.on ? [fn, [...args, callTok()]] : [...args, callTok()]))); };
 const sheetStore = {
   mode: 'sheet',
   load: have => (have ? call('getData', have) : call('getData')),   // have = รุ่นของข้อมูลที่มี (Code.gs API 61 · ส่งเฉพาะที่เปลี่ยน)
@@ -9075,7 +9096,7 @@ function renderAcct() {
   else if (!gated && store.mode === 'sheet') who = chip(u.me || 'บัญชี Google', u.isAdmin ? 'Google · แอดมิน' : 'Google', 'เข้าสู่ระบบด้วยบัญชี Google');   // รวม Code.gs รุ่นเก่าที่ไม่ส่ง via
   else if (!gated && u.via === 'demo') who = chip(u.name, roleTag(), 'โหมดตัวอย่าง');
   $('#home-slot').innerHTML = home;
-  $('#acct').innerHTML = viewAsBtn() + who;   // ชื่อผู้ใช้และปุ่มออกจากระบบอยู่ขวาสุด · แอดมิน: ปุ่มดูในมุมมอง (18 พ.ย.)
+  $('#acct').innerHTML = practiceBtn(gated) + viewAsBtn() + who;   // ชื่อผู้ใช้และปุ่มออกจากระบบอยู่ขวาสุด · แอดมิน: ปุ่มดูในมุมมอง (18 พ.ย.)
 }
 // แถบเมนูตามที่แอดมินตั้ง: ย้ายปุ่มเฉพาะเมื่อลำดับเปลี่ยน (ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
 // แถบย่อย (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบหลักที่แสดงอยู่ · แถบหลักที่ซ่อนจากตำแหน่งนี้ = แถบย่อยขึ้นมาเป็นแถบหลักแทน
@@ -9228,10 +9249,12 @@ function renderLogo() {
   if ($('#brand-name').textContent !== brand.name) $('#brand-name').textContent = brand.name;
   if ($('#brand-sub').textContent !== brand.sub) $('#brand-sub').textContent = brand.sub;
   $('#brand-sub').hidden = !brand.sub;
-  if (document.title !== brand.name) document.title = brand.name;
+  const tt = (PRACTICE.on && store.mode === 'sheet' ? 'ฝึกใช้ · ' : '') + brand.name;
+  if (document.title !== tt) document.title = tt;
 }
 function render() {
   const gated = state.gate != null;
+  renderPractice();
   if (calBox && !calBox.getClientRects().length) closeCal();
   renderTheme();
   applyQColors();
@@ -12668,6 +12691,82 @@ function renderNurseOntx(tab, words, ordHtml) {
       const rs = list.filter(x => docOf(x) === code).sort((a, b) => !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn)));
       return `<details class="ontx-g nurse-g${code && code === me ? ' mine' : ''}" open><summary>${code ? `${docChip(code)} ${esc(docName(code) || code)}` : 'ไม่ระบุแพทย์'} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => nurseOntxCard(x, edit)).join('')}</ul></details>`;
     }).join('') + pastHtml;
+}
+/* ---------- 19 พ.ย. (Code.gs API 95): โหมดฝึกใช้ ----------
+ * ข้อมูลฝึกอยู่ในไฟล์ Google Sheet แยก (Code.gs สร้างเอง · Config คัดลอกจากระบบจริง) · ทุกคนที่เปิดโหมดฝึกเห็นข้อมูลชุดเดียวกัน
+ * ผู้ป่วยตัวอย่าง = ข้อมูลของโหมดตัวอย่าง (HN 999… ชื่อสมมติ) เปลี่ยนรหัสแพทย์ MP ห้องฉาย เครื่อง CT เป็นของระบบจริง */
+const practiceEmpty = () => !state.cases.length && !state.reg.length && !state.appt.length && !state.dq.length && !state.bq.length && !state.ct.length;
+function practiceSeedData() {
+  const x = demoDb(), cfg = state.config, take = (from, real) => { const m = {}; from.forEach((v, i) => { m[v] = real.length ? real[i % real.length] : v; }); return m; };
+  const D = take(['SC', 'TA', 'PM', 'TC', 'VS'], docCodes().filter(Boolean)), S = take(['JR', 'WM', 'NY', 'WS'], activeStaff().map(s => s.code).filter(Boolean));
+  const R = take(['Infinity', 'Precise', 'VersaHD'], (cfg.rooms || []).filter(Boolean)), C = take(['ct1'], ctRooms().map(r => r.id).filter(Boolean));
+  const room = v => (/^CT:/.test(v) ? 'CT:' + (C[v.slice(3)] || v.slice(3)) : R[v] || v);
+  const fix = (r, t) => {
+    const o = { ...r };
+    if (o.doc) o.doc = D[o.doc] || o.doc;
+    for (const k of ['mp', 'rc']) if (o[k]) o[k] = S[o[k]] || o[k];
+    if (o.room) o.room = room(o.room);
+    if (t === 'appt' && o.ct) o.ct = C[o.ct] || o.ct;
+    if (t === 'duty') o.id = `${o.date}|${o.room}`;
+    return o;
+  };
+  const out = {};
+  for (const t of ['cases', 'logs', 'leaves', 'appt', 'duty', 'reg', 'bq', 'spq', 'dq', 'dqLeave']) out[t] = (x[t] || []).map(r => fix(r, t));
+  return out;
+}
+async function practiceSeedNow(fresh, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await call('practiceReset', practiceSeedData(), !!fresh), n = Object.values((r && r.seeded) || {}).reduce((a, b) => a + (+b || 0), 0);
+    toast(fresh ? `ล้างข้อมูลฝึกแล้ว · เริ่มใหม่ด้วยผู้ป่วยตัวอย่าง (${n} รายการ)` : r && r.skipped ? 'มีข้อมูลฝึกอยู่แล้ว (มีคนสร้างไว้ก่อน)' : `สร้างผู้ป่วยตัวอย่างสำหรับฝึกแล้ว (${n} รายการ · HN 999…)`);
+    await refresh();
+    render();
+  } catch (e) { toast('ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn && btn.isConnected) btn.disabled = false; }
+}
+// เข้า / ออกโหมดฝึก: โหลดข้อมูลใหม่ทั้งหมดจากไฟล์ที่ถูกต้อง (หน้าต่างที่เปิดอยู่ปิดก่อน · ข้อมูลที่โหลดเพิ่มทีหลังล้างทิ้ง)
+async function practiceSwitch(on) {
+  if (on && !practiceCan()) return toast('Code.gs บนลิงก์นี้ยังไม่รองรับโหมดฝึกใช้ · วาง Code.gs รุ่น 2026-11-19.4 แล้ว Deploy', { err: true });
+  if (on && !confirm('เข้าโหมดฝึกใช้?\n\n• ข้อมูลฝึกเก็บในไฟล์แยก ไม่มีผลต่อคิว แผน นัด คะแนน หรือสถิติของระบบจริง\n• ทุกคนที่เปิดโหมดฝึกเห็นข้อมูลชุดเดียวกัน (ฝึกส่งงานข้ามเครื่องได้)\n• ระบบภายนอก (Drive, TDF, HDR, คิวเทคนิคพิเศษ) สำรองข้อมูล และตั้ง PIN ใช้ไม่ได้\n• ออกได้ที่แถบแดงด้านบน')) return;
+  for (const d of $$('dialog[open]')) d.close();
+  pref.set('practice', !!on);
+  PRACTICE.on = !!on;
+  PRACTICE.warned = '';
+  PRACTICE.seedTried = false;
+  draft = null;
+  hdr.data = null;
+  state.srcChk = {};
+  state.practice = null;
+  saveFails.length = 0;
+  renderSaveFails();
+  render();
+  toast(on ? 'กำลังเปิดข้อมูลฝึก…' : 'กำลังกลับระบบจริง…');
+  await refresh();
+  render();
+  if (!state.error) toast(on ? '🧪 โหมดฝึกใช้ · ข้อมูลทดลอง ไม่มีผลต่อระบบจริง' : 'กลับระบบจริงแล้ว');
+}
+function practiceAct(k, btn) {
+  if (k === 'on') return practiceSwitch(true);
+  if (k === 'hide') { PRACTICE.warned = ''; return renderPractice(); }
+  if (k === 'off') return practiceSwitch(false);
+  if (!PRACTICE.on) return;
+  if (k === 'seed') return practiceSeedNow(false, btn);
+  if (k === 'reset' && confirm('ล้างข้อมูลฝึกทั้งหมดแล้วเริ่มใหม่?\n\nทุกคนที่อยู่ในโหมดฝึกจะเห็นข้อมูลใหม่ (ผู้ป่วยตัวอย่างชุดเริ่มต้น + ตั้งค่าล่าสุดจากระบบจริง) · ไฟล์ข้อมูลฝึกเดิมไปอยู่ในถังขยะของ Google Drive')) return practiceSeedNow(true, btn);
+}
+const practiceBtn = gated => (store.mode !== 'sheet' || gated || !state.loaded || !practiceCan() || !serverHas(PRACTICE_API) ? ''
+  : PRACTICE.on ? '<button type="button" class="practice-btn on" data-practice="off" title="กลับไปใช้ระบบจริง">🧪 ออกจากโหมดฝึก</button>'
+    : '<button type="button" class="practice-btn" data-practice="on" title="ฝึกใช้ระบบด้วยข้อมูลทดลอง (ไฟล์แยก ไม่มีผลต่อคิว แผน นัด หรือคะแนนของระบบจริง)">🧪 ฝึกใช้</button>');
+function renderPractice() {
+  const bar = $('#practice-bar'), on = PRACTICE.on && store.mode === 'sheet';
+  document.body.classList.toggle('practice', on);
+  bar.classList.toggle('warn', !on && !!PRACTICE.warned);
+  bar.hidden = !on && !PRACTICE.warned;
+  if (!on) { bar.innerHTML = PRACTICE.warned ? `<b>⚠️</b><span>${esc(PRACTICE.warned)}</span><button type="button" class="btn sm" data-practice="hide">รับทราบ</button>` : ''; return; }
+  const u = state.user, adm = !!u && (u.isAdmin || u.via === 'google'), ready = state.loaded && !!state.practice;
+  bar.innerHTML = `<b>🧪 โหมดฝึกใช้</b><span>ข้อมูลทดลองในไฟล์แยก · ไม่มีผลต่อคิว แผน นัด คะแนน หรือสถิติของระบบจริง · ทุกคนที่เปิดโหมดฝึกเห็นข้อมูลชุดเดียวกัน · ผู้ป่วยตัวอย่าง HN 999…</span>`
+    + `<span class="practice-acts">${ready && practiceEmpty() ? '<button type="button" class="btn sm" data-practice="seed">สร้างผู้ป่วยตัวอย่าง</button>' : ''}`
+    + `${ready && adm ? `<button type="button" class="btn sm" data-practice="reset" title="แอดมิน: ไฟล์ข้อมูลฝึกใหม่ + ผู้ป่วยตัวอย่างชุดเริ่มต้น + ตั้งค่าล่าสุดจากระบบจริง">ล้างข้อมูลฝึก เริ่มใหม่</button>${state.sheetUrl ? `<a class="btn sm" href="${esc(state.sheetUrl)}" target="_blank" rel="noopener">เปิดไฟล์ข้อมูลฝึก</a>` : ''}` : ''}`
+    + `<button type="button" class="btn sm primary" data-practice="off">ออกจากโหมดฝึก</button></span>`;
 }
 /* ---------- 19 พ.ย. (R18 · Code.gs API 94): แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด ---------- */
 const NC_WHAT = { ct: 'นัด CT-Sim', sim: 'Start RT', bq: 'นัดใส่แร่' };
@@ -22545,6 +22644,7 @@ document.addEventListener('click', e => {
   if (ds.failx !== undefined) { saveFails.splice(+ds.failx, 1); return renderSaveFails(); }
   if (t.id === 'dqe-back') return dqEditing && dqBack(dqEditing.id);
   if (t.id === 'logout') return logout();
+  if (ds.practice) return practiceAct(ds.practice, t);   // 19 พ.ย.: โหมดฝึกใช้
   if (t.id === 'idle-stay') return idleSeen(true);
   if (t.id === 'theme-btn') return toggleTheme();
   if (ds.lookfs) return lookSet({ fs: ds.lookfs });
@@ -25022,6 +25122,8 @@ async function refresh(quiet) {
     advCleared = +d.advanceCleared || 0;   // Code.gs API 51 ล้างการบันทึกล่วงหน้าตอนโหลด
     state.gate = null;
     state.sheetUrl = d.sheetUrl || '';
+    state.practice = d.practice || null;
+    if (PRACTICE.on && !d.practice) { PRACTICE.on = false; pref.set('practice', false); PRACTICE.warned = 'ออกจากโหมดฝึกใช้แล้ว (Code.gs ไม่ได้ส่งข้อมูลฝึก) · ตอนนี้เป็นระบบจริง'; }
     state.demo = !!d.demo;
     state.loaded = true;
     state.error = '';
@@ -25037,6 +25139,7 @@ async function refresh(quiet) {
   if (advCleared) toast(`ล้างการบันทึกล่วงหน้า ${advCleared} รายการ (ฉายแล้ว / Off RT / Complete course / Cancel RT ของวันหลังวันนี้)`);
   // หน้าตั้งค่า: ไม่วาดใหม่ระหว่างแก้ · ยังไม่ได้แก้และไม่ได้อยู่ในช่องกรอก = วาดใหม่ให้เห็นค่าล่าสุด
   maybePullBrachy();
+  if (PRACTICE.on && state.practice && !PRACTICE.seedTried && practiceEmpty()) { PRACTICE.seedTried = true; practiceSeedNow(false); }   // ไฟล์ฝึกใหม่: ใส่ผู้ป่วยตัวอย่างให้ครั้งแรก
   if (quiet && state.view === 'settings') { if (!draft && !settingsEl.contains(document.activeElement)) renderSettings(); return; }
   render();
 }
