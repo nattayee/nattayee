@@ -2418,6 +2418,16 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .bq-pt-acts>span{color:var(--muted);margin-right:4px}
 .bq-li-acts{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:8px;vertical-align:middle}
 .bq-course li.pp{color:var(--warn)}
+.bq-hh{font-size:15px;margin:14px 0 8px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.bq-hh small{flex-basis:100%;font-weight:400;font-size:12.5px;color:var(--muted)}
+.bq-hh:first-child{margin-top:4px}
+.bq-htbl td{vertical-align:middle}
+.bq-hat{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
+.bq-hb,.bq-ha{white-space:nowrap}
+.bq-hb b{font-weight:500;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+.bq-ha b{color:var(--accent)}
+.bq-hb small,.bq-ha small{display:block;color:var(--muted);font-size:11.5px}
+.bq-harr{color:var(--muted);text-align:center;padding-inline:2px}
 .bq-sign{min-height:26px;padding:1px 9px;border:1px dashed var(--line-strong);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:12px}
 .bq-sign:hover{border-color:var(--accent);color:var(--accent)}
 .bq-over{color:var(--late);font-weight:600}
@@ -2967,7 +2977,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
   </section>
   <section id="view-bq" hidden>
     <div class="toolbar">
-      <div class="cal-opts bq-views" role="group" aria-label="มุมมอง"><button type="button" data-bqv="queue" aria-pressed="true">ตารางนัดคิว</button><button type="button" data-bqv="dash" aria-pressed="false">แดชบอร์ด</button><button type="button" data-bqv="pp" aria-pressed="false">เลื่อนนัดไม่มีกำหนด</button></div>
+      <div class="cal-opts bq-views" role="group" aria-label="มุมมอง"><button type="button" data-bqv="queue" aria-pressed="true">ตารางนัดคิว</button><button type="button" data-bqv="dash" aria-pressed="false">แดชบอร์ด</button><button type="button" data-bqv="pp" aria-pressed="false" title="ประวัติการเลื่อนนัดทั้งหมด · ตัวเลข = นัดที่เลื่อนไม่มีกำหนด รอลงวันนัดใหม่">ประวัติการเลื่อนนัด</button></div>
       <input type="search" class="tab-q" data-tq="bq" placeholder="ค้นหาผู้ป่วย: HN หรือชื่อ (ดูวันนัดทุกคอร์ส)" autocomplete="off" aria-label="ค้นหาผู้ป่วยในแถบนี้">
       <div class="hdr-act" id="hdr-act" role="group" aria-label="HDR Activity" hidden></div>
       <span class="spacer"></span>
@@ -7432,7 +7442,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-19.3';
+const PAGE_VERSION = '2026-11-19.4';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12817,7 +12827,7 @@ function renderBq() {
   renderHdr();
   $$('[data-bqv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bqv === state.bqView)));
   const nPp = state.bq.filter(a => a.status === BQ_ST.pp).length;
-  $$('[data-bqv="pp"]').forEach(b => { b.innerHTML = `เลื่อนนัดไม่มีกำหนด${nPp ? `<b class="cs-n hold">${nPp}</b>` : ''}`; });
+  $$('[data-bqv="pp"]').forEach(b => { b.innerHTML = `ประวัติการเลื่อนนัด${nPp ? `<b class="cs-n hold" title="เลื่อนนัดไม่มีกำหนด รอลงวันนัดใหม่">${nPp}</b>` : ''}`; });
   const words = tabWords('bq');
   $('#bq-body').innerHTML = state.bqPt ? bqPatientHtml(state.bqPt) : words.length ? bqFindHtml(words) : state.bqView === 'dash' ? bqDashHtml(edit) : state.bqView === 'pp' ? bqPpHtml(edit) : bqQueueHtml(edit);
   const box = $('#bq-body .bq-svg'), w = box ? Math.round(box.clientWidth) : 0;   // กราฟกว้างเท่าที่มีจริง (ตัวหนังสือไม่ถูกขยาย)
@@ -12947,7 +12957,7 @@ async function hdrCheck(btn) {
   if (el) el.innerHTML = hdrChkHtml();
 }
 // แถวในตาราง: คิว (นับเฉพาะนัดที่ไม่ยกเลิกของวันนั้น) HN ชื่อ แพทย์ รูปแบบการใส่ Fx หมายเหตุ สถานะ MP RC มาแล้ว · กดแถว = แก้ไข
-const BQ_HEAD = '<thead><tr><th>คิว</th><th>HN</th><th>ชื่อ-สกุล</th><th title="ห้องฉายรังสีภายนอกของผู้ป่วย">ห้องฉาย</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th title="ตรวจสอบนัดแล้ว (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)">ตรวจสอบ</th><th>RTT</th><th>CT</th><th>US</th><th>MP</th><th>RC</th><th></th><th title="เลื่อนไปก่อน ยังไม่ลงวัน (ไม่นับเคส) · ไปรอในมุมมองเลื่อนนัดไม่มีกำหนด">เลื่อนนัดไม่มีกำหนด</th><th title="เลือกวันนัดใหม่ในปฏิทิน">เลื่อนนัด</th><th title="ยกเลิกนัด Fx นี้ หรือทั้งคอร์ส · ใส่ PIN">ยกเลิก</th></tr></thead>';
+const BQ_HEAD = '<thead><tr><th>คิว</th><th>HN</th><th>ชื่อ-สกุล</th><th title="ห้องฉายรังสีภายนอกของผู้ป่วย">ห้องฉาย</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>หมายเหตุ</th><th>สถานะ</th><th title="ตรวจสอบนัดแล้ว (ตั้งค่า → นัดคิวใส่แร่ → สิทธิ์ของปุ่ม)">ตรวจสอบ</th><th>RTT</th><th>CT</th><th>US</th><th>MP</th><th>RC</th><th></th><th title="เลื่อนไปก่อน ยังไม่ลงวัน (ไม่นับเคส) · ไปรอที่แถบประวัติการเลื่อนนัด">เลื่อนนัดไม่มีกำหนด</th><th title="เลือกวันนัดใหม่ในปฏิทิน">เลื่อนนัด</th><th title="ยกเลิกนัด Fx นี้ หรือทั้งคอร์ส · ใส่ PIN">ยกเลิก</th></tr></thead>';
 const BQ_COLS = 19;
 // 19 พ.ย.: ปุ่มเลื่อนนัดไม่มีกำหนด · เลื่อนนัด… · ยกเลิก (คอลัมน์ท้ายตาราง · ผลการค้นหา · วันนัดของผู้ป่วย) · นัดที่เลื่อนไม่มีกำหนด = ลงวันนัดใหม่ / ยกเลิก
 function bqMvBtns(a, edit) {
@@ -12955,7 +12965,7 @@ function bqMvBtns(a, edit) {
   const b = (k, cls, l, tip) => `<button type="button" class="btn ${cls} sm bq-mvb" data-bqmv="${esc(a.id)}" data-k="${k}" title="${esc(tip)}">${l}</button>`;
   const cx = b('cx', 'ghost danger', 'ยกเลิก', 'ยกเลิกนัด Fx นี้ หรือทั้งคอร์ส · ใส่ PIN');
   if (a.status === BQ_ST.pp) return ['<span class="bq-st pp">รอลงวันใหม่</span>', b('mv', 'primary', 'ลงวันนัดใหม่', 'เลือกวันนัดใหม่ในปฏิทิน'), cx];
-  return [b('pp', 'ghost', 'เลื่อนไม่มีกำหนด', 'เลื่อนไปก่อน ยังไม่ลงวัน · ไม่นับเคส · ไปรอในมุมมองเลื่อนนัดไม่มีกำหนด'), b('mv', 'ghost', 'เลื่อนนัด…', 'เลือกวันนัดใหม่ในปฏิทิน'), cx];
+  return [b('pp', 'ghost', 'เลื่อนไม่มีกำหนด', 'เลื่อนไปก่อน ยังไม่ลงวัน · ไม่นับเคส · ไปรอที่แถบประวัติการเลื่อนนัด (รอลงวันนัดใหม่)'), b('mv', 'ghost', 'เลื่อนนัด…', 'เลือกวันนัดใหม่ในปฏิทิน'), cx];
 }
 const bqMvCells = (a, edit) => bqMvBtns(a, edit).map(h => `<td class="bq-mvc">${h}</td>`).join('');
 function bqRowsHtml(rows, edit) {
@@ -13003,19 +13013,45 @@ function bqDayHead(d, n, span, rows, edit) {
   };
   return `<tr class="ct-day${d === today() ? ' today' : ''}"><td colspan="${span - 9}">${head}</td><td>${cell('rtt')}</td><td></td><td></td><td>${cell('mp')}</td><td>${cell('rc')}</td><td></td><td></td><td></td><td></td></tr>`;
 }
-// 19 พ.ย.: มุมมองเลื่อนนัดไม่มีกำหนด · นัดที่เลื่อนไปก่อน (ไม่นับเคส) · ลงวันนัดใหม่ (ปฏิทินแบบลงนัด) / ยกเลิก
-function bqPpHtml(edit) {
-  const rows = state.bq.filter(a => a.status === BQ_ST.pp).sort((a, b) => bqPid(a.hn, a.name).localeCompare(bqPid(b.hn, b.name)) || (+a.fx || 0) - (+b.fx || 0));
-  const when = a => {
+// 19 พ.ย.: แถบย่อยประวัติการเลื่อนนัด · ด้านบน = รอลงวันนัดใหม่ (เลื่อนนัดไม่มีกำหนด · ไม่นับเคส) ลงวันนัดใหม่ / ยกเลิก
+// ด้านล่าง = การเลื่อนนัดทุกครั้ง (เลื่อนนัด · เลื่อนนัดไม่มีกำหนด · ลงวันนัดใหม่ · แก้วันที่ในหน้าแก้ไขนัด) จากประวัติการแก้ไขของแต่ละนัด · ก่อนเลื่อน → หลังเลื่อน · ล่าสุดก่อน
+const BQ_HIST_N = 100;
+function bqMoveLog() {
+  const out = [];
+  for (const a of state.bq) {
+    if (!a.hist) continue;
     let h = [];
-    try { h = JSON.parse(a.hist || '[]'); } catch (e) { h = []; }
-    const x = (Array.isArray(h) ? h : []).filter(e => (e.ch || []).some(c => c.f === 'status' && c.to === BQ_ST.pp)).pop();
-    return x ? `${x.at} · ${x.by}` : a.updated ? `${fmtStamp(isoStamp(a.updated))}${a.editedBy ? ' · ' + a.editedBy : ''}` : '';
-  };
-  const body = rows.map(a => { const [, mv, cx] = bqMvBtns(a, edit); return `<tr class="ct-row bq-row pp click" data-bqedit="${esc(a.id)}" tabindex="0"${roTip(edit)}><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td>${bqDocHtml(a.doc)}</td><td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td>${esc(bqDay(a.date))}</td><td class="muted">${esc(when(a))}</td><td class="ct-note">${esc(a.note)}</td><td class="bq-mvc">${mv}</td><td class="bq-mvc">${cx}</td></tr>`; }).join('');
-  return `<p class="bq-stats">นัดที่เลื่อนไปก่อน ยังไม่ลงวัน <b>${rows.length}</b> Fx · ไม่นับเป็นเคสของวันใด${edit ? ' · กด "ลงวันนัดใหม่" แล้วเลือกวันในปฏิทิน นัดจะกลับไปอยู่ในตารางนัดคิว' : ''}</p>
-    <div class="table-wrap ct-wrap"><table class="ct-tbl bq-tbl bq-pptbl"><thead><tr><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>วันนัดเดิม</th><th>เลื่อนเมื่อ / โดย</th><th>หมายเหตุ</th><th>ลงวันนัดใหม่</th><th>ยกเลิก</th></tr></thead>
-    <tbody>${body || '<tr><td colspan="10" class="empty-state">ไม่มีนัดที่เลื่อนไม่มีกำหนด</td></tr>'}</tbody></table></div>`;
+    try { h = JSON.parse(a.hist); } catch (e) { h = []; }
+    if (!Array.isArray(h) || !h.length) continue;
+    // ย้อนจากวันนัดปัจจุบัน: วันที่ก่อน / หลังของแต่ละครั้ง (ครั้งที่ไม่ได้เปลี่ยนวัน = วันเดิมของตอนนั้น)
+    let cur = a.date;
+    const rows = [];
+    for (let k = h.length - 1; k >= 0; k--) {
+      const e = h[k] || {}, ch = Array.isArray(e.ch) ? e.ch : [], d = ch.find(c => c && c.f === 'date'), s0 = ch.find(c => c && c.f === 'status');
+      const after = d ? str(d.to) : cur, before = d ? str(d.from) : cur;
+      cur = before;
+      const toPp = !!s0 && s0.to === BQ_ST.pp, fromPp = !!s0 && s0.from === BQ_ST.pp;
+      if (d || toPp || fromPp) rows.push({ a, at: str(e.at), by: str(e.by), before, after, toPp, fromPp });
+    }
+    out.push(...rows);
+  }
+  return out.sort((x, y) => y.at.localeCompare(x.at) || str(x.a.hn).localeCompare(str(y.a.hn)));
+}
+const bqShortDay = d => (isDay(d) ? `${THAI_WD[parseISO(d).getDay()]} ${fmtDay(d)}` : d || '—');
+function bqPpHtml(edit) {
+  const wait = state.bq.filter(a => a.status === BQ_ST.pp).sort((a, b) => bqPid(a.hn, a.name).localeCompare(bqPid(b.hn, b.name)) || (+a.fx || 0) - (+b.fx || 0));
+  const log = bqMoveLog(), shown = log.slice(0, state.bqHistN || BQ_HIST_N);
+  const waitBody = wait.map(a => { const [, mv, cx] = bqMvBtns(a, edit); return `<tr class="ct-row bq-row pp click" data-bqedit="${esc(a.id)}" tabindex="0"${roTip(edit)}><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td>${bqDocHtml(a.doc)}</td><td>${bqTech(a.tech)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td>${esc(bqShortDay(a.date))}</td><td class="ct-note">${esc(a.note)}</td><td class="bq-mvc">${mv}</td><td class="bq-mvc">${cx}</td></tr>`; }).join('');
+  const waitHtml = wait.length ? `<h3 class="bq-hh">รอลงวันนัดใหม่ <span class="bq-st pp">เลื่อนนัดไม่มีกำหนด ${wait.length} Fx</span><small>ไม่นับเป็นเคสของวันใด${edit ? ' · กด "ลงวันนัดใหม่" แล้วเลือกวันในปฏิทิน นัดจะกลับไปอยู่ในตารางนัดคิว' : ''}</small></h3>
+    <div class="table-wrap ct-wrap"><table class="ct-tbl bq-tbl bq-pptbl"><thead><tr><th>HN</th><th>ชื่อ-สกุล</th><th>แพทย์</th><th>รูปแบบการใส่</th><th>Fx</th><th>วันนัดเดิม</th><th>หมายเหตุ</th><th>ลงวันนัดใหม่</th><th>ยกเลิก</th></tr></thead><tbody>${waitBody}</tbody></table></div>` : '';
+  const side = (d, pp, old) => (pp ? `<span class="bq-st pp">เลื่อนนัดไม่มีกำหนด</span>${old && isDay(d) ? `<small>เดิม ${esc(bqShortDay(d))}</small>` : ''}` : `<b>${esc(bqShortDay(d))}</b>`);
+  const logBody = shown.map(x => { const a = x.a, st = a.status === BQ_ST.done ? 'done' : a.status === BQ_ST.cancel ? 'cancel' : a.status === BQ_ST.noshow ? 'noshow' : a.status === BQ_ST.pp ? 'pp' : '';
+    return `<tr class="ct-row bq-hrow click" data-bqedit="${esc(a.id)}" tabindex="0"${roTip(edit)}><td class="bq-hat">${esc(x.at)}</td><td>${esc(x.by)}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td class="bq-fxc">${esc(a.fx)}/${esc(a.total)}</td><td>${bqTech(a.tech)}</td><td>${bqDocHtml(a.doc)}</td>`
+      + `<td class="bq-hb">${side(x.before, x.fromPp, true)}</td><td class="bq-harr" aria-hidden="true">→</td><td class="bq-ha">${side(x.after, x.toPp, false)}</td><td><span class="bq-st ${st}">${esc(a.status)}</span></td></tr>`; }).join('');
+  return waitHtml + `<h3 class="bq-hh">ประวัติการเลื่อนนัด <span class="muted">${log.length} ครั้ง</span><small>ทุกครั้งที่เลื่อนนัด · เลื่อนนัดไม่มีกำหนด · ลงวันนัดใหม่ · แก้วันที่นัด (ล่าสุดก่อน) · กดแถวเพื่อเปิดนัดนั้น</small></h3>
+    <div class="table-wrap ct-wrap"><table class="ct-tbl bq-tbl bq-htbl"><thead><tr><th>เมื่อ</th><th>โดย</th><th>HN</th><th>ชื่อ-สกุล</th><th>Fx</th><th>รูปแบบการใส่</th><th>แพทย์</th><th>ก่อนเลื่อน</th><th></th><th>หลังเลื่อน</th><th>สถานะตอนนี้</th></tr></thead>
+    <tbody>${logBody || '<tr><td colspan="11" class="empty-state">ยังไม่มีประวัติการเลื่อนนัด</td></tr>'}</tbody></table></div>
+    ${log.length > shown.length ? `<p style="margin-top:10px"><button type="button" class="btn ghost sm" data-bqhmore="1">แสดงเพิ่ม (อีก ${log.length - shown.length} ครั้ง)</button></p>` : ''}`;
 }
 // ตารางนัดคิว: วันนี้ · นัดที่จะถึง (เริ่มต้น) · ที่ผ่านมา (ล่าสุดก่อน) · ทั้งหมด
 function bqQueueHtml(edit) {
@@ -13302,7 +13338,7 @@ function openBqMove(id, k) {
     : k === 'cx' ? [...(crs.length > 1 ? [['course', `ทั้งคอร์ส (${crs.length} Fx ที่ยังนัดอยู่ / เลื่อนไว้)`]] : []), ['one', one]] : [];
   $('#bqm-scope-f').hidden = opts.length < 2;
   $('#bqm-scope').innerHTML = opts.map(([v, l], i) => `<label><input type="radio" name="bqmscope" value="${v}"${i ? '' : ' checked'}><span>${esc(l)}</span></label>`).join('');
-  $('#bqm-help').textContent = k === 'pp' ? 'นัดจะไม่นับเป็นเคสของวันนั้น และไปรอที่มุมมอง "เลื่อนนัดไม่มีกำหนด" ให้ลงวันนัดใหม่ภายหลัง · ไม่ต้องใส่ PIN'
+  $('#bqm-help').textContent = k === 'pp' ? 'นัดจะไม่นับเป็นเคสของวันนั้น และไปรอที่แถบ "ประวัติการเลื่อนนัด" (รอลงวันนัดใหม่) ให้ลงวันนัดใหม่ภายหลัง · ไม่ต้องใส่ PIN'
     : k === 'mv' ? 'กดวันในปฏิทินเพื่อเลือกวันนัดใหม่ของ Fx นี้ · ไม่ต้องใส่ PIN' : 'ยกเลิกแล้วย้อนกลับไม่ได้ · กด "ถัดไป" แล้วยืนยันด้วยรหัส PIN';
   const ok = $('#bqm-ok');
   ok.textContent = k === 'pp' ? 'เลื่อนนัดไม่มีกำหนด' : k === 'mv' ? (pp ? 'ลงวันนัดใหม่' : 'เลื่อนนัดไปวันที่เลือก') : 'ถัดไป: ใส่ PIN';
@@ -13341,7 +13377,7 @@ $('#bqm-form').addEventListener('submit', async e => {
   try {
     const recs = await store.bqMove(a.id, date, bqm.k === 'pp' ? scope : 'one');
     bqmDlg.close();
-    bqSaved(recs, date ? `${a.hn} Fx ${a.fx}/${a.total} · ${a.status === BQ_ST.pp ? 'ลงวันนัดใหม่' : `เลื่อนจาก ${fmtDay(a.date)}`} → ${fmtDay(date)}` : `เลื่อนนัดไม่มีกำหนด ${a.hn} ${recs.length} Fx · ดูที่มุมมอง "เลื่อนนัดไม่มีกำหนด"`);
+    bqSaved(recs, date ? `${a.hn} Fx ${a.fx}/${a.total} · ${a.status === BQ_ST.pp ? 'ลงวันนัดใหม่' : `เลื่อนจาก ${fmtDay(a.date)}`} → ${fmtDay(date)}` : `เลื่อนนัดไม่มีกำหนด ${a.hn} ${recs.length} Fx · ดูที่แถบ "ประวัติการเลื่อนนัด"`);
   } catch (ex) { toast('เลื่อนนัดไม่สำเร็จ: ' + errMsg(ex), { err: true }); btn.disabled = false; }
 });
 function bqePickDay(d) {
@@ -21936,6 +21972,7 @@ document.addEventListener('click', e => {
   if (ds.bqv) { state.bqView = ds.bqv; pref.set('bqView', ds.bqv); state.bqPt = ''; return renderBq(); }
   if (ds.bqf) { state.bqF = ds.bqf; state.bqLimit = BQ_DAYS; return renderBq(); }
   if (ds.bqmore) { state.bqLimit += BQ_DAYS; return renderBq(); }
+  if (ds.bqhmore) { state.bqHistN = (state.bqHistN || BQ_HIST_N) + BQ_HIST_N; return renderBq(); }   // ประวัติการเลื่อนนัด: แสดงเพิ่ม
   if (ds.bqday) return bqPickDash(ds.bqday);
   if (ds.bqthis) { state.month = thisMonth(); return renderBq(); }
   if (ds.bqpt) { state.bqPt = ds.bqpt; return renderBq(); }
