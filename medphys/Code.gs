@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.5';
-const API_LEVEL = 102;   // 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.8';
+const API_LEVEL = 105;   // 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -250,7 +250,7 @@ TABLES.ncall = {
 TABLES.mlog = {
   sheet: 'MachineLog',
   fields: [['id', 'id'], ['machine', 'เครื่อง'], ['status', 'สถานะ'], ['from', 'เริ่ม'], ['to', 'สิ้นสุด'], ['cat', 'หมวดอาการ'], ['note', 'Note'], ['eta', 'คาดว่าเสร็จ'], ['wait', 'ผู้ป่วยรอฉาย (คน)'],
-    ['by', 'บันทึกโดย'], ['role', 'ตำแหน่ง'], ['at', 'บันทึกเมื่อ'], ['editBy', 'แก้โดย'], ['editAt', 'แก้เมื่อ']],
+    ['by', 'บันทึกโดย'], ['role', 'ตำแหน่ง'], ['at', 'บันทึกเมื่อ'], ['editBy', 'แก้โดย'], ['editAt', 'แก้เมื่อ'], ['energy', 'พลังงาน']],   // energy (API 103): พลังงานที่เกิด Interrupt
 };
 // API 86: คำสั่งแพทย์ระหว่างฉาย (ห้องตรวจ → ระหว่างฉาย) ต่อเคสต่อวัน · id = วันที่|id เคส · kind = alone (RT Alone) | ccrt
 // rt / cmt = continue | hold · src = see (พบแพทย์วันนี้) / hold (Hold RT อยู่) · nurse = เวลาที่พยาบาลยืนยัน · เขียนผ่าน rtdSave / nurseMark
@@ -1023,11 +1023,11 @@ const CFG_TABS = {
   team: ['staff', 'doctors', 'crew', 'teams'],   // teams (API 91): ตำแหน่งหัวหน้า/ลูกน้องของแต่ละทีม
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
-  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard', 'machine'],   // machine (API 100): สถานะเครื่อง
+  room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard', 'machine', 'fxSee'],   // machine (API 100): สถานะเครื่อง · fxSee (API 104)
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow · tdfApp (17 พ.ย.): ลิงก์เว็บ TDF
   form: ['formRules'],   // 13 พ.ย.: ตั้งค่า → ฟอร์ม (ค่าเริ่มต้นของฟอร์มตามตัวเลือก)
   cols: ['cols'],        // 13 พ.ย.: ตั้งค่า → Column แสดงผล (ค่าเริ่มต้นของคอลัมน์)
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู · subOrder (API 105): ลำดับแถบย่อย
 };
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
 const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
@@ -1038,17 +1038,22 @@ function subEntry_(cfg, p) {
   const me = [String(p.username || '').toLowerCase(), String(p.email || '').toLowerCase()].filter(Boolean);
   return list.filter(s => s && String(s.user || '').trim() && me.indexOf(String(s.user || '').trim().toLowerCase()) >= 0)[0] || null;
 }
-// หมวดที่แอดมินรองคนนี้แก้ได้
+// หมวดที่แอดมินรองคนนี้แก้ได้ · API 105: all (ค่าเริ่มต้น · ไม่ได้ตั้ง all: false) = ทุกหมวดเท่าแอดมินหลัก รวมหัวข้อแอดมิน ('*' = ทุกส่วนของการตั้งค่า) · ทุกการแก้ยังเป็นคำขอรอแอดมินหลักอนุมัติ
+const SUB_ALL = '*';
 function subTabs_(cfg, p) {
   const x = subEntry_(cfg, p);
-  return x && Array.isArray(x.tabs) ? x.tabs.map(String).filter((t, i, a) => CFG_TABS[t] && a.indexOf(t) === i) : [];
+  if (!x) return [];
+  if (x.all !== false) return Object.keys(CFG_TABS).concat(SUB_ALL);
+  return Array.isArray(x.tabs) ? x.tabs.map(String).filter((t, i, a) => CFG_TABS[t] && a.indexOf(t) === i) : [];
 }
+const subAll_ = u => !!(u && u.sub && u.sub.indexOf(SUB_ALL) >= 0);
 function cfgTabOf_(key) {
   for (const t in CFG_TABS) if (CFG_TABS[t].indexOf(key) >= 0) return t;
   return '';
 }
 // คีย์ที่แก้นอกหมวดที่ได้รับสิทธิ์ · renames (แก้ชื่อตัวเลือก) ดูทีละรายการตามหมวดของรายการนั้น
 function cfgReqBad_(cfg, changes, tabs) {
+  if (tabs.indexOf(SUB_ALL) >= 0) return [];   // API 105: แอดมินรองแบบทุกหมวด
   const bad = [];
   Object.keys(changes).forEach(k => {
     if (k === 'renames') {
@@ -3372,8 +3377,10 @@ function rtdSave(rec, token) {
   Object.assign(r, { id: r.date + '|' + r.case, by: R8_WHO_(u), at: new Date().toISOString(), nurse: '', nurseBy: '' });
   return withLock_(() => {
     const ss = ss_(), x = openRow_(ss, 'rtd', null, r.id);
+    const was = x.row && String(x.cur.nurse || '') && String(x.cur.rt) === 'hold';
     writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.rtd.fields, r, x.row ? x.vals : null);
-    return r;
+    const c = was ? rtdHold_(ss, r, false) : null;   // API 104: คำสั่ง Hold เดิมที่ยืนยันแล้วถูกแก้ = รอยืนยันใหม่
+    return c ? Object.assign({ caseRow: c }, r) : r;
   });
 }
 /** แถบ Nurse: ยืนยัน (on) / ยกเลิก · table = appt (CT Order) | dq (order จาก Call center) | rtd (คำสั่งแพทย์ระหว่างฉาย) */
@@ -3385,7 +3392,9 @@ function nurseMark(table, id, on, token) {
     if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const set = on ? { nurse: new Date().toISOString(), nurseBy: R8_WHO_(u) } : { nurse: '', nurseBy: '' };
     writeFields_(x.sh, x.row, x.header, TABLES[table].fields.filter(f => f[0] in set), set, x.vals);
-    return Object.assign(x.cur, set);
+    const out = Object.assign(x.cur, set);
+    if (table === 'rtd') { const c = rtdHold_(ss, out, !!on); if (c) out.caseRow = c; }   // API 104: Hold RT ที่ยืนยัน = Hold ในตารางวันฉาย
+    return out;
   });
 }
 /* ---------- API 94 (19 พ.ย.): แถบ Nurse → รับคำสั่งแพทย์ ----------
@@ -3406,17 +3415,22 @@ function rtdNurse(rec, token) {
     if (x.row && x.cur && x.cur.rt) {   // แพทย์สั่งแล้ว: ยืนยันอย่างเดียว
       const set = { nurse: now, nurseBy: who };
       writeFields_(x.sh, x.row, x.header, TABLES.rtd.fields.filter(f => f[0] in set), set, x.vals);
-      return Object.assign(x.cur, set);
+      const out = Object.assign(x.cur, set), c = rtdHold_(ss, out, true);
+      if (c) out.caseRow = c;
+      return out;
     }
     Object.assign(r, { id: id, src: (r.src ? r.src + ',' : '') + 'nurse', by: who + ' (พยาบาลแทนแพทย์)', at: now, nurse: now, nurseBy: who });
     writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.rtd.fields, r, x.row ? x.vals : null);
+    const c = rtdHold_(ss, r, true);
+    if (c) r.caseRow = c;
     return r;
   });
 }
 /* ---------- API 100 (20 พ.ย.): สถานะเครื่อง (Machine status) · แสดงทุกแถบ · ประวัติในชีต MachineLog ใช้วิเคราะห์ uptime / downtime ---------- */
-const MST_STATUS = ['ready', 'qc', 'part', 'down', 'repair', 'test', 'pm', 'sys'];
+const MST_STATUS = ['ready', 'qc', 'part', 'down', 'repair', 'test', 'pm', 'sys', 'intr'];
+const MST_EVENT = 'intr';   // API 103: Interrupt (Reset แล้วหาย ใช้งานต่อได้) = เหตุการณ์ ณ เวลาหนึ่ง (เริ่ม = สิ้นสุด) · สถานะของเครื่องไม่เปลี่ยน · ไม่อยู่ในลำดับช่วงสถานะ
 const MST_ROLES = ['RTT', 'MP'];   // ตำแหน่งที่ตั้งสถานะได้ (ตั้งค่า → สถานะเครื่อง · config.machine.roles) · แอดมินตั้งได้เสมอ
-const MST_NAME = { ready: 'พร้อมใช้', qc: 'QC / Warm-up', part: 'ใช้ได้บางส่วน', down: 'เครื่องเสีย', repair: 'กำลังซ่อม', test: 'ทดสอบหลังซ่อม', pm: 'PM ตามกำหนด', sys: 'ระบบสนับสนุนล่ม' };
+const MST_NAME = { ready: 'พร้อมใช้', qc: 'QC / Warm-up', part: 'ใช้ได้บางส่วน', down: 'เครื่องเสีย', repair: 'กำลังซ่อม', test: 'ทดสอบหลังซ่อม', pm: 'PM ตามกำหนด', sys: 'ระบบสนับสนุนล่ม', intr: 'Interrupt' };
 function mstRoles_(cfg) {
   const r = cfg && cfg.machine && Array.isArray(cfg.machine.roles) ? cfg.machine.roles.map(x => String(x || '').trim()).filter(x => /^[\w -]{1,20}$/.test(x)) : null;
   return r && r.length ? r : MST_ROLES.slice();
@@ -3451,9 +3465,17 @@ function machineSet(rec, token) {
   if (eta) { const e = new Date(eta); if (isNaN(e.getTime())) throw new Error('เวลาที่คาดว่าเสร็จไม่ถูกต้อง'); eta = e.toISOString(); }
   const wait = rec.wait === '' || rec.wait == null || !isFinite(+rec.wait) ? '' : String(Math.max(0, Math.min(999, Math.floor(+rec.wait))));
   const who = String(u.name || u.username || u.me || '');
+  if (status === MST_EVENT) {   // API 103: Interrupt = เพิ่มหนึ่งแถว (เริ่ม = สิ้นสุด = เวลาที่เกิด) · ช่วงสถานะปัจจุบันไม่ถูกปิด
+    return withLock_(() => {
+      const ss = ss_(), x = openRow_(ss, 'mlog', null, '');
+      const r = { id: Utilities.getUuid(), machine: machine, status: status, from: from, to: from, cat: cut(rec.cat, 60), note: cut(rec.note, 500), eta: '', wait: '', by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '', energy: cut(rec.energy, 20) };
+      writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.mlog.fields, r, null);
+      return { rows: [r] };
+    });
+  }
   return withLock_(() => {
     const ss = ss_();
-    const mine = readCols_(ss, 'mlog', null, ['machine', 'status', 'from', 'to']).filter(x => x.machine === machine).sort((a, b) => String(a.from).localeCompare(String(b.from)));
+    const mine = readCols_(ss, 'mlog', null, ['machine', 'status', 'from', 'to']).filter(x => x.machine === machine && x.status !== MST_EVENT).sort((a, b) => String(a.from).localeCompare(String(b.from)));
     const open = mine.filter(x => !String(x.to || '').trim()).pop() || null;
     const when = v => Utilities.formatDate(new Date(v), tz_(ss), 'yyyy-MM-dd HH:mm');
     const info = { cat: status === 'ready' ? '' : cut(rec.cat, 60), note: cut(rec.note, 500), eta: status === 'ready' ? '' : eta };
@@ -3476,7 +3498,7 @@ function machineSet(rec, token) {
     if (open && from < String(open.from)) throw new Error('เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน (' + MST_NAME[open.status] + ' เริ่ม ' + when(open.from) + ')');
     const out = [], x = openRow_(ss, 'mlog', null, open ? open.id : '');   // ไม่มีช่วงเปิด = ได้ชีตและหัวคอลัมน์ (ไม่อ่านแถว)
     if (open && x.row) out.push(saveRow_(x, TABLES.mlog.fields.filter(f => f[0] === 'to'), { to: from }));
-    const r = Object.assign({ id: Utilities.getUuid(), machine: machine, status: status, from: from, to: '', wait: wait, by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '' }, info);
+    const r = Object.assign({ id: Utilities.getUuid(), machine: machine, status: status, from: from, to: '', wait: wait, by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '', energy: '' }, info);
     writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.mlog.fields, r, null);
     out.push(r);
     return { rows: out };
@@ -3509,11 +3531,18 @@ function machineLogEdit(rec, token) {
     // เรียงตามเวลาเริ่ม · เริ่มพร้อมกัน = ช่วงที่สิ้นสุดก่อนอยู่ก่อน ช่วงที่ยังไม่สิ้นสุดอยู่ท้าย (เทียบข้อความตรง ๆ: localeCompare จัดสัญลักษณ์ไว้ก่อนตัวเลข)
     const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0), END = '\uffff';
     const order = (a, b) => cmp(S(a.from), S(b.from)) || cmp(S(a.to) || END, S(b.to) || END);
-    const mine = all.filter(x => x.machine === cur.machine && x.id !== id).sort(order);
-    const prev = mine.filter(y => S(y.to) && S(y.to) === S(cur.from)).pop() || null;
-    const next = S(cur.to) ? mine.filter(y => S(y.from) === S(cur.to))[0] || null : null;
     const out = [];
     const put = (rid, set) => { const x = openRow_(ss, 'mlog', null, rid); if (x.row) out.push(saveRow_(x, TABLES.mlog.fields.filter(f => f[0] in set), set)); };
+    if (cur.status === MST_EVENT) {   // API 103: Interrupt (เหตุการณ์) ไม่มีช่วงข้างเคียง
+      if (rec.del === true) { const x = openRow_(ss, 'mlog', null, id); if (x.row) delRow_(x.sh, x.row, x.header, x.vals); return { rows: [], del: [id] }; }
+      const at = time(rec.from, 'เวลาที่เกิด');
+      put(id, { from: at, to: at, cat: cut(rec.cat, 60), note: cut(rec.note, 500), energy: cut(rec.energy, 20), editBy: who, editAt: now.toISOString() });
+      return { rows: out, del: [] };
+    }
+    if (cut(rec.status, 10) === MST_EVENT) throw new Error('เปลี่ยนช่วงสถานะเป็น Interrupt ไม่ได้ (บันทึก Interrupt ใหม่จากหน้าต่างสถานะเครื่อง)');
+    const mine = all.filter(x => x.machine === cur.machine && x.id !== id && x.status !== MST_EVENT).sort(order);
+    const prev = mine.filter(y => S(y.to) && S(y.to) === S(cur.from)).pop() || null;
+    const next = S(cur.to) ? mine.filter(y => S(y.from) === S(cur.to))[0] || null : null;
     if (rec.del === true) {
       if (prev) put(prev.id, { to: S(cur.to) });
       const x = openRow_(ss, 'mlog', null, id);
@@ -3592,12 +3621,72 @@ function ncallMark(id, status, note, token) {
 // นัดวันนี้: มาแล้ว (came) / ไม่มา ติดต่อแล้ว (noshow) / ล้าง ('') · id = att|what|ref|วันนัด
 // ไม่มาทำ CT-Sim = เอาออกจากคิว CT (นัดเป็น ไม่มาทำ CT · หน้าแจกงานแพทย์กลับไปรอลงนัด ให้แพทย์แก้วันนัดหรือยกเลิก) · เปลี่ยนเป็นมาแล้ว / ล้าง = คืนคิว
 const NC_SKIP_BY = ' · Nurse: ไม่มาตามนัด';
+const NC_SIM_SEE = 'Start RT วันแรก · พบแพทย์ก่อน';   // Note ของรายการพบแพทย์ที่มาจาก "มาแล้วพบแพทย์ก่อน"
+/** API 104: แถบ Nurse → Hold RT: Note ของผู้ป่วยที่ Hold อยู่ (เพิ่มได้หลายครั้ง · หนึ่งแถวต่อหนึ่ง Note · kind note) */
+function ncallNote(rec, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.ncall);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const note = cut(rec.note, 300), ref = cut(rec.ref, 80);
+  if (!ref || !cut(rec.hn, 40)) throw new Error('ไม่มีข้อมูลผู้ป่วย');
+  if (!note) throw new Error('กรอก Note');
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'ncall', null, ''), now = new Date().toISOString();
+    const r = { id: Utilities.getUuid(), kind: 'note', what: 'hold', ref: ref, hn: cut(rec.hn, 40), name: cut(rec.name, 200), doc: cut(rec.doc, 10).toUpperCase(), from: '', to: '', date: today_(ss), status: '', tries: '', note: note, by: R8_WHO_(u), at: now, nBy: '', nAt: '' };
+    writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.ncall.fields, r, null);
+    return r;
+  });
+}
+/** API 104: แถบ Nurse → Hold RT: ยกเลิก course ของผู้ป่วยที่ Hold อยู่ (ต้องใส่สาเหตุ) = Cancel RT วันนี้ (เหมือน Off RT → Cancel RT ในแถบห้องฉาย · บันทึกผู้ยกเลิก) */
+function holdCancel(id, reason, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.nurse);
+  reason = String(reason == null ? '' : reason).trim().slice(0, 300);
+  if (!reason) throw new Error('กรอกสาเหตุที่ยกเลิก course');
+  return caseEdit_(u, String(id || ''), '', () => false, (c0, ss) => {
+    if (has_(c0.rt)) throw new Error('เคสนี้บันทึก ' + (c0.rt === 'cancel' ? 'Cancel RT' : 'Complete course') + ' ไว้แล้ว');
+    const open = jsonList_(c0.fxlog).filter(x => x && !x.lane && x.act === 'skip' && !String(x.back || ''))[0];
+    if (!open) throw new Error('ผู้ป่วยนี้ไม่ได้ Hold อยู่แล้ว โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    return { rt: 'cancel', rtDate: today_(ss), rtAt: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm'), rtBy: R8_WHO_(u) + ' (Nurse · Hold RT)', rtNote: reason };
+  });
+}
+/**
+ * API 104: คำสั่ง Hold RT ของแพทย์ที่พยาบาลยืนยันแล้ว = สถานะ Hold ในตารางวันฉาย (เหมือนสั่ง Hold จากสถานะ fraction · จนกว่าจะกลับมา)
+ * วันที่ = วันที่ของคำสั่ง · วันนั้นบันทึกฉายแล้ว / สถานะอื่นไว้แล้ว = เริ่ม Hold วันถัดไป · Hold อยู่แล้ว = ไม่เพิ่ม · รายการมี ord = id ของคำสั่ง
+ * on = false (ยกเลิกการยืนยัน / แพทย์แก้คำสั่ง): เอารายการ Hold ที่มาจากคำสั่งนี้ออก · คืนเคสที่เปลี่ยน (ไม่เปลี่ยน = null)
+ */
+function rtdHold_(ss, row, on) {
+  const cid = String((row && row.case) || ''), oid = String((row && row.id) || ''), d = String((row && row.date) || '').slice(0, 10);
+  if (!cid || !oid || !R8_DAY_(d)) return null;
+  const x = openRow_(ss, 'cases', readConfig_(ss), cid);
+  if (!x.row || has_(x.cur.rt)) return null;
+  let list = jsonList_(x.cur.fxlog).filter(e => e), changed = false;
+  const mine = e => String(e.ord || '') === oid;
+  if (list.some(mine)) { list = list.filter(e => !mine(e)); changed = true; }
+  if (on && String(row.rt) === 'hold') {
+    const main = list.filter(e => !e.lane), held = main.some(e => e.act === 'skip' && String(e.date) <= d && (!String(e.back || '') || d < String(e.back)));
+    if (!held) {
+      let from = d;
+      if (list.some(e => String(e.date).slice(0, 10) === d)) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + 1); from = t.toISOString().slice(0, 10); }   // วันนั้นบันทึกไว้แล้ว (เช่น ฉายแล้ว + พบแพทย์) = Hold ตั้งแต่วันถัดไป
+      if (!list.some(e => String(e.date).slice(0, 10) === from)) {
+        list.push({ date: from, type: 'hold', label: 'Hold', act: 'skip', back: '', reason: '', note: ('คำสั่งแพทย์ ' + d + (row.note ? ' · ' + row.note : '')).slice(0, 200), ord: oid,
+          by: String(row.nurseBy || row.by || ''), at: Utilities.formatDate(new Date(), tz_(ss), 'yyyy-MM-dd HH:mm') });
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return null;
+  list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  return saveRow_(x, TABLES.cases.fields, { fxlog: list.length ? JSON.stringify(list) : '' });
+}
 function ncallAtt(rec, token) {
   const u = requireEdit_(token, EDIT_VIEWS.ncall);
   rec = rec && typeof rec === 'object' ? rec : {};
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-  const what = cut(rec.what, 8), ref = cut(rec.ref, 80), date = cut(rec.date, 10), status = rec.status === 'came' || rec.status === 'noshow' ? rec.status : '';
-  if (['ct', 'sim'].indexOf(what) < 0) throw new Error('ไม่รู้จักนัด');
+  // API 104: what see = นัดพบแพทย์ระหว่างฉาย (ref = รายการพบแพทย์) · fx = พบแพทย์ระหว่างฉายจากสถานะ fraction (ref = เคส)
+  // status see = มาแล้วพบแพทย์ก่อน (เฉพาะ Start RT วันแรก): เพิ่มรายการพบแพทย์ของวันนั้น (ห้องตรวจ → ระหว่างฉาย) · เปลี่ยนเป็นอย่างอื่น = เอารายการนั้นออก (ถ้ายังไม่ได้พบ)
+  const what = cut(rec.what, 8), ref = cut(rec.ref, 80), date = cut(rec.date, 10);
+  const status = rec.status === 'came' || rec.status === 'noshow' || (rec.status === 'see' && what === 'sim') ? rec.status : '';
+  if (['ct', 'sim', 'see', 'fx'].indexOf(what) < 0) throw new Error('ไม่รู้จักนัด');
   if (!ref || !NC_DAY_(date)) throw new Error('ไม่มีข้อมูลนัด');
   const who = R8_WHO_(u), now = new Date().toISOString();
   return withLock_(() => {
@@ -3616,7 +3705,18 @@ function ncallAtt(rec, token) {
         if (set) { writeFields_(a.sh, a.row, a.header, TABLES.appt.fields.filter(f => f[0] in set), set, a.vals); markDirty_('appt'); appt = Object.assign(a.cur, set); }
       }
     }
-    return { rec: r, appt: appt };
+    let visit = null, visitDel = '';
+    if (what === 'sim') {   // API 104: มาแล้วพบแพทย์ก่อน ↔ รายการพบแพทย์ของวันนั้น (id ตายตัวต่อการนัด)
+      const vid = 'simsee|' + ref + '|' + date, v = openRow_(ss, 'visit', null, vid);
+      if (status === 'see' && !v.row) {
+        if (!r.hn || !r.name) throw new Error('ไม่มี HN / ชื่อของผู้ป่วย');
+        if (dqDocs_(readConfig_(ss) || {}).indexOf(r.doc) < 0) throw new Error('ผู้ป่วยนี้ยังไม่ได้ระบุแพทย์ (ส่งพบแพทย์ไม่ได้) · ใส่แพทย์ในเคส / นัดก่อน');
+        visit = { id: vid, date: date, hn: r.hn, name: r.name, doc: r.doc, note: NC_SIM_SEE, by: who, at: now, seen: '', seenBy: '' };
+        writeFields_(v.sh, v.sh.getLastRow() + 1, v.header, TABLES.visit.fields, visit, null);
+      } else if (status === 'see') visit = v.cur;
+      else if (v.row && !String(v.cur.seen || '')) { delRow_(v.sh, v.row, v.header, v.vals); visitDel = vid; }
+    }
+    return { rec: r, appt: appt, visit: visit, visitDel: visitDel };
   });
 }
 /* ---------- API 91 (18 พ.ย.): RO Jobs → P4P แพทย์ · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม ---------- */
@@ -4444,7 +4544,7 @@ function tdfxWithdraw(id, token) {
 /** แอดมิน: ตรวจชีตบันทึกและโฟลเดอร์ PDF ของ TDF ด้วยค่าที่กำลังตั้ง (ไม่เขียนอะไร) */
 function tdfxCheck(s, token) {
   const u = who_(token);
-  if (!u.isAdmin) throw new Error('ตรวจชีตของ TDF ได้เฉพาะแอดมิน');
+  if (!u.isAdmin && !subAll_(u)) throw new Error('ตรวจชีตของ TDF ได้เฉพาะแอดมิน');
   s = s && typeof s === 'object' ? s : {};
   const sh = tdfxSheet_(String(s.rec || '').trim()), rows = sh.getDataRange().getValues().slice(1);
   const dates = rows.map(r => (r[1] instanceof Date ? Utilities.formatDate(r[1], 'Asia/Bangkok', 'yyyy-MM-dd') : '')).filter(String).sort();
@@ -4484,7 +4584,7 @@ function hdrRead_(sh) {
 function hdrGet(s, token) {
   const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg);
   if (s && typeof s === 'object') {
-    if (!u.isAdmin) throw new Error('ตรวจชีตของ HDR Activity ได้เฉพาะแอดมิน');
+    if (!u.isAdmin && !subAll_(u)) throw new Error('ตรวจชีตของ HDR Activity ได้เฉพาะแอดมิน');
     return hdrRead_(hdrSheet_(s));
   }
   if (u.via !== 'google' && !userAccess_(cfg, 'bq', u)) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ไม่เห็นแถบนัดคิวใส่แร่');
@@ -5255,7 +5355,7 @@ function requireEdit_(token, views) {
 // ส่งอีเมลด้วยถ้า LPCH ส่งมา · ไม่เก็บรายชื่อไว้ที่นี่
 function lpchMembers(token) {
   const u = who_(token);
-  if (!u.isAdmin) throw new Error('ดูรายชื่อสมาชิกได้เฉพาะแอดมิน');
+  if (!u.isAdmin && !subAll_(u)) throw new Error('ดูรายชื่อสมาชิกได้เฉพาะแอดมิน');   // API 105: แอดมินรองแบบทุกหมวดดูได้ (ใช้ตั้งสิทธิ์ในคำขอ)
   if (u.via !== 'lpch') throw new Error('ดึงรายชื่อได้เมื่อเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
   const out = lpchCall_({ action: 'directory', token: String(token) });
   const users = (Array.isArray(out.users) ? out.users : []).map(x => ({ username: String(x.username || ''), name: String(x.fullName || x.username || ''), role: String(x.role || ''), email: String(x.email || '').trim().toLowerCase() })).filter(x => x.username);
