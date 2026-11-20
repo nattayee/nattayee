@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.3';
-const API_LEVEL = 100;   // 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.4';
+const API_LEVEL = 101;   // 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3429,6 +3429,7 @@ function recentMlog_(ss) {
 /**
  * ตั้งสถานะเครื่อง: ปิดช่วงสถานะปัจจุบันของเครื่องนั้น (to = เวลาเริ่มของสถานะใหม่) แล้วเพิ่มแถวใหม่ · สถานะเดิม = แก้รายละเอียดของช่วงปัจจุบัน
  * rec = { machine, status, from (เวลาเริ่ม ISO · ว่าง = ตอนนี้ · ย้อนหลังได้ไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน), cat, note, eta, wait }
+ * API 101: สถานะเดิม + from = แก้เวลาเริ่มของช่วงปัจจุบัน (เช่น เสียจริงก่อนเวลาที่กด) · ช่วงก่อนหน้า (สิ้นสุด = เวลาเริ่มเดิม) สิ้นสุดตามเวลาใหม่ · ต้องหลังเวลาเริ่มของช่วงก่อนหน้า
  * ตั้งได้: ตำแหน่งใน config.machine.roles (เริ่มต้น RTT, MP) และแอดมิน · กำลังซ่อม / ทดสอบหลังซ่อม → พร้อมใช้ / QC / ใช้ได้บางส่วน = MP หรือแอดมินเท่านั้น (ตรวจ QA ก่อนปล่อยเครื่อง)
  * ไม่ใช้รหัส PIN (กดได้เร็วตอนเครื่องเสีย) · บันทึกผู้ตั้งทุกครั้ง · คืน { rows: [ช่วงที่ปิด, ช่วงใหม่] }
  */
@@ -3444,25 +3445,35 @@ function machineSet(rec, token) {
   const now = new Date(), fd = cut(rec.from, 40) ? new Date(cut(rec.from, 40)) : now;
   if (isNaN(fd.getTime())) throw new Error('เวลาเริ่มไม่ถูกต้อง');
   if (fd.getTime() > now.getTime() + 5 * 60000) throw new Error('เวลาเริ่มอยู่ในอนาคต');
-  const from = fd.toISOString();
+  let from = fd.toISOString();
+  const fromSet = !!cut(rec.from, 40);
   let eta = cut(rec.eta, 40);
   if (eta) { const e = new Date(eta); if (isNaN(e.getTime())) throw new Error('เวลาที่คาดว่าเสร็จไม่ถูกต้อง'); eta = e.toISOString(); }
   const wait = rec.wait === '' || rec.wait == null || !isFinite(+rec.wait) ? '' : String(Math.max(0, Math.min(999, Math.floor(+rec.wait))));
   const who = String(u.name || u.username || u.me || '');
   return withLock_(() => {
     const ss = ss_();
-    const open = readCols_(ss, 'mlog', null, ['machine', 'status', 'from', 'to']).filter(x => x.machine === machine && !String(x.to || '').trim())
-      .sort((a, b) => String(a.from).localeCompare(String(b.from))).pop() || null;
+    const mine = readCols_(ss, 'mlog', null, ['machine', 'status', 'from', 'to']).filter(x => x.machine === machine).sort((a, b) => String(a.from).localeCompare(String(b.from)));
+    const open = mine.filter(x => !String(x.to || '').trim()).pop() || null;
+    const when = v => Utilities.formatDate(new Date(v), tz_(ss), 'yyyy-MM-dd HH:mm');
     const info = { cat: status === 'ready' ? '' : cut(rec.cat, 60), note: cut(rec.note, 500), eta: status === 'ready' ? '' : eta };
     if (open && open.status === status) {   // สถานะเดิม: แก้รายละเอียดของช่วงปัจจุบัน (ไม่เพิ่มแถว)
-      const x = openRow_(ss, 'mlog', null, open.id), set = Object.assign({}, info, { editBy: who, editAt: now.toISOString() });
-      return { rows: [saveRow_(x, TABLES.mlog.fields.filter(f => f[0] in set), set)] };
+      const x = openRow_(ss, 'mlog', null, open.id), set = Object.assign({}, info, { editBy: who, editAt: now.toISOString() }), out = [];
+      if (fromSet && from !== String(open.from)) {   // API 101: แก้เวลาเริ่มของช่วงปัจจุบัน · ช่วงก่อนหน้าสิ้นสุดตาม (ช่วงต่อกันไม่มีช่องว่าง)
+        const prev = mine.filter(y => y.id !== open.id && String(y.to) === String(open.from)).pop() || null;
+        if (prev && from <= String(prev.from)) throw new Error('เวลาเริ่มต้องหลังเวลาเริ่มของสถานะก่อนหน้า (' + MST_NAME[prev.status] + ' เริ่ม ' + when(prev.from) + ')');
+        if (prev) { const p = openRow_(ss, 'mlog', null, prev.id); if (p.row) out.push(saveRow_(p, TABLES.mlog.fields.filter(f => f[0] === 'to'), { to: from })); }
+        set.from = from;
+      }
+      out.push(saveRow_(x, TABLES.mlog.fields.filter(f => f[0] in set), set));
+      return { rows: out };
     }
     // ซ่อมเสร็จ: ปล่อยเครื่องให้ใช้ได้เฉพาะ MP / แอดมิน
     if (open && ['repair', 'test'].indexOf(open.status) >= 0 && ['ready', 'qc', 'part'].indexOf(status) >= 0 && !admin && role.toUpperCase() !== 'MP') {
       throw new Error('ปล่อยเครื่องหลังซ่อม (' + MST_NAME[open.status] + ' → ' + MST_NAME[status] + ') ได้เฉพาะ MP (ตรวจ QA ก่อนใช้งาน) · ตั้งเป็น "ทดสอบหลังซ่อม" แล้วแจ้ง MP');
     }
-    if (open && from < String(open.from)) throw new Error('เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน (' + MST_NAME[open.status] + ' เริ่ม ' + Utilities.formatDate(new Date(open.from), tz_(ss), 'yyyy-MM-dd HH:mm') + ')');
+    if (open && from < String(open.from) && new Date(open.from).getTime() - fd.getTime() < 60000) from = String(open.from);   // ช่องเวลาละเอียดถึงนาที: นาทีเดียวกับเวลาเริ่มของสถานะปัจจุบัน = เริ่มต่อกันพอดี
+    if (open && from < String(open.from)) throw new Error('เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน (' + MST_NAME[open.status] + ' เริ่ม ' + when(open.from) + ')');
     const out = [], x = openRow_(ss, 'mlog', null, open ? open.id : '');   // ไม่มีช่วงเปิด = ได้ชีตและหัวคอลัมน์ (ไม่อ่านแถว)
     if (open && x.row) out.push(saveRow_(x, TABLES.mlog.fields.filter(f => f[0] === 'to'), { to: from }));
     const r = Object.assign({ id: Utilities.getUuid(), machine: machine, status: status, from: from, to: '', wait: wait, by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '' }, info);
@@ -5195,14 +5206,31 @@ function lpchUrl_() {
   return v === '-' ? '' : v;
 }
 
-// เรียก API ของ LPCH RO Workspace (doPost) หนึ่งครั้ง โยนข้อความผิดพลาดของ LPCH ต่อ
+// 20 พ.ย.: LPCH ไม่ว่างชั่วคราว = ข้อผิดพลาดของ Apps Script ฝั่ง LPCH ที่ลองใหม่แล้วมักผ่าน (LockService ของ LPCH รอคิวไม่ทัน ฯลฯ)
+// เจอที่หน้าเข้าสู่ระบบ: "Error: Lock timeout: another process was holding the lock for too long." · ไม่รวมข้อความเรื่องรหัสผ่าน / บัญชี (ลองซ้ำ = นับพยายามผิดเพิ่ม)
+const LPCH_BUSY_RE = /lock timeout|holding the lock for too long|service invoked too many times|exceeded maximum execution time|service spreadsheets (failed|timed out)|service error: spreadsheets/i;
+const LPCH_BUSY_MSG = 'ระบบเข้าสู่ระบบกลาง LPCH RO Workspace ไม่ว่างชั่วคราว (มีผู้ใช้พร้อมกันหลายคน) · รอสักครู่แล้วลองอีกครั้ง';
+const LPCH_GRACE_SECONDS = 1800;   // ผลตรวจบัญชีครั้งล่าสุดที่ผ่าน ใช้ต่อได้นานเท่านี้ระหว่าง LPCH ไม่ว่าง (ผู้ที่เข้าระบบอยู่แล้วทำงานต่อได้)
+// เรียก API ของ LPCH RO Workspace (doPost) โยนข้อความผิดพลาดของ LPCH ต่อ · LPCH ไม่ว่างชั่วคราว = ลองใหม่เองไม่เกิน 2 ครั้ง (รวมไม่เกิน ~25 วินาที)
 function lpchCall_(req) {
   const url = lpchUrl_();
   if (!url) throw new Error('ยังไม่ได้เชื่อมกับ LPCH RO Workspace (ตั้ง Script property LPCH_URL)');
-  const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
-  const body = String(res.getContentText('UTF-8') || '');
-  let out = null;
-  try { out = JSON.parse(body); } catch (e) { out = null; }
+  const t0 = Date.now();
+  let res = null, body = '', out = null;
+  for (let i = 0; ; i++) {
+    res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(req), muteHttpExceptions: true });
+    body = String(res.getContentText('UTF-8') || '');
+    out = null;
+    try { out = JSON.parse(body); } catch (e) { out = null; }
+    if (!out || out.ok || !LPCH_BUSY_RE.test(String(out.error || '')) || i >= 2 || Date.now() - t0 > 25000) break;
+    Utilities.sleep(i ? 2500 : 1200);
+  }
+  if (out && !out.ok && LPCH_BUSY_RE.test(String(out.error || ''))) {
+    console.log('lpch busy ' + String(req && req.action) + ': ' + String(out.error).slice(0, 200));
+    const e = new Error(LPCH_BUSY_MSG);
+    e.lpchBusy = true;
+    throw e;
+  }
   if (!out) {
     // สคริปต์ของ LPCH พังหรือถูกวางโค้ดอื่นทับ: Apps Script ตอบหน้า Error (HTML, HTTP 200) เช่น "Script function not found: doPost"
     const why = ((/<title>Error<\/title>[\s\S]*<div[^>]*>([^<]{3,200})<\/div>\s*<\/body>/.exec(body) || [])[1] || '').trim();
@@ -5234,10 +5262,18 @@ function lpchUser_(token) {
   if (hit) return JSON.parse(hit);
   let p;
   try { p = lpchProfile_(lpchCall_({ action: 'me', token: token }).user); } catch (e) {
-    if (e.message !== 'session_expired') throw e;   // LPCH ติดต่อไม่ได้: แจ้งตามจริง ไม่ออกจากระบบ
+    if (e.message !== 'session_expired') {
+      // 20 พ.ย.: LPCH ไม่ว่างชั่วคราว = ใช้ผลตรวจครั้งล่าสุดที่ผ่านของ token นี้ต่อ (ไม่เกิน LPCH_GRACE_SECONDS) แล้วถามใหม่ในอีก 1 นาที · ไม่มีผลเดิม = แจ้งตามจริง ไม่ออกจากระบบ
+      const old = e.lpchBusy ? CacheService.getScriptCache().get('lpchOk_' + token) : null;
+      if (!old) throw e;
+      reqCachePut_(key, old, 60);
+      return JSON.parse(old);
+    }
     p = { error: 'การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' };
   }
   reqCachePut_(key, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  if (p.error) CacheService.getScriptCache().remove('lpchOk_' + token);
+  else CacheService.getScriptCache().put('lpchOk_' + token, JSON.stringify(p), LPCH_GRACE_SECONDS);
   return p;
 }
 
@@ -5246,6 +5282,7 @@ function lpchFinish_(out) {
   const p = lpchProfile_(out.user);
   if (p.error) throw new Error(p.error);
   CacheService.getScriptCache().put('lpch_' + out.token, JSON.stringify(p), LPCH_CHECK_SECONDS);
+  CacheService.getScriptCache().put('lpchOk_' + out.token, JSON.stringify(p), LPCH_GRACE_SECONDS);
   return Object.assign({ token: out.token }, p);
 }
 
@@ -5530,6 +5567,7 @@ function txsPdf(hn, kind, opt, token) {
 function lpchLogout(token) {
   if (!token) return true;
   CacheService.getScriptCache().remove('lpch_' + token);
+  CacheService.getScriptCache().remove('lpchOk_' + token);
   if (REQ_.cache) delete REQ_.cache['lpch_' + token];
   try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
   return true;

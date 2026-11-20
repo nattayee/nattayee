@@ -4482,7 +4482,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
       <div class="ms-cur" id="ms-cur"></div>
       <div id="ms-set">
         <div class="field"><span class="lbl">ตั้งสถานะ</span><div class="ms-grid" id="ms-status" role="radiogroup" aria-label="สถานะเครื่อง"></div></div>
-        <div class="form-grid"><label class="field"><span class="lbl">เริ่มตั้งแต่ <span class="sub-lbl">ย้อนหลังได้ เช่น เสียก่อนมากด</span></span><input type="datetime-local" id="ms-from"></label>
+        <div class="form-grid"><label class="field"><span class="lbl">เริ่มตั้งแต่ <span class="sub-lbl" id="ms-from-sub">ย้อนหลังได้ เช่น เสียก่อนมากด</span></span><input type="datetime-local" id="ms-from"></label>
           <label class="field" id="ms-eta-f"><span class="lbl">คาดว่าเสร็จ <span class="sub-lbl">ไม่บังคับ</span></span><input type="datetime-local" id="ms-eta"></label></div>
         <div class="field" id="ms-cat-f"><span class="lbl">หมวดอาการ / สาเหตุ <span class="sub-lbl">ไม่บังคับ · ใช้วิเคราะห์</span></span><div class="chips" id="ms-cat" role="radiogroup" aria-label="หมวดอาการ"></div></div>
         <label class="field"><span class="lbl">หมายเหตุ</span><input id="ms-note" maxlength="500"></label>
@@ -6636,6 +6636,7 @@ const TXS_UNITS = [
 const TXS_DAYS = 180;
 // 20 พ.ย.: สถานะเครื่อง (Code.gs API 100 · machineSet) · สัญลักษณ์ในแถวโลโก้ ทุกตำแหน่งของแผนกเห็นทุกแถบ · RTT / MP ตั้งสถานะ · ประวัติ = ชีต MachineLog
 const MST_API = 100;
+const MST_FIX_API = 101;   // แก้เวลาเริ่มของสถานะปัจจุบัน (Code.gs 2026-11-20.4)
 // up = ใช้งานได้ (ไม่นับ downtime) · unplan = เสีย / ซ่อม (downtime) · ban = แถบเตือนใต้เมนู
 const MST = {
   ready: { label: 'พร้อมใช้', short: 'พร้อมใช้', cls: 'ok', mark: '✓', hint: 'ใช้งานได้ปกติ', up: true },
@@ -7834,7 +7835,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.5';
+const PAGE_VERSION = '2026-11-20.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8052,11 +8053,25 @@ function localStore() {
       const fd = rec.from ? new Date(rec.from) : now;
       if (isNaN(fd)) throw new Error('เวลาเริ่มไม่ถูกต้อง');
       if (fd.getTime() > now.getTime() + 5 * 60000) throw new Error('เวลาเริ่มอยู่ในอนาคต');
-      const from = fd.toISOString(), open = db.mlog.filter(x => x.machine === rec.machine && !x.to).sort((a, b) => str(a.from).localeCompare(str(b.from))).pop() || null;
+      let from = fd.toISOString();
+      const open = db.mlog.filter(x => x.machine === rec.machine && !x.to).sort((a, b) => str(a.from).localeCompare(str(b.from))).pop() || null;
       const info = { cat: rec.status === 'ready' ? '' : str(rec.cat).slice(0, 60), note: str(rec.note).slice(0, 500), eta: rec.status === 'ready' || !rec.eta ? '' : new Date(rec.eta).toISOString() };
-      if (open && open.status === rec.status) { Object.assign(open, info, { editBy: who, editAt: now.toISOString() }); persist(); return { rows: [clone(open)] }; }
+      if (open && open.status === rec.status) {
+        const out = [];
+        if (rec.from && from !== open.from) {   // แก้เวลาเริ่มของช่วงปัจจุบัน · ช่วงก่อนหน้าสิ้นสุดตาม
+          const prev = db.mlog.filter(y => y.machine === open.machine && y.id !== open.id && y.to === open.from).sort((a, b) => str(a.from).localeCompare(str(b.from))).pop() || null;
+          if (prev && from <= str(prev.from)) throw new Error('เวลาเริ่มต้องหลังเวลาเริ่มของสถานะก่อนหน้า');
+          if (prev) { prev.to = from; out.push(clone(prev)); }
+          open.from = from;
+        }
+        Object.assign(open, info, { editBy: who, editAt: now.toISOString() });
+        persist();
+        out.push(clone(open));
+        return { rows: out };
+      }
       if (open && ['repair', 'test'].includes(open.status) && ['ready', 'qc', 'part'].includes(rec.status) && !admin && role.toUpperCase() !== 'MP') throw new Error(`ปล่อยเครื่องหลังซ่อม (${MST[open.status].label} → ${MST[rec.status].label}) ได้เฉพาะ MP (ตรวจ QA ก่อนใช้งาน) · ตั้งเป็น "ทดสอบหลังซ่อม" แล้วแจ้ง MP`);
       const out = [];
+      if (open && from < str(open.from) && new Date(open.from) - fd < 60000) from = open.from;   // นาทีเดียวกับเวลาเริ่มของสถานะปัจจุบัน
       if (open) { if (from < str(open.from)) throw new Error('เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน'); open.to = from; out.push(clone(open)); }
       const r = { id: uid(), machine: str(rec.machine), status: rec.status, from, to: '', ...info, wait: rec.wait === '' || rec.wait == null ? '' : String(rec.wait), by: who, role: role || 'Admin', at: now.toISOString(), editBy: '', editAt: '' };
       db.mlog.push(r);
@@ -13453,7 +13468,7 @@ $('#ss-print-btn').addEventListener('click', e => printSeeSum(e.currentTarget));
  * สัญลักษณ์ในแถวโลโก้: ไอคอนชนิดเครื่อง + ตัวย่อ · สีและเครื่องหมายมุมขวา = สถานะ · เครื่องที่ไม่ปกติขยายข้อความ · เลื่อนหน้าลง = แบบย่อในแถวเมนู
  * กดสัญลักษณ์ = ดู / ตั้งสถานะ (RTT, MP, แอดมิน · ตั้งค่า → สถานะเครื่อง) · ทุกการเปลี่ยน = หนึ่งช่วงในชีต MachineLog (ใช้คิด uptime / downtime)
  * รอบแรก: แสดงสถานะและเก็บประวัติเท่านั้น (ไม่เปลี่ยนตารางวันฉายของผู้ป่วย) */
-const mstUi = { id: '', ym: '', sig: '', from0: '', wait: {} };
+const mstUi = { id: '', ym: '', sig: '', from0: '', cur0: '', mode: '', wait: {} };
 const mstDlg = $('#ms-dlg'), mstStatDlg = $('#mst-dlg');
 const mstOn = () => state.gate == null && !txsOnly() && (store.mode !== 'sheet' || (state.loaded && serverHas(MST_API))) && mstList().length > 0;
 const mstList = () => ((state.config.machine || {}).list || []).filter(m => m.on);
@@ -13511,7 +13526,9 @@ function openMst(id) {
   const lock = k => ['repair', 'test'].includes(cur.status) && ['ready', 'qc', 'part'].includes(k) && !mp;
   $('#ms-status').innerHTML = Object.entries(MST).map(([k, v]) => `<label class="${v.cls}"${lock(k) ? ' title="ปล่อยเครื่องหลังซ่อมได้เฉพาะ MP"' : ''}><input type="radio" name="msst" value="${k}"${k === cur.status ? ' checked' : ''}${lock(k) ? ' disabled' : ''}><i aria-hidden="true">${v.mark}</i><span><b>${esc(v.label)}</b><small>${esc(v.hint)}${lock(k) ? ' · เฉพาะ MP' : ''}</small></span></label>`).join('');
   chipGroup($('#ms-cat'), 'mscat', ['ไม่ระบุ', ...state.config.machine.cats, ...(cur.cat && !state.config.machine.cats.includes(cur.cat) ? [cur.cat] : [])], cur.cat || 'ไม่ระบุ');
-  $('#ms-from').value = mstUi.from0 = mstLocal(new Date());   // ไม่ได้แก้เวลา = ใช้เวลาของเซิร์ฟเวอร์ตอนบันทึก (นาฬิกาเครื่องผู้ใช้คลาดเคลื่อนได้)
+  mstUi.from0 = mstLocal(new Date());   // ไม่ได้แก้เวลา = ใช้เวลาของเซิร์ฟเวอร์ตอนบันทึก (นาฬิกาเครื่องผู้ใช้คลาดเคลื่อนได้)
+  mstUi.cur0 = cur.from ? mstLocal(new Date(cur.from)) : '';   // เวลาเริ่มของสถานะปัจจุบัน (แก้ได้เมื่อเลือกสถานะเดิม)
+  mstUi.mode = '';
   $('#ms-from').max = mstLocal(new Date(Date.now() + 5 * 60000));
   $('#ms-eta').value = cur.eta ? mstLocal(new Date(cur.eta)) : '';
   $('#ms-note').value = cur.note || '';
@@ -13528,7 +13545,12 @@ function syncMst() {
   const k = chipValue($('#ms-status')), cur = mstCur(mstUi.id), same = k === cur.status;
   $('#ms-eta-f').hidden = k === 'ready';
   $('#ms-cat-f').hidden = k === 'ready';
-  $('#ms-from').closest('.field').hidden = same;   // สถานะเดิม = แก้รายละเอียดของช่วงปัจจุบัน (เวลาเริ่มเดิม)
+  // 20 พ.ย. (.6): ช่องเริ่มตั้งแต่แสดงเสมอ · สถานะเดิม = เวลาเริ่มของช่วงปัจจุบัน (แก้ได้ เช่น เสียจริงก่อนเวลาที่กด) · สถานะอื่น = ตอนนี้ (ย้อนหลังได้)
+  const el = $('#ms-from'), mode = same ? (cur.from ? 'fix' : 'none') : 'new', old = store.mode === 'sheet' && !serverHas(MST_FIX_API);
+  if (mode !== mstUi.mode) { mstUi.mode = mode; el.value = mode === 'fix' ? mstUi.cur0 : mstUi.from0; }
+  el.closest('.field').hidden = mode === 'none';
+  el.disabled = mode === 'fix' && old;
+  $('#ms-from-sub').textContent = mode !== 'fix' ? 'ย้อนหลังได้ เช่น เสียก่อนมากด' : old ? 'แก้เวลาเริ่มได้เมื่อใช้ Code.gs รุ่น 2026-11-20.4 ขึ้นไป' : 'แก้เวลาเริ่มของสถานะนี้ได้';
   $('#ms-save').textContent = same ? 'บันทึกรายละเอียด' : `ตั้งเป็น ${(MST[k] || MST.ready).label}`;
 }
 $('#ms-status').addEventListener('change', syncMst);
@@ -13537,10 +13559,14 @@ $('#ms-form').addEventListener('submit', async e => {
   const m = mstOf(mstUi.id), cur = mstCur(mstUi.id), status = chipValue($('#ms-status')), btn = $('#ms-save');
   if (!MST[status]) return toast('เลือกสถานะ', { err: true });
   const fv = $('#ms-from').value, ev = $('#ms-eta').value, same = status === cur.status;
-  const fd = same || !fv || fv === mstUi.from0 ? null : new Date(fv);
+  const fix = same && !!cur.from && !$('#ms-from').disabled && !!fv && fv !== mstUi.cur0;   // แก้เวลาเริ่มของสถานะปัจจุบัน
+  let fd = fix || (!same && fv && fv !== mstUi.from0) ? new Date(fv) : null;
   if (fd && isNaN(fd)) { $('#ms-from').focus(); return toast('เวลาเริ่มไม่ถูกต้อง', { err: true }); }
   if (fd && fd.getTime() > Date.now() + 5 * 60000) { $('#ms-from').focus(); return toast('เวลาเริ่มอยู่ในอนาคต', { err: true }); }
-  if (fd && cur.from && fd.toISOString() < cur.from) { $('#ms-from').focus(); return toast(`เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน (${MST[cur.status].label} เริ่ม ${mstWhen(cur.from)})`, { err: true }); }
+  if (fd && !same && cur.from && fd.toISOString() < cur.from && new Date(cur.from) - fd < 60000) fd = new Date(cur.from);   // นาทีเดียวกับเวลาเริ่มของสถานะปัจจุบัน
+  if (fd && !same && cur.from && fd.toISOString() < cur.from) { $('#ms-from').focus(); return toast(`เวลาเริ่มต้องไม่ก่อนเวลาเริ่มของสถานะปัจจุบัน (${MST[cur.status].label} เริ่ม ${mstWhen(cur.from)})`, { err: true }); }
+  const prev = fix ? (state.mlog || []).filter(y => y.machine === m.id && y.id !== cur.id && y.to === cur.from).sort((a, b) => str(a.from).localeCompare(str(b.from))).pop() : null;
+  if (prev && fd.toISOString() <= prev.from) { $('#ms-from').focus(); return toast(`เวลาเริ่มต้องหลังเวลาเริ่มของสถานะก่อนหน้า (${MST[prev.status].label} เริ่ม ${mstWhen(prev.from)})`, { err: true }); }
   const cat = chipValue($('#ms-cat'));
   const rec = { machine: m.id, status, from: fd ? fd.toISOString() : '', cat: status === 'ready' || cat === 'ไม่ระบุ' ? '' : cat, note: str($('#ms-note').value), eta: status !== 'ready' && ev && !isNaN(new Date(ev)) ? new Date(ev).toISOString() : '', wait: same ? '' : mstWait(m) };
   btn.disabled = true;
@@ -13550,7 +13576,7 @@ $('#ms-form').addEventListener('submit', async e => {
     mstDlg.close();
     render();
     if (mstStatDlg.open) renderMstStats();
-    toast(same ? `${m.label}: บันทึกรายละเอียดแล้ว` : `${m.label}: ${MST[status].label}${fd && Date.now() - fd.getTime() > 90000 ? ` (เริ่ม ${mstWhen(fd.toISOString())})` : ''}`);
+    toast(fix ? `${m.label}: แก้เวลาเริ่มเป็น ${mstWhen(fd.toISOString())} แล้ว` : same ? `${m.label}: บันทึกรายละเอียดแล้ว` : `${m.label}: ${MST[status].label}${fd && Date.now() - fd.getTime() > 90000 ? ` (เริ่ม ${mstWhen(fd.toISOString())})` : ''}`);
   } catch (err) { toast('ตั้งสถานะเครื่องไม่สำเร็จ: ' + errMsg(err), { err: true }); }
   finally { btn.disabled = false; }
 });
