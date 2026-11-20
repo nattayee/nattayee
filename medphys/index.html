@@ -503,6 +503,9 @@ dialog.ms-dlg{width:min(600px,calc(100vw - 20px))}
 .ms-hist ul{list-style:none;margin:6px 0 0;padding:0}
 .ms-hist li{padding:5px 0;border-top:1px solid var(--line)}
 .ms-hist li small{display:block;color:var(--muted)}
+.ms-acts{display:inline-flex;gap:10px;margin-left:8px;white-space:nowrap}
+.ms-acts .link-btn.danger{color:var(--late)}
+.ms-hist li .ms-acts{float:right}
 .mst-dlg .ap-acts{align-items:center}
 .mst-dlg .ap-acts b{min-width:110px;text-align:center;font-size:14px}
 .mst-h{margin:16px 0 6px;font-size:14.5px}
@@ -4493,6 +4496,22 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     <footer class="dlg-foot"><button type="button" class="btn ghost" id="ms-stats">ประวัติและสถิติทุกเครื่อง</button><span class="spacer"></span><button type="button" class="btn" data-close>ปิด</button><button type="submit" class="btn primary" id="ms-save">บันทึกสถานะ</button></footer>
   </form>
 </dialog>
+<dialog id="mse-dlg" class="ms-dlg" aria-labelledby="mse-title">
+  <form class="dlg" id="mse-form" novalidate autocomplete="off">
+    <header class="dlg-head"><h2 id="mse-title">แก้ประวัติสถานะเครื่อง</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body">
+      <p class="muted" id="mse-info" style="margin:0"></p>
+      <label class="field"><span class="lbl">สถานะ</span><select id="mse-status"></select></label>
+      <div class="form-grid"><label class="field"><span class="lbl">เริ่ม</span><input type="datetime-local" id="mse-from"></label>
+        <label class="field"><span class="lbl">สิ้นสุด <span class="sub-lbl" id="mse-to-sub"></span></span><input type="datetime-local" id="mse-to"></label></div>
+      <div class="form-grid"><label class="field"><span class="lbl">หมวดอาการ / สาเหตุ</span><select id="mse-cat"></select></label>
+        <label class="field"><span class="lbl">คาดว่าเสร็จ <span class="sub-lbl">ไม่บังคับ</span></span><input type="datetime-local" id="mse-eta"></label></div>
+      <label class="field"><span class="lbl">หมายเหตุ</span><input id="mse-note" maxlength="500"></label>
+      <p class="muted" style="margin:0;font-size:12.5px">แก้เวลาเริ่ม / สิ้นสุด = ช่วงก่อนหน้าและช่วงถัดไปขยับตามให้ประวัติต่อกัน · ลบช่วง = ช่วงก่อนหน้ายาวต่อแทน · บันทึกผู้แก้ทุกครั้ง (ประวัติการแก้ไข)</p>
+    </div>
+    <footer class="dlg-foot"><button type="button" class="btn ghost danger" id="mse-del">ลบช่วงนี้</button><span class="spacer"></span><button type="button" class="btn" data-close>ยกเลิก</button><button type="submit" class="btn primary" id="mse-save">บันทึก</button></footer>
+  </form>
+</dialog>
 <dialog id="mst-dlg" class="dlg-wide mst-dlg" aria-labelledby="mst-title">
   <div class="dlg">
     <header class="dlg-head"><h2 id="mst-title">สถานะเครื่อง · ประวัติและสถิติ</h2><span class="ap-acts"><button type="button" class="btn ghost sm" id="mst-prev" aria-label="เดือนก่อนหน้า">‹</button><b id="mst-month"></b><button type="button" class="btn ghost sm" id="mst-next" aria-label="เดือนถัดไป">›</button><button type="button" class="btn ghost sm" id="mst-xlsx">ส่งออก Excel</button></span><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
@@ -6637,6 +6656,7 @@ const TXS_DAYS = 180;
 // 20 พ.ย.: สถานะเครื่อง (Code.gs API 100 · machineSet) · สัญลักษณ์ในแถวโลโก้ ทุกตำแหน่งของแผนกเห็นทุกแถบ · RTT / MP ตั้งสถานะ · ประวัติ = ชีต MachineLog
 const MST_API = 100;
 const MST_FIX_API = 101;   // แก้เวลาเริ่มของสถานะปัจจุบัน (Code.gs 2026-11-20.4)
+const MST_EDIT_API = 102;   // แอดมินแก้ไข / ลบประวัติ (Code.gs 2026-11-20.5 · machineLogEdit)
 // up = ใช้งานได้ (ไม่นับ downtime) · unplan = เสีย / ซ่อม (downtime) · ban = แถบเตือนใต้เมนู
 const MST = {
   ready: { label: 'พร้อมใช้', short: 'พร้อมใช้', cls: 'ok', mark: '✓', hint: 'ใช้งานได้ปกติ', up: true },
@@ -7835,7 +7855,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.6';
+const PAGE_VERSION = '2026-11-20.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -7917,6 +7937,7 @@ const sheetStore = {
   rtdNurse: rec => call('rtdNurse', rec),   // 19 พ.ย. (API 94): รับคำสั่งแพทย์ (พยาบาลสั่งแทน + ยืนยัน)
   ncallAdd: rec => call('ncallAdd', rec),
   machineSet: rec => call('machineSet', rec),   // 20 พ.ย. (API 100): สถานะเครื่อง
+  machineLogEdit: rec => call('machineLogEdit', rec),   // 20 พ.ย. (API 102): แอดมินแก้ไข / ลบประวัติสถานะเครื่อง
   txsLog: (act, info) => call('txsLog', act, info || {}),   // 20 พ.ย. (API 98): Treatment Summary
   txsLogRead: q => call('txsLogRead', q || {}),
   txsRefer: (hn, on, note) => call('txsRefer', hn, !!on, note || ''),
@@ -8078,6 +8099,44 @@ function localStore() {
       persist();
       out.push(clone(r));
       return { rows: out };
+    },
+    // 20 พ.ย.: เหมือน machineLogEdit ใน Code.gs (API 102)
+    machineLogEdit: async rec => {
+      const u = state.user, now = new Date(), who = u.name || 'ผู้ใช้ตัวอย่าง';
+      if (!u.isAdmin) throw new Error('แก้ไข / ลบประวัติสถานะเครื่องได้เฉพาะแอดมิน');
+      const cur = db.mlog.find(x => x.id === rec.id);
+      if (!cur) throw new Error('ไม่พบรายการนี้ในประวัติ (อาจถูกลบไปแล้ว)');
+      const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0), END = '\uffff';   // เทียบข้อความตรง ๆ (localeCompare จัดสัญลักษณ์ไว้ก่อนตัวเลข)
+      const order = (a, b) => cmp(str(a.from), str(b.from)) || cmp(str(a.to) || END, str(b.to) || END);
+      const mine = db.mlog.filter(x => x.machine === cur.machine && x.id !== cur.id).sort(order);
+      const prev = mine.filter(y => y.to && y.to === cur.from).pop() || null, next = cur.to ? mine.find(y => y.from === cur.to) || null : null, out = [];
+      if (rec.del === true) {
+        if (prev) { prev.to = cur.to; out.push(clone(prev)); }
+        db.mlog.splice(db.mlog.indexOf(cur), 1);
+        persist();
+        return { rows: out, del: [cur.id] };
+      }
+      if (!MST[rec.status]) throw new Error('สถานะไม่ถูกต้อง');
+      const time = (v, what, future) => { const d = new Date(v); if (!v || isNaN(d)) throw new Error(what + 'ไม่ถูกต้อง'); if (!future && d.getTime() > now.getTime() + 5 * 60000) throw new Error(what + 'อยู่ในอนาคต'); return d.toISOString(); };
+      const open = !cur.to, from = time(rec.from, 'เวลาเริ่ม'), to = open ? '' : time(rec.to, 'เวลาสิ้นสุด');
+      if (to && to < from) throw new Error('เวลาสิ้นสุดต้องไม่ก่อนเวลาเริ่ม');
+      const plan = mine.map(y => ({ id: y.id, status: y.status, from: y.from, to: y.to })), pv = prev && plan.find(y => y.id === prev.id), nx = next && plan.find(y => y.id === next.id);
+      if (pv && from !== cur.from) pv.to = from;
+      if (nx && to !== cur.to) nx.from = to;
+      plan.push({ id: cur.id, status: rec.status, from, to });
+      plan.sort(order);
+      for (const [q, o] of [[pv, prev], [nx, next]]) if (q && q.to && q.to < q.from) throw new Error(`เวลาใหม่เลยช่วง ${MST[o.status].label} ที่อยู่ติดกัน · แก้ / ลบช่วงนั้นก่อน หรือเลือกเวลาที่ไม่เลยช่วงนั้น`);
+      plan.forEach((a, i) => {
+        const b = plan[i + 1];
+        if (b && (!a.to || a.to > b.from)) throw new Error(`ช่วงเวลาทับกับช่วง ${MST[(a.id === cur.id ? b : a).status].label} ของเครื่องนี้`);
+      });
+      if (pv && pv.to !== prev.to) { prev.to = pv.to; out.push(clone(prev)); }
+      if (nx && nx.from !== next.from) { next.from = nx.from; out.push(clone(next)); }
+      Object.assign(cur, { status: rec.status, from, cat: rec.status === 'ready' ? '' : str(rec.cat).slice(0, 60), note: str(rec.note).slice(0, 500), eta: rec.status !== 'ready' && rec.eta ? time(rec.eta, 'เวลาที่คาดว่าเสร็จ', true) : '', editBy: who, editAt: now.toISOString() });
+      if (!open) cur.to = to;
+      persist();
+      out.push(clone(cur));
+      return { rows: out, del: [] };
     },
     // 20 พ.ย.: เหมือน txsLog / txsLogRead / txsRefer / txsSetup / txsPdf ใน Code.gs (API 98)
     txsLog: async (act, info) => {
@@ -13537,7 +13596,7 @@ function openMst(id) {
   $('#ms-ro').hidden = can;
   $('#ms-ro').textContent = state.viewAs ? viewAsMsg() : `ตั้งสถานะได้เฉพาะ ${(state.config.machine.roles || []).join(', ') || '—'} และแอดมิน (ตำแหน่งของคุณ: ${u.role || '—'}) · แจ้ง RTT ประจำห้องหรือ MP`;
   const hist = (state.mlog || []).filter(r => r.machine === id).sort((a, b) => str(b.from).localeCompare(str(a.from))).slice(0, 8);
-  $('#ms-hist').innerHTML = hist.length ? `<ul>${hist.map(r => `<li><span class="mst-pill ${MST[r.status].cls}">${esc(MST[r.status].label)}</span> ${esc(mstWhen(r.from))} → ${r.to ? esc(mstWhen(r.to)) : 'ตอนนี้'} · ${esc(mstDur(r.from, r.to))}<small>${esc([r.cat, r.note, r.by && `โดย ${r.by}`].filter(Boolean).join(' · '))}</small></li>`).join('')}</ul>` : '<p class="muted" style="margin:6px 0 0">ยังไม่มีประวัติ</p>';
+  $('#ms-hist').innerHTML = hist.length ? `<ul>${hist.map(r => `<li><span class="mst-pill ${MST[r.status].cls}">${esc(MST[r.status].label)}</span> ${esc(mstWhen(r.from))} → ${r.to ? esc(mstWhen(r.to)) : 'ตอนนี้'} · ${esc(mstDur(r.from, r.to))}${mstActs(r)}<small>${esc([r.cat, r.note, r.by && `โดย ${r.by}`].filter(Boolean).join(' · '))}</small></li>`).join('')}</ul>` : '<p class="muted" style="margin:6px 0 0">ยังไม่มีประวัติ</p>';
   syncMst();
   if (!mstDlg.open) mstDlg.showModal();
 }
@@ -13631,8 +13690,8 @@ function renderMstStats() {
     <h3 class="mst-h">แยกตามหมวดอาการ (เสีย / ซ่อม)</h3>
     ${d.cats.length ? `<div class="mst-wrap"><table class="mst-tbl" id="mst-cats"><thead><tr><th>หมวดอาการ</th><th>ครั้ง</th><th>ชั่วโมงทำการที่เสียไป</th></tr></thead><tbody>${d.cats.map(c => `<tr><td>${esc(c.k)}</td><td>${c.n}</td><td>${mstNum(c.h, 2)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">เดือนนี้ไม่มีช่วงเครื่องเสีย / ซ่อม</p>'}
     <h3 class="mst-h">ประวัติของเดือน (ไม่รวมช่วงพร้อมใช้)</h3>
-    ${d.log.length ? `<div class="mst-wrap"><table class="mst-tbl" id="mst-log"><thead><tr><th>เครื่อง</th><th class="l">สถานะ</th><th class="l">เริ่ม</th><th class="l">สิ้นสุด</th><th>นาน</th><th class="l">หมวดอาการ</th><th class="l">หมายเหตุ</th><th>ผู้ป่วยรอฉาย</th><th class="l">บันทึกโดย</th></tr></thead>
-      <tbody>${d.log.map(({ m, r }) => `<tr><td>${esc(m.label)}</td><td class="l"><span class="mst-pill ${MST[r.status].cls}">${esc(MST[r.status].label)}</span></td><td class="l">${esc(mstWhen(r.from))}</td><td class="l">${r.to ? esc(mstWhen(r.to)) : 'ตอนนี้'}</td><td>${esc(mstDur(r.from, r.to))}</td><td class="l">${esc(r.cat || '–')}</td><td class="l w">${esc(r.note || '')}</td><td>${esc(r.wait || '–')}</td><td class="l">${esc(r.by || '–')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">เดือนนี้ทุกเครื่องพร้อมใช้ตลอด (ไม่มีการตั้งสถานะอื่น)</p>'}`;
+    ${d.log.length ? `<div class="mst-wrap"><table class="mst-tbl" id="mst-log"><thead><tr><th>เครื่อง</th><th class="l">สถานะ</th><th class="l">เริ่ม</th><th class="l">สิ้นสุด</th><th>นาน</th><th class="l">หมวดอาการ</th><th class="l">หมายเหตุ</th><th>ผู้ป่วยรอฉาย</th><th class="l">บันทึกโดย</th>${mstAdmin() ? '<th></th>' : ''}</tr></thead>
+      <tbody>${d.log.map(({ m, r }) => `<tr><td>${esc(m.label)}</td><td class="l"><span class="mst-pill ${MST[r.status].cls}">${esc(MST[r.status].label)}</span></td><td class="l">${esc(mstWhen(r.from))}</td><td class="l">${r.to ? esc(mstWhen(r.to)) : 'ตอนนี้'}</td><td>${esc(mstDur(r.from, r.to))}</td><td class="l">${esc(r.cat || '–')}</td><td class="l w">${esc(r.note || '')}</td><td>${esc(r.wait || '–')}</td><td class="l">${esc(r.by || '–')}${r.editBy ? ` <small class="muted" title="แก้โดย ${esc(r.editBy)}">(แก้)</small>` : ''}</td>${mstAdmin() ? `<td>${mstActs(r)}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<p class="muted">เดือนนี้ทุกเครื่องพร้อมใช้ตลอด (ไม่มีการตั้งสถานะอื่น)</p>'}`;
 }
 function openMstStats() {
   if (!mstUi.ym) mstUi.ym = thisMonth();
@@ -13661,6 +13720,81 @@ $('#mst-xlsx').addEventListener('click', async e => {
     toast(saved ? `ดาวน์โหลด ${file} แล้ว` : 'ยกเลิกการดาวน์โหลด');
   } catch (err) { toast('สร้างไฟล์ Excel ไม่สำเร็จ: ' + errMsg(err), { err: true }); }
   finally { btn.disabled = false; }
+});
+// ---- แอดมิน: แก้ไข / ลบประวัติ (API 102) ----
+const mseDlg = $('#mse-dlg');
+const mstAdmin = () => { const u = state.user || {}; return !state.viewAs && (u.via === 'google' || !!u.isAdmin) && (store.mode !== 'sheet' || serverHas(MST_EDIT_API)); };
+const mstActs = r => (mstAdmin() ? `<span class="ms-acts"><button type="button" class="link-btn" data-msedit="${esc(r.id)}">แก้ไข</button><button type="button" class="link-btn danger" data-msdel="${esc(r.id)}">ลบ</button></span>` : '');
+// ช่วงก่อนหน้า / ถัดไปที่ต่อกับแถวนี้ (สิ้นสุด = เริ่ม)
+function mstNear(r) {
+  const mine = (state.mlog || []).filter(y => y.machine === r.machine && y.id !== r.id).sort((a, b) => str(a.from).localeCompare(str(b.from)));
+  return { prev: mine.filter(y => y.to && y.to === r.from).pop() || null, next: r.to ? mine.find(y => y.from === r.to) || null : null };
+}
+function mstApply(res) {
+  const del = new Set((res && res.del) || []);
+  state.mlog = (state.mlog || []).filter(x => !del.has(x.id));
+  for (const x of ((res && res.rows) || []).map(normMlog)) { const i = state.mlog.findIndex(y => y.id === x.id); if (i >= 0) state.mlog[i] = x; else state.mlog.push(x); }
+  render();
+  if (mstDlg.open) { const d = $('.ms-hist', mstDlg), was = d.open; openMst(mstUi.id); d.open = was; }
+  if (mstStatDlg.open) renderMstStats();
+}
+function openMstEdit(id) {
+  const r = (state.mlog || []).find(x => x.id === id);
+  if (!r || !mstAdmin()) return;
+  const m = mstOf(r.machine), cats = state.config.machine.cats;
+  mstUi.edit = { id, from0: mstLocal(new Date(r.from)), to0: r.to ? mstLocal(new Date(r.to)) : '' };
+  $('#mse-title').textContent = `แก้ประวัติ · ${m.label}`;
+  $('#mse-info').textContent = [`บันทึกโดย ${r.by || '–'}${r.role ? ` (${r.role})` : ''}${r.at ? ` · ${mstWhen(r.at)}` : ''}`, r.editBy && `แก้ล่าสุดโดย ${r.editBy}${r.editAt ? ` · ${mstWhen(r.editAt)}` : ''}`].filter(Boolean).join(' · ');
+  $('#mse-status').innerHTML = Object.entries(MST).map(([k, v]) => opt(k, v.label, r.status)).join('');
+  $('#mse-cat').innerHTML = ['', ...cats, ...(r.cat && !cats.includes(r.cat) ? [r.cat] : [])].map(c => opt(c, c || 'ไม่ระบุ', r.cat)).join('');
+  $('#mse-from').value = mstUi.edit.from0;
+  $('#mse-to').value = mstUi.edit.to0;
+  $('#mse-to').disabled = !r.to;
+  $('#mse-to-sub').textContent = r.to ? '' : 'สถานะปัจจุบัน (ยังไม่สิ้นสุด)';
+  $('#mse-from').max = $('#mse-to').max = mstLocal(new Date(Date.now() + 5 * 60000));
+  $('#mse-eta').value = r.eta ? mstLocal(new Date(r.eta)) : '';
+  $('#mse-note').value = r.note || '';
+  if (!mseDlg.open) mseDlg.showModal();
+}
+$('#mse-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const ed = mstUi.edit || {}, r = (state.mlog || []).find(x => x.id === ed.id), btn = $('#mse-save');
+  if (!r) { mseDlg.close(); return toast('ไม่พบรายการนี้แล้ว (อาจถูกลบไปแล้ว)', { err: true }); }
+  // ช่องเวลาละเอียดถึงนาที: ไม่ได้แก้ = ส่งเวลาเดิม (มีวินาที) ช่วงข้างเคียงไม่ขยับ
+  const pick = (el, v0, iso0) => { const v = el.value; return !v ? '' : v === v0 ? iso0 : isNaN(new Date(v)) ? null : new Date(v).toISOString(); };
+  const from = pick($('#mse-from'), ed.from0, r.from), to = r.to ? pick($('#mse-to'), ed.to0, r.to) : '', ev = $('#mse-eta').value, status = $('#mse-status').value;
+  if (!from) { $('#mse-from').focus(); return toast('เวลาเริ่มไม่ถูกต้อง', { err: true }); }
+  if (r.to && !to) { $('#mse-to').focus(); return toast('เวลาสิ้นสุดไม่ถูกต้อง', { err: true }); }
+  if (to && to < from) { $('#mse-to').focus(); return toast('เวลาสิ้นสุดต้องไม่ก่อนเวลาเริ่ม', { err: true }); }
+  if (new Date(to || from).getTime() > Date.now() + 5 * 60000) return toast('เวลาอยู่ในอนาคต', { err: true });
+  btn.disabled = true;
+  try {
+    const res = await store.machineLogEdit({ id: r.id, status, from, to, cat: status === 'ready' ? '' : $('#mse-cat').value, note: str($('#mse-note').value), eta: status !== 'ready' && ev && !isNaN(new Date(ev)) ? new Date(ev).toISOString() : '' });
+    mseDlg.close();
+    mstApply(res);
+    toast(`แก้ประวัติของ ${mstOf(r.machine).label} แล้ว`);
+  } catch (err) { toast('แก้ประวัติไม่สำเร็จ: ' + errMsg(err), { err: true }); }
+  finally { btn.disabled = false; }
+});
+async function mstDelete(id) {
+  const r = (state.mlog || []).find(x => x.id === id);
+  if (!r || !mstAdmin()) return;
+  const m = mstOf(r.machine), { prev } = mstNear(r), st = MST[r.status].label;
+  const what = r.to ? `ลบช่วง "${st}" ของ ${m.label} (${mstWhen(r.from)} → ${mstWhen(r.to)})?\n\n${prev ? `ช่วงก่อนหน้า (${MST[prev.status].label}) จะยาวต่อถึง ${mstWhen(r.to)}` : 'ไม่มีช่วงก่อนหน้า: ประวัติของเครื่องจะเริ่มที่ช่วงถัดไป'}`
+    : `ลบสถานะปัจจุบัน "${st}" ของ ${m.label} (ตั้งแต่ ${mstWhen(r.from)})?\n\nเครื่องจะกลับเป็น ${prev ? `สถานะก่อนหน้า (${MST[prev.status].label})` : 'พร้อมใช้ (ไม่มีประวัติก่อนหน้า)'}`;
+  if (!confirm(what + '\n\nการลบถูกบันทึกในประวัติการแก้ไข')) return;
+  try {
+    const res = await store.machineLogEdit({ id: r.id, del: true });
+    if (mseDlg.open) mseDlg.close();
+    mstApply(res);
+    toast(`ลบช่วง ${st} ของ ${m.label} แล้ว`);
+  } catch (err) { toast('ลบประวัติไม่สำเร็จ: ' + errMsg(err), { err: true }); }
+}
+$('#mse-del').addEventListener('click', () => mstDelete((mstUi.edit || {}).id));
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-msedit], [data-msdel]');
+  if (!b) return;
+  if (b.dataset.msedit !== undefined) openMstEdit(b.dataset.msedit); else mstDelete(b.dataset.msdel);
 });
 // ---- ตั้งค่า → ห้องฉาย → สถานะเครื่อง ----
 function mstSec(d) {

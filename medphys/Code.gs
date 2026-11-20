@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.4';
-const API_LEVEL = 101;   // 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.5';
+const API_LEVEL = 102;   // 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3480,6 +3480,72 @@ function machineSet(rec, token) {
     writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.mlog.fields, r, null);
     out.push(r);
     return { rows: out };
+  });
+}
+/**
+ * API 102: แอดมินแก้ไข / ลบช่วงสถานะในประวัติ (ชีต MachineLog) · ช่วงข้างเคียงขยับตามให้ประวัติต่อกันไม่มีช่องว่าง · ทุกครั้งลงประวัติการแก้ไข (AuditLog)
+ * rec = { id, del: true } | { id, status, from, to, cat, note, eta }
+ *   ลบ: ช่วงก่อนหน้ายาวต่อถึงจุดสิ้นสุดของช่วงที่ลบ · ลบช่วงปัจจุบัน = เครื่องกลับเป็นสถานะก่อนหน้า (ไม่มี = พร้อมใช้)
+ *   แก้: เวลาเริ่มเปลี่ยน = ช่วงก่อนหน้าสิ้นสุดตาม · เวลาสิ้นสุดเปลี่ยน = ช่วงถัดไปเริ่มตาม · ช่วงปัจจุบัน (ยังไม่สิ้นสุด) แก้เวลาสิ้นสุดไม่ได้ · ห้ามทับช่วงอื่นของเครื่องเดียวกัน
+ * คืน { rows: [แถวที่เปลี่ยน], del: [id ที่ลบ] }
+ */
+function machineLogEdit(rec, token) {
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg);
+  if (!(u.via === 'google' || u.isAdmin)) throw new Error('แก้ไข / ลบประวัติสถานะเครื่องได้เฉพาะแอดมิน');
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const cut = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const id = cut(rec.id, 80), now = new Date(), who = String(u.name || u.username || u.me || '');
+  if (!id) throw new Error('ไม่ได้ระบุรายการ');
+  const time = (v, what, future) => {
+    const d = new Date(cut(v, 40));
+    if (!cut(v, 40) || isNaN(d.getTime())) throw new Error(what + 'ไม่ถูกต้อง');
+    if (!future && d.getTime() > now.getTime() + 5 * 60000) throw new Error(what + 'อยู่ในอนาคต');
+    return d.toISOString();
+  };
+  return withLock_(() => {
+    const ss = ss_(), S = v => String(v == null ? '' : v).trim(), when = v => Utilities.formatDate(new Date(v), tz_(ss), 'yyyy-MM-dd HH:mm');
+    const all = readCols_(ss, 'mlog', null, ['machine', 'status', 'from', 'to']), cur = all.filter(x => x.id === id)[0];
+    if (!cur) throw new Error('ไม่พบรายการนี้ในประวัติ (อาจถูกลบไปแล้ว) · โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    // เรียงตามเวลาเริ่ม · เริ่มพร้อมกัน = ช่วงที่สิ้นสุดก่อนอยู่ก่อน ช่วงที่ยังไม่สิ้นสุดอยู่ท้าย (เทียบข้อความตรง ๆ: localeCompare จัดสัญลักษณ์ไว้ก่อนตัวเลข)
+    const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0), END = '\uffff';
+    const order = (a, b) => cmp(S(a.from), S(b.from)) || cmp(S(a.to) || END, S(b.to) || END);
+    const mine = all.filter(x => x.machine === cur.machine && x.id !== id).sort(order);
+    const prev = mine.filter(y => S(y.to) && S(y.to) === S(cur.from)).pop() || null;
+    const next = S(cur.to) ? mine.filter(y => S(y.from) === S(cur.to))[0] || null : null;
+    const out = [];
+    const put = (rid, set) => { const x = openRow_(ss, 'mlog', null, rid); if (x.row) out.push(saveRow_(x, TABLES.mlog.fields.filter(f => f[0] in set), set)); };
+    if (rec.del === true) {
+      if (prev) put(prev.id, { to: S(cur.to) });
+      const x = openRow_(ss, 'mlog', null, id);
+      if (x.row) delRow_(x.sh, x.row, x.header, x.vals);
+      return { rows: out, del: [id] };
+    }
+    const status = cut(rec.status, 10);
+    if (MST_STATUS.indexOf(status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+    const open = !S(cur.to), from = time(rec.from, 'เวลาเริ่ม'), to = open ? '' : time(rec.to, 'เวลาสิ้นสุด');
+    if (to && to < from) throw new Error('เวลาสิ้นสุดต้องไม่ก่อนเวลาเริ่ม');
+    const eta = status !== 'ready' && cut(rec.eta, 40) ? time(rec.eta, 'เวลาที่คาดว่าเสร็จ', true) : '';
+    // ช่วงข้างเคียงขยับตาม แล้วตรวจทุกช่วงของเครื่องนี้: ไม่ทับกัน · มีช่วงที่ยังไม่สิ้นสุดได้เฉพาะช่วงสุดท้าย
+    const plan = mine.map(y => ({ id: y.id, status: y.status, from: S(y.from), to: S(y.to) }));
+    const pv = prev ? plan.filter(y => y.id === prev.id)[0] : null, nx = next ? plan.filter(y => y.id === next.id)[0] : null;
+    if (pv && from !== S(cur.from)) pv.to = from;
+    if (nx && to !== S(cur.to)) nx.from = to;
+    plan.push({ id: id, status: status, from: from, to: to });
+    plan.sort(order);
+    // ช่วงข้างเคียงที่ขยับตามแล้วติดลบ = เวลาใหม่เลยช่วงนั้นไป (ตรวจก่อน: ข้อความตรงประเด็นกว่า "ทับ")
+    [[pv, prev], [nx, next]].forEach(q => {
+      if (q[0] && q[0].to && q[0].to < q[0].from) throw new Error('เวลาใหม่เลยช่วง ' + MST_NAME[q[1].status] + ' ที่อยู่ติดกัน (' + when(q[1].from) + (S(q[1].to) ? ' → ' + when(q[1].to) : '') + ') · แก้ / ลบช่วงนั้นก่อน หรือเลือกเวลาที่ไม่เลยช่วงนั้น');
+    });
+    plan.forEach((a, i) => {
+      const b = plan[i + 1];
+      if (b && (!a.to || a.to > b.from)) { const o = a.id === id ? b : a; throw new Error('ช่วงเวลาทับกับช่วง ' + MST_NAME[o.status] + ' ของเครื่องนี้ (เริ่ม ' + when(o.from) + ')'); }
+    });
+    if (pv && pv.to !== S(prev.to)) put(prev.id, { to: pv.to });
+    if (nx && nx.from !== S(next.from)) put(next.id, { from: nx.from });
+    const set = { status: status, from: from, cat: status === 'ready' ? '' : cut(rec.cat, 60), note: cut(rec.note, 500), eta: eta, editBy: who, editAt: now.toISOString() };
+    if (!open) set.to = to;
+    put(id, set);
+    return { rows: out, del: [] };
   });
 }
 
