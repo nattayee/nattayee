@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.8';
-const API_LEVEL = 105;   // 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.9';
+const API_LEVEL = 106;   // 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -3468,7 +3468,7 @@ function machineSet(rec, token) {
   if (status === MST_EVENT) {   // API 103: Interrupt = เพิ่มหนึ่งแถว (เริ่ม = สิ้นสุด = เวลาที่เกิด) · ช่วงสถานะปัจจุบันไม่ถูกปิด
     return withLock_(() => {
       const ss = ss_(), x = openRow_(ss, 'mlog', null, '');
-      const r = { id: Utilities.getUuid(), machine: machine, status: status, from: from, to: from, cat: cut(rec.cat, 60), note: cut(rec.note, 500), eta: '', wait: '', by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '', energy: cut(rec.energy, 20) };
+      const r = { id: Utilities.getUuid(), machine: machine, status: status, from: from, to: from, cat: cut(rec.cat, 60), note: cut(rec.note, 500), eta: '', wait: '', by: who, role: admin && !role ? 'Admin' : role, at: now.toISOString(), editBy: '', editAt: '', energy: cut(rec.energy, 60) };   // API 106: เลือกได้หลายพลังงาน
       writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.mlog.fields, r, null);
       return { rows: [r] };
     });
@@ -3536,7 +3536,7 @@ function machineLogEdit(rec, token) {
     if (cur.status === MST_EVENT) {   // API 103: Interrupt (เหตุการณ์) ไม่มีช่วงข้างเคียง
       if (rec.del === true) { const x = openRow_(ss, 'mlog', null, id); if (x.row) delRow_(x.sh, x.row, x.header, x.vals); return { rows: [], del: [id] }; }
       const at = time(rec.from, 'เวลาที่เกิด');
-      put(id, { from: at, to: at, cat: cut(rec.cat, 60), note: cut(rec.note, 500), energy: cut(rec.energy, 20), editBy: who, editAt: now.toISOString() });
+      put(id, { from: at, to: at, cat: cut(rec.cat, 60), note: cut(rec.note, 500), energy: cut(rec.energy, 60), editBy: who, editAt: now.toISOString() });
       return { rows: out, del: [] };
     }
     if (cut(rec.status, 10) === MST_EVENT) throw new Error('เปลี่ยนช่วงสถานะเป็น Interrupt ไม่ได้ (บันทึก Interrupt ใหม่จากหน้าต่างสถานะเครื่อง)');
@@ -3982,15 +3982,39 @@ function dqEdit(id, ch, pin, token) {
       if (!d || !(cur.desk === 'in' || cur.desk === 'walk')) throw new Error('เปลี่ยนได้เฉพาะ ภายใน / Walk in ของรายการในแถบย่อย ภายใน/Walk in');
       if (d !== cur.desk) set.desk = d;
     }
+    let moved = [];
     if ('doc' in ch) {
-      const d = dqCut_(ch.doc, 10).toUpperCase();
+      const d = dqCut_(ch.doc, 10).toUpperCase(), old = String(cur.doc || '').toUpperCase();
       if (dqDocs_(cfg).indexOf(d) < 0) throw new Error('ไม่พบรหัสแพทย์ ' + d);
-      if (d !== cur.doc) { set.doc = d; if (cur.how !== 'import') set.how = 'manual'; }   // ดึงจากรายงาน: ยังไม่นับในคิว
+      if (d !== cur.doc) {
+        set.doc = d; if (cur.how !== 'import') set.how = 'manual';   // ดึงจากรายงาน: ยังไม่นับในคิว
+        if (ch.appt) moved = dqMoveAppt_(ss, cur.hn, String(cur.date || '').slice(0, 10), old, d);   // API 106: ย้ายแพทย์เจ้าของไข้ = เปลี่ยนแพทย์ในนัด CT Order ด้วย
+      }
     }
     set.updated = dqNow_();
     writeFields_(x.sh, x.row, x.header, TABLES.dq.fields.filter(f => f[0] in set), set, x.vals);
-    return Object.assign(cur, set);
+    const out = Object.assign(cur, set);
+    if (moved.length) out.apptRows = moved;
+    return out;
   });
+}
+/**
+ * API 106: ย้ายแพทย์เจ้าของไข้ — นัด CT Order ของ HN นั้นที่ลงตั้งแต่วันที่แจก (ไม่นับนัดที่ตั้งว่าไม่มาทำ CT) และแพทย์ยังเป็นคนเดิม เปลี่ยนเป็นแพทย์ใหม่
+ * (เหมือน dqAppt ในหน้าเว็บ: นัดของการแจกครั้งนั้น) · คืนแถวนัดที่เปลี่ยน
+ */
+function dqMoveAppt_(ss, hn, date, oldDoc, newDoc) {
+  const tz = tz_(ss), now = new Date().toISOString(), out = [];
+  rowsOfHn_(ss, 'appt', hn).forEach(a => {
+    const made = a.created ? Utilities.formatDate(new Date(a.created), tz, 'yyyy-MM-dd') : '';
+    if (String(a.took || '') === 'skip' || String(a.doc || '').toUpperCase() !== oldDoc || !made || made < date) return;
+    const x = openRow_(ss, 'appt', null, a.id);
+    if (!x.row) return;
+    const set = { doc: newDoc, updated: now };
+    writeFields_(x.sh, x.row, x.header, TABLES.appt.fields.filter(f => f[0] in set), set, x.vals);
+    markDirty_('appt');
+    out.push(Object.assign(x.cur, set));
+  });
+  return out;
 }
 /**
  * ดึงจากรายงานผู้ป่วยที่รับ Consult ของ HIS (หน้าเว็บอ่านไฟล์ จับคู่แพทย์ผู้นัด → รหัสแพทย์แล้วส่งมา) · recs = [{ hn, name, doc, date: วันที่รับ Consult, visit, chan, refer, icd }]
