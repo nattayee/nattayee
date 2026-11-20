@@ -1251,6 +1251,23 @@ div.c-main,div.lrow{cursor:default}
 .ss-empty{margin:16px 0;color:#444}
 .ss-ft{margin-top:10px;padding-top:4px;border-top:1px solid #bbb;font-size:8pt;color:#555}
 #ss-print{display:none}
+/* 20 พ.ย.: ผู้ป่วยระหว่างฉายทั้งหมด · หนึ่งรายหนึ่งบรรทัด (ตัวเล็ก ระยะแถวแคบ ข้อความยาวตัดท้าย) = ประหยัดกระดาษ */
+.ss-sheet.ota-sheet{padding:8mm;font-size:8.5pt;line-height:1.25}
+.ota-sheet .ss-hd{padding-bottom:3px;margin-bottom:3px}
+.ota-sheet .ss-hd h1{font-size:13pt}
+.ota-sheet .ss-hd p{font-size:9.5pt}
+.ota-sheet .ss-tot{font-size:9.5pt}
+.ota-sheet .ss-tot>b{font-size:15pt}
+.ota-sheet .ss-doc{font-size:9.5pt;margin:5px 0 2px}
+.ss-sheet.ota-sheet table{font-size:8.5pt}
+.ss-sheet.ota-sheet th,.ss-sheet.ota-sheet td{padding:.8px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;vertical-align:middle}
+.ss-sheet.ota-sheet td:first-child{text-align:right;overflow:visible;text-overflow:clip;padding-inline:2px}
+.ss-sheet.ota-sheet .ss-hn{overflow:visible;text-overflow:clip}
+.ss-sheet.ota-sheet.ota-land{width:297mm}
+.ota-sheet .ota-hold{font-weight:700}
+.ota-sheet .ss-ft{margin-top:5px}
+#ota-ctl select{font:inherit;font-size:13px;padding:3px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg)}
+#ota-ctl .ss-pick{margin-left:8px}
 /* 20 พ.ย.: Treatment Summary · รายการ (ชื่อย่อ) · เอกสาร A4 กระดาษขาวทั้งสองธีม · ลายน้ำ "ใช้ภายในเท่านั้น" ทุกหน้า */
 .txs-top{align-items:baseline;gap:6px 12px}
 .txs-title{margin:0;font-size:18px}
@@ -4530,6 +4547,13 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   <div class="dlg">
     <header class="dlg-head"><h2 id="ss-title">สรุปนัดพบแพทย์</h2><span class="ap-acts"><button type="button" class="btn primary sm ap-print" id="ss-print-btn">🖨 พิมพ์</button></span><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
     <div class="dlg-body"><div class="ss-days" id="ss-days" role="group" aria-label="วันที่มีนัดพบแพทย์"></div><div class="ss-prev" id="ss-prev"></div></div>
+  </div>
+</dialog>
+<!-- 20 พ.ย.: ผู้ป่วยระหว่างฉายทั้งหมด (Nurse → นัดพบแพทย์) · หนึ่งรายหนึ่งบรรทัด · ดูก่อนพิมพ์ -->
+<dialog id="ota-dlg" class="dlg-wide ss-dlg" aria-labelledby="ota-title">
+  <div class="dlg">
+    <header class="dlg-head"><h2 id="ota-title">ผู้ป่วยระหว่างฉายทั้งหมด</h2><span class="ap-acts"><button type="button" class="btn primary sm ap-print" id="ota-print-btn">🖨 พิมพ์</button></span><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body"><div class="ss-days" id="ota-ctl" role="group" aria-label="การจัดกลุ่มและตัวกรอง"></div><div class="ss-prev" id="ota-prev"></div></div>
   </div>
 </dialog>
 <div class="viz-tip" id="viz-tip" role="tooltip" hidden></div>
@@ -7855,7 +7879,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.7';
+const PAGE_VERSION = '2026-11-20.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -13523,6 +13547,107 @@ async function printSeeSum(btn) {
   finally { if (btn) btn.disabled = false; }
 }
 $('#ss-print-btn').addEventListener('click', e => printSeeSum(e.currentTarget));
+/* ---------- 20 พ.ย.: Nurse → นัดพบแพทย์ · ผู้ป่วยระหว่างฉายทั้งหมด (ดูก่อนพิมพ์ · พิมพ์ A4) ----------
+ * รายชื่อเดียวกับหัวข้อ "นัดพบแพทย์ · ผู้ป่วยระหว่างฉาย" (ผู้ป่วยที่ฉายอยู่ / Hold RT วันนี้ จากตารางวันฉาย) · หนึ่งรายหนึ่งบรรทัด
+ * จัดกลุ่ม: แพทย์ (เรียงห้องฉาย → HN) · ห้องฉาย (เรียงแพทย์ → HN) · ไม่จัดกลุ่ม (เรียง HN) · กรองแพทย์ / ห้องฉายได้ */
+const otaDlg = $('#ota-dlg');
+const ota = { g: '', doc: '', room: '', land: null };
+const OTA_NONE = '__none';   // ค่าของตัวกรอง "ไม่ระบุแพทย์ / ไม่ระบุห้องฉาย" (ค่าว่าง = ทั้งหมด)
+// Prescription แบบสั้นให้พอหนึ่งบรรทัด: เทคนิค · บริเวณ Dose/fx × Fx (แสดงยอดรวมเมื่อกรอก Prescription เองไม่เท่า Dose/fx × Fx) · ความถี่ที่ไม่ใช่ Daily
+const otaDose = x => {
+  const fq = x.freq && x.freq !== 'Daily' ? ` ${x.freq}` : '';
+  if (!x.dpf && !x.fx) return fq.trim();
+  const prod = (+x.dpf || 0) * (+x.fx || 0), own = +x.rx > 0 && Math.abs(+x.rx - prod) > 1e-9;
+  return `${x.dpf ? cGyText(x.dpf) : '? cGy'} × ${x.fx || '?'} fx${own ? ` (${cGyText(x.rx)})` : ''}${fq}`;
+};
+const otaRx = c => {
+  const ss = sitesOf(c), one = x => [[x.area, startText(x) ? `(${startText(x)})` : ''].filter(Boolean).join(' '), otaDose(x)].filter(Boolean).join(' ');
+  return [catOf(c.cat).label || c.tech, ss.length > 1 ? ss.map(one).join(' | ') : one(c)].filter(Boolean).join(' · ');
+};
+function otaRows() {
+  const td = today();
+  return txCasesOn(td).map(x => {
+    const c = x.c, st = x.st || {}, ap = (state.visit || []).filter(v => hnKey(v.hn) === hnKey(c.hn) && v.date >= td && !v.seen).map(v => v.date).sort();
+    const fx = st.k === 'hold' ? `${st.label || 'Hold'}${st.days ? ` ${st.days} วัน` : ''}` : str(st.short || st.t).replace('ฉายอยู่ · ', '');
+    return { c, hold: st.k === 'hold', doc: str(c.doc).toUpperCase(), room: roomOnDay(c, td), fx, rx: ota.land ? rxText(c) : otaRx(c), rxFull: rxText(c), ap: [...new Set(ap)].map(d => `${+d.slice(8)}/${+d.slice(5, 7)}`).join(', '), apFull: [...new Set(ap)].map(fmtDay).join(', ') };
+  });
+}
+function otaSheet() {
+  const td = today(), all = otaRows(), order = dqAllDocs(), at = c => (order.includes(c) ? order.indexOf(c) : 999);
+  const fv = v => (v === OTA_NONE ? '' : v);   // ตัวกรอง "ไม่ระบุ"
+  const rows = all.filter(r => (!ota.doc || r.doc === fv(ota.doc)) && (!ota.room || r.room === fv(ota.room)));
+  const g = ['doc', 'room', 'none'].includes(ota.g) ? ota.g : 'doc', byHn = (a, b) => str(a.c.hn).localeCompare(str(b.c.hn));
+  const docCmp = (a, b) => (a === '') - (b === '') || at(a) - at(b) || a.localeCompare(b), roomCmp = (a, b) => roomLabel(a).localeCompare(roomLabel(b));
+  const docText = code => (code ? `${code}${docName(code) ? ` · ${docName(code)}` : ''}` : 'ไม่ระบุแพทย์');
+  // คอลัมน์: จัดกลุ่มตามอะไร = ไม่ต้องมีคอลัมน์นั้น (ที่ว่างให้ Prescription)
+  const cols = [['ที่', '8mm'], ['HN', '21mm'], ['ชื่อ-สกุล', ota.land ? '56mm' : '40mm'], ...(g === 'doc' ? [] : [['แพทย์', '10mm']]), ...(g === 'room' ? [] : [['ห้องฉาย', '16mm']]), ['Prescription', ''], ['Fx', '17mm'], ['นัดพบแพทย์', ota.land ? '34mm' : '22mm']];
+  const head = `<colgroup>${cols.map(c => `<col${c[1] ? ` style="width:${c[1]}"` : ''}>`).join('')}</colgroup><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead>`;
+  let n = 0;
+  const line = r => `<tr><td>${++n}</td><td class="ss-hn">${esc(r.c.hn)}</td><td title="${esc(r.c.name || '')}">${esc(r.c.name || '')}</td>${g === 'doc' ? '' : `<td>${esc(r.doc || '-')}</td>`}${g === 'room' ? '' : `<td>${esc(r.room ? roomLabel(r.room) : '-')}</td>`}<td title="${esc(r.rxFull)}">${esc(r.rx)}</td><td${r.hold ? ' class="ota-hold"' : ''}>${esc(r.fx)}</td><td title="${esc(r.apFull)}">${esc(r.ap)}</td></tr>`;
+  const table = rs => `<table>${head}<tbody>${rs.map(line).join('')}</tbody></table>`;
+  const keys = g === 'doc' ? [...new Set(rows.map(r => r.doc))].sort(docCmp) : g === 'room' ? [...new Set(rows.map(r => r.room))].sort(roomCmp) : [];
+  const body = g === 'none' ? table(rows.slice().sort(byHn))
+    : keys.map(k => {
+      const rs = rows.filter(r => (g === 'doc' ? r.doc : r.room) === k).sort((a, b) => (g === 'doc' ? roomCmp(a.room, b.room) : docCmp(a.doc, b.doc)) || byHn(a, b));
+      return `<h3 class="ss-doc">${esc(g === 'doc' ? docText(k) : k ? roomLabel(k) : 'ไม่ระบุห้องฉาย')} <span>${rs.length} คน</span></h3>${table(rs)}`;
+    }).join('');
+  const tot = (g === 'room' ? [...new Set(rows.map(r => r.room))].sort(roomCmp).map(k => `${k ? roomLabel(k) : '-'} ${rows.filter(r => r.room === k).length}`) : [...new Set(rows.map(r => r.doc))].sort(docCmp).map(k => `${k || '-'} ${rows.filter(r => r.doc === k).length}`)).map(esc).join(' · ');
+  const filt = [ota.doc && (ota.doc === OTA_NONE ? 'ไม่ระบุแพทย์' : `แพทย์ ${ota.doc}`), ota.room && (ota.room === OTA_NONE ? 'ไม่ระบุห้องฉาย' : `ห้องฉาย ${roomLabel(ota.room)}`)].filter(Boolean).join(' · '), holdN = rows.filter(r => r.hold).length;
+  return { n: rows.length, all, html: `<header class="ss-hd"><div><b>${esc(state.config.appName || '')}</b><h1>ผู้ป่วยระหว่างฉายทั้งหมด</h1><p>${esc(LONG_DAY_FMT.format(parseISO(td)))}${filt ? ` · ${esc(filt)}` : ''}</p></div><div class="ss-tot"><b>${rows.length}</b> คน${holdN ? ` (Hold ${holdN})` : ''}${tot ? `<small>${tot}</small>` : ''}</div></header>`
+    + (rows.length ? body : `<p class="ss-empty">${all.length ? 'ไม่มีผู้ป่วยระหว่างฉายที่ตรงกับตัวกรอง' : 'วันนี้ไม่มีผู้ป่วยระหว่างฉาย'}</p>`)
+    + `<footer class="ss-ft">พิมพ์ ${esc(whenText(nowISO()))}${state.user.name ? ` · ${esc(state.user.name)}` : ''} · รายชื่อจากตารางวันฉายของวันนี้ (ฉายอยู่ + Hold RT) · นัดพบแพทย์ = นัดที่ยังไม่ได้พบ ตั้งแต่วันนี้</footer>` };
+}
+function renderOta() {
+  if (!ota.g) ota.g = pref.get('otaGroup', 'doc');
+  if (ota.land == null) ota.land = !!pref.get('otaLand', false);
+  const sh = otaSheet(), docs = [...new Set(sh.all.map(r => r.doc))].sort(), rooms = [...new Set(sh.all.map(r => r.room))].sort((a, b) => roomLabel(a).localeCompare(roomLabel(b)));
+  const fv = v => (v === OTA_NONE ? '' : v), key = v => v || OTA_NONE;
+  if (ota.doc && !docs.includes(fv(ota.doc))) { ota.doc = ''; return renderOta(); }
+  if (ota.room && !rooms.includes(fv(ota.room))) { ota.room = ''; return renderOta(); }
+  $('#ota-title').textContent = `ผู้ป่วยระหว่างฉายทั้งหมด · ${fmtDay(today())} · ${sh.n} คน`;
+  $('#ota-ctl').innerHTML = [['doc', 'แยกแพทย์'], ['room', 'แยกห้องฉาย'], ['none', 'ไม่แยก (เรียง HN)']].map(([k, l]) => `<button type="button" class="ss-day" data-otag="${k}" aria-pressed="${ota.g === k}">${l}</button>`).join('')
+    + `<label class="ss-pick">แพทย์ <select id="ota-doc" aria-label="กรองแพทย์">${opt('', 'ทุกคน', ota.doc)}${docs.map(d => opt(key(d), d || 'ไม่ระบุแพทย์', ota.doc)).join('')}</select></label>`
+    + `<label class="ss-pick">ห้องฉาย <select id="ota-room" aria-label="กรองห้องฉาย">${opt('', 'ทุกห้อง', ota.room)}${rooms.map(r => opt(key(r), r ? roomLabel(r) : 'ไม่ระบุห้องฉาย', ota.room)).join('')}</select></label>`
+    + `<label class="ss-pick">กระดาษ <select id="ota-land" aria-label="แนวกระดาษ">${opt('0', 'A4 แนวตั้ง (ประหยัดกระดาษ)', ota.land ? '1' : '0')}${opt('1', 'A4 แนวนอน (Prescription เต็ม)', ota.land ? '1' : '0')}</select></label>`;
+  $('#ota-prev').innerHTML = `<div class="ss-sheet ota-sheet${ota.land ? ' ota-land' : ''}">${sh.html}</div>`;
+  fitOta();
+}
+function fitOta() {
+  const box = $('#ota-prev'), page = box && box.firstElementChild;
+  if (!otaDlg.open || !page) return;
+  page.style.zoom = '';
+  page.style.zoom = String(Math.max(0.35, Math.min(1, (box.clientWidth - 24) / page.offsetWidth)));
+}
+window.addEventListener('resize', fitOta);
+function openOta() {
+  if (!otaDlg.open) otaDlg.showModal();
+  renderOta();
+}
+$('#ota-ctl').addEventListener('change', e => {
+  if (e.target.id === 'ota-doc') ota.doc = e.target.value; else if (e.target.id === 'ota-room') ota.room = e.target.value;
+  else if (e.target.id === 'ota-land') { ota.land = e.target.value === '1'; pref.set('otaLand', ota.land); } else return;
+  renderOta();
+});
+// พิมพ์: รายชื่อตามการจัดกลุ่ม ตัวกรอง และแนวกระดาษที่เลือก (A4 ขอบ 8 มม. · หลายหน้าได้)
+async function printOta(btn) {
+  const box = $('#ss-print');
+  box.innerHTML = `<div class="ss-sheet ota-sheet${ota.land ? ' ota-land' : ''}">${otaSheet().html}</div>`;
+  if (btn) btn.disabled = true;
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const st = document.createElement('style');
+    st.textContent = ota.land ? '@page{size:A4 landscape;margin:8mm}' : '@page{size:A4;margin:8mm}';
+    document.head.appendChild(st);
+    document.body.classList.add('printing-ss');
+    let done = false;
+    const end = () => { if (done) return; done = true; document.body.classList.remove('printing-ss'); st.remove(); box.innerHTML = ''; window.removeEventListener('afterprint', end); };
+    window.addEventListener('afterprint', end);
+    setTimeout(end, 120000);
+    window.print();
+  } catch (e) { toast('พิมพ์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn) btn.disabled = false; }
+}
+$('#ota-print-btn').addEventListener('click', e => printOta(e.currentTarget));
 /* ---------- 20 พ.ย.: สถานะเครื่อง (Machine status · Code.gs API 100) ----------
  * สัญลักษณ์ในแถวโลโก้: ไอคอนชนิดเครื่อง + ตัวย่อ · สีและเครื่องหมายมุมขวา = สถานะ · เครื่องที่ไม่ปกติขยายข้อความ · เลื่อนหน้าลง = แบบย่อในแถวเมนู
  * กดสัญลักษณ์ = ดู / ตั้งสถานะ (RTT, MP, แอดมิน · ตั้งค่า → สถานะเครื่อง) · ทุกการเปลี่ยน = หนึ่งช่วงในชีต MachineLog (ใช้คิด uptime / downtime)
@@ -14353,7 +14478,7 @@ function seeApptHtml(words, vedit) {
   }).join('');
   const add = vedit ? '<button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในรายชื่อ · ส่งไปรอที่ห้องตรวจ">+ พบแพทย์นอกตารางนัด</button>' : '';
   return `<h3 class="ontx-h">นัดพบแพทย์ · ผู้ป่วยระหว่างฉาย <span class="muted">(${rows.length})</span><small>รายชื่อจากแถบ ${esc(navLabel('course'))} วันนี้ แยกแพทย์ → ห้องฉาย · กด "${nxLbl}" หรือเลือกวัน แล้ววันนั้นผู้ป่วยไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย · ข้ามวันแล้วรายชื่อเป็นของวันใหม่ (ไม่ค้างรายชื่อเดิม)</small></h3>`
-    + `<div class="see-aptools"><button type="button" class="btn primary see-sum" data-seesum="1" title="ดูรายชื่อผู้ป่วยที่นัดพบแพทย์แต่ละวัน แล้วสั่งพิมพ์">📋 สรุปนัดพบแพทย์รายวัน · ดู / พิมพ์</button>${add}</div>`
+    + `<div class="see-aptools"><button type="button" class="btn" data-otaall="1" title="รายชื่อผู้ป่วยระหว่างฉายทั้งหมดของวันนี้ หนึ่งรายหนึ่งบรรทัด · ดูก่อนพิมพ์ แล้วสั่งพิมพ์">👥 ผู้ป่วยระหว่างฉายทั้งหมด · ดู / พิมพ์</button><button type="button" class="btn primary see-sum" data-seesum="1" title="ดูรายชื่อผู้ป่วยที่นัดพบแพทย์แต่ละวัน แล้วสั่งพิมพ์">📋 สรุปนัดพบแพทย์รายวัน · ดู / พิมพ์</button>${add}</div>`
     + (body || `<section class="nurse-sec"><p class="muted" style="margin:4px 0">${words.length ? 'ไม่พบผู้ป่วยระหว่างฉายที่ตรงกับคำค้น' : 'วันนี้ไม่มีผู้ป่วยระหว่างฉาย'}</p></section>`);
 }
 // Prescription: เทคนิค · บริเวณ · Dose/fx × Fx (รวม) · ความถี่ (หลายบริเวณ = ทุกบริเวณ)
@@ -24008,6 +24133,8 @@ document.addEventListener('click', e => {
   if (ds.csonursedq) return nurseMark('dq', ds.csonursedq, true, t).then(() => openSoNurse(ds.csonursedq));
   if (ds.csonextdq) return openSoNurse(ds.csonextdq);
   if (ds.seesum) return openSeeSum();   // 19 พ.ย.: สรุปนัดพบแพทย์รายวัน
+  if (ds.otaall) return openOta();   // 20 พ.ย.: ผู้ป่วยระหว่างฉายทั้งหมด
+  if (ds.otag) { ota.g = ds.otag; pref.set('otaGroup', ota.g); return renderOta(); }
   if (ds.ssday) { ssDay = ds.ssday; return renderSeeSum(); }
   if (ds.nurseord) { nurseOrdOpen = !nurseOrdOpen; return renderNurse(); }
   if (ds.nursemv) return nurseMove(ds.nursemv);
