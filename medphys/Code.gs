@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-20.9';
-const API_LEVEL = 106;   // 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-20.10';
+const API_LEVEL = 107;   // 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -711,7 +711,7 @@ function readDelta_(ss, table, cfg, since) {
 // ตำแหน่งอื่น (ดูอย่างเดียว) เห็นเฉพาะแถบที่แอดมินติ๊ก "ตำแหน่งอื่น" ใน ตั้งค่า → แถบเมนู
 // ส่งเฉพาะตารางที่แถบเหล่านั้นใช้ (ไม่ได้เปิดแถบไหนเลย = ไม่ส่งข้อมูลผู้ป่วยและกิจกรรม) · MP ได้ทุกตาราง
 const NAV_PREV = { queue: 'pend', course: 'queue', ctsim: 'course' };
-const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend', nurse: 'dq' };   // flow (16 พ.ย.): RT Workflow มีข้อมูลผู้ป่วย = เห็นเท่าแถบห้องฉายจนกว่าแอดมินจะตั้ง   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
+const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend', sendbook: 'pend', nurse: 'dq' };   // sendbook (20 พ.ย.): ทะเบียนหนังสือส่ง = เห็นเท่าแถบงานรอ   // flow (16 พ.ย.): RT Workflow มีข้อมูลผู้ป่วย = เห็นเท่าแถบห้องฉายจนกว่าแอดมินจะตั้ง   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: ลงทะเบียน นัดคิวใส่แร่ = สิทธิ์เท่าแถบลงนัด · ลงนัด = เท่าแถบ CT-SIM · RTT/RA Jobs = เท่าแถบห้องฉาย
 // แถบลงนัดใช้เคสและรายการ CT-SIM นับจำนวนในปฏิทิน (วันนัด CT · Start RT) · ตารางวันฉาย (ห้องฉาย) แสดงนัดที่ยังไม่ลง CT-SIM
 // แถบ RTT/RA Jobs ใช้เคส รายการ CT-SIM และผู้ปฏิบัติงานประจำวันคำนวณงานห้องฉาย/CT · ภาระงาน (jobs) ส่งเฉพาะของตัวเอง (แอดมินได้ทุกคน) · นัด (ลงนัด) = Vac-Lok ที่จองไว้
 // แถบลงทะเบียนแสดงนัดของผู้ป่วย · แถบลงนัดและนัดคิวใส่แร่ดึงข้อมูลผู้ป่วยที่ลงทะเบียน · ตารางวันฉาย (ห้องฉาย) ใช้วันนัดใส่แร่เป็นสถานะ HDR อัตโนมัติ · แดชบอร์ดสรุป Brachytherapy จากนัดใส่แร่
@@ -721,7 +721,7 @@ const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p',
   see: ['course', 'consult', 'nurse'], rtd: ['consult', 'nurse', 'course'], visit: ['nurse', 'consult'], roJobs: ['rojobs'],
   ncall: ['nurse', 'ctsim', 'consult', 'course', 'appt', 'bq'],
   // API 100: สถานะเครื่อง = ทุกตำแหน่งของแผนกที่เห็นแถบใดก็ได้ (หน่วยงานภายนอกของ Treatment Summary ไม่ได้)
-  mlog: ['reg', 'dq', 'consult', 'nurse', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'rojobs', 'jobs', 'deptcal', 'flow', 'settings'] };   // API 94: แถบ Nurse (เลื่อนนัด · ไม่มาตามนัด) · แถบอื่นเห็นป้ายไม่มาตามนัด   // API 86: พบแพทย์วันนี้ · คำสั่งแพทย์ระหว่างฉาย
+  mlog: ['reg', 'dq', 'consult', 'nurse', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'settings'] };   // API 94: แถบ Nurse (เลื่อนนัด · ไม่มาตามนัด) · แถบอื่นเห็นป้ายไม่มาตามนัด   // API 86: พบแพทย์วันนี้ · คำสั่งแพทย์ระหว่างฉาย
 // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 ['cases', 'appt', 'dq', 'ctsim'].forEach(t => { if (GUEST_TABLES[t].indexOf('nurse') < 0) GUEST_TABLES[t].push('nurse'); });   // แถบ Nurse (API 86): CT Order · คำสั่งแพทย์ · Call center
 // API 91: RO Jobs → P4P แพทย์ นับผู้ป่วยใหม่ (แจกงานแพทย์) ตรวจติดตาม/เคมีบำบัด (คำสั่งแพทย์ระหว่างฉาย · พบแพทย์นอกตาราง) จำลองการฉาย (CT-SIM) ใส่แร่ contour และ plan evaluation (เคส)
@@ -1024,7 +1024,7 @@ const CFG_TABS = {
   case: ['queue', 'skips', 'manualFrom', 'rate', 'p4pGroup', 'cats', 'types', 'aims', 'techniques', 'freqs', 'areas', 'rooms', 'fields', 'required', 'defaults', 'icdExtra', 'qa', 'qaSee', 'caseView'],
   p4p: ['positions', 'guarantee', 'acts', 'carry', 'brachySync', 'tdfSync'],
   room: ['ptags', 'mobility', 'igrt', 'qColors', 'queues', 'fxTypes', 'moveReplan', 'cpTreat', 'fxSeen', 'fxAdj', 'fxgHead', 'fxgParts', 'quota', 'dayMax', 'gapWarn', 'dutyRoles', 'ptForm', 'delGuard', 'machine', 'fxSee'],   // machine (API 100): สถานะเครื่อง · fxSee (API 104)
-  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow · tdfApp (17 พ.ย.): ลิงก์เว็บ TDF
+  tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p', 'sendBook'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow · tdfApp (17 พ.ย.): ลิงก์เว็บ TDF
   form: ['formRules'],   // 13 พ.ย.: ตั้งค่า → ฟอร์ม (ค่าเริ่มต้นของฟอร์มตามตัวเลือก)
   cols: ['cols'],        // 13 พ.ย.: ตั้งค่า → Column แสดงผล (ค่าเริ่มต้นของคอลัมน์)
   sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู · subOrder (API 105): ลำดับแถบย่อย
@@ -4577,6 +4577,211 @@ function tdfxCheck(s, token) {
     last: dates[dates.length - 1] || '', folder: f ? { name: f.getName(), url: f.getUrl() } : null };
 }
 
+/* ---------- ทะเบียนหนังสือส่ง (20 พ.ย. · API 107): แถบย่อยของ Planning · อ่าน / บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง ----------
+ * ชีต: config.sendBook.url · หนึ่งแท็บต่อปี พ.ศ. (ชื่อแท็บ = ปี 4 หลัก) · แถวหัว: เลขทะเบียนส่ง | ที่ | ลงวันที่ | จาก | ถึง | เรื่อง | การปฏิบัติ | หมายเหตุ
+ * คอลัมน์ A มีเลขเรียงไว้ล่วงหน้าได้ (แถวที่มีแต่เลข = ยังไม่ได้ใช้) · ลบรายการ = ล้าง B:H คงเลขไว้ในคอลัมน์ A
+ * วันที่เก็บเป็นวันที่ ค.ศ. รูปแบบ d/m/yyyy (ค่าเดิมที่พิมพ์ปีเป็น พ.ศ. = ปี ≥ 2400 อ่านเป็น พ.ศ.) · ข้อความที่อ่านเป็นวันที่ไม่ได้ส่งเป็น dateText
+ * เลขถัดไปของปี = เลขว่างตัวแรกนับจากตัวนับของปีนั้น (Script property SBK_NEXT · ไม่ได้ตั้ง = เลขมากสุดที่มีข้อมูล + 1) · เลขที่มีข้อมูลแล้วถูกข้าม */
+const SBK_HEAD = ['เลขทะเบียนส่ง', 'ที่', 'ลงวันที่', 'จาก', 'ถึง', 'เรื่อง', 'การปฏิบัติ', 'หมายเหตุ'];
+const SBK_VIEW = 'sendbook', SBK_PROP = 'SBK_NEXT', SBK_LEN = { ref: 100, from: 200, to: 200, subject: 1000, action: 200, note: 1000 };
+const sbkYearOk_ = n => /^\d{4}$/.test(String(n)) && +n >= 2400 && +n <= 2700;
+const sbkStr_ = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+function sbkUser_(token, edit) {
+  const ss = ss_(), cfg = readConfig_(ss) || {}, u = who_(token, ss, cfg), acc = u.via === 'google' ? 'edit' : userAccess_(cfg, SBK_VIEW, u);
+  if (!acc) throw new Error('ตำแหน่ง ' + (u.role || '-') + ' ไม่เห็นแถบทะเบียนหนังสือส่ง');
+  if (edit && acc !== 'edit') throw new Error('ดูได้อย่างเดียว · ตำแหน่ง ' + (u.role || '-') + ' ออกเลข / แก้ไขทะเบียนหนังสือส่งไม่ได้ (ตั้งค่า → แถบเมนู)');
+  return { cfg: cfg, u: u };
+}
+function sbkBook_(url) {
+  url = String(url || '').trim();
+  if (!url) throw new Error('ยังไม่ได้ตั้งลิงก์ชีตของทะเบียนหนังสือส่ง (ตั้งค่า → แถบงานอื่น → ทะเบียนหนังสือส่ง)');
+  return extBook_({ url: url }, 'ทะเบียนหนังสือส่ง');
+}
+const sbkUrl_ = cfg => String((cfg.sendBook || {}).url || '').trim();
+function sbkLocked_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('ระบบกำลังบันทึกข้อมูลของผู้ใช้อื่นอยู่ กรุณาลองใหม่อีกครั้งในอีกสักครู่');
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+// ค่าในคอลัมน์ ลงวันที่ → { date: 'yyyy-MM-dd' (ค.ศ.) หรือ '' · text: ข้อความเดิมเมื่ออ่านเป็นวันที่ไม่ได้ }
+function sbkDate_(v, tz) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const s = Utilities.formatDate(v, tz, 'yyyy-MM-dd'), y = +s.slice(0, 4);
+    return { date: (y >= 2400 ? y - 543 : y) + s.slice(4), text: '' };
+  }
+  const t = String(v == null ? '' : v).trim();
+  if (!t) return { date: '', text: '' };
+  const m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/.exec(t);
+  if (m) {
+    const d = +m[1], mo = +m[2];
+    let y = +m[3];
+    if (m[3].length === 2) y += 2500;   // ปี พ.ศ. 2 หลัก
+    if (y >= 2400) y -= 543;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (y >= 1900 && y <= 2200 && mo >= 1 && mo <= 12 && dt.getUTCDate() === d) return { date: y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2), text: '' };
+  }
+  return { date: '', text: t.slice(0, 60) };
+}
+const sbkNo_ = v => { const n = typeof v === 'number' ? v : /^\d+$/.test(String(v == null ? '' : v).trim()) ? +String(v).trim() : NaN; return n > 0 && Math.floor(n) === n ? n : 0; };
+// แท็บของปี: หัวคอลัมน์ต้องตรงกับเว็บทะเบียนหนังสือส่ง · rows = [{ row, no, data, v }] (ทุกแถวที่มีอะไรอยู่)
+function sbkSheet_(sh) {
+  const head = sh.getRange(1, 1, 1, SBK_HEAD.length).getValues()[0].map(x => String(x == null ? '' : x).trim());
+  const ok = head.join('|') === SBK_HEAD.join('|'), last = sh.getLastRow();
+  const vals = ok && last > 1 ? sh.getRange(2, 1, last - 1, SBK_HEAD.length).getValues() : [];
+  return { ok: ok, rows: vals.map((v, i) => ({ row: i + 2, no: sbkNo_(v[0]), data: v.slice(1).some(x => x !== '' && x != null), v: v })) };
+}
+function sbkRecord_(year, x, tz, dup) {
+  const v = x.v, d = sbkDate_(v[2], tz);
+  return { id: year + '-' + x.no + (dup ? '-r' + x.row : ''), year: year, no: x.no, row: x.row, ref: sbkStr_(v[1], 200), date: d.date, dateText: d.text,
+    from: sbkStr_(v[3], 300), to: sbkStr_(v[4], 300), subject: sbkStr_(v[5], 2000), action: sbkStr_(v[6], 300), note: sbkStr_(v[7], 2000) };
+}
+const sbkCounters_ = () => { try { const o = JSON.parse(propRead_(SBK_PROP) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
+// เลขถัดไป: เลขว่าง (ยังไม่มีข้อมูล) ตัวแรก นับจากตัวนับที่ตั้งไว้ · ไม่ได้ตั้ง = เลขมากสุดที่มีข้อมูล + 1
+function sbkNext_(bookId, year, rows, counters) {
+  const used = {}; let max = 0;
+  rows.forEach(x => { if (x.no && x.data) { used[x.no] = 1; if (x.no > max) max = x.no; } });
+  let n = sbkNo_((counters || {})[bookId + '|' + year]) || max + 1;
+  while (used[n]) n++;
+  return n;
+}
+function sbkRead_(book) {
+  const tz = book.getSpreadsheetTimeZone() || 'Asia/Bangkok', id = book.getId(), counters = sbkCounters_();
+  const records = [], nextNo = {}, bad = [];
+  book.getSheets().forEach(sh => {
+    const name = String(sh.getName()).trim();
+    if (!sbkYearOk_(name)) return;
+    const year = +name, s = sbkSheet_(sh);
+    if (!s.ok) { bad.push(name); return; }
+    const seen = {};
+    s.rows.forEach(x => { if (!x.no || !x.data) return; records.push(sbkRecord_(year, x, tz, !!seen[x.no])); seen[x.no] = 1; });
+    nextNo[year] = sbkNext_(id, year, s.rows, counters);
+  });
+  const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  return { records: records, nextNo: nextNo, currentYear: +now.slice(0, 4) + 543, sheetUrl: book.getUrl(), title: book.getName(), bad: bad };
+}
+function sbkState(token) {
+  const x = sbkUser_(token, false);
+  return sbkRead_(sbkBook_(sbkUrl_(x.cfg)));
+}
+// ค่าจากฟอร์ม → ค่าที่เขียนลงแถว (B:H) · date = yyyy-MM-dd (ค.ศ.) · keepDate = แก้ไขรายการที่วันที่ในชีตอ่านไม่ได้และไม่ได้ระบุใหม่
+function sbkBody_(body, tz, needDate) {
+  body = body && typeof body === 'object' ? body : {};
+  const iso = String(body.date || '').trim(), subject = sbkStr_(body.subject, SBK_LEN.subject);
+  let date = null;
+  if (iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) throw new Error('วันที่ไม่ถูกต้อง');
+    const y = +iso.slice(0, 4), t = new Date(Date.UTC(y, +iso.slice(5, 7) - 1, +iso.slice(8)));
+    if (y < 1990 || y > 2200 || t.getUTCDate() !== +iso.slice(8)) throw new Error('วันที่ไม่ถูกต้อง');
+    date = Utilities.parseDate(iso, tz, 'yyyy-MM-dd');
+  } else if (needDate) throw new Error('กรุณาระบุวันที่');
+  if (!subject) throw new Error('กรุณาระบุเรื่อง');
+  return { iso: iso, date: date, ref: sbkStr_(body.ref, SBK_LEN.ref), from: sbkStr_(body.from, SBK_LEN.from), to: sbkStr_(body.to, SBK_LEN.to), subject: subject,
+    action: sbkStr_(body.action, SBK_LEN.action), note: sbkStr_(body.note, SBK_LEN.note) };
+}
+// เขียน B:H ของแถว · ข้อความเก็บเป็นข้อความ (@) · วันที่รูปแบบ d/m/yyyy · ช่องที่มีรายการให้เลือก (data validation) และค่าไม่อยู่ในรายการ = เอากติกาของช่องนั้นออกแล้วเขียนใหม่
+function sbkWrite_(sh, row, b, keepDate) {
+  const put = (col, val, fmt) => {
+    const c = sh.getRange(row, col);
+    try { c.setNumberFormat(fmt).setValue(val); } catch (e) {
+      if (!/validation|ตรวจสอบ/i.test(String(e && e.message))) throw e;
+      c.clearDataValidations(); c.setNumberFormat(fmt).setValue(val);
+    }
+  };
+  put(2, b.ref, '@');
+  if (b.date) put(3, b.date, 'd/m/yyyy'); else if (!keepDate) put(3, '', 'd/m/yyyy');
+  put(4, b.from, '@'); put(5, b.to, '@'); put(6, b.subject, '@'); put(7, b.action, '@'); put(8, b.note, '@');
+}
+// แท็บของปี (ไม่มี = สร้างใหม่ไว้หน้าสุด พร้อมแถวหัว)
+function sbkYearSheet_(book, year, create) {
+  let sh = book.getSheetByName(String(year));
+  if (!sh && create) {
+    sh = book.insertSheet(String(year), 0);
+    sh.getRange(1, 1, 1, SBK_HEAD.length).setValues([SBK_HEAD]).setFontWeight('bold');
+    try { sh.setFrozenRows(1); } catch (e) { /* ไม่จำเป็น */ }
+  }
+  if (!sh) throw new Error('ไม่พบแท็บปี ' + year + ' ในชีตทะเบียนหนังสือส่ง');
+  return sh;
+}
+function sbkCreate(body, token) {
+  const x = sbkUser_(token, true), book = sbkBook_(sbkUrl_(x.cfg)), tz = book.getSpreadsheetTimeZone() || 'Asia/Bangkok', b = sbkBody_(body, tz, true);
+  const year = +b.iso.slice(0, 4) + 543;
+  return sbkLocked_(() => {
+    const sh = sbkYearSheet_(book, year, true), s = sbkSheet_(sh);
+    if (!s.ok) throw new Error('หัวคอลัมน์ของแท็บ ' + year + ' ไม่ตรงกับทะเบียนหนังสือส่ง จึงไม่บันทึก (ต้องเป็น ' + SBK_HEAD.join(', ') + ')');
+    const counters = sbkCounters_(), key = book.getId() + '|' + year, no = sbkNext_(book.getId(), year, s.rows, counters);
+    const free = s.rows.filter(r => r.no === no && !r.data)[0];   // แถวที่มีเลขนี้เรียงไว้ล่วงหน้า
+    let row = free ? free.row : 0;
+    if (!row) {
+      const lastData = s.rows.filter(r => r.data || r.no).map(r => r.row).pop() || 1;
+      row = lastData + 1;
+      sh.getRange(row, 1).setValue(no);
+    }
+    sbkWrite_(sh, row, b, false);
+    if (counters[key] != null) { counters[key] = no + 1; propSave_(SBK_PROP, JSON.stringify(counters)); }
+    SpreadsheetApp.flush();
+    return sbkRecord_(year, { row: row, no: no, v: [no, b.ref, b.date, b.from, b.to, b.subject, b.action, b.note] }, tz, false);
+  });
+}
+// หาแถวของรายการ: ตามแถวที่หน้าเว็บส่งมา (ถ้าเลขยังตรง) ไม่งั้นแถวแรกที่มีเลขนั้นและมีข้อมูล
+function sbkFind_(rows, key) {
+  const no = sbkNo_(key && key.no), row = +(key && key.row) || 0;
+  return rows.filter(r => r.row === row && r.no === no && r.data)[0] || rows.filter(r => r.no === no && r.data)[0] || null;
+}
+function sbkUpdate(key, body, token) {
+  const x = sbkUser_(token, true), book = sbkBook_(sbkUrl_(x.cfg)), tz = book.getSpreadsheetTimeZone() || 'Asia/Bangkok';
+  const year = +(key && key.year);
+  if (!sbkYearOk_(year)) throw new Error('ไม่รู้จักปีของรายการ');
+  return sbkLocked_(() => {
+    const sh = sbkYearSheet_(book, year, false), s = sbkSheet_(sh);
+    if (!s.ok) throw new Error('หัวคอลัมน์ของแท็บ ' + year + ' ไม่ตรงกับทะเบียนหนังสือส่ง จึงไม่บันทึก');
+    const cur = sbkFind_(s.rows, key);
+    if (!cur) throw new Error('ไม่พบเลขที่ ' + (key && key.no) + ' ของปี ' + year + ' ในชีต (อาจถูกลบหรือแก้เลขไปแล้ว) · กดรีเฟรช');
+    const had = sbkDate_(cur.v[2], tz), b = sbkBody_(body, tz, !had.text);
+    const no = body && body.no !== undefined && body.no !== '' ? sbkNo_(body.no) : cur.no;
+    if (!no) throw new Error('เลขทะเบียนส่งต้องเป็นจำนวนเต็มบวก');
+    if (no !== cur.no) {
+      if (s.rows.some(r => r.no === no && r.data && r.row !== cur.row)) throw new Error('เลขที่ ' + no + ' ของปี ' + year + ' มีอยู่แล้ว');
+      const blank = s.rows.filter(r => r.no === no && !r.data && r.row !== cur.row)[0];
+      if (blank) sh.getRange(blank.row, 1).setValue(cur.no);   // สลับเลขกับแถวว่างที่เรียงเลขไว้ล่วงหน้า (เลขไม่ซ้ำ ไม่หาย)
+      sh.getRange(cur.row, 1).setValue(no);
+    }
+    sbkWrite_(sh, cur.row, b, !b.date);
+    SpreadsheetApp.flush();
+    return sbkRecord_(year, { row: cur.row, no: no, v: [no, b.ref, b.date || cur.v[2], b.from, b.to, b.subject, b.action, b.note] }, tz, false);
+  });
+}
+function sbkDelete(key, token) {
+  const x = sbkUser_(token, true), book = sbkBook_(sbkUrl_(x.cfg)), year = +(key && key.year);
+  if (!sbkYearOk_(year)) throw new Error('ไม่รู้จักปีของรายการ');
+  return sbkLocked_(() => {
+    const sh = sbkYearSheet_(book, year, false), s = sbkSheet_(sh), cur = s.ok ? sbkFind_(s.rows, key) : null;
+    if (!cur) throw new Error('ไม่พบเลขที่ ' + (key && key.no) + ' ของปี ' + year + ' ในชีต (อาจถูกลบไปแล้ว) · กดรีเฟรช');
+    sh.getRange(cur.row, 2, 1, SBK_HEAD.length - 1).clearContent();   // คงเลขไว้ในคอลัมน์แรก
+    SpreadsheetApp.flush();
+    return { year: year, no: cur.no };
+  });
+}
+function sbkSetNext(year, next, token) {
+  const x = sbkUser_(token, true), book = sbkBook_(sbkUrl_(x.cfg));
+  year = +year; next = sbkNo_(next);
+  if (!sbkYearOk_(year)) throw new Error('ปีไม่ถูกต้อง');
+  if (!next) throw new Error('กรุณาใส่จำนวนเต็มบวก');
+  return sbkLocked_(() => {
+    const counters = sbkCounters_();
+    counters[book.getId() + '|' + year] = next;
+    propSave_(SBK_PROP, JSON.stringify(counters));
+    const sh = book.getSheetByName(String(year)), s = sh ? sbkSheet_(sh) : { ok: true, rows: [] };
+    return { year: year, next: sbkNext_(book.getId(), year, s.ok ? s.rows : [], counters) };
+  });
+}
+// ตั้งค่า: ตรวจลิงก์ชีต (แอดมิน)
+function sbkCheck(s, token) {
+  const u = who_(token);
+  if (!u.isAdmin && !subAll_(u)) throw new Error('ตรวจชีตของทะเบียนหนังสือส่งได้เฉพาะแอดมิน');
+  const st = sbkRead_(sbkBook_(String((s && s.url) || '').trim())), years = Object.keys(st.nextNo).map(Number).sort((a, b) => b - a);
+  return { title: st.title, years: years.map(y => ({ year: y, n: st.records.filter(r => r.year === y).length, next: st.nextNo[y] })), bad: st.bad };
+}
+
 /* ---------- HDR Activity (17 พ.ย.): ช่องกรอกหลังช่องค้นหา HN ในแถบนัดคิวใส่แร่ · อ่าน/บันทึกในชีตของเว็บ HDR Activity ----------
  * ตั้งค่า → นัดคิวใส่แร่ → HDR Activity (config.bq.hdr = { on, url, sheet, tol }) · ข้อมูลอยู่ที่ชีตของเว็บนั้นที่เดียว
  * แท็บ Record: A วันที่ · C Calculation (สูตร) · D %Diff (สูตร) · E Planning · F MP · G t (สูตร) · J2 Serial · K2:K5 Isotope, Acceptance date, A0, T½ · K6 e
@@ -5617,7 +5822,7 @@ function txsOut_(ss, cfg, w, need, have, out) {
   out.txs = txsData_(ss, cfg, w, lack, refer);
 }
 // การตั้งค่าที่ส่งให้หน่วยงานภายนอก: ตัดรายชื่อแอดมิน บัญชี LPCH / อีเมลของบุคลากร รหัสชีตและโฟลเดอร์ของระบบอื่น และการตั้งค่า P4P / งานของแผนก
-const TXS_CFG_DROP = ['admins', 'subAdmins', 'brachySync', 'tdfSync', 'tdfApp', 'roP4p', 'reg', 'appt', 'dq', 'jobs', 'vac', 'teams', 'crew', 'positions', 'guarantee', 'rate', 'carry', 'acts', 'order', 'machine'];
+const TXS_CFG_DROP = ['admins', 'subAdmins', 'brachySync', 'tdfSync', 'tdfApp', 'roP4p', 'reg', 'appt', 'dq', 'jobs', 'vac', 'teams', 'crew', 'positions', 'guarantee', 'rate', 'carry', 'acts', 'order', 'machine', 'sendBook'];
 function txsCfgOut_(c) {
   if (!c || typeof c !== 'object') return c;
   const out = {};
@@ -6365,7 +6570,7 @@ const practiceOn_ = () => String(propRead_(PRACTICE_ON) || '') === '1';
 const PRACTICE_NO = ['doGet', 'onOpen', 'openApp', 'practiceCall', 'importLegacy', 'txsPdf', 'bqImportCheck', 'bqImport', 'vacImportCheck', 'vacImport',
   'regDriveCheck', 'regDrivePull', 'regDriveTick', 'tdfxList', 'tdfxSave', 'tdfxRecheck', 'tdfxSavePdf', 'tdfxWithdraw', 'tdfxCheck', 'tdfCheck', 'tdfPull',
   'hdrGet', 'hdrAdd', 'brachyCheck', 'brachyPull', 'brachyTick', 'spqCheck', 'spqPull', 'setPin', 'setupLpch', 'snapWarm', 'snapTick',
-  'backupDaily', 'backupInstall', 'backupStatus', 'backupSave', 'backupNow'];
+  'backupDaily', 'backupInstall', 'backupStatus', 'backupSave', 'backupNow', 'sbkState', 'sbkCreate', 'sbkUpdate', 'sbkDelete', 'sbkSetNext', 'sbkCheck'];
 const PRACTICE_MSG = 'ใช้ในโหมดฝึกใช้ไม่ได้ (เชื่อมระบบภายนอก / สำรองข้อมูล / ตั้งรหัส PIN) · ออกจากโหมดฝึกใช้แล้วทำในระบบจริง';
 function practiceCall(fn, args) {
   fn = String(fn || '');
