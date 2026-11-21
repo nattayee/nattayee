@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --safe:#16a34a; --help:#b91c1c; --miss:#ea580c; --gray:#64748b; --bg:#f1f5f9; --card:#fff; --text:#0f172a; --line:#e2e8f0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sarabun","Noto Sans Thai",sans-serif; background:var(--bg); color:var(--text); font-size:16px; }
+  .hidden { display:none !important; }
+  header { background:#0f172a; color:#fff; padding:12px 16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:18px; }
+  #evInfo { font-size:14px; opacity:.9; }
+  main { padding:16px; max-width:1100px; margin:0 auto; }
+  button, select, input { font:inherit; }
+  .b { border:0; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer; }
+  .b.red { background:#dc2626; color:#fff; } .b.green { background:var(--safe); color:#fff; }
+  .b.gray { background:#e2e8f0; color:var(--text); } .b.dark { background:#334155; color:#fff; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .tile { background:var(--card); border-radius:14px; padding:14px; border:3px solid transparent; cursor:pointer; text-align:left; }
+  .tile .n { font-size:40px; font-weight:800; line-height:1.1; }
+  .tile .l { font-size:14px; color:var(--gray); }
+  .tile.active { border-color:#0f172a; }
+  .t-MISSING .n { color:var(--miss); } .t-HELP .n { color:var(--help); } .t-SAFE .n { color:var(--safe); }
+  .t-AWAY .n, .t-NOT_IN .n, .t-ALL .n { color:var(--gray); }
+  .bar { height:14px; background:#e2e8f0; border-radius:8px; overflow:hidden; margin:14px 0 4px; }
+  .bar div { height:100%; background:var(--safe); transition:width .4s; }
+  .note { font-size:13px; color:var(--gray); }
+  .tools { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 10px; }
+  .tools input, .tools select { padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .tools input { flex:1; min-width:180px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; }
+  th, td { padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#f8fafc; font-size:13px; color:var(--gray); }
+  tr.row { cursor:pointer; } tr.row:hover { background:#f8fafc; }
+  .badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:13px; font-weight:700; color:#fff; white-space:nowrap; }
+  .s-SAFE { background:var(--safe); } .s-HELP { background:var(--help); } .s-MISSING { background:var(--miss); }
+  .s-AWAY, .s-NOT_IN { background:var(--gray); }
+  small { color:var(--gray); }
+  .points { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .points span { background:#fff; border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:13px; }
+  .center { max-width:360px; margin:12vh auto; background:#fff; padding:24px; border-radius:16px; text-align:center; }
+  .center input { width:100%; font-size:28px; text-align:center; padding:12px; border:2px solid var(--line); border-radius:12px; margin:12px 0; letter-spacing:6px; }
+  dialog { border:0; border-radius:16px; padding:20px; width:min(92vw,380px); }
+  dialog .b { width:100%; margin-top:8px; padding:14px; }
+  .err { color:#b91c1c; font-size:14px; min-height:20px; }
+  @media (max-width:640px) { .hide-sm { display:none; } th, td { padding:8px 6px; } }
+  @media print { header button, .tools, .tiles, .bar, .points { display:none !important; } body { background:#fff; } }
+</style>
+</head>
+<body>
+
+<div id="vPin" class="center">
+  <h2 style="margin:0">🔐 Dashboard ผู้ควบคุม</h2>
+  <input id="pin" type="password" inputmode="numeric" placeholder="PIN" autofocus>
+  <button class="b dark" style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
+  <div class="err" id="pinErr"></div>
+</div>
+
+<div id="vMain" class="hidden">
+  <header>
+    <div>
+      <h1>🚨 สถานะการอพยพ</h1>
+      <div id="evInfo">กำลังโหลด…</div>
+    </div>
+    <div>
+      <button id="btnStart" class="b red hidden" onclick="$('dlgStart').showModal()">ประกาศเหตุฉุกเฉิน</button>
+      <button id="btnClose" class="b gray hidden" onclick="closeEv()">ปิดเหตุการณ์</button>
+      <button class="b gray" onclick="window.print()">พิมพ์</button>
+    </div>
+  </header>
+  <main>
+    <div class="tiles" id="tiles"></div>
+    <div class="bar"><div id="barFill" style="width:0"></div></div>
+    <div class="note" id="barText"></div>
+    <div class="note" id="scanNote"></div>
+    <div class="points" id="points"></div>
+
+    <div class="tools">
+      <input id="search" type="search" placeholder="ค้นหาชื่อ / รหัส / เบอร์">
+      <select id="dept"><option value="">ทุกแผนก</option></select>
+      <select id="floor"><option value="">ทุกชั้น/อาคาร</option></select>
+    </div>
+    <div class="err" id="err"></div>
+    <table>
+      <thead><tr><th>สถานะ</th><th>ชื่อ</th><th class="hide-sm">แผนก / ชั้น</th><th>เบอร์</th><th class="hide-sm">รายละเอียด</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p class="note" id="updated"></p>
+  </main>
+</div>
+
+<dialog id="dlgStart">
+  <h3 style="margin-top:0">ประกาศเหตุฉุกเฉิน</h3>
+  <select id="evType" style="width:100%;padding:12px;border-radius:10px">
+    <option>ไฟไหม้</option><option>แผ่นดินไหว</option><option>สารเคมีรั่วไหล</option>
+    <option>ซ้อมอพยพหนีไฟ</option><option>อื่นๆ</option>
+  </select>
+  <button class="b red" onclick="startEv()">ยืนยัน: เริ่มนับยอดใหม่</button>
+  <button class="b gray" onclick="$('dlgStart').close()">ยกเลิก</button>
+</dialog>
+
+<dialog id="dlgAct">
+  <h3 style="margin:0" id="actName"></h3>
+  <small id="actInfo"></small>
+  <button class="b green" onclick="act('SAFE')">✅ ยืนยันว่าปลอดภัย</button>
+  <button class="b red" onclick="act('HELP')">🆘 ต้องการความช่วยเหลือ</button>
+  <button class="b dark" onclick="act('AWAY')">🏠 ไม่อยู่ในพื้นที่ / ลา / ออกไปข้างนอก</button>
+  <button class="b gray" onclick="$('dlgAct').close()">ปิด</button>
+</dialog>
+
+<script>
+var PIN = '';
+var data = null;
+var filter = 'MISSING';
+var LABEL = { MISSING: 'ยังไม่เช็คอิน', HELP: 'ขอความช่วยเหลือ', SAFE: 'ปลอดภัย', AWAY: 'ไม่อยู่ในพื้นที่', NOT_IN: 'ไม่ได้สแกนเข้างาน', ALL: 'ทั้งหมด' };
+var ORDER = { HELP: 0, MISSING: 1, SAFE: 2, AWAY: 3, NOT_IN: 4 };
+var actTarget = null;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function call(fn, args, ok) {
+  var r = google.script.run.withSuccessHandler(function (x) { $('err').textContent = ''; ok && ok(x); })
+    .withFailureHandler(function (e) { $('err').textContent = '⚠ ' + (e.message || e); });
+  r[fn].apply(r, args);
+}
+
+/* ---------- เข้าสู่ระบบ ---------- */
+try { PIN = sessionStorage.getItem('pin') || ''; } catch (e) {}
+if (PIN) login(PIN);
+$('pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') login(); });
+function login(saved) {
+  var pin = saved || $('pin').value;
+  google.script.run
+    .withSuccessHandler(function (d) {
+      PIN = pin; try { sessionStorage.setItem('pin', pin); } catch (e) {}
+      $('vPin').classList.add('hidden'); $('vMain').classList.remove('hidden');
+      render(d); setInterval(refresh, 5000);
+    })
+    .withFailureHandler(function (e) { $('pinErr').textContent = e.message; try { sessionStorage.removeItem('pin'); } catch (x) {} })
+    .getDashboard(pin);
+}
+var loading = false;
+function refresh() {
+  if (loading || document.hidden) return;
+  loading = true;
+  google.script.run
+    .withSuccessHandler(function (d) { loading = false; $('err').textContent = ''; render(d); })
+    .withFailureHandler(function (e) { loading = false; $('err').textContent = '⚠ อัปเดตไม่สำเร็จ: ' + (e.message || e); })
+    .getDashboard(PIN);
+}
+
+/* ---------- แสดงผล ---------- */
+function render(d) {
+  data = d;
+  var ev = d.event;
+  $('evInfo').textContent = ev
+    ? (ev.active ? '🔴 กำลังเกิดเหตุ: ' : '⚪ ปิดแล้ว: ') + ev.type + ' · เริ่ม ' + ev.start + (ev.end ? ' · ปิด ' + ev.end : '')
+    : 'ยังไม่มีเหตุการณ์';
+  $('btnStart').classList.toggle('hidden', !!(ev && ev.active));
+  $('btnClose').classList.toggle('hidden', !(ev && ev.active));
+
+  var c = d.count;
+  var tiles = ['MISSING', 'HELP', 'SAFE', 'AWAY'];
+  if (d.scanEnabled) tiles.push('NOT_IN');
+  tiles.push('ALL');
+  $('tiles').innerHTML = tiles.map(function (k) {
+    var n = k === 'ALL' ? d.list.length : c[k];
+    return '<button class="tile t-' + k + (filter === k ? ' active' : '') + '" data-k="' + k + '"><div class="n">' + n + '</div><div class="l">' + LABEL[k] + '</div></button>';
+  }).join('');
+
+  var done = c.SAFE + c.HELP;
+  var pct = d.expected ? Math.round(done * 100 / d.expected) : 0;
+  $('barFill').style.width = pct + '%';
+  $('barText').textContent = 'นับยอดแล้ว ' + done + ' / ' + d.expected + ' คนที่อยู่ในอาคาร (' + pct + '%)';
+  $('scanNote').textContent = 'ℹ ' + d.scanNote;
+
+  var per = {};
+  d.list.forEach(function (x) { if (x.state === 'SAFE' || x.state === 'HELP') per[x.point || '-'] = (per[x.point || '-'] || 0) + 1; });
+  $('points').innerHTML = Object.keys(per).sort().map(function (p) {
+    var pt = d.points.filter(function (q) { return q.code === p; })[0];
+    return '<span>📍 ' + esc(pt ? pt.code + ' ' + pt.name : p) + ': <b>' + per[p] + '</b></span>';
+  }).join('');
+
+  fillSelect('dept', d.list.map(function (x) { return x.dept; }));
+  fillSelect('floor', d.list.map(function (x) { return x.floor; }));
+  renderTable();
+  $('updated').textContent = 'อัปเดตล่าสุด ' + d.serverTime + ' (รีเฟรชอัตโนมัติทุก 5 วินาที)';
+}
+
+function fillSelect(id, values) {
+  var sel = $(id), cur = sel.value;
+  var uniq = values.filter(function (v, i, a) { return v && a.indexOf(v) === i; }).sort();
+  var first = sel.options[0].outerHTML;
+  sel.innerHTML = first + uniq.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join('');
+  sel.value = cur;
+}
+
+function renderTable() {
+  if (!data) return;
+  var q = $('search').value.trim().toLowerCase(), dept = $('dept').value, floor = $('floor').value;
+  var rows = data.list.filter(function (x) {
+    if (filter !== 'ALL' && x.state !== filter) return false;
+    if (dept && x.dept !== dept) return false;
+    if (floor && x.floor !== floor) return false;
+    if (q && (x.name + ' ' + x.id + ' ' + x.phone).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).sort(function (a, b) { return ORDER[a.state] - ORDER[b.state] || a.dept.localeCompare(b.dept, 'th') || a.name.localeCompare(b.name, 'th'); });
+
+  $('tbody').innerHTML = rows.length ? rows.map(function (x) {
+    var detail = [];
+    if (x.time) detail.push(x.time + (x.point ? ' @' + x.point : '') + (x.by && x.by !== 'SELF' ? ' (' + (x.by === 'BUDDY' ? 'เพื่อนเช็คอินให้' : 'เจ้าหน้าที่') + ')' : ''));
+    if (x.note) detail.push('📝 ' + x.note);
+    if (x.scanTime) detail.push('สแกนเข้า ' + x.scanTime);
+    return '<tr class="row" data-id="' + esc(x.id) + '"><td><span class="badge s-' + x.state + '">' + LABEL[x.state] + '</span></td>' +
+      '<td><b>' + esc(x.name) + '</b><br><small>' + esc(x.id) + '</small></td>' +
+      '<td class="hide-sm">' + esc(x.dept) + '<br><small>' + esc(x.floor) + '</small></td>' +
+      '<td>' + (x.phone ? '<a href="tel:' + esc(x.phone) + '" onclick="event.stopPropagation()">' + esc(x.phone) + '</a>' : '') + '</td>' +
+      '<td class="hide-sm"><small>' + esc(detail.join(' · ')) + '</small></td></tr>';
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px">' +
+    (filter === 'MISSING' ? '🎉 ทุกคนที่อยู่ในอาคารเช็คอินครบแล้ว' : 'ไม่มีรายการ') + '</td></tr>';
+}
+
+$('tiles').addEventListener('click', function (e) {
+  var t = e.target.closest('.tile'); if (!t) return;
+  filter = t.getAttribute('data-k'); render(data);
+});
+['search', 'dept', 'floor'].forEach(function (id) { $(id).addEventListener('input', renderTable); });
+
+$('tbody').addEventListener('click', function (e) {
+  var tr = e.target.closest('tr.row'); if (!tr) return;
+  var id = tr.getAttribute('data-id');
+  actTarget = data.list.filter(function (x) { return x.id === id; })[0];
+  $('actName').textContent = actTarget.name;
+  $('actInfo').textContent = actTarget.id + ' · ' + actTarget.dept + ' · สถานะ: ' + LABEL[actTarget.state];
+  $('dlgAct').showModal();
+});
+
+/* ---------- การกระทำ ---------- */
+function act(status) {
+  $('dlgAct').close();
+  call('staffCheckIn', [PIN, actTarget.id, status, 'STAFF', ''], refresh);
+}
+function startEv() {
+  $('dlgStart').close();
+  call('startEvent', [PIN, $('evType').value, ''], function () { filter = 'MISSING'; refresh(); });
+}
+function closeEv() {
+  if (!confirm('ปิดเหตุการณ์นี้? ข้อมูลจะยังเก็บไว้ในชีต CheckIns')) return;
+  call('closeEvent', [PIN], refresh);
+}
+</script>
+</body>
+</html>

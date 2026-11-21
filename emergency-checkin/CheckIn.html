@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --safe:#16a34a; --help:#dc2626; --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sarabun","Noto Sans Thai",sans-serif; background:var(--bg); color:var(--text); font-size:18px; }
+  header { background:#b91c1c; color:#fff; padding:14px 16px; }
+  header h1 { margin:0; font-size:20px; }
+  header small { opacity:.9; }
+  main { padding:16px; max-width:520px; margin:0 auto; }
+  .hidden { display:none !important; }
+  input[type=search], textarea, select { width:100%; font-size:20px; padding:14px; border:2px solid var(--line); border-radius:12px; background:#fff; }
+  textarea { font-size:16px; }
+  .list { margin-top:10px; }
+  .item { display:block; width:100%; text-align:left; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:8px; font-size:18px; }
+  .item small { color:var(--muted); display:block; font-size:14px; }
+  .btn { display:block; width:100%; border:0; border-radius:16px; padding:22px; font-size:22px; font-weight:700; color:#fff; margin-top:12px; }
+  .btn.safe { background:var(--safe); }
+  .btn.help { background:var(--help); }
+  .btn.ghost { background:transparent; color:var(--muted); border:2px solid var(--line); font-size:17px; padding:14px; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; text-align:center; }
+  .who { font-size:24px; font-weight:700; margin:6px 0; }
+  .muted { color:var(--muted); font-size:15px; }
+  .big-ok { font-size:72px; line-height:1; }
+  .banner { padding:10px 14px; border-radius:10px; margin-bottom:12px; font-size:15px; }
+  .banner.warn { background:#fef3c7; color:#92400e; }
+  .banner.err { background:#fee2e2; color:#991b1b; }
+  label { font-size:15px; color:var(--muted); display:block; margin:14px 0 6px; }
+</style>
+</head>
+<body data-point="<?= point ?>">
+<header>
+  <h1>🚨 เช็คอินฉุกเฉิน</h1>
+  <small id="pointLabel">กำลังโหลด…</small>
+</header>
+<main>
+  <div id="netBanner" class="banner warn hidden"></div>
+
+  <!-- 1) จำเครื่องนี้ได้: กดปุ่มเดียว -->
+  <section id="vRemember" class="hidden">
+    <div class="card">
+      <div class="muted">คุณคือ</div>
+      <div class="who" id="rememberName"></div>
+      <div class="muted" id="rememberDept"></div>
+    </div>
+    <button class="btn safe" onclick="submit(me, 'SAFE', 'SELF')">✅ ฉันปลอดภัย</button>
+    <button class="btn help" onclick="showConfirm(me, 'SELF', true)">🆘 ต้องการความช่วยเหลือ</button>
+    <button class="btn ghost" onclick="forgetMe()">ไม่ใช่ฉัน / เปลี่ยนชื่อ</button>
+  </section>
+
+  <!-- 2) ค้นหาชื่อ -->
+  <section id="vSearch" class="hidden">
+    <div id="buddyBanner" class="banner warn hidden">กำลังเช็คอิน <b>แทนเพื่อน</b> ที่ไม่มีมือถือ</div>
+    <input id="q" type="search" placeholder="พิมพ์ชื่อ หรือ รหัสพนักงาน" autocomplete="off">
+    <div id="results" class="list"></div>
+    <button id="cancelBuddy" class="btn ghost hidden" onclick="backHome()">ยกเลิก</button>
+  </section>
+
+  <!-- 3) ยืนยัน -->
+  <section id="vConfirm" class="hidden">
+    <div class="card">
+      <div class="muted" id="confirmLabel">ยืนยันชื่อ</div>
+      <div class="who" id="confirmName"></div>
+      <div class="muted" id="confirmDept"></div>
+    </div>
+    <div id="helpBox" class="hidden">
+      <label for="note">ต้องการความช่วยเหลือเรื่องอะไร (ไม่บังคับ)</label>
+      <textarea id="note" rows="2" placeholder="เช่น บาดเจ็บที่ขา, สำลักควัน"></textarea>
+      <button class="btn help" onclick="submit(selected, 'HELP', mode)">🆘 ส่งขอความช่วยเหลือ</button>
+    </div>
+    <div id="choiceBox">
+      <button class="btn safe" onclick="submit(selected, 'SAFE', mode)">✅ ปลอดภัย</button>
+      <button class="btn help" onclick="showHelp()">🆘 ต้องการความช่วยเหลือ</button>
+    </div>
+    <button class="btn ghost" onclick="backHome()">ย้อนกลับ</button>
+  </section>
+
+  <!-- 4) สำเร็จ -->
+  <section id="vDone" class="hidden">
+    <div class="card">
+      <div class="big-ok" id="doneIcon">✅</div>
+      <div class="who" id="doneName"></div>
+      <div id="doneMsg"></div>
+      <div class="muted" id="doneTime"></div>
+    </div>
+    <button class="btn ghost" onclick="startBuddy()">👥 เช็คอินแทนเพื่อนที่ไม่มีมือถือ</button>
+    <button class="btn ghost" onclick="backHome()">กลับหน้าแรก</button>
+  </section>
+</main>
+
+<script>
+var POINT = document.body.getAttribute('data-point') || '';
+var employees = [];   // [id, name, dept]
+var me = null;        // พนักงานที่จำไว้ในเครื่องนี้
+var selected = null;
+var mode = 'SELF';    // SELF | BUDDY
+
+function $(id) { return document.getElementById(id); }
+function show(id) {
+  ['vRemember', 'vSearch', 'vConfirm', 'vDone'].forEach(function (v) { $(v).classList.toggle('hidden', v !== id); });
+  window.scrollTo(0, 0);
+}
+function store(k, v) { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+// คิวรอส่ง: เก็บในหน่วยความจำเสมอ และสำรองลง localStorage (ถ้าเบราว์เซอร์อนุญาต)
+var pending = load('pending') || [];
+function savePending() { store('pending', pending); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+/* ---------- โหลดข้อมูล ---------- */
+function init(data) {
+  employees = data.employees;
+  store('emp_cache', data);
+  var p = data.points.filter(function (x) { return x.code === POINT; })[0];
+  $('pointLabel').textContent = p ? ('จุดรวมพล ' + p.code + ' : ' + p.name) : (POINT ? 'จุดรวมพล ' + POINT : 'ไม่ระบุจุดรวมพล');
+  var saved = load('me');
+  me = saved && employees.filter(function (e) { return e[0] === saved[0]; })[0];
+  backHome();
+  flush(); // ส่งข้อมูลที่ค้างจากครั้งก่อน (ถ้ามี)
+}
+
+google.script.run
+  .withSuccessHandler(init)
+  .withFailureHandler(function () {
+    var cached = load('emp_cache');
+    if (cached) { init(cached); banner('ออฟไลน์: ใช้รายชื่อที่เคยโหลดไว้ ข้อมูลจะส่งเมื่อมีสัญญาณ'); }
+    else { $('pointLabel').textContent = 'โหลดข้อมูลไม่สำเร็จ กรุณารีเฟรช หรือแจ้งเจ้าหน้าที่ที่จุดรวมพล'; }
+  })
+  .getCheckInData();
+
+/* ---------- หน้าจอ ---------- */
+function backHome() {
+  mode = 'SELF'; selected = null;
+  $('buddyBanner').classList.add('hidden');
+  $('cancelBuddy').classList.add('hidden');
+  if (me) {
+    $('rememberName').textContent = me[1];
+    $('rememberDept').textContent = me[2] + ' · ' + me[0];
+    show('vRemember');
+  } else {
+    $('q').value = ''; render('');
+    show('vSearch'); $('q').focus();
+  }
+}
+function forgetMe() { me = null; store('me'); backHome(); }
+function startBuddy() {
+  mode = 'BUDDY'; $('q').value = ''; render('');
+  $('buddyBanner').classList.remove('hidden');
+  $('cancelBuddy').classList.remove('hidden');
+  show('vSearch'); $('q').focus();
+}
+
+$('q').addEventListener('input', function () { render(this.value); });
+function render(q) {
+  q = q.trim().toLowerCase();
+  if (!q) { $('results').innerHTML = '<p class="muted">พิมพ์อย่างน้อย 1 ตัวอักษร</p>'; return; }
+  var hits = employees.filter(function (e) {
+    return e[0].toLowerCase().indexOf(q) >= 0 || e[1].toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 20);
+  $('results').innerHTML = hits.length ? hits.map(function (e, i) {
+    return '<button class="item" data-i="' + employees.indexOf(e) + '">' + esc(e[1]) +
+      '<small>' + esc(e[0]) + ' · ' + esc(e[2]) + '</small></button>';
+  }).join('') : '<p class="muted">ไม่พบชื่อ ลองพิมพ์รหัสพนักงาน หรือแจ้งเจ้าหน้าที่</p>';
+}
+$('results').addEventListener('click', function (ev) {
+  var b = ev.target.closest('.item'); if (!b) return;
+  showConfirm(employees[+b.getAttribute('data-i')], mode, false);
+});
+
+function showConfirm(emp, m, help) {
+  selected = emp; mode = m;
+  $('confirmLabel').textContent = m === 'BUDDY' ? 'เช็คอินแทน' : 'ยืนยันชื่อ';
+  $('confirmName').textContent = emp[1];
+  $('confirmDept').textContent = emp[2] + ' · ' + emp[0];
+  $('note').value = '';
+  $('helpBox').classList.toggle('hidden', !help);
+  $('choiceBox').classList.toggle('hidden', help);
+  show('vConfirm');
+}
+function showHelp() { $('helpBox').classList.remove('hidden'); $('choiceBox').classList.add('hidden'); $('note').focus(); }
+
+/* ---------- ส่งข้อมูล (มีคิวสำรองกรณีเน็ตหลุด / เซิร์ฟเวอร์ยุ่ง) ---------- */
+function submit(emp, status, by) {
+  var payload = { empId: emp[0], status: status, point: POINT, by: by, note: status === 'HELP' ? $('note').value : '' };
+  if (by === 'SELF') { me = emp; store('me', emp); }
+  pending.push(payload); savePending();
+  $('doneIcon').textContent = status === 'HELP' ? '🆘' : '✅';
+  $('doneName').textContent = emp[1];
+  $('doneMsg').textContent = status === 'HELP' ? 'ส่งคำขอความช่วยเหลือแล้ว อยู่ในที่ปลอดภัย เจ้าหน้าที่กำลังไป' : 'บันทึกว่าปลอดภัยแล้ว';
+  $('doneTime').textContent = 'กำลังส่งข้อมูล…';
+  show('vDone');
+  flush();
+}
+
+var flushing = false, retryDelay = 2000;
+function flush() {
+  if (flushing || !pending.length) return;
+  flushing = true;
+  google.script.run
+    .withSuccessHandler(function (res) {
+      flushing = false; retryDelay = 2000;
+      pending.shift(); savePending();
+      $('doneTime').textContent = '✔ ส่งสำเร็จ ' + res.time;
+      banner(pending.length ? 'รอส่งอีก ' + pending.length + ' รายการ' : '');
+      if (pending.length) flush();
+    })
+    .withFailureHandler(function (err) {
+      flushing = false;
+      var msg = (err && err.message) || '';
+      if (/ไม่พบรหัสพนักงาน/.test(msg)) {   // ข้อมูลผิด ไม่ต้องลองซ้ำ
+        pending.shift(); savePending();
+        banner(msg, true); return;
+      }
+      $('doneTime').textContent = 'ยังส่งไม่สำเร็จ ระบบจะลองใหม่อัตโนมัติ (ห้ามปิดหน้านี้)';
+      banner('สัญญาณไม่ดีหรือระบบมีผู้ใช้มาก กำลังลองส่งใหม่…');
+      setTimeout(flush, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 20000);
+    })
+    .checkIn(pending[0]);
+}
+setInterval(flush, 15000);
+window.addEventListener('online', flush);
+
+function banner(msg, isErr) {
+  var b = $('netBanner');
+  b.textContent = msg || '';
+  b.className = 'banner ' + (isErr ? 'err' : 'warn') + (msg ? '' : ' hidden');
+}
+</script>
+</body>
+</html>
