@@ -571,6 +571,8 @@ dialog.ms-dlg{width:min(600px,calc(100vw - 20px))}
 .mst-pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--sunken);color:var(--muted)}
 .mst-pill.ok{color:var(--ok)}.mst-pill.info{color:var(--viz-1)}.mst-pill.warn{color:var(--warn)}.mst-pill.bad{color:var(--late);background:var(--late-soft)}
 .mst-set td input,.mst-set td select{width:100%;min-width:70px}
+.mst-catk td textarea{width:100%;min-width:240px;padding:6px 9px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:13px;line-height:1.45;resize:vertical}
+.mst-catk td:first-child{white-space:nowrap;vertical-align:top;padding-top:10px}
 @media (max-width:700px){.ms-t2{display:none}.mstat{justify-content:flex-start;margin-left:0}.ms-grid{grid-template-columns:minmax(0,1fr)}}
 .ap-dupwhy{color:var(--late);font-weight:600}
 .ap-dupbox>summary{color:var(--late);font-weight:600}
@@ -7005,6 +7007,33 @@ const MST_KINDS = [['linac', 'เครื่องฉาย'], ['ct', 'CT'], ['
 const MST_COLOR = '#475569';
 const mstColor = () => MST_COLOR;
 const MST_CATS = ['MLC', 'CBCT / XVI / EPID', 'Gantry / Collimator', 'Couch', 'Beam / Dose rate', 'Chiller / ระบบน้ำ', 'เครือข่าย / Mosaiq', 'ไฟฟ้า', 'อื่นๆ'];
+// 21 พ.ย.: หมวดอาการตามชนิดเครื่อง — CT-Sim / TPS / HDR ไม่ใช่เครื่องฉาย จึงมีรายการของตัวเอง (เครื่องฉาย = MST_CATS / MST_ICATS เดิม) · แก้ได้ที่ ตั้งค่า → สถานะเครื่อง
+// CT-Sim: ส่วนประกอบของเครื่อง (หลอด · gantry / detector · เตียง · reconstruction) + สิ่งที่ใช้กับงานจำลองการฉาย (เลเซอร์ · 4D-CT · injector) + ปัจจัยภายนอก (ส่งภาพ · ปรับอากาศ · ไฟฟ้า)
+// TPS: license · server / ฐานข้อมูล · เครื่องลูกข่าย · โปรแกรม · การคำนวณ · รับส่งข้อมูล · เครือข่าย · สำรองข้อมูล · อัปเดต
+const MST_CATS_K = {
+  ct: ['หลอดเอกซเรย์ / Generator', 'Gantry / Detector', 'เตียง (Couch)', 'เลเซอร์จัดตำแหน่ง', 'คุณภาพภาพ / Artifact / Calibration', 'Console / Reconstruction', '4D-CT / Respiratory gating', 'เครื่องฉีดสารทึบรังสี (Injector)', 'ส่งภาพ / DICOM / เครือข่าย', 'ระบบปรับอากาศ / Cooling', 'ไฟฟ้า / UPS', 'อื่นๆ'],
+  tps: ['License / Dongle', 'Server / ฐานข้อมูล', 'เครื่อง Workstation / จอ', 'โปรแกรมค้าง / ปิดเอง', 'คำนวณ Dose / Optimization', 'Import / Export (DICOM · R&V)', 'เครือข่าย', 'Storage / Backup', 'อัปเดตซอฟต์แวร์ / Patch', 'ไฟฟ้า / UPS', 'อื่นๆ'],
+  hdr: ['Source / Source cable', 'Check cable / Dummy', 'Channel / Transfer tube', 'Applicator', 'Indexer / Drive', 'Treatment console', 'Door interlock / Emergency stop', 'Radiation monitor', 'ส่งแผน / เครือข่าย', 'ไฟฟ้า / UPS / Battery', 'อื่นๆ'],
+  other: ['Hardware', 'Software', 'เครือข่าย', 'ไฟฟ้า', 'อื่นๆ'],
+};
+const MST_ICATS_K = {
+  ct: ['Tube arc / Scan abort', 'Tube ร้อน (รอ cooling)', 'Console ค้าง / Restart', 'เตียงไม่เคลื่อน', 'เลเซอร์ไม่ติด / ไม่ขยับ', 'Reconstruction ค้าง', 'Injector error', 'ส่งภาพไม่ได้', 'อื่นๆ (เพิ่มในหมายเหตุ)'],
+  tps: ['โปรแกรมค้าง / ปิดเอง', 'License หลุด', 'คำนวณ Dose ไม่ผ่าน', 'Server ช้า / เชื่อมต่อไม่ได้', 'Import / Export ไม่ได้', 'เครื่อง Restart', 'อื่นๆ (เพิ่มในหมายเหตุ)'],
+  hdr: ['Error code (ระบุในหมายเหตุ)', 'Check cable ไม่ผ่าน', 'Channel / Applicator ติดขัด', 'Door interlock', 'Console ค้าง / Restart', 'อื่นๆ (เพิ่มในหมายเหตุ)'],
+  other: ['ค้าง / Restart', 'อื่นๆ (เพิ่มในหมายเหตุ)'],
+};
+const MST_CAT_KINDS = ['ct', 'hdr', 'tps', 'other'];   // ชนิดที่มีรายการของตัวเอง เรียงตาม MST_KINDS (linac ใช้ cats / icats)
+// คำอธิบายสถานะที่ต่างจากเครื่องฉาย
+const MST_HINTS_K = {
+  ct: { qc: 'Warm-up หลอด / Air calibration / Daily QC (ยังไม่เริ่มใช้งาน)', part: 'ใช้ได้บางอย่าง เช่น ฉีด contrast / 4D-CT / เลเซอร์ ใช้ไม่ได้', sys: 'ไฟดับ / เครือข่าย / ระบบปรับอากาศล่ม (เครื่องไม่เสีย)' },
+  tps: { qc: 'ตรวจระบบ / ทดสอบหลังเปิดเครื่อง (ยังไม่เริ่มใช้งาน)', part: 'ใช้ได้บางอย่าง เช่น ใช้ได้บางเครื่อง / บางโมดูล / คำนวณช้า', test: 'แก้ไขเสร็จ รอ MP ตรวจสอบก่อนใช้วางแผนจริง', sys: 'ไฟดับ / เครือข่าย / Server กลางล่ม (โปรแกรมไม่เสีย)' },
+  hdr: { qc: 'Daily QC / ตรวจตำแหน่ง source (ยังไม่เริ่มใช้งาน)', part: 'ใช้ได้บางอย่าง เช่น ใช้ได้บาง channel', sys: 'ไฟดับ / เครือข่ายล่ม (เครื่องไม่เสีย)' },
+  other: { part: 'ใช้ได้บางอย่าง' },
+};
+const mstHint = (k, kind) => (MST_HINTS_K[kind] || {})[k] || MST[k].hint;
+const mstCatList = (v, max) => [...new Set((Array.isArray(v) ? v : []).map(x => str(x).replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean))].slice(0, max);
+// หมวดอาการที่ให้เลือกของเครื่องชนิดนั้น · ev = หมวดของ Interrupt
+const mstCatsOf = (kind, ev, mc) => { mc = mc || state.config.machine; const k = MST_CAT_KINDS.includes(kind) ? kind : ''; return (k ? ((ev ? mc.icatsK : mc.catsK) || {})[k] : ev ? mc.icats : mc.cats) || []; };
 // เครื่องที่ติดตาม: ห้องฉาย + เครื่อง CT ตามตั้งค่า + HDR (เพิ่มเครื่องอื่นได้) · ตัวย่อ = อักษรแรกของชื่อห้อง (ซ้ำกัน = เพิ่มตัวอักษร) · CT หลายเครื่อง = CT1, CT2
 function normMachine(m, cfg) {
   m = m && typeof m === 'object' ? m : {};
@@ -7028,7 +7057,10 @@ function normMachine(m, cfg) {
   return { list, roles: Array.isArray(m.roles) ? [...new Set(m.roles.map(str).filter(r => ROLE_RE.test(r)))] : ['RTT', 'MP'],
     hours: { from: hm(m.hours && m.hours.from) || '08:00', to: hm(m.hours && m.hours.to) || '20:00' },
     cats: Array.isArray(m.cats) && m.cats.length ? [...new Set(m.cats.map(x => str(x).slice(0, 40)).filter(Boolean))].slice(0, 20) : MST_CATS.slice(),
-    icats: Array.isArray(m.icats) && m.icats.length ? [...new Set(m.icats.map(x => str(x).slice(0, 40)).filter(Boolean))].slice(0, 30) : MST_ICATS.slice() };
+    icats: Array.isArray(m.icats) && m.icats.length ? [...new Set(m.icats.map(x => str(x).slice(0, 40)).filter(Boolean))].slice(0, 30) : MST_ICATS.slice(),
+    // 21 พ.ย.: หมวดอาการของชนิดเครื่องอื่น (ว่าง = ค่าเริ่มต้นของชนิดนั้น)
+    catsK: Object.fromEntries(MST_CAT_KINDS.map(k => { const v = mstCatList((m.catsK || {})[k], 20); return [k, v.length ? v : MST_CATS_K[k].slice()]; })),
+    icatsK: Object.fromEntries(MST_CAT_KINDS.map(k => { const v = mstCatList((m.icatsK || {})[k], 30); return [k, v.length ? v : MST_ICATS_K[k].slice()]; })) };
 }
 const normMlog = o => ({ id: str(o.id) || uid(), machine: str(o.machine), status: MST[str(o.status)] ? str(o.status) : 'ready', from: str(o.from), to: str(o.to), cat: str(o.cat), note: str(o.note), eta: str(o.eta), wait: str(o.wait), by: str(o.by), role: str(o.role), at: str(o.at), editBy: str(o.editBy), editAt: str(o.editAt), energy: str(o.energy) });
 function normTxs(t) {
@@ -8215,7 +8247,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.13';
+const PAGE_VERSION = '2026-11-21.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14376,7 +14408,7 @@ function openMst(id) {
     ${intrs.length ? `<small class="ms-intr-n"><b>↻ Interrupt วันนี้ ${intrs.length} ครั้ง</b> · ล่าสุด ${esc(mstWhen(intrs[0].from))}${intrs[0].cat ? ` (${esc(intrs[0].cat)})` : ''}</small>` : ''}`;
   // ซ่อมเสร็จ: ปล่อยเครื่องได้เฉพาะ MP / แอดมิน
   const lock = k => ['repair', 'test'].includes(cur.status) && ['ready', 'qc', 'part'].includes(k) && !mp;
-  $('#ms-status').innerHTML = Object.entries(MST).filter(([k, v]) => !v.event || intrOn).map(([k, v]) => `<label class="${v.cls}"${lock(k) ? ' title="ปล่อยเครื่องหลังซ่อมได้เฉพาะ MP"' : ''}><input type="radio" name="msst" value="${k}"${k === cur.status ? ' checked' : ''}${lock(k) ? ' disabled' : ''}><i aria-hidden="true">${v.mark}</i><span><b>${esc(v.label)}</b><small>${esc(v.hint)}${lock(k) ? ' · เฉพาะ MP' : ''}</small></span></label>`).join('');
+  $('#ms-status').innerHTML = Object.entries(MST).filter(([k, v]) => !v.event || intrOn).map(([k, v]) => `<label class="${v.cls}"${lock(k) ? ' title="ปล่อยเครื่องหลังซ่อมได้เฉพาะ MP"' : ''}><input type="radio" name="msst" value="${k}"${k === cur.status ? ' checked' : ''}${lock(k) ? ' disabled' : ''}><i aria-hidden="true">${v.mark}</i><span><b>${esc(v.label)}</b><small>${esc(mstHint(k, m.kind))}${lock(k) ? ' · เฉพาะ MP' : ''}</small></span></label>`).join('');
   mstUi.enN = mstEnChips($('#ms-energy'), id, '');
   mstUi.ev = null;   // syncMst เติมหมวดอาการตามชนิด (ช่วงสถานะ / Interrupt)
   mstUi.from0 = mstLocal(new Date());   // ไม่ได้แก้เวลา = ใช้เวลาของเซิร์ฟเวอร์ตอนบันทึก (นาฬิกาเครื่องผู้ใช้คลาดเคลื่อนได้)
@@ -14403,7 +14435,7 @@ function syncMst() {
   if (mstUi.ev !== ev) {
     const keep = mstUi.ev == null ? null : { cat: chipValue($('#ms-cat')), note: $('#ms-note').value }, cfg = state.config.machine;
     if (mstUi.ev != null) mstUi[mstUi.ev ? 'keepEv' : 'keepSt'] = keep;
-    const was = mstUi.ev == null ? null : mstUi[ev ? 'keepEv' : 'keepSt'], list = ev ? cfg.icats : cfg.cats, cat = was ? was.cat : ev ? 'ไม่ระบุ' : cur.cat || 'ไม่ระบุ';
+    const was = mstUi.ev == null ? null : mstUi[ev ? 'keepEv' : 'keepSt'], list = mstCatsOf(mstOf(mstUi.id).kind, ev, cfg), cat = was ? was.cat : ev ? 'ไม่ระบุ' : cur.cat || 'ไม่ระบุ';   // 21 พ.ย.: หมวดตามชนิดเครื่อง
     chipGroup($('#ms-cat'), 'mscat', ['ไม่ระบุ', ...list, ...(cat !== 'ไม่ระบุ' && !list.includes(cat) ? [cat] : [])], cat);
     $('#ms-note').value = was ? was.note : ev ? '' : cur.note || '';
     if (mstUi.ev == null) mstUi.keepEv = mstUi.keepSt = null;
@@ -14580,7 +14612,7 @@ function mstApply(res) {
 function openMstEdit(id) {
   const r = (state.mlog || []).find(x => x.id === id);
   if (!r || !mstAdmin()) return;
-  const ev = r.status === MST_EVENT, m = mstOf(r.machine), cats = ev ? state.config.machine.icats : state.config.machine.cats;
+  const ev = r.status === MST_EVENT, m = mstOf(r.machine), cats = mstCatsOf(m.kind, ev);
   mstUi.edit = { id, from0: mstLocal(new Date(r.from)), to0: r.to ? mstLocal(new Date(r.to)) : '' };
   $('#mse-title').textContent = `${ev ? 'แก้ Interrupt' : 'แก้ประวัติ'} · ${m.label}`;
   $('#mse-info').textContent = [`บันทึกโดย ${r.by || '–'}${r.role ? ` (${r.role})` : ''}${r.at ? ` · ${mstWhen(r.at)}` : ''}`, r.editBy && `แก้ล่าสุดโดย ${r.editBy}${r.editAt ? ` · ${mstWhen(r.editAt)}` : ''}`].filter(Boolean).join(' · ');
@@ -14669,8 +14701,11 @@ function mstSec(d) {
       <div class="field" style="margin-bottom:12px"><span class="lbl">ตำแหน่งที่ตั้งสถานะได้ <span class="sub-lbl">แอดมินตั้งได้เสมอ · ซ่อมเสร็จ (กำลังซ่อม / ทดสอบหลังซ่อม → พร้อมใช้) ปล่อยเครื่องได้เฉพาะ MP</span></span><div class="chips">${d.roles.map(r => `<label><input type="checkbox" data-mstrole value="${esc(r)}"${m.roles.includes(r) ? ' checked' : ''}><span>${esc(r)}</span></label>`).join('')}</div></div>
       <div class="form-grid" style="margin-bottom:10px"><label class="field"><span class="lbl">ชั่วโมงทำการ: เริ่ม <span class="sub-lbl">ใช้คิด Uptime %</span></span><input type="time" data-k="machine.hours.from" value="${esc(m.hours.from)}"></label>
         <label class="field"><span class="lbl">ถึง <span class="sub-lbl">รวมคิวเย็น · จันทร์–ศุกร์ที่ไม่ใช่วันหยุด</span></span><input type="time" data-k="machine.hours.to" value="${esc(m.hours.to)}"></label></div>
-      <label class="field" style="margin-bottom:10px"><span class="lbl">หมวดอาการ / สาเหตุ <span class="sub-lbl">คั่นด้วย , · ให้เลือกตอนตั้งสถานะ</span></span><input data-mstcats value="${esc(m.cats.join(', '))}" maxlength="600"></label>
-      <label class="field"><span class="lbl">หมวดอาการของ Interrupt <span class="sub-lbl">Reset แล้วหาย ใช้งานต่อได้ · คั่นด้วย , · สูงสุด 30 หมวด</span></span><input data-msticats value="${esc(m.icats.join(', '))}" maxlength="900"></label></div>`;
+      <div class="field"><span class="lbl">หมวดอาการ / สาเหตุ ตามชนิดเครื่อง <span class="sub-lbl">ให้เลือกตอนตั้งสถานะ · คั่นด้วย , · Interrupt = Reset แล้วหาย ใช้งานต่อได้ (สูงสุด 30 หมวด) · ล้างช่องให้ว่าง = กลับเป็นค่าเริ่มต้นของชนิดนั้น</span></span>
+        <div class="mst-wrap"><table class="mst-tbl mst-catk"><thead><tr><th class="l">ชนิดเครื่อง</th><th class="l">หมวดอาการ / สาเหตุ</th><th class="l">หมวดอาการของ Interrupt</th></tr></thead><tbody>
+          <tr><td class="l"><b>เครื่องฉาย</b></td><td class="l"><textarea rows="3" data-mstcats maxlength="900" aria-label="หมวดอาการของเครื่องฉาย">${esc(m.cats.join(', '))}</textarea></td><td class="l"><textarea rows="3" data-msticats maxlength="1300" aria-label="หมวดอาการของ Interrupt ของเครื่องฉาย">${esc(m.icats.join(', '))}</textarea></td></tr>
+          ${MST_CAT_KINDS.map(k => `<tr><td class="l"><b>${esc((MST_KINDS.find(x => x[0] === k) || [k, k])[1])}</b></td><td class="l"><textarea rows="3" data-mstcatk="${k}" maxlength="900" aria-label="หมวดอาการของ ${esc(k)}">${esc((m.catsK[k] || []).join(', '))}</textarea></td><td class="l"><textarea rows="3" data-msticatk="${k}" maxlength="1300" aria-label="หมวดอาการของ Interrupt ของ ${esc(k)}">${esc((m.icatsK[k] || []).join(', '))}</textarea></td></tr>`).join('')}
+        </tbody></table></div></div></div>`;
 }
 $('#view-settings').addEventListener('click', e => {   // (settingsEl ประกาศทีหลัง)
   const b = e.target.closest('[data-mstadd], [data-mstdel]');
@@ -26411,6 +26446,10 @@ function settingsEdit(el) {
     draft.machine.cats = [...new Set(el.value.split(',').map(x => str(x).slice(0, 40)).filter(Boolean))].slice(0, 20);
   } else if (el.dataset.msticats !== undefined) {   // หมวดอาการของ Interrupt
     draft.machine.icats = [...new Set(el.value.split(',').map(x => str(x).slice(0, 40)).filter(Boolean))].slice(0, 30);
+  } else if (el.dataset.mstcatk !== undefined || el.dataset.msticatk !== undefined) {   // 21 พ.ย.: หมวดอาการของชนิดเครื่องอื่น (CT · HDR · TPS · อื่นๆ) · ว่าง = ค่าเริ่มต้น
+    const ev = el.dataset.msticatk !== undefined, kind = ev ? el.dataset.msticatk : el.dataset.mstcatk, key = ev ? 'icatsK' : 'catsK', v = mstCatList(el.value.split(','), ev ? 30 : 20);
+    draft.machine[key] = { ...(draft.machine[key] || {}), [kind]: v.length ? v : (ev ? MST_ICATS_K : MST_CATS_K)[kind].slice() };
+    if (!v.length) el.value = draft.machine[key][kind].join(', ');
   } else if (el.dataset.fxadjrole !== undefined) {   // ตำแหน่งที่เพิ่ม / ลบ fraction ได้
     draft.fxAdj.roles = $$('[data-fxadjrole]:checked', settingsEl).map(x => x.value);
   } else if (el.dataset.rdval !== undefined) {   // ดึงจาก Google Drive: ค่าของคอลัมน์ตัวกรองที่ดึง
