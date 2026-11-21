@@ -140,6 +140,15 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
   .toc b { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* ฝังใน RT Hub (หน้าต่างคู่มือ): หัวไม่ซ้ำกับหัวหน้าต่าง · การ์ดของตำแหน่งผู้ใช้ขึ้นก่อนและมีป้าย */
+html.embed .brand { display: none; }
+html.embed .wrap { padding-block: 14px 40px; }
+html.embed .bar { margin-bottom: 10px; }
+html.embed .bar:has(.crumb:empty) { display: none; }
+html.embed .crumb { margin-left: 0; }
+.card.mine { position: relative; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .me { position: absolute; top: -11px; right: 14px; padding: 1px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 12px/1.7 var(--body); white-space: nowrap; }
 </style>
 
 <div class="wrap">
@@ -157,6 +166,17 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
 (function () {
   "use strict";
   var M = null, view = document.getElementById("view"), crumb = document.getElementById("crumb");
+  /* หน้าที่ฝังคู่มือ (RT Hub) ตั้งค่าเหล่านี้ก่อนสคริปต์นี้ทำงาน · ไม่ตั้ง = คู่มือเปิดเดี่ยวตามปกติ
+     RTHUB_EMBED  เปลี่ยนหน้าในตัว ไม่ใช้ # ของที่อยู่ (หน้า blob / srcdoc)     RTHUB_BASE  ที่อยู่โฟลเดอร์คู่มือ (ต่อหน้า guides.json และภาพ)
+     RTHUB_DATA   เนื้อหา guides.json ที่โหลดมาแล้ว (ไม่ต้องโหลดเอง)           RTHUB_NAV   ชื่อแถบเมนูปัจจุบัน { view: ชื่อ }
+     RTHUB_ROLE   ตำแหน่งของผู้ใช้ (การ์ดของตำแหน่งนั้นขึ้นก่อน)                 RTHUB_THEME "light" | "dark"     RTHUB_START หน้าที่เปิดครั้งแรก (id ของคู่มือ) */
+  var EMBED = !!window.RTHUB_EMBED, FRAMED = EMBED && window.parent !== window;
+  var BASE = typeof window.RTHUB_BASE === "string" ? window.RTHUB_BASE : "";
+  var ROLE = typeof window.RTHUB_ROLE === "string" ? window.RTHUB_ROLE : "";
+  var cur = typeof window.RTHUB_START === "string" ? window.RTHUB_START : "";
+  if (FRAMED) document.documentElement.classList.add("embed");
+  if (window.RTHUB_THEME === "dark" || window.RTHUB_THEME === "light") document.documentElement.setAttribute("data-theme", window.RTHUB_THEME);
+  function tell(what) { if (FRAMED) try { window.parent.postMessage({ rthubManual: what }, "*"); } catch (e) {} }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   // text in the guides may use **bold** and [ปุ่ม] for a button label
   function rich(s) {
@@ -229,7 +249,7 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
 
   function figure(st, alt) {
     return '<figure class="shot" tabindex="0" role="button" aria-label="ขยายภาพ: ' + esc(alt) + '">' +
-      '<img src="' + esc(st.img) + '" width="' + st.w + '" height="' + st.h + '" alt="' + esc(alt) + '" loading="lazy">' + marksSvg(st) +
+      '<img src="' + esc(BASE + st.img) + '" width="' + st.w + '" height="' + st.h + '" alt="' + esc(alt) + '" loading="lazy">' + marksSvg(st) +
       (st.caption ? "<figcaption>" + rich(st.caption) + "</figcaption>" : "") + "</figure>";
   }
 
@@ -238,13 +258,16 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
     tab = tab === "case" ? "case" : "role";
     crumb.innerHTML = "";
     var groups = tab === "role" ? M.roles : M.cases;
+    function mine(g) { return tab === "role" && !!ROLE && (g.hub || []).indexOf(ROLE) >= 0; }
+    if (tab === "role" && ROLE) groups = groups.filter(mine).concat(groups.filter(function (g) { return !mine(g); }));
     view.innerHTML =
       '<section class="hero"><h1>' + esc(M.title) + "</h1><p>" + rich(M.intro) + "</p></section>" +
       '<div class="tabs" role="tablist" aria-label="เลือกคู่มือ">' +
         '<button type="button" role="tab" data-tab="role" aria-selected="' + (tab === "role") + '">ตามวิชาชีพ</button>' +
         '<button type="button" role="tab" data-tab="case" aria-selected="' + (tab === "case") + '">ตามกรณีผู้ป่วย</button></div>' +
       '<div class="grid">' + groups.map(function (g) {
-        return '<div class="card"><h3><span class="ic" aria-hidden="true">' + esc(g.badge) + "</span>" + esc(g.title) + "</h3>" +
+        return '<div class="card' + (mine(g) ? " mine" : "") + '"><h3><span class="ic" aria-hidden="true">' + esc(g.badge) + "</span>" + esc(g.title) +
+          (mine(g) ? '<span class="me">ตำแหน่งของคุณ</span>' : "") + "</h3>" +
           "<p>" + rich(g.desc) + "</p><ul>" + g.guides.map(function (id) { var x = byId(id); return x ? '<li><a href="#' + id + '">' + esc(x.title) + "</a></li>" : ""; }).join("") + "</ul></div>";
       }).join("") + "</div>" +
       (M.flow ? '<section class="path"><h2>' + esc(M.flow.title) + "</h2><p>" + rich(M.flow.desc) + '</p><div class="flow">' + M.flow.svg + "</div></section>" : "");
@@ -283,7 +306,7 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
   }
 
   function route() {
-    var id = location.hash.replace(/^#/, ""), g = id && byId(id);
+    var id = EMBED ? cur : location.hash.replace(/^#/, ""), g = id && byId(id);
     if (g) guide(g);
     else { var t = "role"; try { t = sessionStorage.getItem("rthub-manual-tab") || "role"; } catch (e) {} home(t); }
   }
@@ -306,8 +329,21 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
   view.addEventListener("click", function (e) { var f = e.target.closest && e.target.closest(".shot"); if (f && !f.closest(".zoom")) zoom(f); });
   view.addEventListener("keydown", function (e) { var f = e.target.closest && e.target.closest(".shot"); if (f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); zoom(f); } });
 
-  window.addEventListener("hashchange", route);
-  fetch("guides.json").then(function (r) { return r.json(); }).then(function (data) { M = navFill(data, navNames(data.nav), ""); route(); })
-    .catch(function () { view.innerHTML = '<p class="note">โหลดเนื้อหาคู่มือไม่สำเร็จ ลองรีเฟรชหน้า</p>'; });
+  if (EMBED) {
+    // ลิงก์ #… ในคู่มือ = เปลี่ยนหน้าในตัว (ลิงก์ไปขั้นตอนในหน้าเดียวกันมีตัวจัดการของตัวเอง)
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a[href^='#']");
+      if (!a || a.hasAttribute("data-step")) return;
+      e.preventDefault();
+      cur = a.getAttribute("href").slice(1);
+      route();
+      if (!byId(cur)) window.scrollTo(0, 0);
+    });
+    // Esc ในคู่มือ (ไม่มีภาพขยายเปิดอยู่) = ปิดหน้าต่างของหน้าที่ฝัง
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !document.querySelector(".zoom")) tell("close"); }, true);
+  } else window.addEventListener("hashchange", route);
+  (window.RTHUB_DATA && typeof window.RTHUB_DATA === "object" ? Promise.resolve(window.RTHUB_DATA) : fetch(BASE + "guides.json").then(function (r) { return r.json(); }))
+    .then(function (data) { M = navFill(data, navNames(data.nav), ""); route(); tell("ready"); })
+    .catch(function () { view.innerHTML = '<p class="note">โหลดเนื้อหาคู่มือไม่สำเร็จ ลองรีเฟรชหน้า</p>'; tell("error"); });
 })();
 </script>
