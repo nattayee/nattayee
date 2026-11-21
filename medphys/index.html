@@ -8215,7 +8215,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-20.12';
+const PAGE_VERSION = '2026-11-20.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8247,7 +8247,9 @@ if (pref.get('practice', false) === true) {
   if (!PRACTICE.on) { pref.set('practice', false); PRACTICE.warned = 'ออกจากโหมดฝึกใช้แล้ว: Code.gs บนลิงก์นี้ยังไม่รองรับ (ต้องรุ่น 2026-11-19.5 ขึ้นไป) · ตอนนี้เป็นระบบจริง'; }
 }
 const callTok = () => lpchToken || (SHEET_DIALOG ? 'sheet-dialog' : '');
-const call = (fn, ...args) => { if (state.viewAs && !VIEWAS_CALL_READ.test(fn)) return Promise.reject(new Error(viewAsMsg())); const t0 = performance.now(); return new Promise((ok, fail) => google.script.run.withSuccessHandler(v => { speedAdd(fn, t0, true); ok(v); }).withFailureHandler(err => {
+// 21 พ.ย.: หน้าเว็บที่เปิดค้างไว้ก่อน Deploy Code.gs รุ่นใหม่ รู้จักเฉพาะคำสั่งของรุ่นที่โหลดมา (google.script.run) · เรียกคำสั่งใหม่ = บอกให้โหลดหน้าใหม่ (เดิมขึ้นข้อความ "… is not a function")
+const CALL_STALE = 'หน้าเว็บนี้เปิดค้างไว้ตั้งแต่ก่อนอัปเดต Code.gs จึงยังเรียกคำสั่งใหม่ไม่ได้ · โหลดหน้าใหม่ (กด F5 หรือปิดแล้วเปิดลิงก์ใหม่) แล้วลองอีกครั้ง · ยังไม่ได้อีก = Code.gs ที่ Deploy ยังเป็นรุ่นเก่า (Deploy → Manage deployments → ดินสอ → New version)';
+const call = (fn, ...args) => { if (state.viewAs && !VIEWAS_CALL_READ.test(fn)) return Promise.reject(new Error(viewAsMsg())); const t0 = performance.now(); return new Promise((ok, fail) => { const run = google.script.run.withSuccessHandler(v => { speedAdd(fn, t0, true); ok(v); }).withFailureHandler(err => {
   speedAdd(fn, t0, false);
   const m = errMsg(err), i = m.indexOf(LOGIN_MARK), po = m.indexOf(PRACTICE_OFF_MARK);
   if (po >= 0) { const why = m.slice(po + PRACTICE_OFF_MARK.length); practiceKick(why); return fail(Object.assign(new Error(why), { practiceOff: true })); }
@@ -8255,7 +8257,9 @@ const call = (fn, ...args) => { if (state.viewAs && !VIEWAS_CALL_READ.test(fn)) 
   const why = m.slice(i + LOGIN_MARK.length);
   showGate(why);
   fail(Object.assign(new Error(why), { login: true }));
-})[PRACTICE.on ? 'practiceCall' : fn](...(PRACTICE.on ? [fn, [...args, callTok()]] : [...args, callTok()]))); };
+}), name = PRACTICE.on ? 'practiceCall' : fn;
+  if (typeof run[name] !== 'function') return fail(Object.assign(new Error(CALL_STALE), { stale: true }));
+  run[name](...(PRACTICE.on ? [fn, [...args, callTok()]] : [...args, callTok()])); }); };
 const sheetStore = {
   mode: 'sheet',
   load: have => (have ? call('getData', have) : call('getData')),   // have = รุ่นของข้อมูลที่มี (Code.gs API 61 · ส่งเฉพาะที่เปลี่ยน)
