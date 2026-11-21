@@ -2,13 +2,18 @@
  * ระบบเช็คอินกรณีเกิดภัยพิบัติ (Emergency Check-in)
  * ใช้ Google Sheets เป็นฐานข้อมูล + Google Apps Script Web App
  *
+ * รายชื่อเจ้าหน้าที่อ่านจากชีตโซน (ชื่อชีตขึ้นต้นด้วย "โซน") ที่มีอยู่แล้ว:
+ *   แถวหัวหน่วยงาน (merge A:F)  |  แถวหัวตาราง: สถานะ | ชื่อ-สกุล | ตำแหน่ง | (เบอร์โทร) | (รหัสพนักงาน)
+ *   - ตอนนี้ใช้ "ชื่อ-สกุล" เป็นตัวระบุตัวคน
+ *   - เมื่อเพิ่มคอลัมน์ที่หัวตารางมีคำว่า "รหัส" (เช่น "รหัสพนักงาน") ระบบจะใช้รหัสแทนโดยอัตโนมัติ
+ *   - ผลการเช็คอินจะเขียนกลับลงคอลัมน์ "สถานะ" เดิม (อยู่ / ลา / ไม่ทราบ)
+ *
  * หน้าเว็บ:
- *   <WEB_APP_URL>?point=A          -> หน้าเช็คอินพนักงาน (ใส่ใน QR ที่จุดรวมพล)
+ *   <WEB_APP_URL>?point=A          -> หน้าเช็คอิน (ใส่ใน QR ที่จุดรวมพล)
  *   <WEB_APP_URL>?page=dashboard   -> หน้าผู้ควบคุมเหตุการณ์ (ต้องใช้ PIN)
  */
 
 const SHEET = {
-  EMP: 'Employees',
   SCAN: 'ScanLog',
   EVENTS: 'Events',
   CHECKINS: 'CheckIns',
@@ -17,21 +22,24 @@ const SHEET = {
 };
 
 const HEADERS = {
-  Employees: ['รหัสพนักงาน', 'ชื่อ-นามสกุล', 'แผนก', 'ชั้น/อาคาร', 'เบอร์โทร'],
   ScanLog: ['รหัสพนักงาน', 'วันเวลาที่สแกน', 'ประเภท (เข้า/ออก) - ไม่บังคับ'],
   Events: ['EventID', 'ประเภทเหตุ', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'สถานะ', 'หมายเหตุ'],
-  CheckIns: ['EventID', 'รหัสพนักงาน', 'ชื่อ-นามสกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ'],
+  CheckIns: ['EventID', 'รหัส/ชื่อ (ตัวระบุ)', 'ชื่อ-สกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ'],
   Config: ['ตั้งค่า', 'ค่า', 'คำอธิบาย'],
 };
 
 const DEFAULT_CONFIG = [
-  ['ADMIN_PIN', '1234', 'PIN สำหรับเข้าหน้า Dashboard (ควรเปลี่ยน)'],
-  ['POINTS', 'A:ลานจอดรถด้านหน้า,B:สนามหญ้าด้านหลัง', 'จุดรวมพล รูปแบบ รหัส:ชื่อ คั่นด้วยจุลภาค'],
-  ['USE_SCAN_LOG', 'TRUE', 'TRUE = นับเฉพาะคนที่สแกนนิ้ว/ใบหน้าเข้างานวันนี้ว่าอยู่ในอาคาร'],
-  ['SCAN_LOOKBACK_HOURS', '16', 'ดูข้อมูลสแกนย้อนหลังกี่ชั่วโมง (รองรับกะดึกข้ามวัน)'],
+  ['ADMIN_PIN', '1234', 'PIN สำหรับเข้าหน้า Dashboard (ต้องเปลี่ยน)'],
+  ['POINTS', 'A:จุดรวมพล 1,B:จุดรวมพล 2', 'จุดรวมพล รูปแบบ รหัส:ชื่อ คั่นด้วยจุลภาค'],
+  ['ZONE_SHEET_PREFIX', 'โซน', 'ชีตที่ชื่อขึ้นต้นด้วยคำนี้ถือเป็นรายชื่อเจ้าหน้าที่'],
+  ['SYNC_ZONE_STATUS', 'TRUE', 'TRUE = เขียนผลเช็คอินกลับลงคอลัมน์ "สถานะ" ในชีตโซน'],
+  ['USE_SCAN_LOG', 'FALSE', 'TRUE = ใช้ข้อมูลสแกนนิ้ว/ใบหน้า (ต้องมีรหัสพนักงานในชีตโซนก่อน)'],
+  ['SCAN_LOOKBACK_HOURS', '16', 'ดูข้อมูลสแกนย้อนหลังกี่ชั่วโมง (รองรับเวรดึกข้ามวัน)'],
 ];
 
 const STATUS = { SAFE: 'SAFE', HELP: 'HELP', AWAY: 'AWAY' };
+// ค่าในคอลัมน์ "สถานะ" ของชีตโซน
+const ZONE_TEXT = { PRESENT: 'อยู่', LEAVE: 'ลา', UNKNOWN: 'ไม่ทราบ' };
 
 /* ------------------------------------------------------------------ */
 /* ติดตั้งครั้งแรก: เลือกฟังก์ชัน setup แล้วกด Run                         */
@@ -40,7 +48,7 @@ function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(HEADERS).forEach(function (name) {
     let sh = ss.getSheetByName(name);
-    if (!sh) sh = ss.insertSheet(name);
+    if (!sh) sh = ss.insertSheet(name, ss.getNumSheets()); // ต่อท้าย ไม่แทรกหน้าชีตโซน
     if (sh.getLastRow() === 0) {
       sh.getRange(1, 1, 1, HEADERS[name].length).setValues([HEADERS[name]]).setFontWeight('bold');
       sh.setFrozenRows(1);
@@ -49,11 +57,19 @@ function setup() {
   const cfg = ss.getSheetByName(SHEET.CONFIG);
   if (cfg.getLastRow() === 1) {
     cfg.getRange(2, 1, DEFAULT_CONFIG.length, 3).setValues(DEFAULT_CONFIG);
+  } else {
+    // เพิ่มค่าตั้งใหม่ที่ยังไม่มี (กรณีอัปเดตจากเวอร์ชันเก่า)
+    const have = getConfig_();
+    DEFAULT_CONFIG.forEach(function (r) { if (!(r[0] in have)) cfg.appendRow(r); });
   }
-  // คอลัมน์รหัสพนักงานเป็นข้อความ ป้องกันเลข 0 นำหน้าหาย
-  ss.getSheetByName(SHEET.EMP).getRange('A:A').setNumberFormat('@');
   ss.getSheetByName(SHEET.SCAN).getRange('A:A').setNumberFormat('@');
-  safeAlert_('ติดตั้งเรียบร้อย\nวางรายชื่อพนักงานในชีต Employees แล้ว Deploy เป็น Web app');
+  clearCache();
+  const emps = loadEmployees_();
+  const zones = {};
+  emps.forEach(function (e) { e.zone.split(', ').forEach(function (z) { zones[z] = (zones[z] || 0) + 1; }); });
+  safeAlert_('ติดตั้งเรียบร้อย\nพบเจ้าหน้าที่ ' + emps.length + ' คน\n' +
+    Object.keys(zones).map(function (z) { return '• ' + z + ': ' + zones[z] + ' คน'; }).join('\n') +
+    '\n\nขั้นต่อไป: เปลี่ยน ADMIN_PIN ในชีต Config แล้ว Deploy เป็น Web app');
 }
 
 /** สร้างชีต QR ที่มีลิงก์ + รูป QR ของแต่ละจุดรวมพล (รันหลัง Deploy) */
@@ -61,7 +77,7 @@ function generateQrSheet() {
   const url = ScriptApp.getService().getUrl();
   if (!url) throw new Error('ยังไม่ได้ Deploy เป็น Web app');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET.QR) || ss.insertSheet(SHEET.QR);
+  const sh = ss.getSheetByName(SHEET.QR) || ss.insertSheet(SHEET.QR, ss.getNumSheets());
   sh.clear();
   const rows = [['จุดรวมพล', 'ลิงก์', 'QR Code']];
   getPoints_().forEach(function (p) {
@@ -76,16 +92,35 @@ function generateQrSheet() {
   safeAlert_('สร้างชีต QR แล้ว พิมพ์ไปติดที่จุดรวมพลได้เลย');
 }
 
+/** ตั้งสถานะทุกคนที่เป็น "อยู่" ให้กลับเป็น "ไม่ทราบ" (คนที่ "ลา" คงไว้) */
+function resetZoneStatusMenu() {
+  const n = resetZoneStatus_();
+  safeAlert_('รีเซ็ตแล้ว ' + n + ' คน (คนที่ลาไม่ถูกเปลี่ยน)');
+}
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('🚨 เช็คอินฉุกเฉิน')
-    .addItem('ติดตั้ง / สร้างชีต', 'setup')
+    .addItem('ติดตั้ง / ตรวจรายชื่อ', 'setup')
     .addItem('สร้าง QR Code จุดรวมพล', 'generateQrSheet')
-    .addItem('ล้างแคชรายชื่อพนักงาน', 'clearCache')
+    .addItem('รีเซ็ตสถานะ "อยู่" → "ไม่ทราบ"', 'resetZoneStatusMenu')
+    .addItem('ล้างแคชรายชื่อ', 'clearCache')
     .addToUi();
 }
 
+/** แก้รายชื่อในชีตโซน แล้วล้างแคชให้หน้าเว็บเห็นทันที */
+function onEdit(e) {
+  try {
+    const name = e && e.range && e.range.getSheet().getName();
+    if (name && isZoneSheet_(name) && e.range.getColumn() !== 4) clearCache();
+  } catch (err) { /* ignore */ }
+}
+
 function clearCache() {
-  CacheService.getScriptCache().remove('employees');
+  const c = CacheService.getScriptCache();
+  const n = Number(c.get('emp_n') || 0);
+  const keys = ['emp_n'];
+  for (let i = 0; i < n; i++) keys.push('emp_' + i);
+  c.removeAll(keys);
 }
 
 /* ------------------------------------------------------------------ */
@@ -104,21 +139,21 @@ function doGet(e) {
 
 /* ---------- เรียกจากหน้าเช็คอิน ---------- */
 
-/** ข้อมูลเริ่มต้นของหน้าเช็คอิน */
+/** ข้อมูลเริ่มต้นของหน้าเช็คอิน: [ตัวระบุ, ชื่อ, หน่วยงาน, โซน, ตำแหน่ง] */
 function getCheckInData() {
   return {
-    employees: getEmployees_().map(function (e) { return [e.id, e.name, e.dept]; }),
+    employees: getEmployees_().map(function (e) { return [e.id, e.name, e.dept, e.zone, e.pos]; }),
     points: getPoints_(),
   };
 }
 
 /**
- * พนักงานเช็คอิน
- * payload: { empId, status: 'SAFE'|'HELP', point, by: 'SELF'|'BUDDY', note }
+ * เช็คอินด้วยตัวเอง / เพื่อนเช็คอินให้
+ * payload: { empId, name, status: 'SAFE'|'HELP', point, by: 'SELF'|'BUDDY', note }
  */
 function checkIn(payload) {
-  const emp = findEmployee_(payload.empId);
-  if (!emp) throw new Error('ไม่พบรหัสพนักงาน ' + payload.empId);
+  const emp = findEmployee_(payload.empId, payload.name);
+  if (!emp) throw new Error('ไม่พบรายชื่อ ' + (payload.name || payload.empId));
   const status = payload.status === STATUS.HELP ? STATUS.HELP : STATUS.SAFE;
   const by = payload.by === 'BUDDY' ? 'BUDDY' : 'SELF';
   const eventId = getOrCreateActiveEvent_();
@@ -151,20 +186,24 @@ function getDashboard(pin) {
     });
   }
 
+  // อ่านชีตโซนสดทุกครั้ง เพื่อให้เห็นสถานะที่หัวหน้าโซนเลือกเองในชีตด้วย
+  const employees = loadEmployees_();
   const scan = getPresentFromScan_();
-  const employees = getEmployees_();
   const list = employees.map(function (e) {
     const c = latest[e.id];
-    const inBuilding = scan.enabled ? !!scan.present[e.id] : true;
-    let state;
-    if (c) state = c.status;                   // SAFE / HELP / AWAY
-    else if (inBuilding) state = 'MISSING';    // อยู่ในอาคารแต่ยังไม่เช็คอิน
-    else state = 'NOT_IN';                     // ไม่ได้สแกนเข้างานวันนี้
+    const onLeave = e.sheetStatus === ZONE_TEXT.LEAVE;
+    const scanned = scan.enabled && e.code ? !!scan.present[e.code] : true; // ยังไม่มีรหัส = ถือว่าอยู่
+    const inBuilding = !onLeave && scanned;
+    let state, by = c ? c.by : '';
+    if (c) state = c.status;                                              // SAFE / HELP / AWAY
+    else if (onLeave) state = 'AWAY';                                     // หัวหน้าโซนเลือก "ลา"
+    else if (e.sheetStatus === ZONE_TEXT.PRESENT) { state = 'SAFE'; by = 'SHEET'; } // เลือก "อยู่" ในชีต
+    else if (!scanned) state = 'NOT_IN';                                  // ไม่ได้สแกนเข้างาน
+    else state = 'MISSING';                                               // ยังไม่ทราบ ต้องตามหา
     return {
-      id: e.id, name: e.name, dept: e.dept, floor: e.floor, phone: e.phone,
-      state: state, inBuilding: inBuilding,
-      scanTime: scan.present[e.id] || '',
-      point: c ? c.point : '', time: c ? c.time : '', by: c ? c.by : '', note: c ? c.note : '',
+      id: e.id, code: e.code, name: e.name, dept: e.dept, zone: e.zone, pos: e.pos, phone: e.phone,
+      state: state, inBuilding: inBuilding, scanTime: e.code ? (scan.present[e.code] || '') : '',
+      point: c ? c.point : '', time: c ? c.time : '', by: by, note: c ? c.note : '',
     };
   });
 
@@ -211,11 +250,162 @@ function closeEvent(pin) {
 function staffCheckIn(pin, empId, status, point, note) {
   checkPin_(pin);
   const emp = findEmployee_(empId);
-  if (!emp) throw new Error('ไม่พบรหัสพนักงาน');
+  if (!emp) throw new Error('ไม่พบรายชื่อ');
   if ([STATUS.SAFE, STATUS.HELP, STATUS.AWAY].indexOf(status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   const eventId = getOrCreateActiveEvent_();
   appendCheckIn_(eventId, emp, status, point || 'STAFF', 'STAFF', note);
   return { ok: true };
+}
+
+/* ------------------------------------------------------------------ */
+/* อ่านรายชื่อจากชีตโซน                                                  */
+/* ------------------------------------------------------------------ */
+function isZoneSheet_(name) {
+  const prefix = getConfig_().ZONE_SHEET_PREFIX || 'โซน';
+  return String(name).trim().indexOf(prefix) === 0;
+}
+
+function normName_(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+/** "โซนที่ 1 " -> "โซน 1" */
+function zoneLabel_(sheetName) {
+  const m = String(sheetName).match(/(\d+)/);
+  return m ? 'โซน ' + m[1] : String(sheetName).trim();
+}
+
+/** หาคอลัมน์จากหัวตาราง (ค้นในแถว 1-3) คืนค่า index เริ่มที่ 0 หรือ -1 */
+function findCol_(head, re) {
+  for (let r = 0; r < head.length; r++) {
+    for (let c = 0; c < head[r].length; c++) {
+      if (re.test(String(head[r][c]).trim())) return c;
+    }
+  }
+  return -1;
+}
+
+/** อ่านทุกชีตโซน คืนรายชื่อพร้อมตำแหน่งแถว (ไม่ใช้แคช) */
+function loadEmployees_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const byId = {};
+  const out = [];
+  ss.getSheets().forEach(function (sh) {
+    const sheetName = sh.getName();
+    if (!isZoneSheet_(sheetName)) return;
+    const lastRow = sh.getLastRow(), lastCol = Math.max(sh.getLastColumn(), 8);
+    if (lastRow < 2) return;
+    const values = sh.getRange(1, 1, lastRow, lastCol).getValues();
+    const head = values.slice(0, 3);
+    const cName = findCol_(head, /^ชื่อ\s*-?\s*สกุล$|^ชื่อ-นามสกุล$/);
+    if (cName < 0) return;
+    const cStatus = findCol_(head, /^สถานะ$/);
+    const cPos = findCol_(head, /^ตำแหน่ง$/);
+    const cPhone = findCol_(head, /^เบอร์/);
+    const cCode = findCol_(head, /รหัส/);
+    const zone = zoneLabel_(sheetName);
+    let dept = '';
+    values.forEach(function (row, i) {
+      const name = normName_(row[cName]);
+      const first = normName_(row[0]);
+      if (!name) {                                   // แถวหัวหน่วยงาน (merge A:F)
+        if (first && isNaN(first) && !/^(อยู่|ลา|ไม่ทราบ)$/.test(first)) dept = first;
+        return;
+      }
+      if (/^ชื่อ/.test(name) || /^[-–]/.test(name)) return;   // หัวตาราง / หมายเหตุ เช่น "- เช็ครายชื่อที่โซน 2 -"
+      const code = cCode >= 0 ? normName_(row[cCode]) : '';
+      const id = code || name;
+      const loc = [sheetName, i + 1, cName + 1, cStatus + 1];
+      if (byId[id]) {                                // ชื่อซ้ำหลายโซน: รวมเป็นคนเดียว
+        const e = byId[id];
+        e.locs.push(loc);
+        if (e.zone.indexOf(zone) < 0) e.zone += ', ' + zone;
+        if (!e.sheetStatus || e.sheetStatus === ZONE_TEXT.UNKNOWN) e.sheetStatus = cStatus >= 0 ? normName_(row[cStatus]) : '';
+        return;
+      }
+      const e = {
+        id: id, code: code, name: name, dept: dept, zone: zone,
+        pos: cPos >= 0 ? normName_(row[cPos]) : '', phone: cPhone >= 0 ? normName_(row[cPhone]) : '',
+        sheetStatus: cStatus >= 0 ? normName_(row[cStatus]) : '', locs: [loc],
+      };
+      byId[id] = e;
+      out.push(e);
+    });
+  });
+  return out;
+}
+
+/** รายชื่อแบบมีแคช (แบ่งเก็บหลายก้อน เพราะแคชเก็บได้ก้อนละไม่เกิน 100KB) */
+function getEmployees_() {
+  const cache = CacheService.getScriptCache();
+  const n = Number(cache.get('emp_n') || 0);
+  if (n) {
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('emp_' + i);
+    const got = cache.getAll(keys);
+    if (Object.keys(got).length === n) {
+      try { return JSON.parse(keys.map(function (k) { return got[k]; }).join('')); } catch (e) { /* โหลดใหม่ */ }
+    }
+  }
+  const list = loadEmployees_().map(function (e) { const x = Object.assign({}, e); delete x.sheetStatus; return x; });
+  try {
+    const s = JSON.stringify(list), size = 25000, parts = {};
+    let k = 0;
+    for (let i = 0; i < s.length; i += size) parts['emp_' + (k++)] = s.slice(i, i + size);
+    parts.emp_n = String(k);
+    cache.putAll(parts, 600);
+  } catch (err) { /* ใช้งานได้โดยไม่มีแคช */ }
+  return list;
+}
+
+function findEmployee_(id, name) {
+  id = normName_(id);
+  const list = getEmployees_();
+  let e = list.filter(function (x) { return x.id === id; })[0];
+  // รองรับเครื่องที่จำชื่อไว้ก่อนเพิ่มรหัสพนักงาน
+  if (!e && name) e = list.filter(function (x) { return x.name === normName_(name); })[0];
+  if (!e) e = list.filter(function (x) { return x.name === id; })[0];
+  return e || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* เขียนสถานะกลับลงชีตโซน                                                */
+/* ------------------------------------------------------------------ */
+function syncEnabled_() { return String(getConfig_().SYNC_ZONE_STATUS).toUpperCase() !== 'FALSE'; }
+
+function writeZoneStatus_(emp, text) {
+  if (!syncEnabled_()) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  emp.locs.forEach(function (loc) {
+    const sh = ss.getSheetByName(loc[0]);
+    if (!sh || loc[3] < 1) return;
+    let row = loc[1];
+    // กันกรณีมีคนแทรก/ลบแถวระหว่างเกิดเหตุ: ตรวจชื่อก่อนเขียน ถ้าไม่ตรงให้ค้นหาใหม่
+    if (normName_(sh.getRange(row, loc[2]).getValue()) !== emp.name) {
+      const names = sh.getRange(1, loc[2], sh.getLastRow(), 1).getValues();
+      row = -1;
+      for (let i = 0; i < names.length; i++) if (normName_(names[i][0]) === emp.name) { row = i + 1; break; }
+      if (row < 0) return;
+      clearCache();
+    }
+    sh.getRange(row, loc[3]).setValue(text);
+  });
+}
+
+/** "อยู่" -> "ไม่ทราบ" ทุกชีตโซน (คนที่ "ลา" คงไว้) คืนจำนวนที่เปลี่ยน */
+function resetZoneStatus_() {
+  if (!syncEnabled_()) return 0;
+  let changed = 0;
+  SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function (sh) {
+    if (!isZoneSheet_(sh.getName()) || sh.getLastRow() < 3) return;
+    const head = sh.getRange(1, 1, 3, Math.max(sh.getLastColumn(), 8)).getValues();
+    const c = findCol_(head, /^สถานะ$/);
+    if (c < 0) return;
+    const rng = sh.getRange(1, c + 1, sh.getLastRow(), 1);
+    const vals = rng.getValues();
+    let dirty = false;
+    vals.forEach(function (v) { if (normName_(v[0]) === ZONE_TEXT.PRESENT) { v[0] = ZONE_TEXT.UNKNOWN; dirty = true; changed++; } });
+    if (dirty) rng.setValues(vals);
+  });
+  return changed;
 }
 
 /* ------------------------------------------------------------------ */
@@ -235,8 +425,12 @@ function readRows_(name) {
 }
 
 function getConfig_() {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.CONFIG);
   const cfg = {};
-  readRows_(SHEET.CONFIG).forEach(function (r) { if (r[0]) cfg[String(r[0]).trim()] = String(r[1]).trim(); });
+  if (!sh || sh.getLastRow() < 2) return cfg;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    if (r[0]) cfg[String(r[0]).trim()] = String(r[1]).trim();
+  });
   return cfg;
 }
 
@@ -249,35 +443,11 @@ function getPoints_() {
   }).filter(function (p) { return p.code; });
 }
 
-function getEmployees_() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get('employees');
-  if (hit) return JSON.parse(hit);
-  const list = readRows_(SHEET.EMP)
-    .filter(function (r) { return String(r[0]).trim() && String(r[1]).trim(); })
-    .map(function (r) {
-      return {
-        id: String(r[0]).trim(), name: String(r[1]).trim(),
-        dept: String(r[2] || '').trim(), floor: String(r[3] || '').trim(), phone: String(r[4] || '').trim(),
-      };
-    });
-  try { cache.put('employees', JSON.stringify(list), 600); } catch (err) { /* เกินขนาดแคช */ }
-  return list;
-}
-
-function findEmployee_(id) {
-  id = String(id || '').trim();
-  return getEmployees_().filter(function (e) { return e.id === id; })[0] || null;
-}
-
-/** อ่านข้อมูลสแกนนิ้ว/ใบหน้า: คืนรายชื่อคนที่ (น่าจะ) อยู่ในอาคาร */
+/** อ่านข้อมูลสแกนนิ้ว/ใบหน้า: คืนรายชื่อรหัสที่ (น่าจะ) อยู่ในอาคาร */
 function getPresentFromScan_() {
   const cfg = getConfig_();
-  const result = { enabled: false, present: {}, note: '' };
-  if (String(cfg.USE_SCAN_LOG).toUpperCase() !== 'TRUE') {
-    result.note = 'ปิดการใช้ข้อมูลสแกน: นับพนักงานทุกคน';
-    return result;
-  }
+  const result = { enabled: false, present: {}, note: 'สถานะ "ลา" อ้างอิงจากคอลัมน์สถานะในชีตโซน' };
+  if (String(cfg.USE_SCAN_LOG).toUpperCase() !== 'TRUE') return result;
   const hours = Number(cfg.SCAN_LOOKBACK_HOURS) || 16;
   const since = new Date(Date.now() - hours * 3600 * 1000);
   const last = {}; // id -> {t, out}
@@ -293,11 +463,11 @@ function getPresentFromScan_() {
   });
   const n = Object.keys(result.present).length;
   if (n === 0) {
-    result.note = 'ไม่พบข้อมูลสแกนใน ' + hours + ' ชม.ล่าสุด: นับพนักงานทุกคนแทน';
-    return result; // ไม่มีข้อมูล -> ปลอดภัยไว้ก่อน นับทุกคน
+    result.note = 'ไม่พบข้อมูลสแกนใน ' + hours + ' ชม.ล่าสุด: นับเจ้าหน้าที่ทุกคน (ยกเว้นคนที่ลา)';
+    return result;
   }
   result.enabled = true;
-  result.note = 'อ้างอิงข้อมูลสแกนนิ้ว/ใบหน้า ' + hours + ' ชม.ล่าสุด (' + n + ' คนอยู่ในอาคาร)';
+  result.note = 'อ้างอิงข้อมูลสแกนนิ้ว/ใบหน้า ' + hours + ' ชม.ล่าสุด (' + n + ' คน) · คนที่ยังไม่มีรหัสถือว่าอยู่ในอาคาร';
   return result;
 }
 
@@ -320,7 +490,7 @@ function getOrCreateActiveEvent_() {
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('ACTIVE_EVENT_ID');
   if (id) return id;
-  // พนักงานเช็คอินก่อนผู้ควบคุมกดเริ่มเหตุการณ์ -> สร้างให้อัตโนมัติ
+  // มีคนเช็คอินก่อนผู้ควบคุมกดประกาศเหตุ -> สร้างให้อัตโนมัติ
   return withLock_(function () {
     return props.getProperty('ACTIVE_EVENT_ID') || createEvent_('ไม่ระบุ (เริ่มอัตโนมัติ)', '').id;
   });
@@ -328,6 +498,7 @@ function getOrCreateActiveEvent_() {
 
 function createEvent_(type, note) {
   const id = 'EV' + Utilities.formatDate(new Date(), tz_(), 'yyyyMMdd-HHmmss');
+  resetZoneStatus_();   // เริ่มนับใหม่: "อยู่" จากครั้งก่อนกลับเป็น "ไม่ทราบ"
   sheet_(SHEET.EVENTS).appendRow([id, type, new Date(), '', 'ACTIVE', note]);
   PropertiesService.getScriptProperties().setProperty('ACTIVE_EVENT_ID', id);
   return { ok: true, id: id };
@@ -337,6 +508,9 @@ function appendCheckIn_(eventId, emp, status, point, by, note) {
   sheet_(SHEET.CHECKINS).appendRow([
     eventId, "'" + emp.id, emp.name, status, String(point || ''), new Date(), by, String(note || '').slice(0, 200),
   ]);
+  try {
+    writeZoneStatus_(emp, status === STATUS.AWAY ? ZONE_TEXT.LEAVE : ZONE_TEXT.PRESENT);
+  } catch (err) { Logger.log('เขียนสถานะลงชีตโซนไม่สำเร็จ: ' + err); }
 }
 
 function checkPin_(pin) {
@@ -358,8 +532,4 @@ function fmt_(d) {
 
 function safeAlert_(msg) {
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
-}
-
-function include(name) {
-  return HtmlService.createHtmlOutputFromFile(name).getContent();
 }

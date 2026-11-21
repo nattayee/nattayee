@@ -97,6 +97,15 @@
   .points { display:flex; flex-wrap:wrap; gap:8px; }
   .points span { display:inline-flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:13px; }
   .points svg { color:var(--safe); }
+  .zones { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; }
+  .zone { text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; cursor:pointer; display:grid; gap:6px; }
+  .zone:hover { border-color:var(--muted); }
+  .zone.sel { border-color:var(--ink); box-shadow:0 0 0 2px var(--ring); }
+  .zone .zt { display:flex; justify-content:space-between; gap:6px; font-weight:600; font-size:14px; }
+  .zone .zt span { font-size:12px; font-weight:600; color:var(--miss); }
+  .zone .zt span.ok { color:var(--safe); }
+  .zone .zb { height:6px; border-radius:4px; background:var(--gray-soft); overflow:hidden; display:flex; }
+  .zone .zb i { display:block; height:100%; }
 
   /* ---------- รายชื่อ ---------- */
   .tools { display:flex; flex-wrap:wrap; gap:8px; }
@@ -211,19 +220,20 @@
       </div>
       <div class="tiles" id="tiles"></div>
     </div>
+    <div class="zones" id="zones"></div>
     <div class="points" id="points"></div>
 
     <div class="tools">
       <div class="field">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="search" type="search" placeholder="ค้นหาชื่อ รหัส หรือเบอร์โทร">
+        <input id="search" type="search" placeholder="ค้นหาชื่อ ตำแหน่ง หรือเบอร์โทร">
       </div>
-      <select id="dept"><option value="">ทุกแผนก</option></select>
-      <select id="floor"><option value="">ทุกชั้น/อาคาร</option></select>
+      <select id="dept"><option value="">ทุกหน่วยงาน</option></select>
+      <select id="floor"><option value="">ทุกโซน</option></select>
     </div>
     <div class="err" id="err"></div>
     <div class="list">
-      <div class="lh"><span>สถานะ</span><span>ชื่อ</span><span>แผนก / ชั้น</span><span>เบอร์โทร</span><span>รายละเอียด</span></div>
+      <div class="lh"><span>สถานะ</span><span>ชื่อ</span><span>หน่วยงาน / โซน</span><span>เบอร์โทร</span><span>รายละเอียด</span></div>
       <div id="tbody"></div>
     </div>
     <p class="foot">แตะที่ชื่อเพื่อบันทึกสถานะแทน · ข้อมูลรีเฟรชอัตโนมัติทุก 5 วินาที</p>
@@ -259,7 +269,7 @@
   <div class="stack">
     <button class="b green" onclick="act('SAFE')">ยืนยันว่าปลอดภัย</button>
     <button class="b red" onclick="act('HELP')">ต้องการความช่วยเหลือ</button>
-    <button class="b soft" onclick="act('AWAY')">ไม่อยู่ในพื้นที่ · ลา · ออกไปข้างนอก</button>
+    <button class="b soft" onclick="act('AWAY')">ลา · ไม่อยู่ในพื้นที่</button>
     <button class="b soft" style="background:transparent;border:0" onclick="$('dlgAct').close()">ปิด</button>
   </div>
 </dialog>
@@ -268,7 +278,7 @@
 var PIN = '';
 var data = null;
 var filter = 'MISSING';
-var LABEL = { MISSING: 'ยังไม่เช็คอิน', HELP: 'ขอความช่วยเหลือ', SAFE: 'ปลอดภัย', AWAY: 'ไม่อยู่ในพื้นที่', NOT_IN: 'ไม่ได้สแกนเข้างาน', ALL: 'ทั้งหมด' };
+var LABEL = { MISSING: 'ยังไม่เช็คอิน', HELP: 'ขอความช่วยเหลือ', SAFE: 'ปลอดภัย', AWAY: 'ลา / ไม่อยู่', NOT_IN: 'ไม่ได้สแกนเข้างาน', ALL: 'ทั้งหมด' };
 var ORDER = { HELP: 0, MISSING: 1, SAFE: 2, AWAY: 3, NOT_IN: 4 };
 var PIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
 var actTarget = null;
@@ -347,14 +357,40 @@ function render(d) {
   }).join('');
 
   fillSelect('dept', d.list.map(function (x) { return x.dept; }));
-  fillSelect('floor', d.list.map(function (x) { return x.floor; }));
+  var zs = {};
+  d.list.forEach(function (x) { x.zone.split(', ').forEach(function (z) { zs[z] = 1; }); });
+  fillSelect('floor', Object.keys(zs));
+  renderZones();
   renderTable();
   $('updated').textContent = 'LIVE · ' + d.serverTime.split(' ')[1];
 }
 
+function renderZones() {
+  var z = {}, sel = $('floor').value;
+  data.list.forEach(function (x) {
+    x.zone.split(', ').forEach(function (k) {
+      var o = z[k] = z[k] || { SAFE: 0, HELP: 0, MISSING: 0, exp: 0 };
+      if (x.state in o) { o[x.state]++; o.exp++; }
+    });
+  });
+  $('zones').innerHTML = Object.keys(z).sort(function (a, b) { return a.localeCompare(b, 'th', { numeric: true }); }).map(function (k) {
+    var o = z[k], w = function (n) { return o.exp ? (n * 100 / o.exp) + '%' : '0'; };
+    return '<button class="zone' + (sel === k ? ' sel' : '') + '" data-z="' + esc(k) + '"><span class="zt">' + esc(k) +
+      (o.MISSING ? '<span>ค้าง ' + o.MISSING + '</span>' : '<span class="ok">ครบ</span>') + '</span>' +
+      '<span class="zb"><i style="width:' + w(o.SAFE) + ';background:var(--safe)"></i><i style="width:' + w(o.HELP) + ';background:var(--help)"></i>' +
+      '<i style="width:' + w(o.MISSING) + ';background:var(--miss)"></i></span></button>';
+  }).join('');
+}
+$('zones').addEventListener('click', function (e) {
+  var b = e.target.closest('.zone'); if (!b) return;
+  var z = b.getAttribute('data-z');
+  $('floor').value = $('floor').value === z ? '' : z;
+  renderZones(); renderTable();
+});
+
 function fillSelect(id, values) {
   var sel = $(id), cur = sel.value;
-  var uniq = values.filter(function (v, i, a) { return v && a.indexOf(v) === i; }).sort();
+  var uniq = values.filter(function (v, i, a) { return v && a.indexOf(v) === i; }).sort(function (a, b) { return a.localeCompare(b, 'th', { numeric: true }); });
   var first = sel.options[0].outerHTML;
   sel.innerHTML = first + uniq.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join('');
   sel.value = cur;
@@ -362,24 +398,25 @@ function fillSelect(id, values) {
 
 function renderTable() {
   if (!data) return;
-  var q = $('search').value.trim().toLowerCase(), dept = $('dept').value, floor = $('floor').value;
+  var q = $('search').value.replace(/\s+/g, '').toLowerCase(), dept = $('dept').value, floor = $('floor').value;
   var rows = data.list.filter(function (x) {
     if (filter !== 'ALL' && x.state !== filter) return false;
     if (dept && x.dept !== dept) return false;
-    if (floor && x.floor !== floor) return false;
-    if (q && (x.name + ' ' + x.id + ' ' + x.phone).toLowerCase().indexOf(q) < 0) return false;
+    if (floor && x.zone.split(', ').indexOf(floor) < 0) return false;
+    if (q && (x.name + x.pos + x.phone + x.code).replace(/\s+/g, '').toLowerCase().indexOf(q) < 0) return false;
     return true;
-  }).sort(function (a, b) { return ORDER[a.state] - ORDER[b.state] || a.dept.localeCompare(b.dept, 'th') || a.name.localeCompare(b.name, 'th'); });
+  }).sort(function (a, b) { return ORDER[a.state] - ORDER[b.state] || a.zone.localeCompare(b.zone, 'th', { numeric: true }) || a.dept.localeCompare(b.dept, 'th') || a.name.localeCompare(b.name, 'th'); });
 
   $('tbody').innerHTML = rows.length ? rows.map(function (x) {
     var detail = [];
-    if (x.time) detail.push(x.time.split(' ')[1] + (x.point ? ' · จุด ' + x.point : '') + (x.by && x.by !== 'SELF' ? ' · ' + (x.by === 'BUDDY' ? 'เพื่อนเช็คอินให้' : 'เจ้าหน้าที่บันทึก') : ''));
+    if (x.time) detail.push(x.time.split(' ')[1] + (x.point ? ' · จุด ' + x.point : '') + (x.by && x.by !== 'SELF' ? ' · ' + ({ BUDDY: 'เพื่อนเช็คอินให้', STAFF: 'เจ้าหน้าที่บันทึก' }[x.by] || x.by) : ''));
+    if (!x.time && x.by === 'SHEET') detail.push('เลือก "อยู่" ในชีตโซน');
     if (x.note) detail.push('“' + x.note + '”');
     if (x.scanTime && !x.time) detail.push('สแกนเข้างาน ' + x.scanTime.split(' ')[1]);
     return '<div class="row" tabindex="0" role="button" data-id="' + esc(x.id) + '">' +
       '<span class="pill k-' + x.state + '">' + LABEL[x.state] + '</span>' +
-      '<span><span class="nm">' + esc(x.name) + '</span><small>' + esc(x.id) + '</small></span>' +
-      '<span>' + esc(x.dept) + '<small>' + esc(x.floor) + '</small></span>' +
+      '<span><span class="nm">' + esc(x.name) + '</span><small>' + esc([x.pos, x.code].filter(Boolean).join(' · ')) + '</small></span>' +
+      '<span>' + esc(x.dept) + '<small>' + esc(x.zone) + '</small></span>' +
       '<span>' + (x.phone ? '<a href="tel:' + esc(x.phone) + '" onclick="event.stopPropagation()">' + esc(x.phone) + '</a>' : '') + '</span>' +
       '<span class="sm">' + esc(detail.join(' · ')) + '</span></div>';
   }).join('') : '<div class="empty">' + (filter === 'MISSING'
@@ -391,13 +428,13 @@ $('tiles').addEventListener('click', function (e) {
   var t = e.target.closest('.tile'); if (!t) return;
   filter = t.getAttribute('data-k'); render(data);
 });
-['search', 'dept', 'floor'].forEach(function (id) { $(id).addEventListener('input', renderTable); });
+['search', 'dept', 'floor'].forEach(function (id) { $(id).addEventListener('input', function () { renderTable(); if (id === 'floor') renderZones(); }); });
 
 function openAct(id) {
   actTarget = data.list.filter(function (x) { return x.id === id; })[0];
   if (!actTarget) return;
   $('actName').textContent = actTarget.name;
-  $('actInfo').textContent = actTarget.id + ' · ' + actTarget.dept + ' · สถานะตอนนี้: ' + LABEL[actTarget.state];
+  $('actInfo').textContent = [actTarget.pos, actTarget.dept, actTarget.zone].filter(Boolean).join(' · ') + ' · สถานะตอนนี้: ' + LABEL[actTarget.state];
   $('dlgAct').showModal();
 }
 $('tbody').addEventListener('click', function (e) { var r = e.target.closest('.row'); if (r) openAct(r.getAttribute('data-id')); });

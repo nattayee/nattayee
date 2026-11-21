@@ -129,10 +129,10 @@
   <section id="vSearch" class="hidden">
     <div id="buddyBanner" class="banner hidden">กำลังเช็คอิน <b>แทนเพื่อน</b> ที่ไม่มีมือถือ</div>
     <h2 id="searchTitle">ค้นหาชื่อของคุณ</h2>
-    <p class="sub">พิมพ์ชื่อเล่น ชื่อจริง หรือรหัสพนักงาน</p>
+    <p class="sub">พิมพ์ชื่อหรือนามสกุล ไม่ต้องพิมพ์คำนำหน้า</p>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="เช่น สมชาย หรือ 10021" autocomplete="off" enterkeyhint="search">
+      <input id="q" type="search" placeholder="เช่น อารยา หรือ สังบัวแก้ว" autocomplete="off" enterkeyhint="search">
     </div>
     <div id="results" class="list"></div>
     <button id="cancelBuddy" class="btn ghost hidden" onclick="backHome()">ยกเลิก</button>
@@ -175,7 +175,7 @@
 
 <script>
 var POINT = document.body.getAttribute('data-point') || '';
-var employees = [];   // [id, name, dept]
+var employees = [];   // [ตัวระบุ (รหัสหรือชื่อ), ชื่อ, หน่วยงาน, โซน, ตำแหน่ง]
 var me = null;        // พนักงานที่จำไว้ในเครื่องนี้
 var selected = null;
 var mode = 'SELF';    // SELF | BUDDY
@@ -194,16 +194,21 @@ var pending = load('pending') || [];
 function savePending() { store('pending', pending); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 // ตัวอักษรแรกของชื่อ (ข้ามสระหน้า เ แ โ ใ ไ)
-function initial(name) { var s = String(name || '').replace(/^(นาย|นางสาว|นาง|น\.ส\.)\s*/, '').replace(/^[เแโใไ]/, ''); return s.charAt(0) || '?'; }
+function stripTitle(name) { return String(name || '').replace(/^(นางสาว|นาวสาว|นาง|นาย|น\.ส\.|ว่าที่\s*ร\.?\s*ต\.?|ดร\.)\s*/, ''); }
+function initial(name) { var s = stripTitle(name).replace(/^[เแโใไ]/, ''); return s.charAt(0) || '?'; }
+function squash(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
+function sub(e) { return [e[4], e[3]].filter(Boolean).join(' · '); }
 
 /* ---------- โหลดข้อมูล ---------- */
 function init(data) {
   employees = data.employees;
   store('emp_cache', data);
   var p = data.points.filter(function (x) { return x.code === POINT; })[0];
-  $('pointLabel').textContent = p ? ('จุดรวมพล ' + p.code + ' · ' + p.name) : (POINT ? 'จุดรวมพล ' + POINT : 'ไม่ระบุจุดรวมพล');
+  $('pointLabel').textContent = p ? (/^จุดรวมพล/.test(p.name) ? p.name : 'จุดรวมพล ' + p.code + ' · ' + p.name) : (POINT ? 'จุดรวมพล ' + POINT : 'ไม่ระบุจุดรวมพล');
   var saved = load('me');
-  me = saved && employees.filter(function (e) { return e[0] === saved[0]; })[0];
+  // หาเครื่องที่เคยจำไว้ ด้วยตัวระบุ หรือชื่อ (กรณีเพิ่มรหัสพนักงานภายหลัง)
+  me = saved && (employees.filter(function (e) { return e[0] === saved[0]; })[0] ||
+    employees.filter(function (e) { return e[1] === saved[1]; })[0]);
   backHome();
   flush(); // ส่งข้อมูลที่ค้างจากครั้งก่อน (ถ้ามี)
 }
@@ -226,7 +231,7 @@ function backHome() {
   if (me) {
     $('rememberAvatar').textContent = initial(me[1]);
     $('rememberName').textContent = me[1];
-    $('rememberDept').textContent = me[2] + ' · ' + me[0];
+    $('rememberDept').textContent = sub(me);
     show('vRemember');
   } else {
     $('q').value = ''; render('');
@@ -244,16 +249,19 @@ function startBuddy() {
 
 $('q').addEventListener('input', function () { render(this.value); });
 function render(q) {
-  q = q.trim().toLowerCase();
+  q = squash(q);
   if (!q) { $('results').innerHTML = ''; return; }
+  // เทียบแบบไม่สนช่องว่าง: "อารยา สัง" เจอ "นางอารยา  สังบัวแก้ว"
   var hits = employees.filter(function (e) {
-    return e[0].toLowerCase().indexOf(q) >= 0 || e[1].toLowerCase().indexOf(q) >= 0;
+    return squash(e[1]).indexOf(q) >= 0 || squash(e[0]).indexOf(q) >= 0;
+  }).sort(function (a, b) {   // ชื่อที่ขึ้นต้นด้วยคำค้นมาก่อน
+    return (squash(stripTitle(a[1])).indexOf(q) === 0 ? 0 : 1) - (squash(stripTitle(b[1])).indexOf(q) === 0 ? 0 : 1);
   }).slice(0, 20);
   $('results').innerHTML = hits.length ? hits.map(function (e) {
     return '<button class="item" data-i="' + employees.indexOf(e) + '"><span class="avatar">' + esc(initial(e[1])) + '</span>' +
-      '<span><span class="nm">' + esc(e[1]) + '</span><small>' + esc(e[2]) + ' · ' + esc(e[0]) + '</small></span>' +
+      '<span><span class="nm">' + esc(e[1]) + '</span><small>' + esc(sub(e)) + '</small></span>' +
       '<span class="go">›</span></button>';
-  }).join('') : '<div class="empty">ไม่พบชื่อนี้ ลองพิมพ์รหัสพนักงาน หรือแจ้งเจ้าหน้าที่ที่จุดรวมพล</div>';
+  }).join('') : '<div class="empty">ไม่พบชื่อนี้ ลองพิมพ์แค่ชื่อหรือแค่นามสกุล หรือแจ้งเจ้าหน้าที่ที่จุดรวมพล</div>';
 }
 $('results').addEventListener('click', function (ev) {
   var b = ev.target.closest('.item'); if (!b) return;
@@ -265,7 +273,7 @@ function showConfirm(emp, m, help) {
   $('confirmAvatar').textContent = initial(emp[1]);
   $('confirmLabel').textContent = m === 'BUDDY' ? 'เช็คอินแทนเพื่อน' : 'ยืนยันว่าเป็นคุณ';
   $('confirmName').textContent = emp[1];
-  $('confirmDept').textContent = emp[2] + ' · ' + emp[0];
+  $('confirmDept').textContent = [emp[4], emp[2], emp[3]].filter(Boolean).join(' · ');
   $('note').value = '';
   $('helpBox').classList.toggle('hidden', !help);
   $('choiceBox').classList.toggle('hidden', help);
@@ -275,7 +283,7 @@ function showHelp() { $('helpBox').classList.remove('hidden'); $('choiceBox').cl
 
 /* ---------- ส่งข้อมูล (มีคิวสำรองกรณีเน็ตหลุด / เซิร์ฟเวอร์ยุ่ง) ---------- */
 function submit(emp, status, by) {
-  var payload = { empId: emp[0], status: status, point: POINT, by: by, note: status === 'HELP' ? $('note').value : '' };
+  var payload = { empId: emp[0], name: emp[1], status: status, point: POINT, by: by, note: status === 'HELP' ? $('note').value : '' };
   if (by === 'SELF') { me = emp; store('me', emp); }
   pending.push(payload); savePending();
   var help = status === 'HELP';
@@ -304,7 +312,7 @@ function flush() {
     .withFailureHandler(function (err) {
       flushing = false;
       var msg = (err && err.message) || '';
-      if (/ไม่พบรหัสพนักงาน/.test(msg)) {   // ข้อมูลผิด ไม่ต้องลองซ้ำ
+      if (/ไม่พบรายชื่อ/.test(msg)) {   // ข้อมูลผิด ไม่ต้องลองซ้ำ
         pending.shift(); savePending();
         banner(msg, true); return;
       }
