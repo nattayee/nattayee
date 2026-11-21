@@ -8309,7 +8309,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-21.6';
+const PAGE_VERSION = '2026-11-21.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -22370,7 +22370,15 @@ async function fetchHolidays(year, btn) {
   renderSettings();
   toast(`ปี ${year + 543}: เพิ่มวันหยุด ${add.length} วัน${note} · กด "บันทึกการตั้งค่า"`);
 }
+// หัวข้อที่ผู้ใช้แก้จริงตั้งแต่เปิด draft (ก่อนหน้าบันทึกจัดรูปแบบค่า) · ไม่มีค่าตั้งต้น = null (ถือว่าทุกหัวข้อ)
+function draftTouched() {
+  let base = null;
+  try { base = draftBase ? JSON.parse(draftBase) : null; } catch (e) { base = null; }
+  if (!base || !draft) return null;
+  return new Set([...Object.keys(draft), ...Object.keys(base)].filter(k => JSON.stringify(draft[k]) !== JSON.stringify(base[k])));
+}
 async function saveSettings() {
+  const touched = draftTouched();
   const codes = draft.staff.map(s => str(s.code).toUpperCase());
   if (codes.some(c => !c)) return toast('กรอกรหัสนักฟิสิกส์ให้ครบทุกแถว', { err: true });
   if (new Set(codes).size !== codes.length) return toast('รหัสนักฟิสิกส์ซ้ำกัน แก้ให้ไม่ซ้ำก่อนบันทึก', { err: true });
@@ -22402,7 +22410,8 @@ async function saveSettings() {
   const stillAdmin = via === 'lpch'
     ? lpchAdmin || (!!me && draft.admins.includes(me)) || draft.admins.includes(username)
     : (me && (me === owner || draft.admins.includes(me))) || (!draft.admins.length && !owner);
-  if (store.mode === 'sheet' && !stillAdmin) return toast(via === 'lpch' ? `ต้องมีชื่อผู้ใช้ของคุณ (${username}) อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก` : me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
+  // กันแอดมินหลักลบชื่อตัวเองออกจากรายชื่อแอดมิน · แอดมินรองไม่ได้อยู่ในรายชื่อนี้ (อยู่ในรายชื่อแอดมินรอง) และส่งเป็นคำขอ จึงไม่ต้องตรวจ (21 พ.ย. แก้: เดิมแอดมินรองส่งขออนุมัติไม่ได้)
+  if (store.mode === 'sheet' && state.user.isAdmin && !stillAdmin) return toast(via === 'lpch' ? `ต้องมีชื่อผู้ใช้ของคุณ (${username}) อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก` : me ? 'ต้องมีอีเมลของคุณ (' + me + ') อยู่ในรายชื่อแอดมิน ไม่เช่นนั้นจะแก้การตั้งค่าไม่ได้อีก' : 'ระบบไม่ทราบอีเมลของคุณ จึงตั้งรายชื่อแอดมินไม่ได้ ให้เจ้าของไฟล์เป็นผู้ตั้ง', { err: true });
   if (Object.values(draft.acts).some(a => !str(a.label))) return toast('กรอกชื่อกิจกรรมให้ครบ', { err: true });
   draft.fields = draft.fields.filter(f => str(f.label) || f.options.length);
   if (draft.fields.some(f => !str(f.label))) return toast('กรอกชื่อหัวข้อเพิ่มเติมให้ครบ', { err: true });
@@ -22430,7 +22439,7 @@ async function saveSettings() {
   if (badRule) return toast(str(badRule.match) ? `รหัส ICD-10 "${str(badRule.match)}" ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ใช้ไม่ได้ ใส่แบบ C61 หรือ C50.9` : 'ใส่รหัส ICD-10 ในค่าเริ่มต้นตามเทคนิคหรือ ICD-10 ให้ครบ', { err: true });
   const next = mergeConfig({ ...draft, queue: state.config.queue, carry: state.config.carry });
   const btn = $('#save-settings');
-  if (!state.user.isAdmin) return proposeSettings(next, btn);
+  if (!state.user.isAdmin) return proposeSettings(next, btn, touched);
   btn.disabled = true;
   try {
     await store.saveConfig(next);
@@ -22444,11 +22453,11 @@ async function saveSettings() {
   finally { if (btn.isConnected) btn.disabled = false; }
 }
 // แอดมินรอง: ส่งเฉพาะส่วนที่แก้เป็นคำขอ (ยังไม่มีผล) · ส่วนนอกหมวดที่ได้รับสิทธิ์ส่งไม่ได้
-async function proposeSettings(next, btn) {
+async function proposeSettings(next, btn, touched) {
   const tabs = subScope();
   if (!tabs.length) return toast('แก้การตั้งค่าได้เฉพาะแอดมิน', { err: true });
   const changes = {};
-  for (const k of new Set([...Object.keys(next), ...Object.keys(state.config)])) if (k !== 'queue' && k !== 'carry' && JSON.stringify(next[k]) !== JSON.stringify(state.config[k])) changes[k] = next[k];
+  for (const k of new Set([...Object.keys(next), ...Object.keys(state.config)])) if (k !== 'queue' && k !== 'carry' && (!touched || touched.has(k)) && JSON.stringify(next[k]) !== JSON.stringify(state.config[k])) changes[k] = next[k];   // เฉพาะหัวข้อที่แก้จริง
   if (!Object.keys(changes).length) { draft = null; render(); return toast('ไม่มีการแก้ไข'); }
   const bad = cfgReqBad(state.config, changes, tabs);
   if (bad.length) return toast(`แก้ส่วนนี้ไม่ได้ (นอกหมวดที่ได้รับสิทธิ์): ${bad.map(k => cfgKeyLabel(k.replace(/^renames\./, ''))).join(', ')}`, { err: true });
