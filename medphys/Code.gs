@@ -35,8 +35,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-21.1';
-const API_LEVEL = 108;   // 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-21.2';
+const API_LEVEL = 109;   // 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -252,6 +252,13 @@ TABLES.mlog = {
   fields: [['id', 'id'], ['machine', 'เครื่อง'], ['status', 'สถานะ'], ['from', 'เริ่ม'], ['to', 'สิ้นสุด'], ['cat', 'หมวดอาการ'], ['note', 'Note'], ['eta', 'คาดว่าเสร็จ'], ['wait', 'ผู้ป่วยรอฉาย (คน)'],
     ['by', 'บันทึกโดย'], ['role', 'ตำแหน่ง'], ['at', 'บันทึกเมื่อ'], ['editBy', 'แก้โดย'], ['editAt', 'แก้เมื่อ'], ['energy', 'พลังงาน']],   // energy (API 103): พลังงานที่เกิด Interrupt
 };
+// API 109 (21 พ.ย.): ประกาศ · หนึ่งแถว = หนึ่งประกาศ · roles = อาชีพที่แจ้ง (คั่นด้วยจุลภาค) · level = normal | urgent · until = แสดงถึงวันที่
+// acks = JSON { อาชีพ: { by, user, at } } (คนแรกของอาชีพที่กดรับทราบ = ประกาศหายจากทุกคนในอาชีพนั้น) · ยกเลิก = cancelBy / cancelAt · เขียนผ่าน notifyAdd / notifyAck / notifyCancel
+TABLES.notify = {
+  sheet: 'Notices',
+  fields: [['id', 'id'], ['text', 'ข้อความ'], ['roles', 'ถึงอาชีพ'], ['level', 'ระดับ'], ['until', 'แสดงถึง'], ['by', 'ส่งโดย'], ['byUser', 'บัญชีผู้ส่ง'], ['at', 'ส่งเมื่อ'],
+    ['acks', 'รับทราบ (JSON)'], ['cancelBy', 'ยกเลิกโดย'], ['cancelAt', 'ยกเลิกเมื่อ']],
+};
 // API 86: คำสั่งแพทย์ระหว่างฉาย (ห้องตรวจ → ระหว่างฉาย) ต่อเคสต่อวัน · id = วันที่|id เคส · kind = alone (RT Alone) | ccrt
 // rt / cmt = continue | hold · src = see (พบแพทย์วันนี้) / hold (Hold RT อยู่) · nurse = เวลาที่พยาบาลยืนยัน · เขียนผ่าน rtdSave / nurseMark
 TABLES.rtd = {
@@ -446,7 +453,7 @@ const DELTA_TABLES = ['cases', 'logs', 'dq', 'reg'];   // ตารางให�
 const DELTA_MAX = 500;                    // แถวที่แก้เกินนี้ = ส่งทั้งตาราง
 const DELTA_MARGIN_MS = 5 * 60000;        // ส่งแถวที่แก้ก่อนครั้งก่อนเผื่อไว้ (บันทึกที่ค้างระหว่างอ่าน)
 // ข้อมูลที่ส่ง → ตารางที่ใช้ · windowed = ช่วงวันที่ขึ้นกับวันนี้ (วันใหม่ = รุ่นใหม่)
-const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'], dqDuty: ['dqDuty'], events: ['events'], jobLeaves: ['jobs'], see: ['see'], rtd: ['rtd'], visit: ['visit'], roJobs: ['roJobs'], ncall: ['ncall'], mlog: ['mlog'] };   // jobLeaves (API 79) = วันลาในแบบฟอร์ม RTT/RA Jobs ของทุกคน (ปฏิทินแผนก)
+const OUT_TABLES = { cases: ['cases'], logs: ['logs'], leaves: ['leaves'], duty: ['duty'], ctsim: ['ctsim'], appt: ['appt'], reg: ['reg'], bq: ['bq', 'cases'], jobs: ['jobs'], vac: ['vac'], spq: ['spq'], dq: ['dq'], dqLeave: ['dqLeave'], dqDuty: ['dqDuty'], events: ['events'], jobLeaves: ['jobs'], see: ['see'], rtd: ['rtd'], visit: ['visit'], roJobs: ['roJobs'], ncall: ['ncall'], mlog: ['mlog'], notify: ['notify'] };   // jobLeaves (API 79) = วันลาในแบบฟอร์ม RTT/RA Jobs ของทุกคน (ปฏิทินแผนก)
 const OUT_WINDOWED = ['duty', 'ctsim', 'appt', 'bq', 'jobs', 'roJobs'];
 let DIRTY_ = null;
 // ตารางที่บันทึกในคำขอนี้ · นอกล็อก = เก็บรุ่นใหม่ทันที
@@ -651,8 +658,9 @@ function tablesFor_(ss, config, user, need, have) {
     roJobs: () => roJobsFor_(ss, user, config),   // API 91
     ncall: () => recentNcall_(ss),   // API 94
     mlog: () => recentMlog_(ss),   // API 100
+    notify: () => recentNotify_(ss),   // API 109
   };
-  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave, dqDuty: need.dqLeave, events: need.events, jobLeaves: need.jobLeaves, see: need.see, rtd: need.rtd, visit: need.visit, roJobs: need.roJobs, ncall: need.ncall, mlog: need.mlog };
+  const want = { cases: need.cases, logs: need.logs, leaves: need.leaves, duty: need.duty, ctsim: need.ctsim, appt: need.appt, reg: need.reg, bq: need.bq, jobs: need.jobs, vac: need.vac, spq: need.appt || need.ctsim || need.cases, dq: need.dq, dqLeave: need.dqLeave, dqDuty: need.dqLeave, events: need.events, jobLeaves: need.jobLeaves, see: need.see, rtd: need.rtd, visit: need.visit, roJobs: need.roJobs, ncall: need.ncall, mlog: need.mlog, notify: need.notify };
   Object.keys(want).forEach(k => {
     if (!want[k]) { out[k] = []; return; }
     const v = verOf(k);
@@ -722,6 +730,7 @@ const GUEST_TABLES = { cases: ['work', 'pend', 'queue', 'course', 'dash', 'p4p',
   ncall: ['nurse', 'ctsim', 'consult', 'course', 'appt', 'bq'],
   // API 100: สถานะเครื่อง = ทุกตำแหน่งของแผนกที่เห็นแถบใดก็ได้ (หน่วยงานภายนอกของ Treatment Summary ไม่ได้)
   mlog: ['reg', 'dq', 'consult', 'nurse', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'settings'] };   // API 94: แถบ Nurse (เลื่อนนัด · ไม่มาตามนัด) · แถบอื่นเห็นป้ายไม่มาตามนัด   // API 86: พบแพทย์วันนี้ · คำสั่งแพทย์ระหว่างฉาย
+GUEST_TABLES.notify = GUEST_TABLES.mlog.slice();   // API 109: ประกาศ = ทุกตำแหน่งของแผนก (หน่วยงานภายนอกของ Treatment Summary ไม่ได้)
 // แถบ Consult: รอลงนัดแยกตามแพทย์ + ปฏิทินของฟอร์มลงนัด CT+RT   // แจกงานแพทย์: แถบลงนัดแสดงผู้ป่วยที่รอลงนัดแยกตามแพทย์
 ['cases', 'appt', 'dq', 'ctsim'].forEach(t => { if (GUEST_TABLES[t].indexOf('nurse') < 0) GUEST_TABLES[t].push('nurse'); });   // แถบ Nurse (API 86): CT Order · คำสั่งแพทย์ · Call center
 // API 91: RO Jobs → P4P แพทย์ นับผู้ป่วยใหม่ (แจกงานแพทย์) ตรวจติดตาม/เคมีบำบัด (คำสั่งแพทย์ระหว่างฉาย · พบแพทย์นอกตาราง) จำลองการฉาย (CT-SIM) ใส่แร่ contour และ plan evaluation (เคส)
@@ -759,7 +768,7 @@ const EDIT_VIEWS = { see: ['nurse'], rtd: ['consult'], nurse: ['nurse'], visit: 
   cases: ['work', 'pend', 'queue'], logs: ['logs', 'work', 'pend'], leaves: ['work', 'queue', 'mpleave'], course: ['course'], ctsim: ['ctsim'], appt: ['appt', 'consult'], jobs: ['jobs'], reg: ['reg'], bq: ['bq'], vac: ['jobs', 'ctsim'], dq: ['dq'], events: ['deptcal'] };   // consult (API 69): ลงนัด CT+RT
 
 // ตารางที่เขียนผ่านฟังก์ชันของตัวเองเท่านั้น (ตรวจ PIN และสถานะการลง/แจก) ไม่ผ่าน saveRecord / deleteRecord
-const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty', 'see', 'rtd', 'visit', 'roJobs', 'ncall', 'mlog'];
+const OWN_WRITERS = ['ctsim', 'duty', 'appt', 'jobs', 'reg', 'bq', 'vac', 'spq', 'regArch', 'dq', 'dqLeave', 'dqDuty', 'see', 'rtd', 'visit', 'roJobs', 'ncall', 'mlog', 'notify'];
 function saveRecord(table, rec, token) { return saveRecord_(table, rec, token, null); }
 // edit = { pin }: แก้รายการที่มีอยู่ต้องยืนยัน PIN (ตรวจหลังอ่านแถวภายใต้ล็อก · เดิมอ่านคอลัมน์ id ก่อนล็อกอีกรอบ)
 function saveRecord_(table, rec, token, edit) {
@@ -3575,6 +3584,78 @@ function machineLogEdit(rec, token) {
     if (!open) set.to = to;
     put(id, set);
     return { rows: out, del: [] };
+  });
+}
+
+/* ---------- API 109 (21 พ.ย.): ประกาศ · ตัววิ่งใต้แถบเมนูของอาชีพที่แจ้ง · กดรับทราบ (คนแรกของอาชีพ) = หายจากทุกคนในอาชีพนั้น · หมดอายุ = หายเอง ---------- */
+const NTF_DAYS = 120;   // ส่งประกาศย้อนหลังกี่วัน (ประวัติ) · ชีต Notices เก็บทั้งหมด
+const NTF_MAX_DAYS = 30;   // แสดงได้นานสุดกี่วันนับจากวันส่ง
+const ntfRoles_ = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+function ntfAcks_(v) {
+  let a = null;
+  try { a = JSON.parse(String(v || '{}')); } catch (e) { a = null; }
+  return a && typeof a === 'object' && !Array.isArray(a) ? a : {};
+}
+// ส่ง / ยกเลิกประกาศได้: แอดมินหลัก แอดมินรอง และบัญชี Google ที่เป็นแอดมิน
+const ntfCanSend_ = u => !!(u && (u.isAdmin || u.isSub));
+function recentNotify_(ss) {
+  const from = new Date(Date.now() - NTF_DAYS * 864e5).toISOString();
+  return readTable_(ss, 'notify').filter(x => String(x.at || '') >= from);
+}
+/**
+ * ส่งประกาศ · rec = { text (ไม่เกิน 300 ตัวอักษร), roles: [อาชีพ], level: normal | urgent, until: yyyy-mm-dd (วันนี้ ถึง 30 วัน) }
+ * ผู้ส่ง: แอดมินหลัก / แอดมินรอง · คืน { rows: [ประกาศใหม่] }
+ */
+function notifyAdd(rec, token) {
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg);
+  if (!ntfCanSend_(u)) throw new Error('ส่งประกาศได้เฉพาะแอดมินและแอดมินรอง');
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const text = String(rec.text == null ? '' : rec.text).replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!text) throw new Error('พิมพ์ข้อความประกาศก่อนส่ง');
+  const roles = (Array.isArray(rec.roles) ? rec.roles : ntfRoles_(rec.roles)).map(x => String(x || '').trim()).filter((x, i, a) => /^[\w -]{1,20}$/.test(x) && a.indexOf(x) === i).slice(0, 20);
+  if (!roles.length) throw new Error('เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง');
+  const level = rec.level === 'urgent' ? 'urgent' : 'normal';
+  const td = today_(ss0), until = String(rec.until || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new Error('วันที่แสดงถึงไม่ถูกต้อง');
+  const max = Utilities.formatDate(new Date(Date.parse(td + 'T12:00:00Z') + NTF_MAX_DAYS * 864e5), 'UTC', 'yyyy-MM-dd');
+  if (until < td) throw new Error('วันที่แสดงถึงต้องไม่ก่อนวันนี้');
+  if (until > max) throw new Error('แสดงได้นานสุด ' + NTF_MAX_DAYS + ' วัน');
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'notify', null, '');
+    const r = { id: Utilities.getUuid(), text: text, roles: roles.join(', '), level: level, until: until, by: String(u.name || u.username || u.me || ''), byUser: String(u.username || u.me || ''),
+      at: new Date().toISOString(), acks: '{}', cancelBy: '', cancelAt: '' };
+    writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.notify.fields, r, null);
+    return { rows: [r] };
+  });
+}
+/** รับทราบประกาศในนามอาชีพของผู้ใช้ (คนแรกของอาชีพ) · กดซ้ำหรือคนอื่นในอาชีพกดไปแล้ว = คืนประกาศเดิม · คืน { rows: [ประกาศ] } */
+function notifyAck(id, token) {
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg), role = String(u.role || '').trim();
+  if (!role) throw new Error('บัญชีนี้ไม่มีตำแหน่ง จึงรับทราบในนามอาชีพไม่ได้');
+  id = String(id || '').trim();
+  if (!id) throw new Error('ไม่ได้ระบุประกาศ');
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'notify', null, id), cur = x.cur;
+    if (!x.row || !cur) throw new Error('ไม่พบประกาศนี้ (อาจถูกลบไปแล้ว)');
+    const roles = ntfRoles_(cur.roles), mine = roles.filter(r => r.toLowerCase() === role.toLowerCase())[0];
+    if (!mine) throw new Error('ประกาศนี้ไม่ได้แจ้ง ' + role);
+    const acks = ntfAcks_(cur.acks);
+    if (acks[mine]) return { rows: [cur] };
+    if (String(cur.cancelAt || '')) throw new Error('ประกาศนี้ถูกยกเลิกแล้ว');
+    acks[mine] = { by: String(u.name || u.username || u.me || ''), user: String(u.username || u.me || ''), at: new Date().toISOString() };
+    return { rows: [saveRow_(x, TABLES.notify.fields, { acks: JSON.stringify(acks) })] };
+  });
+}
+/** ยกเลิกประกาศ (หายจากแถบของทุกอาชีพ · ยังอยู่ในประวัติ) · แอดมินหลัก / แอดมินรอง · คืน { rows: [ประกาศ] } */
+function notifyCancel(id, token) {
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg);
+  if (!ntfCanSend_(u)) throw new Error('ยกเลิกประกาศได้เฉพาะแอดมินและแอดมินรอง');
+  id = String(id || '').trim();
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'notify', null, id);
+    if (!x.row || !x.cur) throw new Error('ไม่พบประกาศนี้ (อาจถูกลบไปแล้ว)');
+    if (String(x.cur.cancelAt || '')) return { rows: [x.cur] };
+    return { rows: [saveRow_(x, TABLES.notify.fields, { cancelBy: String(u.name || u.username || u.me || ''), cancelAt: new Date().toISOString() })] };
   });
 }
 
