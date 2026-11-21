@@ -181,6 +181,24 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
   }
   function byId(id) { return M.guides.filter(function (g) { return g.id === id; })[0]; }
 
+  /* ---------- ชื่อแถบเมนู: ข้อความในคู่มือเขียนเป็น {nav:view} แล้วแทนด้วยชื่อที่แอดมินตั้ง (guides.json → nav) ----------
+     หน้าที่ฝังคู่มือส่งชื่อปัจจุบันมาแทนได้: window.RTHUB_NAV = { course: "…" } หรือ ?nav={"course":"…"} ต่อท้ายลิงก์ */
+  function navNames(base) {
+    var out = {}, q = null, k;
+    for (k in base || {}) out[k] = base[k];
+    try { q = JSON.parse(new URLSearchParams(location.search).get("nav") || "null"); } catch (e) { q = null; }
+    [window.RTHUB_NAV, q].forEach(function (o) {
+      if (o && typeof o === "object") for (var k in o) if (typeof o[k] === "string" && o[k].trim() && o[k].length <= 40) out[k] = o[k].trim();
+    });
+    return out;
+  }
+  function navFill(o, nav, key) {
+    if (typeof o === "string") return o.replace(/\{nav:([a-z]+)\}/g, function (m, k) { var v = nav[k] || k; return key === "svg" ? esc(v) : v; });   // svg ใส่ลงหน้าเป็น markup จึง escape ที่นี่ · ข้อความอื่น escape ตอนแสดง
+    if (Array.isArray(o)) return o.map(function (x) { return navFill(x, nav, key); });
+    if (o && typeof o === "object") { var r = {}; for (var k in o) r[k] = k === "nav" ? o[k] : navFill(o[k], nav, k); return r; }
+    return o;
+  }
+
   /* ---------- marks on a screenshot: box around each target, numbered badge beside it, arrow from badge to box ---------- */
   function marksSvg(st) {
     var W = st.w, H = st.h, s = Math.max(1, W / 1000), R = 17 * s, sw = 3.2 * s, out = [], placed = [];
@@ -295,7 +313,7 @@ kbd, .ui { font: 600 .92em var(--body); padding: 0 6px; border-radius: 6px; back
   view.addEventListener("keydown", function (e) { var f = e.target.closest && e.target.closest(".shot"); if (f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); zoom(f); } });
 
   window.addEventListener("hashchange", route);
-  fetch("guides.json").then(function (r) { return r.json(); }).then(function (data) { M = data; route(); })
+  fetch("guides.json").then(function (r) { return r.json(); }).then(function (data) { M = navFill(data, navNames(data.nav), ""); route(); })
     .catch(function () { view.innerHTML = '<p class="note">โหลดเนื้อหาคู่มือไม่สำเร็จ ลองรีเฟรชหน้า</p>'; });
 })();
 </script>

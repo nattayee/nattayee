@@ -1,9 +1,10 @@
 // ถ่ายภาพหน้าจอประกอบคู่มือส่วนนัดคิวใส่แร่ (โหมดตัวอย่าง ข้อมูลสมมุติของหน้าเว็บเอง) พร้อมตำแหน่งกรอบ (marks) ของแต่ละภาพ
-// ใช้: node bq_shots.js <index.html ของ RT Hub> <outdir>   → <outdir>/*.png + shots.json  (แปลงเป็น webp ด้วย to_webp.py)
-// ชุดเดียวกับภาพเดิมของคู่มือ: จอ 1080×705 · 2x · วันจันทร์ที่ 7 ธ.ค. 2569 10:00 · ฟอนต์จริงของหน้าเว็บ
+// ใช้: node bq_shots.js <index.html ของ RT Hub> <outdir> [nav.json = แถบเมนูตามที่แอดมินตั้ง]   → <outdir>/*.png + shots.json  (แปลงเป็น webp ด้วย to_webp.py)
+// ชุดเดียวกับภาพเดิมของคู่มือ: จอ 1440×940 · 1.5x · วันจันทร์ที่ 7 ธ.ค. 2569 10:00 · ฟอนต์จริงของหน้าเว็บ
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
-const DSF = 2, VW = 1080, VH = 1000, VIEW_H = 705;   // จอสูง 1000 ให้รายการอยู่ในจอโดยไม่ต้องเลื่อนหน้า (เลื่อนแล้วแถบหัวแบบย่อจะบังส่วนบนของภาพ) · ภาพทั้งจอใช้ 705 เหมือนภาพเดิม
+const { applyNav } = require('./nav_inject.js');
+const DSF = 1.5, VW = 1440, VH = 1300, VIEW_H = 940;   // ชุดเดียวกับภาพเดิมของคู่มือ: จอ 1440×940 · 1.5x (ภาพกว้าง 2160px)   // จอสูง 1000 ให้รายการอยู่ในจอโดยไม่ต้องเลื่อนหน้า (เลื่อนแล้วแถบหัวแบบย่อจะบังส่วนบนของภาพ) · ภาพทั้งจอใช้ 705 เหมือนภาพเดิม
 (async () => {
   const htmlPath = process.argv[2], out = process.argv[3]; fs.mkdirSync(out, { recursive: true });
   const srv = http.createServer((q, r) => { r.setHeader('content-type', 'text/html; charset=utf-8'); r.end(fs.readFileSync(htmlPath)); }).listen(0);
@@ -13,6 +14,7 @@ const DSF = 2, VW = 1080, VH = 1000, VIEW_H = 705;   // จอสูง 1000 ใ
   await p.clock.install({ time: new Date('2026-12-07T10:00:00+07:00') });
   await p.goto(url); await p.waitForSelector('.nav'); await p.waitForTimeout(900);
   await p.evaluate(() => document.fonts.ready);
+  if (process.argv[4]) console.log('nav:', await applyNav(p, JSON.parse(fs.readFileSync(process.argv[4], 'utf8'))));   // แถบเมนูตามที่แอดมินตั้ง (ชื่อ · ลำดับ · กลุ่ม)
   await p.addStyleTag({ content: '#bq-link{display:none!important}' });   // ข้อความตั้งค่าสำหรับแอดมิน (ยังไม่ได้ตั้งให้นับคะแนน MP / RC) ไม่เกี่ยวกับขั้นตอนใช้งาน
   console.log('font ok', await p.evaluate(() => document.fonts.check('16px "IBM Plex Sans Thai"')), '| version', await p.evaluate(() => (document.body.innerText.match(/หน้าเว็บรุ่น ([\d.-]+)/) || [])[1]));
   const go = async v => { await p.evaluate(v => (document.querySelector(`.nav [data-view="${v}"]`) || document.querySelector(`[data-view="${v}"]`)).click(), v); await p.waitForTimeout(450); };
@@ -32,6 +34,7 @@ const DSF = 2, VW = 1080, VH = 1000, VIEW_H = 705;   // จอสูง 1000 ใ
     c = { x: Math.max(0, Math.floor(c.x - pad)), y: Math.max(0, Math.floor(c.y - pad)), w: Math.ceil(c.w + pad * 2), h: Math.ceil(c.h + pad * 2) };
     if (o.h) c.h = Math.min(c.h, o.h);
     c.w = Math.min(c.w, VW - c.x); c.h = Math.min(c.h, VH - c.y);
+    for (const k of ['x', 'y', 'w', 'h']) c[k] = 2 * Math.floor(c[k] / 2);   // เลขคู่: คูณ 1.5 แล้วได้พิกเซลเต็ม
     const ms = [];
     for (const m of marks) {
       const r = m && m.u ? union(await Promise.all(m.u.map(rect))) : m && m.s ? await rect(m.s) : await rect(m);
@@ -41,8 +44,8 @@ const DSF = 2, VW = 1080, VH = 1000, VIEW_H = 705;   // จอสูง 1000 ใ
       ms.push(k);
     }
     await p.screenshot({ path: path.join(out, name + '.png'), clip: { x: c.x, y: c.y, width: c.w, height: c.h } });
-    META[name] = { img: `shots/${name}.webp`, w: c.w * DSF, h: c.h * DSF, marks: ms, _c: c };
-    console.log('snap', name, c.w * DSF + 'x' + c.h * DSF, 'marks', ms.length);
+    META[name] = { img: `shots/${name}.webp`, w: Math.round(c.w * DSF), h: Math.round(c.h * DSF), marks: ms, _c: c };
+    console.log('snap', name, META[name].w + 'x' + META[name].h, 'marks', ms.length);
   };
   const toast = () => p.$eval('#toast', t => t.textContent).catch(() => '');
   const hideToasts = () => p.evaluate(() => { const t = document.querySelector('#toast'); if (t) t.className = 'toast'; });   // ซ่อนเหมือนที่หน้าเว็บทำเองเมื่อครบเวลา (ห้ามลบทิ้ง)
