@@ -8305,7 +8305,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-21.4';
+const PAGE_VERSION = '2026-11-21.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -15661,7 +15661,7 @@ function renderBq() {
 // %Diff = (Planning − Calculation) ÷ Planning × 100 · บันทึก = เพิ่มแถว (วันที่ · Planning · MP) ในชีตของเว็บนั้น ผ่าน Code.gs · ดูอย่างเดียว = เห็นค่าที่คำนวณ
 const hdrCfg = () => (state.config.bq && state.config.bq.hdr) || hdrNorm(null);
 const hdrOn = () => hdrCfg().on && !!accessOf('bq') && (store.mode === 'local' || (serverHas(HDR_API) && !!hdrCfg().url));
-const hdr = { data: null, busy: false, err: '', key: '', sig: '', saving: false, form: { date: '', plan: '', mp: '' } };
+const hdr = { data: null, busy: false, err: '', key: '', sig: '', saving: false, dirty: false, form: { date: '', plan: '', mp: '' } };
 const hdrDay = v => { const [y, m, d] = str(v).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
 function hdrCalc(s, day) {
   if (!s || !isDay(day) || !isDay(s.refDate) || !(s.a0 > 0) || !(s.halfLife > 0)) return null;
@@ -15675,12 +15675,28 @@ function demoHdr() {
   const records = pref.get('demoHdr', []).filter(r => r && isDay(r.date) && +r.planning > 0).map(r => { const c = hdrCalc(source, r.date); return { date: r.date, calc: c, planning: +r.planning, diff: c == null ? null : (r.planning - c) / r.planning * 100, mp: str(r.mp) }; });
   return { title: 'ตัวอย่าง', tab: 'Record', rows: records.length, source, mpList: state.config.staff.map(x => str(x.code)).filter(Boolean).slice(0, 10), records };
 }
+// 21 พ.ย.: บันทึกแล้วค่าล่าสุดค้างแสดงไว้ — ช่อง Planning / MP แสดงค่าที่บันทึกไว้ของวันที่เลือก (แถวท้ายสุดของวันนั้นในชีต) จนกว่าจะพิมพ์ค่าใหม่
+// วันที่ยังไม่มีบันทึก: ช่องว่าง และบอกค่าล่าสุดของวันก่อนไว้ข้างท้าย · ค่าในช่องตรงกับที่บันทึกแล้ว = ปุ่มเป็น "✓ บันทึกแล้ว" (กดซ้ำไม่ได้ ไม่เกิดแถวซ้ำ)
+const hdrRecs = () => ((hdr.data || {}).records || []).filter(r => r && isDay(r.date) && r.planning > 0);
+const hdrRec = day => hdrRecs().filter(r => r.date === day).pop() || null;
+const hdrLatest = () => hdrRecs().reduce((a, r) => (!a || r.date >= a.date ? r : a), null);
+const hdrSaved = () => { const r = hdrRec(hdr.form.date), p = parseFloat(hdr.form.plan); return !!r && p > 0 && Math.abs(p - r.planning) < 1e-9 && str(r.mp) === str(hdr.form.mp); };
+function hdrFill() {
+  if (hdr.dirty || !hdr.data) return;
+  const r = hdrRec(hdr.form.date), list = hdr.data.mpList || [], mine = str(pref.get('hdrMp', ''));
+  hdr.form.plan = r ? String(r.planning) : '';
+  hdr.form.mp = r && list.includes(r.mp) ? r.mp : list.includes(mine) ? mine : '';
+  const i = $('#hdr-plan'), m = $('#hdr-mp');
+  if (i) i.value = hdr.form.plan;
+  if (m) m.value = hdr.form.mp;
+}
 const hdrSrcText = s => (s ? `Source ${s.serial || '—'}${s.isotope ? ` (${s.isotope})` : ''} · A0 ${s.a0 == null ? '—' : s.a0} GBq · ${s.refDate ? fmtDay(s.refDate) : '—'} · T½ ${s.halfLife == null ? '—' : s.halfLife} วัน` : '');
 async function hdrLoad() {
   hdr.busy = true; hdr.err = '';
   try {
     hdr.data = await store.hdrGet(null);
     if (hdr.form.mp && !(hdr.data.mpList || []).includes(hdr.form.mp)) hdr.form.mp = '';
+    hdrFill();
   } catch (e) { hdr.err = errMsg(e); hdr.data = null; }
   finally { hdr.busy = false; if (state.view === 'bq') renderHdr(); }
 }
@@ -15690,7 +15706,7 @@ function hdrHtml(edit) {
     : '<span class="hdr-t">HDR Activity</span><span class="muted">กำลังโหลด…</span>';
   const src = hdrSrcText(d.source);
   return `<span class="hdr-t" title="${esc(src)}">Activity</span>${edit ? `<input type="date" id="hdr-date" value="${esc(f.date)}" aria-label="วันที่">` : `<span class="muted">${esc(fmtDay(f.date))}</span>`}
-    <output class="hdr-calc" id="hdr-calc" title="${esc(src)}"></output>${edit ? `<input type="number" id="hdr-plan" step="any" min="0" inputmode="decimal" value="${esc(f.plan)}" placeholder="Planning (GBq)" aria-label="Planning (GBq)">
+    <output class="hdr-calc" id="hdr-calc" title="${esc(src)}"></output>${edit ? '' : '<span class="hdr-diff" id="hdr-diff"></span>'}${edit ? `<input type="number" id="hdr-plan" step="any" min="0" inputmode="decimal" value="${esc(f.plan)}" placeholder="Planning (GBq)" aria-label="Planning (GBq)">
     <select id="hdr-mp" aria-label="MP">${['', ...(d.mpList || [])].map(m => `<option value="${esc(m)}"${m === f.mp ? ' selected' : ''}>${m ? esc(m) : 'MP —'}</option>`).join('')}</select>
     <span class="hdr-diff" id="hdr-diff"></span><button type="button" class="btn primary sm" id="hdr-save"${hdr.saving ? ' disabled' : ''}>${hdr.saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>` : ''}`;
 }
@@ -15701,18 +15717,28 @@ function hdrOut() {
   const c = hdrCalc(d.source, f.date), tol = hdrCfg().tol, dif = $('#hdr-diff');
   out.textContent = c == null ? '— GBq' : `${c.toFixed(4)} GBq`;
   if (!dif) return;
-  const p = parseFloat(f.plan), had = (d.records || []).filter(r => r.date === f.date);
+  const rec = hdrRec(f.date), view = !$('#hdr-plan'), p = view ? (rec ? rec.planning : NaN) : parseFloat(f.plan), saved = view ? !!rec : hdrSaved();
   if (c != null && p > 0) {
     const x = (p - c) / p * 100, ok = Math.abs(x) <= tol;
     dif.className = 'hdr-diff ' + (ok ? 'ok' : 'bad');
-    dif.textContent = `%Diff ${hdrPct(x)} ${ok ? '✓ ผ่านเกณฑ์' : '▲ เกินเกณฑ์'}`;
-    dif.title = `เกณฑ์ ±${tol}% · (Planning − Calculation) ÷ Planning × 100`;
-  } else if (had.length) {
-    const r = had[had.length - 1];
+    dif.textContent = `${view ? `Planning ${rec.planning} GBq${rec.mp ? ` · ${rec.mp}` : ''} · ` : ''}%Diff ${hdrPct(x)} ${ok ? '✓ ผ่านเกณฑ์' : '▲ เกินเกณฑ์'}${saved ? (view ? ' · บันทึกแล้ว' : '') : rec ? ' · ยังไม่บันทึก' : ''}`;   // ช่องกรอก: ปุ่มบอกว่าบันทึกแล้วอยู่แล้ว
+    dif.title = `เกณฑ์ ±${tol}% · (Planning − Calculation) ÷ Planning × 100${saved ? ' · ค่านี้อยู่ในชีตของ HDR Activity แล้ว' : rec ? ` · ค่าที่บันทึกไว้ของวันนี้: ${rec.planning}${rec.mp ? ` · ${rec.mp}` : ''}` : ''}`;
+  } else if (rec) {
     dif.className = 'hdr-diff muted';
-    dif.textContent = `บันทึกแล้ว${r.planning != null ? ` ${r.planning}` : ''}${r.mp ? ` · ${r.mp}` : ''}`;
+    dif.textContent = `บันทึกแล้ว ${rec.planning}${rec.mp ? ` · ${rec.mp}` : ''}`;
     dif.title = 'วันที่นี้มีในชีตของ HDR Activity แล้ว';
-  } else { dif.className = 'hdr-diff'; dif.textContent = ''; dif.title = ''; }
+  } else {
+    const last = hdrLatest();   // วันที่ยังไม่มีบันทึก: บอกค่าล่าสุดที่บันทึกไว้
+    dif.className = 'hdr-diff' + (last ? ' muted' : '');
+    dif.textContent = last ? `ล่าสุด ${fmtDay(last.date)} · ${last.planning} GBq${last.mp ? ` · ${last.mp}` : ''}` : '';
+    dif.title = last ? 'ค่า Planning ล่าสุดที่บันทึกไว้ในชีตของ HDR Activity' : '';
+  }
+  const b = $('#hdr-save');
+  if (b && !hdr.saving) {
+    b.disabled = saved;
+    b.textContent = saved ? '✓ บันทึกแล้ว' : 'บันทึก';
+    b.title = saved ? 'ค่านี้บันทึกในชีตของ HDR Activity แล้ว · แก้ค่า Planning หรือ MP เพื่อบันทึกใหม่' : '';
+  }
 }
 function renderHdr() {
   const box = $('#hdr-act');
@@ -15733,12 +15759,14 @@ async function hdrSave() {
   const f = hdr.form, p = parseFloat(f.plan);
   if (hdr.saving || !hdr.data) return;
   if (accessOf('bq') !== 'edit') return toast('ตำแหน่งนี้ดู HDR Activity ได้อย่างเดียว', { err: true });
+  if (hdrSaved()) return toast('ค่านี้บันทึกไว้แล้ว · แก้ค่า Planning หรือ MP ก่อน ถ้าต้องการบันทึกใหม่');
   if (!isDay(f.date) || !(p > 0)) { toast('กรอกวันที่และค่า Planning (GBq) ก่อนบันทึก', { err: true }); const i = $('#hdr-plan'); if (i) i.focus(); return; }
   const c = hdrCalc(hdr.data.source, f.date), x = c == null ? null : (p - c) / p * 100;
   hdr.saving = true; renderHdr();
   try {
     hdr.data = await store.hdrAdd(f.date, p, f.mp);
-    hdr.form.plan = '';
+    hdr.dirty = false;
+    hdrFill();   // ค่าที่เพิ่งบันทึกค้างอยู่ในช่อง (อ่านกลับจากชีต)
     toast(`บันทึก HDR Activity แล้ว · ${fmtDay(f.date)} · Planning ${p} GBq${x == null ? '' : ` · %Diff ${hdrPct(x)}${Math.abs(x) > hdrCfg().tol ? ' (เกินเกณฑ์)' : ''}`}`);
   } catch (e) { toast('บันทึก HDR Activity ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   finally { hdr.saving = false; hdr.key = ''; if (state.view === 'bq') renderHdr(); }
@@ -15747,9 +15775,9 @@ async function hdrSave() {
   const box = $('#hdr-act');
   const edit = e => {
     const t = e.target;
-    if (t.id === 'hdr-date') hdr.form.date = t.value;
-    else if (t.id === 'hdr-plan') hdr.form.plan = t.value;
-    else if (t.id === 'hdr-mp') { hdr.form.mp = t.value; pref.set('hdrMp', t.value); }
+    if (t.id === 'hdr-date') { hdr.form.date = t.value; hdrFill(); }   // เปลี่ยนวัน: ขึ้นค่าที่บันทึกไว้ของวันนั้น (ค่าที่พิมพ์ค้างไว้ยังไม่บันทึก = คงไว้)
+    else if (t.id === 'hdr-plan') { hdr.form.plan = t.value; hdr.dirty = str(t.value) !== '' && !hdrSaved(); }
+    else if (t.id === 'hdr-mp') { hdr.form.mp = t.value; pref.set('hdrMp', t.value); hdr.dirty = str(hdr.form.plan) !== '' && !hdrSaved(); }
     else return;
     hdrOut();
   };
