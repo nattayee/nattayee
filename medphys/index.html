@@ -7034,6 +7034,9 @@ const TXS_UNITS = [
   { role: 'Refer', label: 'ศูนย์ refer (ภายใน รพ.)', print: true, scope: 'refer' },
 ];
 const TXS_DAYS = 180;
+// 21 พ.ย.: Treatment Summary แสดงเฉพาะผู้ป่วยที่เริ่มฉาย (Start RT · ใส่แร่ = นัดแรกของคอร์ส) ตั้งแต่วันนี้ · ก่อนหน้านี้ข้อมูลผู้ป่วยที่เพิ่งเข้าระบบยังไม่ครบ
+// แอดมินเปลี่ยนได้ที่ ตั้งค่าหน่วยงานของแถบนี้ (config.txs.from · ว่าง = แสดงทั้งหมด) เมื่อใช้ Code.gs 2026-11-21.1 ขึ้นไป · Code.gs เดิมไม่เก็บค่านี้ = ใช้วันนี้เสมอ
+const TXS_FROM = '2026-12-01', TXS_FROM_API = 108;
 // 20 พ.ย.: สถานะเครื่อง (Code.gs API 100 · machineSet) · สัญลักษณ์ในแถวโลโก้ ทุกตำแหน่งของแผนกเห็นทุกแถบ · RTT / MP ตั้งสถานะ · ประวัติ = ชีต MachineLog
 const MST_API = 100;
 const MST_FIX_API = 101;   // แก้เวลาเริ่มของสถานะปัจจุบัน (Code.gs 2026-11-20.4)
@@ -7127,7 +7130,8 @@ function normTxs(t) {
   const units = (Array.isArray(t.units) ? t.units : TXS_UNITS).filter(u => u && ROLE_RE.test(str(u.role)))
     .map(u => ({ role: str(u.role), label: str(u.label || u.role).replace(/\s+/g, ' ').slice(0, 60), print: u.print === true, scope: u.scope === 'refer' ? 'refer' : 'all' }))
     .filter(u => { const k = u.role.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
-  return { units, days: Math.min(730, Math.max(7, Math.floor(+t.days) || TXS_DAYS)), folder: /^[\w-]{10,120}$/.test(str(t.folder)) ? str(t.folder) : '' };
+  return { units, days: Math.min(730, Math.max(7, Math.floor(+t.days) || TXS_DAYS)), folder: /^[\w-]{10,120}$/.test(str(t.folder)) ? str(t.folder) : '',
+    from: /^\d{4}-\d{2}-\d{2}$/.test(str(t.from)) ? str(t.from) : t.from === '' ? '' : TXS_FROM };   // ใช้ก่อน isDay ถูกประกาศ (ตั้งค่าเริ่มต้นตอนโหลด)
 }
 const txsUnitOf = (role, cfg = state.config) => { const r = str(role).toLowerCase(); return r ? ((cfg && cfg.txs) || normTxs()).units.find(u => u.role.toLowerCase() === r) || null : null; };
 const txsOuterRole = (role, cfg = state.config) => { const r = str(role).toLowerCase(); return !!r && r !== ADMIN_ROLE.toLowerCase() && r !== SUB_ROLE.toLowerCase() && !LPCH_ROLES.some(x => x.toLowerCase() === r) && !!txsUnitOf(role, cfg); };
@@ -7473,7 +7477,7 @@ const DEFAULT_CONFIG = {
   carry: {},     // แต้มต่อ { 'YYYY-MM': { JR: 360 } }
   // แถบเมนู: ลำดับและแถบที่แสดง (แอดมินตั้ง ใช้กับทุกคน) · ตั้งค่าแสดงเสมอ
   nav: ['reg', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'jobs', 'settings'].map(view => ({ view, on: true, guest: true })),
-  txs: { units: TXS_UNITS.map(u => ({ ...u })), days: TXS_DAYS, folder: '' },   // 20 พ.ย.: Treatment Summary (หน่วยงานและสิทธิ์)
+  txs: { units: TXS_UNITS.map(u => ({ ...u })), days: TXS_DAYS, folder: '', from: TXS_FROM },   // 20 พ.ย.: Treatment Summary (หน่วยงานและสิทธิ์)
   machine: { list: [], roles: ['RTT', 'MP'], hours: { from: '08:00', to: '20:00' }, cats: MST_CATS.slice(), icats: MST_ICATS.slice() },   // 20 พ.ย.: สถานะเครื่อง (list ว่าง = ห้องฉาย + CT ตามตั้งค่า + HDR · ชั่วโมงทำการรวมคิวเย็น)
   skips: {},     // หักคิวรายเดือน { 'YYYY-MM': { cat: { code: n } } } (แอดมินตั้ง)
   manualFrom: '2026-11-01',
@@ -8305,7 +8309,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-21.5';
+const PAGE_VERSION = '2026-11-21.6';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14846,13 +14850,15 @@ function txsRtCalc(c, sc, st) {
 function txsDocs() {
   const me = txsMe(), td = today(), hol = holidayMap(), cut = plusDays(td, -state.config.txs.days), refer = txsReferSet();
   const ok = hn => !!hnKey(hn) && (me.scope !== 'refer' || refer.has(hnKey(hn)));
-  const out = [];
+  const from = txsFrom(), out = [];
+  let early = 0;   // คอร์สที่เริ่มก่อนวันที่ตั้ง (ไม่แสดง)
   for (const c of state.cases) {
     if (!ok(c.hn) || c.rt === 'cancel' || preRow(c) || !inCourse(c) || !planReady(c)) continue;
     const sc = courseSched(c, hol);
     if (!sc || !sc.fx.size || sc.start > td || (sc.off && c.rt !== 'complete')) continue;
     const st = c.rt === 'complete' ? 'complete' : 'on', k = txsRtCalc(c, sc, st);
     if (st === 'complete' && (k.end || td) < cut) continue;
+    if (from && sc.start < from) { early++; continue; }   // Start RT ก่อนวันที่ตั้ง
     const hold = st === 'on' && sc.hold && sc.hold.date <= td ? sc.hold : null;
     out.push({ kind: 'rt', key: 'rt:' + c.id, id: c.id, hn: c.hn, name: c.name, st, hold, c, sc, k, from: k.first, to: st === 'complete' ? k.end : sc.last, room: roomsOf(c).filter(r => r !== NO_ROOM).map(roomLabel).join(', '), doc: c.doc, no: txsNo('TS', c.hn, c.id), last: st === 'complete' ? k.end : td, fx: `${k.doneMain}/${k.plannedMain}` });
   }
@@ -14866,11 +14872,16 @@ function txsDocs() {
     const next = rows.find(a => a.status === BQ_ST.booked && a.date >= td) || null, pend = rows.some(a => a.status === BQ_ST.pp || (a.status === BQ_ST.booked && a.date >= td));
     const st = pend ? 'on' : 'complete', lastDone = done[done.length - 1].date;
     if (st === 'complete' && lastDone < cut) continue;
+    if (from && (live[0] || rows[0]).date < from) { early++; continue; }   // ใส่แร่: นัดแรกของคอร์สก่อนวันที่ตั้ง
     const a0 = rows.find(a => a.name) || rows[0];
     out.push({ kind: 'bq', key: 'bq:' + g, id: done[0].id, hn: a0.hn, name: a0.name, st, rows, done, next, total, from: (live[0] || rows[0]).date, to: st === 'complete' ? lastDone : (live[live.length - 1] || rows[rows.length - 1]).date, room: [...new Set(done.map(a => a.ctRoom).filter(Boolean).map(ctLabel))].join(', '), doc: docCodeOf(a0.doc) || a0.doc, tech: a0.tech, no: txsNo('BS', a0.hn, a0.course || a0.id), last: lastDone, fx: `${done.length}/${total}` });
   }
-  return out.sort((a, b) => (a.st === b.st ? 0 : a.st === 'on' ? -1 : 1) || str(b.last).localeCompare(str(a.last)) || str(a.hn).localeCompare(str(b.hn)));
+  out.sort((a, b) => (a.st === b.st ? 0 : a.st === 'on' ? -1 : 1) || str(b.last).localeCompare(str(a.last)) || str(a.hn).localeCompare(str(b.hn)));
+  out.early = early;
+  return out;
 }
+const txsFrom = () => { const f = (state.config.txs || {}).from; return f === undefined ? TXS_FROM : str(f); };
+const txsFromText = () => (txsFrom() ? `เริ่มฉายตั้งแต่ ${fmtDay(txsFrom())} ${parseISO(txsFrom()).getFullYear() + 543}` : '');
 const txsStPill = d => (d.st === 'complete' ? '<span class="txs-pill ok">Complete course</span>' : d.hold ? `<span class="txs-pill warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-pill on">On treatment</span>');
 const txsChip = d => (d.st === 'complete' ? `<span class="txs-chip">Complete course${d.to ? ' ' + esc(fmtDay(d.to)) : ''}</span>` : d.hold ? `<span class="txs-chip warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-chip on">On treatment</span>');
 const txsWm = () => `<div class="txs-wm" aria-hidden="true">${Array.from({ length: 15 }, (_, i) => `<span style="left:${(i % 3) * 36 - 10}%;top:${Math.floor(i / 3) * 21 + 3}%">ใช้ภายในเท่านั้น</span>`).join('')}</div>`;
@@ -14976,8 +14987,8 @@ function txsListHtml(me) {
   const rows = all.filter(d => (txsUi.st === 'all' || d.st === txsUi.st) && (txsUi.kind === 'all' || d.kind === txsUi.kind)
     && (!q || [d.hn, txsShort(d.name), d.no, d.doc, docName(d.doc), d.room, d.kind === 'rt' ? catOf(d.c.cat).label : d.tech].join(' ').toLowerCase().includes(q)));
   const note = me.scope === 'refer' ? `แสดงเฉพาะผู้ป่วยที่ส่งต่อ (${refer.size} ราย) · ` : '';
-  const head = `<p class="txs-sum">${esc(note)}${rows.length} รายการ${rows.length !== all.length ? ` จาก ${all.length}` : ''} · On treatment และ Complete course ย้อนหลัง ${state.config.txs.days} วัน · ชื่อผู้ป่วยแบบย่อ${me.print ? ' (เอกสารที่พิมพ์มีชื่อเต็ม)' : ''}</p>`;
-  if (!rows.length) return head + `<p class="empty-state">${all.length ? 'ไม่พบผู้ป่วยที่ตรงกับตัวกรอง' : me.scope === 'refer' ? 'ยังไม่มีผู้ป่วยที่ส่งต่อที่กำลังฉายหรือ Complete course (แอดมินเพิ่มรายชื่อผู้ป่วยที่ส่งต่อ)' : 'ยังไม่มีผู้ป่วยกำลังฉายหรือ Complete course'}</p>`;
+  const head = `<p class="txs-sum">${esc(note)}${rows.length} รายการ${rows.length !== all.length ? ` จาก ${all.length}` : ''} · On treatment และ Complete course ย้อนหลัง ${state.config.txs.days} วัน${txsFrom() ? ` · <b>${esc(txsFromText())}</b>${all.early ? ` <span class="muted">(ไม่แสดง ${all.early} รายที่เริ่มก่อนวันนั้น)</span>` : ''}` : ''} · ชื่อผู้ป่วยแบบย่อ${me.print ? ' (เอกสารที่พิมพ์มีชื่อเต็ม)' : ''}</p>`;
+  if (!rows.length) return head + `<p class="empty-state">${all.length ? 'ไม่พบผู้ป่วยที่ตรงกับตัวกรอง' : txsFrom() && (all.early || txsFrom() > today()) ? `ยังไม่มีผู้ป่วยที่${esc(txsFromText())} · ผู้ป่วยที่เริ่มก่อนวันนั้นไม่แสดง เพราะข้อมูลของผู้ป่วยที่เพิ่งเข้าระบบยังไม่ครบ` : me.scope === 'refer' ? 'ยังไม่มีผู้ป่วยที่ส่งต่อที่กำลังฉายหรือ Complete course (แอดมินเพิ่มรายชื่อผู้ป่วยที่ส่งต่อ)' : 'ยังไม่มีผู้ป่วยกำลังฉายหรือ Complete course'}</p>`;
   return head + `<div class="txs-wrap"><table class="txs-tbl"><thead><tr><th>HN</th><th>ชื่อ (ย่อ)</th><th>ประเภท</th><th>สถานะ</th><th>ห้อง</th><th>แพทย์</th><th>ช่วงวันที่</th><th>ครั้ง</th><th>เลขที่เอกสาร</th>${me.admin ? '<th>ส่งต่อ</th>' : ''}<th></th></tr></thead><tbody>${rows.map(d => `<tr>
     <td class="txs-hn">${esc(d.hn)}</td><td>${esc(txsShort(d.name) || '—')}</td><td class="nw">${d.kind === 'rt' ? `ฉายรังสี<small>${esc(catOf(d.c.cat).label)}</small>` : `ใส่แร่<small>${esc(d.tech || '')}</small>`}</td>
     <td>${txsStPill(d)}</td><td>${esc(d.room || '–')}</td><td class="nw">${esc(d.doc || '–')}<small>${esc(docName(d.doc))}</small></td><td class="nw">${esc(txsRange(d.from, d.to))}</td><td class="num">${esc(d.fx)}</td><td class="nw"><small>${esc(d.no)}</small></td>
@@ -15043,13 +15054,16 @@ function txsUnitsHtml() {
   <div class="txs-wrap"><table class="txs-tbl txs-units"><thead><tr><th>ตำแหน่งใน LPCH</th><th>หน่วยงาน</th><th>สิทธิ์</th><th>ขอบเขต</th><th>ประเภท</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">ยังไม่มีหน่วยงาน</td></tr>'}</tbody></table></div>
   <div class="txs-form" style="margin-top:12px"><button type="button" class="btn sm" data-txsuadd>+ เพิ่มหน่วยงาน</button>
     <label class="field"><span class="lbl">Complete course แสดงย้อนหลัง (วัน)</span><input id="txs-u-days" data-txsk="days" type="number" min="7" max="730" value="${esc(t.days)}"></label>
+    <label class="field"><span class="lbl">แสดงผู้ป่วยที่เริ่มฉายตั้งแต่ <span class="sub-lbl">Start RT · ใส่แร่ = นัดแรก · ว่าง = ทั้งหมด${txsFromOld() ? ' · ต้องใช้ Code.gs รุ่น 2026-11-21.1 ขึ้นไปจึงเปลี่ยนได้' : ''}</span></span><input id="txs-u-from" data-txsk="from" type="date" value="${esc(t.from === undefined ? TXS_FROM : t.from)}"${txsFromOld() ? ' disabled' : ''}></label>
     <label class="field"><span class="lbl">โฟลเดอร์ PDF ที่จัดเก็บ (Google Drive ID · ไม่บังคับ)</span><input id="txs-u-folder" data-txsk="folder" value="${esc(t.folder)}" maxlength="120" placeholder="ID ของโฟลเดอร์ที่มีไฟล์ RT_summary_HN.pdf / Brachy_summary_HN.pdf"></label></div>
   <div class="txs-form"><button type="button" class="btn primary" data-txsusave>บันทึกหน่วยงานและสิทธิ์</button><button type="button" class="btn ghost" data-txsureset>ยกเลิกที่แก้</button>
     <button type="button" class="btn ghost" data-txsmem${txsUi.memBusy ? ' disabled' : ''}>${mem ? 'ดึงรายชื่อบัญชีจาก LPCH ใหม่' : 'ดูบัญชีของแต่ละหน่วยงาน (LPCH)'}</button></div>`;
 }
+const txsFromOld = () => store.mode === 'sheet' && !serverHas(TXS_FROM_API);   // Code.gs เดิมไม่เก็บวันที่เริ่มแสดง
 async function txsUnitsSave() {
   const t = txsUi.draft;
   if (!t) return;
+  if (t.from && !isDay(str(t.from))) return toast('วันที่เริ่มแสดงไม่ถูกต้อง', { err: true });
   const bad = t.units.find(u => !ROLE_RE.test(str(u.role)));
   if (bad) return toast(`ตำแหน่ง "${bad.role}" ไม่ถูกต้อง (ตัวอักษรอังกฤษ ตัวเลข ช่องว่าง - _ ไม่เกิน 20 ตัว)`, { err: true });
   try {
