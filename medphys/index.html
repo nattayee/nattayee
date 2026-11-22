@@ -8467,7 +8467,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.6';
+const PAGE_VERSION = '2026-11-22.7';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8558,7 +8558,7 @@ const sheetStore = {
   sbkDelete: key => call('sbkDelete', key),
   sbkSetNext: (year, next) => call('sbkSetNext', year, next),
   machineSet: rec => call('machineSet', rec),   // 20 พ.ย. (API 100): สถานะเครื่อง
-  notifyAdd: rec => call('notifyAdd', rec), notifyAck: id => call('notifyAck', id), notifyCancel: id => call('notifyCancel', id),   // 21 พ.ย. (API 109): ประกาศ
+  notifyAdd: rec => call('notifyAdd', rec), notifyAck: id => call('notifyAck', id), notifyCancel: id => call('notifyCancel', id), notifyDelete: id => call('notifyDelete', id),   // 22 พ.ย. (API 112): แอดมินลบประกาศ · 21 พ.ย. (API 109): ประกาศ
   machineLogEdit: rec => call('machineLogEdit', rec),   // 20 พ.ย. (API 102): แอดมินแก้ไข / ลบประวัติสถานะเครื่อง
   txsLog: (act, info) => call('txsLog', act, info || {}),   // 20 พ.ย. (API 98): Treatment Summary
   txsLogRead: q => call('txsLogRead', q || {}),
@@ -8745,6 +8745,13 @@ function localStore() {
       if (!ntfCanCancel(normNtf(r))) throw new Error('ยกเลิกได้เฉพาะประกาศที่คุณส่ง (แอดมินยกเลิกได้ทุกประกาศ)');
       if (!r.cancelAt) { r.cancelBy = str(state.user.name || state.user.username); r.cancelAt = nowISO(); persist(); }
       return { rows: [clone(r)] };
+    },
+    notifyDelete: async id => {   // 22 พ.ย.: เหมือน notifyDelete ใน Code.gs (API 112) · แอดมินหลัก / แอดมินรอง
+      if (!ntfBoss()) throw new Error('ลบประกาศได้เฉพาะแอดมินหลักและแอดมินรอง');
+      const n = db.notify.length;
+      db.notify = db.notify.filter(x => x.id !== id);
+      persist();
+      return { id, deleted: db.notify.length < n };
     },
     machineSet: async rec => {
       const u = state.user, admin = !!u.isAdmin, role = str(u.role), now = new Date(), who = u.name || 'ผู้ใช้ตัวอย่าง';
@@ -28336,6 +28343,8 @@ const NTF_LABEL = { RO: 'แพทย์', MP: 'นักฟิสิกส์',
 const NTF_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
 const ntfOn = () => (store.mode !== 'sheet' || serverHas(NOTIFY_API)) && navOn('notify');   // 22 พ.ย.: ตั้งค่า → แถบเมนู → ประกาศ (ไม่เห็น = ไม่มีกระดิ่ง)
 const ntfBoss = () => !!state.user.isAdmin || subTabs().length > 0 || state.user.via === 'google';
+const NTF_DEL_API = 112;   // 22 พ.ย.: Code.gs ที่ลบประกาศได้ (notifyDelete)
+const ntfCanDel = () => ntfBoss() && !state.viewAs && !state.user.pending && serverHas(NTF_DEL_API);   // ลบถาวร: แอดมินหลัก / แอดมินรอง (ไม่ใช่ตอนดูในมุมมองตำแหน่งอื่น)
 // ส่งได้: Code.gs API 110 ขึ้นไป = ตามแถว ประกาศ ในแถบเมนู (ยังไม่ตั้ง = ทุกตำแหน่ง) · รุ่นก่อน = แอดมินหลัก / แอดมินรอง
 const ntfCanSend = () => ntfOn() && !state.user.pending && !state.viewAs && (ntfNew() ? accessOf('notify') === 'edit' : ntfBoss());
 const ntfMe = () => str(state.user.username) || (store.mode !== 'sheet' ? 'demo.user' : '');   // บัญชีผู้ส่ง (โหมดตัวอย่าง = ผู้ใช้ตัวอย่าง)
@@ -28356,8 +28365,8 @@ const ntfDone = n => !ntfLive(n) || n.roles.every(r => n.acks[r]);
 const ntfForMe = () => (state.notify || []).filter(n => ntfLive(n) && ntfMine(n) && !ntfAckOf(n, ntfRole())).sort(ntfSort);
 const ntfWhen = s => { const d = new Date(s); if (isNaN(d.getTime())) return ''; const hm = `${pad(d.getHours())}:${pad(d.getMinutes())} น.`; return iso(d) === today() ? `วันนี้ ${hm}` : `${fmtDay(iso(d))} ${hm}`; };
 const ntfMerge = rows => { for (const x of (rows || []).map(normNtf)) { const i = state.notify.findIndex(y => y.id === x.id); if (i >= 0) state.notify[i] = x; else state.notify.push(x); } };
-const NTF_FORM0 = () => ({ kind: 'patient', hn: '', pname: '', auto: '', text: '', roles: [], days: 3 });
-const ntfUi = { idx: 0, key: '', tab: 'now', q: '', role: '', kindF: '', form: NTF_FORM0(), err: '', busy: false, arm: '', armT: 0, seen: null };
+const NTF_FORM0 = () => ({ kind: 'patient', hn: '', pname: '', auto: '', text: '', roles: [], days: 0 });   // 22 พ.ย.: แสดงถึง ค่าเริ่มต้น = วันนี้
+const ntfUi = { idx: 0, key: '', tab: 'now', q: '', role: '', kindF: '', form: NTF_FORM0(), err: '', busy: false, arm: '', armT: 0, del: '', delT: 0, seen: null };
 const ntfDlg = $('#ntf-dlg');
 function renderNtf(gated) {
   const bar = $('#ntf-bar'), btn = $('#ntf-btn');
@@ -28467,6 +28476,7 @@ function ntfItem(n, send) {
     : `<span class="ntf-ack wait">○ ${esc(ntfRoleName(r))} <small>${ntfLive(n) ? 'ยังไม่รับทราบ' : 'ไม่ได้รับทราบ'}</small></span>`; }).join('')}</div>`
     : mineAck ? `<div class="ntf-acks"><span class="ntf-ack ok">✓ ${esc(ntfRoleName(ntfKeyOf(n, role)))} รับทราบแล้ว <small>${esc(mineAck.by)} · ${esc(ntfWhen(mineAck.at))}</small></span></div>` : '';
   const acts = [];
+  if (ntfCanDel()) acts.push(`<button type="button" class="btn${ntfUi.del === n.id ? '' : ' ghost'} danger ntf-del" data-ntfdel="${esc(n.id)}" title="ลบประกาศนี้ถาวร · หายจากแถบและประวัติของทุกคน (แอดมิน)">${ntfUi.del === n.id ? 'กดอีกครั้งเพื่อยืนยันลบถาวร' : 'ลบ'}</button>`);   // 22 พ.ย. (API 112)
   if (ntfCanCancel(n) && ntfLive(n) && !ntfDone(n)) acts.push(`<button type="button" class="btn ghost${ntfUi.arm === n.id ? ' danger' : ''}" data-ntfcancel="${esc(n.id)}">${ntfUi.arm === n.id ? 'กดอีกครั้งเพื่อยืนยันยกเลิก' : 'ยกเลิกประกาศ'}</button>`);
   if (mine && ntfLive(n) && !mineAck) acts.push(`<button type="button" class="btn primary" data-ntfack="${esc(n.id)}">รับทราบ</button>`);
   const pt = n.kind === 'patient', bq = n.kind === 'brachy';
@@ -28604,6 +28614,17 @@ async function ntfCancel(id) {
   catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
   ntfUi.key = ''; renderNtf(); renderNtfDlg();
 }
+// 22 พ.ย. (API 112): แอดมินลบประกาศถาวร · กดครั้งแรก = ขอยืนยัน (4 วินาที) · สำเร็จ = หายจากแถบและประวัติทันที
+async function ntfDelete(id) {
+  if (ntfUi.del !== id) { ntfUi.del = id; clearTimeout(ntfUi.delT); ntfUi.delT = setTimeout(() => { ntfUi.del = ''; renderNtfDlg(); }, 4000); return renderNtfDlg(); }
+  ntfUi.del = ''; clearTimeout(ntfUi.delT);
+  try {
+    await store.notifyDelete(id);
+    state.notify = (state.notify || []).filter(x => x.id !== id);
+    toast('ลบประกาศแล้ว · หายจากแถบและประวัติของทุกคน');
+  } catch (e) { toast('ลบไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  ntfUi.key = ''; renderNtf(); renderNtfDlg();
+}
 ntfDlg.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -28619,6 +28640,7 @@ ntfDlg.addEventListener('click', e => {
   else if ('ntfkf' in d) ntfUi.kindF = d.ntfkf;
   else if (d.ntfdays) f.days = +d.ntfdays;
   else if (d.ntfcancel) return ntfCancel(d.ntfcancel);
+  else if (d.ntfdel) return ntfDelete(d.ntfdel);
   else if (d.ntfack) return ntfAck(d.ntfack, b);
   else return;
   ntfUi.err = '';
