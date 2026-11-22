@@ -632,13 +632,15 @@ button.bq-chk{cursor:pointer}
 .dq-emer input:checked+span{background:var(--late);border-color:var(--late);color:#fff}
 .dq-owner input:checked+span{background:var(--accent);border-color:var(--accent);color:#fff}   /* เจ้าของไข้เดิม */
 .dq-sheet tr.owner td{background:var(--accent-soft)}
-.dq-sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));align-items:start;gap:12px;margin:0 0 14px}
+.dq-sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--dqw,380px)),1fr));align-items:start;gap:12px;margin:0 0 14px;overflow-x:auto}   /* 22 พ.ย.: --dqw = ความกว้างของตารางที่กว้างสุด (ไม่ทับกัน) */
+.dq-sheet.fit table{width:max-content}
 .dq-sheet h3{grid-column:1/-1;margin:0;font-size:14px;font-weight:600}
 .dq-sheet h3 small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
 .dq-sheet table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1px solid var(--line)}
-.dq-sheet th,.dq-sheet td{padding:4px 8px;border:1px solid var(--line);text-align:left;white-space:nowrap}
+.dq-sheet th,.dq-sheet td{padding:4px 8px;border:1px solid var(--line);text-align:left;white-space:nowrap;line-height:22px;height:31px;box-sizing:border-box}   /* แถวสูงเท่ากันทุกตาราง (มี / ไม่มีป้าย) */
+.dq-sheet td .hn,.dq-sheet td .dq-how,.dq-sheet td small{vertical-align:middle;line-height:18px}
+.dq-sheet td .dq-how{padding:0 8px}
 .dq-sheet td.no{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
-.dq-sheet td.doc{max-width:230px;overflow:hidden;text-overflow:ellipsis}
 .dq-sheet td.doc small{color:var(--muted)}
 .dq-sheet tr.plan td{color:var(--muted)}
 .dq-sheet tr.next td{background:var(--accent-soft);font-weight:600;color:var(--fg)}
@@ -8467,7 +8469,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.7';
+const PAGE_VERSION = '2026-11-22.8';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -13406,7 +13408,17 @@ function renderDqSheet(ym, run) {
   box.innerHTML = `<h3>ตารางคิว ${esc(ymTh(ym))} · แจกแล้ว ${used.length} เคส (ลำดับ ${start}–${last})${plan.length ? ` · คิวถัดไป ลำดับ ${m}/${last + 1}: ${esc(plan[0].code)} ${esc(docName(plan[0].code))}` : ''}`
     + `<small>ลำดับ = เดือน/ลำดับที่ (เริ่มที่ ${start} · ตั้งค่า → แจกงานแพทย์ → ลำดับเคสแรกของเดือน) · แถวสีเทา = คิวที่จะได้ตามลำดับจนครบ ${per} เคส (คิวแรกตามวันนี้ · ถัดไปไม่ดูวันลา) · E = Emergency (ไม่นับในคิว)</small></h3>`
     + (blocks.join('') || '<p class="muted">ยังไม่มีเคสในเดือนนี้</p>');
+  dqSheetFit(box);
 }
+// 22 พ.ย.: ทุกตารางกว้างเท่ากัน = กว้างพอสำหรับตารางที่ยาวสุด (ชื่อแพทย์เต็ม · ป้าย เลือกเอง / นอกคิว / E) · ตารางที่วางเรียงกันไม่ทับกัน
+function dqSheetFit(box) {
+  if (!box || box.hidden) return;
+  box.classList.add('fit');
+  const w = Math.max(0, ...[...box.querySelectorAll('table')].map(t => t.offsetWidth));
+  box.classList.remove('fit');
+  if (w) box.style.setProperty('--dqw', Math.ceil(w) + 'px');
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => dqSheetFit($('#dq-sheet'))).catch(() => {});   // ฟอนต์โหลดทีหลัง = ตัวอักษรกว้างขึ้น
 
 /* ---------- เวร S1 (เคส Emergency) ---------- */
 const dqsDlg = $('#dqs-dlg'), dqsForm = $('#dqs-form');
