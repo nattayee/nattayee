@@ -2763,6 +2763,9 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .tg-box{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .tg-wrap{overflow-x:auto}
 .tg-box label.check{white-space:normal}
+.tg-pt{display:grid;gap:4px}
+.tg-pt .check{align-items:flex-start}
+.tg-pt input[type=radio]{flex:none;width:16px;height:16px;min-height:0;margin:2px 0 0;padding:0}
 .tg-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .tg-row input[type=password]{flex:1 1 260px;min-width:0;max-width:460px;min-height:34px;padding:5px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit}
 .tg-steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:grid;gap:2px}
@@ -7700,7 +7703,7 @@ const DEFAULT_CONFIG = {
   brachySync: { on: false, src: '', url: '', sheet: '', map: {}, count: 'all', from: '' },   // src internal = นัดในแถบนัดคิวใส่แร่
   // ดึง RC จาก TDF Dose Calculator: นับ approved = Recheck ผ่าน | reviewed = รวมไม่ผ่าน
   tdfSync: { on: false, url: '', sheet: '', map: {}, count: 'approved', from: '' },
-  tg: { on: false, chats: {}, all: '', kinds: ['patient', 'brachy', 'general'], hn: false },   // 22 พ.ย. (API 113): ประกาศ → Telegram (กลุ่มของแต่ละอาชีพ · token อยู่ใน Script Properties ไม่อยู่ใน Config)
+  tg: { on: false, chats: {}, all: '', kinds: ['patient', 'brachy', 'general'], pt: 'abbr', hn: true },   // 22 พ.ย. (API 113): ประกาศ → Telegram (กลุ่มของแต่ละอาชีพ · token อยู่ใน Script Properties ไม่อยู่ใน Config)
   sendBook: { url: '' },   // 20 พ.ย.: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning) · ลิงก์ชีตเดิมของเว็บทะเบียนหนังสือส่ง
   // แถบ CT-SIM: เครื่อง CT (รหัสคงที่ ชื่อแก้ได้) · ตัวเลือกของช่องห้อง CT · ช่องในฟอร์ม
   ct: {
@@ -7935,6 +7938,16 @@ const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // แอดมินรอง: หมวดในหน้าตั้งค่า → คีย์ของ Config (ตรงกับ CFG_TABS ใน Code.gs) · คีย์ที่ไม่อยู่ในหมวดใด (แอดมิน แอดมินรอง) = แอดมินหลักเท่านั้น
 // 22 พ.ย. (API 113): ประกาศ → Telegram
 const TG_KINDS = ['patient', 'brachy', 'general'];
+const TG_PT = ['abbr', 'hn', 'none'];   // ข้อมูลผู้ป่วยในข้อความ Telegram: HN + ชื่อย่อ / HN / ไม่ใส่
+// ชื่อย่อแบบเดียวกับ tgAbbr_ ใน Code.gs: คำนำหน้า (ตามที่บันทึก) · ชื่อ 3 ตัวอักษรแรก + นามสกุล 3 ตัวอักษรแรก (สระบน / ล่าง / วรรณยุกต์นับรวมกับตัวหน้า)
+const TG_TITLE_RE = /^(?:นางสาว|นาง|นาย|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|น\.ส\.|mrs\.?|mr\.?|ms\.?|miss)\s{0,}/i;
+function tgAbbr(name) {
+  const all = String(name == null ? '' : name).replace(/\s+/g, ' ').trim(), m = all.match(TG_TITLE_RE), title = m ? m[0].trim() : '', t = all.slice(m ? m[0].length : 0).trim();   // คำนำหน้าแสดงตามที่บันทึก
+  if (!t) return title;
+  const cut = w => { const ch = w.match(/[^\u0E31\u0E34-\u0E3A\u0E47-\u0E4E][\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]{0,}/g) || []; return ch.length > 3 ? ch.slice(0, 3).join('') + '.' : w; };
+  const p = t.split(' ');
+  return [title, cut(p[0]), p.length > 1 ? cut(p.slice(1).join('')) : ''].filter(Boolean).join(' ');
+}
 const TG_ID_RE = /^-?\d{3,20}$/;
 const TG_TOKEN_RE = /^\d{5,15}:[A-Za-z0-9_-]{30,60}$/;
 const CFG_TABS = {
@@ -8345,7 +8358,9 @@ function mergeConfig(c) {
   out.sendBook = { url: str((c.sendBook && typeof c.sendBook === 'object' ? c.sendBook : {}).url).trim().slice(0, 500) };   // 20 พ.ย.: ทะเบียนหนังสือส่ง
   const tg = c.tg && typeof c.tg === 'object' ? c.tg : {}, tgId = v => (TG_ID_RE.test(str(v).trim()) ? str(v).trim() : '');   // 22 พ.ย. (API 113): ประกาศ → Telegram
   out.tg = { on: tg.on === true, chats: Object.fromEntries(Object.entries(tg.chats && typeof tg.chats === 'object' ? tg.chats : {}).map(([r, v]) => [str(r), tgId(v)]).filter(([r, v]) => v && /^[\w -]{1,20}$/.test(r))),
-    all: tgId(tg.all), kinds: Array.isArray(tg.kinds) ? TG_KINDS.filter(k => tg.kinds.includes(k)) : TG_KINDS.slice(), hn: tg.hn === true };
+    all: tgId(tg.all), kinds: Array.isArray(tg.kinds) ? TG_KINDS.filter(k => tg.kinds.includes(k)) : TG_KINDS.slice() };
+  out.tg.pt = TG_PT.includes(tg.pt) ? tg.pt : tg.hn === true ? 'hn' : 'abbr';   // 22 พ.ย. (API 114): ข้อมูลผู้ป่วยในข้อความ · abbr = HN + ชื่อย่อ (ค่าเริ่มต้น)
+  out.tg.hn = out.tg.pt !== 'none';   // Code.gs 2026-11-22.5 อ่าน hn (HN อย่างเดียว)
   const jb = c.jobs && typeof c.jobs === 'object' ? c.jobs : {}, jnum = (v, dv) => (v === '' || v == null || !isFinite(+v) ? dv : +v);
   const jprof = k => { const x = jb[k] && typeof jb[k] === 'object' ? jb[k] : {}, dv = d.jobs[k]; return { title: str(x.title).slice(0, 80) || dv.title, guar: jnum(x.guar, dv.guar), rate: jnum(x.rate, dv.rate), group: str(x.group).slice(0, 20) || dv.group }; };
   const jmap = (v, dv) => Object.fromEntries(Object.entries(v && typeof v === 'object' && !Array.isArray(v) ? v : dv).filter(([, t]) => ['2D', '3D', 'IMRT', 'SBRT', 'VMAT', '-', ''].includes(t)));
@@ -8492,7 +8507,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.9';
+const PAGE_VERSION = '2026-11-22.10';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -26895,8 +26910,10 @@ function settingsEdit(el) {
     draft.reg.drive.filter.vals = [...new Set(el.value.split(',').map(str).filter(Boolean))];
   } else if (el.dataset.bqbtn) {   // สิทธิ์ของปุ่มในแถบนัดคิวใส่แร่
     draft.bq.btn = { ...(draft.bq.btn || {}), [el.dataset.bqbtn]: $$(`[data-bqbtn="${el.dataset.bqbtn}"]:checked`, settingsEl).map(x => x.value) };
-  } else if (el.dataset.tg) {   // 22 พ.ย.: Telegram · on / hn
+  } else if (el.dataset.tg) {   // 22 พ.ย.: Telegram · on
     draft.tg = { ...draft.tg, [el.dataset.tg]: el.checked };
+  } else if (el.dataset.tgpt) {   // ข้อมูลผู้ป่วยในข้อความ
+    if (el.checked && TG_PT.includes(el.dataset.tgpt)) draft.tg = { ...draft.tg, pt: el.dataset.tgpt, hn: el.dataset.tgpt !== 'none' };
   } else if (el.dataset.tgkind !== undefined) {
     draft.tg = { ...draft.tg, kinds: TG_KINDS.filter(k => $(`[data-tgkind="${k}"]`, settingsEl) && $(`[data-tgkind="${k}"]`, settingsEl).checked) };
   } else if (el.dataset.tgchat !== undefined) {   // กลุ่มของอาชีพ (* = กลุ่มรวม)
@@ -28436,6 +28453,7 @@ const NTF_DEL_API = 112;   // 22 พ.ย.: Code.gs ที่ลบประก�
 /* ---------- 22 พ.ย. (API 113): ตั้งค่า → ประกาศ → Telegram ----------
  * token ของ bot ตั้งแยก (แอดมินหลัก · เก็บใน Script Properties ของ Code.gs · หน้าเว็บไม่เห็น token) · ส่วนอื่นอยู่ใน config.tg (บันทึกพร้อมการตั้งค่า) */
 const TG_API = 113;
+const TG_PT_API = 114;   // Code.gs ที่ใส่ชื่อย่อในข้อความ Telegram
 const TG_KIND_LABEL = { patient: 'ผู้ป่วย', brachy: 'HDR ส่งภาพแล้ว', general: 'ทั่วไป' };
 const tgUi = { st: null, loading: false, err: '', busy: '', test: {}, at: 0 };   // at = เวลาที่อ่านสถานะล่าสุด (0 = อ่านใหม่ตอนเปิดตั้งค่า)
 const tgMain = () => store.mode !== 'sheet' ? !!state.user.isAdmin : !!state.user.isAdmin || state.user.via === 'google';   // ตั้ง / ลบ bot
@@ -28461,7 +28479,9 @@ function tgSetInner(d) {
       ${main ? `<input type="password" id="tg-tok" autocomplete="off" spellcheck="false" placeholder="${st.set ? 'วาง token ใหม่เพื่อเปลี่ยน bot' : 'วาง token จาก @BotFather'}" aria-label="token ของ bot"><button type="button" class="btn" data-tgset${busy ? ' disabled' : ''}>${busy === 'set' ? 'กำลังตรวจ…' : 'ตั้ง bot'}</button>${st.set ? `<button type="button" class="btn ghost danger" data-tgdel${busy ? ' disabled' : ''}>ลบ bot</button>` : ''}` : '<span class="muted">· แอดมินหลักเป็นผู้ตั้ง bot</span>'}</div>
     <label class="check"><input type="checkbox" data-tg="on"${t.on ? ' checked' : ''}> <b>ส่งประกาศเข้า Telegram</b></label>
     <div class="tg-row" role="group" aria-label="ประเภทที่ส่ง"><span>ส่งประเภท:</span>${TG_KINDS.map(k => `<label class="check"><input type="checkbox" data-tgkind="${k}"${t.kinds.includes(k) ? ' checked' : ''}> ${TG_KIND_LABEL[k]}</label>`).join('')}</div>
-    <div><label class="check"><input type="checkbox" data-tg="hn"${t.hn ? ' checked' : ''}> ใส่ HN ในข้อความ (ผู้ป่วย / HDR)</label><p class="muted def-note" style="margin:2px 0 0">ไม่ติ๊ก = ข้อความบอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub" · <b>ชื่อผู้ป่วยไม่ส่งเสมอ</b></p></div>
+    <div class="tg-pt" role="radiogroup" aria-label="ข้อมูลผู้ป่วยในข้อความ"><span>ข้อมูลผู้ป่วยในข้อความ (ผู้ป่วย / HDR):</span>
+      ${[['abbr', `HN + คำนำหน้า + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก) เช่น HN 999000123 · ${tgAbbr('นาย สมชาย ใจดี')}${store.mode === 'sheet' && !serverHas(TG_PT_API) ? ' · ต้องใช้ Code.gs 2026-11-22.6' : ''}`], ['hn', 'HN อย่างเดียว'], ['none', 'ไม่ใส่ (บอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub")']].map(([k, l]) => `<label class="check"><input type="radio" name="tg-pt" data-tgpt="${k}"${t.pt === k ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
+      <p class="muted def-note" style="margin:2px 0 0"><b>ชื่อเต็มของผู้ป่วยไม่ส่งเสมอ</b> · ข้อความใน Telegram อยู่ในมือถือของสมาชิกกลุ่ม ใช้กลุ่มที่มีเฉพาะเจ้าหน้าที่</p></div>
     <div class="tg-wrap"><table class="tg-map"><thead><tr><th>อาชีพที่ประกาศถึง</th><th>กลุ่ม Telegram</th><th></th></tr></thead><tbody>
       ${roles.map(r => row(r, `<b>${esc(r)}</b> ${esc(NTF_LABEL[r] || '')}`, t.chats[r] || '')).join('')}
       ${row('*', '<b>กลุ่มรวม</b> ทุกประกาศ (ไม่บังคับ)', t.all || '')}</tbody></table></div>
