@@ -38,6 +38,7 @@ const DEFAULT_CONFIG = [
   ['SYNC_ZONE_STATUS', 'TRUE', 'TRUE = เขียนผลเช็คอินกลับลงคอลัมน์ "สถานะ" ในชีตโซน'],
   ['USE_SCAN_LOG', 'FALSE', 'TRUE = ใช้ข้อมูลสแกนนิ้ว/ใบหน้า (ต้องมีรหัสพนักงานในชีตโซนก่อน)'],
   ['SCAN_LOOKBACK_HOURS', '16', 'ดูข้อมูลสแกนย้อนหลังกี่ชั่วโมง (รองรับเวรดึกข้ามวัน)'],
+  ['WEB_APP_URL', '', 'ลิงก์ Web app ที่ลงท้ายด้วย /exec (คัดลอกจากหน้าต่าง Deploy) ใช้สร้าง QR'],
 ];
 
 const STATUS = { SAFE: 'SAFE', HELP: 'HELP', AWAY: 'AWAY' };
@@ -99,8 +100,14 @@ function setupRoles_(sh) {
 
 /** สร้างชีต QR ที่มีลิงก์ + รูป QR ของแต่ละจุดรวมพล (รันหลัง Deploy) */
 function generateQrSheet() {
-  const url = ScriptApp.getService().getUrl();
-  if (!url) throw new Error('ยังไม่ได้ Deploy เป็น Web app');
+  // ต้องเป็นลิงก์ /exec เท่านั้น ลิงก์ /dev เปิดได้เฉพาะคนที่แก้โค้ดได้ เจ้าหน้าที่สแกนแล้วจะเข้าไม่ได้
+  const url = String(getConfig_().WEB_APP_URL || ScriptApp.getService().getUrl() || '').trim();
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) {
+    safeAlert_('ยังไม่มีลิงก์ Web app ที่ใช้ได้\n\n1) Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone)\n' +
+      '2) คัดลอก "Web app URL" ที่ลงท้ายด้วย /exec\n3) วางในชีต Config แถว WEB_APP_URL\n4) กดเมนูสร้าง QR อีกครั้ง' +
+      (url ? '\n\nลิงก์ที่พบตอนนี้ใช้ไม่ได้: ' + url : ''));
+    return;
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(SHEET.QR) || ss.insertSheet(SHEET.QR, ss.getNumSheets());
   sh.clear();
