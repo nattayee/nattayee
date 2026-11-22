@@ -1405,15 +1405,33 @@ dialog.man-dlg{width:min(1320px,calc(100vw - 16px))}
 /* 21 พ.ย. (API 109): ประกาศ · ตัววิ่งใต้แถบเมนู (อยู่ในหัวหน้าเว็บที่ติดด้านบน เห็นทุกแถบ) · ปกติ = เขียวของระบบ · ด่วน = แดง */
 .ntf-bar{flex:1 0 100%;order:99;display:flex;align-items:center;gap:10px;min-width:0;margin-top:2px;padding:6px 6px 6px 8px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft)}
 .ntf-bar[hidden]{display:none}
+.ntf-bar{border-color:var(--ok);background:var(--ok-soft)}
 .ntf-bar.urgent{border-color:var(--late);background:var(--late-soft)}
 .ntf-tag{display:inline-flex;align-items:center;gap:6px;flex:none;padding:3px 10px 3px 8px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;white-space:nowrap}
+.ntf-tag{background:var(--ok);color:var(--surface)}
 .ntf-bar.urgent .ntf-tag{background:var(--late);color:var(--surface)}
 .ntf-tag svg{width:16px;height:16px}
 .ntf-pos{flex:none;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ntf-track{flex:1 1 auto;min-width:0;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent,#000 18px,#000 calc(100% - 18px),transparent)}
 .ntf-run{display:inline-block;padding-left:100%;white-space:nowrap;font-size:15px;line-height:30px;animation:ntf-run var(--dur,18s) linear infinite}
 .ntf-track:hover .ntf-run,.ntf-track:focus-within .ntf-run{animation-play-state:paused}
-.ntf-run b{font-weight:600}
+.ntf-run b{font-weight:600;color:var(--ok)}
+.ntf-bar.urgent .ntf-run b{color:var(--late)}
+.ntf-run .ntf-pt{margin-right:8px;font-weight:700}
+.ntf-bar .ntf-ok{background:var(--ok);color:var(--surface)}
+.ntf-kind{display:inline-flex;align-items:center;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--ok-soft);color:var(--ok)}
+.ntf-kind.pt{background:var(--late-soft);color:var(--late)}
+.ntf-ptline{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--late);font-size:15px}
+.ntf-ptline b{font-weight:700}
+.ntf-item p.gen{color:var(--ok)}
+.ntf-item.urgent p.gen,.ntf-item p.pt{color:var(--late)}
+.ntf-pt-fields{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:8px}
+.ntf-pt-fields input{width:100%;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:15px}
+@media (max-width:560px){.ntf-pt-fields{grid-template-columns:minmax(0,1fr)}}
+.ntf-row .chip-btn.pt[aria-pressed="true"]{border-color:var(--late);background:var(--late-soft);color:var(--late)}
+.ntf-row .chip-btn.gen[aria-pressed="true"]{border-color:var(--ok);background:var(--ok-soft);color:var(--ok)}
+.ntf-prev.pt span:last-child{color:var(--late);font-weight:600}
+.ntf-prev.gen span:last-child{color:var(--ok);font-weight:600}
 .ntf-run .ntf-meta{margin-left:10px;color:var(--muted);font-size:13px}
 @keyframes ntf-run{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 @media (prefers-reduced-motion:reduce){.ntf-run{animation:none;padding-left:0;white-space:normal;line-height:1.45}}
@@ -4364,6 +4382,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
     <div id="flow-view" hidden></div>
     <div class="flow-pop" id="flow-pop" hidden role="dialog" aria-label="ขั้นตอนของผู้ป่วย"></div>
   </section>
+  <section id="view-notify" hidden aria-hidden="true"></section>   <!-- 22 พ.ย.: ประกาศ = ไอคอนกระดิ่ง (สิทธิ์ในแถบเมนู) ไม่มีหน้าของตัวเอง -->
   <section id="view-txsum" hidden>
     <div class="toolbar txs-top"><h2 class="txs-title">Treatment Summary</h2><span class="muted txs-who" id="txs-who"></span><span class="spacer"></span></div>
     <div class="tabs txs-tabs" role="tablist" id="txs-tabs" aria-label="แถบย่อยของ Treatment Summary" hidden></div>
@@ -7212,7 +7231,8 @@ const normNtf = o => {
   if (!a) { try { a = JSON.parse(str(o.acks) || '{}'); } catch (e) { a = {}; } }
   if (!a || typeof a !== 'object' || Array.isArray(a)) a = {};
   return { id: str(o.id), text: str(o.text), roles: (Array.isArray(o.roles) ? o.roles : str(o.roles).split(',')).map(str).filter(Boolean), level: o.level === 'urgent' ? 'urgent' : 'normal',
-    until: str(o.until).slice(0, 10), by: str(o.by), byUser: str(o.byUser), at: str(o.at), acks: a, cancelBy: str(o.cancelBy), cancelAt: str(o.cancelAt) };
+    until: str(o.until).slice(0, 10), by: str(o.by), byUser: str(o.byUser), at: str(o.at), acks: a, cancelBy: str(o.cancelBy), cancelAt: str(o.cancelAt),
+    kind: o.kind === 'patient' ? 'patient' : 'general', hn: str(o.hn), pname: str(o.pname) };   // 22 พ.ย. (API 110): ประเภท ผู้ป่วย / ทั่วไป
 };
 const normMlog = o => ({ id: str(o.id) || uid(), machine: str(o.machine), status: MST[str(o.status)] ? str(o.status) : 'ready', from: str(o.from), to: str(o.to), cat: str(o.cat), note: str(o.note), eta: str(o.eta), wait: str(o.wait), by: str(o.by), role: str(o.role), at: str(o.at), editBy: str(o.editBy), editAt: str(o.editAt), energy: str(o.energy) });
 function normTxs(t) {
@@ -7735,11 +7755,11 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['reg', 'dq', 'consult', 'nurse', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'txsum', 'settings'];
+const VIEWS = ['reg', 'dq', 'consult', 'nurse', 'appt', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'notify', 'txsum', 'settings'];
 const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook'];
 // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: อยู่ใต้แถบเดียวกับแถบนี้ (เช่น วันลา MP อยู่ใต้ Planning เหมือนตารางแจกเคส)
 const NAV_PARENT_LIKE = { mpleave: 'queue', tdfcalc: 'queue', sendbook: 'queue' };   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
-const VIEW_LABEL = { txsum: 'Treatment Summary', deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', tdfcalc: 'TDF Dose Calculator', sendbook: 'ทะเบียนหนังสือส่ง', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'ห้องตรวจ', nurse: 'Nurse', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
+const VIEW_LABEL = { notify: 'ประกาศ', txsum: 'Treatment Summary', deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', tdfcalc: 'TDF Dose Calculator', sendbook: 'ทะเบียนหนังสือส่ง', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'ห้องตรวจ', nurse: 'Nurse', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
 const NAV_LIKE = { reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend', sendbook: 'pend', nurse: 'dq' };   // ทะเบียนหนังสือส่ง (20 พ.ย.) = เห็นเท่าแถบงานรอ   // Nurse (18 พ.ย.) = เห็นเท่าแถบแจกงานแพทย์   // TDF (17 พ.ย.) = เห็นเท่าแถบงานรอ (Planning) · RT Workflow (ข้อมูลผู้ป่วย) = เท่าแถบห้องฉาย   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
@@ -8313,6 +8333,7 @@ function mergeConfig(c) {
     for (const r of out.roles) {
       const a = src[r];
       access[r] = a === 'edit' || a === 'view' || a === '' ? a : !on ? '' : r === 'MP' ? 'edit' : guest ? 'view' : '';
+      if (x.view === 'notify' && !(a === 'edit' || a === 'view' || a === '')) access[r] = 'edit';   // 22 พ.ย.: ประกาศ · ยังไม่ตั้ง = ทุกตำแหน่งส่งได้
       if (x.view === TXS_VIEW) access[r] = txsUnitOf(r, out) ? 'view' : access[r] && (hasOwn(src, r) || r === 'MP') ? 'view' : '';   // 20 พ.ย.: ดูได้อย่างมาก · ยังไม่ตั้ง = MP
       else if (txsOuterRole(r, out)) access[r] = '';   // หน่วยงานภายนอก: เฉพาะ Treatment Summary
       if (x.view === 'settings') access[r] = r === 'MP' || access[r] ? 'view' : '';
@@ -8322,7 +8343,7 @@ function mergeConfig(c) {
     access[SUB_ROLE] = x.view === 'settings' ? 'view' : ACC_SET.includes(src[SUB_ROLE]) ? src[SUB_ROLE] : 'role';   // ยังไม่ตั้ง = ตามตำแหน่ง
     const vals = Object.entries(access).filter(([, v]) => v !== 'role');
     const lbl = x.view === 'appt' && /^ลงนัด( CT\+RT)?$/.test(str(x.label).trim()) ? '' : x.view === 'consult' && /^consult$/i.test(str(x.label).trim()) ? '' : str(x.label).slice(0, 30);   // ชื่อเดิม Consult = ห้องตรวจ (18 พ.ย.)   // ชื่อเดิมของแถบลงนัด = CT Order
-    return { view: x.view, label: lbl, on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && r !== ADMIN_ROLE && r !== SUB_ROLE && v), access, parent: str(x.parent) };
+    return { view: x.view, label: lbl, on: x.view === 'settings' || vals.some(([, v]) => v), guest: vals.some(([r, v]) => r !== 'MP' && r !== ADMIN_ROLE && r !== SUB_ROLE && v), access, parent: x.view === 'notify' ? '' : str(x.parent) };   // ประกาศ = ไอคอนกระดิ่ง (ไม่อยู่ใต้แถบ)
   });
   // รวมแถบ (ตั้งค่า → แถบเมนู → อยู่ใต้แถบ): แถบย่อยอยู่ในเมนู ▾ ของแถบหลัก · ไม่ซ้อนเกิน 1 ชั้น · ตั้งค่า อยู่ใต้แถบอื่นไม่ได้และมีแถบย่อยไม่ได้
   // ยังไม่เคยตั้ง (navGrouped): แจกงาน (งาน) ตารางแจกเคส RC และกิจกรรม สรุป P4P อยู่ใต้แถบ Planning (ชื่อที่ตั้ง หรือแถบงานรอ)
@@ -8400,7 +8421,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-21.8';
+const PAGE_VERSION = '2026-11-22.1';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8644,12 +8665,15 @@ function localStore() {
     // 20 พ.ย.: เหมือน machineSet ใน Code.gs (API 100)
     // 21 พ.ย.: ประกาศ (กติกาเดียวกับ notifyAdd / notifyAck / notifyCancel ใน Code.gs)
     notifyAdd: async rec => {
-      if (!ntfCanSend()) throw new Error('ส่งประกาศได้เฉพาะแอดมินและแอดมินรอง');
+      if (!ntfCanSend()) throw new Error(`ตำแหน่ง ${state.user.role || '-'} ส่งประกาศไม่ได้ (แอดมินตั้งที่ ตั้งค่า → แถบเมนู → ประกาศ)`);
       const text = str(rec && rec.text).replace(/\s+/g, ' ').slice(0, 300), roles = [...new Set(((rec && rec.roles) || []).map(str).filter(Boolean))];
+      const kind = rec && rec.kind === 'patient' ? 'patient' : 'general', hn = kind === 'patient' ? str(rec.hn).replace(/\s+/g, '').toUpperCase() : '', pname = kind === 'patient' ? str(rec.pname).replace(/\s+/g, ' ').slice(0, 120) : '';
+      if (kind === 'patient' && !NTF_HN_RE.test(hn)) throw new Error('ประกาศผู้ป่วย: กรอก HN ให้ถูกต้อง');
+      if (kind === 'patient' && !pname) throw new Error('ประกาศผู้ป่วย: กรอกชื่อผู้ป่วย');
       if (!text) throw new Error('พิมพ์ข้อความประกาศก่อนส่ง');
       if (!roles.length) throw new Error('เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง');
       if (!isDay(rec.until) || rec.until < today() || rec.until > plusDays(today(), 30)) throw new Error('วันที่แสดงถึงไม่ถูกต้อง');
-      const r = { id: uid(), text, roles: roles.join(', '), level: rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: str(state.user.username), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '' };
+      const r = { id: uid(), text, roles: roles.join(', '), level: kind === 'patient' || rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind, hn, pname };
       db.notify.push(r);
       persist();
       return { rows: [clone(r)] };
@@ -8670,9 +8694,9 @@ function localStore() {
       return { rows: [clone(r)] };
     },
     notifyCancel: async id => {
-      if (!ntfCanSend()) throw new Error('ยกเลิกประกาศได้เฉพาะแอดมินและแอดมินรอง');
       const r = db.notify.find(x => x.id === id);
       if (!r) throw new Error('ไม่พบประกาศนี้ (อาจถูกลบไปแล้ว)');
+      if (!ntfCanCancel(normNtf(r))) throw new Error('ยกเลิกได้เฉพาะประกาศที่คุณส่ง (แอดมินยกเลิกได้ทุกประกาศ)');
       if (!r.cancelAt) { r.cancelBy = str(state.user.name || state.user.username); r.cancelAt = nowISO(); persist(); }
       return { rows: [clone(r)] };
     },
@@ -9692,7 +9716,9 @@ function demoDb() {
   // 21 พ.ย.: ประกาศตัวอย่าง (ผู้ใช้ตัวอย่าง = MP · แอดมิน จึงเห็นตัววิ่ง)
   const nAt = m => new Date(Date.now() - m * 60000).toISOString(), nDay = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); }, nTd = nDay(0);   // ตอนนี้ยังใช้ plusDays ไม่ได้ (ประกาศทีหลัง)
   const notify = [
-    { id: 'demo-n1', text: 'VersaHD ปิดซ่อม MLC 13:00–15:00 วันนี้ ผู้ป่วยรอบบ่ายย้ายไป Infinity ตามรายชื่อในแถบห้องฉาย', roles: 'RTT, MP, Nurse', level: 'urgent', until: nTd, by: 'แอดมิน ตัวอย่าง', byUser: 'demo.admin', at: nAt(40),
+    { id: 'demo-n3', kind: 'patient', hn: '999000301', pname: 'นายตัวอย่าง หนึ่ง', text: 'มาถึงแล้ว รอ CT-Sim ที่ห้อง CT-1 (ไม่ต้องนัดใหม่)', roles: 'RTT, MP, Nurse', level: 'urgent', until: nTd,
+      by: T(1), byUser: 'demo.rtt', at: nAt(12), acks: '{}', cancelBy: '', cancelAt: '' },
+    { id: 'demo-n1', text: 'VersaHD ปิดซ่อม MLC 13:00–15:00 วันนี้ ผู้ป่วยรอบบ่ายย้ายไป Infinity ตามรายชื่อในแถบห้องฉาย', roles: 'RTT, MP, Nurse', level: 'normal', until: nTd, by: 'แอดมิน ตัวอย่าง', byUser: 'demo.admin', at: nAt(40),
       acks: JSON.stringify({ RTT: { by: T(1), user: 'demo.rtt', at: nAt(25) } }), cancelBy: '', cancelAt: '' },
     { id: 'demo-n2', text: 'ประชุมทีมรังสีรักษา วันศุกร์นี้ 15:00 ห้องประชุม 2 ชั้น 3', roles: 'RO, MP, RTT, Nurse, Register, Refer', level: 'normal', until: nDay(3), by: 'แอดมิน ตัวอย่าง', byUser: 'demo.admin', at: nAt(180),
       acks: JSON.stringify({ Register: { by: 'ห้องบัตร ตัวอย่าง', user: 'demo.reg', at: nAt(150) } }), cancelBy: '', cancelAt: '' },
@@ -10460,7 +10486,7 @@ function render() {
   renderCfgBadge();
   renderApBadge();
   renderWorkBadge();
-  if (!navOn(state.view)) state.view = (state.config.nav.find(x => navOn(x.view)) || { view: '' }).view;
+  if (!navOn(state.view) || state.view === 'notify') state.view = (state.config.nav.find(x => x.view !== 'notify' && navOn(x.view)) || { view: '' }).view;   // ประกาศไม่ใช่หน้า
   // แถบที่ตำแหน่งนี้ดูได้อย่างเดียว (ตั้งค่า → แถบเมนู) · "ตั้งค่า" มีข้อความของตัวเอง · ยังไม่ทราบผู้ใช้: ยังไม่บอก
   const ro = !!state.view && state.view !== 'settings' && state.view !== TXS_VIEW && accessOf(state.view) === 'view';
   $('#ro-notice').hidden = !ro || (store.mode === 'sheet' && !state.loaded);
@@ -21445,7 +21471,8 @@ function accSel(x, i, r) {
   if (x.view === TXS_VIEW && (r === ADMIN_ROLE || txsUnitOf(r))) return `<span class="acc-fixed" title="${r === ADMIN_ROLE ? 'แอดมินเห็นเสมอ' : 'หน่วยงานในตาราง Treatment Summary (แถบนั้น → หน่วยงานและสิทธิ์) เห็นเสมอ'}">ดูได้</span>`;
   if (x.view !== TXS_VIEW && txsOuterRole(r)) return '<span class="acc-fixed" title="หน่วยงานภายนอกเห็นเฉพาะแถบ Treatment Summary">ไม่เห็น</span>';
   const v = (x.access || {})[r] || '', opts = x.view === TXS_VIEW ? (r === SUB_ROLE ? [['role', 'ตามตำแหน่ง'], ...ACCESS_OPTS.slice(0, 2)] : ACCESS_OPTS.slice(0, 2)) : x.view === 'settings' ? ACCESS_OPTS.slice(0, 2) : r === SUB_ROLE ? [['role', 'ตามตำแหน่ง'], ...ACCESS_OPTS] : ACCESS_OPTS;
-  return `<select class="acc-sel" data-navacc="${i}" data-accrole="${esc(r)}" data-v="${v}" aria-label="${esc(VIEW_LABEL[x.view] || x.view)} · ${esc(r)}">${opts.map(([k, l]) => opt(k, l, v)).join('')}</select>`;
+  const lab = (k, l) => (x.view === 'notify' ? { '': 'ไม่เห็น', view: 'รับ', edit: 'ส่งได้' }[k] || l : l);   // 22 พ.ย.: ประกาศ
+  return `<select class="acc-sel" data-navacc="${i}" data-accrole="${esc(r)}" data-v="${v}" aria-label="${esc(VIEW_LABEL[x.view] || x.view)} · ${esc(r)}">${opts.map(([k, l]) => opt(k, lab(k, l), v)).join('')}</select>`;
 }
 // สมาชิกที่ใช้งานอยู่ใน LPCH RO Workspace (ดึงตอนกดปุ่ม ไม่เก็บไว้ในระบบนี้) จัดกลุ่มตามตำแหน่ง
 function membersHtml(d) {
@@ -22283,13 +22310,14 @@ function renderSettings() {
       · <b>แถว └</b> = แถบย่อยในหน้าของแถบนั้น: เลือกตำแหน่งที่เห็น และกด ↑ ท้ายแถวเพื่อ<b>เรียงลำดับแถบย่อย</b> (ใช้กับทุกคน · แถบ Nurse แต่ละคนจัดลำดับของตัวเองทับได้ด้วยปุ่ม ⇅ จัดลำดับแถบ)
       · สิทธิ์ตามตำแหน่งใน LPCH RO Workspace: <b>ไม่เห็น</b> / <b>ดูได้</b> (ดูอย่างเดียว) / <b>บันทึกได้</b> (บันทึก แก้ไข ลบในแถบนั้น ยืนยันด้วยรหัส PIN)
       · แก้ไขเคสต้องบันทึกได้ในแถบ งาน งานรอ หรือตารางแจกเคส · ตั้งค่าแก้ได้เฉพาะแอดมิน · บัญชี Google ของเจ้าของไฟล์ทำได้ทุกแถบ
+      · <b>ประกาศ</b> (ไอคอนกระดิ่ง): <b>รับ</b> = เห็นแถบตัววิ่งของตำแหน่งตัวเองและกดรับทราบ · <b>ส่งได้</b> = ส่งประกาศได้ด้วย (ยังไม่ตั้ง = ทุกตำแหน่งส่งได้)
       · <b>Admin</b> = ผู้ที่เป็นแอดมิน (ตั้งค่า → แอดมิน) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง (ยังไม่ตั้ง = เท่า MP)${store.mode === 'sheet' && !serverHas(ADMIN_API) ? ' · ต้องใช้ Code.gs รุ่น 2026-11-10.5 ขึ้นไป' : ''}
       · <b>แอดมินรอง</b> = ผู้ที่อยู่ในรายชื่อแอดมินรอง (ตั้งค่า → แอดมิน) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง ("ตามตำแหน่ง" = ใช้คอลัมน์ตำแหน่งของตัวเอง) · แก้ตั้งค่าได้เฉพาะหมวดที่ได้รับสิทธิ์ และต้องรอแอดมินหลักอนุมัติ${store.mode === 'sheet' && !serverHas(SUB_NAV_API) ? ' · ต้องใช้ Code.gs รุ่น 2026-11-10.6 ขึ้นไป' : ''}</p></div>
       ${store.mode === 'sheet' && !serverHas(ACCESS_API) ? `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>สิทธิ์ "บันทึกได้" ของตำแหน่งที่ไม่ใช่ MP และการดึงรายชื่อจาก LPCH ใช้ได้เมื่อวาง Code.gs รุ่น 2026-10-18.3 ขึ้นไป (ที่ใช้อยู่: รุ่น ${esc(state.codeVersion || 'เก่า')}) แล้ว Deploy เวอร์ชันใหม่ · ระหว่างนี้ตำแหน่งอื่นที่ตั้ง "บันทึกได้" จะดูได้อย่างเดียว</span></p>` : ''}
       <div class="table-wrap set-table nav-acc"><table><thead><tr><th></th><th style="text-align:left">แถบ</th><th style="text-align:left">ชื่อที่แสดง</th><th style="text-align:left">อยู่ใต้แถบ</th>${d.roles.map(r => `<th>${esc(r)}</th>`).join('')}<th class="acc-admin" title="แอดมิน (ตั้งค่า → แอดมิน) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง · ยังไม่ตั้ง = เท่า MP">Admin</th><th class="acc-admin" title="แอดมินรอง (ตั้งค่า → แอดมิน → แอดมินรอง) ใช้คอลัมน์นี้แทนตำแหน่งของตัวเอง · ตามตำแหน่ง = ใช้คอลัมน์ตำแหน่งของตัวเอง">แอดมินรอง</th><th></th></tr></thead><tbody>${d.nav.map((x, i) => `<tr class="navacc-row" data-navrow="${x.view}">
         <td class="idx">${i + 1}</td><td class="nav-name">${esc(VIEW_LABEL[x.view] || x.view)}</td>
         <td><input class="nav-label" data-k="nav.${i}.label" value="${esc(x.label)}" maxlength="30" placeholder="${esc(VIEW_LABEL[x.view] || x.view)}" aria-label="ชื่อแถบ ${esc(VIEW_LABEL[x.view] || x.view)}"></td>
-        <td>${x.view === 'settings' ? '<span class="muted">แถบหลัก</span>' : `<select data-k="nav.${i}.parent" data-navparent aria-label="${esc(VIEW_LABEL[x.view] || x.view)} อยู่ใต้แถบ">${opt('', '— แถบหลัก —', x.parent || '')}${d.nav.filter(p => p.view !== x.view && p.view !== 'settings' && !p.parent).map(p => opt(p.view, `▾ ${str(p.label) || VIEW_LABEL[p.view] || p.view}`, x.parent || '')).join('')}</select>`}</td>
+        <td>${x.view === 'settings' ? '<span class="muted">แถบหลัก</span>' : x.view === 'notify' ? '<span class="muted" title="ไม่เห็น = ไม่มีกระดิ่งและแถบตัววิ่ง · รับ = เห็นประกาศถึงตำแหน่งของตัวเองและกดรับทราบ · ส่งได้ = ส่งประกาศได้ด้วย">ไอคอนกระดิ่ง</span>' : `<select data-k="nav.${i}.parent" data-navparent aria-label="${esc(VIEW_LABEL[x.view] || x.view)} อยู่ใต้แถบ">${opt('', '— แถบหลัก —', x.parent || '')}${d.nav.filter(p => p.view !== x.view && p.view !== 'settings' && p.view !== 'notify' && !p.parent).map(p => opt(p.view, `▾ ${str(p.label) || VIEW_LABEL[p.view] || p.view}`, x.parent || '')).join('')}</select>`}</td>
         ${d.roles.map(r => `<td>${accSel(x, i, r)}</td>`).join('')}<td class="acc-admin">${accSel(x, i, ADMIN_ROLE)}</td><td class="acc-admin">${accSel(x, i, SUB_ROLE)}</td>
         <td><button type="button" class="icon-btn" data-up="nav.${i}" aria-label="เลื่อน ${esc(VIEW_LABEL[x.view] || x.view)} ขึ้น"${i ? '' : ' disabled'}>↑</button></td>
       </tr>${x.view === 'dq' ? DQ_DESKS.map(([k]) => `<tr class="navacc-row navacc-sub" data-navsub="${k}">${navDeskCells(d, k)}</tr>`).join('') : ''}${SUB_VIEWS[x.view] ? subOrderOf(x.view, d).map(k => `<tr class="navacc-row navacc-sub" data-navsub2="${x.view}.${k}">${navSubCells(d, x.view, k)}</tr>`).join('') : ''}`).join('')}</tbody></table></div>
@@ -28240,10 +28268,21 @@ $('#man-tab').addEventListener('click', () => {
    ตัววิ่งใต้แถบเมนู = ประกาศถึงอาชีพของผู้ใช้ที่ยังไม่มีใครในอาชีพกดรับทราบ (ด่วนขึ้นก่อน) · กดรับทราบ = หายจากทุกคนในอาชีพนั้น · หมดอายุ / ยกเลิก = หายเอง
    ส่ง / ยกเลิก: แอดมินหลัก แอดมินรอง · ประวัติ 120 วันล่าสุด (ผู้รับเห็นเฉพาะของอาชีพตัวเอง) · ข้อมูลมากับรอบรีเฟรช 1 นาทีเดิม (ไม่เรียกเซิร์ฟเวอร์เพิ่ม) */
 const NOTIFY_API = 109;
+const NTF_KIND_API = 110;   // 22 พ.ย.: สิทธิ์ส่งรายตำแหน่ง · ประเภท ผู้ป่วย / ทั่วไป · ผู้ส่งยกเลิกของตัวเอง
+const NTF_HN_RE = /^[A-Za-z0-9-]{3,20}$/;
+const ntfNew = () => store.mode !== 'sheet' || serverHas(NTF_KIND_API);
 const NTF_LABEL = { RO: 'แพทย์', MP: 'นักฟิสิกส์', RTT: 'นักรังสีการแพทย์', Nurse: 'พยาบาล', Register: 'ห้องบัตร', Refer: 'Call center', Other: 'อื่น ๆ' };
 const NTF_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
-const ntfOn = () => store.mode !== 'sheet' || serverHas(NOTIFY_API);
-const ntfCanSend = () => ntfOn() && !state.user.pending && (!!state.user.isAdmin || subTabs().length > 0);
+const ntfOn = () => (store.mode !== 'sheet' || serverHas(NOTIFY_API)) && navOn('notify');   // 22 พ.ย.: ตั้งค่า → แถบเมนู → ประกาศ (ไม่เห็น = ไม่มีกระดิ่ง)
+const ntfBoss = () => !!state.user.isAdmin || subTabs().length > 0 || state.user.via === 'google';
+// ส่งได้: Code.gs API 110 ขึ้นไป = ตามแถว ประกาศ ในแถบเมนู (ยังไม่ตั้ง = ทุกตำแหน่ง) · รุ่นก่อน = แอดมินหลัก / แอดมินรอง
+const ntfCanSend = () => ntfOn() && !state.user.pending && !state.viewAs && (ntfNew() ? accessOf('notify') === 'edit' : ntfBoss());
+const ntfMe = () => str(state.user.username) || (store.mode !== 'sheet' ? 'demo.user' : '');   // บัญชีผู้ส่ง (โหมดตัวอย่าง = ผู้ใช้ตัวอย่าง)
+const ntfCanCancel = n => ntfBoss() || (ntfNew() && !!n.byUser && n.byUser === ntfMe());
+const ntfRank = n => (n.kind === 'patient' ? 0 : n.level === 'urgent' ? 1 : 2);   // ผู้ป่วยขึ้นก่อนเสมอ แล้วด่วนแบบเดิม แล้วทั่วไป
+const ntfSort = (a, b) => ntfRank(a) - ntfRank(b) || str(b.at).localeCompare(str(a.at));
+const ntfSees = n => ntfBoss() || ntfMine(n) || (!!n.byUser && n.byUser === ntfMe());   // แอดมินเห็นทุกประกาศ · คนอื่นเห็นของตำแหน่งตัวเองและที่ตัวเองส่ง
+const ntfPt = n => (n.kind === 'patient' ? `HN ${n.hn}${n.pname ? ' ' + n.pname : ''}` : '');
 const ntfRole = () => str(state.user.role);
 const ntfRoles = () => [...new Set((state.config.roles && state.config.roles.length ? state.config.roles : LPCH_ROLES).map(str).filter(Boolean))].filter(r => !txsOuterRole(r));
 const ntfRoleName = r => `${r}${NTF_LABEL[r] ? ' · ' + NTF_LABEL[r] : ''}`;
@@ -28252,11 +28291,11 @@ const ntfKeyOf = (n, role) => n.roles.find(x => x.toLowerCase() === str(role).to
 const ntfMine = n => !!ntfRole() && !!ntfKeyOf(n, ntfRole());
 const ntfAckOf = (n, role) => { const k = ntfKeyOf(n, role); return k ? n.acks[k] || null : null; };
 const ntfDone = n => !ntfLive(n) || n.roles.every(r => n.acks[r]);
-const ntfForMe = () => (state.notify || []).filter(n => ntfLive(n) && ntfMine(n) && !ntfAckOf(n, ntfRole()))
-  .sort((a, b) => (a.level === b.level ? 0 : a.level === 'urgent' ? -1 : 1) || str(b.at).localeCompare(str(a.at)));
+const ntfForMe = () => (state.notify || []).filter(n => ntfLive(n) && ntfMine(n) && !ntfAckOf(n, ntfRole())).sort(ntfSort);
 const ntfWhen = s => { const d = new Date(s); if (isNaN(d.getTime())) return ''; const hm = `${pad(d.getHours())}:${pad(d.getMinutes())} น.`; return iso(d) === today() ? `วันนี้ ${hm}` : `${fmtDay(iso(d))} ${hm}`; };
 const ntfMerge = rows => { for (const x of (rows || []).map(normNtf)) { const i = state.notify.findIndex(y => y.id === x.id); if (i >= 0) state.notify[i] = x; else state.notify.push(x); } };
-const ntfUi = { idx: 0, key: '', tab: 'now', q: '', role: '', form: { text: '', roles: [], level: 'normal', days: 3 }, err: '', busy: false, arm: '', armT: 0 };
+const NTF_FORM0 = () => ({ kind: 'general', hn: '', pname: '', auto: '', text: '', roles: [], days: 3 });
+const ntfUi = { idx: 0, key: '', tab: 'now', q: '', role: '', kindF: '', form: NTF_FORM0(), err: '', busy: false, arm: '', armT: 0, seen: null };
 const ntfDlg = $('#ntf-dlg');
 function renderNtf(gated) {
   const bar = $('#ntf-bar'), btn = $('#ntf-btn');
@@ -28271,16 +28310,21 @@ function renderNtf(gated) {
     btn.title = send ? 'ประกาศ · ส่งประกาศใหม่ ดูว่าใครรับทราบแล้ว และประวัติ' : 'ประกาศถึงอาชีพของคุณ และประวัติ';
     btn.setAttribute('aria-label', btn.title + (list.length ? ` (ยังไม่รับทราบ ${list.length})` : ''));
   }
+  // 22 พ.ย.: ประกาศผู้ป่วยที่เพิ่งเข้ามา (ยังไม่เคยเห็นในหน้านี้) ขึ้นแถบทันที
+  const fresh = ntfUi.seen ? list.findIndex(x => x.kind === 'patient' && !ntfUi.seen.has(x.id)) : -1;
+  ntfUi.seen = new Set([...(ntfUi.seen || []), ...list.map(x => x.id)]);
+  if (fresh >= 0) ntfUi.idx = fresh;
   if (!list.length) { bar.hidden = true; bar.innerHTML = ''; ntfUi.key = ''; return; }
   if (ntfUi.idx >= list.length) ntfUi.idx = 0;
-  const n = list[ntfUi.idx], key = [n.id, ntfUi.idx, list.length, send, n.level, n.text].join('|');
+  const n = list[ntfUi.idx], key = [n.id, ntfUi.idx, list.length, send, n.level, n.kind, n.hn, n.pname, n.text].join('|');
   bar.hidden = false;
   if (key === ntfUi.key) return;   // ไม่วาดซ้ำ = ตัววิ่งไม่เริ่มใหม่ทุกครั้งที่หน้าเว็บวาด
   ntfUi.key = key;
   const role = ntfKeyOf(n, ntfRole());
-  bar.classList.toggle('urgent', n.level === 'urgent');
-  bar.innerHTML = `<span class="ntf-tag">${NTF_BELL}<span class="ntf-tt">${n.level === 'urgent' ? 'ด่วน' : 'ประกาศ'}</span></span>${list.length > 1 ? `<span class="ntf-pos">${ntfUi.idx + 1}/${list.length}</span>` : ''}
-    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน"><span class="ntf-run"><b>${esc(n.text)}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
+  bar.classList.toggle('urgent', n.level === 'urgent' || n.kind === 'patient');
+  bar.classList.toggle('pt', n.kind === 'patient');
+  bar.innerHTML = `<span class="ntf-tag">${NTF_BELL}<span class="ntf-tt">${n.kind === 'patient' ? 'ผู้ป่วย' : n.level === 'urgent' ? 'ด่วน' : 'ประกาศ'}</span></span>${list.length > 1 ? `<span class="ntf-pos">${ntfUi.idx + 1}/${list.length}</span>` : ''}
+    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน"><span class="ntf-run"><b>${n.kind === 'patient' ? `<span class="ntf-pt">${esc(ntfPt(n))}</span> ` : ''}${esc(n.text)}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
     ${list.length > 1 ? '<span class="ntf-nav"><button type="button" data-ntfnav="-1" aria-label="ประกาศก่อนหน้า">‹</button><button type="button" data-ntfnav="1" aria-label="ประกาศถัดไป">›</button></span>' : ''}
     ${send ? '<button type="button" class="ntf-link new" data-ntfnew title="เขียนประกาศใหม่">+ ส่ง<span class="ntf-lt">ประกาศ</span></button>' : ''}<button type="button" class="ntf-link" data-ntfhist title="ประกาศที่ผ่านมา และใครรับทราบเมื่อไร">ประวัติ</button>
     <button type="button" class="ntf-ok" data-ntfack="${esc(n.id)}" title="ประกาศนี้จะหายจากทุกคนใน ${esc(ntfRoleName(role))}">รับทราบ</button>`;
@@ -28352,7 +28396,7 @@ function ntfStatus(n) {
   if (n.cancelAt) return '<span class="st off">ยกเลิกแล้ว</span>';
   if (!ntfLive(n)) return '<span class="st off">หมดอายุ</span>';
   if (!left) return '<span class="st done">รับทราบครบ</span>';
-  return `<span class="st ${n.level === 'urgent' ? 'urg' : 'on'}">${n.level === 'urgent' ? 'ด่วน · ' : ''}รอ ${left} อาชีพ</span>`;
+  return `<span class="st ${n.level === 'urgent' || n.kind === 'patient' ? 'urg' : 'on'}">${n.kind !== 'patient' && n.level === 'urgent' ? 'ด่วน · ' : ''}รอ ${left} อาชีพ</span>`;   // ประเภทอยู่ในป้ายหน้ารายการแล้ว
 }
 function ntfItem(n, send) {
   const role = ntfRole(), mineAck = ntfAckOf(n, role), mine = ntfMine(n);
@@ -28360,46 +28404,51 @@ function ntfItem(n, send) {
     : `<span class="ntf-ack wait">○ ${esc(ntfRoleName(r))} <small>${ntfLive(n) ? 'ยังไม่รับทราบ' : 'ไม่ได้รับทราบ'}</small></span>`; }).join('')}</div>`
     : mineAck ? `<div class="ntf-acks"><span class="ntf-ack ok">✓ ${esc(ntfRoleName(ntfKeyOf(n, role)))} รับทราบแล้ว <small>${esc(mineAck.by)} · ${esc(ntfWhen(mineAck.at))}</small></span></div>` : '';
   const acts = [];
-  if (send && ntfLive(n) && !ntfDone(n)) acts.push(`<button type="button" class="btn ghost${ntfUi.arm === n.id ? ' danger' : ''}" data-ntfcancel="${esc(n.id)}">${ntfUi.arm === n.id ? 'กดอีกครั้งเพื่อยืนยันยกเลิก' : 'ยกเลิกประกาศ'}</button>`);
+  if (ntfCanCancel(n) && ntfLive(n) && !ntfDone(n)) acts.push(`<button type="button" class="btn ghost${ntfUi.arm === n.id ? ' danger' : ''}" data-ntfcancel="${esc(n.id)}">${ntfUi.arm === n.id ? 'กดอีกครั้งเพื่อยืนยันยกเลิก' : 'ยกเลิกประกาศ'}</button>`);
   if (mine && ntfLive(n) && !mineAck) acts.push(`<button type="button" class="btn primary" data-ntfack="${esc(n.id)}">รับทราบ</button>`);
-  return `<li class="ntf-item${n.level === 'urgent' ? ' urgent' : ''}${ntfLive(n) ? '' : ' off'}"><div class="ntf-head">${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span><span>ถึง ${esc(fmtDay(n.until))}</span></div>
-    <p>${esc(n.text)}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
+  const pt = n.kind === 'patient';
+  return `<li class="ntf-item${n.level === 'urgent' || pt ? ' urgent' : ''}${ntfLive(n) ? '' : ' off'}"><div class="ntf-head"><span class="ntf-kind${pt ? ' pt' : ''}">${pt ? 'ผู้ป่วย' : 'ทั่วไป'}</span>${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span><span>ถึง ${esc(fmtDay(n.until))}</span></div>
+    ${pt ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b><span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : 'gen'}">${esc(n.text)}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
 }
 function ntfHistHtml(send) {
   const q = ntfUi.q.trim().toLowerCase();
-  const list = (state.notify || []).filter(n => ntfDone(n) && (send || ntfMine(n)) && (!send || !ntfUi.role || n.roles.includes(ntfUi.role))
-    && (!q || [n.text, n.by, n.roles.join(' '), ...Object.values(n.acks).map(a => a && a.by)].join(' ').toLowerCase().includes(q))).sort((a, b) => str(b.at).localeCompare(str(a.at)));
-  let out = `<div class="ntf-tools"><input id="ntf-q" type="search" value="${esc(ntfUi.q)}" placeholder="ค้นหาข้อความ ผู้ส่ง หรือผู้รับทราบ" aria-label="ค้นหาประวัติประกาศ" autocomplete="off">${send ? `<span class="ntf-row" role="group" aria-label="กรองตามอาชีพ"><button type="button" class="chip-btn" data-ntfhr="" aria-pressed="${!ntfUi.role}">ทุกอาชีพ</button>${ntfRoles().map(r => `<button type="button" class="chip-btn" data-ntfhr="${esc(r)}" aria-pressed="${ntfUi.role === r}">${esc(r)}</button>`).join('')}</span>` : ''}</div>
-    <p class="ntf-sum">${list.length} ประกาศ · ${send ? 'หมดอายุ ยกเลิก หรือรับทราบครบทุกอาชีพแล้ว (120 วันล่าสุด)' : `ประกาศถึง ${esc(ntfRoleName(ntfRole()))} ที่ผ่านมา (120 วันล่าสุด)`}</p>`;
-  if (!list.length) return out + `<p class="ntf-empty">${q || ntfUi.role ? 'ไม่พบประกาศที่ตรงกับที่ค้นหา' : 'ยังไม่มีประวัติประกาศ'}</p>`;
+  const boss = ntfBoss();
+  const list = (state.notify || []).filter(n => ntfDone(n) && ntfSees(n) && (!boss || !ntfUi.role || n.roles.includes(ntfUi.role)) && (!ntfUi.kindF || n.kind === ntfUi.kindF)
+    && (!q || [n.text, n.by, n.hn, n.pname, n.roles.join(' '), ...Object.values(n.acks).map(a => a && a.by)].join(' ').toLowerCase().includes(q))).sort((a, b) => str(b.at).localeCompare(str(a.at)));
+  let out = `<div class="ntf-tools"><input id="ntf-q" type="search" value="${esc(ntfUi.q)}" placeholder="ค้นหาข้อความ HN ชื่อผู้ป่วย ผู้ส่ง หรือผู้รับทราบ" aria-label="ค้นหาประวัติประกาศ" autocomplete="off"><span class="ntf-row" role="group" aria-label="กรองตามประเภท">${[['', 'ทุกประเภท'], ['patient', 'ผู้ป่วย'], ['general', 'ทั่วไป']].map(([k, l]) => `<button type="button" class="chip-btn" data-ntfkf="${k}" aria-pressed="${ntfUi.kindF === k}">${l}</button>`).join('')}</span>${boss ? `<span class="ntf-row" role="group" aria-label="กรองตามอาชีพ"><button type="button" class="chip-btn" data-ntfhr="" aria-pressed="${!ntfUi.role}">ทุกอาชีพ</button>${ntfRoles().map(r => `<button type="button" class="chip-btn" data-ntfhr="${esc(r)}" aria-pressed="${ntfUi.role === r}">${esc(r)}</button>`).join('')}</span>` : ''}</div>
+    <p class="ntf-sum">${list.length} ประกาศ · ${boss ? 'หมดอายุ ยกเลิก หรือรับทราบครบทุกอาชีพแล้ว (120 วันล่าสุด)' : `ประกาศถึง ${esc(ntfRoleName(ntfRole()))} ที่ผ่านมา (120 วันล่าสุด)`}</p>`;
+  if (!list.length) return out + `<p class="ntf-empty">${q || ntfUi.role || ntfUi.kindF ? 'ไม่พบประกาศที่ตรงกับที่ค้นหา' : 'ยังไม่มีประวัติประกาศ'}</p>`;
   let month = '';
   out += '<ul class="ntf-list">';
-  for (const n of list) { const d = new Date(n.at), m = isNaN(d.getTime()) ? '' : MONTH_FMT.format(d); if (m !== month) { month = m; out += `<li><h4 class="ntf-month">${esc(m)}</h4></li>`; } out += ntfItem(n, send); }
+  for (const n of list) { const d = new Date(n.at), m = isNaN(d.getTime()) ? '' : MONTH_FMT.format(d); if (m !== month) { month = m; out += `<li><h4 class="ntf-month">${esc(m)}</h4></li>`; } out += ntfItem(n, boss || (!!n.byUser && n.byUser === ntfMe())); }
   return out + '</ul>';
 }
 function ntfDlgHtml() {
   const send = ntfCanSend(), f = ntfUi.form, roles = ntfRoles();
-  const now = (state.notify || []).filter(n => !ntfDone(n) && (send || ntfMine(n))).sort((a, b) => (a.level === b.level ? 0 : a.level === 'urgent' ? -1 : 1) || str(b.at).localeCompare(str(a.at)));
-  const nHist = (state.notify || []).filter(n => ntfDone(n) && (send || ntfMine(n))).length;
+  const now = (state.notify || []).filter(n => !ntfDone(n) && ntfSees(n)).sort(ntfSort);
+  const nHist = (state.notify || []).filter(n => ntfDone(n) && ntfSees(n)).length;
+  const track = n => ntfBoss() || (!!n.byUser && n.byUser === ntfMe());   // ติดตามรายตำแหน่งได้: แอดมิน และผู้ส่งเอง
   const tabs = `<div class="ntf-tabs" role="tablist"><button type="button" role="tab" data-ntftab="now" aria-selected="${ntfUi.tab === 'now'}">${send ? 'ส่ง · ติดตาม' : 'ประกาศถึงฉัน'}<span class="n">${now.length}</span></button><button type="button" role="tab" data-ntftab="hist" aria-selected="${ntfUi.tab === 'hist'}">ประวัติ<span class="n">${nHist}</span></button></div>`;
   if (ntfUi.tab === 'hist') return tabs + ntfHistHtml(send);
-  if (!send) return tabs + `<p class="ntf-who">ส่งประกาศได้เฉพาะแอดมินและแอดมินรอง · กดรับทราบในนามอาชีพของคุณ (${esc(ntfRole() || '—')}) แล้วประกาศหายจากทุกคนในอาชีพนั้น</p>
-    <section class="ntf-sec"><h3>ประกาศถึง ${esc(ntfRoleName(ntfRole()))}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, false)).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศค้างอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+  if (!send) return tabs + `<p class="ntf-who">${ntfNew() ? `ตำแหน่งของคุณ (${esc(ntfRole() || '—')}) รับประกาศได้อย่างเดียว · แอดมินตั้งสิทธิ์ส่งที่ ตั้งค่า → แถบเมนู → ประกาศ` : 'ส่งประกาศได้เฉพาะแอดมินและแอดมินรอง'} · กดรับทราบในนามอาชีพของคุณ (${esc(ntfRole() || '—')}) แล้วประกาศหายจากทุกคนในอาชีพนั้น</p>
+    <section class="ntf-sec"><h3>ประกาศถึง ${esc(ntfRoleName(ntfRole()))}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศค้างอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+  const pt = f.kind === 'patient' && ntfNew(), lead = pt ? ntfPt({ kind: 'patient', hn: f.hn || '…', pname: f.pname }) + ' · ' : '';
   const all = roles.length > 0 && roles.every(r => f.roles.includes(r));
   return tabs + `<section class="ntf-sec"><h3>ส่งประกาศใหม่</h3><form class="ntf-form" id="ntf-form" autocomplete="off">
-    <textarea id="ntf-text" maxlength="300" placeholder="ข้อความที่จะวิ่งบนแถบ เช่น CT-1 ใช้ไม่ได้ช่วงเช้า นัด CT-Sim ย้ายไปบ่าย" aria-label="ข้อความประกาศ">${esc(f.text)}</textarea>
+    ${ntfNew() ? `<div class="ntf-row" role="group" aria-label="ประเภท"><span class="lbl">ประเภท</span><button type="button" class="chip-btn pt" data-ntfkind="patient" aria-pressed="${pt}">ผู้ป่วย (ด่วน · ตัวแดง ขึ้นก่อนเสมอ)</button><button type="button" class="chip-btn gen" data-ntfkind="general" aria-pressed="${!pt}">ทั่วไป (ตัวเขียว)</button></div>` : ''}
+    ${pt ? `<div class="ntf-pt-fields"><input id="ntf-hn" value="${esc(f.hn)}" maxlength="20" inputmode="numeric" placeholder="HN" aria-label="HN ผู้ป่วย" autocomplete="off"><input id="ntf-pname" value="${esc(f.pname)}" maxlength="120" placeholder="ชื่อ-สกุล ผู้ป่วย (พิมพ์ HN แล้วเติมให้ถ้ามีในระบบ)" aria-label="ชื่อผู้ป่วย" autocomplete="off"></div>` : ''}
+    <textarea id="ntf-text" maxlength="300" placeholder="${pt ? 'สถานะผู้ป่วย เช่น มาถึงแล้ว รอ CT-Sim ที่ห้อง CT-1 / ย้ายไปฉายเครื่อง Infinity วันนี้' : 'ข้อความที่จะวิ่งบนแถบ เช่น CT-1 ใช้ไม่ได้ช่วงเช้า นัด CT-Sim ย้ายไปบ่าย'}" aria-label="ข้อความประกาศ">${esc(f.text)}</textarea>
     <div class="ntf-row" role="group" aria-label="แจ้งอาชีพ"><span class="lbl">แจ้งอาชีพ</span><button type="button" class="chip-btn" data-ntfall aria-pressed="${all}">ทุกอาชีพ</button>${roles.map(r => `<button type="button" class="chip-btn" data-ntfrole="${esc(r)}" aria-pressed="${f.roles.includes(r)}">${esc(ntfRoleName(r))}</button>`).join('')}</div>
-    <div class="ntf-row" role="group" aria-label="ระดับ"><span class="lbl">ระดับ</span><button type="button" class="chip-btn" data-ntflevel="normal" aria-pressed="${f.level === 'normal'}">ปกติ</button><button type="button" class="chip-btn urgent" data-ntflevel="urgent" aria-pressed="${f.level === 'urgent'}">ด่วน (แถบสีแดง ขึ้นก่อน)</button></div>
     <div class="ntf-row" role="group" aria-label="แสดงถึง"><span class="lbl">แสดงถึง</span>${[[0, 'วันนี้'], [1, 'พรุ่งนี้'], [3, '3 วัน'], [7, '7 วัน']].map(([d, l]) => `<button type="button" class="chip-btn" data-ntfdays="${d}" aria-pressed="${f.days === d}">${l}</button>`).join('')}<span class="muted" style="font-size:12.5px">ถึง ${esc(fmtDay(plusDays(today(), f.days)))} · หมดอายุแล้วหายเองแม้ยังไม่มีใครกดรับทราบ</span></div>
-    <div class="ntf-prev" aria-hidden="true"><span>ตัวอย่างบนแถบ:</span><span>${esc(f.text) || '—'}</span></div>
+    <div class="ntf-prev ${pt ? 'pt' : 'gen'}" aria-hidden="true" data-lead="${esc(lead)}"><span>ตัวอย่างบนแถบ:</span><span>${esc(lead + f.text) || '—'}</span></div>
     ${ntfUi.err ? `<p class="ntf-err" role="alert">${esc(ntfUi.err)}</p>` : ''}
     <div class="ntf-acts"><button type="submit" class="btn primary"${ntfUi.busy ? ' disabled' : ''}>${ntfUi.busy ? 'กำลังส่ง…' : 'ส่งประกาศ'}</button></div></form></section>
-    <section class="ntf-sec"><h3>กำลังแสดง · ใครรับทราบแล้ว</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, true)).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศที่ยังแสดงอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+    <section class="ntf-sec"><h3>${ntfBoss() ? 'กำลังแสดง · ใครรับทราบแล้ว' : `กำลังแสดง · ถึง ${esc(ntfRoleName(ntfRole()))} และที่คุณส่ง`}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศที่ยังแสดงอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
 }
 function renderNtfDlg() {
   if (!ntfDlg.open) return;
   $('#ntf-title').textContent = ntfCanSend() ? 'ประกาศ · ส่งและติดตาม' : 'ประกาศถึงฉัน';
-  const a = document.activeElement, keep = a && (a.id === 'ntf-text' || a.id === 'ntf-q') ? a.id : '';
+  const a = document.activeElement, keep = a && ['ntf-text', 'ntf-q', 'ntf-hn', 'ntf-pname'].includes(a.id) ? a.id : '';
   $('#ntf-body').innerHTML = ntfDlgHtml();
   if (keep) { const t = $('#' + keep); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
 }
@@ -28413,16 +28462,19 @@ function openNtf(which) {
 async function ntfSend() {
   const f = ntfUi.form;
   f.text = str(($('#ntf-text') || {}).value || f.text);
-  ntfUi.err = !f.text ? 'พิมพ์ข้อความก่อนส่ง' : !f.roles.length ? 'เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง' : '';
+  const pt = f.kind === 'patient' && ntfNew();
+  if (pt) { f.hn = str(($('#ntf-hn') || {}).value || f.hn).replace(/\s+/g, '').toUpperCase(); f.pname = str(($('#ntf-pname') || {}).value || f.pname).replace(/\s+/g, ' '); }
+  ntfUi.err = pt && !NTF_HN_RE.test(f.hn) ? 'ประกาศผู้ป่วย: กรอก HN' : pt && !f.pname ? 'ประกาศผู้ป่วย: กรอกชื่อผู้ป่วย' : !f.text ? 'พิมพ์ข้อความก่อนส่ง' : !f.roles.length ? 'เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง' : '';
   if (ntfUi.err || ntfUi.busy) return renderNtfDlg();
   ntfUi.busy = true;
   renderNtfDlg();
   try {
     const roles = ntfRoles().filter(r => f.roles.includes(r)).concat(f.roles.filter(r => !ntfRoles().includes(r)));
-    const r = await store.notifyAdd({ text: f.text, roles, level: f.level, until: plusDays(today(), f.days) });
+    const rec = pt ? { kind: 'patient', hn: f.hn, pname: f.pname, text: f.text, roles, level: 'urgent', until: plusDays(today(), f.days) } : { kind: 'general', text: f.text, roles, level: 'normal', until: plusDays(today(), f.days) };
+    const r = await store.notifyAdd(rec);
     ntfMerge(r && r.rows);
-    ntfUi.form = { text: '', roles: [], level: 'normal', days: 3 };
-    toast(`ส่งประกาศแล้ว · ขึ้นแถบของ ${roles.join(', ')} ภายในราว 1 นาที`);
+    ntfUi.form = NTF_FORM0();
+    toast(`ส่งประกาศ${pt ? 'ผู้ป่วย' : ''}แล้ว · ขึ้นแถบของ ${roles.join(', ')} ภายในราว 1 นาที`);
   } catch (e) { ntfUi.err = 'ส่งไม่สำเร็จ: ' + errMsg(e); }
   finally { ntfUi.busy = false; ntfUi.key = ''; renderNtf(); renderNtfDlg(); }
 }
@@ -28457,7 +28509,8 @@ ntfDlg.addEventListener('click', e => {
   else if ('ntfhr' in d) ntfUi.role = d.ntfhr;
   else if ('ntfall' in d) f.roles = ntfRoles().every(r => f.roles.includes(r)) ? [] : ntfRoles();
   else if (d.ntfrole) f.roles = f.roles.includes(d.ntfrole) ? f.roles.filter(r => r !== d.ntfrole) : [...f.roles, d.ntfrole];
-  else if (d.ntflevel) f.level = d.ntflevel;
+  else if (d.ntfkind) f.kind = d.ntfkind;
+  else if ('ntfkf' in d) ntfUi.kindF = d.ntfkf;
   else if (d.ntfdays) f.days = +d.ntfdays;
   else if (d.ntfcancel) return ntfCancel(d.ntfcancel);
   else if (d.ntfack) return ntfAck(d.ntfack, b);
@@ -28467,7 +28520,18 @@ ntfDlg.addEventListener('click', e => {
 });
 ntfDlg.addEventListener('input', e => {
   if (e.target.id === 'ntf-q') { ntfUi.q = e.target.value; renderNtfDlg(); }
-  else if (e.target.id === 'ntf-text') { ntfUi.form.text = e.target.value; const p = $('.ntf-prev span:last-child', ntfDlg); if (p) p.textContent = e.target.value || '—'; }
+  else if (e.target.id === 'ntf-text') { ntfUi.form.text = e.target.value; const p = $('.ntf-prev', ntfDlg); if (p) p.lastElementChild.textContent = (p.dataset.lead || '') + e.target.value || '—'; }
+  else if (e.target.id === 'ntf-hn' || e.target.id === 'ntf-pname') {   // 22 พ.ย.: HN ที่มีในระบบ = เติมชื่อให้ (ไม่ทับชื่อที่พิมพ์เอง)
+    const f = ntfUi.form;
+    if (e.target.id === 'ntf-pname') { f.pname = e.target.value; f.auto = ''; }
+    else {
+      f.hn = e.target.value;
+      const p = ptByHn(f.hn), nm = p ? (p.src[0] === 'reg' ? regName(p) : str(p.name)) : '';
+      if (nm && (!f.pname || f.pname === f.auto)) { f.pname = nm; f.auto = nm; const x = $('#ntf-pname'); if (x) x.value = nm; }
+    }
+    const p = $('.ntf-prev', ntfDlg);
+    if (p) { p.dataset.lead = ntfPt({ kind: 'patient', hn: f.hn || '…', pname: f.pname }) + ' · '; p.lastElementChild.textContent = p.dataset.lead + f.text; }
+  }
 });
 ntfDlg.addEventListener('submit', e => { e.preventDefault(); ntfSend(); });
 // ลำดับไอคอนหน้าแถบเมนู (ย้ายเฉพาะเมื่อลำดับเปลี่ยน ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
@@ -28815,7 +28879,7 @@ function maybePullBrachy() {
     }).catch(() => { /* ดึงไม่ได้ ลองใหม่รอบหน้า */ });
   }
 }
-if (!VIEWS.includes(state.view)) state.view = 'work';
+if (!VIEWS.includes(state.view) || state.view === 'notify') state.view = 'work';
 // ออกจากระบบอัตโนมัติ: เปิดหน้าเว็บใหม่หลังไม่ได้ใช้งานเกินเวลาที่ตั้ง = ต้องเข้าสู่ระบบใหม่ ก่อนโหลดข้อมูล (เครื่องที่ใช้ร่วมกัน)
 if (store.mode === 'sheet' && lpchToken) {
   const n = idleMinCached(), last = idleLast();
