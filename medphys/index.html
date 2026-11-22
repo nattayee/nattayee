@@ -8421,7 +8421,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.1';
+const PAGE_VERSION = '2026-11-22.2';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -15015,7 +15015,7 @@ function txsRtCalc(c, sc, st) {
 function txsDocs() {
   const me = txsMe(), td = today(), hol = holidayMap(), cut = plusDays(td, -state.config.txs.days), refer = txsReferSet();
   const ok = hn => !!hnKey(hn) && (me.scope !== 'refer' || refer.has(hnKey(hn)));
-  const from = txsFrom(), out = [];
+  const from = txsCut(), out = [];
   let early = 0;   // คอร์สที่เริ่มก่อนวันที่ตั้ง (ไม่แสดง)
   for (const c of state.cases) {
     if (!ok(c.hn) || c.rt === 'cancel' || preRow(c) || !inCourse(c) || !planReady(c)) continue;
@@ -15046,6 +15046,9 @@ function txsDocs() {
   return out;
 }
 const txsFrom = () => { const f = (state.config.txs || {}).from; return f === undefined ? TXS_FROM : str(f); };
+// 22 พ.ย.: แอดมินหลัก / แอดมินรอง (และบัญชี Google) เห็นทุกคอร์ส ไม่จำกัดวันที่เริ่มฉาย · ดูในมุมมองตำแหน่งอื่น = เห็นแบบตำแหน่งนั้น
+const txsAllDates = () => !state.viewAs && (state.user.via === 'google' || !!state.user.isAdmin || subTabs().length > 0);
+const txsCut = () => (txsAllDates() ? '' : txsFrom());
 const txsFromText = () => (txsFrom() ? `เริ่มฉายตั้งแต่ ${fmtDay(txsFrom())} ${parseISO(txsFrom()).getFullYear() + 543}` : '');
 const txsStPill = d => (d.st === 'complete' ? '<span class="txs-pill ok">Complete course</span>' : d.hold ? `<span class="txs-pill warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-pill on">On treatment</span>');
 const txsChip = d => (d.st === 'complete' ? `<span class="txs-chip">Complete course${d.to ? ' ' + esc(fmtDay(d.to)) : ''}</span>` : d.hold ? `<span class="txs-chip warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-chip on">On treatment</span>');
@@ -15152,8 +15155,8 @@ function txsListHtml(me) {
   const rows = all.filter(d => (txsUi.st === 'all' || d.st === txsUi.st) && (txsUi.kind === 'all' || d.kind === txsUi.kind)
     && (!q || [d.hn, txsShort(d.name), d.no, d.doc, docName(d.doc), d.room, d.kind === 'rt' ? catOf(d.c.cat).label : d.tech].join(' ').toLowerCase().includes(q)));
   const note = me.scope === 'refer' ? `แสดงเฉพาะผู้ป่วยที่ส่งต่อ (${refer.size} ราย) · ` : '';
-  const head = `<p class="txs-sum">${esc(note)}${rows.length} รายการ${rows.length !== all.length ? ` จาก ${all.length}` : ''} · On treatment และ Complete course ย้อนหลัง ${state.config.txs.days} วัน${txsFrom() ? ` · <b>${esc(txsFromText())}</b>${all.early ? ` <span class="muted">(ไม่แสดง ${all.early} รายที่เริ่มก่อนวันนั้น)</span>` : ''}` : ''} · ชื่อผู้ป่วยแบบย่อ${me.print ? ' (เอกสารที่พิมพ์มีชื่อเต็ม)' : ''}</p>`;
-  if (!rows.length) return head + `<p class="empty-state">${all.length ? 'ไม่พบผู้ป่วยที่ตรงกับตัวกรอง' : txsFrom() && (all.early || txsFrom() > today()) ? `ยังไม่มีผู้ป่วยที่${esc(txsFromText())} · ผู้ป่วยที่เริ่มก่อนวันนั้นไม่แสดง เพราะข้อมูลของผู้ป่วยที่เพิ่งเข้าระบบยังไม่ครบ` : me.scope === 'refer' ? 'ยังไม่มีผู้ป่วยที่ส่งต่อที่กำลังฉายหรือ Complete course (แอดมินเพิ่มรายชื่อผู้ป่วยที่ส่งต่อ)' : 'ยังไม่มีผู้ป่วยกำลังฉายหรือ Complete course'}</p>`;
+  const head = `<p class="txs-sum">${esc(note)}${rows.length} รายการ${rows.length !== all.length ? ` จาก ${all.length}` : ''} · On treatment และ Complete course ย้อนหลัง ${state.config.txs.days} วัน${txsCut() ? ` · <b>${esc(txsFromText())}</b>${all.early ? ` <span class="muted">(ไม่แสดง ${all.early} รายที่เริ่มก่อนวันนั้น)</span>` : ''}` : txsFrom() ? ` · <b>แอดมินเห็นทุกคอร์ส</b> <span class="muted">(ตำแหน่งอื่นเห็นเฉพาะที่${esc(txsFromText())})</span>` : ''} · ชื่อผู้ป่วยแบบย่อ${me.print ? ' (เอกสารที่พิมพ์มีชื่อเต็ม)' : ''}</p>`;
+  if (!rows.length) return head + `<p class="empty-state">${all.length ? 'ไม่พบผู้ป่วยที่ตรงกับตัวกรอง' : txsCut() && (all.early || txsCut() > today()) ? `ยังไม่มีผู้ป่วยที่${esc(txsFromText())} · ผู้ป่วยที่เริ่มก่อนวันนั้นไม่แสดง เพราะข้อมูลของผู้ป่วยที่เพิ่งเข้าระบบยังไม่ครบ` : me.scope === 'refer' ? 'ยังไม่มีผู้ป่วยที่ส่งต่อที่กำลังฉายหรือ Complete course (แอดมินเพิ่มรายชื่อผู้ป่วยที่ส่งต่อ)' : 'ยังไม่มีผู้ป่วยกำลังฉายหรือ Complete course'}</p>`;
   return head + `<div class="txs-wrap"><table class="txs-tbl"><thead><tr><th>HN</th><th>ชื่อ (ย่อ)</th><th>ประเภท</th><th>สถานะ</th><th>ห้อง</th><th>แพทย์</th><th>ช่วงวันที่</th><th>ครั้ง</th><th>เลขที่เอกสาร</th>${me.admin ? '<th>ส่งต่อ</th>' : ''}<th></th></tr></thead><tbody>${rows.map(d => `<tr>
     <td class="txs-hn">${esc(d.hn)}</td><td>${esc(txsShort(d.name) || '—')}</td><td class="nw">${d.kind === 'rt' ? `ฉายรังสี<small>${esc(catOf(d.c.cat).label)}</small>` : `ใส่แร่<small>${esc(d.tech || '')}</small>`}</td>
     <td>${txsStPill(d)}</td><td>${esc(d.room || '–')}</td><td class="nw">${esc(d.doc || '–')}<small>${esc(docName(d.doc))}</small></td><td class="nw">${esc(txsRange(d.from, d.to))}</td><td class="num">${esc(d.fx)}</td><td class="nw"><small>${esc(d.no)}</small></td>
@@ -15219,7 +15222,7 @@ function txsUnitsHtml() {
   <div class="txs-wrap"><table class="txs-tbl txs-units"><thead><tr><th>ตำแหน่งใน LPCH</th><th>หน่วยงาน</th><th>สิทธิ์</th><th>ขอบเขต</th><th>ประเภท</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">ยังไม่มีหน่วยงาน</td></tr>'}</tbody></table></div>
   <div class="txs-form" style="margin-top:12px"><button type="button" class="btn sm" data-txsuadd>+ เพิ่มหน่วยงาน</button>
     <label class="field"><span class="lbl">Complete course แสดงย้อนหลัง (วัน)</span><input id="txs-u-days" data-txsk="days" type="number" min="7" max="730" value="${esc(t.days)}"></label>
-    <label class="field"><span class="lbl">แสดงผู้ป่วยที่เริ่มฉายตั้งแต่ <span class="sub-lbl">Start RT · ใส่แร่ = นัดแรก · ว่าง = ทั้งหมด${txsFromOld() ? ' · ต้องใช้ Code.gs รุ่น 2026-11-21.1 ขึ้นไปจึงเปลี่ยนได้' : ''}</span></span><input id="txs-u-from" data-txsk="from" type="date" value="${esc(t.from === undefined ? TXS_FROM : t.from)}"${txsFromOld() ? ' disabled' : ''}></label>
+    <label class="field"><span class="lbl">แสดงผู้ป่วยที่เริ่มฉายตั้งแต่ <span class="sub-lbl">Start RT · ใส่แร่ = นัดแรก · ว่าง = ทั้งหมด · แอดมินหลัก / แอดมินรอง เห็นทั้งหมดเสมอ${txsFromOld() ? ' · ต้องใช้ Code.gs รุ่น 2026-11-21.1 ขึ้นไปจึงเปลี่ยนได้' : ''}</span></span><input id="txs-u-from" data-txsk="from" type="date" value="${esc(t.from === undefined ? TXS_FROM : t.from)}"${txsFromOld() ? ' disabled' : ''}></label>
     <label class="field"><span class="lbl">โฟลเดอร์ PDF ที่จัดเก็บ (Google Drive ID · ไม่บังคับ)</span><input id="txs-u-folder" data-txsk="folder" value="${esc(t.folder)}" maxlength="120" placeholder="ID ของโฟลเดอร์ที่มีไฟล์ RT_summary_HN.pdf / Brachy_summary_HN.pdf"></label></div>
   <div class="txs-form"><button type="button" class="btn primary" data-txsusave>บันทึกหน่วยงานและสิทธิ์</button><button type="button" class="btn ghost" data-txsureset>ยกเลิกที่แก้</button>
     <button type="button" class="btn ghost" data-txsmem${txsUi.memBusy ? ' disabled' : ''}>${mem ? 'ดึงรายชื่อบัญชีจาก LPCH ใหม่' : 'ดูบัญชีของแต่ละหน่วยงาน (LPCH)'}</button></div>`;
