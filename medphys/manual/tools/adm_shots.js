@@ -11,6 +11,7 @@ const DSF = 1.5, VW = 1440, VH = 1300, VIEW_H = 940;   // ชุดเดีย�
   const url = `http://127.0.0.1:${srv.address().port}/`, b = await chromium.launch({ env: { ...process.env, LANG: 'en_GB.UTF-8', LANGUAGE: 'en_GB' } }), errs = [], META = {};   // ช่องวันที่ = วว/ดด/ปปปป เหมือนภาพเดิมของคู่มือ
   const p = await b.newPage({ viewport: { width: VW, height: VH }, timezoneId: 'Asia/Bangkok', deviceScaleFactor: DSF, locale: 'en-GB' });   // วันที่ในช่องกรอก = วว/ดด/ปปปป เหมือนภาพเดิมของคู่มือ
   p.on('pageerror', e => errs.push(String(e))); p.on('dialog', d => d.accept());
+  await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '.ntf-run{animation:none!important;padding-left:0!important}'; document.head.appendChild(s); }); });   // ตัววิ่งประกาศหยุดนิ่ง (ข้อความเริ่มที่ขอบซ้าย) ให้ภาพทุกภาพเหมือนกัน
   await p.clock.install({ time: new Date('2026-12-07T10:00:00+07:00') });
   await p.goto(url); await p.waitForSelector('.nav'); await p.waitForTimeout(900);
   await p.evaluate(() => document.fonts.ready);

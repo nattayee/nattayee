@@ -14,12 +14,20 @@ async function applyNav(page) {
   await page.waitForTimeout(400);
   await page.evaluate(() => document.querySelector('#reset-demo').click());   // หน้าเว็บบันทึกข้อมูลตัวอย่างลง localStorage
   await page.waitForFunction(k => !!localStorage.getItem(k), KEY, { timeout: 8000 });
-  await page.waitForTimeout(300);
-  await page.evaluate(([k, nav]) => { const db = JSON.parse(localStorage.getItem(k)); db.config = Object.assign({}, db.config, { nav: nav.map(x => Object.assign({ on: true, guest: true }, x)) }); localStorage.setItem(k, JSON.stringify(db)); }, [KEY, NAV]);
-  await page.reload();
-  await page.waitForFunction(() => window.MEDPHYS_STARTED === true);
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(700);
+  // เครื่องช้า: หน้าเว็บอาจบันทึกข้อมูลตัวอย่างทับชื่อแถบที่เพิ่งใส่ → ตรวจหลังโหลดใหม่ ไม่ติดก็ใส่ซ้ำ (สูงสุด 4 รอบ)
+  const want = NAV.filter(x => x.label).map(x => x.view + '=' + x.label).join(',');
+  for (let i = 0; i < 4; i++) {
+    await page.waitForTimeout(300 + 500 * i);
+    await page.evaluate(([k, nav]) => { const db = JSON.parse(localStorage.getItem(k)); db.config = Object.assign({}, db.config, { nav: nav.map(x => Object.assign({ on: true, guest: true }, x)) }); localStorage.setItem(k, JSON.stringify(db)); }, [KEY, NAV]);
+    await page.reload();
+    await page.waitForFunction(() => window.MEDPHYS_STARTED === true);
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(700);
+    const got = await page.evaluate(k => ((JSON.parse(localStorage.getItem(k) || '{}').config || {}).nav || []).filter(x => x.label).map(x => x.view + '=' + x.label).join(','), KEY);
+    if (got === want) return;
+    console.log('  (ชื่อแถบยังไม่ติด ใส่ซ้ำ)');
+  }
+  throw new Error('applyNav: ใส่ชื่อแถบตามที่แอดมินตั้งไม่สำเร็จ');
 }
 export const APP = 'file://' + (process.env.RTHUB_PAGE || here('../../../index.html'));
 export const OUT = process.env.MANUAL_RAW || here('./raw');
@@ -42,6 +50,8 @@ export async function open(when, opts = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem('medphys-dispatch:pin:admin')) localStorage.setItem('medphys-dispatch:pin:admin', '1c6d3vt');
     localStorage.setItem('medphys-pref:theme', '"light"');
+    // ตัววิ่งประกาศหยุดนิ่ง (ข้อความเริ่มที่ขอบซ้าย) ให้ภาพทุกภาพเหมือนกัน
+    document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '.ntf-run{animation:none!important;padding-left:0!important}'; document.head.appendChild(s); });
   });
   await page.goto(APP);
   await page.waitForFunction(() => window.MEDPHYS_STARTED === true);

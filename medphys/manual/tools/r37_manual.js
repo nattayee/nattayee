@@ -73,7 +73,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json'
     return { embed: document.documentElement.classList.contains('embed'), theme: document.documentElement.getAttribute('data-theme'), brand: vis(document.querySelector('.brand')), h1: (document.querySelector('.hero h1') || {}).textContent,
       n: cards.length, first: cards[0] && cards[0].querySelector('h3 .ic').textContent + '|' + cards[0].classList.contains('mine'), mine: cards.filter(c => c.classList.contains('mine')).length, me: (document.querySelector('.card .me') || {}).textContent,
       flow: (document.querySelector('.flow') || {}).textContent || '', bar: vis(document.querySelector('.bar')) }; });
-  ok(h1.embed && !h1.brand && !h1.bar && h1.h1 === 'คู่มือ LPCH RT Hub' && h1.n === 8, 'หน้าแรกคู่มือในโหมดฝัง: ไม่มีหัวซ้ำ มีการ์ดวิชาชีพ 8 ใบ ' + J({ ...h1, flow: undefined }));
+  ok(h1.embed && !h1.brand && !h1.bar && h1.h1 === 'คู่มือ LPCH RT Hub' && h1.n === 10, 'หน้าแรกคู่มือในโหมดฝัง: ไม่มีหัวซ้ำ มีการ์ดวิชาชีพ 8 ใบ + ทุกตำแหน่ง + หมวดแอดมิน (ผู้ใช้ในโหมดตัวอย่างเป็นแอดมิน · 22 พ.ย.) ' + J({ ...h1, flow: undefined }));
   ok(h1.mine === 1 && h1.first === 'MP|true' && h1.me === 'ตำแหน่งของคุณ', 'การ์ดของตำแหน่งผู้ใช้ (MP) ขึ้นก่อนและมีป้าย "ตำแหน่งของคุณ"');
   ok(h1.theme === 'light', 'โหมดสีของคู่มือ = โหมดของ Hub (กลางวัน)');
   ok(/RTT · แถบ Complete/.test(h1.flow) && /MP · แถบ งาน/.test(h1.flow) && /ใส่แร่ · แถบ นัดคิวใส่แร่/.test(h1.flow) && !/\{nav:/.test(h1.flow), 'ชื่อแถบในคู่มือ = ชื่อที่ Hub ใช้อยู่ (ข้อมูลตัวอย่าง = ชื่อเริ่มต้น) ไม่ใช่ชื่อที่ฝังใน guides.json');
@@ -150,7 +150,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json'
   if (tab) {
     await tab.waitForSelector('.hero', { timeout: 8000 }).catch(() => {});
     const t1 = await tab.evaluate(() => ({ url: location.href.slice(0, 5), embed: document.documentElement.classList.contains('embed'), brand: !!document.querySelector('.brand') && document.querySelector('.brand').getClientRects().length > 0, cards: document.querySelectorAll('.card').length, flow: document.querySelector('.flow').textContent }));
-    ok(t1.url === 'blob:' && !t1.embed && t1.brand && t1.cards === 8 && /แถบ ห้องฉายทดสอบ/.test(t1.flow), 'แท็บใหม่: คู่มือเต็มหน้า มีหัวคู่มือ ใช้ชื่อแถบของ Hub ' + J({ ...t1, flow: undefined }));
+    ok(t1.url === 'blob:' && !t1.embed && t1.brand && t1.cards === 10 && /แถบ ห้องฉายทดสอบ/.test(t1.flow), 'แท็บใหม่: คู่มือเต็มหน้า มีหัวคู่มือ ใช้ชื่อแถบของ Hub ' + J({ ...t1, flow: undefined }));
     await tab.click('.card a[href="#g-reg"]'); await tab.waitForTimeout(300);
     ok((await tab.evaluate(() => (document.querySelector('.guide-head h1') || {}).textContent)) === 'ลงทะเบียนผู้ป่วยใหม่' && /^blob:/.test(tab.url()), 'แท็บใหม่: เปลี่ยนเรื่องได้ ที่อยู่ยังเป็นหน้าเดิม');
     await tab.close();
@@ -183,7 +183,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json'
   await click('#man-dlg [data-close]');
   flag.local = 'ok';
   await openMan(); f = await ready();
-  ok(!!f && (await note()).hidden && await f.evaluate(() => document.querySelectorAll('.card').length === 8), 'ปิดแล้วเปิดใหม่หลังเชื่อมต่อได้ = คู่มือขึ้นตามปกติ');
+  ok(!!f && (await note()).hidden && await f.evaluate(() => document.querySelectorAll('.card').length === 10), 'ปิดแล้วเปิดใหม่หลังเชื่อมต่อได้ = คู่มือขึ้นตามปกติ');
   await click('#man-dlg [data-close]');
 
   ok(errs.length === 0, 'ไม่มี error ในหน้า ' + J(errs.slice(0, 3)));

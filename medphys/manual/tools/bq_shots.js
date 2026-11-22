@@ -11,6 +11,7 @@ const DSF = 1.5, VW = 1440, VH = 1300, VIEW_H = 940;   // ชุดเดีย�
   const url = `http://127.0.0.1:${srv.address().port}/`, b = await chromium.launch({ env: { ...process.env, LANG: 'en_GB.UTF-8', LANGUAGE: 'en_GB' } }), errs = [], META = {};   // ช่องวันที่ = วว/ดด/ปปปป เหมือนภาพเดิมของคู่มือ
   const p = await b.newPage({ viewport: { width: VW, height: VH }, timezoneId: 'Asia/Bangkok', deviceScaleFactor: DSF, locale: 'en-GB' });   // วันที่ในช่องกรอก = วว/ดด/ปปปป เหมือนภาพเดิมของคู่มือ
   p.on('pageerror', e => errs.push(String(e))); p.on('dialog', d => d.accept());
+  await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '.ntf-run{animation:none!important;padding-left:0!important}'; document.head.appendChild(s); }); });   // ตัววิ่งประกาศหยุดนิ่ง (ข้อความเริ่มที่ขอบซ้าย) ให้ภาพทุกภาพเหมือนกัน
   await p.clock.install({ time: new Date('2026-12-07T10:00:00+07:00') });
   await p.goto(url); await p.waitForSelector('.nav'); await p.waitForTimeout(900);
   await p.evaluate(() => document.fonts.ready);
@@ -121,6 +122,16 @@ const DSF = 1.5, VW = 1440, VH = 1300, VIEW_H = 940;   // ชุดเดีย�
   await p.evaluate(() => (document.querySelector('#bi-ctroom button') || document.querySelector('#bi-ctroom label input')).click()); await p.waitForTimeout(500);
   if (await p.$eval('#bqi-dlg', d => d.open)) { await click('#bqi-save'); await p.waitForTimeout(400); }
   console.log('ct:', await toast()); await hideToasts();
+  // ---------- b08b: ประกาศ HDR ส่งภาพแล้ว (สีม่วง) ขึ้นแถบด้านบนของอาชีพที่ตั้งไว้ (ค่าเริ่มต้น RO, MP · ผู้ใช้ตัวอย่าง = MP) ----------
+  {
+    const y0 = await p.evaluate(() => scrollY); await top();
+    for (let i = 0; i < 8 && !(await p.$eval('#ntf-bar', b => b.classList.contains('bq'))); i++) await click('#ntf-bar [data-ntfnav="1"]');
+    console.log('hdr bar:', (await p.$eval('#ntf-bar', b => b.textContent)).replace(/\s+/g, ' ').trim().slice(0, 160));
+    // ภาพนิ่งของตัววิ่ง ณ ตอนที่ท้ายข้อความ (HDR … ส่งภาพแล้ว) อยู่ในช่อง
+    await p.evaluate(() => { const run = document.querySelector('#ntf-bar .ntf-run'), b = run.querySelector('b'), tr = document.querySelector('#ntf-bar .ntf-track').getBoundingClientRect(); run.style.transform = ''; const r = b.getBoundingClientRect(); run.style.transform = `translateX(${-Math.max(0, r.right - tr.right + 14)}px)`; });
+    await snap('b08b-bq-hdr', '#ntf-bar', ['#ntf-bar .ntf-tag', '#ntf-bar .ntf-track', '#ntf-bar .ntf-ok'], { pad: 14 });
+    await p.evaluate(y => scrollTo(0, y), y0); await p.waitForTimeout(200);
+  }
   await tblRight(true); await click(R('[data-bqus]')); console.log('us:', await toast()); await hideToasts();
   // ---------- b09: ลงชื่อ MP (RC เหมือนกัน) ----------
   await tblRight(true);

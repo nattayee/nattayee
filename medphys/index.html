@@ -1422,6 +1422,8 @@ dialog.man-dlg{width:min(1320px,calc(100vw - 16px))}
 .ntf-run{display:inline-block;padding-left:100%;white-space:nowrap;font-size:15px;line-height:30px;animation:ntf-run var(--dur,18s) linear infinite}
 .ntf-track:hover .ntf-run,.ntf-track:focus-within .ntf-run{animation-play-state:paused}
 .ntf-run b{font-weight:600;color:var(--ok)}
+a.ntf-a{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;word-break:break-all}   /* 22 พ.ย.: ลิงก์ในประกาศ */
+a.ntf-a:hover,a.ntf-a:focus-visible{text-decoration-thickness:2px}
 .ntf-bar.urgent .ntf-run b{color:var(--late)}
 .ntf-run .ntf-pt{margin-right:8px;font-weight:700}
 .ntf-bar .ntf-ok{background:var(--ok);color:var(--surface)}
@@ -8518,7 +8520,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.12';
+const PAGE_VERSION = '2026-11-22.13';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -28575,6 +28577,21 @@ const ntfKeyOf = (n, role) => n.roles.find(x => x.toLowerCase() === str(role).to
 const ntfMine = n => !!ntfRole() && !!ntfKeyOf(n, ntfRole());
 const ntfAckOf = (n, role) => { const k = ntfKeyOf(n, role); return k ? n.acks[k] || null : null; };
 const ntfDone = n => !ntfLive(n) || n.roles.every(r => n.acks[r]);
+// 22 พ.ย.: ลิงก์ในข้อความประกาศกดได้ · เฉพาะ http / https (ตัวอักษรของ URL ตามมาตรฐาน · ไทยหรือช่องว่างต่อท้าย = จบลิงก์) · วงเล็บ / จุด / จุลภาคท้ายลิงก์ไม่นับ · ส่วนอื่น escape ตามเดิม
+const NTF_URL_RE = /https?:\/\/[A-Za-z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+/g;
+function ntfLinks(t) {
+  t = String(t == null ? '' : t);
+  let out = '', last = 0;
+  for (const m of t.matchAll(NTF_URL_RE)) {
+    let u = m[0];
+    const tail = (/[)\].,;:!?']+$/.exec(u) || [''])[0];
+    if (tail) u = u.slice(0, -tail.length);
+    out += esc(t.slice(last, m.index));
+    out += u.length > 10 ? `<a class="ntf-a" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>` : esc(u);
+    last = m.index + u.length;
+  }
+  return out + esc(t.slice(last));
+}
 const ntfForMe = () => (state.notify || []).filter(n => ntfLive(n) && ntfMine(n) && !ntfAckOf(n, ntfRole())).sort(ntfSort);
 const ntfWhen = s => { const d = new Date(s); if (isNaN(d.getTime())) return ''; const hm = `${pad(d.getHours())}:${pad(d.getMinutes())} น.`; return iso(d) === today() ? `วันนี้ ${hm}` : `${fmtDay(iso(d))} ${hm}`; };
 const ntfMerge = rows => { for (const x of (rows || []).map(normNtf)) { const i = state.notify.findIndex(y => y.id === x.id); if (i >= 0) state.notify[i] = x; else state.notify.push(x); } };
@@ -28609,7 +28626,7 @@ function renderNtf(gated) {
   bar.classList.toggle('pt', n.kind === 'patient');
   bar.classList.toggle('bq', n.kind === 'brachy');
   bar.innerHTML = `<span class="ntf-tag">${NTF_BELL}<span class="ntf-tt">${n.kind === 'patient' ? 'ผู้ป่วย' : n.kind === 'brachy' ? 'HDR' : n.level === 'urgent' ? 'ด่วน' : 'ประกาศ'}</span></span>${list.length > 1 ? `<span class="ntf-pos">${ntfUi.idx + 1}/${list.length}</span>` : ''}
-    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน"><span class="ntf-run"><b>${ntfPt(n) ? `<span class="ntf-pt">${esc(ntfPt(n))}</span> ` : ''}${esc(n.text)}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
+    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน"><span class="ntf-run"><b>${ntfPt(n) ? `<span class="ntf-pt">${esc(ntfPt(n))}</span> ` : ''}${ntfLinks(n.text)}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
     ${list.length > 1 ? '<span class="ntf-nav"><button type="button" data-ntfnav="-1" aria-label="ประกาศก่อนหน้า">‹</button><button type="button" data-ntfnav="1" aria-label="ประกาศถัดไป">›</button></span>' : ''}
     ${send ? '<button type="button" class="ntf-link new" data-ntfnew title="เขียนประกาศใหม่">+ ส่ง<span class="ntf-lt">ประกาศ</span></button>' : ''}<button type="button" class="ntf-link" data-ntfhist title="ประกาศที่ผ่านมา และใครรับทราบเมื่อไร">ประวัติ</button>
     <button type="button" class="ntf-ok" data-ntfack="${esc(n.id)}" title="ประกาศนี้จะหายจากทุกคนใน ${esc(ntfRoleName(role))}">รับทราบ</button>`;
@@ -28694,7 +28711,7 @@ function ntfItem(n, send) {
   if (mine && ntfLive(n) && !mineAck) acts.push(`<button type="button" class="btn primary" data-ntfack="${esc(n.id)}">รับทราบ</button>`);
   const pt = n.kind === 'patient', bq = n.kind === 'brachy';
   return `<li class="ntf-item${bq ? ' bq' : n.level === 'urgent' || pt ? ' urgent' : ''}${ntfLive(n) ? '' : ' off'}"><div class="ntf-head"><span class="ntf-kind${pt ? ' pt' : bq ? ' bq' : ''}">${NTF_KIND_LABEL[n.kind] || 'ทั่วไป'}</span>${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span><span>ถึง ${esc(fmtDay(n.until))}</span></div>
-    ${pt || bq ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b><span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : bq ? 'bq' : 'gen'}">${esc(n.text)}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
+    ${pt || bq ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b><span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : bq ? 'bq' : 'gen'}">${ntfLinks(n.text)}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
 }
 function ntfHistHtml(send) {
   const q = ntfUi.q.trim().toLowerCase();
