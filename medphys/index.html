@@ -3341,6 +3341,27 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
 .tab:not([aria-selected="true"]),.seg-mini button:not([aria-pressed="true"]),.fw-views button:not([aria-pressed="true"]){box-shadow:inset 0 0 0 1px var(--line-strong)}
 .seg-mini{gap:4px}
 .mate,.leave-btn,.sbk-year,.set-tabs [role="tab"],.fw-dchip,.see-cell,.cal-opts button,.dpk-rooms button,.viewas-bar .vr-chips button,.look-fs button,.so-type,.dq-rep .dq-doc-btn{border-color:var(--line-strong)}
+/* 22 พ.ย.: ประกาศจาก HN · ก. ปุ่มกระดิ่งข้าง HN (ชี้ / กดค้าง) · ค. ค้น HN หรือชื่อในหน้าต่างประกาศ + ผู้ป่วยล่าสุด */
+.hn-ntf{position:fixed;z-index:60;display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:999px;background:var(--late);color:var(--surface);box-shadow:0 2px 6px rgb(0 0 0 / .25);cursor:pointer}
+.hn-ntf[hidden]{display:none}
+.hn-ntf svg{width:15px;height:15px}
+.hn-ntf:hover,.hn-ntf:focus-visible{filter:brightness(1.1);outline:2px solid var(--surface);outline-offset:-4px}
+.hn-ntf-tip{position:fixed;z-index:61;padding:3px 8px;border-radius:6px;background:var(--fg);color:var(--surface);font-size:12px;white-space:nowrap;pointer-events:none}
+.hn-ntf-tip[hidden]{display:none}
+.ntf-pt-wrap{display:grid;gap:6px}
+.ntf-pt-fields{position:relative}
+.ntf-hn-list{position:absolute;left:0;right:0;top:calc(100% - 2px);z-index:5;margin:0;padding:4px;list-style:none;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);box-shadow:var(--shadow);max-height:260px;overflow:auto}
+.ntf-hn-list[hidden]{display:none}
+.ntf-hn-list li button{display:flex;align-items:baseline;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:8px;background:none;color:var(--fg);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.ntf-hn-list li button:hover,.ntf-hn-list li button.on{background:var(--accent-soft)}
+.ntf-hn-list b{font-family:var(--mono);font-weight:700}
+.ntf-hn-list small{margin-left:auto;color:var(--muted);font-size:12px}
+.ntf-recent{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ntf-recent .lbl{font-size:12.5px;color:var(--muted);font-weight:400}
+.ntf-recent button{padding:2px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--fg);font:inherit;font-size:12.5px;cursor:pointer}
+.ntf-recent button b{font-family:var(--mono);margin-right:5px}
+.ntf-recent button:hover{border-color:var(--late);color:var(--late)}
+.ntf-tipline{margin:0;color:var(--muted);font-size:12.5px}
 </style>
 <!-- TDF-EMBED:BEGIN css -->
 <style id="tdfx-report-css">
@@ -8426,7 +8447,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.4';
+const PAGE_VERSION = '2026-11-22.5';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -28444,7 +28465,9 @@ function ntfDlgHtml() {
   const all = roles.length > 0 && roles.every(r => f.roles.includes(r));
   return tabs + `<section class="ntf-sec"><h3>ส่งประกาศใหม่</h3><form class="ntf-form" id="ntf-form" autocomplete="off">
     ${ntfNew() ? `<div class="ntf-row" role="group" aria-label="ประเภท"><span class="lbl">ประเภท</span><button type="button" class="chip-btn pt" data-ntfkind="patient" aria-pressed="${pt}">ผู้ป่วย (ด่วน · ตัวแดง ขึ้นก่อนเสมอ)</button><button type="button" class="chip-btn gen" data-ntfkind="general" aria-pressed="${!pt}">ทั่วไป (ตัวเขียว)</button></div>` : ''}
-    ${pt ? `<div class="ntf-pt-fields"><input id="ntf-hn" value="${esc(f.hn)}" maxlength="20" inputmode="numeric" placeholder="HN" aria-label="HN ผู้ป่วย" autocomplete="off"><input id="ntf-pname" value="${esc(f.pname)}" maxlength="120" placeholder="ชื่อ-สกุล ผู้ป่วย (พิมพ์ HN แล้วเติมให้ถ้ามีในระบบ)" aria-label="ชื่อผู้ป่วย" autocomplete="off"></div>` : ''}
+    ${pt ? `<div class="ntf-pt-wrap"><div class="ntf-pt-fields"><input id="ntf-hn" value="${esc(f.hn)}" maxlength="60" placeholder="HN หรือชื่อผู้ป่วย" aria-label="HN หรือชื่อผู้ป่วย (พิมพ์แล้วเลือกจากรายการ)" autocomplete="off" role="combobox" aria-controls="ntf-hn-list" aria-expanded="false"><input id="ntf-pname" value="${esc(f.pname)}" maxlength="120" placeholder="ชื่อ-สกุล ผู้ป่วย (เลือกจากรายการแล้วเติมให้)" aria-label="ชื่อผู้ป่วย" autocomplete="off"><ul class="ntf-hn-list" id="ntf-hn-list" role="listbox" hidden></ul></div>
+      ${ntfRecentHtml()}
+      <p class="ntf-tipline">เคล็ดลับ: ชี้ที่ HN ในรายการไหนก็ได้ (มือถือ: กดค้าง) แล้วกด <b style="color:var(--late)">●</b> กระดิ่งแดงข้าง HN = เปิดหน้านี้พร้อม HN และชื่อ</p></div>` : ''}
     <textarea id="ntf-text" maxlength="300" placeholder="${pt ? 'สถานะผู้ป่วย เช่น มาถึงแล้ว รอ CT-Sim ที่ห้อง CT-1 / ย้ายไปฉายเครื่อง Infinity วันนี้' : 'ข้อความที่จะวิ่งบนแถบ เช่น CT-1 ใช้ไม่ได้ช่วงเช้า นัด CT-Sim ย้ายไปบ่าย'}" aria-label="ข้อความประกาศ">${esc(f.text)}</textarea>
     <div class="ntf-row" role="group" aria-label="แจ้งอาชีพ"><span class="lbl">แจ้งอาชีพ</span><button type="button" class="chip-btn" data-ntfall aria-pressed="${all}">ทุกอาชีพ</button>${roles.map(r => `<button type="button" class="chip-btn" data-ntfrole="${esc(r)}" aria-pressed="${f.roles.includes(r)}">${esc(ntfRoleName(r))}</button>`).join('')}</div>
     <div class="ntf-row" role="group" aria-label="แสดงถึง"><span class="lbl">แสดงถึง</span>${[[0, 'วันนี้'], [1, 'พรุ่งนี้'], [3, '3 วัน'], [7, '7 วัน']].map(([d, l]) => `<button type="button" class="chip-btn" data-ntfdays="${d}" aria-pressed="${f.days === d}">${l}</button>`).join('')}<span class="muted" style="font-size:12.5px">ถึง ${esc(fmtDay(plusDays(today(), f.days)))} · หมดอายุแล้วหายเองแม้ยังไม่มีใครกดรับทราบ</span></div>
@@ -28452,6 +28475,45 @@ function ntfDlgHtml() {
     ${ntfUi.err ? `<p class="ntf-err" role="alert">${esc(ntfUi.err)}</p>` : ''}
     <div class="ntf-acts"><button type="submit" class="btn primary"${ntfUi.busy ? ' disabled' : ''}>${ntfUi.busy ? 'กำลังส่ง…' : 'ส่งประกาศ'}</button></div></form></section>
     <section class="ntf-sec"><h3>${ntfBoss() ? 'กำลังแสดง · ใครรับทราบแล้ว' : `กำลังแสดง · ถึง ${esc(ntfRoleName(ntfRole()))} และที่คุณส่ง`}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศที่ยังแสดงอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+}
+// 22 พ.ย.: ผู้ป่วยล่าสุด = ที่เพิ่งเลือก / เปิดจากกระดิ่งข้าง HN (เครื่องนี้) ต่อด้วยประกาศผู้ป่วยล่าสุด · ไม่เกิน 6 คน
+const NTF_RECENT_N = 6;
+function ntfRecent() {
+  const mine = pref.get('ntfRecent', []), out = [], seen = new Set();
+  const add = (hn, pname) => { const k = hnKey(hn); if (!k || seen.has(k) || out.length >= NTF_RECENT_N) return; seen.add(k); out.push({ hn: str(hn), pname: str(pname) }); };
+  for (const x of Array.isArray(mine) ? mine : []) add(x.hn, x.pname);
+  for (const n of (state.notify || []).filter(n => n.kind === 'patient' && ntfSees(n)).sort((a, b) => str(b.at).localeCompare(str(a.at)))) add(n.hn, n.pname);
+  return out;
+}
+const ntfRemember = (hn, pname) => { if (!hnKey(hn)) return; const xs = (pref.get('ntfRecent', []) || []).filter(x => hnKey(x.hn) !== hnKey(hn)); pref.set('ntfRecent', [{ hn: str(hn), pname: str(pname) }, ...xs].slice(0, NTF_RECENT_N)); };
+const ntfRecentHtml = () => { const xs = ntfRecent(); return xs.length ? `<div class="ntf-recent" role="group" aria-label="ผู้ป่วยล่าสุด"><span class="lbl">ล่าสุด:</span>${xs.map(x => `<button type="button" data-ntfpick="${esc(x.hn)}" data-ntfpname="${esc(x.pname)}" title="ประกาศผู้ป่วย HN ${esc(x.hn)}"><b>${esc(x.hn)}</b>${esc(x.pname)}</button>`).join('')}</div>` : ''; };
+const ntfPtName = p => (p ? (p.src && p.src[0] === 'reg' ? regName(p) : str(p.name)) : '');
+let ntfHnHits = [], ntfHnAct = -1;
+function ntfHnDraw() {
+  const box = $('#ntf-hn'), list = $('#ntf-hn-list');
+  if (!box || !list) return;
+  const q = str(box.value);
+  ntfHnHits = q.length >= 2 ? regSearch(q).filter(p => ptHnOk(p.hn)).slice(0, 6) : [];
+  if (ntfHnHits.length === 1 && hnKey(ntfHnHits[0].hn) === hnKey(q) && ntfUi.form.pname) ntfHnHits = [];   // HN ตรงแล้วและมีชื่อ: ไม่ต้องให้เลือกอีก
+  list.hidden = !ntfHnHits.length;
+  box.setAttribute('aria-expanded', String(!list.hidden));
+  list.innerHTML = ntfHnHits.map((p, i) => `<li role="option"><button type="button" data-ntfhit="${i}" class="${i === ntfHnAct ? 'on' : ''}"><b>${esc(p.hn)}</b><span>${esc(ntfPtName(p) || '—')}</span><small>${esc(Object.keys(PT_SRC).filter(x => (p.src || []).includes(x)).map(x => PT_SRC[x]).join(', '))}</small></button></li>`).join('');
+}
+function ntfPickPt(hn, pname) {
+  const f = ntfUi.form;
+  Object.assign(f, { kind: 'patient', hn: str(hn), pname: str(pname), auto: str(pname) });
+  ntfHnHits = []; ntfHnAct = -1;
+  ntfRemember(hn, pname);
+  renderNtfDlg();
+  const t = $('#ntf-text'); if (t) t.focus();
+}
+// ก. เปิดหน้าต่างประกาศผู้ป่วยพร้อม HN + ชื่อ (จากกระดิ่งข้าง HN)
+function ntfForHn(hn) {
+  const p = ptByHn(hn), name = ntfPtName(p);
+  ntfUi.form = { ...NTF_FORM0(), kind: 'patient', hn: str(hn), pname: name, auto: name };
+  ntfRemember(hn, name);
+  openNtf('now');
+  const t = $('#ntf-text'); if (t) t.focus();
 }
 function renderNtfDlg() {
   if (!ntfDlg.open) return;
@@ -28517,6 +28579,8 @@ ntfDlg.addEventListener('click', e => {
   else if ('ntfhr' in d) ntfUi.role = d.ntfhr;
   else if ('ntfall' in d) f.roles = ntfRoles().every(r => f.roles.includes(r)) ? [] : ntfRoles();
   else if (d.ntfrole) f.roles = f.roles.includes(d.ntfrole) ? f.roles.filter(r => r !== d.ntfrole) : [...f.roles, d.ntfrole];
+  else if (d.ntfhit) { const p = ntfHnHits[+d.ntfhit]; return p ? ntfPickPt(p.hn, ntfPtName(p)) : undefined; }
+  else if (d.ntfpick) return ntfPickPt(d.ntfpick, d.ntfpname || ntfPtName(ptByHn(d.ntfpick)));
   else if (d.ntfkind) f.kind = d.ntfkind;
   else if ('ntfkf' in d) ntfUi.kindF = d.ntfkf;
   else if (d.ntfdays) f.days = +d.ntfdays;
@@ -28536,12 +28600,58 @@ ntfDlg.addEventListener('input', e => {
       f.hn = e.target.value;
       const p = ptByHn(f.hn), nm = p ? (p.src[0] === 'reg' ? regName(p) : str(p.name)) : '';
       if (nm && (!f.pname || f.pname === f.auto)) { f.pname = nm; f.auto = nm; const x = $('#ntf-pname'); if (x) x.value = nm; }
+      ntfHnAct = -1; ntfHnDraw();   // 22 พ.ย.: รายการให้เลือก (HN หรือชื่อ)
     }
     const p = $('.ntf-prev', ntfDlg);
     if (p) { p.dataset.lead = ntfPt({ kind: 'patient', hn: f.hn || '…', pname: f.pname }) + ' · '; p.lastElementChild.textContent = p.dataset.lead + f.text; }
   }
 });
 ntfDlg.addEventListener('submit', e => { e.preventDefault(); ntfSend(); });
+ntfDlg.addEventListener('keydown', e => {   // ลูกศร / Enter ในรายการผู้ป่วย
+  if (e.target.id !== 'ntf-hn' || !ntfHnHits.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ntfHnAct = Math.max(0, Math.min(ntfHnHits.length - 1, ntfHnAct + (e.key === 'ArrowDown' ? 1 : -1))); ntfHnDraw(); }
+  else if (e.key === 'Enter') { e.preventDefault(); const p = ntfHnHits[ntfHnAct < 0 ? 0 : ntfHnAct]; if (p) ntfPickPt(p.hn, ntfPtName(p)); }
+  else if (e.key === 'Escape') { e.preventDefault(); ntfHnHits = []; ntfHnDraw(); }
+});
+// ---------- ก. กระดิ่งข้าง HN: ชี้ที่ HN ในรายการไหนก็ได้ (มือถือ / แท็บเล็ต: กดค้าง) ----------
+(() => {
+  const btn = document.createElement('button'), tip = document.createElement('div');
+  btn.type = 'button'; btn.className = 'hn-ntf'; btn.hidden = true; btn.innerHTML = NTF_BELL;
+  tip.className = 'hn-ntf-tip'; tip.hidden = true;
+  document.body.append(btn, tip);
+  let cur = null, hideT = 0, press = 0, pressed = null;   // pressed = HN ที่เพิ่งกดค้าง (กันคลิกที่ตามมาเฉพาะที่ HN นั้น)
+  const hnOf = el => { const t = str(el.textContent).replace(/\s+/g, ''); return NTF_HN_RE.test(t) && /\d{3}/.test(t) ? t : ''; };
+  const usable = el => !!el && !el.closest('#ntf-dlg, .ss-sheet, .txs-doc, [hidden]') && ntfCanSend() && ntfNew() && !!hnOf(el);
+  const hide = () => { btn.hidden = tip.hidden = true; cur = null; };
+  const show = el => {
+    clearTimeout(hideT);
+    const host = el.closest('dialog[open]') || document.body;
+    if (btn.parentElement !== host) host.append(btn, tip);
+    const r = el.getBoundingClientRect(), x = r.right + 32 > innerWidth ? r.left - 30 : r.right + 4;
+    Object.assign(btn.style, { left: `${Math.round(x)}px`, top: `${Math.round(r.top + r.height / 2 - 13)}px` });
+    btn.hidden = false; cur = el;
+    btn.title = `ประกาศผู้ป่วย HN ${hnOf(el)}`; btn.setAttribute('aria-label', btn.title);
+  };
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest && e.target.closest('.hn');
+    if (el && el !== cur && usable(el)) show(el);
+    else if (!el && cur && !btn.contains(e.target)) { clearTimeout(hideT); hideT = setTimeout(hide, 450); }
+  });
+  btn.addEventListener('mouseenter', () => { clearTimeout(hideT); tip.textContent = btn.title + ' · พิมพ์แค่สถานะ'; const r = btn.getBoundingClientRect(); Object.assign(tip.style, { left: `${Math.round(Math.min(r.left, innerWidth - 260))}px`, top: `${Math.round(r.bottom + 6)}px` }); tip.hidden = false; });
+  btn.addEventListener('mouseleave', () => { tip.hidden = true; hideT = setTimeout(hide, 300); });
+  btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const hn = cur && hnOf(cur); hide(); if (hn) ntfForHn(hn); });
+  addEventListener('scroll', hide, { passive: true, capture: true });
+  // กดค้างที่ HN (จอสัมผัส) = เปิดหน้าต่างประกาศเลย
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    const el = e.target.closest && e.target.closest('.hn');
+    if (!usable(el)) return;
+    clearTimeout(press); pressed = null;
+    press = setTimeout(() => { pressed = el; setTimeout(() => { if (pressed === el) pressed = null; }, 900); ntfForHn(hnOf(el)); }, 550);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointermove']) document.addEventListener(ev, e => { if (ev !== 'pointermove' || Math.abs(e.movementX) + Math.abs(e.movementY) > 6) clearTimeout(press); });
+  document.addEventListener('click', e => { if (pressed && pressed.contains(e.target)) { pressed = null; e.preventDefault(); e.stopPropagation(); } }, true);   // คลิกที่ตามหลังการปล่อยนิ้วบน HN
+})();
 // ลำดับไอคอนหน้าแถบเมนู (ย้ายเฉพาะเมื่อลำดับเปลี่ยน ไม่ให้ปุ่มที่โฟกัสอยู่หลุดโฟกัส)
 function applyIcons() {
   const top = $('.top-right'), nav = top && $('.nav', top);
