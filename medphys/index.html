@@ -8518,7 +8518,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.11';
+const PAGE_VERSION = '2026-11-22.12';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -28412,10 +28412,14 @@ async function manLoad(base) {
   return { base, page, data };
 }
 // หน้าคู่มือที่ใส่ค่าของ Hub แล้ว: ชื่อแถบตามที่แอดมินตั้ง · ตำแหน่งของผู้ใช้ (การ์ดของตำแหน่งนั้นขึ้นก่อน) · โหมดสีเดียวกับ Hub
+const manAdmin = () => !state.viewAs && (!!state.user.isAdmin || subTabs().length > 0 || state.user.via === 'google');   // 22 พ.ย.: เห็นหมวดแอดมินของคู่มือ
 function manHtml(src) {
   const nav = {};
   for (const v of Object.keys(VIEW_LABEL)) nav[v] = navLabel(v);
-  const cfg = { RTHUB_EMBED: 1, RTHUB_BASE: src.base, RTHUB_DATA: src.data, RTHUB_NAV: nav, RTHUB_ROLE: str(state.user.role), RTHUB_THEME: isDark() ? 'dark' : 'light' };
+  // 22 พ.ย.: หมวดแอดมินของคู่มือ (admin: true) = เฉพาะแอดมินหลัก / แอดมินรอง / บัญชี Google · คนอื่นไม่ได้เนื้อหาส่วนนี้ในหน้าคู่มือเลย
+  const admin = manAdmin(), cut = k => (Array.isArray(src.data[k]) ? src.data[k].filter(x => admin || !(x && x.admin)) : src.data[k]);
+  const data = { ...src.data, roles: cut('roles'), cases: cut('cases'), guides: cut('guides') };
+  const cfg = { RTHUB_EMBED: 1, RTHUB_ADMIN: admin ? 1 : 0, RTHUB_BASE: src.base, RTHUB_DATA: data, RTHUB_NAV: nav, RTHUB_ROLE: str(state.user.role), RTHUB_THEME: isDark() ? 'dark' : 'light' };
   const js = Object.keys(cfg).map(k => 'window.' + k + '=' + JSON.stringify(cfg[k]).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, ' ')).join(';');
   const m = /<head(\s[^>]*)?>/i.exec(src.page), at = m ? m.index + m[0].length : 0;
   return src.page.slice(0, at) + '<scr' + 'ipt>' + js + '</scr' + 'ipt>' + src.page.slice(at);
@@ -28428,7 +28432,7 @@ function manNote(text, err) {
 }
 async function openManual() {
   if (!manDlg.open) manDlg.showModal();
-  const key = [isDark() ? 'dark' : 'light', str(state.user.role), Object.keys(VIEW_LABEL).map(navLabel).join('|')].join('~');
+  const key = [isDark() ? 'dark' : 'light', str(state.user.role), manAdmin() ? 'admin' : '', Object.keys(VIEW_LABEL).map(navLabel).join('|')].join('~');
   if (manSt.src && manSt.key === key && Date.now() - manSt.at < MAN_KEEP) return;   // หน้าที่โหลดไว้ยังใช้ได้
   const seq = ++manSt.seq;
   clearTimeout(manSt.timer);

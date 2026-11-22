@@ -148,6 +148,7 @@ html.embed .wrap { padding-block: 14px 40px; }
 html.embed .bar { margin-bottom: 10px; }
 html.embed .bar:has(.crumb:empty) { display: none; }
 html.embed .crumb { margin-left: 0; }
+.card.adm { position: relative; border-style: dashed; }
 .card.mine { position: relative; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .card .me { position: absolute; top: -11px; right: 14px; padding: 1px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 12px/1.7 var(--body); white-space: nowrap; }
 </style>
@@ -174,6 +175,15 @@ html.embed .crumb { margin-left: 0; }
   var EMBED = !!window.RTHUB_EMBED, FRAMED = EMBED && window.parent !== window;
   var BASE = typeof window.RTHUB_BASE === "string" ? window.RTHUB_BASE : "";
   var ROLE = typeof window.RTHUB_ROLE === "string" ? window.RTHUB_ROLE : "";
+  /* RTHUB_ADMIN = 1: ผู้ใช้เป็นแอดมินหลัก / แอดมินรอง → เห็นหมวดและคู่มือที่ admin: true · ไม่ตั้ง (เปิดคู่มือเดี่ยว ๆ หรือไม่ใช่แอดมิน) = ไม่แสดง */
+  var ADMIN = window.RTHUB_ADMIN === 1 || window.RTHUB_ADMIN === true;
+  function adminCut(d) {
+    if (ADMIN || !d || typeof d !== "object") return d;
+    var o = {}, k;
+    for (k in d) o[k] = d[k];
+    ["roles", "cases", "guides"].forEach(function (k) { if (Array.isArray(o[k])) o[k] = o[k].filter(function (x) { return !(x && x.admin); }); });
+    return o;
+  }
   var cur = typeof window.RTHUB_START === "string" ? window.RTHUB_START : "";
   if (FRAMED) document.documentElement.classList.add("embed");
   if (window.RTHUB_THEME === "dark" || window.RTHUB_THEME === "light") document.documentElement.setAttribute("data-theme", window.RTHUB_THEME);
@@ -267,8 +277,8 @@ html.embed .crumb { margin-left: 0; }
         '<button type="button" role="tab" data-tab="role" aria-selected="' + (tab === "role") + '">ตามวิชาชีพ</button>' +
         '<button type="button" role="tab" data-tab="case" aria-selected="' + (tab === "case") + '">ตามกรณีผู้ป่วย</button></div>' +
       '<div class="grid">' + groups.map(function (g) {
-        return '<div class="card' + (mine(g) ? " mine" : "") + '"><h3><span class="ic" aria-hidden="true">' + esc(g.badge) + "</span>" + esc(g.title) +
-          (mine(g) ? '<span class="me">ตำแหน่งของคุณ</span>' : "") + "</h3>" +
+        return '<div class="card' + (mine(g) ? " mine" : "") + (g.admin ? " adm" : "") + '"><h3><span class="ic" aria-hidden="true">' + esc(g.badge) + "</span>" + esc(g.title) +
+          (mine(g) ? '<span class="me">ตำแหน่งของคุณ</span>' : g.admin ? '<span class="me">เฉพาะแอดมิน</span>' : "") + "</h3>" +
           "<p>" + rich(g.desc) + "</p><ul>" + g.guides.map(function (id) { var x = byId(id); return x ? '<li><a href="#' + id + '">' + esc(x.title) + "</a></li>" : ""; }).join("") + "</ul></div>";
       }).join("") + "</div>" +
       (M.flow ? '<section class="path"><h2>' + esc(M.flow.title) + "</h2><p>" + rich(M.flow.desc) + '</p><div class="flow">' + M.flow.svg + "</div></section>" : "");
@@ -344,7 +354,7 @@ html.embed .crumb { margin-left: 0; }
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !document.querySelector(".zoom")) tell("close"); }, true);
   } else window.addEventListener("hashchange", route);
   (window.RTHUB_DATA && typeof window.RTHUB_DATA === "object" ? Promise.resolve(window.RTHUB_DATA) : fetch(BASE + "guides.json").then(function (r) { return r.json(); }))
-    .then(function (data) { M = navFill(data, navNames(data.nav), ""); route(); tell("ready"); })
+    .then(function (data) { M = navFill(adminCut(data), navNames(data.nav), ""); route(); tell("ready"); })
     .catch(function () { view.innerHTML = '<p class="note">โหลดเนื้อหาคู่มือไม่สำเร็จ ลองรีเฟรชหน้า</p>'; tell("error"); });
 })();
 </script>
