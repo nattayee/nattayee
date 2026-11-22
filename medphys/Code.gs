@@ -36,8 +36,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-22.4';
-const API_LEVEL = 112;   // 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-22.5';
+const API_LEVEL = 113;   // 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -1038,7 +1038,7 @@ const CFG_TABS = {
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p', 'sendBook'],   // flow (16 พ.ย.): คอลัมน์ RT Workflow · tdfApp (17 พ.ย.): ลิงก์เว็บ TDF
   form: ['formRules'],   // 13 พ.ย.: ตั้งค่า → ฟอร์ม (ค่าเริ่มต้นของฟอร์มตามตัวเลือก)
   cols: ['cols'],        // 13 พ.ย.: ตั้งค่า → Column แสดงผล (ค่าเริ่มต้นของคอลัมน์)
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'icons'],   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู · subOrder (API 105): ลำดับแถบย่อย
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'icons', 'tg'],   // tg (API 113): ประกาศ → Telegram (กลุ่มของแต่ละอาชีพ · token อยู่ใน Script Properties)   // icons (16 พ.ย.): ลำดับไอคอนหน้าแถบเมนู · subOrder (API 105): ลำดับแถบย่อย
 };
 const CFG_REQ_MAX = 49000;   // ตัวอักษรต่อช่อง (ชีตรับได้ 50,000)
 const CFG_REQ_DAYS = 30;     // คำขอที่ตัดสินแล้วแสดงย้อนหลัง
@@ -2043,6 +2043,7 @@ function bqEdit(id, ch, pin, token) {
     return row;
   });
   bqStats_();
+  if (rec && rec._ntf && rec._ntf.length) tgNotify_(cfg, rec._ntf);   // API 113: HDR ส่งภาพแล้ว → Telegram
   return rec;
 }
 // API 111: ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · สีม่วงในหน้าเว็บ) ต่อรอบ CT ที่เพิ่ม · อาชีพ = config.bq.ntf (ค่าเริ่มต้น RO, MP · ว่าง = ไม่ประกาศ) · แสดงถึงสิ้นวัน
@@ -3660,13 +3661,15 @@ function notifyAdd(rec, token) {
   const max = Utilities.formatDate(new Date(Date.parse(td + 'T12:00:00Z') + NTF_MAX_DAYS * 864e5), 'UTC', 'yyyy-MM-dd');
   if (until < td) throw new Error('วันที่แสดงถึงต้องไม่ก่อนวันนี้');
   if (until > max) throw new Error('แสดงได้นานสุด ' + NTF_MAX_DAYS + ' วัน');
-  return withLock_(() => {
+  const out = withLock_(() => {
     const ss = ss_(), x = openRow_(ss, 'notify', null, '');
     const r = { id: Utilities.getUuid(), text: text, roles: roles.join(', '), level: level, until: until, by: String(u.name || u.username || u.me || ''), byUser: String(u.username || u.me || ''),
       at: new Date().toISOString(), acks: '{}', cancelBy: '', cancelAt: '', kind: kind, hn: hn, pname: pname };
     writeFields_(x.sh, x.sh.getLastRow() + 1, x.header, TABLES.notify.fields, r, null);
     return { rows: [r] };
   });
+  tgNotify_(cfg, out.rows);   // API 113: ส่งเข้า Telegram หลังปล่อยล็อก (ไม่สำเร็จ = ประกาศยังอยู่ตามปกติ)
+  return out;
 }
 /** รับทราบประกาศในนามอาชีพของผู้ใช้ (คนแรกของอาชีพ) · กดซ้ำหรือคนอื่นในอาชีพกดไปแล้ว = คืนประกาศเดิม · คืน { rows: [ประกาศ] } */
 function notifyAck(id, token) {
@@ -3711,6 +3714,134 @@ function notifyDelete(id, token) {
     delRow_(x.sh, x.row, x.header, x.vals);
     return { id: id, deleted: true };
   });
+}
+
+/* ---------- API 113: ส่งประกาศเข้า Telegram ----------
+ * token ของ bot (จาก @BotFather) เก็บใน Script Properties (TG_TOKEN) · ไม่อยู่ในชีต ไม่อยู่ในโค้ด ไม่ส่งกลับหน้าเว็บ · ตั้ง / ลบ = แอดมินหลัก (tgSetup)
+ * config.tg = { on, chats: { อาชีพ: chat id }, all: chat id (กลุ่มรวม: ทุกประกาศ), kinds: [patient | brachy | general], hn: ใส่ HN ในข้อความ }
+ * ข้อความ = ประเภท · ถึงอาชีพ · (HN ถ้าเปิด) · ข้อความ · ผู้ส่ง · ลิงก์ RT Hub · ไม่ส่งชื่อผู้ป่วยเสมอ
+ * ส่งหลังบันทึกประกาศ (นอกล็อก · ส่งพร้อมกันทุกกลุ่ม) · ส่งไม่สำเร็จไม่กระทบประกาศ (ผลล่าสุดดูที่ ตั้งค่า) · โหมดฝึกใช้ไม่ส่ง */
+const TG_PROP = 'TG_TOKEN', TG_BOT = 'TG_BOT', TG_LAST = 'TG_LAST', TG_CHATS = 'TG_CHATS';
+const TG_KINDS = ['patient', 'brachy', 'general'];
+const TG_ID_RE = /^-?\d{3,20}$/;
+const TG_TOKEN_RE = /^\d{5,15}:[A-Za-z0-9_-]{30,60}$/;
+function tgCfg_(cfg) {
+  const t = cfg && cfg.tg && typeof cfg.tg === 'object' ? cfg.tg : {};
+  const id = v => { v = String(v == null ? '' : v).trim(); return TG_ID_RE.test(v) ? v : ''; };
+  const chats = {};
+  if (t.chats && typeof t.chats === 'object') Object.keys(t.chats).forEach(r => { const v = id(t.chats[r]); if (v && /^[\w -]{1,20}$/.test(r)) chats[r] = v; });
+  return { on: t.on === true, chats: chats, all: id(t.all), kinds: Array.isArray(t.kinds) ? t.kinds.filter(k => TG_KINDS.indexOf(k) >= 0) : TG_KINDS.slice(), hn: t.hn === true };
+}
+const tgEsc_ = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const tgKind_ = n => (n && (n.kind === 'patient' || n.kind === 'brachy') ? n.kind : 'general');
+function tgUrl_() { try { return String(ScriptApp.getService().getUrl() || ''); } catch (e) { return ''; } }
+// ข้อความ (HTML ของ Telegram) · ไม่มีชื่อผู้ป่วย
+function tgText_(n, c, url) {
+  const k = tgKind_(n), head = k === 'patient' ? '🔴 ประกาศผู้ป่วย' : k === 'brachy' ? '🟣 นัดคิวใส่แร่' : n.level === 'urgent' ? '🔴 ประกาศด่วน' : '🟢 ประกาศ';
+  const lines = ['<b>' + head + '</b> · ถึง ' + tgEsc_(n.roles)];
+  if (k !== 'general') lines.push(c.hn && n.hn ? 'HN <b>' + tgEsc_(n.hn) + '</b>' : '<i>HN และชื่อผู้ป่วยดูใน RT Hub</i>');
+  lines.push(tgEsc_(n.text));
+  lines.push('<i>จาก ' + tgEsc_(n.by) + '</i>');
+  if (url) lines.push('<a href="' + tgEsc_(url) + '">เปิด RT Hub</a>');
+  return lines.join('\n');
+}
+const tgReq_ = (token, method, body) => ({ url: 'https://api.telegram.org/bot' + token + '/' + method, method: 'post', contentType: 'application/json', payload: JSON.stringify(body || {}), muteHttpExceptions: true });
+// ข้อความผิดพลาดที่เก็บ / ส่งกลับ: ตัด token ออกเสมอ
+const tgClean_ = (msg, token) => { let m = String(msg == null ? '' : msg); if (token) m = m.split(token).join('***'); return m.replace(/bot\d{5,15}:[A-Za-z0-9_-]{30,60}/g, 'bot***').slice(0, 300); };
+function tgParse_(res) { try { return JSON.parse(res.getContentText()) || {}; } catch (e) { return { ok: false, description: 'HTTP ' + (res && res.getResponseCode ? res.getResponseCode() : '?') }; } }
+function tgLast_(o) { try { propSave_(TG_LAST, JSON.stringify(Object.assign({ at: new Date().toISOString() }, o))); } catch (e) { /* เก็บผลล่าสุดไม่ได้: ไม่เป็นไร */ } }
+// ประกาศ (แถวของตาราง notify) → กลุ่มของอาชีพที่แจ้ง (+ กลุ่มรวม) · กลุ่มเดียวกันส่งครั้งเดียว
+function tgNotify_(cfg, rows) {
+  let token = '';
+  try {
+    if (PRACTICE_ || !rows || !rows.length) return;
+    const c = tgCfg_(cfg);
+    if (!c.on) return;
+    token = String(propRead_(TG_PROP) || '');
+    if (!token) return;
+    const url = tgUrl_(), reqs = [], to = [];
+    const chatOf = r => { const k = Object.keys(c.chats).filter(x => x.toLowerCase() === String(r).toLowerCase())[0]; return k ? c.chats[k] : ''; };
+    rows.forEach(n => {
+      if (c.kinds.indexOf(tgKind_(n)) < 0) return;
+      const ids = [];
+      ntfRoles_(n.roles).forEach(r => { const id = chatOf(r); if (id && ids.indexOf(id) < 0) ids.push(id); });
+      if (c.all && ids.indexOf(c.all) < 0) ids.push(c.all);
+      const text = tgText_(n, c, url);
+      ids.forEach(id => { reqs.push(tgReq_(token, 'sendMessage', { chat_id: id, text: text, parse_mode: 'HTML', disable_web_page_preview: true })); to.push(id); });
+    });
+    if (!reqs.length) return;
+    const res = UrlFetchApp.fetchAll(reqs), bad = [];
+    res.forEach((x, i) => { const j = tgParse_(x); if (!j.ok) bad.push(to[i] + ': ' + tgClean_(j.description || ('HTTP ' + x.getResponseCode()), token)); });
+    tgLast_({ sent: reqs.length, ok: reqs.length - bad.length, err: bad.slice(0, 3).join(' · ') });
+  } catch (e) { tgLast_({ sent: 0, ok: 0, err: tgClean_(e && e.message, token) }); }
+}
+// แอดมิน: หลัก / รอง / บัญชี Google (ดูสถานะ ค้นหากลุ่ม ทดสอบ) · ตั้ง token = แอดมินหลัก / บัญชี Google
+function tgAdmin_(token, main) {
+  if (PRACTICE_ && main !== null) throw new Error('โหมดฝึกใช้: ตั้งค่า Telegram ในระบบจริง');
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg);
+  const ok = u && (u.isAdmin || u.via === 'google' || (!main && u.isSub));
+  if (!ok) throw new Error(main ? 'ตั้ง bot ของ Telegram ได้เฉพาะแอดมินหลัก' : 'ตั้งค่า Telegram ได้เฉพาะแอดมิน');
+  return { u: u, cfg: cfg };
+}
+function tgChatsSaved_() { try { const a = JSON.parse(propRead_(TG_CHATS) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+/** สถานะ: ตั้ง bot แล้วหรือยัง (ไม่ส่ง token) · ชื่อ bot · กลุ่มที่เคยพบ · ผลการส่งล่าสุด */
+function tgState(token) {
+  if (PRACTICE_) return { set: false, bot: '', chats: [], last: null, url: '', practice: true };
+  tgAdmin_(token, false);
+  let last = null;
+  try { last = JSON.parse(propRead_(TG_LAST) || 'null'); } catch (e) { last = null; }
+  return { set: !!propRead_(TG_PROP), bot: String(propRead_(TG_BOT) || ''), chats: tgChatsSaved_(), last: last, url: tgUrl_() };
+}
+/** ตั้ง token ของ bot (ตรวจกับ Telegram ก่อนเก็บ) · ว่าง = ลบ bot · แอดมินหลักเท่านั้น · ไม่บันทึก token ในประวัติ */
+function tgSetup(tok, token) {
+  tgAdmin_(token, true);
+  tok = String(tok == null ? '' : tok).trim();
+  const props = PropertiesService.getScriptProperties();
+  if (!tok) {
+    [TG_PROP, TG_BOT, TG_CHATS, TG_LAST].forEach(k => { props.deleteProperty(k); if (PROPS_) delete PROPS_[k]; });
+    audit_('config', '', '', 'edit', { 'Telegram': 'ลบ bot' });
+    return tgState(token);
+  }
+  if (!TG_TOKEN_RE.test(tok)) throw new Error('token ไม่ถูกต้อง (รูปแบบ 123456789:ABC… จาก @BotFather)');
+  const j = tgParse_(UrlFetchApp.fetch('https://api.telegram.org/bot' + tok + '/getMe', { muteHttpExceptions: true }));
+  if (!j.ok || !j.result) throw new Error('Telegram ไม่รับ token นี้: ' + tgClean_(j.description || 'ตรวจไม่ผ่าน', tok));
+  propSave_(TG_PROP, tok);
+  propSave_(TG_BOT, String(j.result.username || ''));
+  audit_('config', '', '', 'edit', { 'Telegram': 'ตั้ง bot @' + String(j.result.username || '') });
+  return tgState(token);
+}
+/** ค้นหากลุ่มที่เพิ่ม bot แล้ว (getUpdates · Telegram เก็บไว้ 24 ชั่วโมง) · รวมกับกลุ่มที่เคยพบ · คืน [{ id, title, type }] */
+function tgChats(token) {
+  tgAdmin_(token, false);
+  const tok = String(propRead_(TG_PROP) || '');
+  if (!tok) throw new Error('ยังไม่ได้ตั้ง bot (วาง token ก่อน)');
+  const j = tgParse_(UrlFetchApp.fetch('https://api.telegram.org/bot' + tok + '/getUpdates', { muteHttpExceptions: true }));
+  if (!j.ok) throw new Error('ค้นหากลุ่มไม่สำเร็จ: ' + tgClean_(j.description, tok));
+  const found = tgChatsSaved_(), put = ch => {
+    if (!ch || ch.type === 'private' || !TG_ID_RE.test(String(ch.id))) return;
+    const id = String(ch.id), title = String(ch.title || ch.username || id).slice(0, 80), at = found.map(x => x.id).indexOf(id);
+    if (at >= 0) found[at] = { id: id, title: title, type: String(ch.type || '') }; else found.push({ id: id, title: title, type: String(ch.type || '') });
+  };
+  (Array.isArray(j.result) ? j.result : []).forEach(up => {
+    ['message', 'edited_message', 'channel_post', 'my_chat_member', 'chat_member'].forEach(k => { if (up[k] && up[k].chat) put(up[k].chat); });
+    const m = up.message || {};
+    if (m.migrate_to_chat_id) put({ id: m.migrate_to_chat_id, title: (m.chat && m.chat.title) || '', type: 'supergroup' });   // กลุ่มเปลี่ยนเป็น supergroup = id ใหม่
+  });
+  const keep = found.slice(-50);
+  propSave_(TG_CHATS, JSON.stringify(keep));
+  return keep;
+}
+/** ส่งข้อความทดสอบเข้ากลุ่ม · คืน { ok, err } */
+function tgTest(chatId, token) {
+  const a = tgAdmin_(token, false);
+  const tok = String(propRead_(TG_PROP) || '');
+  if (!tok) throw new Error('ยังไม่ได้ตั้ง bot (วาง token ก่อน)');
+  chatId = String(chatId == null ? '' : chatId).trim();
+  if (!TG_ID_RE.test(chatId)) throw new Error('รหัสกลุ่มไม่ถูกต้อง');
+  const url = tgUrl_(), text = '<b>✅ ทดสอบจาก RT Hub</b>\nกลุ่มนี้จะได้รับประกาศตามที่ตั้งไว้ใน ตั้งค่า → ประกาศ → Telegram\n<i>โดย ' + tgEsc_(a.u.name || a.u.username || '') + '</i>' + (url ? '\n<a href="' + tgEsc_(url) + '">เปิด RT Hub</a>' : '');
+  const r = tgReq_(tok, 'sendMessage', { chat_id: chatId, text: text, parse_mode: 'HTML', disable_web_page_preview: true });
+  const j = tgParse_(UrlFetchApp.fetch(r.url, { method: r.method, contentType: r.contentType, payload: r.payload, muteHttpExceptions: true }));
+  return { ok: !!j.ok, err: j.ok ? '' : tgClean_(j.description || 'ส่งไม่สำเร็จ', tok) };
 }
 
 /* ---------- API 94 (19 พ.ย.): แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall) ---------- */
