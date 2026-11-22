@@ -14,6 +14,7 @@
  */
 
 const SHEET = {
+  ROLES: 'Roles',
   SCAN: 'ScanLog',
   EVENTS: 'Events',
   CHECKINS: 'CheckIns',
@@ -22,14 +23,15 @@ const SHEET = {
 };
 
 const HEADERS = {
+  Roles: ['ชื่อ-สกุล', 'บทบาท', 'PIN ส่วนตัว', 'หมายเหตุ'],
   ScanLog: ['รหัสพนักงาน', 'วันเวลาที่สแกน', 'ประเภท (เข้า/ออก) - ไม่บังคับ'],
-  Events: ['EventID', 'ประเภทเหตุ', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'สถานะ', 'หมายเหตุ'],
+  Events: ['EventID', 'ประเภทเหตุ', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'สถานะ', 'หมายเหตุ', 'ผู้ประกาศเหตุ', 'ผู้ปิดเหตุ'],
   CheckIns: ['EventID', 'รหัส/ชื่อ (ตัวระบุ)', 'ชื่อ-สกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ'],
   Config: ['ตั้งค่า', 'ค่า', 'คำอธิบาย'],
 };
 
 const DEFAULT_CONFIG = [
-  ['ADMIN_PIN', '1234', 'PIN สำหรับเข้าหน้า Dashboard (ต้องเปลี่ยน)'],
+  ['ADMIN_PIN', '1234', 'PIN สำรอง ใช้ได้เฉพาะตอนที่ชีต Roles ยังไม่มีรายชื่อ (หลังตั้ง Roles แล้วใช้ไม่ได้)'],
   ['POINTS', 'A:จุดรวมพล 1,B:จุดรวมพล 2', 'จุดรวมพล รูปแบบ รหัส:ชื่อ คั่นด้วยจุลภาค'],
   ['ZONE_SHEET_PREFIX', 'โซน', 'ชีตที่ชื่อขึ้นต้นด้วยคำนี้ถือเป็นรายชื่อเจ้าหน้าที่'],
   ['SYNC_ZONE_STATUS', 'TRUE', 'TRUE = เขียนผลเช็คอินกลับลงคอลัมน์ "สถานะ" ในชีตโซน'],
@@ -38,6 +40,9 @@ const DEFAULT_CONFIG = [
 ];
 
 const STATUS = { SAFE: 'SAFE', HELP: 'HELP', AWAY: 'AWAY' };
+// บทบาทในชีต Roles: ผู้บัญชาการ / รองผู้บัญชาการ เปิด-ปิดเหตุได้, เจ้าหน้าที่ศูนย์ ดูและบันทึกสถานะแทนได้
+const ROLE = { COMMANDER: 'ผู้บัญชาการ', DEPUTY: 'รองผู้บัญชาการ', OFFICER: 'เจ้าหน้าที่ศูนย์' };
+const AUTO_EVENT_TYPE = 'ไม่ระบุ (เริ่มอัตโนมัติ)';
 // ค่าในคอลัมน์ "สถานะ" ของชีตโซน
 const ZONE_TEXT = { PRESENT: 'อยู่', LEAVE: 'ลา', UNKNOWN: 'ไม่ทราบ' };
 
@@ -63,13 +68,32 @@ function setup() {
     DEFAULT_CONFIG.forEach(function (r) { if (!(r[0] in have)) cfg.appendRow(r); });
   }
   ss.getSheetByName(SHEET.SCAN).getRange('A:A').setNumberFormat('@');
+  // ชีต Events จากเวอร์ชันเก่า: เพิ่มหัวคอลัมน์ผู้ประกาศ/ผู้ปิดเหตุ
+  ss.getSheetByName(SHEET.EVENTS).getRange(1, 1, 1, HEADERS.Events.length).setValues([HEADERS.Events]).setFontWeight('bold');
+  setupRoles_(ss.getSheetByName(SHEET.ROLES));
   clearCache();
   const emps = loadEmployees_();
   const zones = {};
   emps.forEach(function (e) { e.zone.split(', ').forEach(function (z) { zones[z] = (zones[z] || 0) + 1; }); });
   safeAlert_('ติดตั้งเรียบร้อย\nพบเจ้าหน้าที่ ' + emps.length + ' คน\n' +
     Object.keys(zones).map(function (z) { return '• ' + z + ': ' + zones[z] + ' คน'; }).join('\n') +
-    '\n\nขั้นต่อไป: เปลี่ยน ADMIN_PIN ในชีต Config แล้ว Deploy เป็น Web app');
+    '\n\nขั้นต่อไป: ใส่ชื่อผู้บัญชาการและผู้ทำหน้าที่แทนในชีต Roles แล้ว Deploy เป็น Web app');
+}
+
+/** ชีต Roles: รายการบทบาทแบบเลือก + PIN ห้ามซ้ำ + ใส่แถวตัวอย่างพร้อม PIN สุ่ม */
+function setupRoles_(sh) {
+  sh.getRange('C:C').setNumberFormat('@');   // PIN เป็นข้อความ เลข 0 นำหน้าไม่หาย
+  sh.getRange(2, 2, 200, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList([ROLE.COMMANDER, ROLE.DEPUTY, ROLE.OFFICER], true).setAllowInvalid(false).build());
+  if (sh.getLastRow() > 1) return;
+  const pin = function () { return String(Math.floor(100000 + Math.random() * 900000)); };
+  sh.getRange(2, 1, 4, 4).setValues([
+    ['(ใส่ชื่อผู้บัญชาการ)', ROLE.COMMANDER, pin(), 'เปิด/ปิดเหตุการณ์ได้'],
+    ['(ใส่ชื่อรองผู้บัญชาการ)', ROLE.DEPUTY, pin(), 'ทำหน้าที่แทนเมื่อผู้บัญชาการไม่อยู่'],
+    ['(ใส่ชื่อหัวหน้าเวร/ผู้ตรวจการนอกเวลา)', ROLE.DEPUTY, pin(), 'ทำหน้าที่แทนนอกเวลาราชการ'],
+    ['(ใส่ชื่อเจ้าหน้าที่ศูนย์)', ROLE.OFFICER, pin(), 'ดู Dashboard และบันทึกสถานะแทนได้ แต่เปิด/ปิดเหตุไม่ได้'],
+  ]);
+  sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 140); sh.setColumnWidth(4, 320);
 }
 
 /** สร้างชีต QR ที่มีลิงก์ + รูป QR ของแต่ละจุดรวมพล (รันหลัง Deploy) */
@@ -164,7 +188,7 @@ function checkIn(payload) {
 /* ---------- เรียกจากหน้า Dashboard (ต้องมี PIN) ---------- */
 
 function getDashboard(pin) {
-  checkPin_(pin);
+  const me = auth_(pin);
   const props = PropertiesService.getScriptProperties();
   const activeId = props.getProperty('ACTIVE_EVENT_ID');
   const events = readRows_(SHEET.EVENTS);
@@ -175,6 +199,7 @@ function getDashboard(pin) {
   const event = evRow ? {
     id: String(evRow[0]), type: evRow[1], start: fmt_(evRow[2]),
     end: evRow[3] ? fmt_(evRow[3]) : '', active: evRow[4] === 'ACTIVE',
+    auto: evRow[1] === AUTO_EVENT_TYPE, openedBy: evRow[6] || '', closedBy: evRow[7] || '',
   } : null;
 
   // สถานะล่าสุดของแต่ละคนในเหตุการณ์นี้
@@ -211,49 +236,70 @@ function getDashboard(pin) {
   list.forEach(function (x) { count[x.state]++; });
 
   return {
-    event: event, list: list, count: count,
+    me: me, event: event, list: list, count: count,
     expected: count.SAFE + count.HELP + count.MISSING,
     scanEnabled: scan.enabled, scanNote: scan.note,
     points: getPoints_(), serverTime: fmt_(new Date()),
   };
 }
 
+/**
+ * ผู้บัญชาการ/รองฯ ประกาศเหตุ
+ * ถ้ามีคนเช็คอินไปก่อนแล้ว (เหตุการณ์เริ่มอัตโนมัติ) จะเป็นการ "ยืนยัน" เหตุการณ์นั้น ไม่ล้างยอดที่นับไว้
+ */
 function startEvent(pin, type, note) {
-  checkPin_(pin);
+  const me = requireCommander_(pin);
   return withLock_(function () {
     const props = PropertiesService.getScriptProperties();
-    if (props.getProperty('ACTIVE_EVENT_ID')) throw new Error('มีเหตุการณ์ที่ยังไม่ปิดอยู่');
-    return createEvent_(type || 'ไฟไหม้', note || '');
+    const active = props.getProperty('ACTIVE_EVENT_ID');
+    if (active) {
+      const row = findEventRow_(active);
+      if (row && row.values[1] === AUTO_EVENT_TYPE) {
+        row.sheet.getRange(row.index, 2).setValue(type || 'ไฟไหม้');
+        row.sheet.getRange(row.index, 7).setValue(me.name + ' (ยืนยันภายหลัง)');
+        return { ok: true, id: active, confirmed: true };
+      }
+      throw new Error('มีเหตุการณ์ที่ยังไม่ปิดอยู่');
+    }
+    return createEvent_(type || 'ไฟไหม้', note || '', me.name);
   });
 }
 
 function closeEvent(pin) {
-  checkPin_(pin);
+  const me = requireCommander_(pin);
   return withLock_(function () {
     const props = PropertiesService.getScriptProperties();
     const id = props.getProperty('ACTIVE_EVENT_ID');
     if (!id) return { ok: true };
-    const sh = sheet_(SHEET.EVENTS);
-    const ids = sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 1).getValues();
-    for (let i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === id) {
-        sh.getRange(i + 2, 4, 1, 2).setValues([[new Date(), 'CLOSED']]);
-        break;
-      }
+    const row = findEventRow_(id);
+    if (row) {
+      row.sheet.getRange(row.index, 4, 1, 2).setValues([[new Date(), 'CLOSED']]);
+      row.sheet.getRange(row.index, 8).setValue(me.name);
     }
     props.deleteProperty('ACTIVE_EVENT_ID');
     return { ok: true };
   });
 }
 
+function findEventRow_(id) {
+  const sh = sheet_(SHEET.EVENTS);
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return null;
+  const vals = sh.getRange(2, 1, n, HEADERS.Events.length).getValues();
+  for (let i = vals.length - 1; i >= 0; i--) {
+    if (String(vals[i][0]) === id) return { sheet: sh, index: i + 2, values: vals[i] };
+  }
+  return null;
+}
+
 /** ผู้ควบคุมบันทึกสถานะแทน (SAFE / HELP / AWAY = ไม่อยู่ในพื้นที่) */
 function staffCheckIn(pin, empId, status, point, note) {
-  checkPin_(pin);
+  const me = auth_(pin);
   const emp = findEmployee_(empId);
   if (!emp) throw new Error('ไม่พบรายชื่อ');
   if ([STATUS.SAFE, STATUS.HELP, STATUS.AWAY].indexOf(status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   const eventId = getOrCreateActiveEvent_();
-  appendCheckIn_(eventId, emp, status, point || 'STAFF', 'STAFF', note);
+  appendCheckIn_(eventId, emp, status, point || 'STAFF', 'STAFF:' + me.name, note);
   return { ok: true };
 }
 
@@ -492,14 +538,14 @@ function getOrCreateActiveEvent_() {
   if (id) return id;
   // มีคนเช็คอินก่อนผู้ควบคุมกดประกาศเหตุ -> สร้างให้อัตโนมัติ
   return withLock_(function () {
-    return props.getProperty('ACTIVE_EVENT_ID') || createEvent_('ไม่ระบุ (เริ่มอัตโนมัติ)', '').id;
+    return props.getProperty('ACTIVE_EVENT_ID') || createEvent_(AUTO_EVENT_TYPE, 'มีคนเช็คอินก่อนประกาศเหตุ', '').id;
   });
 }
 
-function createEvent_(type, note) {
+function createEvent_(type, note, openedBy) {
   const id = 'EV' + Utilities.formatDate(new Date(), tz_(), 'yyyyMMdd-HHmmss');
   resetZoneStatus_();   // เริ่มนับใหม่: "อยู่" จากครั้งก่อนกลับเป็น "ไม่ทราบ"
-  sheet_(SHEET.EVENTS).appendRow([id, type, new Date(), '', 'ACTIVE', note]);
+  sheet_(SHEET.EVENTS).appendRow([id, type, new Date(), '', 'ACTIVE', note, openedBy || 'ระบบ (อัตโนมัติ)', '']);
   PropertiesService.getScriptProperties().setProperty('ACTIVE_EVENT_ID', id);
   return { ok: true, id: id };
 }
@@ -513,9 +559,38 @@ function appendCheckIn_(eventId, emp, status, point, by, note) {
   } catch (err) { Logger.log('เขียนสถานะลงชีตโซนไม่สำเร็จ: ' + err); }
 }
 
-function checkPin_(pin) {
-  if (String(pin) !== String(getConfig_().ADMIN_PIN)) throw new Error('PIN ไม่ถูกต้อง');
+/**
+ * ตรวจ PIN ส่วนตัวจากชีต Roles คืน { name, role, canCommand }
+ * ถ้าชีต Roles ยังไม่มีรายชื่อจริง ใช้ ADMIN_PIN ใน Config ได้ (สิทธิ์เท่าผู้บัญชาการ) เพื่อไม่ให้ระบบล็อกตัวเอง
+ */
+function auth_(pin) {
+  pin = String(pin || '').trim();
+  if (!pin) throw new Error('กรุณาใส่ PIN');
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ROLES);
+  const rows = sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues() : [];
+  const valid = rows.filter(function (r) {
+    return normName_(r[0]) && !/^\(/.test(normName_(r[0])) && String(r[2]).trim() && r[1];
+  });
+  if (!valid.length) {
+    if (pin === String(getConfig_().ADMIN_PIN)) return { name: 'ผู้ดูแลระบบ (PIN สำรอง)', role: ROLE.COMMANDER, canCommand: true };
+    failDelay_();
+    throw new Error('PIN ไม่ถูกต้อง');
+  }
+  const hit = valid.filter(function (r) { return String(r[2]).trim() === pin; });
+  if (hit.length > 1) throw new Error('PIN นี้ซ้ำกันในชีต Roles กรุณาแจ้งผู้ดูแลให้แก้');
+  if (!hit.length) { failDelay_(); throw new Error('PIN ไม่ถูกต้อง'); }
+  const role = normName_(hit[0][1]);
+  return { name: normName_(hit[0][0]), role: role, canCommand: role === ROLE.COMMANDER || role === ROLE.DEPUTY };
 }
+
+function requireCommander_(pin) {
+  const me = auth_(pin);
+  if (!me.canCommand) throw new Error('เฉพาะผู้บัญชาการหรือรองผู้บัญชาการเท่านั้นที่ประกาศ/ปิดเหตุได้');
+  return me;
+}
+
+/** หน่วงเวลาเมื่อ PIN ผิด กันการสุ่มเดา */
+function failDelay_() { Utilities.sleep(1500); }
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();

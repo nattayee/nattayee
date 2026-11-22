@@ -56,6 +56,15 @@
   .hd-title { display:flex; align-items:center; gap:12px; min-width:0; }
   .hd h1 { margin:0; font-family:var(--f-display); font-size:18px; font-weight:700; }
   #evInfo { font-size:13px; color:var(--top-muted); }
+  .user { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--top-ink); background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:4px 4px 4px 12px; max-width:100%; }
+  .user b { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+  .user .role { color:var(--top-muted); }
+  .user .role.cmd { color:#ffb4ab; }
+  .user button { border:0; background:rgba(255,255,255,.12); color:var(--top-ink); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  .wait { font-size:12.5px; color:var(--top-muted); }
+  .notice { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; background:var(--help-soft); color:var(--help);
+    border-radius:16px; padding:12px 16px; font-size:14px; font-weight:500; }
   .sig { width:10px; height:10px; border-radius:50%; background:var(--top-muted); flex:none; }
   .sig.on { background:#ff4b3e; animation:pulse 1.6s infinite; }
   @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(255,75,62,.6); } 70% { box-shadow:0 0 0 10px rgba(255,75,62,0); } 100% { box-shadow:0 0 0 0 rgba(255,75,62,0); } }
@@ -181,8 +190,8 @@
   <div class="login-card">
     <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg></div>
     <h2>ศูนย์ควบคุมการอพยพ</h2>
-    <p>สำหรับผู้ควบคุมเหตุและ จป. เท่านั้น</p>
-    <input id="pin" type="password" inputmode="numeric" placeholder="••••" autofocus>
+    <p>ใส่ PIN ส่วนตัวของคุณ</p>
+    <input id="pin" type="password" inputmode="numeric" placeholder="••••••" autofocus>
     <button class="b dark" style="width:100%;padding:14px" onclick="login()">เข้าสู่ระบบ</button>
     <div class="err" id="pinErr"></div>
   </div>
@@ -197,15 +206,18 @@
       </div>
       <div class="hd-actions">
         <span class="live"><i></i><span id="updated">LIVE</span></span>
+        <span class="wait hidden" id="waitCmd">รอผู้บัญชาการประกาศเหตุ</span>
         <button id="btnStart" class="b red hidden" onclick="$('dlgStart').showModal()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.5"/></svg>ประกาศเหตุฉุกเฉิน</button>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.5"/></svg><span id="btnStartText">ประกาศเหตุฉุกเฉิน</span></button>
         <button id="btnClose" class="b top-soft hidden" onclick="$('dlgClose').showModal()">ปิดเหตุการณ์</button>
         <button class="b top-soft icon" onclick="window.print()" title="พิมพ์รายชื่อ" aria-label="พิมพ์รายชื่อ">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg></button>
+        <span class="user"><b id="meName"></b><span class="role" id="meRole"></span><button type="button" onclick="logout()">ออก</button></span>
       </div>
     </div>
   </header>
   <main>
+    <div class="notice hidden" id="autoNotice"></div>
     <div class="summary">
       <div class="panel progress">
         <div class="gauge">
@@ -241,15 +253,15 @@
 </div>
 
 <dialog id="dlgStart">
-  <h3>ประกาศเหตุฉุกเฉิน</h3>
-  <p class="sm">ระบบจะเริ่มนับยอดใหม่ทั้งหมด เลือกประเภทเหตุ</p>
+  <h3 id="dlgStartTitle">ประกาศเหตุฉุกเฉิน</h3>
+  <p class="sm" id="dlgStartSub">ระบบจะเริ่มนับยอดใหม่ทั้งหมด เลือกประเภทเหตุ</p>
   <div class="opt" id="evOpts">
     <button type="button" class="sel">ไฟไหม้</button><button type="button">แผ่นดินไหว</button>
     <button type="button">สารเคมีรั่วไหล</button><button type="button">ซ้อมอพยพหนีไฟ</button>
   </div>
   <input type="hidden" id="evType" value="ไฟไหม้">
   <div class="stack">
-    <button class="b red" onclick="startEv()">ยืนยัน เริ่มนับยอด</button>
+    <button class="b red" onclick="startEv()" id="dlgStartBtn">ยืนยัน เริ่มนับยอด</button>
     <button class="b soft" onclick="$('dlgStart').close()">ยกเลิก</button>
   </div>
 </dialog>
@@ -301,14 +313,22 @@ function login(saved) {
     .withSuccessHandler(function (d) {
       PIN = pin; try { sessionStorage.setItem('pin', pin); } catch (e) {}
       $('vPin').classList.add('hidden'); $('vMain').classList.remove('hidden');
-      render(d); setInterval(refresh, 5000);
+      render(d); clearInterval(timer); timer = setInterval(refresh, 5000);
     })
     .withFailureHandler(function (e) { $('pinErr').textContent = e.message; try { sessionStorage.removeItem('pin'); } catch (x) {} })
     .getDashboard(pin);
 }
+var timer = null;
+function logout() {
+  try { sessionStorage.removeItem('pin'); } catch (e) {}
+  clearInterval(timer); timer = null; PIN = ''; data = null;
+  $('pin').value = ''; $('pinErr').textContent = '';
+  $('vMain').classList.add('hidden'); $('vPin').classList.remove('hidden');
+  $('pin').focus();
+}
 var loading = false;
 function refresh() {
-  if (loading || document.hidden) return;
+  if (loading || document.hidden || !PIN) return;
   loading = true;
   google.script.run
     .withSuccessHandler(function (d) { loading = false; $('err').textContent = ''; render(d); })
@@ -322,10 +342,26 @@ function render(d) {
   var ev = d.event, on = !!(ev && ev.active);
   $('sig').classList.toggle('on', on);
   $('evInfo').textContent = ev
-    ? (on ? 'กำลังเกิดเหตุ · ' : 'ปิดแล้ว · ') + ev.type + ' · เริ่ม ' + ev.start + (ev.end ? ' · ปิด ' + ev.end : '')
+    ? (on ? 'กำลังเกิดเหตุ · ' : 'ปิดแล้ว · ') + ev.type + ' · เริ่ม ' + ev.start +
+      (ev.openedBy && !ev.auto ? ' · ประกาศโดย ' + ev.openedBy : '') + (ev.end ? ' · ปิด ' + ev.end + (ev.closedBy ? ' โดย ' + ev.closedBy : '') : '')
     : 'ยังไม่มีเหตุการณ์';
-  $('btnStart').classList.toggle('hidden', on);
-  $('btnClose').classList.toggle('hidden', !on);
+  var me = d.me || {}, cmd = !!me.canCommand, auto = on && ev.auto;
+  $('meName').textContent = me.name || '';
+  $('meRole').textContent = me.role || '';
+  $('meRole').classList.toggle('cmd', cmd);
+  // เฉพาะผู้บัญชาการ/รองฯ เห็นปุ่มประกาศและปิดเหตุ
+  $('btnStart').classList.toggle('hidden', !cmd || (on && !auto));
+  $('btnStartText').textContent = auto ? 'ยืนยันเหตุการณ์' : 'ประกาศเหตุฉุกเฉิน';
+  $('btnClose').classList.toggle('hidden', !cmd || !on);
+  $('waitCmd').classList.toggle('hidden', cmd || (on && !auto));
+  $('waitCmd').textContent = auto ? 'รอผู้บัญชาการยืนยันเหตุ' : 'รอผู้บัญชาการประกาศเหตุ';
+  $('autoNotice').classList.toggle('hidden', !auto);
+  $('autoNotice').textContent = auto
+    ? 'มีเจ้าหน้าที่เริ่มเช็คอินก่อนประกาศเหตุ ระบบเริ่มนับยอดให้แล้ว ' + (cmd ? 'กด "ยืนยันเหตุการณ์" เพื่อระบุประเภทเหตุ ยอดที่นับไว้จะไม่หาย' : 'รอผู้บัญชาการยืนยันประเภทเหตุ')
+    : '';
+  $('dlgStartTitle').textContent = auto ? 'ยืนยันเหตุการณ์' : 'ประกาศเหตุฉุกเฉิน';
+  $('dlgStartSub').textContent = auto ? 'ระบุประเภทเหตุ ยอดที่เช็คอินไว้แล้วจะนับต่อ' : 'ระบบจะเริ่มนับยอดใหม่ทั้งหมด เลือกประเภทเหตุ';
+  $('dlgStartBtn').textContent = auto ? 'ยืนยันเหตุการณ์' : 'ยืนยัน เริ่มนับยอด';
 
   var c = d.count;
   var tiles = ['MISSING', 'HELP', 'SAFE', 'AWAY'];
@@ -409,7 +445,7 @@ function renderTable() {
 
   $('tbody').innerHTML = rows.length ? rows.map(function (x) {
     var detail = [];
-    if (x.time) detail.push(x.time.split(' ')[1] + (x.point ? ' · จุด ' + x.point : '') + (x.by && x.by !== 'SELF' ? ' · ' + ({ BUDDY: 'เพื่อนเช็คอินให้', STAFF: 'เจ้าหน้าที่บันทึก' }[x.by] || x.by) : ''));
+    if (x.time) detail.push(x.time.split(' ')[1] + (x.point && x.point !== 'STAFF' ? ' · จุด ' + x.point : '') + (x.by && x.by !== 'SELF' ? ' · ' + (x.by === 'BUDDY' ? 'เพื่อนเช็คอินให้' : /^STAFF/.test(x.by) ? 'บันทึกโดย ' + (x.by.split(':')[1] || 'เจ้าหน้าที่') : x.by) : ''));
     if (!x.time && x.by === 'SHEET') detail.push('เลือก "อยู่" ในชีตโซน');
     if (x.note) detail.push('“' + x.note + '”');
     if (x.scanTime && !x.time) detail.push('สแกนเข้างาน ' + x.scanTime.split(' ')[1]);
