@@ -144,6 +144,36 @@ function toggleTheme() {
   .status:not(.ok) .dot { animation:blink 1s infinite; }
   @keyframes blink { 50% { opacity:.25; } }
 
+  /* ---------- อัดเสียง ---------- */
+  .rec { background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:18px 16px; box-shadow:var(--shadow);
+    display:grid; justify-items:center; gap:10px; text-align:center; }
+  .rec-t { font-weight:700; font-size:17px; }
+  .rec-s { color:var(--muted); font-size:14px; margin-top:-8px; }
+  .mic { width:88px; height:88px; border-radius:50%; border:0; cursor:pointer; display:grid; place-items:center; color:#fff; font-size:38px;
+    background:var(--help); background:linear-gradient(180deg, color-mix(in srgb, var(--help) 80%, #fff), var(--help));
+    box-shadow:0 12px 28px -12px var(--help); transition:transform .1s; }
+  .mic:active { transform:scale(.95); }
+  .mic .i-stop { display:none; }
+  .rec.on .mic { animation:recpulse 1.4s infinite; }
+  .rec.on .mic .i-mic { display:none; }
+  .rec.on .mic .i-stop { display:block; }
+  @keyframes recpulse { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--help) 55%, transparent); } 70% { box-shadow:0 0 0 18px transparent; } 100% { box-shadow:0 0 0 0 transparent; } }
+  .rec-time { font-variant-numeric:tabular-nums; font-weight:700; font-size:18px; color:var(--help); }
+  .rec-time:empty { display:none; }
+  .rec-hint { font-size:13.5px; color:var(--muted); }
+  .rec-done { display:grid; gap:10px; width:100%; }
+  .rec-done audio, .rec-done video { width:100%; max-height:160px; }
+  .rec-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .chip-btn { border:1px solid var(--line); background:var(--surface-2); border-radius:999px; padding:8px 14px; font-size:14px; font-weight:600; cursor:pointer; }
+  .rec-ok { display:inline-flex; align-items:center; gap:6px; color:var(--safe); font-weight:600; font-size:14px; }
+  .file-btn { display:inline-flex; align-items:center; gap:8px; border:1.5px dashed var(--line-2); border-radius:16px; padding:12px 16px; font-size:15px;
+    font-weight:600; cursor:pointer; color:var(--ink); background:var(--surface-2); }
+  .file-btn input { display:none; }
+  .rec-msg { font-size:13.5px; color:var(--warn-ink); }
+  .rec-msg:empty { display:none; }
+  .or { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; }
+  .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line); }
+
   .banner { padding:12px 14px; border-radius:16px; font-size:15px; background:var(--warn-soft); color:var(--warn-ink); }
   .banner.err { background:var(--help-soft); color:var(--help); }
   @media (prefers-reduced-motion: reduce) { *, *::before { animation:none !important; transition:none !important; } .done-ring .draw { stroke-dashoffset:0; } }
@@ -202,8 +232,34 @@ function toggleTheme() {
       <div class="meta" id="confirmDept"></div>
     </div>
     <div id="helpBox" class="stack hidden">
-      <label for="note">ต้องการความช่วยเหลือเรื่องอะไร (ไม่บังคับ)</label>
-      <textarea id="note" rows="2" placeholder="เช่น บาดเจ็บที่ขา, สำลักควัน"></textarea>
+      <div class="rec" id="rec">
+        <div class="rec-t">ส่งเสียงถึงศูนย์บัญชาการ</div>
+        <div class="rec-s">บอกอาการและตำแหน่งที่อยู่ ไม่เกิน 60 วินาที</div>
+        <div id="recIdle" style="display:grid;justify-items:center;gap:8px">
+          <button class="mic" id="recBtn" type="button" onclick="recToggle()" aria-label="อัดเสียง">
+            <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+            <svg class="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg>
+          </button>
+          <div class="rec-time" id="recTime"></div>
+          <div class="rec-hint" id="recHint">แตะเพื่อเริ่มอัดเสียง</div>
+        </div>
+        <div class="rec-done hidden" id="recDone">
+          <span class="rec-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span id="recLen">อัดเสียงแล้ว</span></span>
+          <div id="recPlayer"></div>
+          <div class="rec-row">
+            <button class="chip-btn" type="button" onclick="recReset(); recToggle()">อัดใหม่</button>
+            <button class="chip-btn" type="button" onclick="recReset()">ลบเสียง</button>
+          </div>
+        </div>
+        <label class="file-btn hidden" id="recFileWrap">
+          <input type="file" id="recFile" accept="audio/*" capture>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+          เปิดแอปอัดเสียงของเครื่อง
+        </label>
+        <div class="rec-msg" id="recMsg"></div>
+      </div>
+      <div class="or">หรือพิมพ์ข้อความ (ไม่บังคับ)</div>
+      <textarea id="note" rows="2" placeholder="เช่น บาดเจ็บที่ขา, สำลักควัน" aria-label="ข้อความถึงศูนย์บัญชาการ"></textarea>
       <button class="btn help solid" onclick="submit(selected, 'HELP', mode)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>ส่งขอความช่วยเหลือ</button>
     </div>
     <div id="choiceBox" class="stack">
@@ -280,6 +336,7 @@ else google.script.run
 /* ---------- หน้าจอ ---------- */
 function backHome() {
   mode = 'SELF'; selected = null;
+  if (typeof rec !== 'undefined' && rec && (rec.mr || rec.stream)) recReset();
   $('buddyBanner').classList.add('hidden');
   $('cancelBuddy').classList.add('hidden');
   $('searchTitle').textContent = 'ค้นหาชื่อของคุณ';
@@ -326,6 +383,7 @@ $('results').addEventListener('click', function (ev) {
 
 function showConfirm(emp, m, help) {
   selected = emp; mode = m;
+  recReset();
   $('confirmAvatar').textContent = initial(emp[1]);
   $('confirmLabel').textContent = m === 'BUDDY' ? 'เช็คอินแทนเพื่อน' : 'ยืนยันว่าเป็นคุณ';
   $('confirmName').textContent = emp[1];
@@ -335,18 +393,113 @@ function showConfirm(emp, m, help) {
   $('choiceBox').classList.toggle('hidden', help);
   show('vConfirm');
 }
-function showHelp() { $('helpBox').classList.remove('hidden'); $('choiceBox').classList.add('hidden'); $('note').focus(); }
+function showHelp() { $('helpBox').classList.remove('hidden'); $('choiceBox').classList.add('hidden'); }
+
+/* ---------- อัดเสียงขอความช่วยเหลือ ---------- */
+var REC_MAX = 60;                     // วินาที
+var FILE_MAX = 3 * 1024 * 1024;       // ไฟล์จากแอปอัดเสียง ไม่เกิน 3MB
+var rec = { mr: null, stream: null, chunks: [], blob: null, mime: '', t0: 0, timer: null, url: '' };
+function recMime() {
+  if (!window.MediaRecorder) return null;
+  var c = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
+  for (var i = 0; i < c.length; i++) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i];
+  return '';
+}
+function recToggle() {
+  if (rec.mr && rec.mr.state === 'recording') return recStop();
+  var m = recMime();
+  if (m === null || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return recFallback('เบราว์เซอร์นี้อัดเสียงในหน้าเว็บไม่ได้ ใช้แอปอัดเสียงของเครื่องแทน');
+  $('recHint').textContent = 'กำลังขอใช้ไมโครโฟน…';
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+    rec.stream = stream; rec.chunks = [];
+    var opt = { audioBitsPerSecond: 32000 }; if (m) opt.mimeType = m;
+    var mr; try { mr = new MediaRecorder(stream, opt); } catch (e) { mr = new MediaRecorder(stream); }
+    rec.mr = mr;
+    mr.ondataavailable = function (e) { if (e.data && e.data.size) rec.chunks.push(e.data); };
+    mr.onstop = function () {
+      recRelease();
+      if (!rec.chunks.length) { recIdleUI(); return; }
+      rec.mime = (mr.mimeType || m || 'audio/webm');
+      rec.blob = new Blob(rec.chunks, { type: rec.mime });
+      recDoneUI(Math.round((Date.now() - rec.t0) / 1000));
+    };
+    mr.start(1000);
+    rec.t0 = Date.now();
+    $('rec').classList.add('on');
+    $('recHint').textContent = 'กำลังอัด… แตะอีกครั้งเพื่อหยุด';
+    recTick(); rec.timer = setInterval(recTick, 250);
+  }).catch(function () {
+    recFallback('ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน ใช้แอปอัดเสียงของเครื่องแทนได้');
+  });
+}
+function recTick() {
+  var sec = Math.floor((Date.now() - rec.t0) / 1000);
+  $('recTime').textContent = mmss(sec) + ' / ' + mmss(REC_MAX);
+  if (sec >= REC_MAX) recStop();
+}
+function mmss(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+function recStop() { clearInterval(rec.timer); if (rec.mr && rec.mr.state !== 'inactive') rec.mr.stop(); }
+function recRelease() {
+  clearInterval(rec.timer);
+  if (rec.stream) rec.stream.getTracks().forEach(function (t) { t.stop(); });
+  rec.stream = null; $('rec').classList.remove('on');
+}
+function recIdleUI() {
+  $('recIdle').classList.remove('hidden'); $('recDone').classList.add('hidden');
+  $('recTime').textContent = ''; $('recHint').textContent = 'แตะเพื่อเริ่มอัดเสียง';
+}
+function recDoneUI(sec) {
+  if (rec.url) URL.revokeObjectURL(rec.url);
+  rec.url = URL.createObjectURL(rec.blob);
+  var tag = /^video\//.test(rec.mime) ? 'video' : 'audio';
+  $('recPlayer').innerHTML = '<' + tag + ' controls playsinline preload="metadata" src="' + rec.url + '"></' + tag + '>';
+  $('recLen').textContent = sec ? 'อัดเสียงแล้ว ' + mmss(sec) + ' นาที' : 'แนบเสียงแล้ว';
+  $('recIdle').classList.add('hidden'); $('recDone').classList.remove('hidden');
+  $('recMsg').textContent = '';
+}
+function recReset() {
+  recStop(); recRelease();
+  rec.mr = null; rec.blob = null; rec.chunks = []; rec.mime = '';
+  if (rec.url) { URL.revokeObjectURL(rec.url); rec.url = ''; }
+  $('recPlayer').innerHTML = ''; $('recFile').value = ''; $('recMsg').textContent = '';
+  recIdleUI();
+}
+function recFallback(msg) {
+  recRelease(); recIdleUI();
+  $('recMsg').textContent = msg;
+  $('recFileWrap').classList.remove('hidden');
+}
+$('recFile').addEventListener('change', function () {
+  var f = this.files && this.files[0]; if (!f) return;
+  if (f.size > FILE_MAX) { $('recMsg').textContent = 'ไฟล์ใหญ่เกิน 3MB กรุณาอัดให้สั้นลง'; this.value = ''; return; }
+  rec.blob = f; rec.mime = f.type || 'audio/mp4';
+  recDoneUI(0);
+});
 
 /* ---------- ส่งข้อมูล (มีคิวสำรองกรณีเน็ตหลุด / เซิร์ฟเวอร์ยุ่ง) ---------- */
 function submit(emp, status, by) {
-  var payload = { empId: emp[0], name: emp[1], status: status, point: POINT, by: by, note: status === 'HELP' ? $('note').value : '' };
+  var help = status === 'HELP';
+  if (help && rec.mr && rec.mr.state === 'recording') {   // ยังอัดอยู่: หยุดก่อนแล้วส่งพร้อมเสียง
+    rec.mr.addEventListener('stop', function () { submit(emp, status, by); }, { once: true });
+    recStop(); return;
+  }
+  var payload = { empId: emp[0], name: emp[1], status: status, point: POINT, by: by, note: help ? $('note').value : '' };
+  var audio = help && rec.blob ? rec : null;
+  if (audio) payload.audioId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   if (by === 'SELF') { me = emp; store('me', emp); }
   pending.push(payload); savePending();
-  var help = status === 'HELP';
+  if (audio) {   // ส่งสถานะก่อนทันที แล้วส่งไฟล์เสียงตามไป
+    var id = payload.audioId, mime = audio.mime, reader = new FileReader();
+    reader.onload = function () {
+      pending.push({ kind: 'audio', audioId: id, mime: mime, data: String(reader.result).split(',')[1] || '' });
+      savePending(); flush();
+    };
+    reader.readAsDataURL(audio.blob);
+  }
   $('doneRing').className = 'done-ring' + (help ? ' help' : '');
   $('doneRing').innerHTML = help ? ICON_HELP : ICON_OK;
   $('doneName').textContent = emp[1];
-  $('doneMsg').textContent = help ? 'ส่งคำขอความช่วยเหลือแล้ว อยู่ในที่ปลอดภัย เจ้าหน้าที่กำลังไปหา' : 'บันทึกว่าปลอดภัยแล้ว';
+  $('doneMsg').textContent = help ? 'ส่งคำขอความช่วยเหลือแล้ว' + (audio ? ' พร้อมข้อความเสียง' : '') + ' อยู่ในที่ปลอดภัย เจ้าหน้าที่กำลังไปหา' : 'บันทึกว่าปลอดภัยแล้ว';
   setStatus(false, 'กำลังส่งข้อมูล…');
   show('vDone');
   flush();
@@ -357,27 +510,34 @@ var flushing = false, retryDelay = 2000;
 function flush() {
   if (flushing || !pending.length) return;
   flushing = true;
-  google.script.run
+  var item = pending[0], isAudio = item.kind === 'audio';
+  var runner = google.script.run
     .withSuccessHandler(function (res) {
       flushing = false; retryDelay = 2000;
       pending.shift(); savePending();
-      setStatus(true, 'ส่งสำเร็จ ' + res.time);
-      banner(pending.length ? 'รอส่งอีก ' + pending.length + ' รายการ' : '');
+      var audioNext = pending.length && pending[0].kind === 'audio';
+      if (isAudio) setStatus(true, 'ส่งสำเร็จพร้อมเสียง ' + res.time);
+      else if (audioNext) setStatus(false, 'ส่งแล้ว กำลังส่งเสียง…');
+      else setStatus(true, 'ส่งสำเร็จ ' + res.time);
+      banner(pending.length && !audioNext ? 'รอส่งอีก ' + pending.length + ' รายการ' : '');
       if (pending.length) flush();
     })
     .withFailureHandler(function (err) {
       flushing = false;
       var msg = (err && err.message) || '';
-      if (/ไม่พบรายชื่อ/.test(msg)) {   // ข้อมูลผิด ไม่ต้องลองซ้ำ
+      if (/ไม่พบรายชื่อ|ไม่พบรายการเสียง|ไม่รองรับ|ใหญ่เกินไป|ไม่มีข้อมูลเสียง/.test(msg)) {   // ข้อมูลผิด ไม่ต้องลองซ้ำ
         pending.shift(); savePending();
-        banner(msg, true); return;
+        if (isAudio) setStatus(true, 'ส่งขอความช่วยเหลือแล้ว (ส่งเสียงไม่สำเร็จ)');
+        banner(msg, true);
+        if (pending.length) flush();
+        return;
       }
-      setStatus(false, 'ยังส่งไม่สำเร็จ กำลังลองใหม่ (ห้ามปิดหน้านี้)');
+      setStatus(false, isAudio ? 'ส่งแล้ว กำลังลองส่งเสียงใหม่ (ห้ามปิดหน้านี้)' : 'ยังส่งไม่สำเร็จ กำลังลองใหม่ (ห้ามปิดหน้านี้)');
       banner('สัญญาณไม่ดีหรือระบบมีผู้ใช้มาก กำลังลองส่งใหม่…');
       setTimeout(flush, retryDelay);
       retryDelay = Math.min(retryDelay * 2, 20000);
-    })
-    .checkIn(pending[0]);
+    });
+  if (isAudio) runner.uploadAudio(item); else runner.checkIn(item);
 }
 setInterval(flush, 15000);
 window.addEventListener('online', flush);

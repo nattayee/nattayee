@@ -109,6 +109,28 @@ function toggleTheme() {
 
   main { max-width:1240px; margin:0 auto; padding:20px; display:grid; gap:16px; }
 
+  /* ---------- แผงขอความช่วยเหลือ ---------- */
+  .helpbox { border-radius:22px; padding:16px; border:1px solid color-mix(in srgb, var(--help) 30%, var(--line));
+    background:var(--help-soft); background:linear-gradient(180deg, var(--help-soft), var(--surface) 140%); display:grid; gap:12px; }
+  .hb-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .hb-head b { font-size:16px; color:var(--help); }
+  .hb-head svg { color:var(--help); font-size:20px; }
+  .hb-sub { color:var(--muted); font-size:12.5px; }
+  .hb-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:10px; }
+  .hcard { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:14px; display:grid; gap:8px; box-shadow:var(--shadow); }
+  .hcard .nm { font-weight:700; font-size:16px; }
+  .hcard .sm { color:var(--muted); font-size:12.5px; }
+  .hcard .msg { background:var(--surface-2); border-radius:12px; padding:8px 11px; font-size:14px; }
+  .hcard .acts { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .hcard .acts .b { height:36px; padding:0 12px; font-size:13.5px; }
+  .hcard .acts a { font-size:13.5px; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .player { width:100%; }
+  .player audio, .player video { width:100%; height:40px; }
+  .player video { height:auto; max-height:180px; border-radius:12px; }
+  .wait-audio { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); }
+  .wait-audio i { width:7px; height:7px; border-radius:50%; background:var(--help); animation:blink 1s infinite; }
+  .mic-tag { display:inline-flex; align-items:center; gap:4px; color:var(--help); font-weight:600; }
+
   /* ---------- สรุปยอด ---------- */
   .summary { display:grid; grid-template-columns:minmax(270px, 340px) minmax(0, 1fr); gap:16px; }
   .panel { background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:var(--shadow); }
@@ -271,6 +293,13 @@ function toggleTheme() {
   </header>
   <main>
     <div class="notice hidden" id="autoNotice"></div>
+    <section class="helpbox hidden" id="helpPanel" aria-live="polite">
+      <div class="hb-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.5"/></svg>
+        <b>ขอความช่วยเหลือ <span id="helpCount"></span> คน</b><span class="hb-sub">ล่าสุดอยู่บนสุด · กดฟังข้อความเสียงได้</span>
+      </div>
+      <div class="hb-list" id="helpList"></div>
+    </section>
     <div class="summary">
       <div class="panel progress">
         <div class="gauge">
@@ -334,6 +363,7 @@ function toggleTheme() {
 <dialog id="dlgAct">
   <h3 id="actName"></h3>
   <p class="sm" id="actInfo"></p>
+  <div id="actAudio" style="margin:-6px 0 14px"></div>
   <div class="stack">
     <button class="b green" onclick="act('SAFE')">ยืนยันว่าปลอดภัย</button>
     <button class="b red" onclick="act('HELP')">ต้องการความช่วยเหลือ</button>
@@ -409,9 +439,9 @@ function hydrate(d) {
   var changed = false;
   if (d.roster) { ROSTER = d.roster; VER = d.ver; changed = true; }
   d.list = ROSTER.map(function (r, i) {
-    var x = (d.info && d.info[i]) || ['', '', '', '', ''];
+    var x = (d.info && d.info[i]) || ['', '', '', '', '', ''];
     return { id: r[0], name: r[1], dept: r[2], zone: r[3], pos: r[4], phone: r[5], code: r[6] || '',
-      state: CODE[d.st.charAt(i)] || 'MISSING', point: x[0], time: x[1], by: x[2], note: x[3], scanTime: x[4] };
+      state: CODE[d.st.charAt(i)] || 'MISSING', point: x[0], time: x[1], by: x[2], note: x[3], scanTime: x[4], audio: x[5] || '' };
   });
   return changed;
 }
@@ -484,9 +514,71 @@ function render(d) {
     d.list.forEach(function (x) { x.zone.split(', ').forEach(function (z) { zs[z] = 1; }); });
     fillSelect('floor', Object.keys(zs));
   }
+  renderHelp();
   renderZones();
   renderTable();
 }
+
+/* ---------- แผงขอความช่วยเหลือ + ฟังเสียง ---------- */
+var PLAYERS = {};   // fileId -> <audio>/<video> ที่โหลดแล้ว (ย้ายไปการ์ดใหม่ได้ เสียงไม่ขาดตอนหน้าจอรีเฟรช)
+var MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+function audioHtml(x) {
+  if (x.audio === 'pending') return '<span class="wait-audio"><i></i>กำลังส่งข้อความเสียง…</span>';
+  if (!x.audio) return '';
+  return '<div class="player" data-player="' + esc(x.audio) + '"><button class="b red" type="button" data-play="' + esc(x.audio) + '">' + MIC + 'ฟังข้อความเสียง</button></div>';
+}
+function renderHelp() {
+  var helps = data.list.filter(function (x) { return x.state === 'HELP'; })
+    .sort(function (a, b) { return a.time < b.time ? 1 : a.time > b.time ? -1 : 0; });
+  $('helpPanel').classList.toggle('hidden', !helps.length);
+  $('helpCount').textContent = helps.length;
+  var key = helps.map(function (x) { return x.id + x.time + x.audio + x.note; }).join('|');
+  if ($('helpList').getAttribute('data-key') === key) return;   // ไม่เปลี่ยน: ไม่วาดใหม่ เสียงที่เล่นอยู่ไม่สะดุด
+  $('helpList').setAttribute('data-key', key);
+  $('helpList').innerHTML = helps.map(function (x) {
+    var meta = [x.time ? x.time.split(' ')[1] : '', x.point && x.point !== 'STAFF' ? 'จุด ' + x.point : '',
+      x.by === 'BUDDY' ? 'เพื่อนแจ้งแทน' : /^STAFF/.test(x.by) ? 'เจ้าหน้าที่บันทึก' : ''].filter(Boolean).join(' · ');
+    return '<div class="hcard" data-id="' + esc(x.id) + '">' +
+      '<div><div class="nm">' + esc(x.name) + '</div><div class="sm">' + esc([x.pos, x.dept, x.zone].filter(Boolean).join(' · ')) + '</div></div>' +
+      (meta ? '<div class="sm">' + esc(meta) + '</div>' : '') +
+      (x.note ? '<div class="msg">“' + esc(x.note) + '”</div>' : '') + audioHtml(x) +
+      '<div class="acts"><button class="b soft" type="button" data-act="' + esc(x.id) + '">บันทึกสถานะ</button>' +
+      (x.phone ? '<a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a>' : '') + '</div></div>';
+  }).join('');
+  // เสียงที่เปิดฟังไว้แล้ว ย้ายกลับเข้าการ์ด
+  [].forEach.call($('helpList').querySelectorAll('[data-player]'), function (el) {
+    var p = PLAYERS[el.getAttribute('data-player')]; if (p) { el.innerHTML = ''; el.appendChild(p); }
+  });
+}
+function playAudio(fileId, box) {
+  if (PLAYERS[fileId]) { box.innerHTML = ''; box.appendChild(PLAYERS[fileId]); PLAYERS[fileId].play().catch(function () {}); return; }
+  box.innerHTML = '<span class="wait-audio"><i></i>กำลังโหลดเสียง…</span>';
+  google.script.run
+    .withSuccessHandler(function (r) {
+      var bin = atob(r.data), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
+      var el = document.createElement(/^video\//.test(r.mime) ? 'video' : 'audio');
+      el.controls = true; el.setAttribute('playsinline', ''); el.src = url;
+      PLAYERS[fileId] = el;
+      box.innerHTML = ''; box.appendChild(el);
+      el.play().catch(function () {});
+    })
+    .withFailureHandler(function (e) { box.innerHTML = '<span class="err">โหลดเสียงไม่สำเร็จ: ' + esc(e.message || e) + '</span>'; })
+    .getAudio(PIN, fileId);
+}
+// ปิดกล่องบันทึกสถานะ: ย้ายตัวเล่นเสียงกลับไปที่การ์ดเดิม
+$('dlgAct').addEventListener('close', function () {
+  [].forEach.call($('helpList').querySelectorAll('[data-player]'), function (el) {
+    var p = PLAYERS[el.getAttribute('data-player')]; if (p && !el.contains(p)) { p.pause(); el.innerHTML = ''; el.appendChild(p); }
+  });
+});
+document.addEventListener('click', function (e) {
+  var p = e.target.closest('[data-play]');
+  if (p) { playAudio(p.getAttribute('data-play'), p.parentNode); return; }
+  var a = e.target.closest('[data-act]');
+  if (a) openAct(a.getAttribute('data-act'));
+});
 
 function renderZones() {
   var z = {}, sel = $('floor').value;
@@ -535,6 +627,7 @@ function renderTable() {
     if (x.time) detail.push(x.time.split(' ')[1] + (x.point && x.point !== 'STAFF' ? ' · จุด ' + x.point : '') + (x.by && x.by !== 'SELF' ? ' · ' + (x.by === 'BUDDY' ? 'เพื่อนเช็คอินให้' : /^STAFF/.test(x.by) ? 'บันทึกโดย ' + (x.by.split(':')[1] || 'เจ้าหน้าที่') : x.by) : ''));
     if (!x.time && x.by === 'SHEET') detail.push('เลือก "อยู่" ในชีตโซน');
     if (x.note) detail.push('“' + x.note + '”');
+    if (x.audio) detail.push(x.audio === 'pending' ? 'กำลังส่งเสียง…' : '🎙 มีข้อความเสียง');
     if (x.scanTime && !x.time) detail.push('สแกนเข้างาน ' + x.scanTime.split(' ')[1]);
     return '<div class="row" tabindex="0" role="button" data-id="' + esc(x.id) + '">' +
       '<span class="pill k-' + x.state + '">' + LABEL[x.state] + '</span>' +
@@ -558,6 +651,9 @@ function openAct(id) {
   if (!actTarget) return;
   $('actName').textContent = actTarget.name;
   $('actInfo').textContent = [actTarget.pos, actTarget.dept, actTarget.zone].filter(Boolean).join(' · ') + ' · สถานะตอนนี้: ' + LABEL[actTarget.state];
+  $('actAudio').innerHTML = actTarget.audio ? audioHtml(actTarget) : '';
+  var p = actTarget.audio && PLAYERS[actTarget.audio];
+  if (p) { var box = $('actAudio').querySelector('[data-player]'); box.innerHTML = ''; box.appendChild(p); }
   $('dlgAct').showModal();
 }
 $('tbody').addEventListener('click', function (e) { var r = e.target.closest('.row'); if (r) openAct(r.getAttribute('data-id')); });

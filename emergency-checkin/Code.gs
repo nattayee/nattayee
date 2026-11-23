@@ -33,7 +33,7 @@ const HEADERS = {
   Roles: ['ชื่อ-สกุล', 'บทบาท', 'เลขบัตรประชาชน 6 หลักท้าย (ใช้เป็น PIN)', 'หมายเหตุ'],
   ScanLog: ['รหัสพนักงาน', 'วันเวลาที่สแกน', 'ประเภท (เข้า/ออก) - ไม่บังคับ'],
   Events: ['EventID', 'ประเภทเหตุ', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'สถานะ', 'หมายเหตุ', 'ผู้ประกาศเหตุ', 'ผู้ปิดเหตุ'],
-  CheckIns: ['EventID', 'รหัส/ชื่อ (ตัวระบุ)', 'ชื่อ-สกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ'],
+  CheckIns: ['EventID', 'รหัส/ชื่อ (ตัวระบุ)', 'ชื่อ-สกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ', 'ข้อความเสียง'],
   Config: ['ตั้งค่า', 'ค่า', 'คำอธิบาย'],
 };
 
@@ -79,6 +79,8 @@ function setup() {
   ss.getSheetByName(SHEET.SCAN).getRange('A:A').setNumberFormat('@');
   // ชีต Events จากเวอร์ชันเก่า: เพิ่มหัวคอลัมน์ผู้ประกาศ/ผู้ปิดเหตุ
   ss.getSheetByName(SHEET.EVENTS).getRange(1, 1, 1, HEADERS.Events.length).setValues([HEADERS.Events]).setFontWeight('bold');
+  ss.getSheetByName(SHEET.CHECKINS).getRange(1, 1, 1, HEADERS.CheckIns.length).setValues([HEADERS.CheckIns]).setFontWeight('bold');
+  audioFolder_();   // สร้างโฟลเดอร์เก็บเสียงใน Drive (และขอสิทธิ์ Drive ตอนติดตั้ง)
   setupRoles_(ss.getSheetByName(SHEET.ROLES));
   clearCache();
   const emps = loadEmployees_();
@@ -263,8 +265,81 @@ function checkIn(payload) {
   const status = payload.status === STATUS.HELP ? STATUS.HELP : STATUS.SAFE;
   const by = payload.by === 'BUDDY' ? 'BUDDY' : 'SELF';
   const eventId = getOrCreateActiveEvent_();
-  appendCheckIn_(eventId, emp, status, payload.point, by, payload.note);
+  // ขอความช่วยเหลือพร้อมเสียง: บันทึกสถานะก่อนทันที ไฟล์เสียงส่งตามมาด้วย uploadAudio
+  const audioId = status === STATUS.HELP && /^[A-Za-z0-9-]{8,40}$/.test(String(payload.audioId || '')) ? 'pending:' + payload.audioId : '';
+  appendCheckIn_(eventId, emp, status, payload.point, by, payload.note, audioId);
   return { ok: true, name: emp.name, status: status, time: fmt_(new Date()) };
+}
+
+/* ---------- ข้อความเสียงขอความช่วยเหลือ ---------- */
+
+const AUDIO_MAX_B64 = 4 * 1024 * 1024;   // base64 ~4MB ≈ ไฟล์ 3MB (อัดในหน้าเว็บ 60 วินาที ใช้ราว 250KB)
+const AUDIO_EXT = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a', 'audio/aac': 'aac',
+  'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/3gpp': '3gp', 'audio/3gpp2': '3g2', 'audio/amr': 'amr',
+  'video/mp4': 'mp4', 'video/webm': 'webm', 'video/3gpp': '3gp', 'video/quicktime': 'mov' };
+
+/**
+ * รับไฟล์เสียงที่ส่งตามหลังการเช็คอิน "ขอความช่วยเหลือ"
+ * payload: { audioId, mime, data (base64) }
+ * รับเฉพาะไฟล์ที่มีแถวเช็คอินรออยู่ (กันคนอัปโหลดไฟล์อื่นเข้ามา)
+ */
+function uploadAudio(payload) {
+  const id = String(payload && payload.audioId || '');
+  if (!/^[A-Za-z0-9-]{8,40}$/.test(id)) throw new Error('ไม่พบรายการเสียงนี้');
+  const mime = String(payload.mime || '').split(';')[0].trim().toLowerCase();
+  if (!AUDIO_EXT[mime]) throw new Error('ชนิดไฟล์เสียงไม่รองรับ (' + mime + ')');
+  const data = String(payload.data || '');
+  if (!data) throw new Error('ไม่มีข้อมูลเสียง');
+  if (data.length > AUDIO_MAX_B64) throw new Error('ไฟล์เสียงใหญ่เกินไป (ไม่เกิน 3MB)');
+
+  return withLock_(function () {
+    const sh = sheet_(SHEET.CHECKINS);
+    const props = PropertiesService.getScriptProperties();
+    const eventId = props.getProperty('ACTIVE_EVENT_ID') || props.getProperty('LAST_EVENT_ID') || '';
+    const last = sh.getLastRow();
+    const start = Math.max(2, Number(props.getProperty('CI_START_' + eventId)) || 2);
+    if (last < start) throw new Error('ไม่พบรายการเสียงนี้');
+    const cells = sh.getRange(start, 9, last - start + 1, 1).getValues();
+    let row = -1;
+    for (let i = cells.length - 1; i >= 0; i--) {
+      const v = String(cells[i][0]);
+      if (v.indexOf('audio:' + id + ':') === 0) return { ok: true, time: fmt_(new Date()) };   // ส่งซ้ำ: มีไฟล์แล้ว
+      if (v === 'pending:' + id) { row = start + i; break; }
+    }
+    if (row < 0) throw new Error('ไม่พบรายการเสียงนี้');
+    const who = normName_(sh.getRange(row, 3).getValue()).replace(/[\\/:*?"<>|]/g, '');
+    const name = eventId + '_' + Utilities.formatDate(new Date(), tz_(), 'HHmmss') + '_' + who + '.' + AUDIO_EXT[mime];
+    const file = audioFolder_().createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
+    sh.getRange(row, 9).setValue('audio:' + id + ':' + file.getId());
+    CacheService.getScriptCache().remove('dash');
+    return { ok: true, time: fmt_(new Date()) };
+  });
+}
+
+/** Dashboard ขอฟังเสียง (ต้องใส่ PIN) ส่งกลับเป็น base64 ไม่ต้องแชร์ไฟล์ใน Drive ให้ใคร */
+function getAudio(pin, fileId) {
+  auth_(pin);
+  fileId = String(fileId || '');
+  if (!/^[A-Za-z0-9_-]{10,80}$/.test(fileId)) throw new Error('ไม่พบไฟล์เสียง');
+  const file = DriveApp.getFileById(fileId);
+  // อ่านได้เฉพาะไฟล์ในโฟลเดอร์เสียงของระบบ
+  const folderId = audioFolder_().getId();
+  const parents = file.getParents();
+  let ok = false;
+  while (parents.hasNext()) if (parents.next().getId() === folderId) { ok = true; break; }
+  if (!ok) throw new Error('ไม่พบไฟล์เสียง');
+  const blob = file.getBlob();
+  return { mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
+}
+
+/** โฟลเดอร์เก็บเสียงใน Google Drive ของเจ้าของระบบ (สร้างให้ครั้งแรก) */
+function audioFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('AUDIO_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* ถูกลบ: สร้างใหม่ */ } }
+  const folder = DriveApp.createFolder('ระบบเช็คอินฉุกเฉิน - เสียงขอความช่วยเหลือ');
+  props.setProperty('AUDIO_FOLDER_ID', folder.getId());
+  return folder;
 }
 
 /* ---------- เรียกจากหน้า Dashboard (ต้องมี PIN) ---------- */
@@ -317,7 +392,7 @@ function buildDashboard_(emps, ver) {
     const last = sh.getLastRow();
     const start = Math.max(2, Number(props.getProperty('CI_START_' + event.id)) || 2);
     if (last >= start) {
-      sh.getRange(start, 1, last - start + 1, 8).getValues().forEach(function (r) {
+      sh.getRange(start, 1, last - start + 1, 9).getValues().forEach(function (r) {
         if (String(r[0]) !== event.id) return;
         latest[String(r[1]).trim()] = r;
       });
@@ -344,9 +419,12 @@ function buildDashboard_(emps, ver) {
     count[state]++;
     st += STATE_CODE[state];
     const scanTime = e.code ? (scan.present[e.code] || '') : '';
-    if (c) info[i] = [String(c[4] || ''), fmt_(c[5]), String(c[6] || ''), String(c[7] || ''), scanTime];
-    else if (state === 'SAFE') info[i] = ['', '', 'SHEET', '', scanTime];
-    else if (scanTime) info[i] = ['', '', '', '', scanTime];
+    // เสียง: "" | "pending" (กำลังอัปโหลด) | fileId
+    const a = c ? String(c[8] || '') : '';
+    const audio = a.indexOf('audio:') === 0 ? a.split(':')[2] : a.indexOf('pending:') === 0 ? 'pending' : '';
+    if (c) info[i] = [String(c[4] || ''), fmt_(c[5]), String(c[6] || ''), String(c[7] || ''), scanTime, audio];
+    else if (state === 'SAFE') info[i] = ['', '', 'SHEET', '', scanTime, ''];
+    else if (scanTime) info[i] = ['', '', '', '', scanTime, ''];
   });
 
   return {
@@ -725,10 +803,10 @@ function createEvent_(type, note, openedBy) {
   return { ok: true, id: id };
 }
 
-function appendCheckIn_(eventId, emp, status, point, by, note) {
+function appendCheckIn_(eventId, emp, status, point, by, note, audio) {
   CacheService.getScriptCache().remove('dash');   // Dashboard เห็นทันทีในรอบถัดไป
   sheet_(SHEET.CHECKINS).appendRow([
-    eventId, "'" + emp.id, emp.name, status, String(point || ''), new Date(), by, String(note || '').slice(0, 200),
+    eventId, "'" + emp.id, emp.name, status, String(point || ''), new Date(), by, String(note || '').slice(0, 200), audio || '',
   ]);
   try {
     writeZoneStatus_(emp, status === STATUS.AWAY ? ZONE_TEXT.LEAVE : ZONE_TEXT.PRESENT);
