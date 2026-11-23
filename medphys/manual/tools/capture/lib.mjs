@@ -13,12 +13,23 @@ async function applyNav(page) {
   await page.evaluate(() => (document.querySelector('.nav [data-view="settings"]') || document.querySelector('[data-view="settings"]')).click());
   await page.waitForTimeout(400);
   await page.evaluate(() => document.querySelector('#reset-demo').click());   // หน้าเว็บบันทึกข้อมูลตัวอย่างลง localStorage
+  // รอให้หน้าเว็บโหลดข้อมูลตัวอย่างเสร็จ (ข้อความ "โหลดข้อมูลตัวอย่างใหม่แล้ว") ก่อนแก้ชื่อแถบ · ไม่งั้นหน้าเว็บอาจบันทึกทับ / ลบทิ้งหลังจากนั้น
+  await page.waitForFunction(() => /โหลดข้อมูลตัวอย่างใหม่แล้ว/.test((document.querySelector('#toast') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
   await page.waitForFunction(k => !!localStorage.getItem(k), KEY, { timeout: 8000 });
   // เครื่องช้า: หน้าเว็บอาจบันทึกข้อมูลตัวอย่างทับชื่อแถบที่เพิ่งใส่ → ตรวจหลังโหลดใหม่ ไม่ติดก็ใส่ซ้ำ (สูงสุด 4 รอบ)
   const want = NAV.filter(x => x.label).map(x => x.view + '=' + x.label).join(',');
   for (let i = 0; i < 4; i++) {
     await page.waitForTimeout(300 + 500 * i);
-    await page.evaluate(([k, nav]) => { const db = JSON.parse(localStorage.getItem(k)); db.config = Object.assign({}, db.config, { nav: nav.map(x => Object.assign({ on: true, guest: true }, x)) }); localStorage.setItem(k, JSON.stringify(db)); }, [KEY, NAV]);
+    const put = await page.evaluate(([k, nav]) => { const db = JSON.parse(localStorage.getItem(k) || 'null'); if (!db) return false; db.config = Object.assign({}, db.config, { nav: nav.map(x => Object.assign({ on: true, guest: true }, x)) }); localStorage.setItem(k, JSON.stringify(db)); return true; }, [KEY, NAV]);
+    if (!put) {   // ข้อมูลตัวอย่างหายไป (หน้าเว็บยังโหลดไม่เสร็จ): โหลดข้อมูลตัวอย่างใหม่อีกครั้ง
+      await page.evaluate(() => (document.querySelector('.nav [data-view="settings"]') || document.querySelector('[data-view="settings"]')).click());
+      await page.waitForTimeout(400);
+      await page.evaluate(() => document.querySelector('#reset-demo').click());
+      // รอให้หน้าเว็บโหลดข้อมูลตัวอย่างเสร็จ (ข้อความ "โหลดข้อมูลตัวอย่างใหม่แล้ว") ก่อนแก้ชื่อแถบ · ไม่งั้นหน้าเว็บอาจบันทึกทับ / ลบทิ้งหลังจากนั้น
+      await page.waitForFunction(() => /โหลดข้อมูลตัวอย่างใหม่แล้ว/.test((document.querySelector('#toast') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
+      await page.waitForFunction(k => !!localStorage.getItem(k), KEY, { timeout: 8000 });
+      continue;
+    }
     await page.reload();
     await page.waitForFunction(() => window.MEDPHYS_STARTED === true);
     await page.evaluate(() => document.fonts.ready);

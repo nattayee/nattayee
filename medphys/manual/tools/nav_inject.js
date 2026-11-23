@@ -8,6 +8,8 @@ module.exports.applyNav = async function applyNav(page, nav) {
   await page.waitForTimeout(500);
   const has = await page.evaluate(() => { const b = document.querySelector('#reset-demo'); if (!b) return false; b.click(); return true; });
   if (!has) throw new Error('applyNav: ไม่พบปุ่ม #reset-demo (ไม่ได้อยู่ในโหมดตัวอย่าง?)');
+  // รอให้หน้าเว็บโหลดข้อมูลตัวอย่างเสร็จ (ข้อความ "โหลดข้อมูลตัวอย่างใหม่แล้ว") ก่อนแก้ชื่อแถบ
+  await page.waitForFunction(() => /โหลดข้อมูลตัวอย่างใหม่แล้ว/.test((document.querySelector('#toast') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
   await page.waitForFunction(k => !!localStorage.getItem(k), KEY, { timeout: 8000 });
   await page.waitForTimeout(300);
   await page.evaluate(([k, nav]) => {

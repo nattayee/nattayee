@@ -8523,7 +8523,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.14';
+const PAGE_VERSION = '2026-11-22.15';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14113,7 +14113,7 @@ const ontxDec = x => (x.c ? state.rtd.find(r => r.id === `${today()}|${x.c.id}`)
 // 20 พ.ย.: คำสั่งของแพทย์ (รวม Hold RT จากห้องตรวจ) มารอยืนยันที่รับคำสั่งแพทย์ทั้งหมด · ผู้ป่วยที่ Hold อยู่และยังไม่มีคำสั่ง / ไม่ได้ส่งพบแพทย์วันนี้ = อยู่แถบย่อย Hold RT อย่างเดียว
 const ontxSent = x => !!(x.visit || x.rect || x.fxsee);
 const nurseOntxList = tab => { const sep = subVisible('nurse').includes('hold'); return ontxAll().filter(x => (tab === 'hold' ? x.hold : !(sep && x.hold) || ontxSent(x) || !!ontxDec(x))); };
-// 19 พ.ย. (R18): แพทย์ยังไม่สั่งวันนี้ = พยาบาลเลือกตัวเลือก (ค่าเริ่มต้นเหมือนห้องตรวจ) แล้วกด "ยืนยัน (แทนแพทย์)" = บันทึกคำสั่ง + ยืนยันในครั้งเดียว (rtdNurse)
+// 19 พ.ย. (R18): แพทย์ยังไม่สั่งวันนี้ = พยาบาลเลือกตัวเลือก (ค่าเริ่มต้นเหมือนห้องตรวจ) แล้วกด "ยืนยัน" (23 พ.ย.: เดิมปุ่มมีคำว่า แทนแพทย์ ต่อท้าย) = บันทึกคำสั่ง + ยืนยันในครั้งเดียว (rtdNurse)
 // แพทย์สั่งแล้ว = ตัวเลือกล็อกตามคำสั่ง กดยืนยันอย่างเดียว · ร่างของพยาบาลเก็บใน nurseDraft (ยังไม่บันทึก)
 const nurseDraft = new Map();
 function nurseOntxForm(c) {
@@ -14132,10 +14132,9 @@ function nurseOntxCard(x, edit) {
   if (!dec && edit && ncOn()) {   // แพทย์ยังไม่สั่ง: พยาบาลเลือกแล้วยืนยันแทนได้
     const f = nurseOntxForm(c);
     return `<li class="ontx-card" data-nontx="${esc(c.id)}">${ontxWho(x)}
-      <div class="ontx-dec"><span class="st wait">แพทย์ยังไม่สั่งที่${esc(navLabel('consult'))}</span> · เลือกแล้วกดยืนยันแทนแพทย์ได้</div>
       <div class="ontx-form">${nurseSeg(c, 'kind', [['alone', 'RT Alone'], ['ccrt', 'CCRT']], f.kind, 'ชนิดการรักษา')}${nurseSeg(c, 'rt', [['continue', 'Continue RT'], ['hold', 'Hold RT']], f.rt, 'RT')}${f.kind === 'ccrt' ? nurseSeg(c, 'cmt', [['continue', 'Continue CMT'], ['hold', 'Hold CMT']], f.cmt, 'CMT') : ''}
         <input class="ontx-note" data-nsnote="${esc(c.id)}" value="${esc(f.note)}" maxlength="500" placeholder="หมายเหตุ (ไม่บังคับ)" aria-label="หมายเหตุ HN ${esc(c.hn)}">
-        <span class="ontx-act"><button type="button" class="btn primary sm" data-nsave="${esc(c.id)}">ยืนยัน (แทนแพทย์)</button></span></div></li>`;
+        <span class="ontx-act"><button type="button" class="btn primary sm" data-nsave="${esc(c.id)}">ยืนยัน</button></span></div></li>`;
   }
   const segs = ontxSegRo([['alone', 'RT Alone'], ['ccrt', 'CCRT']], dec ? dec.kind : '', 'ชนิดการรักษา') + ontxSegRo([['continue', 'Continue RT'], ['hold', 'Hold RT']], dec ? dec.rt : '', 'RT')
     + (dec && dec.kind === 'ccrt' ? ontxSegRo([['continue', 'Continue CMT'], ['hold', 'Hold CMT']], dec.cmt, 'CMT') : '');
@@ -14187,7 +14186,7 @@ function renderNurseOntx(tab, words, ordHtml) {
   if (!list.length) { box.innerHTML = old + `<p class="empty-state">${isHold ? 'ไม่มีผู้ป่วยที่ Hold RT อยู่' : 'ยังไม่มีผู้ป่วยระหว่างฉายที่ต้องพบแพทย์วันนี้'}${words.length || docF ? ' ที่ตรงกับคำค้น / แพทย์ที่เลือก' : ''}</p>` + pastHtml; return; }
   const codes = [...new Set(list.map(docOf))].sort((a, b) => (b === me) - (a === me) || at(a) - at(b) || a.localeCompare(b));
   const decs = list.map(ontxDec).filter(Boolean), nOk = decs.filter(r => r.nurse).length, nNs = decs.filter(r => /(^|,)nurse(,|$)/.test(str(r.src))).length;
-  box.innerHTML = old + `<h3 class="ontx-h">${name} · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${decs.length}${nNs ? ` · พยาบาลบันทึกแทน ${nNs}` : ''} · ยืนยันแล้ว ${nOk})<small>รายชื่อเดียวกับ ${esc(navLabel('consult'))} → ${isHold ? 'Hold RT' : 'ระหว่างฉาย'} · แพทย์สั่งแล้ว = ตัวเลือกตามคำสั่ง ตรวจแล้วกด "ยืนยัน" · แพทย์ยังไม่สั่ง (เช่น Continue RT) = พยาบาลเลือกแล้วกด "ยืนยัน (แทนแพทย์)" ได้เลย${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
+  box.innerHTML = old + `<h3 class="ontx-h">${name} · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${decs.length}${nNs ? ` · พยาบาลบันทึกแทน ${nNs}` : ''} · ยืนยันแล้ว ${nOk})<small>รายชื่อเดียวกับ ${esc(navLabel('consult'))} → ${isHold ? 'Hold RT' : 'ระหว่างฉาย'} · แพทย์สั่งแล้ว = ตัวเลือกตามคำสั่ง ตรวจแล้วกด "ยืนยัน" · แพทย์ยังไม่สั่ง (เช่น Continue RT) = พยาบาลเลือกแล้วกด "ยืนยัน" ได้เลย${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
     + codes.map(code => {
       const rs = list.filter(x => docOf(x) === code).sort((a, b) => !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn)));
       return `<details class="ontx-g nurse-g${code && code === me ? ' mine' : ''}" open><summary>${code ? `${docChip(code)} ${esc(docName(code) || code)}` : 'ไม่ระบุแพทย์'} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => nurseOntxCard(x, edit)).join('')}</ul></details>`;
