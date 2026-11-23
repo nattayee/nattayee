@@ -14,6 +14,12 @@
  *   <WEB_APP_URL>?page=dashboard   -> หน้าผู้ควบคุมเหตุการณ์ (ต้องใช้ PIN)
  */
 
+// ชื่อเว็บและโลโก้ (แสดงบนแท็บเบราว์เซอร์และหัวหน้าเว็บ)
+const APP_NAME = 'ศูนย์ควบคุมการอพยพ รพ.มะเร็งลำปาง';
+const APP_SHORT = 'ศูนย์ควบคุมการอพยพ';
+const ORG_NAME = 'รพ.มะเร็งลำปาง';
+const FAVICON_URL = 'https://www.lpch.go.th/favicon.ico';
+
 const SHEET = {
   ROLES: 'Roles',
   SCAN: 'ScanLog',
@@ -69,12 +75,14 @@ function setup() {
     const have = getConfig_();
     DEFAULT_CONFIG.forEach(function (r) { if (!(r[0] in have)) cfg.appendRow(r); });
   }
+  CFG_MEMO_ = null;
   ss.getSheetByName(SHEET.SCAN).getRange('A:A').setNumberFormat('@');
   // ชีต Events จากเวอร์ชันเก่า: เพิ่มหัวคอลัมน์ผู้ประกาศ/ผู้ปิดเหตุ
   ss.getSheetByName(SHEET.EVENTS).getRange(1, 1, 1, HEADERS.Events.length).setValues([HEADERS.Events]).setFontWeight('bold');
   setupRoles_(ss.getSheetByName(SHEET.ROLES));
   clearCache();
   const emps = loadEmployees_();
+  getEmployees_();   // อุ่นแคชรายชื่อไว้ หน้าเว็บจะเปิดเร็วตั้งแต่ครั้งแรก
   const zones = {};
   emps.forEach(function (e) { e.zone.split(', ').forEach(function (z) { zones[z] = (zones[z] || 0) + 1; }); });
   safeAlert_('ติดตั้งเรียบร้อย\nพบเจ้าหน้าที่ ' + emps.length + ' คน\n' +
@@ -185,7 +193,14 @@ function onOpen() {
 function onEdit(e) {
   try {
     const name = e && e.range && e.range.getSheet().getName();
-    if (name && isZoneSheet_(name) && e.range.getColumn() !== 4) clearCache();
+    if (!name) return;
+    const c = CacheService.getScriptCache();
+    if (name === SHEET.CONFIG) c.removeAll(['cfg', 'dash']);
+    else if (name === SHEET.ROLES) c.remove('roles');
+    else if (isZoneSheet_(name)) {
+      if (e.range.getColumn() === 4 && e.range.getNumColumns() === 1) c.removeAll(['zstat', 'dash']);   // หัวหน้าโซนเลือกสถานะ
+      else clearCache();                                                                               // แก้รายชื่อ
+    }
   } catch (err) { /* ignore */ }
 }
 
@@ -197,7 +212,7 @@ function checkRolesMenu() {
 function clearCache() {
   const c = CacheService.getScriptCache();
   const n = Number(c.get('emp_n') || 0);
-  const keys = ['emp_n'];
+  const keys = ['emp_n', 'emp_v', 'zstat', 'dash', 'cfg', 'roles'];
   for (let i = 0; i < n; i++) keys.push('emp_' + i);
   c.removeAll(keys);
 }
@@ -210,10 +225,22 @@ function doGet(e) {
   const isDash = p.page === 'dashboard';
   const t = HtmlService.createTemplateFromFile(isDash ? 'Dashboard' : 'CheckIn');
   t.point = p.point || '';
-  return t.evaluate()
-    .setTitle(isDash ? 'Dashboard เหตุฉุกเฉิน' : 'เช็คอินฉุกเฉิน')
+  t.appName = APP_SHORT;
+  t.orgName = ORG_NAME;
+  t.logo = LOGO_DATA_URI;
+  // หน้าเช็คอิน: ฝังรายชื่อมากับหน้าเว็บเลย ไม่ต้องเรียกเซิร์ฟเวอร์อีกรอบหลังโหลด
+  t.boot = isDash ? 'null' : safeJson_(getCheckInData());
+  const out = t.evaluate()
+    .setTitle(APP_NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  try { out.setFaviconUrl(FAVICON_URL); } catch (err) { /* ไม่มีไอคอนก็ใช้งานได้ */ }
+  return out;
+}
+
+/** JSON ที่ฝังใน <script> ได้อย่างปลอดภัย */
+function safeJson_(o) {
+  return JSON.stringify(o).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
 /* ---------- เรียกจากหน้าเช็คอิน ---------- */
@@ -242,66 +269,133 @@ function checkIn(payload) {
 
 /* ---------- เรียกจากหน้า Dashboard (ต้องมี PIN) ---------- */
 
-function getDashboard(pin) {
+/**
+ * ข้อมูล Dashboard แบบประหยัด
+ *   - รายชื่อ (roster) ส่งเฉพาะครั้งแรก หรือเมื่อรายชื่อเปลี่ยน (เทียบเลขเวอร์ชัน ver)
+ *   - รอบต่อไปส่งแค่สถานะเป็นตัวอักษร 1 ตัวต่อคน + รายละเอียดเฉพาะคนที่เช็คอินแล้ว
+ *   - ผลคำนวณเก็บแคชสั้นๆ ใช้ร่วมกันทุกคนที่เปิด Dashboard (มีเช็คอินใหม่จะล้างแคชทันที)
+ */
+function getDashboard(pin, clientVer) {
   const me = auth_(pin);
+  const emps = getEmployees_();
+  const ver = EMP_VER_;
+  const cache = CacheService.getScriptCache();
+  let dash = null;
+  const hit = cache.get('dash');
+  if (hit) { try { dash = JSON.parse(hit); } catch (e) { dash = null; } }
+  if (!dash || dash.ver !== ver) {
+    dash = buildDashboard_(emps, ver);
+    // มีเช็คอิน/ประกาศ/ปิดเหตุ หรือแก้สถานะในชีต จะล้างแคชทันที จึงเก็บได้ 10 วินาที
+    try { cache.put('dash', JSON.stringify(dash), 10); } catch (e) { /* ใช้งานได้โดยไม่มีแคช */ }
+  }
+  dash.me = me;
+  dash.serverTime = fmt_(new Date());
+  if (clientVer !== ver) {
+    dash.roster = emps.map(function (e) { return [e.id, e.name, e.dept, e.zone, e.pos, e.phone, e.code]; });
+  }
+  return dash;
+}
+
+const STATE_CODE = { SAFE: 'S', HELP: 'H', MISSING: 'M', AWAY: 'A', NOT_IN: 'N' };
+
+function buildDashboard_(emps, ver) {
   const props = PropertiesService.getScriptProperties();
-  const activeId = props.getProperty('ACTIVE_EVENT_ID');
-  const events = readRows_(SHEET.EVENTS);
-  // ถ้าไม่มีเหตุการณ์ที่กำลังเกิด ให้แสดงเหตุการณ์ล่าสุด
-  const evRow = activeId
-    ? events.filter(function (r) { return String(r[0]) === activeId; })[0]
-    : events[events.length - 1];
+  const eventId = props.getProperty('ACTIVE_EVENT_ID') || props.getProperty('LAST_EVENT_ID');
+  let row = eventId ? findEventRow_(eventId) : null;
+  if (!row) row = lastEventRow_();
+  const evRow = row ? row.values : null;
   const event = evRow ? {
     id: String(evRow[0]), type: evRow[1], start: fmt_(evRow[2]),
     end: evRow[3] ? fmt_(evRow[3]) : '', active: evRow[4] === 'ACTIVE',
     auto: evRow[1] === AUTO_EVENT_TYPE, openedBy: evRow[6] || '', closedBy: evRow[7] || '',
   } : null;
 
-  // สถานะล่าสุดของแต่ละคนในเหตุการณ์นี้
+  // สถานะล่าสุดของแต่ละคน: อ่านเฉพาะแถวของเหตุการณ์นี้ (ไม่อ่านประวัติเก่าทั้งหมด)
   const latest = {};
   if (event) {
-    readRows_(SHEET.CHECKINS).forEach(function (r) {
-      if (String(r[0]) !== event.id) return;
-      latest[String(r[1]).trim()] = { status: r[3], point: r[4], time: fmt_(r[5]), by: r[6], note: r[7] };
-    });
+    const sh = sheet_(SHEET.CHECKINS);
+    const last = sh.getLastRow();
+    const start = Math.max(2, Number(props.getProperty('CI_START_' + event.id)) || 2);
+    if (last >= start) {
+      sh.getRange(start, 1, last - start + 1, 8).getValues().forEach(function (r) {
+        if (String(r[0]) !== event.id) return;
+        latest[String(r[1]).trim()] = r;
+      });
+    }
   }
 
-  // อ่านชีตโซนสดทุกครั้ง เพื่อให้เห็นสถานะที่หัวหน้าโซนเลือกเองในชีตด้วย
-  const employees = loadEmployees_();
+  const zstat = getZoneStatuses_(emps);
   const scan = getPresentFromScan_();
-  const list = employees.map(function (e) {
+  const count = { SAFE: 0, HELP: 0, MISSING: 0, AWAY: 0, NOT_IN: 0 };
+  const info = {};
+  let st = '';
+  emps.forEach(function (e, i) {
     const c = latest[e.id];
-    const onLeave = e.sheetStatus === ZONE_TEXT.LEAVE;
+    const sheetStatus = zstat[e.name] || '';
+    const onLeave = sheetStatus === ZONE_TEXT.LEAVE;
     const scanned = scan.enabled && e.code ? !!scan.present[e.code] : true; // ยังไม่มีรหัส = ถือว่าอยู่
-    const inBuilding = !onLeave && scanned;
-    let state, by = c ? c.by : '';
-    if (c) state = c.status;                                              // SAFE / HELP / AWAY
-    else if (onLeave) state = 'AWAY';                                     // หัวหน้าโซนเลือก "ลา"
-    else if (e.sheetStatus === ZONE_TEXT.PRESENT) { state = 'SAFE'; by = 'SHEET'; } // เลือก "อยู่" ในชีต
-    else if (!scanned) state = 'NOT_IN';                                  // ไม่ได้สแกนเข้างาน
-    else state = 'MISSING';                                               // ยังไม่ทราบ ต้องตามหา
-    return {
-      id: e.id, code: e.code, name: e.name, dept: e.dept, zone: e.zone, pos: e.pos, phone: e.phone,
-      state: state, inBuilding: inBuilding, scanTime: e.code ? (scan.present[e.code] || '') : '',
-      point: c ? c.point : '', time: c ? c.time : '', by: by, note: c ? c.note : '',
-    };
+    let state;
+    if (c) state = c[3];                                            // SAFE / HELP / AWAY
+    else if (onLeave) state = 'AWAY';                               // หัวหน้าโซนเลือก "ลา"
+    else if (sheetStatus === ZONE_TEXT.PRESENT) state = 'SAFE';     // เลือก "อยู่" ในชีต
+    else if (!scanned) state = 'NOT_IN';                            // ไม่ได้สแกนเข้างาน
+    else state = 'MISSING';                                         // ยังไม่ทราบ ต้องตามหา
+    if (!(state in count)) state = 'MISSING';
+    count[state]++;
+    st += STATE_CODE[state];
+    const scanTime = e.code ? (scan.present[e.code] || '') : '';
+    if (c) info[i] = [String(c[4] || ''), fmt_(c[5]), String(c[6] || ''), String(c[7] || ''), scanTime];
+    else if (state === 'SAFE') info[i] = ['', '', 'SHEET', '', scanTime];
+    else if (scanTime) info[i] = ['', '', '', '', scanTime];
   });
 
-  const count = { SAFE: 0, HELP: 0, MISSING: 0, AWAY: 0, NOT_IN: 0 };
-  list.forEach(function (x) { count[x.state]++; });
-
   return {
-    me: me, event: event, list: list, count: count,
+    ver: ver, event: event, st: st, info: info, count: count,
     expected: count.SAFE + count.HELP + count.MISSING,
-    scanEnabled: scan.enabled, scanNote: scan.note,
-    points: getPoints_(), serverTime: fmt_(new Date()),
+    scanEnabled: scan.enabled, scanNote: scan.note, points: getPoints_(),
   };
 }
 
-/**
- * ผู้บัญชาการ/รองฯ ประกาศเหตุ
- * ถ้ามีคนเช็คอินไปก่อนแล้ว (เหตุการณ์เริ่มอัตโนมัติ) จะเป็นการ "ยืนยัน" เหตุการณ์นั้น ไม่ล้างยอดที่นับไว้
- */
+/** สถานะในคอลัมน์ "สถานะ" ของชีตโซน: อ่านแค่คอลัมน์ชื่อ+สถานะ แคช 8 วินาที */
+function getZoneStatuses_(emps) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('zstat');
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* อ่านใหม่ */ } }
+  const sheets = {};
+  emps.forEach(function (e) { e.locs.forEach(function (l) { if (l[3] > 0) sheets[l[0]] = [l[2], l[3]]; }); });
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const out = {};
+  Object.keys(sheets).forEach(function (name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh) return;
+    const nameCol = sheets[name][0], stCol = sheets[name][1];
+    const c1 = Math.min(nameCol, stCol), c2 = Math.max(nameCol, stCol);
+    // อ่านทั้งคอลัมน์ในครั้งเดียว (เช่น "D:E") ไม่ต้องถามจำนวนแถวก่อน
+    sh.getRange(colLetter_(c1) + ':' + colLetter_(c2)).getValues().forEach(function (r) {
+      const nm = normName_(r[nameCol - c1]);
+      if (!nm) return;
+      const v = normName_(r[stCol - c1]);
+      if (!out[nm] || out[nm] === ZONE_TEXT.UNKNOWN) out[nm] = v;   // ชื่อซ้ำหลายโซน: เอาค่าที่ไม่ใช่ "ไม่ทราบ"
+    });
+  });
+  // แก้คอลัมน์สถานะในชีตเองจะล้างแคชทันที (onEdit) แคชนี้จึงเก็บได้นานขึ้น
+  try { cache.put('zstat', JSON.stringify(out), 20); } catch (e) { /* ใช้งานได้โดยไม่มีแคช */ }
+  return out;
+}
+
+function colLetter_(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+function lastEventRow_() {
+  const sh = sheet_(SHEET.EVENTS);
+  const last = sh.getLastRow();
+  if (last < 2) return null;
+  return { sheet: sh, index: last, values: sh.getRange(last, 1, 1, HEADERS.Events.length).getValues()[0] };
+}
+
 function startEvent(pin, type, note) {
   const me = requireCommander_(pin);
   return withLock_(function () {
@@ -312,6 +406,7 @@ function startEvent(pin, type, note) {
       if (row && row.values[1] === AUTO_EVENT_TYPE) {
         row.sheet.getRange(row.index, 2).setValue(type || 'ไฟไหม้');
         row.sheet.getRange(row.index, 7).setValue(me.name + ' (ยืนยันภายหลัง)');
+        CacheService.getScriptCache().remove('dash');
         return { ok: true, id: active, confirmed: true };
       }
       throw new Error('มีเหตุการณ์ที่ยังไม่ปิดอยู่');
@@ -332,6 +427,7 @@ function closeEvent(pin) {
       row.sheet.getRange(row.index, 8).setValue(me.name);
     }
     props.deleteProperty('ACTIVE_EVENT_ID');
+    CacheService.getScriptCache().remove('dash');
     return { ok: true };
   });
 }
@@ -435,15 +531,22 @@ function loadEmployees_() {
 }
 
 /** รายชื่อแบบมีแคช (แบ่งเก็บหลายก้อน เพราะแคชเก็บได้ก้อนละไม่เกิน 100KB) */
+let EMP_MEMO_ = null, EMP_VER_ = '';
 function getEmployees_() {
+  if (EMP_MEMO_) return EMP_MEMO_;
   const cache = CacheService.getScriptCache();
-  const n = Number(cache.get('emp_n') || 0);
-  if (n) {
+  const head = cache.getAll(['emp_n', 'emp_v']);
+  const n = Number(head.emp_n || 0);
+  if (n && head.emp_v) {
     const keys = [];
     for (let i = 0; i < n; i++) keys.push('emp_' + i);
     const got = cache.getAll(keys);
     if (Object.keys(got).length === n) {
-      try { return JSON.parse(keys.map(function (k) { return got[k]; }).join('')); } catch (e) { /* โหลดใหม่ */ }
+      try {
+        EMP_MEMO_ = JSON.parse(keys.map(function (k) { return got[k]; }).join(''));
+        EMP_VER_ = head.emp_v;
+        return EMP_MEMO_;
+      } catch (e) { /* โหลดใหม่ */ }
     }
   }
   const list = loadEmployees_().map(function (e) { const x = Object.assign({}, e); delete x.sheetStatus; return x; });
@@ -452,8 +555,10 @@ function getEmployees_() {
     let k = 0;
     for (let i = 0; i < s.length; i += size) parts['emp_' + (k++)] = s.slice(i, i + size);
     parts.emp_n = String(k);
-    cache.putAll(parts, 600);
-  } catch (err) { /* ใช้งานได้โดยไม่มีแคช */ }
+    parts.emp_v = EMP_VER_ = String(Date.now());
+    cache.putAll(parts, 21600);   // 6 ชม. (สูงสุดของ Apps Script) แก้รายชื่อในชีตโซนจะล้างแคชเอง
+  } catch (err) { EMP_VER_ = EMP_VER_ || 'nocache'; }
+  EMP_MEMO_ = list;
   return list;
 }
 
@@ -506,6 +611,7 @@ function resetZoneStatus_() {
     vals.forEach(function (v) { if (normName_(v[0]) === ZONE_TEXT.PRESENT) { v[0] = ZONE_TEXT.UNKNOWN; dirty = true; changed++; } });
     if (dirty) rng.setValues(vals);
   });
+  CacheService.getScriptCache().removeAll(['zstat', 'dash']);
   return changed;
 }
 
@@ -525,13 +631,22 @@ function readRows_(name) {
   return sh.getRange(2, 1, n, sh.getLastColumn()).getValues();
 }
 
+/** ค่าตั้งในชีต Config: อ่านครั้งเดียวต่อการเรียกใช้ และแคช 60 วินาที (แก้ชีต Config แล้วล้างแคชเอง) */
+let CFG_MEMO_ = null;
 function getConfig_() {
+  if (CFG_MEMO_) return CFG_MEMO_;
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('cfg');
+  if (hit) { try { return (CFG_MEMO_ = JSON.parse(hit)); } catch (e) { /* อ่านใหม่ */ } }
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.CONFIG);
   const cfg = {};
-  if (!sh || sh.getLastRow() < 2) return cfg;
-  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function (r) {
-    if (r[0]) cfg[String(r[0]).trim()] = String(r[1]).trim();
-  });
+  if (sh && sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function (r) {
+      if (r[0]) cfg[String(r[0]).trim()] = String(r[1]).trim();
+    });
+    try { cache.put('cfg', JSON.stringify(cfg), 60); } catch (e) { /* ใช้งานได้โดยไม่มีแคช */ }
+  }
+  CFG_MEMO_ = cfg;
   return cfg;
 }
 
@@ -601,11 +716,17 @@ function createEvent_(type, note, openedBy) {
   const id = 'EV' + Utilities.formatDate(new Date(), tz_(), 'yyyyMMdd-HHmmss');
   resetZoneStatus_();   // เริ่มนับใหม่: "อยู่" จากครั้งก่อนกลับเป็น "ไม่ทราบ"
   sheet_(SHEET.EVENTS).appendRow([id, type, new Date(), '', 'ACTIVE', note, openedBy || 'ระบบ (อัตโนมัติ)', '']);
-  PropertiesService.getScriptProperties().setProperty('ACTIVE_EVENT_ID', id);
+  const props = PropertiesService.getScriptProperties();
+  props.setProperties({
+    ACTIVE_EVENT_ID: id, LAST_EVENT_ID: id,
+    ['CI_START_' + id]: String(sheet_(SHEET.CHECKINS).getLastRow() + 1),   // Dashboard อ่านเฉพาะแถวของเหตุการณ์นี้
+  });
+  CacheService.getScriptCache().removeAll(['dash', 'zstat']);
   return { ok: true, id: id };
 }
 
 function appendCheckIn_(eventId, emp, status, point, by, note) {
+  CacheService.getScriptCache().remove('dash');   // Dashboard เห็นทันทีในรอบถัดไป
   sheet_(SHEET.CHECKINS).appendRow([
     eventId, "'" + emp.id, emp.name, status, String(point || ''), new Date(), by, String(note || '').slice(0, 200),
   ]);
@@ -621,8 +742,7 @@ function appendCheckIn_(eventId, emp, status, point, by, note) {
 function auth_(pin) {
   pin = String(pin || '').trim();
   if (!pin) throw new Error('กรุณาใส่ PIN');
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ROLES);
-  const rows = sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues() : [];
+  const rows = getRoleRows_();
   pin = pin.replace(/\D/g, '');
   if (pin.length === 13) pin = pin.slice(-6);   // พิมพ์เลขบัตรเต็มมา ใช้ 6 หลักท้าย
   const valid = rows.filter(function (r) {
@@ -638,6 +758,18 @@ function auth_(pin) {
   if (!hit.length) { failDelay_(); throw new Error('PIN ไม่ถูกต้อง'); }
   const role = normName_(hit[0][1]);
   return { name: normName_(hit[0][0]), role: role, canCommand: role === ROLE.COMMANDER || role === ROLE.DEPUTY };
+}
+
+/** แถวในชีต Roles (แคช 60 วินาที แก้ชีต Roles แล้วล้างแคชเอง) */
+function getRoleRows_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('roles');
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* อ่านใหม่ */ } }
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ROLES);
+  const rows = sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues()
+    .map(function (r) { return [normName_(r[0]), normName_(r[1]), pinFromCell_(r[2])]; }) : [];
+  try { cache.put('roles', JSON.stringify(rows), 60); } catch (e) { /* ใช้งานได้โดยไม่มีแคช */ }
+  return rows;
 }
 
 function requireCommander_(pin) {
@@ -665,3 +797,6 @@ function fmt_(d) {
 function safeAlert_(msg) {
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
 }
+
+/** โลโก้ รพ.มะเร็งลำปาง (เฉพาะสัญลักษณ์) จาก www.lpch.go.th ย่อเป็น PNG 128px ~2KB ฝังในหน้าเว็บ ไม่ต้องโหลดไฟล์แยก */
+const LOGO_DATA_URI = 'data:image/png;base64,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';
