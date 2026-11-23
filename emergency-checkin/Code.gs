@@ -24,7 +24,7 @@ const SHEET = {
 };
 
 const HEADERS = {
-  Roles: ['ชื่อ-สกุล', 'บทบาท', 'วันเดือนปีเกิด (ใช้เป็น PIN)', 'หมายเหตุ'],
+  Roles: ['ชื่อ-สกุล', 'บทบาท', 'เลขบัตรประชาชน 6 หลักท้าย (ใช้เป็น PIN)', 'หมายเหตุ'],
   ScanLog: ['รหัสพนักงาน', 'วันเวลาที่สแกน', 'ประเภท (เข้า/ออก) - ไม่บังคับ'],
   Events: ['EventID', 'ประเภทเหตุ', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'สถานะ', 'หมายเหตุ', 'ผู้ประกาศเหตุ', 'ผู้ปิดเหตุ'],
   CheckIns: ['EventID', 'รหัส/ชื่อ (ตัวระบุ)', 'ชื่อ-สกุล', 'สถานะ', 'จุดรวมพล', 'เวลา', 'บันทึกโดย', 'หมายเหตุ'],
@@ -82,30 +82,22 @@ function setup() {
     '\n\nขั้นต่อไป: ใส่ชื่อผู้บัญชาการและผู้ทำหน้าที่แทนในชีต Roles แล้ว Deploy เป็น Web app');
 }
 
-/** ชีต Roles: รายการบทบาทแบบเลือก + PIN ห้ามซ้ำ + ใส่แถวตัวอย่างพร้อม PIN สุ่ม */
 /**
- * ชีต Roles: ชื่อ-สกุล | บทบาท | วันเดือนปีเกิด (ใช้เป็น PIN) | หมายเหตุ
- * กรอกวันเกิดแบบ วว/ดด/ปปปป พ.ศ. เช่น 15/03/2530 -> เข้า Dashboard ด้วย 15032530 (หรือปี ค.ศ. 15031987)
+ * ชีต Roles: ชื่อ-สกุล | บทบาท | เลขบัตรประชาชน 6 หลักท้าย (ใช้เป็น PIN) | หมายเหตุ
+ * คอลัมน์ C ใส่ได้ทั้งพิมพ์เอง วางค่า หรือสูตรที่ดึงจากที่อื่น เช่น =RIGHT(VLOOKUP(A2, 'ข้อมูลบุคลากร'!B:C, 2, FALSE), 6)
+ * ใส่เลข 13 หลักได้ ระบบใช้ 6 หลักท้าย (แนะนำให้เก็บแค่ 6 หลัก เพื่อไม่ให้เลขบัตรเต็มอยู่ในชีต)
  */
 function setupRoles_(sh) {
   sh.getRange(1, 1, 1, HEADERS.Roles.length).setValues([HEADERS.Roles]).setFontWeight('bold');
-  sh.getRange('C:C').setNumberFormat('@');   // เก็บเป็นข้อความ กัน Sheets แปลงเป็นวันที่ ค.ศ. เอง
+  sh.getRange('C:C').setNumberFormat('@');   // เก็บเป็นข้อความ เลข 0 นำหน้าไม่หาย
   sh.getRange(2, 2, 200, 1).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList([ROLE.COMMANDER, ROLE.DEPUTY, ROLE.OFFICER], true).setAllowInvalid(false).build());
+  // เตือน (ไม่บล็อก) ถ้าไม่ใช่ 6 หรือ 13 หลัก เพื่อให้ใช้สูตรดึงข้อมูลได้
   sh.getRange(2, 3, 200, 1).setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireFormulaSatisfied('=OR(C2="", REGEXMATCH(TO_TEXT(C2), "^\\d{1,2}/\\d{1,2}/\\d{4}$"))')
-    .setAllowInvalid(false).setHelpText('กรอกวันเกิดแบบ วว/ดด/ปปปป พ.ศ. เช่น 15/03/2530').build());
-  sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 200); sh.setColumnWidth(4, 340);
-  if (sh.getLastRow() > 1) {
-    // ย้ายจากเวอร์ชันเก่า: ล้าง PIN สุ่ม 6 หลักในแถวตัวอย่างที่ยังไม่ได้ใส่ชื่อจริง
-    const rng = sh.getRange(2, 1, sh.getLastRow() - 1, 3);
-    const v = rng.getValues();
-    let dirty = false;
-    v.forEach(function (r) { if (/^\(/.test(normName_(r[0])) && /^\d{6}$/.test(String(r[2]).trim())) { r[2] = ''; dirty = true; } });
-    if (dirty) sh.getRange(2, 3, v.length, 1).setValues(v.map(function (r) { return [r[2]]; }));
-    checkRolePins_(sh);
-    return;
-  }
+    .requireFormulaSatisfied('=OR(C2="", REGEXMATCH(REGEXREPLACE(TO_TEXT(C2), "[^0-9]", ""), "^([0-9]{6}|[0-9]{13})$"))')
+    .setAllowInvalid(true).setHelpText('ใส่เลข 6 หลักท้ายของบัตรประชาชน เช่น 890123').build());
+  sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 260); sh.setColumnWidth(4, 340);
+  if (sh.getLastRow() > 1) { checkRolePins_(sh); return; }
   sh.getRange(2, 1, 4, 4).setValues([
     ['(ใส่ชื่อผู้บัญชาการ)', ROLE.COMMANDER, '', 'เปิด/ปิดเหตุการณ์ได้'],
     ['(ใส่ชื่อรองผู้บัญชาการ)', ROLE.DEPUTY, '', 'ทำหน้าที่แทนเมื่อผู้บัญชาการไม่อยู่'],
@@ -115,40 +107,36 @@ function setupRoles_(sh) {
 }
 
 /**
- * แปลงค่าในคอลัมน์วันเกิดเป็นรายการ PIN ที่ยอมรับ
- *   "15/03/2530" หรือวันที่ -> ["15032530" (พ.ศ.), "15031987" (ค.ศ.)]
- *   ตัวเลขล้วน (PIN แบบเดิม) -> [ตัวเลขนั้น]
+ * แปลงค่าในคอลัมน์ C เป็น PIN 6 หลัก
+ *   "890123" -> "890123" · "1-2345-67890-12-3" หรือ 1234567890123 -> "890123" (6 หลักท้าย)
+ *   12345 (ตัวเลขที่ 0 นำหน้าหายไป) -> "012345"
  */
-function pinsFromCell_(v) {
-  let d, m, y;
-  if (v instanceof Date && !isNaN(v)) {
-    d = Number(Utilities.formatDate(v, tz_(), 'd'));
-    m = Number(Utilities.formatDate(v, tz_(), 'M'));
-    y = Number(Utilities.formatDate(v, tz_(), 'yyyy'));
-  } else {
-    const s = String(v == null ? '' : v).trim();
-    const mm = s.match(/^(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4})$/);
-    if (!mm) { const digits = s.replace(/\D/g, ''); return digits ? [digits] : []; }
-    d = +mm[1]; m = +mm[2]; y = +mm[3];
-  }
-  if (!d || !m || d > 31 || m > 12) return [];
-  const be = y < 2400 ? y + 543 : y, ce = be - 543;
-  const p = function (n) { return (n < 10 ? '0' : '') + n; };
-  return [p(d) + p(m) + be, p(d) + p(m) + ce];
+function pinFromCell_(v) {
+  if (v === '' || v == null || v instanceof Date) return '';
+  let d = (typeof v === 'number' ? String(Math.round(v)) : String(v)).replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length >= 13) d = d.slice(-6);
+  else if (d.length < 6) d = ('000000' + d).slice(-6);
+  return d;
 }
 
-/** เตือนถ้าวันเกิดของสองคนตรงกัน (PIN ซ้ำ ทั้งคู่จะเข้าระบบไม่ได้) */
+/** เตือนถ้าเลข 6 หลักซ้ำกัน (ทั้งคู่จะเข้าระบบไม่ได้) หรือยังไม่ได้ใส่ */
 function checkRolePins_(sh) {
   if (!sh || sh.getLastRow() < 2) return;
-  const seen = {}, dup = [];
+  const seen = {}, dup = [], missing = [], odd = [];
   sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues().forEach(function (r) {
     const name = normName_(r[0]);
     if (!name || /^\(/.test(name)) return;
-    const p = pinsFromCell_(r[2])[0];
-    if (!p) return;
+    const p = pinFromCell_(r[2]);
+    if (!p) { missing.push(name); return; }
+    if (p.length !== 6) odd.push(name);
     if (seen[p]) dup.push(seen[p] + ' กับ ' + name); else seen[p] = name;
   });
-  if (dup.length) safeAlert_('วันเกิดซ้ำกันในชีต Roles (ใช้เป็น PIN ไม่ได้):\n' + dup.join('\n') + '\n\nให้คนใดคนหนึ่งใส่ตัวเลข 8 หลักอื่นแทนวันเกิด');
+  const msg = [];
+  if (dup.length) msg.push('เลขซ้ำกัน (ทั้งคู่จะเข้าระบบไม่ได้ ให้คนหนึ่งใช้เลข 6 หลักอื่น):\n' + dup.join('\n'));
+  if (missing.length) msg.push('ยังไม่ได้ใส่เลข 6 หลัก:\n' + missing.join('\n'));
+  if (odd.length) msg.push('ค่าไม่ใช่เลข 6 หลัก (ตรวจอีกครั้ง):\n' + odd.join('\n'));
+  if (msg.length) safeAlert_('ชีต Roles\n\n' + msg.join('\n\n'));
 }
 
 /** สร้างชีต QR ที่มีลิงก์ + รูป QR ของแต่ละจุดรวมพล (รันหลัง Deploy) */
@@ -188,7 +176,7 @@ function onOpen() {
     .addItem('ติดตั้ง / ตรวจรายชื่อ', 'setup')
     .addItem('สร้าง QR Code จุดรวมพล', 'generateQrSheet')
     .addItem('รีเซ็ตสถานะ "อยู่" → "ไม่ทราบ"', 'resetZoneStatusMenu')
-    .addItem('ตรวจวันเกิดซ้ำในชีต Roles', 'checkRolesMenu')
+    .addItem('ตรวจเลข PIN ในชีต Roles', 'checkRolesMenu')
     .addItem('ล้างแคชรายชื่อ', 'clearCache')
     .addToUi();
 }
@@ -203,7 +191,7 @@ function onEdit(e) {
 
 function checkRolesMenu() {
   checkRolePins_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ROLES));
-  safeAlert_('ตรวจชีต Roles แล้ว');
+  safeAlert_('ตรวจชีต Roles เสร็จแล้ว ถ้าไม่มีข้อความเตือนก่อนหน้านี้ แปลว่าใช้ได้ทุกแถว');
 }
 
 function clearCache() {
@@ -635,17 +623,18 @@ function auth_(pin) {
   if (!pin) throw new Error('กรุณาใส่ PIN');
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ROLES);
   const rows = sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues() : [];
-  pin = pin.replace(/\D/g, '');   // รับได้ทั้ง 15032530 และ 15/03/2530
+  pin = pin.replace(/\D/g, '');
+  if (pin.length === 13) pin = pin.slice(-6);   // พิมพ์เลขบัตรเต็มมา ใช้ 6 หลักท้าย
   const valid = rows.filter(function (r) {
-    return normName_(r[0]) && !/^\(/.test(normName_(r[0])) && pinsFromCell_(r[2]).length && r[1];
+    return normName_(r[0]) && !/^\(/.test(normName_(r[0])) && pinFromCell_(r[2]) && r[1];
   });
   if (!valid.length) {
     if (pin && pin === String(getConfig_().ADMIN_PIN).replace(/\D/g, '')) return { name: 'ผู้ดูแลระบบ (PIN สำรอง)', role: ROLE.COMMANDER, canCommand: true };
     failDelay_();
     throw new Error('PIN ไม่ถูกต้อง');
   }
-  const hit = valid.filter(function (r) { return pin && pinsFromCell_(r[2]).indexOf(pin) >= 0; });
-  if (hit.length > 1) throw new Error('วันเกิดนี้ซ้ำกันในชีต Roles กรุณาแจ้งผู้ดูแลให้แก้');
+  const hit = valid.filter(function (r) { return pin && pinFromCell_(r[2]) === pin; });
+  if (hit.length > 1) throw new Error('เลขนี้ซ้ำกันในชีต Roles กรุณาแจ้งผู้ดูแลให้แก้');
   if (!hit.length) { failDelay_(); throw new Error('PIN ไม่ถูกต้อง'); }
   const role = normName_(hit[0][1]);
   return { name: normName_(hit[0][0]), role: role, canCommand: role === ROLE.COMMANDER || role === ROLE.DEPUTY };
