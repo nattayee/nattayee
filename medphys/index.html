@@ -2365,6 +2365,7 @@ tr.col-head > th[draggable="true"]{cursor:grab}
 .dpk-full .dpk-foot{font-size:14px}
 .prio-chips input[value="Emergency"]:checked+span{border-color:var(--late);background:var(--late);color:var(--surface)}
 .emerg-tag{margin-left:4px}
+.emerg-tag.pre{margin-left:0;margin-right:2px}
 /* 19 พ.ย.: โหมดฝึกใช้ · กรอบแดงรอบหน้าจอ + แถบแดงด้านบน */
 body.practice::before{content:"";position:fixed;inset:0;border:4px solid #c62828;pointer-events:none;z-index:2147483000}
 .practice-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:#c62828;color:#fff;padding:10px 14px;border-radius:10px;margin:0 0 12px;font-size:13.5px}
@@ -8682,7 +8683,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.23';
+const PAGE_VERSION = '2026-11-22.24';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -11491,6 +11492,7 @@ const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 // 18 พ.ย.: นัด Re-CT = Note มี Re-CT#ครั้งที่ (ฟอร์มจาก Re-CT ใส่ให้) หรือคำว่า Re-CT · คืนข้อความตรา เช่น RE-CT #2
 const apReCt = r => { const m = /\bRe-?CT\s*(#\s*\d+)?/i.exec(str(r && r.note)); return m ? `RE-CT${m[1] ? ' ' + m[1].replace(/\s+/g, '') : ''}` : ''; };
 const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
+const emergPre = r => (apEmerg(r) ? '<span class="sp-tag emerg-tag pre">Emergency</span> ' : '');   // 23 พ.ย.: หน้า HN (คอลัมน์ HN ชิดขวา เลข HN ตรงกัน)
 // สถานะ: wait = รอลง CT-SIM · took = ลง CT-SIM แล้ว · skip = ไม่มาทำ CT
 // 20 พ.ย.: dup = นัดซ้ำ · นัดที่ยังรอลง CT-SIM แต่ (1) HN เดียวกันมีนัดที่ลงทีหลัง (ไม่นับนัดที่ไม่มาทำ CT) หรือ (2) มีรายการ CT-SIM ของ HN นั้นที่ลงหลังนัดนี้ (ไม่ใช่ CT ของ HDR / งานวิจัย)
 // = ไม่นับเป็นนัดรอทำ CT (ผู้ป่วยหนึ่งคนมีสถานะเดียว) · อยู่ในกล่อง "นัดซ้ำ" ของหน้าต่างนัดรอลง CT-SIM ให้ลบ
@@ -11632,7 +11634,7 @@ function renderAppt() {
   const span = cols.length + 3;
   const head = `<thead><tr><th>No.</th>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join('')}<th>CT-SIM</th><th>ใบสั่ง</th></tr></thead>`;
   const cell = (r, k) => {
-    if (k === 'hn') return `<td class="ct-hn"><b class="hn">${esc(r.hn || '—')}</b>${emergTag(r)}</td>`;
+    if (k === 'hn') return `<td class="ct-hn">${emergPre(r)}<b class="hn">${esc(r.hn || '—')}</b></td>`;
     if (k === 'special') return `<td class="ct-sp">${spTags(splitList(r.special))}</td>`;
     return `<td class="ct-${k}">${esc(apVal(r, k))}</td>`;
   };
