@@ -1130,6 +1130,7 @@ div.c-main,div.lrow{cursor:default}
 .intake-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:12px;align-items:start}
 .intake-mid{display:flex;flex-wrap:wrap;gap:14px 32px}
 .intake-dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,1.5fr);gap:10px 12px}
+#i-mvn-f{margin-top:4px}
 .intake-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding-top:14px;border-top:1px solid var(--line)}
 .assign{display:flex;align-items:center;gap:12px;min-width:0;font-size:14.5px}
 .assign b{font-weight:600}
@@ -3780,7 +3781,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
           <label class="field plan-field" id="i-ct-field"><span class="lbl"><span>CT-Sim<b class="req" data-req="ct" hidden>*</b></span></span><input type="date" id="i-ct"></label>
           <label class="field"><span class="lbl" id="i-in-lbl">In</span><input type="date" id="i-in"></label>
           <p class="old-dates" id="i-old-dates" hidden>เคสเดิม: ไม่ต้องกรอก CT-Sim และ Start RT</p>
-          <div class="field plan-field" id="i-sim-field"><span class="lbl"><label for="i-sim">Start RT<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"></div>
+          <div class="field plan-field" id="i-sim-field"><span class="lbl"><label for="i-sim">Start RT<b class="req" data-req="sim" hidden>*</b></label><label class="oncall"><input type="checkbox" id="i-oncall"> on call</label></span><input type="date" id="i-sim"><label class="check mvn" id="i-mvn-f" hidden><input type="checkbox" id="i-mvn"> <span>เลื่อนนัดแจ้งพยาบาล</span></label></div>
           <label class="field note-field"><span class="lbl"><span>Note<b class="req" data-req="note" hidden>*</b></span></span><input id="i-note"></label>
         </div>
         <div class="extra-grid" id="i-extra" hidden></div>
@@ -3794,7 +3795,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         </div>
         <div class="intake-foot">
           <div class="assign" id="i-assign" aria-live="polite"></div>
-          <span style="display:flex;gap:8px"><button type="button" class="btn ghost" id="i-clear">ล้างฟอร์ม</button><button type="submit" class="btn primary" id="i-save">แจกเคส</button></span>
+          <span style="display:flex;gap:8px"><button type="button" class="btn ghost" id="i-clear">ล้างฟอร์ม</button><button type="button" class="btn" id="i-draft" hidden title="เก็บค่าที่แก้ลงรายการรอแจกจาก CT-SIM โดยยังไม่แจกให้ MP · ดึงจาก CT-SIM อีกครั้งเมื่อพร้อมแจก">บันทึกไว้ก่อน</button><button type="submit" class="btn primary" id="i-save">แจกเคส</button></span>
         </div>
       </form>
     </div>
@@ -8611,7 +8612,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.18';
+const PAGE_VERSION = '2026-11-22.19';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8685,6 +8686,7 @@ const sheetStore = {
   ctSave: (rec, pin) => call('ctSave', rec, pin),
   ctRemove: (id, pin) => call('ctRemove', id, pin),
   ctMark: (id, mark) => call('ctMark', id, mark),
+  ctDraft: (id, rec) => call('ctDraft', id, rec),   // 23 พ.ย. (API 117): แจกงานฟิสิกส์ บันทึกไว้ก่อน
   apptSave: (rec, pin) => call('apptSave', rec, pin),
   apptRemove: (id, pin) => call('apptRemove', id, pin),
   apptMark: (id, mark) => call('apptMark', id, mark),
@@ -9660,6 +9662,18 @@ function localStore() {
       Object.assign(a, mark === 'skip' ? { took: 'skip', tookBy: state.user.name || 'ผู้ใช้ตัวอย่าง', tookAt: nowStamp() } : { took: '', tookBy: '', tookAt: '' });
       persist();
       return clone(a);
+    },
+    ctDraft: async (id, rec) => {   // 23 พ.ย.: เหมือน Code.gs ctDraft
+      const c = db.ctsim.find(x => x.id === id);
+      if (!c) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      if (c.took) throw new Error(c.took === 'skip' ? 'รายการนี้ตั้ง ไม่ต้องแจก ไว้ · กด คืนกลับรอแจก ก่อน' : 'รายการนี้แจกเคสไปแล้ว · แก้ที่เคสในแถบ Planning');
+      for (const k of CT_DRAFT_KEYS) if (k in rec) c[k] = str(rec[k]);
+      if ('doc' in rec) c.doc = str(rec.doc).toUpperCase();
+      c.updated = nowISO();
+      const ap = [];
+      if ('sim' in rec) for (const a of db.appt || []) if (a.took === c.id && str(a.sim) !== str(rec.sim)) { a.sim = str(rec.sim); ap.push(a.id); }
+      persist();
+      return { ...clone(c), apSim: ap };
     },
     ctMark: async (id, mark) => {
       const c = db.ctsim.find(x => x.id === id);
@@ -11150,6 +11164,7 @@ function renderCtPullBtn() {
   b.hidden = !ctOn() || !canEdit() || !(n || state.ct.length);
   b.innerHTML = `ดึงจาก CT-SIM${n ? ` <span class="n">${n}</span>` : ''}`;
   const r = intakeCt && state.ct.find(x => x.id === intakeCt);
+  syncIntakeDraft();
   $('#i-ctfrom').hidden = !r;
   if (r) $('#i-ctfrom').innerHTML = `ข้อมูลจาก CT-SIM: <b>${esc(r.hn)}</b> · ${esc(ctLabel(r.ct))} ${esc(fmtDay(r.date))}${r.organ ? ` · ${esc(r.organ)}` : ''} · แจกแล้วรายการนี้ผูกกับเคส <button type="button" class="link-btn" data-ctunlink>ไม่ผูก</button>`;
 }
@@ -11176,17 +11191,68 @@ function ctToIntake(r) {
   return { ...extra, hn: r.hn, name: r.name, ct: r.date, in: workdayFrom(today()), note: r.note, sim: r.sim, doc: r.doc, type: r.type, aim: r.aim, room: r.room, tech: r.tech,
     area, dpf: r.dpf, fx: r.fx, rx: r.rx, freq: r.freq, icd: r.icd, dx: r.dx, cats };
 }
+// 23 พ.ย. (API 117): บันทึกไว้ก่อน = เก็บค่าที่แก้ในฟอร์มลงรายการ CT-SIM ที่รอแจก (ยังไม่แจกให้ MP) · ส่งเฉพาะช่องที่แสดงในฟอร์ม (ช่องที่ซ่อน = คงเดิม)
+const CTDRAFT_API = 117;
+const CTDRAFT_OLD = 'บันทึกไว้ก่อนต้องใช้ Code.gs รุ่น 2026-11-23.4 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const CT_DRAFT_KEYS = ['name', 'doc', 'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'note'];
+const intakeCtRec = () => (intakeCt && state.ct.find(x => x.id === intakeCt && !x.took)) || null;
+const iShown = sel => { const el = $(sel); return !!el && !el.closest('[hidden]'); };
+function syncIntakeDraft() {
+  const r = intakeCtRec(), can = !!r && canEdit() && accessOf('work') === 'edit';
+  $('#i-draft').hidden = !can;
+  $('#i-draft').title = store.mode === 'sheet' && !serverHas(CTDRAFT_API) ? CTDRAFT_OLD : 'เก็บค่าที่แก้ลงรายการรอแจกจาก CT-SIM โดยยังไม่แจกให้ MP · ดึงจาก CT-SIM อีกครั้งเมื่อพร้อมแจก';
+  $('#i-mvn-f').hidden = !r || !ncOn();
+  if (!r) $('#i-mvn').checked = false;
+  // วันทำ CT ของผู้ป่วยที่ดึงจาก CT-SIM = ทำ CT แล้ว แก้ที่นี่ไม่ได้ (แก้ได้ที่แถบ CT-SIM)
+  const ctIn = $('#i-ct'), lock = !!(intakeCt && state.ct.some(x => x.id === intakeCt));
+  ctIn.disabled = lock;
+  ctIn.title = lock ? 'วันทำ CT จาก CT-SIM (ทำ CT แล้ว แก้ไม่ได้ · แก้ได้ที่แถบ CT-SIM)' : '';
+}
+// Start RT ในฟอร์มต่างจากรายการ CT-SIM ที่ดึงมา + ติ๊กเลื่อนนัดแจ้งพยาบาล = รายการเลื่อนนัด (Nurse → เลื่อนนัด)
+function intakeMvn(r) {
+  const sim = $('#i-oncall').checked ? 'on call' : $('#i-sim').value;
+  if (!r || !$('#i-mvn').checked || $('#i-mvn-f').hidden || str(r.sim) === str(sim)) return null;
+  return { what: 'sim', ref: r.id, hn: r.hn, name: str($('#i-name').value) || r.name, doc: chipValue($('#i-doc')) || r.doc, from: r.sim, to: sim, note: `${navLabel('work')}${r.organ ? ' · ' + r.organ : ''}` };
+}
+async function saveIntakeDraft(btn) {
+  const r = intakeCtRec();
+  if (!r) return toast('บันทึกไว้ก่อนใช้กับผู้ป่วยที่ดึงจาก CT-SIM (ยังรอแจก) · กด ดึงจาก CT-SIM ก่อน', { err: true });
+  if (store.mode === 'sheet' && !serverHas(CTDRAFT_API)) return toast(CTDRAFT_OLD, { err: true });
+  const err = checkDose('i') || checkArea('i') || checkSites('i');
+  if (err) return toast(err, { err: true });
+  let ex0 = {};
+  try { ex0 = JSON.parse(r.extra || '{}') || {}; } catch (e) { ex0 = {}; }
+  const ex = { ...ex0, ...readExtra('i') };
+  if (roomSitesOn()) ex.sites = JSON.stringify(readSites('i'));
+  const rec = { name: $('#i-name').value, cats: selectedCats().join(', '), area: readArea('i'), ...readDose('i'), ...readDx('i'), note: $('#i-note').value, extra: JSON.stringify(ex) };
+  for (const [k, sel] of [['doc', '#i-doc'], ['type', '#i-type'], ['aim', '#i-aim'], ['room', '#i-room'], ['tech', '#i-tech']]) if (iShown(sel)) rec[k] = chipValue($(sel));
+  if (iShown('#i-sim')) rec.sim = $('#i-oncall').checked ? 'on call' : $('#i-sim').value;
+  const mv = intakeMvn(r);
+  btn.disabled = true;
+  try {
+    const out = await store.ctDraft(r.id, rec), c = normCt(out), i = state.ct.findIndex(x => x.id === c.id);
+    if (i >= 0) state.ct[i] = c; else state.ct.push(c);
+    for (const id of out.apSim || []) { const a = state.appt.find(x => x.id === id); if (a) a.sim = c.sim; }
+    resetIntake();
+    render();
+    toast(`บันทึก ${c.hn} ไว้ก่อนแล้ว (ยังไม่แจก) · ยังรอแจกที่ปุ่ม ดึงจาก CT-SIM`);
+    if (mv) await ncNotify([mv]);
+  } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; }
+}
+$('#i-draft').addEventListener('click', e => saveIntakeDraft(e.currentTarget));
 function useCt(id) {
   const r = state.ct.find(x => x.id === id);
   if (!r) return;
   fillIntake(ctToIntake(r));
   intakeTouched = true;
   intakeCt = id;
+  $('#i-mvn').checked = false;
   ctpullDlg.close();
   renderCtPullBtn();
   $('#intake-sec').scrollIntoView({ block: 'start' });
   $('#i-hn').focus();
-  toast(`ใส่ข้อมูล ${r.hn} จาก CT-SIM แล้ว · ตรวจแล้วกดแจกเคส`);
+  toast(`ใส่ข้อมูล ${r.hn} จาก CT-SIM แล้ว · ตรวจแล้วกดแจกเคส หรือบันทึกไว้ก่อน (ยังไม่แจก)`);
 }
 async function markCt(id, mark) {
   try {
@@ -13003,7 +13069,7 @@ const HIST_TABLE = { ncall: 'Nurse แจ้งผู้ป่วย', roJobs: '
 const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ', restore: 'กู้คืน', purge: 'ลบถาวร' };
 const HIST_FN = { fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
-  courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
+  courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', ctDraft: 'CT-SIM (บันทึกไว้ก่อนจากแจกงานฟิสิกส์)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
   regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', seeSave: 'พบแพทย์วันนี้', seeSaveMany: 'ตารางพบแพทย์', visitSave: 'พบแพทย์นอกตารางนัด', visitMark: 'พบแพทย์แล้ว (นอกตารางนัด)', visitRemove: 'ยกเลิกพบแพทย์นอกตารางนัด', rtdSave: 'คำสั่งแพทย์ระหว่างฉาย', nurseMark: 'Nurse ยืนยัน', rtdNurse: 'รับคำสั่งแพทย์ (Nurse)', ncallAdd: 'เลื่อนนัดแจ้งพยาบาล', ncallMark: 'แจ้งผู้ป่วย (เลื่อนนัด)', ncallAtt: 'นัดวันนี้ (มา / ไม่มา)', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
   dqDutySave: 'เวร S1', saveConfig: 'ตั้งค่า', cfgDecide: 'อนุมัติคำขอตั้งค่า', editLog: 'กิจกรรม', removeLog: 'ลบกิจกรรม', dutyDay: 'ผู้ปฏิบัติงาน', jobsSave: 'RTT/RA Jobs', roJobsSave: 'P4P แพทย์', vacSave: 'Vac-Lok', vacRemove: 'ลบ Vac-Lok', trashRestore: 'กู้คืนจากถังขยะ', trashPurge: 'ลบถาวรจากถังขยะ', evRemove: 'ลบกิจกรรมแผนก', removeLeave: 'ลบวันลา' };
 const histItem = x => (x && typeof x === 'object' ? [x.date && fmtDay(str(x.date).slice(0, 10)), x.label || x.type || x.room || x.kind, x.reason, x.note].filter(Boolean).join(' ') || '·' : str(x));
@@ -24584,6 +24650,7 @@ let intakeTouched = false, intakeSig = '';
 const defaultsSig = () => today() + JSON.stringify(state.config.defaults || {});
 function resetIntake() {
   intakeCt = '';
+  $('#i-mvn').checked = false;
   delete intake.dataset.dupOk;
   kindBy = '';
   fillIntake(defaultCase());
@@ -24645,10 +24712,11 @@ async function submitIntake(e) {
   if (ctFrom) recs[0].ctFrom = ctFrom;   // Code.gs ผูกรายการ CT-SIM กับเคสที่แจก
   const siteJobs = siteJobRecs(recs.find(r => catOf(r.cat).kind !== 'simple'), recs[0].in, true);   // บริเวณเพิ่มเติมคนละบริเวณ = อีกงาน ให้ MP คนเดียวกับเคสแรก
   recs.push(...siteJobs);
-  const btn = $('#i-save');
+  const btn = $('#i-save'), mv = intakeMvn(intakeCtRec());   // 23 พ.ย.: เลื่อนนัดแจ้งพยาบาล (ส่งหลังแจกสำเร็จ)
   btn.disabled = true;
   try {
     const saved = (await store.addCases(recs)).map(normCase);
+    if (mv) setTimeout(() => ncNotify([mv]), 0);
     state.cases.push(...saved);
     const ids = saved.map(x => x.id);
     const ctRec = ctFrom && state.ct.find(r => r.id === ctFrom);
