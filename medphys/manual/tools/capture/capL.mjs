@@ -1,5 +1,6 @@
 // ใบลา (ทุกตำแหน่ง) + ตั้งค่าใบลา (แอดมิน) · ข้อมูลตัวอย่าง วันจันทร์ 23 พ.ย. 2569 · ชื่อ / เบอร์ / บัญชีปลอมทั้งหมด
-//  l01 หน้าต่างวันลา: ประเภท + ปุ่มใบลา   l02 ใบลา: ดู · พิมพ์ · download PDF   l03 หัวหน้างาน: ปุ่มรับทราบ   l04 ตรา รับทราบแล้ว ข้างชื่อผู้ลา
+//  l01 หน้าต่างวันลา: ประเภท + ปุ่มใบลา   l02 ใบลา: ดู · พิมพ์ · download PDF   l03 หัวหน้างาน: ปุ่มรับทราบ   l04 ตรา รับทราบแล้ว (ที่ว่างใกล้ช่องลงชื่อผู้ลา)
+//  24 พ.ย. (.25): ฟอนต์ TH SarabunPSK · ตรามีบรรทัดลงชื่อ + วันที่ พ.ศ. · a08 มีคอลัมน์รักษาการแทนหัวหน้างาน
 //  a08 ตั้งค่า → ทีม → ใบลา   a09 บรรทัด ใบลา: (ตำแหน่ง · เบอร์โทร) ใต้รายชื่อ
 import { open } from './lib.mjs';
 const KEY = 'medphys-dispatch:v1', AT = '2026-11-23T09:05:00+07:00';
@@ -40,9 +41,11 @@ await h.snap('l02-lf-form', { area: '#lf-dlg .dlg', pad: 0, targets: ['#lf-print
 /* ---------- l04 ตรา รับทราบแล้ว ---------- */
 await page.click('#lf-ack'); await page.waitForTimeout(600);
 console.log('ack:', await h.toast());
+// 24 พ.ย. (.25): ตราอยู่ที่ว่างใกล้ช่องลงชื่อผู้ลา (ไม่ทับข้อความ) = ภาพครอบตรา + ช่องลงชื่อผู้ลา
 const st = await page.locator('#lf-prev .lf-stamp').boundingBox();
-const sg = await page.locator('#lf-prev .lf-right').boundingBox();
-await h.snap('l04-lf-stamp', { area: { x: sg.x - 10, y: st.y - 60, w: sg.width + 20, h: st.height + 150 }, targets: ['#lf-prev .lf-stamp'] });
+const sg = await page.locator('#lf-prev .lf-me').boundingBox();
+const x0 = Math.min(st.x, sg.x) - 16, y0 = Math.min(st.y, sg.y) - 44, x1 = Math.max(st.x + st.width, sg.x + sg.width) + 16, y1 = Math.max(st.y + st.height, sg.y + sg.height) + 16;
+await h.snap('l04-lf-stamp', { area: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, targets: [{ t: '#lf-prev .lf-stamp', side: 'top' }] });
 await page.evaluate(() => document.querySelector('#lf-dlg').close()); await page.waitForTimeout(300);
 /* ---------- l03 หน้าต่างวันลาหลังรับทราบ ---------- */
 await h.snap('l03-lv-acked', { area: '#lv-lf', pad: 10, targets: ['#lv-lf-st', '#lv-lf-ack'] });
@@ -54,7 +57,7 @@ await h.day(AT);
 await h.go('settings');
 await page.evaluate(() => { const t = document.querySelector('[data-stab="team"]'); if (t) t.click(); }); await page.waitForTimeout(500);
 await h.snap('a08-adm-leave', { area: '.sec[data-sec="leave"]', pad: 8, scrollTo: '.sec[data-sec="leave"]',
-  targets: ['.sec[data-sec="leave"] [data-k="leave.at"]', '.sec[data-sec="leave"] [data-k="leave.group.name"]', '.sec[data-sec="leave"] [data-k="leave.acting.name"]', '.sec[data-sec="leave"] select[data-k="leave.heads.MP"]'] });
+  targets: ['.sec[data-sec="leave"] [data-k="leave.at"]', '.sec[data-sec="leave"] [data-k="leave.group.name"]', '.sec[data-sec="leave"] [data-k="leave.acting.name"]', '.sec[data-sec="leave"] select[data-k="leave.heads.MP"]', '.sec[data-sec="leave"] select[data-k="leave.hAct.MP"]'] });
 await h.snap('a09-adm-lvrow', { area: '.set-row:has(input[data-k="staff.2.phone"])', pad: 8, targets: ['input[data-k="staff.2.title"]', 'input[data-k="staff.2.phone"]'] });
 await h.snap('a10-adm-lvdoc', { area: '.set-row.doc-row:has(input[data-k="doctors.0.phone"])', pad: 8, targets: ['.doc-row input[data-k="doctors.0.title"]', '.doc-row input[data-k="doctors.0.phone"]'] });
 await h.close();
