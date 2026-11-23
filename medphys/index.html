@@ -429,6 +429,10 @@ button.duty-line:hover{border-color:var(--accent)}
 .cn-tag.ok{background:var(--ok-soft,rgba(26,127,55,.12));color:var(--ok,#1a7f37)}
 .cn-flt{flex-wrap:nowrap}
 .cn-flt small{color:var(--muted);font-variant-numeric:tabular-nums}
+.cn-ask{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;width:100%;margin-top:8px;padding:8px 10px;border:1px dashed var(--line-strong);border-radius:8px;background:var(--sunken)}
+.cn-ask .cn-note{flex:1 1 240px;min-height:30px;padding:2px 8px}
+.cn-tag.rect{background:var(--late-soft);color:var(--late)}
+.cn-tag.cancel{background:var(--sunken);color:var(--muted);text-decoration:line-through}
 .cn-flt input:checked + span small{color:inherit;opacity:.85}
 .cn-help{margin:-4px 0 10px;font-size:13px}
 .cn-grp:not(:has(.cn-row:not(.flt-x))){display:none}
@@ -8208,7 +8212,7 @@ function normLog(o) {
 // แถบ CT-SIM: ผู้ป่วยที่ทำ CT จำลองการฉาย (ช่องเดียวกับ CT_FIELDS ใน Code.gs + สถานะการแจกเคส)
 const CT_KEYS = ['id', 'ct', 'date', 'hn', 'name', 'organ', 'mask', 'bite', 'cm', 'coil', 'ydev', 'inj', 'nss', 'syr', 'doc', 'pstat', 'hdr', 'crad', 'note', 'research',
   'cats', 'type', 'aim', 'room', 'tech', 'area', 'dpf', 'fx', 'rx', 'freq', 'sim', 'icd', 'dx', 'extra', 'ctcm', 'special', 'send', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated',
-  'cdone', 'cdBy'];   // 23 พ.ย.: Contour เสร็จ (เวลา · ผู้กด) · แถบ Contouring
+  'cdone', 'cdBy', 'cnAct', 'cnNote'];   // 23 พ.ย. (API 121): Contouring Re-CT / Cancel Treatment   // 23 พ.ย.: Contour เสร็จ (เวลา · ผู้กด) · แถบ Contouring
 function normCt(o) {
   const c = {};
   for (const k of CT_KEYS) c[k] = str(o[k]);
@@ -8678,7 +8682,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.22';
+const PAGE_VERSION = '2026-11-22.23';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8753,7 +8757,8 @@ const sheetStore = {
   ctRemove: (id, pin) => call('ctRemove', id, pin),
   ctMark: (id, mark) => call('ctMark', id, mark),
   ctDraft: (id, rec) => call('ctDraft', id, rec),
-  ctContour: (id, on) => call('ctContour', id, !!on),   // 23 พ.ย.: แถบ Contouring   // 23 พ.ย. (API 117): แจกงานฟิสิกส์ บันทึกไว้ก่อน
+  ctContour: (id, on) => call('ctContour', id, !!on),
+  ctContourAct: (id, act, note) => call('ctContourAct', id, act, note),   // 23 พ.ย. (API 121): Contouring Re-CT / Cancel Treatment   // 23 พ.ย.: แถบ Contouring   // 23 พ.ย. (API 117): แจกงานฟิสิกส์ บันทึกไว้ก่อน
   apptSave: (rec, pin) => call('apptSave', rec, pin),
   apptRemove: (id, pin) => call('apptRemove', id, pin),
   apptMark: (id, mark) => call('apptMark', id, mark),
@@ -9739,6 +9744,18 @@ function localStore() {
       persist();
       return clone(c);
     },
+    ctContourAct: async (id, act, note) => {   // 23 พ.ย.: เหมือน Code.gs ctContourAct
+      const c = db.ctsim.find(x => x.id === id), n = str(note).slice(0, 300);
+      if (!['rect', 'cancel'].includes(act)) throw new Error('ไม่รู้จักคำสั่ง');
+      if (act === 'cancel' && !n) throw new Error('ใส่สาเหตุที่ Cancel Treatment');
+      if (!c) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      if (c.took) throw new Error('รายการนี้แจกงานฟิสิกส์ไปแล้ว หรือตั้งไม่ต้องแจกไว้แล้ว');
+      Object.assign(c, { took: 'skip', tookBy: `${str(state.user.name) || 'ผู้ใช้ตัวอย่าง'} · ${act === 'rect' ? 'Re-CT' : 'Cancel Treatment'}`, tookAt: nowStamp(), cnAct: act, cnNote: n });
+      const ap = [];
+      if (act === 'cancel') for (const a of db.appt || []) if (a.took === c.id && str(a.sim)) { a.sim = ''; ap.push(a.id); }   // ยกเลิกนัด Start RT
+      persist();
+      return { ...clone(c), apSim: ap };
+    },
     ctDraft: async (id, rec) => {   // 23 พ.ย.: เหมือน Code.gs ctDraft
       const c = db.ctsim.find(x => x.id === id);
       if (!c) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
@@ -9756,9 +9773,11 @@ function localStore() {
       if (!c) throw new Error('ไม่พบรายการนี้ใน CT-SIM (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
       const gone = mark !== 'skip' && c.took && c.took !== 'skip' && splitList(c.took).every(id => !db.cases.some(x => x.id === id));
       if (mark === 'skip' ? c.took : c.took !== 'skip' && !gone) throw new Error(c.took === 'skip' ? 'รายการนี้ตั้งไม่ต้องแจกไว้แล้ว' : c.took ? 'รายการนี้แจกเคสไปแล้ว' : 'รายการนี้ยังรอแจกเคสอยู่');
-      Object.assign(c, mark === 'skip' ? { took: 'skip', tookBy: state.user.name || 'ผู้ใช้ตัวอย่าง', tookAt: nowStamp() } : { took: '', tookBy: '', tookAt: '' });
+      const back = mark !== 'skip' && c.cnAct === 'cancel' && str(c.sim) ? c.sim : '', ap = [];
+      Object.assign(c, mark === 'skip' ? { took: 'skip', tookBy: state.user.name || 'ผู้ใช้ตัวอย่าง', tookAt: nowStamp() } : { took: '', tookBy: '', tookAt: '', cnAct: '', cnNote: '' });
+      if (back) for (const a of db.appt || []) if (a.took === c.id && !str(a.sim)) { a.sim = back; ap.push(a.id); }   // คืนนัด Start RT
       persist();
-      return clone(c);
+      return { ...clone(c), apSim: ap };
     },
     dutyMembers: async () => {
       const dir = demoMembers(), roles = state.config.dutyRoles;
@@ -11245,7 +11264,7 @@ function renderCtPullBtn() {
   $('#i-ctfrom').hidden = !r;
   if (r) $('#i-ctfrom').innerHTML = `ข้อมูลจาก CT-SIM: <b>${esc(r.hn)}</b> · ${esc(ctLabel(r.ct))} ${esc(fmtDay(r.date))}${r.organ ? ` · ${esc(r.organ)}` : ''} · แจกแล้วรายการนี้ผูกกับเคส <button type="button" class="link-btn" data-ctunlink>ไม่ผูก</button>`;
 }
-const ctPullRow = (r, skip) => `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b> ${esc(r.name)}${skip ? '' : cnTag(r)}${(js => (js.length ? ` <span class="dup-tag" title="${esc(`${js.map(jobText).join(' | ')} · ถ้าเป็นงานเดียวกัน กด ไม่ต้องแจก`)}">มีงานวางแผนอยู่แล้ว</span>` : ''))(skip ? [] : openJobsOf(r.hn))}<small>${[ctLabel(r.ct), fmtDay(r.date), ctDocText(r.doc), r.organ, ctCatLabels(r), r.note].filter(Boolean).map(esc).join(' · ')}</small></div>
+const ctPullRow = (r, skip) => `<li><div class="ct-pull-main"><b class="hn">${esc(r.hn)}</b> ${esc(r.name)}${skip ? cnActTag(r) : cnTag(r)}${(js => (js.length ? ` <span class="dup-tag" title="${esc(`${js.map(jobText).join(' | ')} · ถ้าเป็นงานเดียวกัน กด ไม่ต้องแจก`)}">มีงานวางแผนอยู่แล้ว</span>` : ''))(skip ? [] : openJobsOf(r.hn))}<small>${[ctLabel(r.ct), fmtDay(r.date), ctDocText(r.doc), r.organ, ctCatLabels(r), r.note].filter(Boolean).map(esc).join(' · ')}</small></div>
   <span class="ct-pull-acts">${skip ? `<button type="button" class="btn ghost sm" data-ctunskip="${esc(r.id)}">คืนกลับรอแจก</button>` : `<button type="button" class="btn ghost sm" data-ctskip="${esc(r.id)}">ไม่ต้องแจก</button><button type="button" class="btn primary sm" data-ctuse="${esc(r.id)}">ใช้ข้อมูลนี้</button>`}</span></li>`;
 // ข้อความที่ค้นได้: HN ชื่อ แพทย์ (รหัส / ชื่อ) เครื่อง CT วันทำ CT Organ เทคนิค Note
 const ctPullText = r => [r.hn, r.name, r.doc, ctDocText(r.doc), ctLabel(r.ct), fmtDay(r.date), r.organ, ctCatLabels(r), r.tech, r.special, r.note].join(' ').toLowerCase();
@@ -11327,6 +11346,18 @@ const cnOn = () => store.mode !== 'sheet' || serverHas(CONTOUR_API);
 const cnTag = r => (r.cdone ? `<span class="cn-tag ok" title="${esc(`Contour เสร็จ · ${r.cdBy} · ${whenText(r.cdone)}`)}">✓ Contour เสร็จ</span>` : '<span class="cn-tag">กำลัง contour</span>');
 const cnUi = { st: '' };
 const CN_ST = [['', 'ทั้งหมด'], ['wait', 'กำลัง contour'], ['done', 'Contour เสร็จ']];
+// 23 พ.ย. (API 121): Re-CT / Cancel Treatment ของแต่ละเคส · ยืนยันในแถว (Cancel ต้องใส่สาเหตุ)
+const CNACT_API = 121;
+const cnActOn = () => store.mode !== 'sheet' || serverHas(CNACT_API);
+const CNACT_OLD = 'Re-CT / Cancel Treatment ต้องใช้ Code.gs รุ่น 2026-11-23.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const CN_ACT = { rect: 'Re-CT', cancel: 'Cancel Treatment' };
+const NC_CANCEL = 'Cancel Treatment';   // Note ของรายการแจ้งพยาบาลแบบยกเลิกนัด (to ว่าง)
+const cnAsk = { id: '', act: '', note: '' };
+const cnActForm = r => `<div class="cn-ask" data-cnask="${esc(r.id)}"><b>${esc(CN_ACT[cnAsk.act])}</b> ${cnAsk.act === 'rect' ? `<span class="muted">ออกจาก Contouring / แจกงานฟิสิกส์ แล้วเปิดฟอร์ม CT Order (Re-CT)</span>` : '<span class="muted">ไม่ฉายรังสี · ออกจาก Contouring / แจกงานฟิสิกส์</span>'}
+  <input class="cn-note" data-cnnote="1" maxlength="300" value="${esc(cnAsk.note)}" placeholder="${cnAsk.act === 'cancel' ? 'สาเหตุ (บังคับ) เช่น ผู้ป่วยปฏิเสธการรักษา, อาการทรุดลง' : 'หมายเหตุ (ไม่บังคับ) เช่น ตำแหน่งเปลี่ยน, ต้องใช้ CM'}" aria-label="${cnAsk.act === 'cancel' ? 'สาเหตุที่ Cancel Treatment' : 'หมายเหตุ Re-CT'}">
+  <button type="button" class="btn ${cnAsk.act === 'cancel' ? 'danger' : 'primary'} sm" data-cnactok="${esc(r.id)}">ยืนยัน ${esc(CN_ACT[cnAsk.act])}</button><button type="button" class="btn ghost sm" data-cnactno="1">ไม่ทำ</button></div>`;
+// ป้ายในรายการไม่ต้องแจก (แจกงานฟิสิกส์ → ดึงจาก CT-SIM)
+const cnActTag = r => (CN_ACT[r.cnAct] ? ` <span class="cn-tag ${r.cnAct === 'cancel' ? 'cancel' : 'rect'}" title="${esc(`Contouring: ${CN_ACT[r.cnAct]}${r.cnNote ? ` · ${r.cnNote}` : ''} · ${r.tookBy} ${r.tookAt}`)}">${esc(CN_ACT[r.cnAct])}${r.cnNote ? ` · ${esc(r.cnNote)}` : ''}</span>` : '');
 function cnSimText(r) {
   if (r.sim === 'on call') return '<span class="cn-sim">Start RT On Call</span>';
   if (!isDay(r.sim)) return '<span class="cn-sim muted">ยังไม่มีวัน Start RT</span>';
@@ -11346,7 +11377,9 @@ function renderContour() {
   const row = r => `<li class="cn-row${r.cdone ? ' done' : ''}" data-cnid="${esc(r.id)}"><span class="cn-who"><b class="hn">${esc(r.hn)}</b> ${r.doc ? docChip(r.doc) + ' ' : ''}${pnm(r.name)}</span>
       ${cnSimText(r)}<span class="cn-meta">CT ${esc(fmtDay(r.date))}${r.organ ? ' · ' + esc(r.organ) : ''}${ctCatLabels(r) ? ' · ' + esc(ctCatLabels(r)) : ''}</span>
       <span class="cn-acts">${r.cdone ? `<span class="cn-ok" title="${esc(whenText(r.cdone))}">✓ Contour เสร็จ · ${esc(r.cdBy)}</span>${can ? `<button type="button" class="btn ghost sm" data-cnundo="${esc(r.id)}"${cnOn() ? '' : ` disabled title="${esc(CONTOUR_OLD)}"`}>ยกเลิก</button>` : ''}`
-        : can ? `<button type="button" class="btn primary sm" data-cndone="${esc(r.id)}"${cnOn() ? '' : ` disabled title="${esc(CONTOUR_OLD)}"`}>✓ Contour เสร็จแล้ว</button>` : '<span class="cn-tag">กำลัง contour</span>'}</span></li>`;
+        : can ? `<button type="button" class="btn primary sm" data-cndone="${esc(r.id)}"${cnOn() ? '' : ` disabled title="${esc(CONTOUR_OLD)}"`}>✓ Contour เสร็จแล้ว</button>` : '<span class="cn-tag">กำลัง contour</span>'}`
+      + (can ? `<button type="button" class="btn ghost sm" data-cnact="rect" data-cnid2="${esc(r.id)}"${cnActOn() ? '' : ` disabled title="${esc(CNACT_OLD)}"`}>Re-CT</button><button type="button" class="btn ghost danger sm" data-cnact="cancel" data-cnid2="${esc(r.id)}"${cnActOn() ? '' : ` disabled title="${esc(CNACT_OLD)}"`}>Cancel Treatment</button>` : '')
+      + `</span>${can && cnAsk.id === r.id ? cnActForm(r) : ''}</li>`;
   $('#cn-body').innerHTML = docs.map(d => {
     const xs = list.filter(r => (r.doc || '') === d).sort((a, b) => simKey(a).localeCompare(simKey(b)) || a.date.localeCompare(b.date));
     return `<section class="cn-grp"><h3 class="cn-h">${d ? `${docChip(d)} ${esc(docName(d) || d)}` : 'ไม่ระบุแพทย์'} <small class="muted">${xs.length} คน · contour เสร็จ ${xs.filter(r => r.cdone).length}</small></h3><ul class="cn-list">${xs.map(row).join('')}</ul></section>`;
@@ -11362,9 +11395,35 @@ async function cnMark(id, on, btn) {
     toast(on ? `${c.hn} · Contour เสร็จแล้ว · รอ${navLabel('work')}แจกงาน` : `${c.hn} · ยกเลิก Contour เสร็จ`);
   } catch (e) { btn.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
+// 23 พ.ย.: Re-CT / Cancel Treatment → รายการ CT-SIM ไม่ต้องแจก · Re-CT แล้วเปิดฟอร์ม CT Order (Re-CT#n) ถ้ามีสิทธิ์
+async function cnActDo(id, btn) {
+  if (!cnActOn()) return toast(CNACT_OLD, { err: true });
+  const r = state.ct.find(x => x.id === id), act = cnAsk.act, note = str(cnAsk.note);
+  if (!r || !CN_ACT[act]) return;
+  if (act === 'cancel' && !note) { toast('ใส่สาเหตุที่ Cancel Treatment', { err: true }); const i = $('#view-contour [data-cnnote]'); if (i) i.focus(); return; }
+  btn.disabled = true;
+  try {
+    const sim0 = r.sim, out = await store.ctContourAct(id, act, note), c = normCt(out), i = state.ct.findIndex(x => x.id === c.id);
+    if (i >= 0) state.ct[i] = c; else state.ct.push(c);
+    for (const aid of out.apSim || []) { const a = state.appt.find(x => x.id === aid); if (a) a.sim = ''; }   // ยกเลิกนัด Start RT
+    Object.assign(cnAsk, { id: '', act: '', note: '' });
+    render();
+    // Cancel Treatment: แจ้งพยาบาล (Nurse → เลื่อนนัด · ยกเลิกนัด Start RT)
+    if (act === 'cancel' && str(sim0)) await ncNotify([{ what: 'sim', ref: c.id, hn: c.hn, name: c.name, doc: c.doc, from: sim0, to: '', note: `${NC_CANCEL} · ${note}` }]);
+    if (act === 'rect' && apptOn() && apEditVia('consult')) {
+      const td = today(), k = hnKey(c.hn), cc = { id: c.id, hn: c.hn, name: c.name, doc: c.doc, room: c.room, icd: c.icd, dx: c.dx, freq: c.freq };
+      toast(`${c.hn} · Re-CT · ออกจาก Contouring แล้ว · กรอก CT Order (Re-CT) ต่อ`);
+      openApForm(null, null, { k, c: cc, e: { date: td, label: 'Re-CT', reason: navLabel('contour'), note, at: nowISO() }, hn: c.hn, name: c.name, rx: { dpf: c.dpf, fx: c.fx }, no: reCtAll(c.hn).length + 1 }, null, 'rect');
+    } else toast(`${c.hn} · ${CN_ACT[act]} · ออกจาก Contouring และแจกงานฟิสิกส์แล้ว${act === 'rect' ? ` · ลง CT Order (Re-CT) ที่แถบ ${navLabel('appt')}` : ''}`);
+  } catch (e) { btn.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+$('#view-contour').addEventListener('input', e => { if (e.target.dataset.cnnote) cnAsk.note = e.target.value; });
 $('#view-contour').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
+  if (b.dataset.cnact) { Object.assign(cnAsk, { id: b.dataset.cnid2, act: b.dataset.cnact, note: '' }); renderContour(); const i = $('#view-contour [data-cnnote]'); if (i) i.focus(); return; }
+  if (b.dataset.cnactno) { Object.assign(cnAsk, { id: '', act: '', note: '' }); return renderContour(); }
+  if (b.dataset.cnactok) return cnActDo(b.dataset.cnactok, b);
   if (b.dataset.cndone) return cnMark(b.dataset.cndone, true, b);
   if (b.dataset.cnundo) return cnMark(b.dataset.cnundo, false, b);
 });
@@ -11384,9 +11443,10 @@ function useCt(id) {
 }
 async function markCt(id, mark) {
   try {
-    const rec = normCt(await store.ctMark(id, mark));
+    const out = await store.ctMark(id, mark), rec = normCt(out);
     const i = state.ct.findIndex(x => x.id === id);
     if (i >= 0) state.ct[i] = rec;
+    for (const aid of (out && out.apSim) || []) { const a = state.appt.find(x => x.id === aid); if (a) a.sim = rec.sim; }   // 23 พ.ย.: คืนกลับรอแจกหลัง Cancel Treatment = คืนนัด Start RT
     if (intakeCt === id && mark) intakeCt = '';
     renderCtPullBtn();
     if (ctpullDlg.open) openCtPull();
@@ -13197,7 +13257,7 @@ const HIST_TABLE = { ncall: 'Nurse แจ้งผู้ป่วย', roJobs: '
 const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ', restore: 'กู้คืน', purge: 'ลบถาวร' };
 const HIST_FN = { fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
-  courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', ctDraft: 'CT-SIM (บันทึกไว้ก่อนจากแจกงานฟิสิกส์)', ctContour: 'Contour เสร็จ (แถบ Contouring)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
+  courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', ctDraft: 'CT-SIM (บันทึกไว้ก่อนจากแจกงานฟิสิกส์)', ctContour: 'Contour เสร็จ (แถบ Contouring)', ctContourAct: 'Re-CT / Cancel Treatment (แถบ Contouring)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
   regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', seeSave: 'พบแพทย์วันนี้', seeSaveMany: 'ตารางพบแพทย์', visitSave: 'พบแพทย์นอกตารางนัด', visitMark: 'พบแพทย์แล้ว (นอกตารางนัด)', visitRemove: 'ยกเลิกพบแพทย์นอกตารางนัด', rtdSave: 'คำสั่งแพทย์ระหว่างฉาย', nurseMark: 'Nurse ยืนยัน', rtdNurse: 'รับคำสั่งแพทย์ (Nurse)', ncallAdd: 'เลื่อนนัดแจ้งพยาบาล', ncallMark: 'แจ้งผู้ป่วย (เลื่อนนัด)', ncallAtt: 'นัดวันนี้ (มา / ไม่มา)', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
   dqDutySave: 'เวร S1', saveConfig: 'ตั้งค่า', cfgDecide: 'อนุมัติคำขอตั้งค่า', editLog: 'กิจกรรม', removeLog: 'ลบกิจกรรม', dutyDay: 'ผู้ปฏิบัติงาน', jobsSave: 'RTT/RA Jobs', roJobsSave: 'P4P แพทย์', vacSave: 'Vac-Lok', vacRemove: 'ลบ Vac-Lok', trashRestore: 'กู้คืนจากถังขยะ', trashPurge: 'ลบถาวรจากถังขยะ', evRemove: 'ลบกิจกรรมแผนก', removeLeave: 'ลบวันลา' };
 const histItem = x => (x && typeof x === 'object' ? [x.date && fmtDay(str(x.date).slice(0, 10)), x.label || x.type || x.room || x.kind, x.reason, x.note].filter(Boolean).join(' ') || '·' : str(x));
@@ -14746,7 +14806,7 @@ function renderNurseMv(words, ordHtml) {
   const old = store.mode === 'sheet' && !ncOn() ? `<p class="notice"><b>ยังใช้ไม่ได้</b><span>${esc(NC_OLD)}</span></p>` : '';
   const row = r => {
     const note = ncNoteDraft.has(r.id) ? ncNoteDraft.get(r.id) : r.note, st = r.status;
-    return `<li class="nc-row" data-ncid="${esc(r.id)}"><span class="nurse-who"><b class="hn">${esc(r.hn)}</b> ${r.doc ? docChip(r.doc) + ' ' : ''}${pnm(r.name)} <span class="nc-what ${esc(r.what)}">${esc(NC_WHAT[r.what] || r.what)}</span> <span class="nc-mv">${esc(ncDay(r.from))} → <b>${esc(ncDay(r.to))}</b></span>`
+    return `<li class="nc-row" data-ncid="${esc(r.id)}"><span class="nurse-who"><b class="hn">${esc(r.hn)}</b> ${r.doc ? docChip(r.doc) + ' ' : ''}${pnm(r.name)} <span class="nc-what ${esc(r.what)}">${esc(NC_WHAT[r.what] || r.what)}</span> <span class="nc-mv">${esc(ncDay(r.from))} → <b>${esc(!r.to && str(r.note).startsWith(NC_CANCEL) ? 'ยกเลิกนัด' : ncDay(r.to))}</b></span>`
       + `<small>เลื่อนโดย ${esc(r.by)} ${esc(whenText(r.at))}${st === 'told' ? ` · <span class="nurse-ok">✓ แจ้งผู้ป่วยแล้ว · ${esc(r.nBy)} ${esc(whenText(r.nAt))}</span>` : st === 'fail' ? ` · <span class="nc-no">ติดต่อไม่ได้ ${esc(r.tries || '1')} ครั้ง (ล่าสุด ${esc(whenText(r.nAt))} · ${esc(r.nBy)})</span>` : ''}${!edit && r.note ? ` · หมายเหตุ: ${esc(r.note)}` : ''}</small></span>`
       + (edit ? `<span class="nc-acts"><input class="nc-note" data-ncnote="${esc(r.id)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(r.hn)}">`
         + (st === 'told' ? `<button type="button" class="btn ghost sm" data-ncmark="${esc(r.id)}" data-st="">ยกเลิก</button>`
@@ -17913,7 +17973,10 @@ function fxgVals(g, key) {
   else if (key === 'mqt') v = [groupMq(cs)];
   else if (key === 'q') v = [(tagInfo(groupTags(cs)).q || {}).label];
   else if (key === 'bd') { const bd = tagInfo(groupTags(cs)).bd; v = [bd && (bd.time || BD_NOTIME)]; }
-  else if (key === 'mob' || key === 'igrt') { const ps = ptStatus(tagInfo(groupTags(cs)), roomOf(g.main.c)); v = [key === 'mob' ? ps.mob : igText(ps.ig)]; }
+  else if (key === 'mob' || key === 'igrt') {
+    const ps = ptStatus(tagInfo(groupTags(cs)), roomOf(g.main.c)), tab = igrtTab(roomOf(g.main.c)), pr = key === 'igrt' && igrtProto(g.main.c, tab);   // 23 พ.ย.: IGRT = แนวทาง (ถ้ามี)
+    v = [key === 'mob' ? ps.mob : pr ? `${tab} ${IGRT_PROTO[pr.id].short}` : igText(ps.ig)];
+  }
   else { const td = today(), e = sc && fxEventAt(sc.evs, td); v = [!g.ready ? (g.main.c.apId ? 'รอ CT-Sim' : 'รอ Plan complete') : !sc ? 'ไม่มีวันฉาย' : sc.hold ? sc.hold.label : e && e.act === 'skip' ? e.label : sc.start > td ? 'รอฉาย' : 'กำลังฉาย']; }
   v = [...new Set(v.filter(Boolean))];
   return v.length ? v : [BLANK];
@@ -18186,10 +18249,10 @@ function fxGridRow(g, days, hol, td, edit, room = '') {
     : `<span class="ptags"${tags.length ? ` title="${esc(tags.join(', '))}"` : ''}>${chips}</span>`;
   // แถบสถานะ: สถานะผู้ป่วย (เดิน / รถนอน) · IGRT (ค่าเริ่มต้นของห้อง = เส้นประ) · กดเพื่อแก้ในรายละเอียดผู้ป่วย
   const ps = ptStatus(ti, roomOf(c)), igT = igText(ps.ig);
-  const stTip = [ps.mob && `สถานะผู้ป่วย: ${ps.mob}${ps.mobDef ? ' (ค่าเริ่มต้น)' : ''}`, igT && `IGRT ${igT}${ps.igDef ? ` (ค่าเริ่มต้นของห้อง ${roomLabel(roomOf(c))})` : ''}`,
+  const stTip = [ps.mob && `สถานะผู้ป่วย: ${ps.mob}${ps.mobDef ? ' (ค่าเริ่มต้น)' : ''}`, igT && !igrtProto(c, igrtTab(roomOf(c))) && `IGRT ${igT}${ps.igDef ? ` (ค่าเริ่มต้นของห้อง ${roomLabel(roomOf(c))})` : ''}`,
     (pr => (pr ? `แนวทาง IGRT ${igrtTab(roomOf(c))}: ${IGRT_PROTO[pr.id].label}${pr.auto ? ' (อัตโนมัติจาก Organ / บริเวณ)' : ''}` : ''))(igrtProto(c, igrtTab(roomOf(c))))].filter(Boolean).join(' · ');
   const igTab = igrtTab(roomOf(c)), igPr = igrtProto(c, igTab), igP = igPr && IGRT_PROTO[igPr.id];   // 23 พ.ย.: แนวทาง IGRT ของเคส
-  const stIn = (ps.mob ? `<span class="st-chip mob${ps.mobDef ? ' def' : ''}">${esc(ps.mob)}</span>` : '') + (igT ? `<span class="st-chip ig${ps.igDef ? ' def' : ''}">${esc(igT)}</span>` : '')
+  const stIn = (ps.mob ? `<span class="st-chip mob${ps.mobDef ? ' def' : ''}">${esc(ps.mob)}</span>` : '') + (igT && !igP ? `<span class="st-chip ig${ps.igDef ? ' def' : ''}">${esc(igT)}</span>` : '')   // 23 พ.ย.: มีแนวทาง (ป้ายสีน้ำเงิน) = ไม่แสดงป้าย IGRT เดิม
     + (igP ? `<span class="st-chip igp${igPr.auto ? ' def' : ''}">${esc(igTab)} ${esc(igP.short)}</span>` : '');
   const stat = !stIn ? '' : canEdit() && fx2On() && !ctRow ? `<button type="button" class="fxg-stat" data-ptags="${esc(c.id)}" title="${esc(stTip + ' · กดเพื่อแก้')}">${stIn}</button>` : `<span class="fxg-stat" title="${esc(stTip)}">${stIn}</span>`;
   const given = fxGiven(sc, td);
@@ -18726,6 +18789,8 @@ function openTags(id) {
   $('#pin-igp').hidden = !igTab;
   $('#pin-igp').innerHTML = igTab ? [['', `อัตโนมัติ (${igGs ? IGRT_PROTO[igGs].short : 'ไม่พบ'})`], ...IGRT_TABS[igTab].map(id => [id, IGRT_PROTO[id].short]), ['none', 'ไม่ใช้แนวทาง']].map(([v, l]) => radio('pigp', v, l, v === igSel)).join('') : '';
   $$('#pin-igp label').forEach(l => { const p = IGRT_PROTO[$('input', l).value]; if (p) l.title = p.label; });
+  pinCtx.igOld = !!freqs.length;
+  syncIgOld();
   $('#pin-igp-sub').textContent = igTab ? `แนวทาง IGRT ${igTab} (ห้อง ${roomLabel(room)}) · ป้าย CB / KV ในตารางวันฉาย และนับงาน CBCT / kV ของ RTT` : '';
   const t0 = ti.bd ? ti.bd.time : '';
   $('#pin-bd-time').innerHTML = ['', ...BD_TIMES, ...(t0 && !BD_TIMES.includes(t0) ? [t0] : [])].map(t => `<option value="${t}"${t === t0 ? ' selected' : ''}>${t ? t + ' น.' : 'ไม่ระบุเวลา'}</option>`).join('');
@@ -18850,6 +18915,13 @@ function readTags() {
   const igp = $('#pin-igp').hidden ? str((pinCtx || {}).igp0) : chipValue($('#pin-igp'));   // 23 พ.ย.: แนวทาง IGRT (ห้องที่ไม่มีตาราง = คงค่าเดิม)
   return uniqTags([...tags, ...(mob && mob !== ml[0] ? [mob] : []), ...(igTag ? [igTag] : []), ...(igp ? ['IGRTP ' + igp] : []), ...(q ? ['คิว ' + q] : [])]).join(', ');
 }
+// 23 พ.ย.: ชนิด / ความถี่ IGRT เดิม = เฉพาะห้องที่ไม่มีแนวทาง หรือเลือก ไม่ใช้แนวทาง (ค่าที่เลือกไว้ยังเก็บเหมือนเดิม)
+function syncIgOld() {
+  const on = $('#pin-igp').hidden || chipValue($('#pin-igp')) === 'none';
+  $('#pin-ig').hidden = !on;
+  $('#pin-igf').hidden = !on || !(pinCtx && pinCtx.igOld);
+}
+$('#pin-igp').addEventListener('change', syncIgOld);
 // ช่องเวลา BD protocol: แสดงเมื่อติ๊ก BD protocol
 const syncBd = () => { $('#pin-bd-box').hidden = !chipValues($('#pin-tags')).some(isBdName); };
 $('#pin-tags').addEventListener('change', syncBd);

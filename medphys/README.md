@@ -930,6 +930,15 @@
 
 ## ความเร็วเมื่อข้อมูลสะสมหลายปี (รุ่น 2026-11-09.11 · Code.gs 2026-11-09.5 · API 61)
 
+- **2026-11-22.23 + Code.gs 2026-11-23.8 (API 121): ป้าย IGRT เดิมออก · Contouring Re-CT / Cancel Treatment**
+  - ตารางวันฉาย: เคสที่มีแนวทาง IGRT (ป้ายสีน้ำเงิน เช่น L1 Mask) ไม่แสดงป้าย IGRT เดิม (CBCT Daily ฯลฯ) แล้ว · ตัวกรอง IGRT ใช้ชื่อแนวทาง
+    - รายละเอียดผู้ป่วย: ชนิด / ความถี่ IGRT เดิม (CBCT / Planar · Daily / Weekly) แสดงเฉพาะห้องที่ไม่มีแนวทาง หรือเมื่อเลือก ไม่ใช้แนวทาง
+  - แถบ Contouring: แต่ละเคสมีปุ่ม **Re-CT** และ **Cancel Treatment** (กดแล้วยืนยันในแถวนั้น · Cancel Treatment ต้องใส่สาเหตุ · Re-CT ใส่หมายเหตุได้)
+    - บันทึกแล้วรายการ CT-SIM เป็น "ไม่ต้องแจก" = ออกจาก Contouring และจากปุ่มดึงจาก CT-SIM ของแจกงานฟิสิกส์ (ในรายการไม่ต้องแจกมีป้าย Re-CT / Cancel Treatment + หมายเหตุ)
+    - Cancel Treatment: **ยกเลิกนัด Start RT** ของนัด (CT Order) ที่ลง CT-SIM เป็นรายการนั้น (ปฏิทิน Start RT / ตารางวันฉาย / นัดวันนี้ ไม่นับแล้ว) และ**แจ้งพยาบาล** ที่ Nurse → เลื่อนนัด แสดง "ยกเลิกนัด" พร้อมสาเหตุ
+    - Re-CT: เปิดฟอร์ม CT Order (Re-CT#ครั้งที่ · ข้อมูลผู้ป่วย / Prescription จากรายการ CT-SIM) ให้กรอกต่อ (ผู้มีสิทธิ์ลง CT Order จากห้องตรวจ)
+    - แจกงานฟิสิกส์ → คืนกลับรอแจก = ล้าง Re-CT / Cancel Treatment (กลับมาที่ Contouring · Cancel Treatment = คืนนัด Start RT ด้วย)
+    - CT-SIM เพิ่มคอลัมน์ Contouring: Re-CT / Cancel และ Contouring: หมายเหตุ (Code.gs เพิ่มให้เอง) · ต้องวาง Code.gs ใหม่ (ก่อนนั้นปุ่มกดไม่ได้) · Code.gs รุ่นนี้รวมของ 2026-11-23.1–.7
 - **2026-11-22.22 + Code.gs 2026-11-23.7 (API 120): Verify image (IGRT) ตามแนวทาง IGRT ปี 69 (รวมของ .21 ในรอบเดียวกัน)**
   - ตั้งค่า → ตารางวันฉาย: **แนวทาง IGRT ของแต่ละห้อง** (ตาราง L1 / L2 / L3 / ไม่มี) · ค่าเริ่มต้น Infinity = L1 · Precise = L2 (KV ทุก fraction) · VersaHD = L3
   - แนวทางของเคส: อัตโนมัติจาก Organ / บริเวณ / Dx / ICD / เทคนิค (+ ป้าย BD protocol) หรือเลือกเองใน **รายละเอียดผู้ป่วย → IGRT** (Mask · Breast · Routine / No BD · BD · Daily · SGRT Breast · SGRT Chest · ไม่ใช้แนวทาง)
