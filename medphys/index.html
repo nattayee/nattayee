@@ -8831,7 +8831,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.31';
+const PAGE_VERSION = '2026-11-22.32';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -30041,7 +30041,9 @@ const ACCT_API = 126;
 const acctDlg = $('#acct-dlg');
 const acctOn = () => store.mode === 'local' || (!!state.user && state.user.via === 'lpch' && (+(state.loaded ? state.api : window.MEDPHYS_API) || 0) >= ACCT_API);
 const ACCT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16.5a3.4 3.4 0 0 1 6.4 0"/><path d="M14 10h4M14 13.5h3"/></svg>';
-const acctBtn = () => (acctOn() ? `<button type="button" class="acct-btn" id="acct-btn" title="บัญชีของฉัน · ข้อมูลส่วนตัว รหัสผ่าน อุปกรณ์ที่เข้าสู่ระบบ" aria-label="บัญชีของฉัน">${ACCT_SVG}<span>บัญชีของฉัน</span></button>` : '');
+// .32: ปุ่มเห็นเสมอสำหรับผู้ใช้บัญชี RO Workspace (Code.gs รุ่นเก่า = กดแล้วบอกวิธีอัปเดต · เดิมปุ่มไม่ขึ้นจนกว่าจะวาง Code.gs ใหม่ ผู้ใช้หาไม่เจอ)
+const acctShow = () => store.mode === 'local' || (!!state.user && state.user.via === 'lpch');
+const acctBtn = () => (acctShow() ? `<button type="button" class="acct-btn" id="acct-btn" title="บัญชีของฉัน · ข้อมูลส่วนตัว รหัสผ่าน อุปกรณ์ที่เข้าสู่ระบบ" aria-label="บัญชีของฉัน">${ACCT_SVG}<span>บัญชีของฉัน</span></button>` : '');
 const ACCT_ST = { active: 'ใช้งาน', pending: 'รออนุมัติ', disabled: 'ระงับ' };
 const ACCT_LV = { main: 'admin หลัก', sub: 'admin รอง' };
 const acctUi = { tab: 'me', who: '', me: null, roles: [], sess: null, mem: null, q: '', st: 'all', busy: '', del: '', err: '', note: '', loading: '' };
@@ -30073,7 +30075,15 @@ function demoRo() {
   return demoRoCache;
 }
 async function openAcct(tab, q) {
-  if (!acctOn()) return toast('บัญชีของฉันต้องใช้ Code.gs รุ่น 2026-11-24.4 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่', { err: true });
+  if (!acctOn()) {   // .32: Code.gs ที่ Deploy ยังเป็นรุ่นเก่า = หน้าต่างบอกวิธีอัปเดต (ปุ่มเห็นเสมอ)
+    for (const b of $$('#acct-dlg [data-accttab]')) b.hidden = true;
+    $('#acct-body').innerHTML = `<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>บัญชีของฉัน (แก้ข้อมูลส่วนตัว เปลี่ยนรหัสผ่าน อุปกรณ์ที่เข้าสู่ระบบ จัดการสมาชิก) ใช้ได้เมื่อวาง Code.gs รุ่น 2026-11-24.4 ขึ้นไป · ตอนนี้เป็นรุ่น ${esc(state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า'))}</span></p>
+      <ol class="setup-steps"><li>เปิดหน้าติดตั้ง Code.gs แล้วกดคัดลอกโค้ด</li><li>ในโปรเจกต์ Apps Script ของ RT Hub วางทับ Code.gs ทั้งไฟล์ แล้วบันทึก</li><li>Deploy → Manage deployments → แก้ไข (ดินสอ) → Version: New version → Deploy</li><li>โหลดหน้าเว็บใหม่ (F5) · ไอคอนนี้จะเปิดหน้าบัญชีของฉันได้</li></ol>
+      ${state.homeUrl ? `<p class="muted acct-note">ระหว่างนี้แก้ข้อมูลบัญชีได้ที่ <a href="${esc(state.homeUrl)}" target="${LINK_TARGET}" rel="noopener">LPCH RO Workspace</a></p>` : ''}`;
+    if (!acctDlg.open) acctDlg.showModal();
+    return;
+  }
+  for (const b of $$('#acct-dlg [data-accttab]')) b.hidden = b.dataset.accttab === 'mem';
   const who = `${state.user.username}|${state.user.name}|${state.user.role}`;
   if (acctUi.who !== who) Object.assign(acctUi, { who, me: null, roles: [], sess: null, mem: null });
   Object.assign(acctUi, { tab: tab || 'me', err: '', note: '', del: '' });
