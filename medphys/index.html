@@ -1576,6 +1576,8 @@ a.ntf-a:hover,a.ntf-a:focus-visible{text-decoration-thickness:2px}
 .jobs-leave.ro{list-style:none;margin:4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 12px}
 .acct-tabs{margin-bottom:12px;flex-wrap:wrap;width:fit-content;max-width:100%;border-radius:16px}
 .acct-form{display:grid;gap:12px;max-width:560px}
+.acct-hub{border:1px solid var(--line);border-radius:10px;padding:8px 12px 10px;margin:0;display:grid;gap:8px;min-width:0}   /* 24 พ.ย.: ข้อมูลใบลา (RT Hub) */
+.acct-hub legend{font-weight:700;font-size:13.5px;padding:0 4px}
 .acct-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)}
 .acct-info>div{display:grid;gap:2px;min-width:0}.acct-info b{font-weight:600;overflow-wrap:anywhere}
 .acct-acts{display:flex;flex-wrap:wrap;gap:8px}
@@ -8871,7 +8873,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.34';
+const PAGE_VERSION = '2026-11-22.35';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8939,6 +8941,7 @@ const sheetStore = {
   msgRead: ids => call('msgRead', ids),   // 24 พ.ย. (API 124): จำนวนภาพของ fraction ที่บันทึกแล้ว
   acctMe: () => call('acctMe'),   // 24 พ.ย. (API 126): บัญชีของฉัน / จัดการสมาชิก (ส่งต่อไป LPCH RO Workspace)
   acctSave: rec => call('acctSave', rec),
+  selfProfile: rec => call('selfProfile', rec),   // 24 พ.ย. (API 129): ข้อมูลใบลาของตัวเอง
   acctPassword: (o, n) => call('acctPassword', o, n),
   acctSessions: () => call('acctSessions'),
   acctSignOut: id => call('acctSignOut', id),
@@ -9485,6 +9488,19 @@ function localStore() {
       if (d.users.some(x => x !== u && x.email === email)) throw new Error('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
       Object.assign(u, { fullName: name, email, phone: str(rec.phone).slice(0, 40) });
       return clone({ user: u, message: 'บันทึกข้อมูลเรียบร้อย (ตัวอย่าง)' });
+    },
+    selfProfile: async rec => {   // 24 พ.ย.: เหมือน selfProfile ใน Code.gs (API 129) · อีเมล = อีเมลของบัญชีตัวอย่าง
+      const rows = selfRows(db.config || {}), mail = str(demoRo().users[0].email).toLowerCase();
+      if (!rows.length) throw new Error('บัญชีนี้ยังไม่อยู่ในรายชื่อบุคลากรของ RT Hub (ตั้งค่า → ทีม) · ติดต่อแอดมินให้เลือกบัญชีนี้ในรายชื่อก่อน');
+      const out = rows.map(({ x }) => {
+        if (!str(x.user)) x.user = lfMe()[0] || 'demo.user';
+        if (mail) x.email = mail;
+        if (rec.title !== undefined) x.title = lvTxt(rec.title, 120);
+        if (rec.phone !== undefined) x.phone = lvTxt(rec.phone, 40);
+        return { list: rows.find(r => r.x === x).l, code: str(x.code), name: str(x.name), user: str(x.user), email: str(x.email), title: str(x.title), phone: str(x.phone) };
+      });
+      persist();
+      return { rows: clone(out) };
     },
     acctPassword: async (o, n) => { if (o !== 'demo-pass') throw new Error('รหัสผ่านเดิมไม่ถูกต้อง (ตัวอย่าง: demo-pass)'); if (str(n).length < 8) throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร'); return { message: 'เปลี่ยนรหัสผ่านเรียบร้อย (ตัวอย่าง ไม่ได้เปลี่ยนจริง)' }; },
     acctSessions: async () => clone({ sessions: demoRo().sess }),
@@ -22792,8 +22808,15 @@ function membersHtml(d) {
   return `<div class="mem-bar">${btn}<span class="muted">สมาชิกที่ใช้งานอยู่ ${dir.users.length} คน · เชื่อมกับรายชื่อของระบบนี้แล้ว ${linkedN} คน</span>${sync}${miss ? `<button type="button" class="btn ghost" data-lpchadd="all">+ เพิ่มทุกคนที่ยังไม่อยู่ในรายชื่อ (${miss} คน)</button>` : ''}</div>
     <div class="mem-list">${roles.map(r => row(r, dir.users.filter(u => u.role === r))).join('')}${rest.length ? row('ไม่ระบุตำแหน่ง', rest) : ''}</div>`;
 }
-async function fetchMembers(btn) {
-  btn.disabled = true;
+// 24 พ.ย.: เปิดตั้งค่า (แอดมิน · บัญชี LPCH) = ดึงรายชื่อสมาชิกให้เองครั้งเดียว · แถวที่เชื่อมบัญชีแล้วแต่อีเมลว่าง = ใส่อีเมลจาก RO Workspace (กดบันทึกเพื่อเก็บ)
+let lpchDirAuto = false;
+function lpchDirAutoLoad() {
+  if (lpchDirAuto || state.lpchDir || store.mode !== 'sheet' || state.user.via !== 'lpch' || !serverHas(ACCESS_API) || !(state.user.isAdmin || subTabs().length)) return;
+  lpchDirAuto = true;
+  setTimeout(() => fetchMembers(null, true), 0);
+}
+async function fetchMembers(btn, auto) {
+  if (btn) btn.disabled = true;
   try {
     const dir = await store.members();
     state.lpchDir = {
@@ -22808,8 +22831,8 @@ async function fetchMembers(btn) {
       draft.nav.forEach(x => { for (const r of add) x.access[r] = x.on && x.guest ? 'view' : ''; });
     }
     renderSettings();
-    toast(`ดึงสมาชิก ${state.lpchDir.users.length} คน${add.length ? ` · เพิ่มตำแหน่ง ${add.join(', ')}` : ''}${linked ? ` · เชื่อมบัญชี/อีเมลให้ ${linked} คน` : ''}${add.length || linked ? ' แล้วกด "บันทึกการตั้งค่า"' : ''}`);
-  } catch (e) { btn.disabled = false; toast('ดึงรายชื่อไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+    if (!auto || linked) toast(`ดึงสมาชิก ${state.lpchDir.users.length} คน${add.length ? ` · เพิ่มตำแหน่ง ${add.join(', ')}` : ''}${linked ? ` · เชื่อมบัญชี/อีเมลให้ ${linked} คน` : ''}${add.length || linked ? ' แล้วกด "บันทึกการตั้งค่า"' : ''}`);
+  } catch (e) { if (btn) btn.disabled = false; if (!auto) toast('ดึงรายชื่อไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 // บัญชี RO Workspace ของนักฟิสิกส์ (ตำแหน่ง MP) และแพทย์ (RO): เลือกจากรายชื่อสมาชิกที่ดึงมา · อีเมลมาจากรายชื่อ (ถ้า LPCH ส่งมา) หรือพิมพ์เอง
 const ACCT_ROLE = { staff: 'MP', doctors: 'RO', crew: '' };
@@ -22961,7 +22984,7 @@ function acctHtml(list, i) {
     + (mine.length ? `<optgroup label="${esc(want)}">${mine.map(one).join('')}</optgroup>` : '')
     + (others.length ? `<optgroup label="ตำแหน่งอื่น">${others.map(one).join('')}</optgroup>` : '');
   const me = user && user === state.user.username;
-  const meta = cur ? `<span class="acct-role${me ? ' me' : ''}" title="ตำแหน่งใน LPCH RO Workspace">${esc(cur.role || 'ไม่ระบุตำแหน่ง')}${me ? ' · บัญชีของคุณ' : ''}</span>${cur.email && cur.email !== str(x.email).toLowerCase() ? `<span class="acct-warn" title="อีเมลใน RO Workspace">RO Workspace: ${esc(cur.email)}</span>` : ''}`
+  const meta = cur ? `<span class="acct-role${me ? ' me' : ''}" title="ตำแหน่งใน LPCH RO Workspace">${esc(cur.role || 'ไม่ระบุตำแหน่ง')}${me ? ' · บัญชีของคุณ' : ''}</span>${cur.email && cur.email !== str(x.email).toLowerCase() ? `<span class="acct-warn" title="อีเมลใน RO Workspace">RO Workspace: ${esc(cur.email)}</span><button type="button" class="btn ghost sm" data-acctmail="${list}.${i}" title="ใช้อีเมลของบัญชีใน RO Workspace">ใช้อีเมลนี้</button>` : ''}`
     : user && dir ? '<span class="acct-warn">ไม่พบในรายชื่อสมาชิกที่ใช้งานอยู่ (ออกแล้วหรือเปลี่ยนชื่อผู้ใช้)</span>' : me ? '<span class="acct-role me">บัญชีของคุณ</span>' : '';
   const who = x.code || x.name || (list === 'staff' ? 'นักฟิสิกส์' : list === 'crew' ? 'บุคลากร' : 'แพทย์');
   return `<div class="acct"><span>บัญชี</span><select data-acct="${list}.${i}" aria-label="บัญชี LPCH RO Workspace ของ ${esc(who)}"${!dir && !user ? ' title="กดดึงรายชื่อจาก LPCH RO Workspace ด้านบนเพื่อเลือก"' : ''}>${opts}</select>`
@@ -23271,6 +23294,7 @@ function lfSetHtml(d) {
 }
 function renderSettings() {
   if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); }
+  lpchDirAutoLoad();   // 24 พ.ย.: อีเมลจาก RO Workspace
   const d = draft, el = $('#view-settings');
   const ymNow = thisMonth();
   // R9: ตำแหน่งในทีม หัวหน้า / ลูกน้อง แบบทีมนักฟิสิกส์ (มีผลตั้งแต่เดือนนี้ · เก็บประวัติ) · ใช้กับแพทย์และรายชื่อ RTT, RA และบุคลากรอื่น
@@ -27851,6 +27875,7 @@ document.addEventListener('click', e => {
   if (ds.holfetch) return fetchHolidays(+ds.holfetch, t);
   if (ds.nocolor) { setPath(draft, ds.nocolor, ''); return renderSettings(); }
   if (ds.lpchdir !== undefined) return fetchMembers(t);
+  if (ds.acctmail) { const [l, i] = ds.acctmail.split('.'), x = draft[l] && draft[l][+i], u = x && state.lpchDir && state.lpchDir.users.find(v => v.username === x.user); if (u && u.email) { x.email = u.email; renderSettings(); } return; }   // 24 พ.ย.: อีเมลจาก RO Workspace
   if (ds.settab) {   // แถบย่อยของตั้งค่า: ล้างคำค้น แล้วกลับไปบนสุดของหมวด
     pref.set('setTab', ds.settab);
     setQ = '';
@@ -30533,9 +30558,47 @@ function acctMeHtml(u) {
     <label class="field"><span class="lbl"><span>ชื่อ-นามสกุล<b class="req">*</b></span></span><input id="acct-name" maxlength="80" autocomplete="name" value="${esc(u.fullName)}"></label>
     <label class="field"><span class="lbl"><span>อีเมล<b class="req">*</b></span></span><input id="acct-email" type="email" maxlength="100" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(u.email)}"><small class="gate-help">ใช้รับรหัสเมื่อลืมรหัสผ่าน · 1 อีเมลต่อ 1 บัญชี</small></label>
     <label class="field"><span class="lbl">เบอร์โทร / เบอร์ภายใน</span><input id="acct-phone" type="tel" maxlength="30" autocomplete="tel" value="${esc(u.phone)}"></label>
+    ${acctHubHtml(u)}
     <div class="acct-acts"><button type="submit" class="btn primary" id="acct-save">บันทึกข้อมูลส่วนตัว</button>${pin}</div>
     <p class="muted acct-note">ข้อมูลบัญชีเก็บที่ LPCH RO Workspace: แก้ที่นี่ = แก้ที่ RO Workspace และแอปที่เชื่อมด้วย · เปลี่ยนชื่อผู้ใช้หรือตำแหน่ง ติดต่อผู้ดูแลระบบ · ขนาดตัวอักษรและสีของเว็บ: ปุ่ม Aa บนแถบด้านบน</p>
   </form>`;
+}
+/* 24 พ.ย. (Code.gs API 129): ข้อมูลใบลาของตัวเองในรายชื่อบุคลากรของ RT Hub (ตั้งค่า → ทีม) · ตำแหน่ง (ใบลา) · เบอร์โทรระหว่างลา
+ * แถวของตัวเอง = เชื่อมบัญชีนี้ไว้ (หรืออีเมลตรง / ชื่อ-สกุลตรงกันแถวเดียว) · บันทึกแล้วอีเมลในรายชื่อ = อีเมลของบัญชีใน RO Workspace */
+const SELF_API = 129;
+const selfOn = () => store.mode !== 'sheet' || serverHas(SELF_API);
+const SELF_LIST_NAME = { staff: 'ทีมนักฟิสิกส์การแพทย์', doctors: 'แพทย์', crew: 'RTT, RA และบุคลากรอื่น' };
+function selfRows(cfg = state.config) {
+  const me = lfMe(), out = [], each = fn => { for (const l of ['staff', 'doctors', 'crew']) (Array.isArray(cfg[l]) ? cfg[l] : []).forEach((x, i) => { if (x && typeof x === 'object') fn(l, i, x); }); };
+  each((l, i, x) => { if (me.includes(str(x.user).trim().toLowerCase())) out.push({ l, i, x }); });
+  if (!out.length) each((l, i, x) => { if (!str(x.user).trim() && me.includes(str(x.email).trim().toLowerCase())) out.push({ l, i, x }); });
+  if (!out.length && state.user.via === 'lpch' && str(state.user.name)) {
+    const k = nameKey(state.user.name), hit = [];
+    each((l, i, x) => { if (k && !str(x.user).trim() && nameKey(x.name) === k) hit.push({ l, i, x }); });
+    if (hit.length === 1) out.push(hit[0]);
+  }
+  return out;
+}
+function acctHubHtml(u) {
+  const rows = selfRows(), x = rows.length ? rows[0].x : null, where = rows.map(r => `${SELF_LIST_NAME[r.l]}${r.x.code ? ` (${r.x.code})` : r.x.name ? ` (${r.x.name})` : ''}`).join(' · ');
+  if (!x) return `<fieldset class="acct-hub"><legend>ข้อมูลใบลา (RT Hub)</legend><p class="muted acct-note">บัญชีนี้ยังไม่อยู่ในรายชื่อบุคลากรของ RT Hub · แอดมินเลือกบัญชีนี้ในแถวของคุณที่ ตั้งค่า → ทีม ก่อน จึงกรอกตำแหน่งและเบอร์โทรระหว่างลาได้เอง</p></fieldset>`;
+  const off = selfOn() ? '' : ' disabled';
+  const mail = str(x.email).toLowerCase(), roMail = str(u.email).toLowerCase();
+  return `<fieldset class="acct-hub"><legend>ข้อมูลใบลา (RT Hub)</legend>
+    <p class="muted acct-note">รายชื่อ: ${esc(where)} · ใช้ในใบลาและการรับทราบของหัวหน้างาน</p>
+    <div class="gate-row"><label class="field"><span class="lbl">ตำแหน่ง (ใบลา)</span><input id="acct-lvtitle" maxlength="120" value="${esc(str(x.title))}" placeholder="เช่น นักฟิสิกส์การแพทย์ปฏิบัติการ"${off}></label>
+      <label class="field"><span class="lbl">เบอร์โทรระหว่างลา</span><input id="acct-lvphone" type="tel" maxlength="40" value="${esc(str(x.phone))}" placeholder="${esc(u.phone ? `เช่น ${u.phone}` : 'เบอร์ที่ติดต่อได้ระหว่างลา')}"${off}></label></div>
+    <p class="muted acct-note">อีเมลในรายชื่อ RT Hub: <b>${esc(mail || 'ยังไม่มี')}</b>${roMail && mail !== roMail ? ` · กดบันทึกแล้วเชื่อมเป็นอีเมลของ RO Workspace (${esc(roMail)})` : mail ? ' · ตรงกับ RO Workspace' : ''}</p>
+    ${selfOn() ? '' : '<p class="acct-err">บันทึกข้อมูลใบลาเองต้องใช้ Code.gs รุ่น 2026-11-24.7 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</p>'}</fieldset>`;
+}
+// รายการที่ Code.gs ส่งกลับ → แก้ state.config (แถวของตัวเอง)
+function selfApply(rows) {
+  for (const r of rows || []) {
+    const list = state.config[r.list];
+    if (!Array.isArray(list)) continue;
+    const x = list.find(y => (r.user && str(y.user).toLowerCase() === r.user.toLowerCase()) || (r.code && y.code === r.code)) || list.find(y => r.name && nameKey(y.name) === nameKey(r.name));
+    if (x) Object.assign(x, { user: r.user, email: r.email, title: r.title, phone: r.phone });
+  }
 }
 function acctPwHtml() {
   return `<form id="acct-pw" class="acct-form" novalidate>
@@ -30626,7 +30689,15 @@ acctDlg.addEventListener('submit', e => {
     const rec = { fullName: str($('#acct-name').value), email: str($('#acct-email').value).toLowerCase(), phone: str($('#acct-phone').value) };
     const bad = !rec.fullName ? 'กรอกชื่อ-นามสกุล' : !GATE_EMAIL.test(rec.email) ? 'กรอกอีเมลให้ถูกต้อง (ใช้รับรหัสเมื่อลืมรหัสผ่าน)' : '';
     if (bad) { acctUi.err = bad; return renderAcctDlg(); }
-    return acctDo(() => store.acctSave(rec), r => { acctUi.me = r.user; if (r.user && r.user.fullName && state.user.via !== 'demo') { state.user.name = r.user.fullName; renderAcct(); } return r.message || 'บันทึกข้อมูลเรียบร้อย'; });
+    const hub = $('#acct-lvtitle') && selfOn() && selfRows().length ? { title: str($('#acct-lvtitle').value), phone: str($('#acct-lvphone').value) } : null;
+    return acctDo(async () => { const r = await store.acctSave(rec); let s = null, sErr = ''; if (hub) { try { s = await store.selfProfile(hub); } catch (e) { sErr = errMsg(e); } } return { r, s, sErr }; },
+      ({ r, s, sErr }) => {
+        acctUi.me = r.user;
+        if (r.user && r.user.fullName && state.user.via !== 'demo') { state.user.name = r.user.fullName; renderAcct(); }
+        if (s) selfApply(s.rows);
+        if (sErr) acctUi.err = 'บันทึกข้อมูลใบลาใน RT Hub ไม่สำเร็จ: ' + sErr;
+        return (r.message || 'บันทึกข้อมูลเรียบร้อย') + (s ? ' · ข้อมูลใบลาและอีเมลในรายชื่อ RT Hub บันทึกแล้ว' : '');
+      });
   }
   if (f.id === 'acct-pw') {
     const o = $('#acct-old').value, n = $('#acct-new').value;
