@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Crypto Trader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🤖</span>
+      <div>
+        <h1>AI Crypto Trader</h1>
+        <div class="badges">
+          <span class="badge badge-paper">PAPER · เงินจำลอง</span>
+          <span class="badge" id="badge-market">ราคา: …</span>
+          <span class="badge" id="badge-ai">AI: …</span>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="bot-status" id="bot-status"><span class="dot"></span><span class="label">กำลังโหลด…</span></div>
+      <button class="btn btn-ghost" id="btn-run" title="ให้ AI วิเคราะห์ทุกเหรียญตอนนี้">⚡ วิเคราะห์ตอนนี้</button>
+      <button class="btn btn-primary" id="btn-toggle">▶ เริ่มบอท</button>
+      <button class="btn btn-icon" id="btn-settings" title="ตั้งค่า" aria-label="ตั้งค่า">⚙️</button>
+    </div>
+  </header>
+
+  <div class="disclaimer">
+    ⚠️ ตอนนี้เป็น <b>โหมดเงินจำลอง (Paper trading)</b> — ไม่มีการส่งคำสั่งซื้อขายไปที่ exchange จริง
+    AI ไม่สามารถรับประกันกำไรได้ ทดสอบให้มั่นใจก่อนใช้เงินจริงเสมอ
+  </div>
+  <div class="alert" id="alert" hidden></div>
+
+  <main>
+    <section class="stats">
+      <div class="stat"><div class="stat-label">มูลค่าพอร์ต</div><div class="stat-value" id="st-equity">–</div><div class="stat-sub" id="st-equity-sub"></div></div>
+      <div class="stat"><div class="stat-label">เงินสด (USDT)</div><div class="stat-value" id="st-cash">–</div><div class="stat-sub" id="st-exposure"></div></div>
+      <div class="stat"><div class="stat-label">กำไร/ขาดทุนรวม</div><div class="stat-value" id="st-pnl">–</div><div class="stat-sub" id="st-pnl-sub"></div></div>
+      <div class="stat"><div class="stat-label">กำไร/ขาดทุนวันนี้</div><div class="stat-value" id="st-day">–</div><div class="stat-sub" id="st-day-sub"></div></div>
+      <div class="stat"><div class="stat-label">ค่าใช้ AI (ประมาณ)</div><div class="stat-value" id="st-ai">–</div><div class="stat-sub" id="st-ai-sub"></div></div>
+    </section>
+
+    <section class="grid">
+      <div class="col-main">
+        <div class="card">
+          <div class="card-head">
+            <div class="tabs" id="symbol-tabs" role="tablist"></div>
+            <div class="price-now"><span id="chart-price">–</span> <span class="muted" id="chart-interval"></span></div>
+          </div>
+          <div class="chart" id="chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>สถานะที่ถืออยู่</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>เหรียญ</th><th class="num">จำนวน</th><th class="num">ราคาเข้า</th><th class="num">ราคาล่าสุด</th><th class="num">มูลค่า</th><th class="num">กำไร/ขาดทุน</th><th class="num">SL / TP</th><th></th></tr></thead>
+              <tbody id="positions"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>มูลค่าพอร์ตตามเวลา</h2></div>
+          <div class="chart chart-sm" id="equity-chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>ประวัติการเทรด</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>เวลา</th><th>เหรียญ</th><th>ฝั่ง</th><th class="num">ราคา</th><th class="num">มูลค่า</th><th class="num">กำไร/ขาดทุน</th><th>เหตุผล</th></tr></thead>
+              <tbody id="trades"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <aside class="col-side">
+        <div class="card card-feed">
+          <div class="card-head">
+            <h2>การตัดสินใจของ AI</h2>
+            <span class="muted small" id="next-run"></span>
+          </div>
+          <div class="feed" id="decisions"></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="settings-dialog">
+    <form id="settings-form" method="dialog">
+      <h2>ตั้งค่าบอท</h2>
+      <fieldset>
+        <legend>ตลาด</legend>
+        <label class="wide">คู่เทรด (คั่นด้วย ,)<input name="symbols" placeholder="BTCUSDT, ETHUSDT" /></label>
+        <label>Timeframe แท่งเทียน
+          <select name="candleInterval">
+            <option value="5m">5 นาที</option><option value="15m">15 นาที</option><option value="30m">30 นาที</option>
+            <option value="1h">1 ชั่วโมง</option><option value="4h">4 ชั่วโมง</option><option value="1d">1 วัน</option>
+          </select>
+        </label>
+        <label>ให้ AI ตัดสินใจทุก (นาที)<input name="decisionIntervalMin" type="number" min="1" max="1440" step="1" /></label>
+      </fieldset>
+      <fieldset>
+        <legend>การจัดการความเสี่ยง</legend>
+        <label>ขนาดสูงสุดต่อเหรียญ (% พอร์ต)<input name="maxPositionPct" type="number" min="1" max="100" step="1" /></label>
+        <label>ถือเหรียญรวมไม่เกิน (% พอร์ต)<input name="maxTotalExposurePct" type="number" min="1" max="100" step="1" /></label>
+        <label>ความมั่นใจขั้นต่ำของ AI (%)<input name="minConfidencePct" type="number" min="0" max="100" step="5" /></label>
+        <label>หยุดบอทเมื่อขาดทุนวันนี้เกิน (%)<input name="maxDailyLossPct" type="number" min="0.5" max="100" step="0.5" /></label>
+        <label>Stop-loss เริ่มต้น (%)<input name="defaultStopLossPct" type="number" min="0.5" max="50" step="0.5" /></label>
+        <label>Stop-loss สูงสุด (%)<input name="maxStopLossPct" type="number" min="0.5" max="50" step="0.5" /></label>
+        <label>Take-profit เริ่มต้น (%)<input name="defaultTakeProfitPct" type="number" min="0.5" max="500" step="0.5" /></label>
+        <label>ค่าธรรมเนียมต่อครั้ง (%)<input name="feePct" type="number" min="0" max="1" step="0.01" /></label>
+      </fieldset>
+      <p class="form-error" id="settings-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="settings-cancel">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary" id="settings-save">บันทึก</button>
+      </div>
+
+      <fieldset class="danger-zone">
+        <legend>รีเซ็ตบัญชีจำลอง</legend>
+        <p class="muted small">ล้างพอร์ต ประวัติเทรด และการตัดสินใจทั้งหมด แล้วเริ่มใหม่ด้วยเงินจำนวนนี้</p>
+        <div class="row">
+          <label>เงินตั้งต้น (USDT)<input name="startingBalance" type="number" min="100" step="100" /></label>
+          <button type="button" class="btn btn-danger" id="btn-reset">รีเซ็ตบัญชี</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>
+
+  <script src="/vendor/lightweight-charts.js"></script>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
