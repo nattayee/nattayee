@@ -36,8 +36,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-24.3';
-const API_LEVEL = 125;   // 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-24.4';
+const API_LEVEL = 126;   // 126: บัญชีของฉัน (acctMe / acctSave / acctPassword / acctSessions / acctSignOut) · จัดการสมาชิก (acctMembers / acctMemberSave / acctMemberDelete · RO Workspace ตรวจสิทธิ์เอง) · ผู้สมัครใหม่ = ข้อความถึงผู้รับที่ตั้งไว้ (config.msg.signup / signupTo · ไม่ตั้ง = แอดมินหลัก) · 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -504,7 +504,12 @@ function msgSend(rec, token) {
   if (!to.length) throw new Error('เลือกผู้รับ');
   if (to.length > MSG_MAX_TO) throw new Error('ส่งได้ครั้งละไม่เกิน ' + MSG_MAX_TO + ' คน');
   if (!title && !text) throw new Error('พิมพ์ข้อความ');
-  const at = new Date().toISOString(), fromName = String(u.name || u.username || me);
+  const fromName = String(u.name || u.username || me);
+  return inboxPost_(cfg, { acc: me, name: fromName }, to, kind, title, text, ref, (cfg.msg || {}).mail !== false && rec.mail !== false, inboxKeys_(u));
+}
+// เขียนข้อความหนึ่งแถวต่อผู้รับ แล้วส่งสำเนาอีเมล (นอกล็อก) · from = { acc, name } (ระบบส่งเอง: acc ว่าง) · bump = บัญชีของผู้ส่ง
+function inboxPost_(cfg, from, to, kind, title, text, ref, mailOn, bump) {
+  const at = new Date().toISOString(), me = from.acc, fromName = from.name;
   const rows = withLock_(() => {
     const ss = ss_(), out = [];
     to.forEach(x => {
@@ -515,10 +520,9 @@ function msgSend(rec, token) {
     });
     return out;
   });
-  inboxBump_(to.map(x => x.acc).concat(inboxKeys_(u)));
+  inboxBump_(to.map(x => x.acc).concat(bump || []));
   // สำเนาอีเมล (นอกล็อก · ไม่ใส่ข้อมูลผู้ป่วย: ข้อความที่ผู้ใช้พิมพ์เท่านั้น)
-  const msgCfg = cfg.msg || {};
-  if (msgCfg.mail !== false && rec.mail !== false) {
+  if (mailOn) {
     const url = tgUrl_(), done = {};
     rows.forEach(r => {
       const mail = msgMailOf_(cfg, r.to);
@@ -6226,7 +6230,8 @@ function lpchFinish_(out) {
 // ช่องเข้าสู่ระบบในหน้าเว็บ: ชื่อผู้ใช้ (หรืออีเมล) และรหัสผ่านตรวจที่ LPCH ไม่เก็บที่นี่
 // API 89: have = { pack } (หน้าเว็บรุ่นใหม่) = ส่งข้อมูลทั้งหมดมาพร้อมผลเข้าสู่ระบบ (ไม่ต้องเรียก getData อีกรอบ)
 function lpchLogin(username, password, have) {
-  const r = lpchFinish_(lpchCall_({ action: 'login', username: String(username || ''), password: String(password || '') }));
+  const ua = have && typeof have === 'object' ? signupText_(have.ua, 300) : '';   // API 126: เบราว์เซอร์ (บัญชีของฉัน → อุปกรณ์)
+  const r = lpchFinish_(lpchCall_(Object.assign({ action: 'login', username: String(username || ''), password: String(password || '') }, ua ? { ua: ua } : {})));
   txsLoginLog_(r, 'กรอกชื่อผู้ใช้และรหัสผ่าน');   // API 98
   if (have && typeof have === 'object' && have.pack && r.token) { try { r.data = getData({ pack: 1 }, r.token); } catch (e) { console.log('lpchLogin data ' + e); } }
   return r;
@@ -6282,13 +6287,148 @@ function lpchRegister(rec, have) {
   if (password.length > 200) throw new Error('รหัสผ่านยาวเกินไป');
   signupGuard_('reg');
   let out;
-  try { out = lpchCall_({ action: 'register', username: username, fullName: fullName, role: role, email: email, phone: phone, password: password, ua: 'LPCH RT Hub' }); } catch (e) { throw lpchOld_(e) ? new Error(LPCH_OLD_MSG) : e; }
+  try { out = lpchCall_({ action: 'register', username: username, fullName: fullName, role: role, email: email, phone: phone, password: password, ua: (have && typeof have === 'object' && signupText_(have.ua, 300)) || 'LPCH RT Hub' }); } catch (e) { throw lpchOld_(e) ? new Error(LPCH_OLD_MSG) : e; }
   if (out.token && out.user) {
     const r = lpchFinish_(out);
     if (have && typeof have === 'object' && have.pack) { try { r.data = getData({ pack: 1 }, r.token); } catch (e) { console.log('lpchRegister data ' + e); } }
     return Object.assign(r, { status: 'active' });
   }
+  try { signupNotify_({ username: username, fullName: fullName, role: role, email: email, phone: phone }); } catch (e) { console.log('signupNotify ' + e); }   // API 126
   return { status: String(out.status || 'pending'), username: username, message: String(out.message || 'สมัครสมาชิกสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน') };
+}
+// API 126: แจ้งผู้รับที่ตั้งไว้ (ตั้งค่า → ระบบ → ข้อความส่วนตัว · ไม่เลือก = แอดมินหลัก) ว่ามีผู้สมัครรออนุมัติ · ข้อความส่วนตัว + สำเนาอีเมลตาม config.msg.mail
+// ผู้รับที่มีสิทธิ์จัดการสมาชิกใน RO Workspace กด "จัดการสมาชิก" ในข้อความแล้วอนุมัติใน RT Hub ได้เลย
+function signupNotify_(p) {
+  const cfg = readConfig_(ss_()) || {}, m = cfg.msg || {};
+  if (m.signup === false) return [];
+  const list = Array.isArray(m.signupTo) && m.signupTo.length ? m.signupTo : adminList_(cfg);
+  const to = list.map(x => String(x == null ? '' : x).trim().toLowerCase()).filter((x, i, a) => x && /^[a-z0-9._@+-]+$/.test(x) && a.indexOf(x) === i).slice(0, MSG_MAX_TO);
+  if (!to.length) return [];
+  const people = [].concat(cfg.staff || [], cfg.doctors || [], cfg.crew || []);
+  const nameOf = acc => { const x = people.filter(q => q && [q.user, q.email].map(v => String(v || '').trim().toLowerCase()).indexOf(acc) >= 0)[0]; return String((x && x.name) || acc); };
+  let label = p.role;
+  try { const r = (lpchRoles().roles || []).filter(x => x.code === p.role)[0]; if (r) label = r.label; } catch (e) { /* ใช้รหัสตำแหน่ง */ }
+  const title = ('สมัครสมาชิกใหม่ รออนุมัติ: ' + p.fullName).slice(0, 120);
+  const text = ['ตำแหน่ง ' + label, 'ชื่อผู้ใช้ ' + p.username, 'อีเมล ' + p.email].concat(p.phone ? ['โทร ' + p.phone] : []).join(' · ')
+    + '\nอนุมัติได้ที่ ไอคอนบัญชีของฉัน → จัดการสมาชิก (ผู้ที่มีสิทธิ์จัดการสมาชิกใน LPCH RO Workspace) หรือที่หน้า LPCH RO Workspace';
+  return inboxPost_(cfg, { acc: '', name: 'ระบบสมัครสมาชิก' }, to.map(a => ({ acc: a, name: nameOf(a) })), 'signup', title, text.slice(0, 1000), 'signup|' + p.username, m.mail !== false, []);
+}
+
+/* ---------- API 126 (24 พ.ย.): บัญชีของฉัน / จัดการสมาชิก ----------
+ * token ของ RT Hub คือการเข้าสู่ระบบของ LPCH RO Workspace: ส่งคำสั่งของ RO Workspace ต่อด้วย token ของผู้ใช้เอง
+ * (me / updateProfile / changePassword / sessionList / sessionRevoke / listUsers / updateUser / deleteUser) · RO Workspace ตรวจสิทธิ์เอง
+ * จัดการสมาชิก = ผู้ที่มีสิทธิ์ "จัดการสมาชิก" ใน RO Workspace (admin หลัก หรือ admin รองที่ได้สิทธิ์นี้) · ไม่ตั้ง / เปลี่ยนระดับ admin ที่นี่ (ทำที่ RO Workspace)
+ * ไม่เก็บรหัสผ่านที่นี่ ไม่เขียนลง log
+ */
+function acctUser_(token) {
+  const u = who_(token);
+  if (u.via !== 'lpch') throw new Error('บัญชีของฉันใช้ได้เมื่อเข้าสู่ระบบด้วยบัญชี LPCH RO Workspace');
+  return u;
+}
+function acctCall_(req, token) {
+  try { return lpchCall_(Object.assign({}, req, { token: String(token) })); } catch (e) {
+    if (e.message === 'session_expired') { lpchDrop_(token); throw new Error('LOGIN|การเข้าสู่ระบบด้วยบัญชี LPCH หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'); }
+    if (lpchOld_(e)) throw new Error('LPCH RO Workspace ยังไม่รองรับคำสั่งนี้จากระบบอื่น · ทำที่หน้า LPCH RO Workspace ได้เลย');
+    throw e;
+  }
+}
+const acctOut_ = u => ({ username: String(u.username || ''), fullName: String(u.fullName || ''), role: String(u.role || ''), phone: String(u.phone || ''), email: String(u.email || ''),
+  status: String(u.status || ''), adminLevel: String(u.adminLevel || (u.isAdmin === true || String(u.isAdmin).toUpperCase() === 'TRUE' ? 'main' : '')),
+  perms: Array.isArray(u.perms) ? u.perms.map(String) : [], createdAt: Number(u.createdAt) || null, lastLogin: Number(u.lastLogin) || null });
+const acctRoles_ = () => { try { return lpchRoles().roles; } catch (e) { return []; } };
+// ข้อมูลบัญชีของฉัน (จาก RO Workspace) + รายการตำแหน่ง
+function acctMe(token) {
+  acctUser_(token);
+  return { user: acctOut_(acctCall_({ action: 'me' }, token).user || {}), roles: acctRoles_() };
+}
+// แก้ชื่อ-นามสกุล อีเมล เบอร์โทรของตัวเอง · ชื่อใหม่ใช้ใน RT Hub ทันที (ไม่ต้องรอแคช)
+function acctSave(rec, token) {
+  acctUser_(token);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const fullName = signupText_(rec.fullName, 100), email = signupText_(rec.email, 120).toLowerCase(), phone = signupText_(rec.phone, 40);
+  if (!fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
+  if (fullName.length > 80) throw new Error('ชื่อยาวเกินไป');
+  if (!email) throw new Error('กรุณากรอกอีเมล (ใช้รับรหัสเมื่อลืมรหัสผ่าน)');
+  if (email.length > 100 || !SIGNUP_EMAIL_RE_.test(email)) throw new Error('รูปแบบอีเมลไม่ถูกต้อง');
+  const out = acctCall_({ action: 'updateProfile', fullName: fullName, email: email, phone: phone }, token);
+  if (out.user) { try { lpchFinish_({ token: String(token), user: out.user }); if (REQ_.cache) delete REQ_.cache['lpch_' + token]; REQ_.who = null; } catch (e) { /* ครั้งหน้าถาม RO Workspace ใหม่ */ } }
+  return { user: acctOut_(out.user || {}), message: String(out.message || 'บันทึกข้อมูลเรียบร้อย') };
+}
+// เปลี่ยนรหัสผ่าน · ใส่รหัสเดิมผิดได้ 5 ครั้งต่อ 15 นาที (RO Workspace ไม่ได้นับให้คำสั่งนี้)
+function acctPassword(oldPw, newPw, token) {
+  const u = acctUser_(token), o = String(oldPw == null ? '' : oldPw), n = String(newPw == null ? '' : newPw);
+  if (!o) throw new Error('กรอกรหัสผ่านเดิม');
+  if (n.length < 8) throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+  if (n.length > 200) throw new Error('รหัสผ่านยาวเกินไป');
+  if (n === o) throw new Error('รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสเดิม');
+  const c = CacheService.getScriptCache(), k = 'pwfail_' + String(u.username || '').toLowerCase(), fails = Number(c.get(k) || 0);
+  if (fails >= 5) throw new Error('ใส่รหัสผ่านเดิมผิดหลายครั้ง กรุณารอ 15 นาที (หรือใช้ ลืมรหัสผ่าน ที่หน้าเข้าสู่ระบบ)');
+  let out;
+  try { out = acctCall_({ action: 'changePassword', oldPassword: o, newPassword: n }, token); } catch (e) {
+    if (/รหัสผ่านเดิมไม่ถูกต้อง/.test(e.message)) c.put(k, String(fails + 1), 900);
+    throw e;
+  }
+  c.remove(k);
+  return { message: String(out.message || 'เปลี่ยนรหัสผ่านเรียบร้อย') };
+}
+// อุปกรณ์ / แอปที่เข้าสู่ระบบด้วยบัญชีนี้ (ไม่ส่ง token ของเครื่องอื่น: รหัสอ้างอิง 16 ตัว)
+function acctSessions(token) {
+  acctUser_(token);
+  const out = acctCall_({ action: 'sessionList' }, token);
+  return { sessions: (Array.isArray(out.sessions) ? out.sessions : []).slice(0, 60).map(s => ({ id: String(s.id || ''), current: s.current === true, ua: String(s.ua || '').slice(0, 300),
+    via: String(s.via || '').slice(0, 20), app: String(s.app || '').slice(0, 80), createdAt: Number(s.createdAt) || null, lastSeen: Number(s.lastSeen) || null, expiresAt: Number(s.expiresAt) || null })) };
+}
+// ออกจากระบบเครื่องหนึ่ง (id) หรือทุกเครื่องยกเว้นเครื่องนี้ ('others')
+function acctSignOut(id, token) {
+  acctUser_(token);
+  const others = id === 'others', sid = String(id == null ? '' : id);
+  if (!others && !/^[0-9a-f]{16}$/.test(sid)) throw new Error('ไม่พบการเข้าสู่ระบบนี้');
+  const out = acctCall_(others ? { action: 'sessionRevoke', others: true } : { action: 'sessionRevoke', id: sid }, token);
+  if (out.self) lpchDrop_(token);
+  return { count: Number(out.count) || 0, self: out.self === true, message: String(out.message || '') };
+}
+// จัดการสมาชิก (สิทธิ์ "จัดการสมาชิก" ใน RO Workspace)
+function acctMembers(token) {
+  acctUser_(token);
+  const out = acctCall_({ action: 'listUsers' }, token);
+  return { users: (Array.isArray(out.users) ? out.users : []).map(acctOut_), roles: acctRoles_() };
+}
+const ACCT_USER_RE_ = /^[a-z0-9._-]{3,30}$/;
+// อนุมัติ / ระงับ / เปิดใช้ (status) และเปลี่ยนตำแหน่ง (role) · ไม่แตะระดับ admin
+function acctMemberSave(rec, token) {
+  const me = acctUser_(token);
+  rec = rec && typeof rec === 'object' ? rec : {};
+  const username = signupText_(rec.username, 40).toLowerCase(), status = signupText_(rec.status, 12), role = signupText_(rec.role, 30);
+  if (!ACCT_USER_RE_.test(username)) throw new Error('ไม่พบผู้ใช้');
+  if (status && ['active', 'pending', 'disabled'].indexOf(status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+  if (!status && !role) throw new Error('ไม่มีอะไรเปลี่ยน');
+  const req = { action: 'updateUser', username: username };
+  if (status) req.status = status;
+  if (role) req.role = role;
+  const user = acctOut_(acctCall_(req, token).user || {});
+  if (rec.from === 'pending' && status === 'active' && user.username) { try { acctWelcome_(user, me); } catch (e) { console.log('acctWelcome ' + e); } }
+  return { user: user };
+}
+// อนุมัติแล้ว: ข้อความถึงบัญชีนั้น (เห็นเมื่อเข้าสู่ระบบ) + อีเมลถึงอีเมลที่ใช้สมัคร (ตาม config.msg.mail)
+function acctWelcome_(user, admin) {
+  const cfg = readConfig_(ss_()) || {}, m = cfg.msg || {};
+  const title = 'บัญชีของคุณได้รับอนุมัติแล้ว', text = 'เข้าสู่ระบบ LPCH RT Hub และ LPCH RO Workspace ได้ด้วยชื่อผู้ใช้ ' + user.username + ' และรหัสผ่านที่ตั้งไว้ตอนสมัคร';
+  inboxPost_(cfg, { acc: '', name: 'ระบบสมัครสมาชิก' }, [{ acc: user.username, name: user.fullName || user.username }], 'acct', title, text, '', false, []);
+  if (m.mail === false || !SIGNUP_EMAIL_RE_.test(user.email) || MailApp.getRemainingDailyQuota() < 1) return;
+  const url = tgUrl_();
+  MailApp.sendEmail({ to: user.email, subject: '[RT Hub] ' + title, name: 'LPCH RT Hub',
+    body: 'เรียน ' + (user.fullName || user.username) + '\n\n' + text + (url ? '\nเปิด RT Hub: ' + url : '') + '\n\nอนุมัติโดย ' + String(admin.name || admin.username || '') });
+}
+// ลบได้เฉพาะบัญชีที่รออนุมัติ (ปฏิเสธการสมัคร) · บัญชีอื่น = ระงับ หรือลบที่หน้า RO Workspace
+function acctMemberDelete(username, token) {
+  acctUser_(token);
+  const name = signupText_(username, 40).toLowerCase();
+  if (!ACCT_USER_RE_.test(name)) throw new Error('ไม่พบผู้ใช้');
+  const cur = (acctCall_({ action: 'listUsers' }, token).users || []).filter(x => String(x.username) === name)[0];
+  if (!cur) throw new Error('ไม่พบผู้ใช้');
+  if (cur.status !== 'pending') throw new Error('ลบได้เฉพาะบัญชีที่รออนุมัติ (ปฏิเสธการสมัคร) · บัญชีอื่นใช้ ระงับ แทน หรือลบที่หน้า LPCH RO Workspace');
+  acctCall_({ action: 'deleteUser', username: name }, token);
+  return { ok: true };
 }
 // ลืมรหัสผ่าน ขั้นที่ 1: RO Workspace ส่งรหัส 6 หลักไปที่อีเมลของบัญชี (ข้อความเดียวกันทุกกรณี ไม่บอกว่ามีบัญชีหรือไม่)
 function lpchForgot(login) {
@@ -6587,11 +6727,14 @@ function txsPdf(hn, kind, opt, token) {
 
 function lpchLogout(token) {
   if (!token) return true;
+  lpchDrop_(token);
+  try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
+  return true;
+}
+function lpchDrop_(token) {
   CacheService.getScriptCache().remove('lpch_' + token);
   CacheService.getScriptCache().remove('lpchOk_' + token);
   if (REQ_.cache) delete REQ_.cache['lpch_' + token];
-  try { lpchCall_({ action: 'logout', token: String(token) }); } catch (e) { /* ปล่อยให้หมดอายุเอง */ }
-  return true;
 }
 
 /**
