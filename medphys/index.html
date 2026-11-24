@@ -1586,6 +1586,10 @@ a.ntf-a:hover,a.ntf-a:focus-visible{text-decoration-thickness:2px}
 .acct-form{display:grid;gap:12px;max-width:560px}
 .acct-hub{border:1px solid var(--line);border-radius:10px;padding:8px 12px 10px;margin:0;display:grid;gap:8px;min-width:0}   /* 24 พ.ย.: ข้อมูลใบลา (RT Hub) */
 .acct-hub legend{font-weight:700;font-size:13.5px;padding:0 4px}
+.sig-box{display:flex;align-items:center;justify-content:center;min-height:92px;padding:8px;border:1px dashed var(--line-strong);border-radius:8px;background:#fff;color:#5b6472}   /* .38: ลายเซ็นบนพื้นขาวเหมือนในฟอร์ม */
+.sig-box img{max-width:100%;max-height:120px}
+.sig-pick{position:relative;cursor:pointer}
+.sig-file{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .acct-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)}
 .acct-info>div{display:grid;gap:2px;min-width:0}.acct-info b{font-weight:600;overflow-wrap:anywhere}
 .acct-acts{display:flex;flex-wrap:wrap;gap:8px}
@@ -8370,7 +8374,7 @@ function normCase(o) {
   for (const f of CASE_FIELDS) c[f] = str(o[f]);
   if (Array.isArray(o.sites)) c.sites = o.sites.length ? JSON.stringify(o.sites) : '';   // บริเวณที่ฉายเพิ่มเติม เก็บเป็น JSON
   if (Array.isArray(o.fxlog)) c.fxlog = o.fxlog.length ? JSON.stringify(o.fxlog) : '';   // สถานะ fraction รายวัน เก็บเป็น JSON
-  for (const k of Object.keys(o)) if (/^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม
+  for (const k in o) if (k.charCodeAt(0) === 120 && k.charCodeAt(1) === 95 && Object.prototype.hasOwnProperty.call(o, k) && /^x_[\w-]+$/.test(k)) c[k] = str(o[k]);   // หัวข้อเพิ่มเติม (x_…)
   for (const f of ['ct', 'in']) c[f] = dateStr(c[f]);
   for (const f of ['fin', 'eval', 'mu', 'd0', 'd4', 'mc', 'pc', 'rtAt']) c[f] = stampStr(c[f]);
   c.rt = c.rt === 'complete' || c.rt === 'cancel' ? c.rt : '';
@@ -8881,7 +8885,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.37';
+const PAGE_VERSION = '2026-11-22.38';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8949,7 +8953,10 @@ const sheetStore = {
   msgRead: ids => call('msgRead', ids),   // 24 พ.ย. (API 124): จำนวนภาพของ fraction ที่บันทึกแล้ว
   acctMe: () => call('acctMe'),   // 24 พ.ย. (API 126): บัญชีของฉัน / จัดการสมาชิก (ส่งต่อไป LPCH RO Workspace)
   acctSave: rec => call('acctSave', rec),
-  selfProfile: rec => call('selfProfile', rec),   // 24 พ.ย. (API 129): ข้อมูลใบลาของตัวเอง
+  selfProfile: rec => call('selfProfile', rec),
+  sigMine: () => call('sigMine'),   // .38 (API 130): ลายเซ็นของตัวเอง
+  sigSave: img => call('sigSave', img),
+  sigDelete: () => call('sigDelete'),   // 24 พ.ย. (API 129): ข้อมูลใบลาของตัวเอง
   acctPassword: (o, n) => call('acctPassword', o, n),
   acctSessions: () => call('acctSessions'),
   acctSignOut: id => call('acctSignOut', id),
@@ -9497,6 +9504,15 @@ function localStore() {
       Object.assign(u, { fullName: name, email, phone: str(rec.phone).slice(0, 40) });
       return clone({ user: u, message: 'บันทึกข้อมูลเรียบร้อย (ตัวอย่าง)' });
     },
+    sigMine: async () => clone(db.sig || { img: '', at: '' }),   // .38: เหมือน sigMine / sigSave / sigDelete ใน Code.gs (API 130)
+    sigSave: async img => {
+      if (!/^data:image\/png;base64,iVBORw0KGgo/.test(str(img))) throw new Error('รูปลายเซ็นไม่ถูกต้อง (ต้องเป็นรูป PNG ที่หน้าเว็บเตรียมให้)');
+      if (str(img).length > SIG_MAX) throw new Error('รูปลายเซ็นใหญ่เกินไป');
+      db.sig = { img: str(img), at: nowISO() };
+      persist();
+      return clone(db.sig);
+    },
+    sigDelete: async () => { delete db.sig; persist(); return { ok: true }; },
     selfProfile: async rec => {   // 24 พ.ย.: เหมือน selfProfile ใน Code.gs (API 129) · อีเมล = อีเมลของบัญชีตัวอย่าง
       const rows = selfRows(db.config || {}), mail = str(demoRo().users[0].email).toLowerCase();
       if (!rows.length) throw new Error('บัญชีนี้ยังไม่อยู่ในรายชื่อบุคลากรของ RT Hub (ตั้งค่า → ทีม) · ติดต่อแอดมินให้เลือกบัญชีนี้ในรายชื่อก่อน');
@@ -10478,7 +10494,9 @@ function pickNext(o, trace) {
   const staff = o.staff, n = staff.length;
   if (!n) return '';
   const idx = code => staff.findIndex(s => s.code === code);
-  const away = (code, day) => o.leaves.some(l => l.mp === code && l.from <= day && day <= (l.to || l.from));
+  const lv = new Map();   // .38: ใบลาแยกตามคน (เดิมไล่ใบลาทุกคนทุกก้าวของคิว)
+  for (const l of o.leaves) { if (!lv.has(l.mp)) lv.set(l.mp, []); lv.get(l.mp).push(l); }
+  const away = (code, day) => { const a = lv.get(code); return !!a && a.some(l => l.from <= day && day <= (l.to || l.from)); };
   const free = (i, day) => staff[i].active !== false && !away(staff[i].code, day);
   // เดินคิวจาก start: ข้ามคนที่ไม่ว่างวันนั้น และหักเคสเลือกเองที่ค้างอยู่ทีละ 1
   const select = (start, day, cr, skipped) => {
@@ -11060,17 +11078,21 @@ function pinTop() {
   if (off !== pinOffset) { pinOffset = off; topBar.style.top = `${-off}px`; }
   topBar.classList.toggle('two-row', off > 0);   // 20 พ.ย.: แถวโลโก้เลื่อนพ้นจอได้ = สถานะเครื่องแบบย่อในแถวเมนู
   const below = lock ? coursePin.offsetHeight : 0;
-  root.style.scrollPaddingTop = `${topBar.offsetHeight - off + below + (lock ? head.offsetHeight : 0) + 12}px`;
-  root.style.setProperty('--pin-h', `${topBar.offsetHeight - off}px`);   // หัวตารางวันฉายติดใต้แถบนี้
-  root.style.setProperty('--cpin-h', `${below}px`);   // หน้าปฏิทินที่ค้างส่วนหัว: หัวตารางติดใต้ส่วนหัวของหน้า
+  // .38: เขียนเฉพาะค่าที่เปลี่ยน (ตัวแปร CSS ที่ราก = คำนวณ style ใหม่ทั้งหน้า)
+  const sp = `${topBar.offsetHeight - off + below + (lock ? head.offsetHeight : 0) + 12}px`, ph = `${topBar.offsetHeight - off}px`, cp = `${below}px`;
+  if (root.style.scrollPaddingTop !== sp) root.style.scrollPaddingTop = sp;
+  if (root.style.getPropertyValue('--pin-h') !== ph) root.style.setProperty('--pin-h', ph);   // หัวตารางวันฉายติดใต้แถบนี้
+  if (root.style.getPropertyValue('--cpin-h') !== cp) root.style.setProperty('--cpin-h', cp);   // หน้าปฏิทินที่ค้างส่วนหัว: หัวตารางติดใต้ส่วนหัวของหน้า
   markStuck();
 }
 // .33 (ข้อ 3): แถบย่อยที่เลือกอยู่ของแถบที่เปิด (แถวแถบย่อยแรกที่เห็น) · ไม่มีแถบย่อย = ว่าง
+// .38: เห็นอยู่ไหม = มีกล่องแสดงผล · checkVisibility คำนวณแค่ style (getClientRects ต้องคำนวณ layout ทั้งหน้ากลางการวาด)
+const seen = el => (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0);
 function curSubName() {
   const v = $(`#view-${state.view}`);
   if (!v || v.hidden) return '';
   for (const tl of $$('[role="tablist"]', v)) {
-    if (!tl.getClientRects().length) continue;
+    if (!seen(tl)) continue;
     const b = $('[aria-selected="true"]', tl);
     if (!b) continue;
     const t = [...b.childNodes].filter(n => n.nodeType === 3).map(n => n.nodeValue).join('').trim() || str(b.textContent);
@@ -11164,7 +11186,14 @@ function renderLogo() {
   const tt = (PRACTICE.on && store.mode === 'sheet' ? 'ฝึกใช้ · ' : '') + brand.name;
   if (document.title !== tt) document.title = tt;
 }
-function render() {
+// .38: ค่าที่คำนวณซ้ำหลายครั้งในการวาดหนึ่งรอบ (เช่น รายการงานรอของทุกการ์ด + วงกลมบนแถบ) จำไว้เฉพาะระหว่างวาดรอบนั้น
+// นอกการวาด (ปุ่ม / บันทึก) คำนวณใหม่ทุกครั้งเหมือนเดิม · ข้อมูลไม่เปลี่ยนระหว่างวาดหนึ่งรอบ
+let rDepth = 0;
+const rMemo = new Map();
+const rmemo = (k, fn) => { if (!rDepth) return fn(); if (!rMemo.has(k)) rMemo.set(k, fn()); return rMemo.get(k); };
+const inMemo = fn => { rDepth++; try { return fn(); } finally { if (!--rDepth) rMemo.clear(); } };
+function render() { inMemo(render0); }
+function render0() {
   const gated = state.gate != null;
   renderPractice();
   if (calBox && !calBox.getClientRects().length) closeCal();
@@ -11220,8 +11249,7 @@ function render() {
   if (oldApi) $('#api-text').textContent = `หน้าเว็บนี้ต้องใช้ Code.gs รุ่น ${NEEDS_API} ขึ้นไป (ในโปรเจกต์เป็นรุ่น ${state.api || 'เก่ากว่า 4'}) บางอย่างอาจใช้ไม่ได้ · วาง Code.gs ใหม่จากหน้าคัดลอกโค้ด แล้ว Deploy เวอร์ชันใหม่`;
   renderNav();
   renderViewAs();   // 18 พ.ย.: แถบ "กำลังดูในมุมมอง"
-  pinTop();
-  applyBoxes();
+  applyBoxes();   // .38: pinTop ย้ายไปหลังวาดแถบ (วัดส่วนหัวครั้งเดียวกับหน้าที่วาดเสร็จแล้ว)
   if (caseDlg.open && editingCase) syncCaseStamps();
   renderPendBadge();
   renderCfgBadge();
@@ -11242,7 +11270,7 @@ function render() {
   $('#demo-notice').hidden = store.mode !== 'local';
   $$('.month-label').forEach(el => { el.textContent = fmtMonth(state.month); });
   if (!intakeTouched && intakeSig !== defaultsSig()) resetIntake();
-  if (!state.view) return;
+  if (!state.view) return pinTop();
   if (state.view === 'work') renderWork();
   else if (state.view === 'logs') renderLogs();
   else if (state.view === 'p4p') renderP4P();
@@ -11268,6 +11296,7 @@ function render() {
   else if (state.view === TXS_VIEW) renderTxs();
   else renderSettings();
   viewHistBtn();   // 24 พ.ย.: ปุ่มประวัติการบันทึกของแถบ / แถบย่อย
+  if (state.view !== 'course') pinTop();   // แถบห้องฉายเรียกเองตอนท้าย renderCourse
 }
 
 // แถวในแบบ P4P: กิจกรรมนับครั้งตามกลุ่ม แล้วต่อด้วยหมวดงานตามกลุ่ม
@@ -13679,7 +13708,8 @@ function viewHistBtn() {
   const v = state.view, sec = v && $(`#view-${v}`);
   if (!sec) return;
   let b = $('.view-hist', sec);
-  if (b && (!auditShown(v) || state.gate != null || !b.getClientRects().length)) { b.remove(); b = null; }   // อยู่ในส่วนที่ซ่อนไปแล้ว = วางใหม่
+  const shown = x => x.isConnected && seen(x);   // .38: checkVisibility (style) แทน getClientRects (layout ทั้งหน้ากลางการวาด)
+  if (b && (!auditShown(v) || state.gate != null || !shown(b))) { b.remove(); b = null; }   // อยู่ในส่วนที่ซ่อนไปแล้ว = วางใหม่
   if (!auditShown(v) || state.gate != null) return;
   if (!b) {
     b = document.createElement('button');
@@ -13688,8 +13718,8 @@ function viewHistBtn() {
     b.dataset.histView = v;
     b.textContent = '🕘 ประวัติการบันทึก';
     // วาง: แถบเครื่องมือที่มีแถบย่อย → แถบเครื่องมือแรกที่เห็น → ต่อจากแถบย่อย / บนสุดของแถบ (ชิดขวา)
-    const tl = $$('[role="tablist"]', sec).find(x => x.getClientRects().length), vis = x => !x.closest('[hidden]');
-    const tb = tl ? tl.closest('.toolbar') : $$('.toolbar', sec).find(vis);
+    const tl = $$('[role="tablist"]', sec).find(shown);
+    const tb = tl ? tl.closest('.toolbar') : $$('.toolbar', sec).find(shown);
     if (tb) tb.appendChild(b);
     else { b.classList.add('solo'); if (tl) tl.after(b); else sec.prepend(b); }
   }
@@ -18402,8 +18432,10 @@ function siteStart(c, i) {
 // งานของบริเวณเพิ่มเติมที่ยังไม่ได้แจก (ไม่รวมเทคนิคนับครั้ง ผู้ป่วยที่เพิ่มในแถบห้องฉาย และงานวางแผนใหม่)
 function siteJobRecs(parent, inDate, batch) {
   if (!parent || !parent.id || isDirect(parent) || parent.replan || catOf(parent.cat).kind === 'simple' || (!batch && !parent.mp)) return [];
-  const have = new Set(state.cases.map(rpOf).filter(m => m && m.kind === 'site' && m.of === parent.id).map(m => m.sid));
-  return siteJobSites(parent).filter(x => x.sid && !have.has(x.sid)).map(x => {
+  const sites = siteJobSites(parent).filter(x => x.sid);   // .38: ไม่มีบริเวณเพิ่มเติมคนละบริเวณ = จบเลย (ไม่ต้องไล่ทุกเคส)
+  if (!sites.length) return [];
+  const have = siteHave().get(parent.id) || new Set();
+  return sites.filter(x => !have.has(x.sid)).map(x => {
     const extra = Object.fromEntries(Object.keys(parent).filter(k => /^x_[\w-]+$/.test(k)).map(k => [k, parent[k]]));
     // MP คนเดิมของบริเวณที่ 1: แจกพร้อมเคส = follow (Code.gs ใช้คนเดียวกับเคสแรกของชุด) · เคสเดิม = manual (ระบุ MP)
     return normCase({ ...extra, id: uid(), cat: x.cat || siteCatGuess(x.area, parent.cat) || parent.cat, how: batch ? 'follow' : 'manual', mp: batch ? '' : parent.mp, n: '', hn: parent.hn, name: parent.name, icd: parent.icd, dx: parent.dx, doc: parent.doc, type: parent.type, aim: parent.aim,
@@ -18411,6 +18443,8 @@ function siteJobRecs(parent, inDate, batch) {
       sites: '', note: '', batch: '', updated: nowISO(), replan: JSON.stringify({ of: parent.id, date: '', kind: 'site', sid: x.sid, label: `บริเวณที่ ${x.i + 2} · ${x.area}`, reason: startText(x) }) });
   });
 }
+// .38: งานบริเวณเพิ่มเติมที่แจกแล้ว { id เคสเดิม → Set(sid) } · ระหว่างวาดคำนวณครั้งเดียว · นอกการวาดคำนวณใหม่ทุกครั้ง
+const siteHave = () => rmemo('siteHave', () => { const m = new Map(); for (const c of state.cases) { const r = rpOf(c); if (r && r.kind === 'site') { if (!m.has(r.of)) m.set(r.of, new Set()); m.get(r.of).add(r.sid); } } return m; });
 // เคสที่มีบริเวณเพิ่มเติมคนละบริเวณแต่ยังไม่มีงาน (วัน In ตั้งแต่วันเริ่มใช้ระบบเต็ม เช่นเคสที่แจกก่อนมีกติกานี้): แจกให้ MP คนเดิมในครั้งเดียว
 const siteJobFrom = () => state.config.manualFrom || '2026-11-01';
 const siteJobsMissing = () => (accessOf('work') !== 'edit' ? [] : planCases().filter(c => str(c.in) >= siteJobFrom() && siteJobRecs(c, c.in, false).length));
@@ -18418,7 +18452,7 @@ async function addMissingSiteJobs(btn) {
   btn.disabled = true;
   try {
     if (store.mode === 'sheet') await refresh(true);   // ข้อมูลล่าสุดก่อน (คนอื่นอาจแจกไปแล้ว) กันแจกซ้ำ
-    const recs = siteJobsMissing().flatMap(c => siteJobRecs(c, c.in, false));
+    const recs = inMemo(() => siteJobsMissing().flatMap(c => siteJobRecs(c, c.in, false)));
     if (!recs.length) { render(); toast('ไม่มีงานของบริเวณเพิ่มเติมที่ต้องแจก'); return; }
     const saved = (await store.addCases(recs)).map(normCase);
     state.cases.push(...saved);
@@ -24113,11 +24147,14 @@ function saveConfigSoon(message) {
 /* ---------- แดชบอร์ด ---------- */
 const HOL_API = 12;   // Code.gs ที่ดึงวันหยุดจาก Google Calendar ได้
 const isDay = v => /^\d{4}-\d{2}-\d{2}$/.test(str(v).slice(0, 10)) && str(v).length >= 10;
-const nextDate = ds => { const d = parseISO(ds); d.setDate(d.getDate() + 1); return iso(d); };
+// .38: วันถัดไป / วันในสัปดาห์ ขึ้นกับสตริงวันที่อย่างเดียว → จำผลไว้ (ปฏิทิน / ตารางฉายเรียกซ้ำหลายหมื่นครั้ง)
+const DAY_NEXT = new Map(), DAY_WD = new Map();
+const dayMemo = (m, k, fn) => { let v = m.get(k); if (v === undefined) { if (m.size > 50000) m.clear(); v = fn(); m.set(k, v); } return v; };
+const nextDate = ds => dayMemo(DAY_NEXT, ds, () => { const d = parseISO(ds); d.setDate(d.getDate() + 1); return iso(d); });
 const plusDays = (ds, n) => { const d = parseISO(ds); d.setDate(d.getDate() + n); return iso(d); };
 function holidayMap() { const m = {}; for (const h of state.config.holidays || []) m[h.date] = h.name || 'วันหยุด'; return m; }
 // วันฉายรังสี: จันทร์–ศุกร์ ที่ไม่ใช่วันหยุด
-const isWorkday = (ds, hol) => { const w = parseISO(ds).getDay(); return w !== 0 && w !== 6 && !hol[ds]; };
+const isWorkday = (ds, hol) => { const w = dayMemo(DAY_WD, ds, () => parseISO(ds).getDay()); return w !== 0 && w !== 6 && !hol[ds]; };
 const nextWorkday = (ds, hol) => { let d = ds; for (let i = 0; i < 60 && !isWorkday(d, hol); i++) d = nextDate(d); return d; };
 // วันที่ฉายของหนึ่งบริเวณ: [{ date, upto }] upto = จำนวน fx สะสมถึงวันนั้น · ไม่รู้จำนวน fx = นับแค่วันเริ่ม
 // block(วันที่) จากสถานะ fraction: 'skip' = ไม่ได้ฉายวันนั้น (fraction เลื่อนออกไป) · 'stop' = หยุดตั้งแต่วันนั้น (Hold จนกว่าจะกลับมา, Off RT)
@@ -24700,15 +24737,21 @@ function renderPendBadge() {
   const soon = [u.late && `ภายใน 1 วันทำการ ${u.late} เคส`, u.warn && `ภายใน 2 วันทำการ ${u.warn} เคส`].filter(Boolean).join(' · ');
   b.title = `รอ Finish ${u.n} เคส${soon ? ` · Start RT ${soon}` : ''}`;
 }
+// .38: เคสที่อาจรอ (ไม่ใช่กิจกรรม · ยังไม่ส่งแก้แผน) + ขั้นตอนของทุกแผน เรียงตาม Start RT แล้ว In · คำนวณครั้งเดียวต่อการวาด
+// (เรียงก่อนกรองได้ผลเดียวกับกรองก่อนเรียง เพราะ sort คงลำดับเดิมของตัวที่เท่ากัน)
+const pendBase = () => rmemo('pendBase', () => planCases().map(c => { const k = catOf(c.cat); return k.kind === 'simple' || revisedBy(c) ? null : { c, k, ps: planStamps(c) }; }).filter(Boolean)
+  .sort((a, b) => (isDay(a.c.sim) ? a.c.sim : '9').localeCompare(isDay(b.c.sim) ? b.c.sim : '9') || a.c.in.localeCompare(b.c.in)));
+const stepKeys = k => rmemo('stepKeys|' + k.id, () => new Set(stepsOf(k).map(x => x.key)));
 function pendingOf(key, room) {
-  return planCases().filter(c => {
-    const k = catOf(c.cat);
-    if (k.kind === 'simple' || (room && !roomsOf(c).includes(room)) || revisedBy(c)) return false;
-    const ps = planStamps(c);   // ทุกแผน: แผนใดยังไม่ทำขั้นตอนนี้ = ยังรออยู่
-    if (key === 'fin') return ps.some(x => !x.fin);
-    if (key === 'eval') return ps.some(x => !!x.fin && !x.eval);
-    return stepsOf(k).some(x => x.key === key) && ps.some(x => !x[key]) && recentCase(c);
-  }).sort((a, b) => (isDay(a.sim) ? a.sim : '9') .localeCompare(isDay(b.sim) ? b.sim : '9') || a.in.localeCompare(b.in));
+  const out = [];
+  for (const { c, k, ps } of pendBase()) {   // ทุกแผน: แผนใดยังไม่ทำขั้นตอนนี้ = ยังรออยู่
+    if (room && !roomsOf(c).includes(room)) continue;
+    const hit = key === 'fin' ? ps.some(x => !x.fin)
+      : key === 'eval' ? ps.some(x => !!x.fin && !x.eval)
+      : stepKeys(k).has(key) && ps.some(x => !x[key]) && (ps.some(x => !x.eval) || (isDay(c.sim) ? daysFrom(c.sim) >= -7 : isDay(c.in) && daysFrom(c.in) >= -30));   // = recentCase(c)
+    if (hit) out.push(c);
+  }
+  return out;
 }
 // หน้างานรอ: การ์ดต่อขั้นตอน กดการ์ดเพื่อดูรายการพร้อมปุ่มบันทึก · กรองห้องได้ (จำไว้แยกจากแดชบอร์ด)
 function renderPend() {
@@ -24717,7 +24760,8 @@ function renderPend() {
   $('#pend-rooms').innerHTML = [['', 'ทุกห้อง'], ...rooms.map(r => [r, roomLabel(r)])].map(([v, l]) => `<button type="button" data-proom="${esc(v)}" aria-pressed="${room === v}">${esc(l)}</button>`).join('');
   renderPending(rooms.includes(room) ? room : '');
 }
-function renderPending(room) {
+function renderPending(room) { inMemo(() => renderPending0(room)); }   // .38: ค้นหา / กดการ์ด (นอก render) ก็คำนวณรายการครั้งเดียว
+function renderPending0(room) {
   const steps = PEND_STEPS(), words = tabWords('pend');
   syncTabQ('pend');
   const pendOf = (key, r) => { const l = pendingOf(key, r); return words.length ? l.filter(c => wordsIn(words, caseText(c))) : l; };
@@ -29600,11 +29644,26 @@ function colTools(t, key) {
   wrap.insertAdjacentHTML('beforebegin', `<div class="col-tools"><button type="button" class="col-btn" data-colcfg="${key}" title="ขยับ / ซ่อนคอลัมน์ของตารางนี้ (จำไว้ในเครื่องนี้)">คอลัมน์</button></div>`);
 }
 let colQ = false;
+// .38: หาตารางแบบเร็ว ('#id' · '<บรรพบุรุษ> table.<class>') แทน querySelectorAll ทั้งเอกสารทุกครั้งที่ DOM เปลี่ยน
+function colFind(sel) {
+  let m = /^#([\w-]+)$/.exec(sel);
+  if (m) { const e = document.getElementById(m[1]); return e ? [e] : []; }
+  m = /^(.+) table\.([\w-]+)$/.exec(sel);
+  if (m) return [...document.getElementsByClassName(m[2])].filter(t => t.tagName === 'TABLE' && t.parentElement && t.parentElement.closest(m[1]));
+  return $$(sel);
+}
 function colScan() {
   colQ = false;
-  for (const [key, , sel] of COL_TBLS) for (const t of $$(sel)) { colApply(t, key); colTools(t, key); }
+  for (const [key, , sel] of COL_TBLS) for (const t of colFind(sel)) { colApply(t, key); colTools(t, key); }
 }
-new MutationObserver(() => { if (!colQ) { colQ = true; queueMicrotask(colScan); } }).observe(document.body, { childList: true, subtree: true });
+// DOM ที่เปลี่ยนนอกตาราง (ตัววิ่ง ประกาศ ปุ่ม ฯลฯ) ไม่ต้องจัดคอลัมน์ใหม่
+const colTouch = recs => recs.some(r => {
+  const t = r.target;
+  if (t.nodeType === 1 && (t.tagName === 'TABLE' || t.closest('table'))) return true;
+  for (const n of r.addedNodes) if (n.nodeType === 1 && (n.tagName === 'TABLE' || n.querySelector('table'))) return true;
+  return false;
+});
+new MutationObserver(recs => { if (!colQ && colTouch(recs)) { colQ = true; queueMicrotask(colScan); } }).observe(document.body, { childList: true, subtree: true });
 function colSave(key, order, hide) { pref.set(colPrefKey(key), { order, hide: [...hide] }); colReapply(key); }
 let colsPop = null;   // { key, btn }
 function openColsPop(key, btn) {
@@ -30529,7 +30588,7 @@ async function openAcct(tab, q) {
   }
   for (const b of $$('#acct-dlg [data-accttab]')) b.hidden = b.dataset.accttab === 'mem';
   const who = `${state.user.username}|${state.user.name}|${state.user.role}`;
-  if (acctUi.who !== who) Object.assign(acctUi, { who, me: null, roles: [], sess: null, mem: null });
+  if (acctUi.who !== who) Object.assign(acctUi, { who, me: null, roles: [], sess: null, mem: null, sig: null, sigNew: '', sigErr: '', sigMsg: '', sigDel: false });
   Object.assign(acctUi, { tab: tab || 'me', err: '', note: '', del: '' });
   if (q != null) Object.assign(acctUi, { q: str(q), st: 'all' });
   if (!acctDlg.open) acctDlg.showModal();
@@ -30542,6 +30601,11 @@ async function acctLoad() {
     renderAcctDlg();
     try { const r = await store.acctMe(); acctUi.me = r.user; acctUi.roles = r.roles || []; } catch (e) { acctUi.err = errMsg(e); }
     acctUi.loading = '';
+  }
+  if (acctUi.me && acctUi.tab === 'me' && acctUi.sig == null && sigOn() && !acctUi.sigLoading) {
+    acctUi.sigLoading = true;
+    try { acctUi.sig = await store.sigMine(); } catch (e) { acctUi.sig = { img: '', at: '' }; acctUi.sigErr = errMsg(e); }
+    acctUi.sigLoading = false;
   }
   if (acctUi.me && acctUi.tab === 'dev' && !acctUi.sess) {
     try { acctUi.sess = (await store.acctSessions()).sessions || []; } catch (e) { acctUi.err = errMsg(e); acctUi.sess = []; }
@@ -30567,6 +30631,7 @@ function acctMeHtml(u) {
     <label class="field"><span class="lbl"><span>อีเมล<b class="req">*</b></span></span><input id="acct-email" type="email" maxlength="100" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(u.email)}"><small class="gate-help">ใช้รับรหัสเมื่อลืมรหัสผ่าน · 1 อีเมลต่อ 1 บัญชี</small></label>
     <label class="field"><span class="lbl">เบอร์โทร / เบอร์ภายใน</span><input id="acct-phone" type="tel" maxlength="30" autocomplete="tel" value="${esc(u.phone)}"></label>
     ${acctHubHtml(u)}
+    <div id="acct-sigwrap">${acctSigHtml()}</div>
     <div class="acct-acts"><button type="submit" class="btn primary" id="acct-save">บันทึกข้อมูลส่วนตัว</button>${pin}</div>
     <p class="muted acct-note">ข้อมูลบัญชีเก็บที่ LPCH RO Workspace: แก้ที่นี่ = แก้ที่ RO Workspace และแอปที่เชื่อมด้วย · เปลี่ยนชื่อผู้ใช้หรือตำแหน่ง ติดต่อผู้ดูแลระบบ · ขนาดตัวอักษรและสีของเว็บ: ปุ่ม Aa บนแถบด้านบน</p>
   </form>`;
@@ -30594,8 +30659,8 @@ function acctHubHtml(u) {
   const mail = str(x.email).toLowerCase(), roMail = str(u.email).toLowerCase();
   return `<fieldset class="acct-hub"><legend>ข้อมูลใบลา (RT Hub)</legend>
     <p class="muted acct-note">รายชื่อ: ${esc(where)} · ใช้ในใบลาและการรับทราบของหัวหน้างาน</p>
-    <div class="gate-row"><label class="field"><span class="lbl">ตำแหน่ง (ใบลา)</span><input id="acct-lvtitle" maxlength="120" value="${esc(str(x.title))}" placeholder="เช่น นักฟิสิกส์การแพทย์ปฏิบัติการ"${off}></label>
-      <label class="field"><span class="lbl">เบอร์โทรระหว่างลา</span><input id="acct-lvphone" type="tel" maxlength="40" value="${esc(str(x.phone))}" placeholder="${esc(u.phone ? `เช่น ${u.phone}` : 'เบอร์ที่ติดต่อได้ระหว่างลา')}"${off}></label></div>
+    <div class="gate-row"><label class="field"><span class="lbl">ตำแหน่ง</span><input id="acct-lvtitle" maxlength="120" value="${esc(str(x.title))}" placeholder="เช่น นักฟิสิกส์การแพทย์ปฏิบัติการ"${off}></label>
+      <label class="field"><span class="lbl">โทรศัพท์มือถือ</span><input id="acct-lvphone" type="tel" maxlength="40" value="${esc(str(x.phone))}" placeholder="${esc(u.phone ? `เช่น ${u.phone}` : 'เช่น 08x-xxx-xxxx')}"${off}></label></div>
     <p class="muted acct-note">อีเมลในรายชื่อ RT Hub: <b>${esc(mail || 'ยังไม่มี')}</b>${roMail && mail !== roMail ? ` · กดบันทึกแล้วเชื่อมเป็นอีเมลของ RO Workspace (${esc(roMail)})` : mail ? ' · ตรงกับ RO Workspace' : ''}</p>
     ${selfOn() ? '' : '<p class="acct-err">บันทึกข้อมูลใบลาเองต้องใช้ Code.gs รุ่น 2026-11-24.7 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</p>'}</fieldset>`;
 }
@@ -30607,6 +30672,74 @@ function selfApply(rows) {
     const x = list.find(y => (r.user && str(y.user).toLowerCase() === r.user.toLowerCase()) || (r.code && y.code === r.code)) || list.find(y => r.name && nameKey(y.name) === nameKey(r.name));
     if (x) Object.assign(x, { user: r.user, email: r.email, title: r.title, phone: r.phone });
   }
+}
+/* .38 (Code.gs API 130): ลายเซ็นอิเล็กทรอนิกส์ของตัวเอง · ใช้ประทับในฟอร์มของระบบภายหลัง
+ * เลือกรูป (ถ่าย / สแกนลายเซ็นบนกระดาษขาว) → หน้าเว็บตัดพื้นขาวเป็นโปร่ง ตัดขอบ ย่อ (PNG ไม่เกิน 45,000 ตัวอักษร) → ดูตัวอย่าง → บันทึก
+ * เก็บในชีต Signatures (ไม่โหลดไปกับข้อมูลทั้งหมด) · เห็น / เปลี่ยน / ลบ ได้เฉพาะเจ้าของบัญชี */
+const SIG_API = 130, SIG_MAX = 45000;
+const sigOn = () => store.mode !== 'sheet' || serverHas(SIG_API);
+function acctSigHtml() {
+  const s = acctUi.sig, cur = s && s.img, nw = acctUi.sigNew, busy = !!acctUi.sigBusy;
+  const head = '<fieldset class="acct-hub acct-sig"><legend>ลายเซ็นอิเล็กทรอนิกส์</legend>';
+  if (!sigOn()) return head + '<p class="acct-err">แนบลายเซ็นต้องใช้ Code.gs รุ่น 2026-11-24.8 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่</p></fieldset>';
+  if (s == null) return head + '<p class="muted acct-note">กำลังโหลดลายเซ็น…</p></fieldset>';
+  const box = nw ? `<img src="${esc(nw)}" alt="ลายเซ็นใหม่ (ยังไม่บันทึก)">` : cur ? `<img src="${esc(cur)}" alt="ลายเซ็นของคุณ">` : '<span class="muted">ยังไม่มีลายเซ็น</span>';
+  const dis = busy ? ' disabled' : '';
+  const acts = nw ? `<button type="button" class="btn primary sm" data-sigsave${dis}>บันทึกลายเซ็น</button><button type="button" class="btn ghost sm" data-sigcancel${dis}>ยกเลิก</button><small class="muted">ตัวอย่าง: พื้นขาวตัดออกแล้ว</small>`
+    : `<label class="btn sm sig-pick">📎 ${cur ? 'เปลี่ยนรูปลายเซ็น' : 'แนบรูปลายเซ็น'}<input type="file" id="acct-sigfile" accept="image/png,image/jpeg,image/webp" class="sig-file"${dis}></label>${cur ? `<button type="button" class="btn ghost sm danger" data-sigdel${dis}>${acctUi.sigDel ? 'ยืนยันลบลายเซ็น' : 'ลบลายเซ็น'}</button>` : ''}`;
+  return head + '<p class="muted acct-note">ใช้ประทับลายเซ็นในฟอร์มของระบบ · เซ็นด้วยปากกาสีเข้มบนกระดาษขาว แล้วถ่ายรูปหรือสแกน · ระบบตัดพื้นขาวให้โปร่งและตัดขอบให้เอง · เห็นได้เฉพาะคุณ</p>'
+    + `<div class="sig-box">${box}</div>`
+    + (acctUi.sigErr ? `<p class="acct-err" role="alert">${esc(acctUi.sigErr)}</p>` : acctUi.sigMsg ? `<p class="acct-ok" role="status">${esc(acctUi.sigMsg)}</p>` : '')
+    + `<div class="acct-acts">${acts}</div>${cur && !nw && s.at ? `<small class="muted">บันทึกเมื่อ ${esc(whenText(s.at))}</small>` : ''}</fieldset>`;
+}
+const sigRender = () => { const w = $('#acct-sigwrap'); if (w) w.innerHTML = acctSigHtml(); };
+// รูป → PNG พื้นโปร่ง: ความเข้มของเส้น = ความมืดของพิกเซล (สว่างกว่า 215 = พื้น) · ตัดขอบชิดเส้น เว้น 8 px · สูงไม่เกิน 160 กว้างไม่เกิน 600
+async function sigProcess(file) {
+  if (!file || !str(file.type).startsWith('image')) throw new Error('เลือกไฟล์รูปภาพ (PNG / JPG)');
+  if (file.size > 12 * 1024 * 1024) throw new Error('ไฟล์ใหญ่เกิน 12 MB');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('เปิดรูปนี้ไม่ได้ · ลองบันทึกเป็น PNG หรือ JPG')); i.src = url; });
+    const k = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.max(1, Math.round(img.naturalWidth * k)), hh = Math.max(1, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = hh;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, w, hh);
+    const d = g.getImageData(0, 0, w, hh), p = d.data;
+    let x0 = w, y0 = hh, x1 = -1, y1 = -1;
+    for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2], ink = (p[i + 3] / 255) * Math.max(0, Math.min(1, (215 - lum) / 95));
+      if (ink < 0.08) { p[i + 3] = 0; continue; }
+      p[i + 3] = Math.round(255 * Math.min(1, ink * 1.15));
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    if (x1 < 0) throw new Error('ไม่พบเส้นลายเซ็นในรูป · เซ็นด้วยปากกาสีเข้มบนกระดาษขาว');
+    g.putImageData(d, 0, 0);
+    const pad = 8, sx = Math.max(0, x0 - pad), sy = Math.max(0, y0 - pad), sw = Math.min(w, x1 + pad + 1) - sx, sh = Math.min(hh, y1 + pad + 1) - sy;
+    let s = Math.min(1, 600 / sw, 160 / sh);
+    for (let t = 0; t < 8; t++) {
+      const o = document.createElement('canvas');
+      o.width = Math.max(1, Math.round(sw * s)); o.height = Math.max(1, Math.round(sh * s));
+      const og = o.getContext('2d');
+      og.imageSmoothingQuality = 'high';
+      og.drawImage(c, sx, sy, sw, sh, 0, 0, o.width, o.height);
+      const out = o.toDataURL('image/png');
+      if (out.length <= SIG_MAX) return out;
+      s *= 0.82;
+    }
+    throw new Error('รูปลายเซ็นใหญ่เกินไป · ครอปให้ชิดลายเซ็นแล้วลองใหม่');
+  } finally { URL.revokeObjectURL(url); }
+}
+async function sigDo(fn, done) {
+  if (acctUi.sigBusy) return;
+  Object.assign(acctUi, { sigBusy: true, sigErr: '', sigMsg: '' });
+  sigRender();
+  try { acctUi.sigMsg = (await done(await fn())) || ''; } catch (e) { acctUi.sigErr = errMsg(e); }
+  acctUi.sigBusy = false;
+  sigRender();
 }
 function acctPwHtml() {
   return `<form id="acct-pw" class="acct-form" novalidate>
@@ -30664,6 +30797,13 @@ acctDlg.addEventListener('click', e => {
   const ds = b.dataset;
   if (ds.accttab) { Object.assign(acctUi, { tab: ds.accttab, err: '', note: '', del: '' }); renderAcctDlg(); return acctLoad(); }
   if (ds.acctpin !== undefined) { acctDlg.close(); return openPinSettings(); }
+  if (ds.sigsave !== undefined) return sigDo(() => store.sigSave(acctUi.sigNew), r => { acctUi.sig = r; acctUi.sigNew = ''; return 'บันทึกลายเซ็นเรียบร้อย'; });
+  if (ds.sigcancel !== undefined) { Object.assign(acctUi, { sigNew: '', sigErr: '', sigMsg: '' }); return sigRender(); }
+  if (ds.sigdel !== undefined) {
+    if (!acctUi.sigDel) { Object.assign(acctUi, { sigDel: true, sigMsg: '', sigErr: '' }); return sigRender(); }
+    acctUi.sigDel = false;
+    return sigDo(() => store.sigDelete(), () => { acctUi.sig = { img: '', at: '' }; return 'ลบลายเซ็นแล้ว'; });
+  }
   if (ds.acctflt) { acctUi.st = ds.acctflt; acctUi.del = ''; return renderAcctDlg(); }
   if (ds.acctout) return acctDo(() => store.acctSignOut(ds.acctout), async r => { acctUi.sess = null; await acctLoad(); return r.message || 'ออกจากระบบแล้ว'; });
   if (ds.acctst) {
@@ -30678,6 +30818,12 @@ acctDlg.addEventListener('click', e => {
   }
 });
 acctDlg.addEventListener('change', e => {
+  if (e.target.id === 'acct-sigfile') {   // .38: เลือกรูปลายเซ็น → ตัวอย่าง (ยังไม่บันทึก)
+    const f = e.target.files && e.target.files[0];
+    Object.assign(acctUi, { sigErr: '', sigMsg: '', sigDel: false });
+    if (f) sigProcess(f).then(u => { acctUi.sigNew = u; sigRender(); }, err => { acctUi.sigErr = errMsg(err); sigRender(); });
+    return;
+  }
   const s = e.target.closest('[data-acctrole]');
   if (!s) return;
   const name = s.dataset.acctrole, role = s.value;
@@ -30704,7 +30850,7 @@ acctDlg.addEventListener('submit', e => {
         if (r.user && r.user.fullName && state.user.via !== 'demo') { state.user.name = r.user.fullName; renderAcct(); }
         if (s) selfApply(s.rows);
         if (sErr) acctUi.err = 'บันทึกข้อมูลใบลาใน RT Hub ไม่สำเร็จ: ' + sErr;
-        return (r.message || 'บันทึกข้อมูลเรียบร้อย') + (s ? ' · ข้อมูลใบลาและอีเมลในรายชื่อ RT Hub บันทึกแล้ว' : '');
+        return 'บันทึกข้อมูลเรียบร้อย';   // .38: ข้อความเดียว
       });
   }
   if (f.id === 'acct-pw') {
