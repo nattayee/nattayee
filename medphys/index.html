@@ -204,6 +204,18 @@ button{cursor:pointer}
 .gate-card p{margin:0;font-size:13.5px;color:var(--muted)}
 .gate-card .gate-err{color:var(--late)}
 .gate-card .gate-foot{font-size:12.5px}
+.gate-form{display:grid;gap:14px}
+.gate-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.gate-tabs button{border:0;background:var(--sunken);color:var(--muted);padding:9px 8px;font:inherit;font-size:14px;cursor:pointer}
+.gate-tabs button+button{border-left:1px solid var(--line)}
+.gate-tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-fg);font-weight:600}
+.gate-card .gate-ok{padding:9px 11px;border-radius:8px;background:var(--accent-soft);color:var(--fg)}
+.gate-card .gate-hint{font-size:13px}
+.gate-card .gate-step{font-weight:600;color:var(--fg)}
+.gate-help{font-size:12px;color:var(--muted)}
+.gate-link{border:0;background:none;padding:0;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer}
+.gate-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:420px){.gate-row{grid-template-columns:minmax(0,1fr)}}
 .setup-card{width:min(560px,100%)}
 .setup-steps{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
 .setup-steps b{font-weight:600}
@@ -3687,17 +3699,55 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <p class="muted">จำไว้สำหรับบัญชีนี้ในเบราว์เซอร์นี้ · โหมดกลางวัน/กลางคืน: ปุ่มข้าง ๆ</p>
       </div>
 
-  <!-- เข้าสู่ระบบด้วยบัญชี LPCH RO Workspace -->
+  <!-- เข้าสู่ระบบ / สมัครสมาชิก / ลืมรหัสผ่าน ด้วยบัญชี LPCH RO Workspace (บัญชีเก็บที่ RO Workspace ที่เดียว · Code.gs API 125 ส่งต่อคำขอให้) -->
   <section class="gate" id="gate" hidden>
-    <form class="gate-card" id="gate-form" novalidate>
-      <div><h2>เข้าสู่ระบบ</h2><p>ใช้ชื่อผู้ใช้และรหัสผ่านของ <b>LPCH RO Workspace</b></p></div>
-      <p class="gate-err" id="gate-err" role="alert" hidden></p>
-      <label class="field"><span class="lbl">ชื่อผู้ใช้ หรืออีเมล</span><input id="g-user" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
-      <label class="field"><span class="lbl">รหัสผ่าน</span><input id="g-pass" type="password" autocomplete="current-password"></label>
-      <button type="submit" class="btn primary" id="g-save">เข้าสู่ระบบ</button>
+    <div class="gate-card" id="gate-card">
+      <div><h2 id="gate-h">เข้าสู่ระบบ</h2><p id="gate-sub">ใช้ชื่อผู้ใช้และรหัสผ่านของ <b>LPCH RO Workspace</b></p></div>
+      <div class="gate-tabs" id="gate-tabs" role="tablist" aria-label="เข้าสู่ระบบหรือสมัครสมาชิก" hidden><button type="button" role="tab" data-gtab="in" aria-selected="true">เข้าสู่ระบบ</button><button type="button" role="tab" data-gtab="up" aria-selected="false">สมัครสมาชิก</button></div>
+      <p class="gate-ok" id="gate-ok" role="status" hidden></p>
+      <form class="gate-form" id="gate-form" novalidate>
+        <p class="gate-err" id="gate-err" role="alert" hidden></p>
+        <label class="field"><span class="lbl">ชื่อผู้ใช้ หรืออีเมล</span><input id="g-user" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span class="lbl">รหัสผ่าน</span><input id="g-pass" type="password" autocomplete="current-password"></label>
+        <button type="submit" class="btn primary" id="g-save">เข้าสู่ระบบ</button>
+        <p class="gate-hint" id="gate-in-hint" hidden><button type="button" class="gate-link" data-gtab="fp">ลืมรหัสผ่าน?</button> · ยังไม่มีบัญชี? <button type="button" class="gate-link" data-gtab="up">สมัครสมาชิก</button></p>
+      </form>
+      <form class="gate-form" id="gate-reg" novalidate hidden>
+        <label class="field"><span class="lbl"><span>ชื่อ-นามสกุล<b class="req">*</b></span></span><input id="gr-name" autocomplete="name" maxlength="80"></label>
+        <label class="field"><span class="lbl"><span>ตำแหน่ง<b class="req">*</b></span></span><select id="gr-role"><option value="">— เลือกตำแหน่ง —</option></select></label>
+        <label class="field"><span class="lbl"><span>ชื่อผู้ใช้ (Username)<b class="req">*</b></span></span><input id="gr-user" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="30" placeholder="ภาษาอังกฤษ/ตัวเลข 3–30 ตัว"></label>
+        <label class="field"><span class="lbl"><span>อีเมล<b class="req">*</b></span></span><input id="gr-email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="100" placeholder="name@example.com"><small class="gate-help">ใช้รับรหัสยืนยันเมื่อลืมรหัสผ่าน · 1 อีเมลต่อ 1 บัญชี</small></label>
+        <div class="gate-row">
+          <label class="field"><span class="lbl"><span>รหัสผ่าน<b class="req">*</b></span></span><input id="gr-pass" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว"></label>
+          <label class="field"><span class="lbl"><span>ยืนยันรหัสผ่าน<b class="req">*</b></span></span><input id="gr-pass2" type="password" autocomplete="new-password"></label>
+        </div>
+        <label class="field"><span class="lbl">เบอร์โทร / เบอร์ภายใน</span><input id="gr-phone" type="tel" autocomplete="tel" maxlength="30"></label>
+        <p class="gate-err" id="gr-err" role="alert" hidden></p>
+        <button type="submit" class="btn primary" id="gr-save">สมัครสมาชิก</button>
+        <p class="gate-hint">หลังสมัคร ผู้ดูแลระบบ LPCH RO Workspace ต้องอนุมัติก่อนจึงจะเข้าใช้งานได้ · มีบัญชีแล้ว? <button type="button" class="gate-link" data-gtab="in">เข้าสู่ระบบ</button></p>
+      </form>
+      <form class="gate-form" id="gate-fp" novalidate hidden>
+        <p class="gate-step">ลืมรหัสผ่าน — ขั้นที่ 1/2</p>
+        <label class="field"><span class="lbl">ชื่อผู้ใช้หรืออีเมลที่ใช้สมัคร</span><input id="gf-login" autocomplete="username" autocapitalize="off" spellcheck="false"><small class="gate-help">ระบบจะส่งรหัสยืนยัน 6 หลักไปที่อีเมลของบัญชี</small></label>
+        <p class="gate-err" id="gf-err" role="alert" hidden></p>
+        <button type="submit" class="btn primary" id="gf-save">ส่งรหัสไปที่อีเมล</button>
+        <p class="gate-hint"><button type="button" class="gate-link" data-gtab="rp">มีรหัสแล้ว</button> · <button type="button" class="gate-link" data-gtab="in">กลับไปเข้าสู่ระบบ</button></p>
+      </form>
+      <form class="gate-form" id="gate-rp" novalidate hidden>
+        <p class="gate-step">ลืมรหัสผ่าน — ขั้นที่ 2/2</p>
+        <label class="field"><span class="lbl">ชื่อผู้ใช้หรืออีเมล</span><input id="gp-login" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span class="lbl">รหัสยืนยัน 6 หลักจากอีเมล</span><input id="gp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>
+        <div class="gate-row">
+          <label class="field"><span class="lbl">รหัสผ่านใหม่</span><input id="gp-pass" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัว"></label>
+          <label class="field"><span class="lbl">ยืนยันรหัสผ่านใหม่</span><input id="gp-pass2" type="password" autocomplete="new-password"></label>
+        </div>
+        <p class="gate-err" id="gp-err" role="alert" hidden></p>
+        <button type="submit" class="btn primary" id="gp-save">ตั้งรหัสผ่านใหม่และเข้าสู่ระบบ</button>
+        <p class="gate-hint"><button type="button" class="gate-link" data-gtab="fp">ขอรหัสใหม่</button> · <button type="button" class="gate-link" data-gtab="in">กลับไปเข้าสู่ระบบ</button></p>
+      </form>
       <a class="btn gate-lpch" id="gate-lpch" href="#" target="_top" rel="noopener"><span class="gate-home"></span>ไปที่ LPCH RO Workspace</a>
-      <p class="gate-foot">หรือเข้าสู่ระบบที่ LPCH RO Workspace แล้วกดปุ่มระบบนี้ จะเข้าได้ทันที · บันทึกข้อมูลได้เฉพาะนักฟิสิกส์การแพทย์ (MP) ตำแหน่งอื่นดูได้อย่างเดียว · ลืมรหัสผ่านให้รีเซ็ตที่ LPCH RO Workspace</p>
-    </form>
+      <p class="gate-foot" id="gate-foot">หรือเข้าสู่ระบบที่ LPCH RO Workspace แล้วกดปุ่มระบบนี้ จะเข้าได้ทันที · บัญชีเดียวกันใช้ได้ทั้ง LPCH RO Workspace และ RT Hub<span id="gate-foot-old"> · ลืมรหัสผ่านให้รีเซ็ตที่ LPCH RO Workspace</span></p>
+    </div>
   </section>
 
   <div class="ms-ban" id="ms-ban" role="status" hidden></div>
@@ -8745,7 +8795,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.29';
+const PAGE_VERSION = '2026-11-22.30';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10959,6 +11009,7 @@ function render() {
     $('#viewas-bar').hidden = true;
     $('#gate-err').textContent = state.gate;
     $('#gate-err').hidden = !state.gate;
+    gateSync();
     const lp = $('#gate-lpch');
     lp.hidden = !state.homeUrl;
     lp.href = state.homeUrl || '#';
@@ -30498,12 +30549,14 @@ function showGate(why) {
   setToken('');
   state.gate = ssoError || why || '';
   ssoError = '';
+  gateTab = 'in';
+  $('#gate-ok').hidden = true;
   state.loaded = false;
   state.txsData = null; state.txsRefer = []; state.mlog = []; state.notify = [];
   state.cases = []; state.logs = []; state.leaves = []; state.duty = []; state.ct = []; state.appt = []; state.reg = []; state.bq = []; state.jobs = []; state.vac = []; state.dq = []; state.dqLeave = []; state.dqDuty = [];
   render();
   const u = $('#g-user');
-  if (u && !document.activeElement.closest('#gate-form')) u.focus();
+  if (u && !document.activeElement.closest('#gate-card')) u.focus();
 }
 /* ---------- ออกจากระบบอัตโนมัติ (ตั้งค่า → สำรองข้อมูลและความปลอดภัย) ---------- */
 // ผู้ที่เข้าระบบด้วยบัญชี LPCH ไม่ได้ใช้งาน (คลิก แตะ พิมพ์ เลื่อน) นานเกิน security.idleMin นาที · เวลาใช้งานล่าสุดเก็บใน localStorage ทุกแท็บใช้ร่วมกัน
@@ -30557,15 +30610,122 @@ $('#gate-form').addEventListener('submit', async e => {
   err.hidden = true;
   try {
     const r = await call('lpchLogin', user, pass, { pack: 1 });   // Code.gs API 89: ส่งข้อมูลมาพร้อมผลเข้าสู่ระบบ (รุ่นเก่าไม่สนค่านี้)
-    setToken(r.token);
-    txsFresh = true;   // Code.gs บันทึกการเข้าสู่ระบบของหน่วยงานแล้ว (lpchLogin)
-    $('#g-pass').value = '';
-    state.gate = null;
-    preData = r.data && typeof r.data === 'object' && !r.data.gate ? r.data : null;
-    await refresh();
-    if (state.gate == null) toast(`เข้าสู่ระบบแล้ว · ${r.name}`);
+    await gateIn(r);
   } catch (ex) { err.textContent = errMsg(ex); err.hidden = false; }
   finally { btn.disabled = false; }
+});
+async function gateIn(r, msg) {
+  setToken(r.token);
+  txsFresh = true;   // Code.gs บันทึกการเข้าสู่ระบบของหน่วยงานแล้ว (lpchLogin)
+  $('#g-pass').value = '';
+  state.gate = null;
+  preData = r.data && typeof r.data === 'object' && !r.data.gate ? r.data : null;
+  await refresh();
+  if (state.gate == null) toast(`${msg || 'เข้าสู่ระบบแล้ว'} · ${r.name}`);
+}
+/* ---------- สมัครสมาชิก / ลืมรหัสผ่าน (24 พ.ย. · Code.gs API 125) ----------
+ * บัญชีเก็บที่ LPCH RO Workspace ที่เดียว: Code.gs ส่งต่อคำขอไปที่ RO Workspace (หน้าสมัครเดียวกับของ RO Workspace) · ใช้ได้ทั้ง RO Workspace, RT Hub และแอปอื่นที่เชื่อม
+ * Code.gs รุ่นก่อน 125 = ไม่แสดงแถบสมัคร / ลืมรหัสผ่าน (สมัคร / รีเซ็ตที่ RO Workspace เหมือนเดิม) */
+const SIGNUP_API = 125;
+const signupOn = () => store.mode === 'sheet' && (+window.MEDPHYS_API || 0) >= SIGNUP_API;
+const GATE_FORMS = { in: '#gate-form', up: '#gate-reg', fp: '#gate-fp', rp: '#gate-rp' };
+const GATE_H = { in: ['เข้าสู่ระบบ', 'ใช้ชื่อผู้ใช้และรหัสผ่านของ <b>LPCH RO Workspace</b>'], up: ['สมัครสมาชิก', 'บัญชีเก็บที่ <b>LPCH RO Workspace</b> · ใช้ได้ทั้ง RO Workspace, RT Hub และระบบอื่นที่เชื่อม'],
+  fp: ['ลืมรหัสผ่าน', 'ตั้งรหัสผ่านใหม่ของบัญชี <b>LPCH RO Workspace</b>'], rp: ['ลืมรหัสผ่าน', 'ตั้งรหัสผ่านใหม่ของบัญชี <b>LPCH RO Workspace</b>'] };
+const GATE_EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/, GATE_USER = /^[a-z0-9._-]{3,30}$/;
+let gateTab = 'in', gateRoles = null, gateRolesBusy = false;
+const gateErr = (sel, m) => { const e = $(sel); e.textContent = m || ''; e.hidden = !m; };
+function gateSync() {
+  const on = signupOn();
+  if (!on || !GATE_FORMS[gateTab]) gateTab = 'in';
+  $('#gate-tabs').hidden = !on;
+  $('#gate-in-hint').hidden = !on;
+  $('#gate-foot-old').hidden = on;
+  for (const [k, sel] of Object.entries(GATE_FORMS)) $(sel).hidden = k !== gateTab;
+  for (const b of $$('#gate-tabs [data-gtab]')) b.setAttribute('aria-selected', String(b.dataset.gtab === gateTab));
+  $('#gate-h').textContent = GATE_H[gateTab][0];
+  $('#gate-sub').innerHTML = GATE_H[gateTab][1];
+}
+// เปลี่ยนขั้น: ok = ข้อความผลสำเร็จด้านบน · login = ชื่อผู้ใช้ / อีเมลที่ใส่ให้ในขั้นนั้น
+function gateShow(tab, ok, login) {
+  gateTab = tab;
+  gateSync();
+  gateErr('#gate-ok', ok);
+  for (const id of ['#gr-err', '#gf-err', '#gp-err']) gateErr(id, '');
+  if (login) $({ in: '#g-user', fp: '#gf-login', rp: '#gp-login' }[gateTab] || '#g-user').value = login;
+  if (gateTab === 'up') gateLoadRoles();
+  const f = $(GATE_FORMS[gateTab]), first = $$('input, select', f).find(x => !x.value && !x.disabled) || $('input', f);
+  if (first) first.focus();
+}
+async function gateLoadRoles() {
+  const sel = $('#gr-role');
+  if (gateRoles || gateRolesBusy) return;
+  gateRolesBusy = true;
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">กำลังโหลดตำแหน่ง…</option>';
+  try {
+    const r = await call('lpchRoles');
+    gateRoles = (r && Array.isArray(r.roles) ? r.roles : []).filter(x => x && x.code);
+    sel.innerHTML = '<option value="">— เลือกตำแหน่ง —</option>' + gateRoles.map(x => `<option value="${esc(x.code)}">${esc(x.label || x.code)}</option>`).join('');
+  } catch (ex) {
+    sel.innerHTML = '<option value="">— โหลดตำแหน่งไม่ได้ —</option>';
+    gateErr('#gr-err', `${errMsg(ex)} · กดแถบสมัครสมาชิกอีกครั้งเพื่อลองใหม่`);
+  } finally { gateRolesBusy = false; sel.disabled = false; }
+}
+$('#gate-card').addEventListener('click', e => {
+  const b = e.target.closest('[data-gtab]');
+  if (!b) return;
+  const typed = str($({ in: '#g-user', up: '#gr-user', fp: '#gf-login', rp: '#gp-login' }[gateTab]).value);
+  gateShow(b.dataset.gtab, '', b.dataset.gtab === 'up' ? '' : typed);
+});
+const gateBusy = (sel, on, idle) => { const b = $(sel); b.disabled = on; b.textContent = on ? 'กำลังดำเนินการ…' : idle; };
+$('#gate-reg').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = id => $(id).value;
+  const rec = { fullName: str(v('#gr-name')), role: v('#gr-role'), username: str(v('#gr-user')).toLowerCase(), email: str(v('#gr-email')).toLowerCase(), password: v('#gr-pass'), phone: str(v('#gr-phone')) };
+  const bad = !rec.fullName ? 'กรอกชื่อ-นามสกุล' : !rec.role ? 'เลือกตำแหน่ง'
+    : !GATE_USER.test(rec.username) ? 'ชื่อผู้ใช้ต้องเป็นภาษาอังกฤษ ตัวเลข หรือ . _ - ความยาว 3–30 ตัว (ไม่มีช่องว่าง)'
+    : !GATE_EMAIL.test(rec.email) ? 'กรอกอีเมลให้ถูกต้อง (ใช้รับรหัสเมื่อลืมรหัสผ่าน)'
+    : rec.password.length < 8 ? 'รหัสผ่านต้องมีอย่างน้อย 8 ตัว' : rec.password !== v('#gr-pass2') ? 'รหัสผ่านทั้งสองช่องไม่ตรงกัน' : '';
+  if (bad) return gateErr('#gr-err', bad);
+  gateErr('#gr-err', '');
+  gateBusy('#gr-save', true);
+  try {
+    const r = await call('lpchRegister', rec, { pack: 1 });
+    $('#gr-pass').value = $('#gr-pass2').value = '';
+    if (r && r.token) { await gateIn(r, 'สมัครสมาชิกและเข้าสู่ระบบแล้ว'); return; }
+    for (const id of ['#gr-name', '#gr-user', '#gr-email', '#gr-phone']) $(id).value = '';
+    $('#gr-role').value = '';
+    gateShow('in', `${(r && r.message) || 'สมัครสมาชิกสำเร็จ'} · เมื่อผู้ดูแลระบบ LPCH RO Workspace อนุมัติแล้ว เข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่านนี้ได้เลย`, rec.username);
+  } catch (ex) { gateErr('#gr-err', errMsg(ex)); }
+  finally { gateBusy('#gr-save', false, 'สมัครสมาชิก'); }
+});
+$('#gate-fp').addEventListener('submit', async e => {
+  e.preventDefault();
+  const login = str($('#gf-login').value);
+  if (!login) return gateErr('#gf-err', 'กรอกชื่อผู้ใช้หรืออีเมล');
+  gateErr('#gf-err', '');
+  gateBusy('#gf-save', true);
+  try {
+    const r = await call('lpchForgot', login);
+    gateShow('rp', (r && r.message) || 'ส่งรหัสไปที่อีเมลแล้ว', login);
+  } catch (ex) { gateErr('#gf-err', errMsg(ex)); }
+  finally { gateBusy('#gf-save', false, 'ส่งรหัสไปที่อีเมล'); }
+});
+$('#gate-rp').addEventListener('submit', async e => {
+  e.preventDefault();
+  const login = str($('#gp-login').value), code = $('#gp-code').value.replace(/\s/g, ''), pass = $('#gp-pass').value;
+  const bad = !login ? 'กรอกชื่อผู้ใช้หรืออีเมล' : !/^\d{6}$/.test(code) ? 'กรอกรหัสยืนยัน 6 หลักจากอีเมล'
+    : pass.length < 8 ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัว' : pass !== $('#gp-pass2').value ? 'รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน' : '';
+  if (bad) return gateErr('#gp-err', bad);
+  gateErr('#gp-err', '');
+  gateBusy('#gp-save', true);
+  try {
+    const r = await call('lpchReset', login, code, pass, { pack: 1 });
+    $('#gp-code').value = $('#gp-pass').value = $('#gp-pass2').value = '';
+    if (r && r.token) { await gateIn(r, 'ตั้งรหัสผ่านใหม่และเข้าสู่ระบบแล้ว'); return; }
+    gateShow('in', [r && r.message, r && r.loginErr].filter(Boolean).join(' · ') || 'ตั้งรหัสผ่านใหม่แล้ว', (r && r.username) || login);
+  } catch (ex) { gateErr('#gp-err', errMsg(ex)); }
+  finally { gateBusy('#gp-save', false, 'ตั้งรหัสผ่านใหม่และเข้าสู่ระบบ'); }
 });
 let movedOnce = false;
 // ข้อมูลจาก Code.gs API 61: ตารางแบบย่อ { c: คีย์, r: แถว } · ตารางรุ่นเดิม (same) ใช้ของที่มี · Cases / Logs ที่เปลี่ยน (delta) = แทน/เพิ่มเฉพาะแถวนั้น
