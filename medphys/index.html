@@ -8709,7 +8709,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.25';
+const PAGE_VERSION = '2026-11-22.26';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9639,6 +9639,8 @@ function localStore() {
       if (!str(rec.hn) || !str(rec.name) || !str(rec.doc) || !isDay(rec.date)) throw new Error('กรอก HN ชื่อ แพทย์ และวันที่');
       const i = rec.id ? db.visit.findIndex(x => x.id === rec.id) : -1, cur = i >= 0 ? db.visit[i] : null;
       const r = { id: cur ? cur.id : uid(), date: rec.date, hn: str(rec.hn).trim(), name: str(rec.name).trim(), doc: str(rec.doc).toUpperCase(), note: str(rec.note).trim(), by: cur ? cur.by : state.user.name || 'ผู้ใช้ตัวอย่าง', at: cur ? cur.at : nowISO(), seen: cur ? cur.seen : '', seenBy: cur ? cur.seenBy : '' };
+      const dup = db.visit.find(x => x.id !== r.id && x.date === r.date && hnKey(x.hn) === hnKey(r.hn));   // API 123
+      if (dup) throw new Error(`HN ${r.hn} มีรายการพบแพทย์วันที่ ${fmtDay(r.date)} แล้ว (แพทย์ ${dup.doc}) · ลงซ้ำไม่ได้ · แก้ไขรายการเดิมแทน`);
       if (i >= 0) db.visit[i] = r; else db.visit.push(r);
       persist();
       return clone(r);
@@ -14331,6 +14333,11 @@ const vsDlg = $('#vs-dlg');
 // 18 พ.ย. (R11): นัดพบแพทย์ล่วงหน้าจากรายชื่อผู้ป่วยระหว่างฉาย (Nurse → นัดพบแพทย์) = รายการพบแพทย์ที่ Note "นัดพบแพทย์"
 const VISIT_APPT = 'นัดพบแพทย์';
 const visitTag = v => (v && v.note === VISIT_APPT ? 'นัดพบแพทย์' : v && v.note === NC_OFF_SEE ? 'Off RT · พบแพทย์' : 'นอกตารางนัด');
+// 24 พ.ย. (Code.gs API 123): ผู้ป่วยหนึ่งคนมีรายการพบแพทย์ได้วันละหนึ่งรายการ (นอกตารางนัด · นัดพบแพทย์ · Hold RT ส่งพบแพทย์ · Start RT วันแรก / Off RT พบแพทย์)
+const vsSys = v => /^(simsee|offsee)\|/.test(str(v && v.id));   // สร้างจากแถบ Nurse → นัดวันนี้ (ผูกกับสถานะของนัด) = แก้ / ลบจากหน้าต่างนี้ไม่ได้
+const vsDupOf = (hn, date, id) => (state.visit || []).find(v => v.id !== id && v.date === date && hnKey(v.hn) === hnKey(hn)) || null;
+const vsKind = v => (v.note === NC_SIM_SEE ? NC_SIM_SEE : v.note === NC_HOLD_SEE ? NC_HOLD_SEE : visitTag(v));
+const vsDupMsg = v => `HN ${v.hn} มีรายการพบแพทย์วันที่ ${fmtDay(v.date)} แล้ว (${vsKind(v)} · แพทย์ ${v.doc}${v.seen ? ' · พบแพทย์แล้ว' : ''}) · ลงซ้ำไม่ได้`;
 let vsEditing = null;
 function openVisit(id) {
   if (accessOf('nurse') !== 'edit') return toast(RO_MSG, { err: true });
@@ -14368,6 +14375,12 @@ $('#vs-form').addEventListener('submit', async e => {
   if (!name) return err('กรอกชื่อ-สกุล');
   if (!doc) return err('เลือกแพทย์');
   if (!isDay(date)) return err('เลือกวันที่พบแพทย์');
+  const dup = vsDupOf(hn, date, vsEditing ? vsEditing.id : '');
+  if (dup) {   // 24 พ.ย.: ลงซ้ำไม่ได้ · ปุ่มเปิดรายการเดิมมาแก้ (เปลี่ยนแพทย์ / เหตุผล)
+    $('#vs-err').innerHTML = esc(vsDupMsg(dup)) + (vsSys(dup) ? '' : ` <button type="button" class="btn sm" data-vsgo="${esc(dup.id)}">แก้ไขรายการเดิม</button>`);
+    $('#vs-err').hidden = false;
+    return;
+  }
   const btn = $('#vs-save');
   btn.disabled = true;
   try {
@@ -14400,6 +14413,44 @@ async function visitRemoveDo(id, btn) {
     toast(`ยกเลิกแล้ว · HN ${v.hn}`);
     render();
   } catch (e) { toast('ยกเลิกไม่สำเร็จ: ' + errMsg(e), { err: true }); if (btn && btn.isConnected) btn.disabled = false; }
+}
+/* 24 พ.ย.: รายการพบแพทย์ที่ลงซ้ำอยู่แล้ว (วันนี้เป็นต้นไป · HN + แพทย์เดียวกัน) = เก็บหนึ่งรายการ ลบรายการซ้ำที่ยังไม่ได้พบแพทย์
+ * เก็บ: รายการจากนัดวันนี้ (Start RT วันแรก / Off RT) → พบแพทย์แล้ว → ลงก่อน · ผู้ที่แก้แถบ Nurse ได้เปิดหน้า = ลบให้ (มีประวัติการบันทึก · กู้คืนได้ที่ถังขยะ)
+ * HN เดียวกันคนละแพทย์ = ไม่ลบให้ (ไม่รู้ว่ารายการไหนถูก) */
+function visitDups() {
+  const td = today(), g = new Map(), out = [];
+  for (const v of state.visit || []) {
+    if (!isDay(v.date) || v.date < td || !hnKey(v.hn)) continue;
+    const k = `${v.date}|${hnKey(v.hn)}|${v.doc}`;
+    if (!g.has(k)) g.set(k, []);
+    g.get(k).push(v);
+  }
+  for (const vs of g.values()) {
+    if (vs.length < 2) continue;
+    const keep = vs.slice().sort((a, b) => vsSys(b) - vsSys(a) || !!b.seen - !!a.seen || str(a.at).localeCompare(str(b.at)) || str(a.id).localeCompare(str(b.id)))[0];
+    for (const v of vs) if (v !== keep && !v.seen && !vsSys(v)) out.push(v);
+  }
+  return out;
+}
+const vsDupTried = new Set();
+let vsDupBusy = false;
+async function visitDupClean() {
+  if (vsDupBusy || !state.loaded || accessOf('nurse') !== 'edit' || !visitOn()) return;
+  const xs = visitDups().filter(v => !vsDupTried.has(v.id));
+  if (!xs.length) return;
+  vsDupBusy = true;
+  const done = [];
+  try {
+    for (const v of xs) {
+      vsDupTried.add(v.id);
+      try { await store.visitRemove(v.id); done.push(v); } catch (e) { /* ลบไม่ได้ (เช่นเน็ต) = คงไว้ แสดงตามเดิม */ }
+    }
+  } finally { vsDupBusy = false; }
+  if (!done.length) return;
+  const ids = new Set(done.map(v => v.id));
+  state.visit = state.visit.filter(v => !ids.has(v.id));
+  toast(`ลบรายการพบแพทย์ที่ลงซ้ำ ${done.length} รายการ · HN ${[...new Set(done.map(v => v.hn))].join(', ')} (เก็บไว้รายการเดียว · กู้คืนได้ที่ถังขยะ)`);
+  render();
 }
 // ห้องตรวจ → ระหว่างฉาย: ผู้ป่วยตามตาราง + นอกตารางนัดวันนี้ (ผู้ป่วยที่ฉายอยู่ = บัตรเต็ม · กลุ่มตามแพทย์ที่เลือก)
 // 19 พ.ย. (R18): Re-CT แบบพบแพทย์ (สถานะ fraction วันนี้) · ผู้ป่วยละรายการ
@@ -14696,6 +14747,8 @@ async function holdSeeDo(id, btn) {
   const c = state.cases.find(x => x.id === id), doc = c ? str(c.doc).toUpperCase() : '';
   if (!c) return toast('ไม่พบผู้ป่วยนี้แล้ว', { err: true });
   if (!docCodes().includes(doc)) return toast(`HN ${c.hn}: ยังไม่ได้ระบุแพทย์ ส่งพบแพทย์ไม่ได้ · ใส่แพทย์ในเคสก่อน`, { err: true });
+  const dup = vsDupOf(c.hn, today(), '');
+  if (dup) return toast(vsDupMsg(dup), { err: true });
   if (btn) btn.disabled = true;
   try {
     const v = normVisit(await store.visitSave({ id: '', date: today(), hn: c.hn, name: c.name || c.hn, doc, note: NC_HOLD_SEE }));
@@ -26987,6 +27040,7 @@ document.addEventListener('click', e => {
   if (ds.vsnew) return openVisit('');   // 18 พ.ย.: พบแพทย์นอกตารางนัด
   if (ds.seeappt) { const d = ds.pick ? (($(`[data-seeapd="${CSS.escape(ds.seeappt)}"]`) || {}).value || '') : ds.d; return seeAppt(ds.seeappt, d, t); }   // R11: นัดพบแพทย์จากรายชื่อระหว่างฉาย
   if (ds.vsedit) return openVisit(ds.vsedit);
+  if (ds.vsgo) { vsDlg.close(); return openVisit(ds.vsgo); }   // 24 พ.ย.: จากข้อความลงซ้ำ
   if (ds.vsdel) return visitRemoveDo(ds.vsdel, t);
   if (ds.vsmark) return visitMarkDo(ds.vsmark, !!ds.on, t);
   if (ds.seeundo) { seeDraft.clear(); return renderNurse(); }
@@ -30306,6 +30360,7 @@ async function refresh(quiet) {
   if (advCleared) toast(`ล้างการบันทึกล่วงหน้า ${advCleared} รายการ (ฉายแล้ว / Off RT / Complete course / Cancel RT ของวันหลังวันนี้)`);
   // หน้าตั้งค่า: ไม่วาดใหม่ระหว่างแก้ · ยังไม่ได้แก้และไม่ได้อยู่ในช่องกรอก = วาดใหม่ให้เห็นค่าล่าสุด
   maybePullBrachy();
+  visitDupClean();   // 24 พ.ย.: รายการพบแพทย์ที่ลงซ้ำ
   if (PRACTICE.on && state.practice && !PRACTICE.seedTried && practiceEmpty()) { PRACTICE.seedTried = true; practiceSeedNow(false); }   // ไฟล์ฝึกใหม่: ใส่ผู้ป่วยตัวอย่างให้ครั้งแรก
   if (quiet && state.view === 'settings') { if (!draft && !settingsEl.contains(document.activeElement)) renderSettings(); return; }
   render();
