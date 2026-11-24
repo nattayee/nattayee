@@ -36,8 +36,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-24.5';
-const API_LEVEL = 127;   // 127: Nurse → นัดวันนี้ ไม่มา แจ้งแพทย์แล้ว (ncallAtt noshow · CT-Sim / Start RT วันแรก / นัดพบแพทย์ระหว่างฉาย) = ประกาศผู้ป่วย 'ไม่มา … วันนี้ (วว/ดด)' ถึงอาชีพใน config.noShow (ค่าเริ่มต้น RTT) + Telegram · ยกเลิกไม่มา = ยกเลิกประกาศ · 126: บัญชีของฉัน (acctMe / acctSave / acctPassword / acctSessions / acctSignOut) · จัดการสมาชิก (acctMembers / acctMemberSave / acctMemberDelete · RO Workspace ตรวจสิทธิ์เอง) · ผู้สมัครใหม่ = ข้อความถึงผู้รับที่ตั้งไว้ (config.msg.signup / signupTo · ไม่ตั้ง = แอดมินหลัก) · 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-24.6';
+const API_LEVEL = 128;   // 128: Nurse → รับคำสั่งแพทย์ CCRT + Continue RT + Continue CMT = CMT Today (RT→CMT / CMT→RT) / CMT Tomorrow (nurseCmt · rtdNurse cmtw · คอลัมน์ CMT วันนี้ ใน DocOrders) · นัดเคมีบำบัด (ncallAtt what cmt · rc / cr) · ขอยกเลิกวันลา ทุกทีม = หัวหน้างานอนุมัติก่อน (leaveCancel · แถว can| ในชีต LeaveAck) · ประวัติการบันทึกเลือกช่วงวันที่ / แถบย่อย (auditRange) · 127: Nurse → นัดวันนี้ ไม่มา แจ้งแพทย์แล้ว (ncallAtt noshow · CT-Sim / Start RT วันแรก / นัดพบแพทย์ระหว่างฉาย) = ประกาศผู้ป่วย 'ไม่มา … วันนี้ (วว/ดด)' ถึงอาชีพใน config.noShow (ค่าเริ่มต้น RTT) + Telegram · ยกเลิกไม่มา = ยกเลิกประกาศ · 126: บัญชีของฉัน (acctMe / acctSave / acctPassword / acctSessions / acctSignOut) · จัดการสมาชิก (acctMembers / acctMemberSave / acctMemberDelete · RO Workspace ตรวจสิทธิ์เอง) · ผู้สมัครใหม่ = ข้อความถึงผู้รับที่ตั้งไว้ (config.msg.signup / signupTo · ไม่ตั้ง = แอดมินหลัก) · 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -277,14 +277,16 @@ TABLES.inbox = {
 TABLES.lvack = {
   sheet: 'LeaveAck',
   fields: [['id', 'id'], ['src', 'ที่มา'], ['key', 'วันลา'], ['who', 'ผู้ลา'], ['team', 'ทีม'], ['from', 'ตั้งแต่'], ['to', 'ถึง'], ['type', 'ประเภท'],
-    ['by', 'รับทราบโดย'], ['user', 'บัญชี'], ['at', 'รับทราบเมื่อ']],
+    ['by', 'รับทราบโดย'], ['user', 'บัญชี'], ['at', 'รับทราบเมื่อ'],
+    ['reason', 'เหตุผลขอยกเลิก'], ['ref', 'อ้างอิง'], ['dec', 'ผลขอยกเลิก'], ['decBy', 'ผู้พิจารณา'], ['decAt', 'พิจารณาเมื่อ']],   // API 128: แถว can|… = ขอยกเลิกวันลา (by / user / at = ผู้ขอ)
 };
 // API 86: คำสั่งแพทย์ระหว่างฉาย (ห้องตรวจ → ระหว่างฉาย) ต่อเคสต่อวัน · id = วันที่|id เคส · kind = alone (RT Alone) | ccrt
 // rt / cmt = continue | hold · src = see (พบแพทย์วันนี้) / hold (Hold RT อยู่) · nurse = เวลาที่พยาบาลยืนยัน · เขียนผ่าน rtdSave / nurseMark
 TABLES.rtd = {
   sheet: 'DocOrders',
   fields: [['id', 'id'], ['date', 'วันที่'], ['case', 'เคส'], ['hn', 'HN'], ['name', 'Name'], ['doc', 'แพทย์'], ['room', 'ห้องฉาย'], ['src', 'ที่มา'],
-    ['kind', 'ชนิด'], ['rt', 'RT'], ['cmt', 'CMT'], ['note', 'Note'], ['by', 'สั่งโดย'], ['at', 'สั่งเมื่อ'], ['nurse', 'Nurse ยืนยัน'], ['nurseBy', 'Nurse โดย']],
+    ['kind', 'ชนิด'], ['rt', 'RT'], ['cmt', 'CMT'], ['note', 'Note'], ['by', 'สั่งโดย'], ['at', 'สั่งเมื่อ'], ['nurse', 'Nurse ยืนยัน'], ['nurseBy', 'Nurse โดย'],
+    ['cmtw', 'CMT วันนี้']],   // API 128: rc = CMT Today (RT→CMT) · cr = CMT Today (CMT→RT) · tmr = CMT Tomorrow · ว่าง = ยืนยันปกติ
 };
 // วันลาของแพทย์ (API 62): ลาไม่เสียคิวแจกงานแพทย์ (คนอื่นรับแทน แล้วคืนคิวเมื่อกลับมา) · เขียนผ่าน dqLeaveSave / dqLeaveRemove เท่านั้น
 TABLES.dqLeave = {
@@ -3628,6 +3630,7 @@ function nurseMark(table, id, on, token) {
     const ss = ss_(), x = openRow_(ss, table, null, id);
     if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const set = on ? { nurse: new Date().toISOString(), nurseBy: R8_WHO_(u) } : { nurse: '', nurseBy: '' };
+    if (table === 'rtd') set.cmtw = '';   // API 128: ยืนยันปกติ / ยกเลิก = ไม่มี CMT Today / Tomorrow
     writeFields_(x.sh, x.row, x.header, TABLES[table].fields.filter(f => f[0] in set), set, x.vals);
     const out = Object.assign(x.cur, set);
     if (table === 'rtd') { const c = rtdHold_(ss, out, !!on); if (c) out.caseRow = c; }   // API 104: Hold RT ที่ยืนยัน = Hold ในตารางวันฉาย
@@ -3639,6 +3642,7 @@ function nurseMark(table, id, on, token) {
 function rtdNurse(rec, token) {
   const u = requireEdit_(token, EDIT_VIEWS.nurse);
   rec = rec && typeof rec === 'object' ? rec : {};
+  const cw = CMTW_.indexOf(rec.cmtw) >= 0 ? rec.cmtw : '';   // API 128
   const cut = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
   const r = { date: cut(rec.date, 10), case: cut(rec.case, 80), hn: cut(rec.hn, 40), name: cut(rec.name, 200), doc: cut(rec.doc, 10).toUpperCase(), room: cut(rec.room, 60), src: cut(rec.src, 30),
     kind: rec.kind === 'ccrt' ? 'ccrt' : 'alone', rt: cut(rec.rt, 10), cmt: cut(rec.cmt, 10), note: cut(rec.note, 500) };
@@ -3650,17 +3654,37 @@ function rtdNurse(rec, token) {
   return withLock_(() => {
     const ss = ss_(), id = r.date + '|' + r.case, x = openRow_(ss, 'rtd', null, id);
     if (x.row && x.cur && x.cur.rt) {   // แพทย์สั่งแล้ว: ยืนยันอย่างเดียว
-      const set = { nurse: now, nurseBy: who };
+      const set = { nurse: now, nurseBy: who, cmtw: cmtwOk_(x.cur) ? cw : '' };
       writeFields_(x.sh, x.row, x.header, TABLES.rtd.fields.filter(f => f[0] in set), set, x.vals);
       const out = Object.assign(x.cur, set), c = rtdHold_(ss, out, true);
       if (c) out.caseRow = c;
       return out;
     }
     Object.assign(r, { id: id, src: (r.src ? r.src + ',' : '') + 'nurse', by: who + ' (พยาบาลแทนแพทย์)', at: now, nurse: now, nurseBy: who });
+    r.cmtw = cmtwOk_(r) ? cw : '';
     writeFields_(x.sh, x.row || x.sh.getLastRow() + 1, x.header, TABLES.rtd.fields, r, x.row ? x.vals : null);
     const c = rtdHold_(ss, r, true);
     if (c) r.caseRow = c;
     return r;
+  });
+}
+/* ---------- API 128 (24 พ.ย.): CMT Today / CMT Tomorrow ----------
+ * คำสั่ง CCRT + Continue RT + Continue CMT: พยาบาลยืนยันแบบ CMT Today (rc = ฉายก่อนแล้วให้เคมี RT→CMT · cr = ให้เคมีก่อนแล้วฉาย CMT→RT · ตารางวันฉายแสดงตามนั้น)
+ * หรือ CMT Tomorrow (tmr = ยืนยัน ฉายได้วันนี้ · วันทำการถัดไปผู้ป่วยไปอยู่ Nurse → นัดเคมีบำบัด แล้วเลือก RT→CMT / CMT→RT ที่นั่น = ncallAtt what cmt) */
+const CMTW_ = ['rc', 'cr', 'tmr'];
+const cmtwOk_ = r => !!r && r.kind === 'ccrt' && String(r.rt) === 'continue' && String(r.cmt) === 'continue';
+function nurseCmt(id, w, token) {
+  const u = requireEdit_(token, EDIT_VIEWS.nurse);
+  if (CMTW_.indexOf(w) < 0) throw new Error('เลือก CMT Today (RT→CMT / CMT→RT) หรือ CMT Tomorrow');
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'rtd', null, String(id || ''));
+    if (!x.row) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    if (!cmtwOk_(x.cur)) throw new Error('CMT Today / Tomorrow ใช้กับคำสั่ง CCRT + Continue RT + Continue CMT เท่านั้น');
+    const set = { nurse: new Date().toISOString(), nurseBy: R8_WHO_(u), cmtw: w };
+    writeFields_(x.sh, x.row, x.header, TABLES.rtd.fields.filter(f => f[0] in set), set, x.vals);
+    const out = Object.assign(x.cur, set), c = rtdHold_(ss, out, true);
+    if (c) out.caseRow = c;
+    return out;
   });
 }
 /* ---------- API 100 (20 พ.ย.): สถานะเครื่อง (Machine status) · แสดงทุกแถบ · ประวัติในชีต MachineLog ใช้วิเคราะห์ uptime / downtime ---------- */
@@ -4177,8 +4201,9 @@ function ncallAtt(rec, token) {
   const what = cut(rec.what, 8), ref = cut(rec.ref, 80), date = cut(rec.date, 10);
   // API 119: what off = Off RT วันนี้ · adv = ไม่พบแพทย์ + แนะนำผู้ป่วยแล้ว · see = พบแพทย์ · seeadv = แพทย์พบแล้ว ยืนยัน + แนะนำผู้ป่วยแล้ว
   const status = what === 'off' ? (['adv', 'see', 'seeadv'].indexOf(rec.status) >= 0 ? rec.status : '')
+    : what === 'cmt' ? (rec.status === 'rc' || rec.status === 'cr' ? rec.status : '')   // API 128: นัดเคมีบำบัด RT→CMT / CMT→RT
     : rec.status === 'came' || rec.status === 'noshow' || (rec.status === 'see' && what === 'sim') ? rec.status : '';
-  if (['ct', 'sim', 'see', 'fx', 'off'].indexOf(what) < 0) throw new Error('ไม่รู้จักนัด');
+  if (['ct', 'sim', 'see', 'fx', 'off', 'cmt'].indexOf(what) < 0) throw new Error('ไม่รู้จักนัด');
   if (!ref || !NC_DAY_(date)) throw new Error('ไม่มีข้อมูลนัด');
   const who = R8_WHO_(u), now = new Date().toISOString();
   const out = withLock_(() => {
@@ -4685,6 +4710,73 @@ function leaveAck(req, token) {
       : { id: id, src: src, key: key, who: who, team: team, from: from, to: to, type: type, by: String(u.name || u.username || u.me || ''), user: String(u.username || u.me || ''), at: new Date().toISOString() };
     if (req.undo && !x.row) return { id: id, src: src, key: key, who: who, team: team, from: from, to: to, type: type, by: '', user: '', at: '' };
     return saveRow_(x, TABLES.lvack.fields, set);
+  });
+}
+/* ---------- API 128 (24 พ.ย.): ขอยกเลิกวันลา (ทุกทีม) · หัวหน้างานอนุมัติก่อนจึงยกเลิกได้ ----------
+ * แถวในชีต LeaveAck id = can|src|key · by / user / at = ผู้ขอ · reason = เหตุผล · dec: ว่าง = รออนุมัติ · ok = อนุมัติ (ระบบลบวันลาให้) · no = ไม่อนุมัติ · wd = ถอนคำขอ
+ * act: ask / undo = ผู้ลาเอง (บัญชีในรายชื่อบุคลากร) หรือผู้ที่แก้วันลานั้นได้ · ok / no = หัวหน้างานหรือรักษาการแทนของทีม (แบบเดียวกับรับทราบใบลา · แอดมินกดแทนไม่ได้)
+ * ทีมที่ยังไม่ได้ตั้งหัวหน้างาน = ขอไม่ได้ (ยกเลิกวันลาได้ตามเดิม) · ข้อความแจ้งหัวหน้างาน / ผู้ขอ ส่งจากหน้าเว็บ (msgSend) */
+function leaveMine_(cfg, u, src, who) {
+  const me = [u.username, u.me, u.email].map(x => String(x || '').trim().toLowerCase()).filter(String);
+  const list = src === 'mp' ? cfg.staff : src === 'ro' ? cfg.doctors : cfg.crew;
+  const p = (Array.isArray(list) ? list : []).filter(x => x && (src === 'rtt' ? nameKey_(x.name) === nameKey_(who) : String(x.code || '').toUpperCase() === String(who).toUpperCase()))[0];
+  const acc = p ? [p.user, p.email].map(x => String(x || '').trim().toLowerCase()).filter(String) : [];
+  return acc.some(a => me.indexOf(a) >= 0);
+}
+function leaveEditor_(token, src, who) {
+  try {
+    if (src === 'ro') dqLeaveUser_(token, who); else requireEdit_(token, src === 'mp' ? EDIT_VIEWS.leaves : EDIT_VIEWS.jobs);
+    return true;
+  } catch (e) { return false; }
+}
+const leaveHeadSet_ = (cfg, team) => { const lv = cfg.leave && typeof cfg.leave === 'object' ? cfg.leave : {}, h = lv.heads && typeof lv.heads === 'object' ? lv.heads : {}; return !!String(h[team] || '').trim(); };
+// อนุมัติแล้ว: ลบวันลา · mp = ชีต Leaves · ro = DocLeaves · rtt = วันลาในแบบฟอร์มภาระงาน (ทุกเดือนในช่วง · ประเภทเดียวกัน) · คืนเฉพาะ id / วันลา (ไม่ส่งภาระงานของคนอื่น)
+function leaveDrop_(ss, src, key, who, from, to, type) {
+  if (src === 'mp' || src === 'ro') {
+    const t = src === 'mp' ? 'leaves' : 'dqLeave', x = openRow_(ss, t, null, key);
+    if (x.row) delRow_(x.sh, x.row, x.header, x.vals);
+    return { table: t, id: key, found: !!x.row };
+  }
+  const k = nameKey_(who), m0 = from.slice(0, 7), m1 = to.slice(0, 7), jobs = [];
+  readTable_(ss, 'jobs').forEach(j => {
+    if (nameKey_(j.who) !== k || String(j.ym) < m0 || String(j.ym) > m1) return;
+    let ls;
+    try { ls = JSON.parse(j.leaves || '[]'); } catch (e) { ls = []; }
+    if (!Array.isArray(ls)) return;
+    const keep = ls.filter(l => !(l && String(l.date || '') >= from && String(l.date || '') <= to && LTYPE_(l.type) === type));
+    if (keep.length === ls.length) return;
+    const x = openRow_(ss, 'jobs', null, String(j.id));
+    if (!x.row) return;
+    const set = { leaves: JSON.stringify(keep) };
+    writeFields_(x.sh, x.row, x.header, TABLES.jobs.fields.filter(f => f[0] === 'leaves'), set, x.vals);
+    jobs.push({ id: String(j.id), who: String(j.who || ''), ym: String(j.ym || ''), leaves: set.leaves });
+  });
+  return { table: 'jobs', jobs: jobs, found: jobs.length > 0 };
+}
+function leaveCancel(req, token) {
+  req = req && typeof req === 'object' ? req : {};
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v), cut = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const act = ['ask', 'undo', 'ok', 'no'].indexOf(req.act) >= 0 ? req.act : '';
+  const src = LVACK_SRC.indexOf(req.src) >= 0 ? req.src : '', key = cut(req.key, 200), who = cut(req.who, 120), from = cut(req.from, 10), to = cut(req.to, 10) || from, type = LTYPE_(req.type);
+  if (!act) throw new Error('ไม่รู้จักคำสั่ง');
+  if (!src || !key || !who) throw new Error('ไม่ได้ระบุวันลา');
+  if (!isDate(from) || !isDate(to) || to < from) throw new Error('วันที่ลาไม่ถูกต้อง');
+  const ss0 = ss_(), cfg = readConfig_(ss0) || {}, u = who_(token, ss0, cfg), team = leaveTeam_(cfg, src, who);
+  if (!team) throw new Error('ไม่พบผู้ลา ' + who + ' ในรายชื่อบุคลากร (ตั้งค่า → ทีม)');
+  const head = act === 'ok' || act === 'no';
+  if (head && !leaveHeadOk_(cfg, u, team)) throw new Error('อนุมัติการยกเลิกวันลาได้เฉพาะหัวหน้างานหรือรักษาการแทนของทีม ' + team + ' ที่ตั้งไว้ (ตั้งค่า → ทีม)');
+  if (!head && !leaveMine_(cfg, u, src, who) && !leaveEditor_(token, src, who)) throw new Error('ขอยกเลิกได้เฉพาะเจ้าของวันลา (หรือผู้ที่แก้วันลานี้ได้)');
+  if (act === 'ask' && !leaveHeadSet_(cfg, team)) throw new Error('ทีม ' + team + ' ยังไม่ได้ตั้งหัวหน้างาน (ตั้งค่า → ทีม) · ยกเลิกวันลาได้ตามเดิมโดยไม่ต้องขออนุมัติ');
+  const id = 'can|' + src + '|' + key, now = new Date().toISOString(), me = String(u.name || u.username || u.me || ''), acc = String(u.username || u.me || '');
+  return withLock_(() => {
+    const ss = ss_(), x = openRow_(ss, 'lvack', null, id), pend = !!x.row && !String(x.cur.dec || '');
+    if (act === 'ask') {
+      if (pend) throw new Error('ขอยกเลิกวันลานี้ไว้แล้ว · รอหัวหน้างานอนุมัติ');
+      return { row: saveRow_(x, TABLES.lvack.fields, { id: id, src: src, key: key, who: who, team: team, from: from, to: to, type: type, by: me, user: acc, at: now, reason: cut(req.reason, 300), ref: cut(req.ref, 200), dec: '', decBy: '', decAt: '' }) };
+    }
+    if (!pend) throw new Error('ไม่มีคำขอยกเลิกที่รออนุมัติ (อาจถูกถอนหรือพิจารณาไปแล้ว)');
+    const row = saveRow_(x, TABLES.lvack.fields, { dec: act === 'undo' ? 'wd' : act, decBy: me, decAt: now });
+    return act === 'ok' ? { row: row, gone: leaveDrop_(ss, src, key, who, from, to, type) } : { row: row };
   });
 }
 // สถานะจากแถบ Consult / แจกงานแพทย์ (API 73 · ไม่ต้องใช้ PIN เหมือนไม่มาทำ CT): doc = ขอเอกสารเพิ่ม (ต้องมีรายละเอียด) · nort = ไม่ RT · '' = กลับไปรอลงนัด
@@ -7276,6 +7368,35 @@ function auditRecent(view, q, before, token) {
   }
   const last = out.length ? out[out.length - 1].row : end + 1;
   return { rows: out, before: last, more: last > 2 };
+}
+// API 128 (24 พ.ย.): ประวัติการบันทึกของแถบ / แถบย่อย · opt = { q (ค้นหา), before (แถวก่อนหน้า · โหลดเพิ่ม), from / to (วันที่ตามเวลาของชีต · ว่าง = ทั้งหมด), tables (ตารางของแถบย่อย ⊂ ตารางของแถบ) }
+// แถวใน AuditLog เรียงตามเวลา: อ่านจากท้ายทีละ 2,000 แถว · เจอแถวที่เก่ากว่า from = หยุด · ไม่เกิน 150 รายการ / 40,000 แถวต่อครั้ง (กดโหลดเพิ่มต่อได้)
+function auditRange(view, opt, token) {
+  opt = opt && typeof opt === 'object' ? opt : {};
+  const a = auditTablesFor_(view, token), sh = sheet_(a.ss, AUDIT_SHEET);
+  const want = Array.isArray(opt.tables) && opt.tables.length ? a.tables.filter(t => opt.tables.indexOf(t) >= 0) : a.tables;
+  const isD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')), from = isD(opt.from) ? String(opt.from) : '', to = isD(opt.to) ? String(opt.to) : '';
+  if (!sh || sh.getLastRow() < 2 || !want.length) return { rows: [], before: 0, more: false };
+  const tz = tz_(a.ss), dayOf = v => { const d = v instanceof Date ? v : new Date(String(v)); return isNaN(d) ? '' : Utilities.formatDate(d, tz, 'yyyy-MM-dd'); };
+  const words = String(opt.q || '').toLowerCase().split(/\s+/).filter(Boolean), out = [];
+  let end = Math.min(sh.getLastRow(), +opt.before > 1 ? +opt.before - 1 : sh.getLastRow()), done = false, scanned = 0;
+  while (end >= 2 && out.length < 150 && !done && scanned < 40000) {
+    const start = Math.max(2, end - 1999), vals = sh.getRange(start, 1, end - start + 1, AUDIT_HEAD.length).getValues();
+    let i = vals.length - 1;
+    for (; i >= 0 && out.length < 150; i--) {
+      const r = vals[i], d = from || to ? dayOf(r[0]) : '';
+      if (from && d && d < from) { done = true; break; }
+      if (to && d && d > to) continue;
+      if (want.indexOf(String(r[3])) < 0) continue;
+      if (words.length) { const t = (r[1] + ' ' + r[2] + ' ' + r[5] + ' ' + r[8]).toLowerCase(); if (!words.every(w => t.indexOf(w) >= 0)) continue; }
+      out.push(auditRow_(r, start + i));
+    }
+    scanned += vals.length;
+    end = start + i;   // แถวถัดไปที่ยังไม่ได้ดู (i = −1 = อ่านหมดช่วงนี้แล้ว)
+    if (!words.length && !from && !to && out.length) break;   // ไม่กรอง: ทีละ 2,000 แถวเหมือนเดิม
+  }
+  const last = out.length ? out[out.length - 1].row : end + 1;
+  return { rows: out, before: last, more: !done && last > 2 };
 }
 // ประวัติของรายการ (id ไม่เกิน 30) ใหม่ก่อน
 function auditFor(ids, view, token) {
