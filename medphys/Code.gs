@@ -36,8 +36,8 @@ const LPCH_CHECK_SECONDS = 300;
 const PAGE_URL = 'https://raw.githubusercontent.com/nattayee/nattayee/refs/heads/claude/vigilant-bardeen-py5nxb/medphys/index.html';
 const PAGE_CACHE_SECONDS = 600;
 // รุ่นของไฟล์นี้ (แสดงที่บรรทัดล่างสุดของหน้าเว็บ) และรุ่นของ API ที่หน้าเว็บใช้ตรวจว่า Code.gs ใหม่พอหรือไม่
-const CODE_VERSION = '2026-11-25.7';
-const API_LEVEL = 139;   // 139: Patient chart (สิทธิ์ pchart ใน ตั้งค่า → แถบเมนู · ยังไม่ตั้ง = เท่าแถบลงทะเบียน · ได้ตารางของผู้ป่วย · ถังขยะไม่นับ chart) · ประวัติการบันทึกของผู้ป่วยตาม HN (auditHn · ไม่ส่งค่า QA) · 138: ลิงก์ประกาศของทุกจุดบันทึก (คีย์ sv.ชื่อคำสั่ง · เงื่อนไข sv.คำสั่ง|ช่อง=ค่า) · 137: ข้อความส่วนตัว → Telegram ส่วนตัว (tgMe / tgLinkStart / tgLinkCheck / tgMeTest / tgUnlink · สำเนาใน inboxPost_ · msg.tg) · 136: แถบ Evaluation (evalAct: Approved / Edit ส่งกลับไปวางแผนเดิม + ข้อความถึง MP · ช่อง evNote ของเคส · ลิงก์ประกาศ ev.ok / ev.edit) · 135: Nurse นัดวันนี้ นัด CT-Sim มาตามนัด → พบแพทย์ (ncallAtt what ct status see = รายการพบแพทย์ ctsee|) · ไม่มาตามนัด = ข้อความส่วนตัวถึงแพทย์เจ้าของไข้ด้วย (noShow.msgDoc · ค่าเริ่มต้นเปิด) · 134: แอดมินรองเห็นเหมือนแอดมินหลัก · แถบแจกงานแพทย์ที่ตั้งคอลัมน์แอดมินรองไว้ = ใช้ได้ทุกแถบย่อย (dqDesks_) · ชื่อแถบย่อยที่ตั้งเอง (config.subName · หมวดระบบ · แอดมินรองขอแก้ได้) · 133: ประกาศตามเงื่อนไขในฟอร์ม (config.ntfLink คีย์ ปุ่มบันทึกฟอร์ม|ช่อง=ค่า เช่น ap.new|prio=Emergency · ntfLink รับคีย์เงื่อนไข · สิทธิ์ตามแถบของปุ่ม) · 132: ลิงก์ประกาศของปุ่ม (config.ntfLink · ntfLink · ปุ่มเดิมใช้อาชีพ / ข้อความจากลิงก์) · 131: ลายเซ็นในฟอร์ม (sigForm · ใบลา / Standing order / ใบสั่ง CT Simulation · เฉพาะคนในฟอร์มนั้น · ผู้ที่เห็นแถบของฟอร์ม) · 130: บัญชีของฉัน → ลายเซ็นอิเล็กทรอนิกส์ของตัวเอง (sigMine / sigSave / sigDelete · ชีต Signatures · เจ้าของบัญชีเท่านั้น) · 129: บัญชีของฉัน → ข้อมูลใบลาของตัวเอง (ตำแหน่ง · เบอร์โทรระหว่างลา) ในรายชื่อบุคลากรที่เชื่อมบัญชีนี้ + อีเมลในรายชื่อ = อีเมลของบัญชี RO Workspace (selfProfile) · 128: Nurse → รับคำสั่งแพทย์ CCRT + Continue RT + Continue CMT = CMT Today (RT→CMT / CMT→RT) / CMT Tomorrow (nurseCmt · rtdNurse cmtw · คอลัมน์ CMT วันนี้ ใน DocOrders) · นัดเคมีบำบัด (ncallAtt what cmt · rc / cr) · ขอยกเลิกวันลา ทุกทีม = หัวหน้างานอนุมัติก่อน (leaveCancel · แถว can| ในชีต LeaveAck) · ประวัติการบันทึกเลือกช่วงวันที่ / แถบย่อย (auditRange) · 127: Nurse → นัดวันนี้ ไม่มา แจ้งแพทย์แล้ว (ncallAtt noshow · CT-Sim / Start RT วันแรก / นัดพบแพทย์ระหว่างฉาย) = ประกาศผู้ป่วย 'ไม่มา … วันนี้ (วว/ดด)' ถึงอาชีพใน config.noShow (ค่าเริ่มต้น RTT) + Telegram · ยกเลิกไม่มา = ยกเลิกประกาศ · 126: บัญชีของฉัน (acctMe / acctSave / acctPassword / acctSessions / acctSignOut) · จัดการสมาชิก (acctMembers / acctMemberSave / acctMemberDelete · RO Workspace ตรวจสิทธิ์เอง) · ผู้สมัครใหม่ = ข้อความถึงผู้รับที่ตั้งไว้ (config.msg.signup / signupTo · ไม่ตั้ง = แอดมินหลัก) · 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
+const CODE_VERSION = '2026-11-25.8';
+const API_LEVEL = 140;   // 140: ความปลอดภัย · คำสั่งตั้งระบบและตัวตั้งเวลาใช้ได้เฉพาะตัวตั้งเวลาหรือเจ้าของในหน้า Apps Script (ownerRun_) · ลืมรหัสผ่านจำกัดต่อบัญชี · Telegram ค่าเริ่มต้น HN อย่างเดียว · อีเมลสำรองข้อมูลเป็นลิงก์ (ไม่แนบไฟล์) · บันทึกการเปิด Patient chart (pcSeen · แอดมินเห็นในประวัติของ chart) · 139: Patient chart (สิทธิ์ pchart ใน ตั้งค่า → แถบเมนู · ยังไม่ตั้ง = เท่าแถบลงทะเบียน · ได้ตารางของผู้ป่วย · ถังขยะไม่นับ chart) · ประวัติการบันทึกของผู้ป่วยตาม HN (auditHn · ไม่ส่งค่า QA) · 138: ลิงก์ประกาศของทุกจุดบันทึก (คีย์ sv.ชื่อคำสั่ง · เงื่อนไข sv.คำสั่ง|ช่อง=ค่า) · 137: ข้อความส่วนตัว → Telegram ส่วนตัว (tgMe / tgLinkStart / tgLinkCheck / tgMeTest / tgUnlink · สำเนาใน inboxPost_ · msg.tg) · 136: แถบ Evaluation (evalAct: Approved / Edit ส่งกลับไปวางแผนเดิม + ข้อความถึง MP · ช่อง evNote ของเคส · ลิงก์ประกาศ ev.ok / ev.edit) · 135: Nurse นัดวันนี้ นัด CT-Sim มาตามนัด → พบแพทย์ (ncallAtt what ct status see = รายการพบแพทย์ ctsee|) · ไม่มาตามนัด = ข้อความส่วนตัวถึงแพทย์เจ้าของไข้ด้วย (noShow.msgDoc · ค่าเริ่มต้นเปิด) · 134: แอดมินรองเห็นเหมือนแอดมินหลัก · แถบแจกงานแพทย์ที่ตั้งคอลัมน์แอดมินรองไว้ = ใช้ได้ทุกแถบย่อย (dqDesks_) · ชื่อแถบย่อยที่ตั้งเอง (config.subName · หมวดระบบ · แอดมินรองขอแก้ได้) · 133: ประกาศตามเงื่อนไขในฟอร์ม (config.ntfLink คีย์ ปุ่มบันทึกฟอร์ม|ช่อง=ค่า เช่น ap.new|prio=Emergency · ntfLink รับคีย์เงื่อนไข · สิทธิ์ตามแถบของปุ่ม) · 132: ลิงก์ประกาศของปุ่ม (config.ntfLink · ntfLink · ปุ่มเดิมใช้อาชีพ / ข้อความจากลิงก์) · 131: ลายเซ็นในฟอร์ม (sigForm · ใบลา / Standing order / ใบสั่ง CT Simulation · เฉพาะคนในฟอร์มนั้น · ผู้ที่เห็นแถบของฟอร์ม) · 130: บัญชีของฉัน → ลายเซ็นอิเล็กทรอนิกส์ของตัวเอง (sigMine / sigSave / sigDelete · ชีต Signatures · เจ้าของบัญชีเท่านั้น) · 129: บัญชีของฉัน → ข้อมูลใบลาของตัวเอง (ตำแหน่ง · เบอร์โทรระหว่างลา) ในรายชื่อบุคลากรที่เชื่อมบัญชีนี้ + อีเมลในรายชื่อ = อีเมลของบัญชี RO Workspace (selfProfile) · 128: Nurse → รับคำสั่งแพทย์ CCRT + Continue RT + Continue CMT = CMT Today (RT→CMT / CMT→RT) / CMT Tomorrow (nurseCmt · rtdNurse cmtw · คอลัมน์ CMT วันนี้ ใน DocOrders) · นัดเคมีบำบัด (ncallAtt what cmt · rc / cr) · ขอยกเลิกวันลา ทุกทีม = หัวหน้างานอนุมัติก่อน (leaveCancel · แถว can| ในชีต LeaveAck) · ประวัติการบันทึกเลือกช่วงวันที่ / แถบย่อย (auditRange) · 127: Nurse → นัดวันนี้ ไม่มา แจ้งแพทย์แล้ว (ncallAtt noshow · CT-Sim / Start RT วันแรก / นัดพบแพทย์ระหว่างฉาย) = ประกาศผู้ป่วย 'ไม่มา … วันนี้ (วว/ดด)' ถึงอาชีพใน config.noShow (ค่าเริ่มต้น RTT) + Telegram · ยกเลิกไม่มา = ยกเลิกประกาศ · 126: บัญชีของฉัน (acctMe / acctSave / acctPassword / acctSessions / acctSignOut) · จัดการสมาชิก (acctMembers / acctMemberSave / acctMemberDelete · RO Workspace ตรวจสิทธิ์เอง) · ผู้สมัครใหม่ = ข้อความถึงผู้รับที่ตั้งไว้ (config.msg.signup / signupTo · ไม่ตั้ง = แอดมินหลัก) · 125: สมัครสมาชิก / ลืมรหัสผ่าน จากหน้าเข้าสู่ระบบ (lpchRoles / lpchRegister / lpchForgot / lpchReset ส่งต่อไป LPCH RO Workspace · บัญชีเก็บที่ RO Workspace ที่เดียว · ไม่ต้องเข้าสู่ระบบ) · 124: ข้อความส่วนตัว (ตาราง Inbox · msgSend / msgRead · ส่งถึงบัญชี · สำเนาอีเมลตาม config.msg.mail · ลงวันลา = ขอรับทราบถึงหัวหน้างาน · รับทราบ = แจ้งผู้ลา) · แก้จำนวนภาพ Verify image ของ fraction ที่บันทึกฉายแล้ว (fxImgCase · สถานะไม่เปลี่ยน · PIN) · จำนวนภาพรับทุกชนิด (รหัส 2–4 ตัวอักษร เช่น MV) · 123: พบแพทย์ (visitSave) ผู้ป่วยหนึ่งคนวันละหนึ่งรายการ (HN + วันที่ซ้ำกับรายการที่มีอยู่ = ไม่รับ · แก้รายการเดิมแทน) · 122: ใบลา รับทราบได้เฉพาะหัวหน้างาน / รักษาการแทนของทีมที่ตั้งไว้ (config.leave.heads · hAct · hFrom / hTo · แอดมินกดแทนไม่ได้) · คำสั่งแพทย์ระหว่างฉายที่ Nurse ยืนยันแล้ว แพทย์แก้ / บันทึกซ้ำไม่ได้ (rtdSave · Nurse ยกเลิกการยืนยันก่อน) · Treatment Summary ส่งคอร์ส Cancel RT (+ สาเหตุ rtNote) ให้หน่วยงานภายนอก · 121: Contouring Re-CT / Cancel Treatment (ctContourAct · CT-SIM cnAct / cnNote) · 120: สถานะ fraction เก็บจำนวนภาพ Verify image (img) · 119: Nurse → นัดวันนี้ กลุ่ม Off RT (ncallAtt what off · adv / see / seeadv · รายการพบแพทย์ offsee) · 118: แถบ Contouring (CT-SIM: Contour เสร็จ cdone / cdBy · ctContour · แถบ contour สิทธิ์เท่าแถบ CT Order) · 117: แจกงานฟิสิกส์ บันทึกไว้ก่อน (ctDraft = เก็บค่าที่แก้ลงรายการ CT-SIM ที่รอแจก · Start RT ของนัดที่ผูกเปลี่ยนตาม) · 116: ใบลา (ตาราง LeaveAck · leaveAck = หัวหน้างานรับทราบ · config.leave · ประเภทใบลา ltype ของวันลา MP / แพทย์ · หน่วยงานภายนอกไม่ได้ config.leave และเบอร์โทรบุคลากร) · 115: เปิด / ปิดไอคอนบนแถบเมนู (config.iconsOff · หมวดระบบ) · ลิงก์กลุ่ม Telegram (config.tg.link · ไอคอนบนแถบเมนู) ส่งเฉพาะผู้ที่เห็นประกาศ · หน่วยงานภายนอกไม่ได้ config.tg · 114: Telegram ใส่ HN + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก · config.tg.pt = abbr | hn | none · ค่าเริ่มต้น abbr) · 113: ส่งประกาศเข้า Telegram (กลุ่มตามอาชีพ · config.tg · token ใน Script Properties · tgState / tgSetup / tgChats / tgTest · ไม่ส่งชื่อผู้ป่วย) · 112: แอดมินลบประกาศถาวร (notifyDelete · แอดมินหลัก / แอดมินรอง · บันทึกในประวัติการบันทึก) · 111: นัดคิวใส่แร่ บันทึก CT / Re-CT รอบใหม่ = ประกาศ HDR ส่งภาพแล้ว (ประเภท brachy · อาชีพ = config.bq.ntf · ค่าเริ่มต้น RO, MP) · 110: ประกาศ · สิทธิ์ส่งรายตำแหน่ง (แถบเมนู → ประกาศ) · ประเภท ผู้ป่วย (HN ชื่อ ด่วนเสมอ) / ทั่วไป · 109: ประกาศ (ตาราง Notices · notifyAdd / notifyAck / notifyCancel · ตัววิ่งใต้แถบเมนูตามอาชีพ) · 108: Treatment Summary เก็บวันที่เริ่มแสดง (config.txs.from · ค่าเริ่มต้น 1 ธ.ค. 2569) · 107: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning · sbkState / sbkCreate / sbkUpdate / sbkDelete / sbkSetNext / sbkCheck · บันทึกในชีตเดิมของเว็บทะเบียนหนังสือส่ง) · 106: แจกงานแพทย์ ย้ายแพทย์เจ้าของไข้แล้วเปลี่ยนแพทย์ในนัด CT Order ด้วย (dqEdit ch.appt · คืน apptRows) · สถานะเครื่อง: ช่องพลังงานของ Interrupt ยาว 60 ตัวอักษร (เลือกได้หลายค่า) · 105: แอดมินรองแก้ได้ทุกหมวดเท่าแอดมินหลัก (subAdmins all · ทุกการแก้ยังรอแอดมินหลักอนุมัติ) · ลำดับแถบย่อย (config subOrder) · 104: Nurse นัดวันนี้: มาแล้วพบแพทย์ก่อน (ncallAtt status see + นัดพบแพทย์ / พบแพทย์ระหว่างฉาย) · ncallNote · holdCancel · คำสั่ง Hold RT ที่พยาบาลยืนยัน = Hold ในตารางวันฉาย · 103: สถานะเครื่อง: Interrupt (machineSet status intr = เหตุการณ์ สถานะไม่เปลี่ยน · คอลัมน์ พลังงาน) · 102: สถานะเครื่อง: แอดมินแก้ไข / ลบประวัติ (machineLogEdit · ช่วงข้างเคียงขยับตาม) · 101: สถานะเครื่อง: แก้เวลาเริ่มของสถานะปัจจุบันได้ (machineSet สถานะเดิม + from · ช่วงก่อนหน้าสิ้นสุดตาม) · 100: สถานะเครื่อง (machineSet · ชีต MachineLog หนึ่งแถวต่อหนึ่งช่วงสถานะ · RTT / MP ตั้งได้ · ซ่อมเสร็จปล่อยเครื่องได้เฉพาะ MP) · 99: ห้ามลงนัดซ้ำ (apptSave: HN ที่มีนัดรอทำ CT อยู่แล้วลงนัดใหม่ไม่ได้ · ตั้งค่า → ลงนัด) · ctSave เพิ่มเองแต่ HN มีนัดรอลง CT-SIM = ผูกกับนัดนั้นให้ (apLinked) · 98: แถบ Treatment Summary (หน่วยงานภายนอกดูสรุปการรักษา · สิทธิ์ตามหน่วยงาน · ศูนย์ refer พิมพ์ได้เฉพาะผู้ป่วยที่ส่งต่อ · บันทึกการเข้าถึง TxsLog เพิ่มอย่างเดียว · txsLog / txsLogRead / txsRefer / txsSetup / txsPdf) · 97: งานช้าไม่ถือล็อกบันทึก (ดึงจาก Google Drive อ่านไฟล์นอกล็อก · ย้ายเข้าที่เก็บถาวร · ไฟล์ฝึก) = คนอื่นบันทึกไม่ต้องรอ · 96: แอดมินเปิด / ปิดโหมดฝึกใช้ (practiceSet · ค่าเริ่มต้น ปิด) · 95: โหมดฝึกใช้ (practiceCall · practiceReset · ข้อมูลฝึกในไฟล์ Google Sheet แยก ไม่กระทบระบบจริง) · 94: แถบ Nurse → เลื่อนนัด · นัดวันนี้ · ผู้ป่วยไม่มาตามนัด (ตาราง NurseCall · ncallAdd / ncallMark / ncallAtt) · รับคำสั่งแพทย์ (rtdNurse) · Re-CT พบแพทย์ (fractionCase see) · 93: ถังขยะ (ชีต Trash · trashList · trashRestore · trashPurge) · รายการที่ผู้ใช้ลบเก็บทั้งแถว 90 วัน กู้คืนได้ · 92: นัดคิวใส่แร่ เลื่อนนัด (bqMove) · สถานะ เลื่อนนัดไม่มีกำหนด (ไม่นับเคส · ไม่นับคะแนน) · 91: RO Jobs → P4P แพทย์ (roJobsSave · ตาราง RoJobs) · ตำแหน่งหัวหน้า/ลูกน้องของทุกทีม (หัวหน้าเห็น P4P ของทีม) · 90: พบแพทย์นอกตารางนัด (visitSave · visitMark · visitRemove) · 89: สำเนาตารางในแคช (โหลดข้อมูลเร็วขึ้น) · เข้าสู่ระบบส่งข้อมูลมาพร้อมกัน · 88: ตารางพบแพทย์รายสัปดาห์ในแถบ Nurse (seeSaveMany · บันทึกได้จากแถบ Nurse) · 87: พบแพทย์วันนี้ แก้ไขต้องใส่ PIN (seeSave) · 86: พบแพทย์วันนี้ (seeSave) · ห้องตรวจ ระหว่างฉาย (rtdSave) · แถบ Nurse (nurseMark) · 85: ผูก CT Order กับรายการ CT-SIM เฉพาะ HN ตรงกัน · แก้การผูกผิด (apptRelink) · 84: แจกงานแพทย์ ช่องรับคืนจากแพทย์ (dqBack) · 83: TDF Dose Calculator ฝังในแถบย่อยของ Planning บันทึกลงชีตของเว็บ TDF (tdfx*) · 82: HDR Activity ในแถบนัดคิวใส่แร่ (hdrGet, hdrAdd) · 81: RT Workflow (ไอคอน flow) ได้ข้อมูลทุกตำแหน่ง · วันลา RTT/RA ของทุกคนในแถบ RTT/RA Jobs
 // หน้าเว็บที่เปิดจากเมนูในชีต (บัญชี Google) ส่งค่านี้แทน token
 const SHEET_DIALOG = 'sheet-dialog';
 const CONFIG_SHEET = 'Config';
@@ -4026,7 +4026,7 @@ function tgCfg_(cfg) {
   const chats = {};
   if (t.chats && typeof t.chats === 'object') Object.keys(t.chats).forEach(r => { const v = id(t.chats[r]); if (v && /^[\w -]{1,20}$/.test(r)) chats[r] = v; });
   // API 114: pt = ข้อมูลผู้ป่วยในข้อความ · abbr = HN + ชื่อย่อ (ค่าเริ่มต้น) · hn = HN อย่างเดียว · none = ไม่ใส่ · รุ่น 113 (hn: true) = hn
-  const pt = TG_PT.indexOf(t.pt) >= 0 ? t.pt : t.hn === true ? 'hn' : 'abbr';
+  const pt = TG_PT.indexOf(t.pt) >= 0 ? t.pt : 'hn';   // API 140: ยังไม่เลือก = HN อย่างเดียว (ข้อมูลผู้ป่วยออกนอกโรงพยาบาลน้อยที่สุด)
   return { on: t.on === true, chats: chats, all: id(t.all), kinds: Array.isArray(t.kinds) ? t.kinds.filter(k => TG_KINDS.indexOf(k) >= 0) : TG_KINDS.slice(), pt: pt };
 }
 const TG_PT = ['abbr', 'hn', 'none'];
@@ -5971,7 +5971,19 @@ function extPull_(key, force, token) {
 
 // ตัวตั้งเวลาของ Apps Script (เจ้าของสร้างเอง: Triggers → Add Trigger → brachyTick → Time-driven ทุก 10 นาที) ดึงแม้ไม่มีใครเปิดหน้าเว็บ
 // ดึงทุกระบบที่เปิดไว้ (Brachytherapy และ RC จาก TDF)
-function brachyTick() {
+// API 140 (25 พ.ย.): คำสั่งตั้งระบบและตัวตั้งเวลา ทำงานได้เฉพาะ (1) ตัวตั้งเวลาของโปรเจกต์นี้ (e.triggerUid ตรงกับทริกเกอร์จริง)
+// หรือ (2) เจ้าของกด Run ในหน้า Apps Script · เรียกผ่านหน้าเว็บ (google.script.run) ไม่ได้: คนที่มีลิงก์ระบบสั่งสำรอง / ดึงข้อมูล / อ่านข้อมูลการติดตั้งเองไม่ได้
+function ownerRun_(e) {
+  const uid = e && typeof e === 'object' && e.triggerUid ? String(e.triggerUid) : '';
+  if (uid) { try { if (ScriptApp.getProjectTriggers().some(t => String(t.getUniqueId()) === uid)) return true; } catch (x) { /* ตรวจด้วยบัญชีแทน */ } }
+  let me = '', owner = '';
+  try { me = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (x) { me = ''; }
+  try { owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (x) { owner = ''; }
+  if (me && me === owner) return true;
+  throw new Error('คำสั่งนี้ใช้ได้เฉพาะเจ้าของระบบ (กด Run ในหน้า Apps Script) หรือตัวตั้งเวลา');
+}
+function brachyTick(e) {
+  ownerRun_(e);   // API 140
   const ss = ss_(), cfg = readConfig_(ss) || {};
   Object.keys(EXT).forEach(k => { if (cfg[EXT[k].cfg] && cfg[EXT[k].cfg].on) extSync_(ss, cfg, k, 'ตั้งเวลา'); });
   if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');   // ผู้ป่วยจากโฟลเดอร์ Google Drive (ตามรอบที่ตั้ง)
@@ -5979,7 +5991,8 @@ function brachyTick() {
   try { regArchive_(ss, cfg, false); } catch (e) { /* ครั้งหน้า */ }   // ผู้ป่วยเก่า → ที่เก็บถาวร (วันละครั้ง)
 }
 // ตัวตั้งเวลาเฉพาะการดึงผู้ป่วยจากโฟลเดอร์ Google Drive (ไม่ได้ตั้ง brachyTick ไว้) · Triggers → Add Trigger → regDriveTick → Time-driven
-function regDriveTick() {
+function regDriveTick(e) {
+  ownerRun_(e);   // API 140
   const ss = ss_(), cfg = readConfig_(ss) || {};
   if (cfg.reg && cfg.reg.drive && cfg.reg.drive.on) regDriveSync_(ss, cfg, false, 'ตั้งเวลา');
 }
@@ -6616,6 +6629,13 @@ function signupGuard_(kind) {
   if (n >= SIGNUP_LIMIT_[kind]) throw new Error('มีคำขอจำนวนมากในช่วงนี้ · รอสักครู่แล้วลองอีกครั้ง');
   c.put(k, String(n + 1), 660);
 }
+// API 140: จำกัดต่อบัญชี (นอกจากจำกัดรวมของ signupGuard_) · คืนค่าที่นับอยู่และฟังก์ชันเพิ่ม / ล้าง
+function pwLimit_(kind, login, max, sec, msg) {
+  const c = CacheService.getScriptCache(), k = 'pwl_' + kind + '_' + String(login).slice(0, 120), n = Number(c.get(k) || 0);
+  if (n >= max) throw new Error(msg);
+  return { add: () => c.put(k, String(n + 1), sec), clear: () => c.remove(k) };
+}
+const PW_ASK_MAX = 3, PW_ASK_SEC = 3600, PW_TRY_MAX = 5, PW_TRY_SEC = 900;
 const signupText_ = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
 // ตำแหน่งให้เลือกในหน้าสมัคร (ตามที่ผู้ดูแล RO Workspace ตั้งไว้ · จำไว้ 10 นาที) · RO Workspace รุ่นก่อนมี rolesGet = รายการตั้งต้น
 function lpchRoles() {
@@ -6961,6 +6981,8 @@ function lpchForgot(login) {
   const l = signupText_(login, 120).toLowerCase();
   if (!l) throw new Error('กรุณากรอกชื่อผู้ใช้หรืออีเมล');
   signupGuard_('pw');
+  const lim = pwLimit_('ask', l, PW_ASK_MAX, PW_ASK_SEC, 'ขอรหัสยืนยันของบัญชีนี้หลายครั้งแล้ว · ใช้รหัสล่าสุดในอีเมล หรือรอ 1 ชั่วโมงแล้วขอใหม่');   // API 140
+  lim.add();
   try { return { message: String(lpchCall_({ action: 'forgotPassword', login: l }).message || '') }; } catch (e) { throw lpchOld_(e) ? new Error(LPCH_OLD_MSG) : e; }
 }
 // ขั้นที่ 2: รหัสจากอีเมล + รหัสผ่านใหม่ → ตั้งที่ RO Workspace แล้วเข้าสู่ระบบให้เลย (เข้าไม่ได้ เช่น บัญชีรออนุมัติ = loginErr ให้เข้าสู่ระบบเอง)
@@ -6971,8 +6993,10 @@ function lpchReset(login, code, newPassword, have) {
   if (p.length < 8) throw new Error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
   if (p.length > 200) throw new Error('รหัสผ่านยาวเกินไป');
   signupGuard_('pw');
+  const lim = pwLimit_('try', l, PW_TRY_MAX, PW_TRY_SEC, 'ใส่รหัสยืนยันผิดหลายครั้ง · รอ 15 นาทีแล้วขอรหัสใหม่');   // API 140: กันเดารหัส 6 หลัก
   let out;
-  try { out = lpchCall_({ action: 'resetPassword', login: l, code: c, newPassword: p }); } catch (e) { throw lpchOld_(e) ? new Error(LPCH_OLD_MSG) : e; }
+  try { out = lpchCall_({ action: 'resetPassword', login: l, code: c, newPassword: p }); } catch (e) { if (!lpchOld_(e)) lim.add(); throw lpchOld_(e) ? new Error(LPCH_OLD_MSG) : e; }
+  lim.clear();
   const r = { username: String(out.username || ''), message: String(out.message || 'ตั้งรหัสผ่านใหม่เรียบร้อย') };
   if (r.username) { try { Object.assign(r, lpchLogin(r.username, p, have)); } catch (e) { r.loginErr = String(e.message || e); } }
   return r;
@@ -7274,7 +7298,8 @@ function oldCode_() {
     .filter(x => typeof x[1] !== 'function' || String(x[1]).indexOf(x[2]) < 0).map(x => x[0]);
 }
 
-function checkSetup() {
+function checkSetup(e) {
+  ownerRun_(e);   // API 140: ข้อมูลการติดตั้ง (ชื่อ / ลิงก์ชีต · จำนวนเคส) เฉพาะเจ้าของ
   const out = ['Code.gs รุ่น ' + CODE_VERSION + ' (API ' + API_LEVEL + ')'];
   const dup = oldCode_();
   out.push(dup.length
@@ -7304,7 +7329,8 @@ function checkSetup() {
 }
 
 // รันจากหน้าแก้ไขสคริปต์: ตั้ง LPCH_URL แล้ว เชื่อมต่อได้ และ LPCH รองรับการใช้บัญชีร่วมกันหรือยัง
-function setupLpch() {
+function setupLpch(e) {
+  ownerRun_(e);   // API 140
   const url = lpchUrl_();
   let msg;
   if (!url) msg = '✗ ปิดการเชื่อม LPCH อยู่ (LPCH_URL = -) ใช้บัญชี Google อย่างเดียว';
@@ -7834,6 +7860,7 @@ function pcNoQa_(what) {
 }
 function auditHn(hn, token) {
   const a = auditTablesFor_('pchart', token), sh = sheet_(a.ss, AUDIT_SHEET);
+  const u0 = AUDIT_U_ || {}, tabs = a.tables.concat(u0.isAdmin || u0.via === 'google' ? ['pcview'] : []);   // API 140: แอดมินเห็นการเปิดดู chart ด้วย
   const k = String(hn == null ? '' : hn).trim();
   if (!k || k.length > 20 || !/\d/.test(k)) throw new Error('HN ไม่ถูกต้อง');
   if (!sh || sh.getLastRow() < 2) return { rows: [], more: false };
@@ -7842,8 +7869,20 @@ function auditHn(hn, token) {
   else col.getValues().forEach((v, i) => { if (String(v[0]).trim() === k) rows[i + 2] = true; });
   const all = Object.keys(rows).map(Number).sort((x, y) => y - x);
   const out = all.slice(0, 300).map(r => auditRow_(sh.getRange(r, 1, 1, AUDIT_HEAD.length).getValues()[0], r))
-    .filter(x => a.tables.indexOf(x.table) >= 0).map(x => { x.what = pcNoQa_(x.what); return x; });
+    .filter(x => tabs.indexOf(x.table) >= 0).map(x => { x.what = pcNoQa_(x.what); return x; });
   return { rows: out, more: all.length > 300 };
+}
+// API 140 (25 พ.ย.): เปิด Patient chart = บันทึกการเปิดดู (ตาราง pcview ใน AuditLog · ผู้ใช้ + HN · คนเดิม HN เดิมภายใน 10 นาที = ไม่บันทึกซ้ำ)
+// ตามหลักบันทึกการเข้าถึงข้อมูลสุขภาพ (ISO 27799 / PDPA) · แอดมินเห็นในแท็บประวัติการบันทึกของ chart · ผู้ใช้อื่นไม่เห็น
+function pcSeen(hn, token) {
+  auditTablesFor_('pchart', token);   // ต้องเปิด chart ได้
+  const k = String(hn == null ? '' : hn).trim();
+  if (!k || k.length > 20 || !/\d/.test(k)) throw new Error('HN ไม่ถูกต้อง');
+  const u = AUDIT_U_ || {}, c = CacheService.getScriptCache(), key = 'pcs_' + String(u.username || u.me || u.name || '').slice(0, 80) + '_' + k;
+  if (c.get(key)) return { ok: true, dup: true };
+  c.put(key, '1', 600);
+  audit_('pcview', k, k, 'view', {});
+  return { ok: true };
 }
 function withLock_(fn) {
   if (LOCKED_) return fn();   // ถือล็อกอยู่แล้วในคำขอนี้
@@ -8122,15 +8161,11 @@ function backupPrune_(folder, cfg, now, tz) {
 function backupMail_(file, to, now, tz) {
   const when = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm'), title = appTitle_();
   try {
-    const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + file.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) throw new Error('แปลงเป็น .xlsx ไม่ได้ (' + res.getResponseCode() + ')');
-    const blob = res.getBlob().setName(file.getName().replace(/[\\/:*?"<>|]/g, '-') + '.xlsx'), size = blob.getBytes().length, big = size > BACKUP_MAIL_MAX;
-    const body = 'ไฟล์สำรองข้อมูล ' + title + ' เมื่อ ' + when + (big ? '\nไฟล์ใหญ่ ' + Math.round(size / 1048576) + ' MB เกินที่แนบอีเมลได้ · เปิดไฟล์ใน Google Drive: ' + file.getUrl() : '\nแนบไฟล์ .xlsx ' + (Math.round(size / 104857.6) / 10) + ' MB')
-      + '\n\nไฟล์นี้มีข้อมูลผู้ป่วย เก็บในที่ที่จำกัดผู้เข้าถึง ห้ามส่งต่อ (พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล)\nเปลี่ยนความถี่ได้ที่ หน้าเว็บ → ตั้งค่า → สำรองข้อมูล';
-    const o = { to: to, subject: 'สำรองข้อมูล ' + title + ' · ' + when, body: body, name: title };
-    if (!big) o.attachments = [blob];
-    MailApp.sendEmail(o);
-    return backupSetState_({ mailAt: now.toISOString(), mailTo: to, mailErr: '', mailSize: size, mailLink: big });
+    // API 140: ส่งลิงก์ไฟล์สำรองใน Google Drive (เปิดได้เฉพาะบัญชีที่มีสิทธิ์ในไฟล์) แทนแนบไฟล์ · อีเมลไม่มีข้อมูลผู้ป่วย
+    const body = 'สำรองข้อมูล ' + title + ' เมื่อ ' + when + '\nเปิดไฟล์สำรอง (Google Drive · เปิดได้เฉพาะบัญชีที่มีสิทธิ์ในไฟล์): ' + file.getUrl()
+      + '\n\nไฟล์สำรองมีข้อมูลผู้ป่วย อย่าแชร์ไฟล์หรือโฟลเดอร์ให้ผู้อื่น และอย่าดาวน์โหลดเก็บในเครื่องส่วนตัว (พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล)';
+    MailApp.sendEmail({ to: to, subject: 'สำรองข้อมูล ' + title + ' · ' + when, body: body, name: title });
+    return backupSetState_({ mailAt: now.toISOString(), mailTo: to, mailErr: '', mailSize: 0, mailLink: true });
   } catch (e) {
     const st = backupSetState_({ mailAt: now.toISOString(), mailErr: String(e && e.message || e) });
     alert_('backupmail', 'ส่งไฟล์สำรองทางอีเมลไม่สำเร็จ', 'สำรองข้อมูลใน Drive แล้ว แต่ส่งอีเมลไม่สำเร็จ: ' + st.mailErr);
@@ -8151,7 +8186,8 @@ function snapTrigger_() {
   ScriptApp.newTrigger('snapWarm').timeBased().everyHours(1).create();
   return true;
 }
-function snapWarm() {
+function snapWarm(e) {
+  ownerRun_(e);   // API 140
   const ss = ss_(), h = +Utilities.formatDate(new Date(), tz_(ss), 'H');
   if (h < 6 || h > 20) return 'night';
   const config = readConfig_(ss), user = { via: 'google', isAdmin: true, name: 'snapWarm', username: '', role: '' };
@@ -8160,7 +8196,8 @@ function snapWarm() {
   return JSON.stringify(out.src || {});
 }
 // ทริกเกอร์รายวัน (เรียกจากหน้าเว็บได้ด้วย จึงไม่ทำซ้ำถ้าสำรองอัตโนมัติไปแล้วภายใน 12 ชั่วโมง)
-function backupDaily() {
+function backupDaily(e) {
+  ownerRun_(e);   // API 140: หน้าเว็บสั่งสำรองเองไม่ได้ (แอดมินใช้ปุ่ม สำรองตอนนี้ ในตั้งค่า)
   try { regArchive_(ss_(), readConfig_(ss_()) || {}, false); } catch (e) { console.log('backupDaily regArchive_ ' + e); }   // API 89: ย้ายผู้ป่วยเก่าตอนกลางคืน
   try { trashPrune_(ss_()); } catch (e) { console.log('backupDaily trashPrune_ ' + e); }   // API 93: ถังขยะเกิน 90 วัน
   const last = backupState_();
@@ -8169,7 +8206,8 @@ function backupDaily() {
   return 'ok';
 }
 // ครั้งแรก: เจ้าของกด Run ฟังก์ชันนี้ในหน้า Apps Script เพื่ออนุญาต Drive / Gmail / ทริกเกอร์ · ตั้งทริกเกอร์และสำรองหนึ่งครั้ง (ไม่ส่งอีเมล · ไม่เกินทุก 10 นาที)
-function backupInstall() {
+function backupInstall(e) {
+  ownerRun_(e);   // API 140
   const cache = CacheService.getScriptCache();
   if (cache.get('backupInstall')) return 'ทำไปแล้วเมื่อสักครู่';
   cache.put('backupInstall', '1', 600);

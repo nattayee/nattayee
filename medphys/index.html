@@ -491,6 +491,10 @@ button.duty-line:hover{border-color:var(--accent)}
 .pc-sheet ul{margin:0;padding-left:18px}
 .ss-sheet.pc-sheet td:first-child{text-align:left}
 .pc-sh-hd{display:flex;align-items:center;gap:10px;border-bottom:2px solid #000;padding-bottom:6px}
+.pc-sheet{position:relative}
+.pc-wm{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.pc-wm span{position:absolute;left:14%;transform:rotate(-28deg);white-space:nowrap;font-size:22pt;font-weight:700;letter-spacing:.04em;color:rgba(128,128,128,.14)}
+@media print{#ss-print .pc-wm{position:fixed}}
 .pc-sh-logo{height:14mm;width:auto}
 .pc-sh-t{flex:1}
 .pc-sh-t h1{font-size:16pt;margin:0;line-height:1.2}
@@ -923,6 +927,7 @@ button.bq-chk{cursor:pointer}
 .hist-act{display:inline-block;padding:0 6px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--sunken)}
 .hist-act.add{background:var(--ok-soft,var(--accent-soft));color:var(--ok,var(--accent))}
 .hist-act.del{background:var(--late-soft);color:var(--late)}
+.hist-act.view{background:var(--line);color:var(--muted)}
 .hist-what{margin:4px 0 0;padding-left:18px;color:var(--fg);font-size:12.5px}
 .hist-what li{overflow-wrap:anywhere}
 .ap-dq{margin:0 0 14px;padding:10px 12px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
@@ -8206,7 +8211,7 @@ const DEFAULT_CONFIG = {
   brachySync: { on: false, src: '', url: '', sheet: '', map: {}, count: 'all', from: '' },   // src internal = นัดในแถบนัดคิวใส่แร่
   // ดึง RC จาก TDF Dose Calculator: นับ approved = Recheck ผ่าน | reviewed = รวมไม่ผ่าน
   tdfSync: { on: false, url: '', sheet: '', map: {}, count: 'approved', from: '' },
-  tg: { on: false, chats: {}, all: '', kinds: ['patient', 'brachy', 'general'], pt: 'abbr', hn: true, link: '' },   // 22 พ.ย. (API 113): ประกาศ → Telegram (กลุ่มของแต่ละอาชีพ · token อยู่ใน Script Properties ไม่อยู่ใน Config)
+  tg: { on: false, chats: {}, all: '', kinds: ['patient', 'brachy', 'general'], pt: 'hn', hn: true, link: '' },   // 22 พ.ย. (API 113): ประกาศ → Telegram (กลุ่มของแต่ละอาชีพ · token อยู่ใน Script Properties ไม่อยู่ใน Config)
   sendBook: { url: '' },   // 20 พ.ย.: ทะเบียนหนังสือส่ง (แถบย่อยของ Planning) · ลิงก์ชีตเดิมของเว็บทะเบียนหนังสือส่ง
   // แถบ CT-SIM: เครื่อง CT (รหัสคงที่ ชื่อแก้ได้) · ตัวเลือกของช่องห้อง CT · ช่องในฟอร์ม
   ct: {
@@ -8711,7 +8716,7 @@ const SV_SKIP = new Set(['mode', 'load', 'getData', 'saveConfig', 'cfgPropose', 
   'tgMe', 'tgLinkStart', 'tgLinkCheck', 'tgMeTest', 'tgUnlink', 'tgState', 'tgSetup', 'tgChats', 'tgTest', 'sigMine', 'sigSave', 'sigDelete', 'sigForm', 'sbkState', 'ntfLink', 'notifyAdd', 'notifyAck', 'notifyCancel', 'notifyDelete',
   'machineLogEdit', 'txsLog', 'txsLogRead', 'txsSetup', 'txsPdf', 'txsRefer', 'bqCheck', 'bqImport', 'bqImportCheck', 'vacImport', 'vacImportCheck', 'dutyMembers', 'members', 'lpchMembers', 'setPin', 'holidays', 'thaiHolidays',
   'brachyCheck', 'brachyPull', 'tdfCheck', 'tdfPull', 'hdrGet', 'regDriveCheck', 'regDrivePull', 'regFind', 'regRestore', 'regArchiveNow', 'spqCheck', 'spqPull', 'backupStatus', 'backupSave', 'backupNow',
-  'auditRecent', 'auditRange', 'auditFor', 'auditHn', 'trashList', 'trashRestore', 'trashPurge', 'dqImport', 'practiceCall', 'practiceReset', 'practiceSeed', 'login', 'logout']);
+  'auditRecent', 'auditRange', 'auditFor', 'auditHn', 'pcSeen', 'trashList', 'trashRestore', 'trashPurge', 'dqImport', 'practiceCall', 'practiceReset', 'practiceSeed', 'login', 'logout']);
 const SV_FIELD = { prio: 'ความเร่งด่วน', cm: 'CM', room: 'ห้องฉาย', doc: 'แพทย์', type: 'ประเภท', status: 'สถานะ', st: 'สถานะ', act: 'การทำ', step: 'ขั้นตอน', how: 'วิธี', tech: 'เทคนิค', what: 'รายการ', cat: 'เทคนิค', kind: 'ประเภท',
   mark: 'เครื่องหมาย', aim: 'Aim', ct: 'เครื่อง CT', mp: 'MP', desk: 'ช่องทาง', special: 'เทคนิคพิเศษ', hdr: 'HDR', pstat: 'สถานะผู้ป่วย', ctcm: 'CM', label: 'รายการ', reason: 'สาเหตุ', mode: 'แบบ', machine: 'เครื่อง' };
 const SV_NOCOND = /^(id|hn|name|title|note|notes|text|pin|at|by|created|updated|date|time|sim|in|phone|email|token|user|ref|from|to|until|fullName|username|dpf|fx|rx|freq|area|sites|dx|icd|order|draft|body|img)$/;
@@ -9363,7 +9368,7 @@ function mergeConfig(c) {
   const tg = c.tg && typeof c.tg === 'object' ? c.tg : {}, tgId = v => (TG_ID_RE.test(str(v).trim()) ? str(v).trim() : '');   // 22 พ.ย. (API 113): ประกาศ → Telegram
   out.tg = { on: tg.on === true, chats: Object.fromEntries(Object.entries(tg.chats && typeof tg.chats === 'object' ? tg.chats : {}).map(([r, v]) => [str(r), tgId(v)]).filter(([r, v]) => v && /^[\w -]{1,20}$/.test(r))),
     all: tgId(tg.all), kinds: Array.isArray(tg.kinds) ? TG_KINDS.filter(k => tg.kinds.includes(k)) : TG_KINDS.slice() };
-  out.tg.pt = TG_PT.includes(tg.pt) ? tg.pt : tg.hn === true ? 'hn' : 'abbr';   // 22 พ.ย. (API 114): ข้อมูลผู้ป่วยในข้อความ · abbr = HN + ชื่อย่อ (ค่าเริ่มต้น)
+  out.tg.pt = TG_PT.includes(tg.pt) ? tg.pt : 'hn';   // 22 พ.ย. (API 114): ข้อมูลผู้ป่วยในข้อความ · abbr = HN + ชื่อย่อ · 25 พ.ย. (.50): ยังไม่เลือก = HN อย่างเดียว (PDPA)
   out.tg.hn = out.tg.pt !== 'none';
   out.tg.link = TG_LINK_RE.test(str(tg.link).trim()) ? str(tg.link).trim() : '';   // 22 พ.ย. (API 115): ลิงก์เชิญเข้ากลุ่ม (ไอคอนบนแถบเมนู)   // Code.gs 2026-11-22.5 อ่าน hn (HN อย่างเดียว)
   const jb = c.jobs && typeof c.jobs === 'object' ? c.jobs : {}, jnum = (v, dv) => (v === '' || v == null || !isFinite(+v) ? dv : +v);
@@ -9513,7 +9518,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.49';
+const PAGE_VERSION = '2026-11-22.50';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9696,6 +9701,7 @@ const sheetStore = {
   trashPurge: tid => call('trashPurge', tid),
   auditFor: (ids, view) => call('auditFor', ids, view),
   auditHn: hn => call('auditHn', hn),   // 25 พ.ย. (API 139): Patient chart → ประวัติการบันทึกของผู้ป่วย
+  pcSeen: hn => call('pcSeen', hn),   // 25 พ.ย. (API 140): บันทึกการเปิด chart
   casesDo: (fn, ids, args) => call('casesDo', fn, ids, args),
   dqImport: recs => call('dqImport', recs),
   dqDutySave: list => call('dqDutySave', list),
@@ -10963,6 +10969,7 @@ function localStore() {
     auditRange: async () => ({ rows: [], before: 0, more: false, demo: true }),
     auditFor: async () => [],
     auditHn: async () => ({ rows: [], demo: true }),
+    pcSeen: async () => ({ ok: true, demo: true }),
     removeLog: async (id, pin) => { demoCheckPin(pin); db.logs = db.logs.filter(x => x.id !== id); persist(); return true; },
     removeLeave: async (id, pin) => { demoCheckPin(pin); db.leaves = db.leaves.filter(x => x.id !== id); persist(); return true; },
     setPin: async (pin, proof) => {
@@ -14499,9 +14506,9 @@ function removeDqLeave(id) {
 const AUDIT_TABS = { evaluate: 1, deptcal: 1, reg: 1, dq: 1, consult: 1, nurse: 1, appt: 1, bq: 1, work: 1, pend: 1, queue: 1, course: 1, ctsim: 1, dash: 1, logs: 1, p4p: 1, jobs: 1, settings: 1 };
 const auditShown = view => !!AUDIT_TABS[view] && !!accessOf(view) && (store.mode !== 'sheet' || serverHas(DQM_API));
 const histLink = (ids, view, title) => (auditShown(view) ? `<button type="button" class="linkish hist-link" data-hist="${esc(ids.join(','))}" data-hist-view="${esc(view)}" data-hist-title="${esc(title || '')}">ประวัติ</button>` : '');
-const HIST_TABLE = { ncall: 'Nurse แจ้งผู้ป่วย', roJobs: 'P4P แพทย์', visit: 'พบแพทย์นอกตารางนัด', see: 'พบแพทย์วันนี้', rtd: 'คำสั่งแพทย์ระหว่างฉาย', events: 'กิจกรรมแผนก', cases: 'เคส', logs: 'กิจกรรม', leaves: 'วันลา MP', duty: 'ผู้ปฏิบัติงาน', ctsim: 'CT-SIM', appt: 'นัด', jobs: 'RTT/RA Jobs', reg: 'ลงทะเบียน', bq: 'นัดคิวใส่แร่', vac: 'Vac-Lok', dq: 'แจกงานแพทย์', dqLeave: 'วันลาแพทย์', dqDuty: 'เวร S1', config: 'ตั้งค่า' };
-const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ', restore: 'กู้คืน', purge: 'ลบถาวร' };
-const HIST_FN = { evalAct: 'Evaluation', fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
+const HIST_TABLE = { pcview: 'Patient chart', ncall: 'Nurse แจ้งผู้ป่วย', roJobs: 'P4P แพทย์', visit: 'พบแพทย์นอกตารางนัด', see: 'พบแพทย์วันนี้', rtd: 'คำสั่งแพทย์ระหว่างฉาย', events: 'กิจกรรมแผนก', cases: 'เคส', logs: 'กิจกรรม', leaves: 'วันลา MP', duty: 'ผู้ปฏิบัติงาน', ctsim: 'CT-SIM', appt: 'นัด', jobs: 'RTT/RA Jobs', reg: 'ลงทะเบียน', bq: 'นัดคิวใส่แร่', vac: 'Vac-Lok', dq: 'แจกงานแพทย์', dqLeave: 'วันลาแพทย์', dqDuty: 'เวร S1', config: 'ตั้งค่า' };
+const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ', restore: 'กู้คืน', purge: 'ลบถาวร', view: 'เปิดดู' };   // view (.50) = เปิด Patient chart
+const HIST_FN = { pcSeen: 'เปิด Patient chart', evalAct: 'Evaluation', fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
   courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', ctDraft: 'CT-SIM (บันทึกไว้ก่อนจากแจกงานฟิสิกส์)', ctContour: 'Contour เสร็จ (แถบ Contouring)', ctContourAct: 'Re-CT / Cancel Treatment (แถบ Contouring)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
   regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', seeSave: 'พบแพทย์วันนี้', seeSaveMany: 'ตารางพบแพทย์', visitSave: 'พบแพทย์นอกตารางนัด', visitMark: 'พบแพทย์แล้ว (นอกตารางนัด)', visitRemove: 'ยกเลิกพบแพทย์นอกตารางนัด', rtdSave: 'คำสั่งแพทย์ระหว่างฉาย', nurseMark: 'Nurse ยืนยัน', rtdNurse: 'รับคำสั่งแพทย์ (Nurse)', ncallAdd: 'เลื่อนนัดแจ้งพยาบาล', ncallMark: 'แจ้งผู้ป่วย (เลื่อนนัด)', ncallAtt: 'นัดวันนี้ (มา / ไม่มา)', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
@@ -15272,7 +15279,7 @@ function secSec(d) {
         <label class="field"${idleCustom || !idlePreset ? '' : ' hidden'}><span class="lbl">กำหนดเอง (ชั่วโมง) <span class="sub-lbl">ทศนิยมได้ เช่น 1.5 = 1 ชั่วโมง 30 นาที · ตั้งแต่ 5 นาที ถึง 24 ชั่วโมง</span></span><input type="number" min="0.1" max="24" step="any" inputmode="decimal" data-k="security.idleMin" data-unit="h" value="${idleCur ? +(idleCur / 60).toFixed(2) : ''}" aria-label="ออกจากระบบอัตโนมัติเมื่อไม่ได้ใช้งาน (ชั่วโมง)"></label></div>
       <p class="muted def-note" style="margin:0 0 16px">ใช้กับผู้ที่เข้าระบบด้วยบัญชี LPCH (เครื่องที่ใช้ร่วมกันในแผนก) · ไม่ได้คลิก แตะ พิมพ์ หรือเลื่อนหน้าจอ ครบเวลา = ออกจากระบบ (เตือนก่อน 1 นาที) · ปิดหน้าเว็บค้างไว้แล้วเปิดใหม่หลังเวลานี้ = ต้องเข้าสู่ระบบใหม่</p>${speedHtml()}`;
   if (!bkCan()) return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองข้อมูลตั้งได้เฉพาะแอดมิน</p></div>${idle}</div>`;
-  return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองทั้งไฟล์ Google Sheet ทุกวันไปที่โฟลเดอร์ใน Google Drive ของเจ้าของไฟล์ · ส่งไฟล์ .xlsx และแจ้งเตือนทางอีเมลถึงเจ้าของ · ค่าในหัวข้อนี้บันทึกด้วยปุ่มของหัวข้อเอง (ไม่ใช่ปุ่มบันทึกด้านล่าง ยกเว้นออกจากระบบอัตโนมัติ)</p></div>
+  return `<div class="sec" data-main><div class="sec-head"><h2>สำรองข้อมูลและความปลอดภัย</h2><p>สำรองทั้งไฟล์ Google Sheet ทุกวันไปที่โฟลเดอร์ใน Google Drive ของเจ้าของไฟล์ · ส่งลิงก์ไฟล์สำรอง (ไม่แนบไฟล์) และแจ้งเตือนทางอีเมลถึงเจ้าของ · ค่าในหัวข้อนี้บันทึกด้วยปุ่มของหัวข้อเอง (ไม่ใช่ปุ่มบันทึกด้านล่าง ยกเว้นออกจากระบบอัตโนมัติ)</p></div>
       ${idle}
       <h3 class="sub-h">โหมดฝึกใช้</h3>
       <div id="prc-box">${practiceSecHtml()}</div>
@@ -15288,10 +15295,10 @@ function bkHtml() {
     : bkStat.trigger ? `<b class="bk-ok">เปิดอยู่</b> · ทุกวัน ${String(c.hour).padStart(2, '0')}:00 น.` : '<b class="bk-bad">ยังไม่เปิด</b> · กด บันทึกการตั้งค่าสำรอง';
   const last = !st.at ? 'ยังไม่เคยสำรอง' : st.ok ? [`<b class="bk-ok">✓ สำเร็จ</b> ${esc(bkWhen(st.at))}${st.why === 'manual' ? ' (กดสำรองเอง)' : ''}`, bkLink(st.url, 'เปิดไฟล์สำรอง'), bkLink(st.folder, 'โฟลเดอร์สำรอง'), st.kept ? `เก็บไว้ ${esc(String(st.kept))} ฉบับ` : ''].filter(Boolean).join(' · ')
     : `<b class="bk-bad">✗ ไม่สำเร็จ</b> ${esc(bkWhen(st.at))} · ${esc(st.err || '')}`;
-  const mail = !st.mailAt ? 'ยังไม่เคยส่ง' : st.mailErr ? `<b class="bk-bad">✗ ส่งไม่สำเร็จ</b> ${esc(bkWhen(st.mailAt))} · ${esc(st.mailErr)}` : `<b class="bk-ok">✓ ส่งแล้ว</b> ${esc(bkWhen(st.mailAt))} ถึง ${esc(st.mailTo || '')}${st.mailLink ? ' (ไฟล์ใหญ่ ส่งเป็นลิงก์)' : st.mailSize ? ` · ${esc((Math.round(st.mailSize / 104857.6) / 10).toFixed(1))} MB` : ''}`;
+  const mail = !st.mailAt ? 'ยังไม่เคยส่ง' : st.mailErr ? `<b class="bk-bad">✗ ส่งไม่สำเร็จ</b> ${esc(bkWhen(st.mailAt))} · ${esc(st.mailErr)}` : `<b class="bk-ok">✓ ส่งแล้ว</b> ${esc(bkWhen(st.mailAt))} ถึง ${esc(st.mailTo || '')}${st.mailLink ? ' (ลิงก์ไฟล์)' : st.mailSize ? ` · ${esc((Math.round(st.mailSize / 104857.6) / 10).toFixed(1))} MB` : ''}`;
   return `<dl class="bk-stat"><dt>สำรองอัตโนมัติ</dt><dd>${auto}</dd><dt>สำรองล่าสุด</dt><dd>${last}</dd><dt>ส่งอีเมลล่าสุด</dt><dd>${mail}</dd><dt>อีเมลถึง</dt><dd>${bkStat.to ? `เจ้าของ · ${esc(bkStat.to)}` : 'เจ้าของ (บัญชีที่รัน Apps Script)'}</dd></dl>
       <div class="form-grid bk-form">
-        <label class="field"><span class="lbl">ส่งไฟล์ทางอีเมลถึงเจ้าของ</span><select id="bk-every">${BK_EVERY.map(([k, l]) => opt(k, l, c.every)).join('')}</select></label>
+        <label class="field"><span class="lbl">ส่งลิงก์ไฟล์สำรองทางอีเมลถึงเจ้าของ</span><select id="bk-every">${BK_EVERY.map(([k, l]) => opt(k, l, c.every)).join('')}</select></label>
         <label class="field"><span class="lbl">เวลาสำรองทุกวัน</span><select id="bk-hour">${Array.from({ length: 24 }, (_, h) => opt(String(h), `${String(h).padStart(2, '0')}:00 น.`, String(c.hour))).join('')}</select></label>
         <label class="field"><span class="lbl">เก็บทุกฉบับย้อนหลัง</span><span class="bk-num"><input type="number" id="bk-days" min="3" max="90" step="1" value="${esc(String(c.keepDays))}" aria-label="เก็บทุกฉบับย้อนหลัง (วัน)"> วัน</span></label>
         <label class="field"><span class="lbl">เก็บฉบับแรกของแต่ละเดือน</span><span class="bk-num"><input type="number" id="bk-months" min="0" max="36" step="1" value="${esc(String(c.keepMonths))}" aria-label="เก็บฉบับแรกของแต่ละเดือน (เดือน)"> เดือน</span></label>
@@ -15299,7 +15306,7 @@ function bkHtml() {
       <label class="check"><input type="checkbox" id="bk-alerts"${c.alerts ? ' checked' : ''}> <span>แจ้งเตือนทางอีเมลถึงเจ้าของ: สำรองไม่สำเร็จ · รหัส PIN ถูกล็อก (ใส่ผิด 5 ครั้ง) · ลบข้อมูลจำนวนมาก (ครั้งเดียว ≥ 10 รายการ หรือคนเดียวรวม ≥ 30 รายการต่อวัน)</span></label>
       <div class="bk-acts"><button type="button" class="btn primary" data-bk="save"${busy ? ' disabled' : ''}>${bkBusy === 'save' ? 'กำลังบันทึก…' : 'บันทึกการตั้งค่าสำรอง'}</button>
         <button type="button" class="btn" data-bk="now"${busy ? ' disabled' : ''}>${bkBusy === 'now' ? 'กำลังสำรอง…' : 'สำรองตอนนี้'}</button>
-        <label class="check"><input type="checkbox" id="bk-nowmail"${c.every !== 'off' ? ' checked' : ''}> <span>ส่งไฟล์ทางอีเมลด้วย</span></label></div>
+        <label class="check"><input type="checkbox" id="bk-nowmail"${c.every !== 'off' ? ' checked' : ''}> <span>ส่งลิงก์ทางอีเมลด้วย</span></label></div>
       <p class="muted def-note" style="margin:10px 0 0">ไฟล์สำรองมีข้อมูลผู้ป่วย: ส่งถึงอีเมลของเจ้าของเท่านั้น เก็บในที่ที่จำกัดผู้เข้าถึง ห้ามส่งต่อ (พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล) · ไฟล์เกิน 20 MB ส่งเป็นลิงก์แทน · ฉบับเก่าเกินที่ตั้งย้ายไปถังขยะของ Drive (กู้คืนได้ 30 วัน)
         · <b>กู้คืน</b>: เปิดไฟล์สำรองของวันที่ต้องการ → คลิกขวาที่แท็บ → คัดลอกไปยัง → สเปรดชีตที่มีอยู่ (ไฟล์จริง) แล้วแทนแท็บเดิม</p>`;
 }
@@ -15324,7 +15331,7 @@ async function bkAct(k) {
     bkStat = k === 'save' ? await store.backupSave(cfg) : await store.backupNow(mail);
     const st = bkStat.state || {};
     if (k === 'save') toast('บันทึกการตั้งค่าสำรองแล้ว' + (bkStat.trigger ? ` · สำรองอัตโนมัติทุกวัน ${String(bkStat.cfg.hour).padStart(2, '0')}:00 น.` : ''));
-    else if (st.ok) toast('สำรองข้อมูลแล้ว' + (mail ? (st.mailErr ? ` · ส่งอีเมลไม่สำเร็จ: ${st.mailErr}` : ' · ส่งไฟล์ทางอีเมลแล้ว') : ''), st.mailErr && mail ? { err: true } : {});
+    else if (st.ok) toast('สำรองข้อมูลแล้ว' + (mail ? (st.mailErr ? ` · ส่งอีเมลไม่สำเร็จ: ${st.mailErr}` : ' · ส่งลิงก์ทางอีเมลแล้ว') : ''), st.mailErr && mail ? { err: true } : {});
     else toast('สำรองไม่สำเร็จ: ' + (st.err || ''), { err: true });
   } catch (ex) { toast((k === 'save' ? 'บันทึกการตั้งค่าสำรองไม่สำเร็จ: ' : 'สำรองไม่สำเร็จ: ') + errMsg(ex), { err: true }); }
   finally { bkBusy = ''; bkPaint(); }
@@ -31197,7 +31204,9 @@ function flowPop(btn) {
  * เปิดจาก: ไอคอนข้าง HN (ชี้ HN ในรายการไหนก็ได้ · จอสัมผัส: กดค้าง) · RT Workflow (ปุ่มบนแถบเครื่องมือ · หน้าต่างของผู้ป่วย)
  * ใครเปิดได้: ตั้งค่า → แถบเมนู → Patient chart (ยังไม่ตั้ง = เท่าแถบลงทะเบียน · ไม่ขยายข้อมูลผู้ป่วยให้ตำแหน่งอื่นเอง) · ประวัติการบันทึก = ทุกคนที่เปิด chart ได้
  * แท็บ สรุป / เส้นเวลา / ประวัติการบันทึก (AuditLog ตาม HN) / เอกสาร · แสดงขั้นตอนและผู้ปฏิบัติ ไม่แสดงค่า QA · พิมพ์ / PDF */
-const PCH_VIEW = 'pchart', PCH_API = 139;
+const PCH_VIEW = 'pchart', PCH_API = 139, PCH_SEEN_API = 140;
+// .50: บันทึกการเปิดดู (Code.gs API 140 · คนเดิม HN เดิมภายใน 10 นาทีไม่บันทึกซ้ำ) · ไม่รอผล ไม่ทำให้ chart ช้า
+const pcSeenLog = hn => { if (hn && store.mode === 'sheet' && serverHas(PCH_SEEN_API)) store.pcSeen(hn).catch(() => {}); };
 const pcOn = () => !!accessOf(PCH_VIEW);
 const pcs = { hn: '', tab: 'sum', cat: '', log: null, loading: '', seq: 0 };
 const pcDlg = $('#pc-dlg');
@@ -31271,6 +31280,7 @@ function pcUpcoming(k, cs, ap) {
 function pcOpen(hn) {
   if (!pcOn()) return toast('ตำแหน่งนี้ยังเปิด Patient chart ไม่ได้ (ตั้งค่า → แถบเมนู → Patient chart)', { err: true });
   Object.assign(pcs, { hn: str(hn).trim(), tab: 'sum', cat: '', log: null });
+  pcSeenLog(pcs.hn);
   $('#flow-pop').hidden = true;
   $('#pc-q').value = '';
   if (!pcDlg.open) pcDlg.showModal();
@@ -31336,7 +31346,8 @@ function pcLog(k) {
     return h + `<li class="hist-row"><span class="hist-t">${esc(hm)}</span><b>${esc(r.by || r.user || '—')}</b> <span class="hist-act ${esc(r.act)}">${esc(HIST_ACT[r.act] || r.act)}</span> <span class="muted">${esc(HIST_FN[r.fn] || HIST_TABLE[r.table] || r.table)}</span>`
       + (lines.length ? `<ul class="hist-what">${lines.slice(0, 14).map(l => `<li>${esc(l)}</li>`).join('')}${lines.length > 14 ? `<li class="muted">และอีก ${lines.length - 14} ช่อง</li>` : ''}</ul>` : '') + '</li>';
   }).join('');
-  return `<p class="muted" id="pc-log-note">${L.rows.length} รายการ · ใหม่ก่อน${L.more ? ' · แสดง 300 รายการล่าสุด' : ''} · ไม่แสดงค่า QA</p><ul class="hist-list pc-log">${items}</ul>`;
+  const seenN = L.rows.filter(r => r.act === 'view').length;
+  return `<p class="muted" id="pc-log-note">${L.rows.length} รายการ · ใหม่ก่อน${L.more ? ' · แสดง 300 รายการล่าสุด' : ''} · ไม่แสดงค่า QA${seenN ? ` · รวมการเปิดดู chart ${seenN} ครั้ง (เห็นเฉพาะแอดมิน)` : ''}</p><ul class="hist-list pc-log">${items}</ul>`;
 }
 function pcDocs(k, ap, cs) {
   const it = (l, sub, view) => `<li><b>${esc(l)}</b> <span class="muted">${esc(sub)}</span>${navOn(view) ? ` <button type="button" class="btn ghost sm" data-pcgo="${view}">เปิดที่แถบ ${esc(navLabel(view))}</button>` : ''}</li>`;
@@ -31347,7 +31358,8 @@ function pcDocs(k, ap, cs) {
 // พิมพ์ / PDF: หัวเอกสาร (โลโก้ HN ชื่อ แพทย์ Diag ขั้นตอนตอนนี้) · การฉายรังสี · นัดที่จะถึง · ขั้นตอนทั้งหมด (เก่า → ใหม่) พร้อมผู้ปฏิบัติ · ไม่มีค่า QA
 function pcSheet() {
   const k = hnKey(pcs.hn), p = pcInfo(k), now = new Date(), tx = pcTxRows(p.cs), up = pcUpcoming(k, p.cs, p.ap), ev = pcEvents(k).reverse();
-  return `<div class="ss-sheet pc-sheet">
+  const wm = `${state.user.name || state.user.username || ''} · ${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;   // .50: ลายน้ำชื่อคนพิมพ์
+  return `<div class="ss-sheet pc-sheet"><div class="pc-wm" aria-hidden="true">${[14, 40, 66, 90].map(t => `<span style="top:${t}%">${esc(wm)}</span>`).join('')}</div>
     <div class="pc-sh-hd"><img class="pc-sh-logo" src="${TXS_LOGO}" alt=""><div class="pc-sh-t"><h1>Patient chart</h1><p>HN <b>${esc(pcs.hn)}</b> · ${esc(p.name || '—')}${p.facts.length ? ` · ${esc(p.facts.join(' · '))}` : ''}</p></div>
       <div class="pc-sh-at">พิมพ์ ${esc(fmtDayY(today()))} ${pad(now.getHours())}:${pad(now.getMinutes())}<br>โดย ${esc(state.user.name || state.user.username || '')}</div></div>
     <p class="pc-sh-facts">${[p.doc && `แพทย์ ${docName(p.doc) || p.doc}`, p.dx && `Diag ${p.dx}`, p.stage && `ตอนนี้: ${p.stage}`].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</p>
@@ -31389,7 +31401,7 @@ pcDlg.addEventListener('click', e => {
   if (b.dataset.pccat !== undefined) { pcs.cat = b.dataset.pccat; return pcRender(); }
   if (b.dataset.pcprint !== undefined) return pcPrint(b);
   if (b.dataset.pcgo) { pcDlg.close(); return flowGo(b.dataset.pcgo, pcs.hn); }
-  if (b.dataset.pchit) { Object.assign(pcs, { hn: b.dataset.pchit, tab: 'sum', cat: '', log: null }); $('#pc-q').value = ''; return pcRender(); }
+  if (b.dataset.pchit) { Object.assign(pcs, { hn: b.dataset.pchit, tab: 'sum', cat: '', log: null }); pcSeenLog(pcs.hn); $('#pc-q').value = ''; return pcRender(); }
 });
 $('#pc-q').addEventListener('input', () => {
   const w = str($('#pc-q').value).trim().toLowerCase();
@@ -31400,7 +31412,7 @@ $('#pc-q').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
   const w = str($('#pc-q').value).trim().toLowerCase(), r = w && pcHits(w)[0];
-  if (r) { Object.assign(pcs, { hn: str(r.hn), tab: 'sum', cat: '', log: null }); $('#pc-q').value = ''; pcRender(); }
+  if (r) { Object.assign(pcs, { hn: str(r.hn), tab: 'sum', cat: '', log: null }); pcSeenLog(pcs.hn); $('#pc-q').value = ''; pcRender(); }
 });
 document.addEventListener('click', e => { const b = e.target instanceof Element ? e.target.closest('[data-pcopen]') : null; if (b) { e.preventDefault(); pcOpen(b.dataset.pcopen); } });
 function flowGo(view, hn) {
@@ -31624,8 +31636,8 @@ function tgSetInner(d) {
     <label class="check"><input type="checkbox" data-tg="on"${t.on ? ' checked' : ''}> <b>ส่งประกาศเข้า Telegram</b></label>
     <div class="tg-row" role="group" aria-label="ประเภทที่ส่ง"><span>ส่งประเภท:</span>${TG_KINDS.map(k => `<label class="check"><input type="checkbox" data-tgkind="${k}"${t.kinds.includes(k) ? ' checked' : ''}> ${TG_KIND_LABEL[k]}</label>`).join('')}</div>
     <div class="tg-pt" role="radiogroup" aria-label="ข้อมูลผู้ป่วยในข้อความ"><span>ข้อมูลผู้ป่วยในข้อความ (ผู้ป่วย / HDR):</span>
-      ${[['abbr', `HN + คำนำหน้า + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก) เช่น HN 999000123 · ${tgAbbr('นาย สมชาย ใจดี')}${store.mode === 'sheet' && !serverHas(TG_PT_API) ? ' · ต้องใช้ Code.gs 2026-11-22.6' : ''}`], ['hn', 'HN อย่างเดียว'], ['none', 'ไม่ใส่ (บอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub")']].map(([k, l]) => `<label class="check"><input type="radio" name="tg-pt" data-tgpt="${k}"${t.pt === k ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
-      <p class="muted def-note" style="margin:2px 0 0"><b>ชื่อเต็มของผู้ป่วยไม่ส่งเสมอ</b> · ข้อความใน Telegram อยู่ในมือถือของสมาชิกกลุ่ม ใช้กลุ่มที่มีเฉพาะเจ้าหน้าที่</p></div>
+      ${[['abbr', `HN + คำนำหน้า + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก) เช่น HN 999000123 · ${tgAbbr('นาย สมชาย ใจดี')}${store.mode === 'sheet' && !serverHas(TG_PT_API) ? ' · ต้องใช้ Code.gs 2026-11-22.6' : ''}`], ['hn', 'HN อย่างเดียว (แนะนำ · ค่าเริ่มต้น)'], ['none', 'ไม่ใส่ (บอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub")']].map(([k, l]) => `<label class="check"><input type="radio" name="tg-pt" data-tgpt="${k}"${t.pt === k ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
+      <p class="muted def-note" style="margin:2px 0 0"><b>ชื่อเต็มของผู้ป่วยไม่ส่งเสมอ</b> · ข้อความใน Telegram อยู่ในมือถือของสมาชิกกลุ่มและเก็บที่เซิร์ฟเวอร์ต่างประเทศ ใช้กลุ่มที่มีเฉพาะเจ้าหน้าที่ · ชื่อย่อ + HN ยังระบุตัวผู้ป่วยได้ (ข้อมูลสุขภาพตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล) จึงแนะนำ HN อย่างเดียว</p></div>
     <div><label class="field"><span class="lbl">ลิงก์เชิญเข้ากลุ่ม · ไอคอน Telegram บนแถบเมนู (ไม่บังคับ)</span><input type="url" data-tglink value="${esc(t.link || '')}" placeholder="https:\/\/t.me/+…" autocomplete="off" spellcheck="false" aria-label="ลิงก์เชิญเข้ากลุ่ม Telegram"${tgLinkOld() ? ' disabled' : ''}></label>
       <p class="muted def-note" style="margin:2px 0 0">${tgLinkOld() ? '<b>ต้องใช้ Code.gs 2026-11-22.7</b> (ซ่อนลิงก์จากหน่วยงานภายนอก) · ' : ''}ใน Telegram: เปิดกลุ่ม → ชื่อกลุ่ม → Invite Links (หรือ Add Members → Invite via Link) → คัดลอก · ไอคอนแสดงให้ผู้ที่เห็นประกาศ (หน่วยงานภายนอกไม่เห็น) · <b>ใครได้ลิงก์ก็เข้ากลุ่มได้</b> ถ้าลิงก์หลุดให้ Revoke ใน Telegram แล้ววางลิงก์ใหม่</p></div>
     <div class="tg-wrap"><table class="tg-map"><thead><tr><th>อาชีพที่ประกาศถึง</th><th>กลุ่ม Telegram</th><th></th></tr></thead><tbody>
