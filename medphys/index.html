@@ -459,6 +459,16 @@ button.duty-line:hover{border-color:var(--accent)}
 .cn-flt small{color:var(--muted);font-variant-numeric:tabular-nums}
 .cn-ask{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;width:100%;margin-top:8px;padding:8px 10px;border:1px dashed var(--line-strong);border-radius:8px;background:var(--sunken)}
 .cn-ask .cn-note{flex:1 1 240px;min-height:30px;padding:2px 8px}
+.nlp-svc{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}   /* .48: เงื่อนไขของจุดบันทึก */
+.nlp-svc .chip{cursor:pointer}
+#nlp-panel .nlp-sv-h{display:block;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.ev-plan{font-weight:600}
+.ev-prev{font-size:12.5px;color:var(--warn)}
+.ev-by{font-size:12px}
+.ev-row .hn-btn{font-size:inherit}
+.rp-tag.ev-tag{background:var(--warn-soft);color:var(--warn);max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.rp-tag.ev-tag.ok,.ev-prev.ok{background:var(--ok-soft);color:var(--ok)}
+.ev-prev.ok{padding:0 6px;border-radius:6px}
 .cn-tag.rect{background:var(--late-soft);color:var(--late)}
 .cn-tag.cancel{background:var(--sunken);color:var(--muted);text-decoration:line-through}
 .cn-flt input:checked + span small{color:inherit;opacity:.85}
@@ -1648,6 +1658,10 @@ dialog>.nlp-bar{top:14px;bottom:auto}   /* ในฟอร์ม: แถบม�
 .acct-form{display:grid;gap:12px;max-width:560px}
 .acct-hub{border:1px solid var(--line);border-radius:10px;padding:8px 12px 10px;margin:0;display:grid;gap:8px;min-width:0}   /* 24 พ.ย.: ข้อมูลใบลา (RT Hub) */
 .acct-hub legend{font-weight:700;font-size:13.5px;padding:0 4px}
+.acct-tg .tg-on{margin:6px 0;color:var(--ok);font-weight:600}   /* .47: Telegram ส่วนตัว */
+.tg-steps{margin:6px 0 8px;padding-left:22px}
+.tg-steps li{margin:5px 0}
+.tg-code{font-size:1.05em;letter-spacing:.08em}
 .sig-box{display:flex;align-items:center;justify-content:center;min-height:92px;padding:8px;border:1px dashed var(--line-strong);border-radius:8px;background:#fff;color:#5b6472}   /* .38: ลายเซ็นบนพื้นขาวเหมือนในฟอร์ม */
 .sig-box img{max-width:100%;max-height:120px}
 .sig-pick{position:relative;cursor:pointer}
@@ -3828,6 +3842,7 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
         <button type="button" data-view="nurse">Nurse</button>
         <button type="button" data-view="appt">ลงนัด</button>
         <button type="button" data-view="contour">Contouring</button>
+        <button type="button" data-view="evaluate">Evaluation</button>
         <button type="button" data-view="bq">นัดคิวใส่แร่</button>
         <button type="button" data-view="work">งาน</button>
         <button type="button" data-view="pend">งานรอ</button>
@@ -4039,6 +4054,16 @@ button.bq-img:hover .bq-imgc{border-color:var(--accent)}
     </div>
     <p class="muted cn-help" id="cn-help"></p>
     <div id="cn-body"></div>
+  </section>
+  <!-- 25 พ.ย. (.46): Evaluation = แผนที่ Planning กด Finish แล้ว รอแพทย์ประเมิน (Approved / Edit ส่งกลับไปวางแผนเดิม) -->
+  <section id="view-evaluate" hidden>
+    <div class="toolbar">
+      <input type="search" class="tab-q" data-tq="evaluate" placeholder="ค้นหา HN, ชื่อ, แพทย์, MP, เทคนิค" autocomplete="off" aria-label="ค้นหาในแถบนี้">
+      <div class="chips cn-flt" id="ev-flt" role="radiogroup" aria-label="สถานะ Evaluation"></div>
+      <span class="spacer"></span>
+    </div>
+    <p class="muted cn-help" id="ev-help"></p>
+    <div id="ev-body"></div>
   </section>
   <section id="view-bq" hidden>
     <div class="toolbar">
@@ -8255,12 +8280,12 @@ const patientAct = kind => kind === 'rc' || !!(state.config.acts[kind] && state.
 // เคสเก่าของ Brachy/Hyperthermia → บันทึกกิจกรรม (id เดิม นับแต้มเท่าเดิม)
 const caseToLog = c => normLog({ id: c.id, kind: c.cat, date: c.in, mp: c.mp, hn: c.hn, name: c.name, note: c.note, created: c.created, updated: nowISO() });
 const isCountKind = key => key !== 'mu' && key !== 'acad' && key !== 'admin' && !!state.config.acts[key];
-const VIEWS = ['reg', 'dq', 'consult', 'nurse', 'appt', 'contour', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'notify', 'txsum', 'settings'];
+const VIEWS = ['reg', 'dq', 'consult', 'nurse', 'appt', 'contour', 'evaluate', 'bq', 'work', 'pend', 'queue', 'course', 'ctsim', 'dash', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook', 'rojobs', 'jobs', 'deptcal', 'flow', 'notify', 'txsum', 'settings'];
 const NAV_GROUP0 = ['work', 'queue', 'logs', 'p4p', 'mpleave', 'tdfcalc', 'sendbook'];
 // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: อยู่ใต้แถบเดียวกับแถบนี้ (เช่น วันลา MP อยู่ใต้ Planning เหมือนตารางแจกเคส)
-const NAV_PARENT_LIKE = { contour: 'appt', mpleave: 'queue', tdfcalc: 'queue', sendbook: 'queue' };   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
-const VIEW_LABEL = { contour: 'Contouring', notify: 'ประกาศ', txsum: 'Treatment Summary', deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', tdfcalc: 'TDF Dose Calculator', sendbook: 'ทะเบียนหนังสือส่ง', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'ห้องตรวจ', nurse: 'Nurse', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
-const NAV_LIKE = { contour: 'appt', reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend', sendbook: 'pend', nurse: 'dq' };   // ทะเบียนหนังสือส่ง (20 พ.ย.) = เห็นเท่าแถบงานรอ   // Nurse (18 พ.ย.) = เห็นเท่าแถบแจกงานแพทย์   // TDF (17 พ.ย.) = เห็นเท่าแถบงานรอ (Planning) · RT Workflow (ข้อมูลผู้ป่วย) = เท่าแถบห้องฉาย   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
+const NAV_PARENT_LIKE = { evaluate: 'contour', contour: 'appt', mpleave: 'queue', tdfcalc: 'queue', sendbook: 'queue' };   // ค่าเริ่มต้น: แถบที่รวมไว้ใต้แถบ Planning (งานรอ)
+const VIEW_LABEL = { evaluate: 'Evaluation', contour: 'Contouring', notify: 'ประกาศ', txsum: 'Treatment Summary', deptcal: 'ปฏิทินแผนก', flow: 'RT Workflow', tdfcalc: 'TDF Dose Calculator', sendbook: 'ทะเบียนหนังสือส่ง', mpleave: 'วันลา', rojobs: 'RO Jobs (แพทย์)', reg: 'ลงทะเบียน', dq: 'แจกงานแพทย์', consult: 'ห้องตรวจ', nurse: 'Nurse', appt: 'CT Order', bq: 'นัดคิวใส่แร่', work: 'งาน', pend: 'งานรอ', queue: 'ตารางแจกเคส', course: 'Complete', ctsim: 'CT-SIM', dash: 'แดชบอร์ด', logs: 'RC และกิจกรรม', p4p: 'สรุป P4P', jobs: 'RTT/RA Jobs', settings: 'ตั้งค่า' };
+const NAV_LIKE = { evaluate: 'contour', contour: 'appt', reg: 'appt', bq: 'appt', appt: 'ctsim', jobs: 'course', dq: 'reg', consult: 'appt', mpleave: 'queue', rojobs: 'dq', flow: 'course', tdfcalc: 'pend', sendbook: 'pend', nurse: 'dq' };   // ทะเบียนหนังสือส่ง (20 พ.ย.) = เห็นเท่าแถบงานรอ   // Nurse (18 พ.ย.) = เห็นเท่าแถบแจกงานแพทย์   // TDF (17 พ.ย.) = เห็นเท่าแถบงานรอ (Planning) · RT Workflow (ข้อมูลผู้ป่วย) = เท่าแถบห้องฉาย   // แถบใหม่ที่การตั้งค่าเดิมยังไม่มี: สิทธิ์เท่าแถบนี้ (ตรงกับ NAV_LIKE ใน Code.gs)
 // สิทธิ์ของผู้ใช้ต่อแถบ ตามตำแหน่งใน LPCH (ตั้งค่า → แถบเมนู) · บัญชี Google: เห็นแถบเดียวกับ MP และบันทึกได้ทุกแถบที่เห็น
 // ยังไม่รู้ผู้ใช้ (กำลังโหลด): เห็นแถบเดียวกับ MP แต่ยังไม่มีฟอร์มและปุ่มบันทึก
 // ตำแหน่งที่ยังไม่อยู่ในรายการ: แบบเดิม (MP บันทึกได้ · ตำแหน่งอื่นดูได้แถบที่ติ๊ก "ตำแหน่งอื่น") · "ตั้งค่า" MP แอดมิน และโหมดตัวอย่างเห็นเสมอ
@@ -8302,7 +8327,7 @@ const navLabel = view => { const x = (state.config.nav || []).find(n => n.view =
 const STEP_LABEL = { plan: 'วางแผน', eval: 'รอ Evaluate', done: 'เสร็จ' };
 // จำนวนครั้งของเคส (ว่าง = 1): นับเป็นกี่คิวและกี่เท่าของแต้ม
 const unitsOf = c => Math.min(50, Math.max(1, Math.floor(+c.n) || 1));
-const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd', 'replan', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
+const CASE_FIELDS = ['id', 'cat', 'mp', 'how', 'n', 'ct', 'in', 'sim', 'fin', 'eval', 'finBy', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'rt', 'rtDate', 'rtAt', 'rtBy', 'rtNote', 'fxlog', 'ptags', 'rmove', 'bsteps', 'mqt', 'fxadd', 'replan', 'evNote', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'tech', 'room', 'dpf', 'fx', 'rx', 'freq', 'area', 'sites', 'batch', 'note', 'created', 'updated'];
 const LOG_FIELDS = ['id', 'kind', 'date', 'mp', 'hn', 'name', 'caseId', 'title', 'min', 'k', 'note', 'created', 'updated', 'src'];   // src = brachy:… ดึงจากระบบนัด
 const LEAVE_FIELDS = ['id', 'mp', 'from', 'to', 'note', 'created', 'updated', 'ltype'];   // ltype (API 116): ประเภทใบลา (ว่าง = ลาพักผ่อน)
 
@@ -8383,7 +8408,7 @@ function tgAbbr(name) {
   const p = t.split(' ');
   return [title, cut(p[0]), p.length > 1 ? cut(p.slice(1).join('')) : ''].filter(Boolean).join(' ');
 }
-const TG_ID_RE = /^-?\d{3,20}$/;
+const TG_ID_RE = /^-?\d{3,20}(#\d{1,10})?$/;   // .47 (API 137): กลุ่ม#Topic = Topic ย่อยของกลุ่มที่เปิด Topics
 const TG_TOKEN_RE = /^\d{5,15}:[A-Za-z0-9_-]{30,60}$/;
 const CFG_TABS = {
   team: ['staff', 'doctors', 'crew', 'teams', 'leave'],   // teams (R9): ตำแหน่งหัวหน้า/ลูกน้องของแต่ละทีม · leave (23 พ.ย.): ใบลา
@@ -8595,9 +8620,11 @@ const NTF_LINKS = [
   { k: 'dq.new', v: ['dq'], label: 'แจก (บันทึกการแจกงานแพทย์)', where: 'แจกงานแพทย์', sel: '#dq-go', text: 'เคสใหม่ · แพทย์ {แพทย์}', roles: ['RO'] },
   { k: 'cc.done', v: ['course'], label: 'Complete course', where: 'ห้องฉาย / Complete', sel: '[data-course="complete"], input[name="fxoff"][value="complete"]', text: 'Complete course ({วันที่})', roles: ['Nurse'] },
   { k: 'bq.new', v: [], label: 'ลงนัดใส่แร่ใหม่', where: 'นัดคิวใส่แร่', sel: '#bq-save', text: 'นัดใส่แร่ใหม่ {วันที่}', roles: ['RTT'] },
+  { k: 'ev.ok', v: ['evaluate'], label: '✓ Approved (Evaluation)', where: 'Evaluation', sel: '[data-evlok], [data-evlokn], [data-evloksend]', api: 136, text: 'แพทย์ Approved แผนแล้ว', roles: ['MP'] },   // .46
+  { k: 'ev.edit', v: ['evaluate'], label: 'Edit · ส่งกลับให้แก้แผน', where: 'Evaluation', sel: '[data-evledit], [data-evlsend]', api: 136, text: 'แพทย์ให้แก้แผน', roles: ['MP'] },
 ];
 const NTFL_PH = ['วันที่', 'แพทย์', 'ห้อง', 'รอบ'];
-const ntflDef = k => NTF_LINKS.find(x => x.k === k) || ntfcDef(k);
+const ntflDef = k => NTF_LINKS.find(x => x.k === k) || ntfcDef(k) || svDef(k);   // .48: จุดบันทึก sv.
 /* .42 (Code.gs API 133): ประกาศตามเงื่อนไขในฟอร์ม · คีย์ใน config.ntfLink = ปุ่มบันทึกฟอร์ม|ช่อง=ค่า (เช่น ap.new|prio=Emergency)
  * บันทึกรายการใหม่ที่ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติของปุ่ม · แก้รายการเดิมเป็นค่านั้น = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ
  * box = ช่องในฟอร์ม (จุดเทาที่ตัวเลือก · โหมดตั้งบนหน้าเว็บกดตัวเลือกได้) · get = ค่าของรายการที่บันทึก (หลายค่า = array) · ช่องตรงกับ NTF_COND_ ใน Code.gs */
@@ -8628,9 +8655,80 @@ const NTF_COND = {
     { f: 'tech', label: 'รูปแบบการใส่', box: '#q-tech', vals: () => state.config.bq.techs, get: r => r.tech },
   ],
 };
-const NTFC_RE = /^([a-z]+\.[a-z]+)\|([a-z]+)=([^|"\\<>]{1,60})$/;
+/* .48 (Code.gs API 138): ลิงก์ประกาศของทุกจุดบันทึก · คีย์ sv.ชื่อคำสั่งของ Code.gs · เงื่อนไข sv.คำสั่ง|ช่อง=ค่า (ช่องของรายการที่บันทึก · a1… = ค่าตามลำดับ)
+ * โหมดตั้งลิงก์ประกาศ: กดบันทึกที่ไหนก็ได้ = ไม่บันทึกจริง (คำสั่งไม่ถึง Code.gs) แต่เปิดกล่องตั้งประกาศของจุดนั้น · ใช้งานจริง: บันทึกสำเร็จแล้วตรวจลิงก์ */
+const SV_API = 138;
+const SV_RE = /^sv\.[a-zA-Z]{2,60}$/;
+// คำสั่งที่ไม่ใช่จุดบันทึกของงาน (อ่านข้อมูล · ตั้งค่า · บัญชี · ประกาศ / ข้อความเอง · นำเข้า · ผู้ดูแล)
+const SV_SKIP = new Set(['mode', 'load', 'getData', 'saveConfig', 'cfgPropose', 'cfgDecide', 'msgSend', 'msgRead', 'acctMe', 'acctSave', 'selfProfile', 'acctPassword', 'acctSessions', 'acctSignOut', 'acctMembers', 'acctMemberSave', 'acctMemberDelete',
+  'tgMe', 'tgLinkStart', 'tgLinkCheck', 'tgMeTest', 'tgUnlink', 'tgState', 'tgSetup', 'tgChats', 'tgTest', 'sigMine', 'sigSave', 'sigDelete', 'sigForm', 'sbkState', 'ntfLink', 'notifyAdd', 'notifyAck', 'notifyCancel', 'notifyDelete',
+  'machineLogEdit', 'txsLog', 'txsLogRead', 'txsSetup', 'txsPdf', 'txsRefer', 'bqCheck', 'bqImport', 'bqImportCheck', 'vacImport', 'vacImportCheck', 'dutyMembers', 'members', 'lpchMembers', 'setPin', 'holidays', 'thaiHolidays',
+  'brachyCheck', 'brachyPull', 'tdfCheck', 'tdfPull', 'hdrGet', 'regDriveCheck', 'regDrivePull', 'regFind', 'regRestore', 'regArchiveNow', 'spqCheck', 'spqPull', 'backupStatus', 'backupSave', 'backupNow',
+  'auditRecent', 'auditRange', 'auditFor', 'trashList', 'trashRestore', 'trashPurge', 'dqImport', 'practiceCall', 'practiceReset', 'practiceSeed', 'login', 'logout']);
+const SV_FIELD = { prio: 'ความเร่งด่วน', cm: 'CM', room: 'ห้องฉาย', doc: 'แพทย์', type: 'ประเภท', status: 'สถานะ', st: 'สถานะ', act: 'การทำ', step: 'ขั้นตอน', how: 'วิธี', tech: 'เทคนิค', what: 'รายการ', cat: 'เทคนิค', kind: 'ประเภท',
+  mark: 'เครื่องหมาย', aim: 'Aim', ct: 'เครื่อง CT', mp: 'MP', desk: 'ช่องทาง', special: 'เทคนิคพิเศษ', hdr: 'HDR', pstat: 'สถานะผู้ป่วย', ctcm: 'CM', label: 'รายการ', reason: 'สาเหตุ', mode: 'แบบ', machine: 'เครื่อง' };
+const SV_NOCOND = /^(id|hn|name|title|note|notes|text|pin|at|by|created|updated|date|time|sim|in|phone|email|token|user|ref|from|to|until|fullName|username|dpf|fx|rx|freq|area|sites|dx|icd|order|draft|body|img)$/;
+const svFd = f => ({ f, label: SV_FIELD[f] || (/^a\d$/.test(f) ? `ค่าที่ ${f.slice(1)}` : f), get: r => (r ? r[f] : '') });
+const svLabel = fn => { const m = /^(save|delete)Record([A-Z]\w*)$/.exec(fn); return m ? `${m[1] === 'save' ? 'บันทึก' : 'ลบ'} ${m[2]}` : HIST_FN[fn] || fn; };
+function svDef(k) {
+  if (!SV_RE.test(str(k))) return null;
+  const lbl = svLabel(k.slice(3));
+  return { k, v: [], label: `บันทึก: ${lbl}`, where: 'จุดบันทึก (ตั้งจากหน้าเว็บจริง)', sel: '', text: `${lbl} ({วันที่})`, roles: [], api: SV_API, sv: true };
+}
+// ชื่อคำสั่งของ Code.gs ที่ฟังก์ชันของ store เรียก (saveRecord / deleteRecord = ตามตาราง · casesDo = คำสั่งข้างใน)
+function svFn(method, a) {
+  const fn = (/call\('(\w+)'/.exec(String(sheetStore[method] || '')) || [])[1] || method;
+  if ((fn === 'saveRecord' || fn === 'deleteRecord') && /^[a-z]\w{1,30}$/.test(str(a[0]))) return fn + str(a[0])[0].toUpperCase() + str(a[0]).slice(1);
+  if (fn === 'casesDo' && /^[a-zA-Z]{2,40}$/.test(str(a[0]))) return str(a[0]);
+  return /^[a-zA-Z]{2,60}$/.test(fn) ? fn : '';
+}
+// ค่าของการบันทึก (ช่องของรายการ · a1… = ค่าตามลำดับที่ไม่ใช่รายการ) + รายการที่ Code.gs คืน (ใช้ HN / ชื่อ / แพทย์ ในประกาศ)
+function svRec(a, r) {
+  const o = {}, put = (k, v) => { if (v == null || typeof v === 'object' || k in o) return; const t = str(v).trim(); if (t && t.length <= 60) o[k] = t; };
+  const obj = x => x && typeof x === 'object' && !Array.isArray(x);
+  a.forEach((v, i) => { if (obj(v)) Object.entries(v).forEach(([k, x]) => { if (/^[a-zA-Z]{1,30}$/.test(k)) put(k, x); }); else if (i < 6) put('a' + (i + 1), v); });
+  const res = obj(r) ? (obj(r.rec) ? r.rec : r) : null;
+  if (res) Object.entries(res).forEach(([k, x]) => { if (/^[a-zA-Z]{1,30}$/.test(k)) put(k, x); });
+  return o;
+}
+const svCondOk = (f, v) => !SV_NOCOND.test(f) && !/^[0-9a-f-]{16,}$/i.test(v) && !/^\d{4,}$/.test(v) && !/^\d{4}-\d{2}-\d{2}/.test(v) && v.length <= 40;
+let svLast = null, svLastAt = 0;   // ปุ่ม / ช่องที่กดล่าสุดในโหมดตั้งลิงก์ประกาศ (วางกล่องตั้งใกล้จุดที่กด) · เวลาที่ผู้ใช้กด / พิมพ์ล่าสุด
+const svByUser = () => Date.now() - svLastAt < 10000;   // บันทึกที่มาจากการกด / พิมพ์ของผู้ใช้ (ไม่ใช่งานเบื้องหลัง)
+function svCatch(fn, a) {
+  nlp.sv = { fn, rec: svRec(a, null) };
+  const at = svLast && svLast.isConnected ? svLast : null;
+  setTimeout(() => { if (nlp.on) nlpOpen('sv.' + fn, at && at.isConnected ? at : null); }, 0);
+  return Promise.reject(new Error('โหมดตั้งลิงก์ประกาศ: ไม่ได้บันทึกจริง · ตั้งประกาศของจุดบันทึกนี้ในกล่องที่เปิดขึ้น'));
+}
+// บันทึกสำเร็จ: ลิงก์ของจุดนั้น · ตรงเงื่อนไข = ประกาศของเงื่อนไข (แทนประกาศปกติ) · ref = รายการ + วันนี้ (บันทึกซ้ำวันเดียวกันไม่ประกาศซ้ำ)
+function svFire(fn, a, r) {
+  const base = 'sv.' + fn, m = state.config.ntfLink || {}, ks = Object.keys(m).filter(k => k === base || k.startsWith(base + '|'));
+  if (!ks.length) return;
+  const rec = svRec(a, r), conds = ks.filter(k => k !== base && nlOn(k) && (c => !!c && ntfcHas(c.fd, c.v, rec))(ntfcParse(k)));
+  const id = rec.id || (a.find(x => typeof x === 'string' && /^[\w|:.-]{3,80}$/.test(x)) || '');
+  const ctx = { ref: `${str(id).slice(0, 60) || uid()}|${today()}`, hn: rec.hn || '', name: rec.name || '', date: isDay(rec.date) ? rec.date : today(), doc: rec.doc || '', room: rec.room || '' };
+  for (const k of conds.length ? conds : nlOn(base) ? [base] : []) ntfFire(k, ctx);
+}
+// store ทุกแบบ (ชีต / ตัวอย่าง): โหมดตั้งลิงก์ประกาศ = ไม่บันทึกจริง · ใช้งานจริง = ประกาศของจุดบันทึกหลังสำเร็จ
+function svWrap(st) {
+  return new Proxy(st, {
+    get(t, p) {
+      const f = t[p];
+      if (typeof f !== 'function' || typeof p !== 'string' || SV_SKIP.has(p)) return f;
+      return (...a) => {
+        const fn = svFn(p, a);
+        if (!fn || SV_SKIP.has(fn)) return f.apply(t, a);
+        if (nlp.on && svByUser()) return svCatch(fn, a);   // งานเบื้องหลังที่ไม่ได้มาจากการกด = ทำตามปกติ (ไม่เด้งกล่อง)
+        const out = f.apply(t, a);
+        if (out && typeof out.then === 'function') out.then(res => { try { svFire(fn, a, res); } catch (e) { /* ประกาศไม่กระทบการบันทึก */ } }, () => {});
+        return out;
+      };
+    },
+  });
+}
+const NTFC_RE = /^([a-z]+\.[a-zA-Z]+)\|([a-zA-Z]{1,30})=([^|"\\<>]{1,60})$/;
 function ntfcParse(k) {
-  const m = NTFC_RE.exec(str(k)), fd = m && (NTF_COND[m[1]] || []).find(x => x.f === m[2]);
+  const m = NTFC_RE.exec(str(k)), fd = m && ((NTF_COND[m[1]] || []).find(x => x.f === m[2]) || (SV_RE.test(m[1]) ? svFd(m[2]) : null));
   return fd ? { base: m[1], f: m[2], v: m[3], fd } : null;
 }
 const ntfcKey = (base, f, v) => `${base}|${f}=${v}`;
@@ -8640,12 +8738,12 @@ const ntfcHas = (fd, v, r) => { const x = r ? fd.get(r) : ''; return Array.isArr
 const ntfcKeys = (base, cfg = state.config) => Object.keys((cfg && cfg.ntfLink) || {}).filter(k => { const c = ntfcParse(k); return !!c && c.base === base; });
 const ntfcOn = base => ntfcKeys(base).filter(k => nlOn(k));
 function ntfcDef(k) {
-  const c = ntfcParse(k), b = c && NTF_LINKS.find(x => x.k === c.base);
-  return b ? { ...b, k, base: c.base, f: c.f, v: c.v, fd: c.fd, api: NTFC_API, sel: '', cond: null, label: `${b.label} · ${c.fd.label} = ${ntfcName(c.fd, c.v)}` } : null;
+  const c = ntfcParse(k), b = c && (NTF_LINKS.find(x => x.k === c.base) || svDef(c.base));
+  return b ? { ...b, k, base: c.base, f: c.f, v: c.v, fd: c.fd, api: b.sv ? SV_API : NTFC_API, sel: '', cond: null, label: `${b.label} · ${c.fd.label} = ${ntfcName(c.fd, c.v)}` } : null;
 }
 // เงื่อนไขใหม่: ข้อความ = ค่าที่เลือก · ข้อความของปุ่ม · อาชีพ = ของปุ่ม (ที่ตั้งไว้)
 function ntfcNew(k, cfg) {
-  const c = ntfcParse(k), b = NTF_LINKS.find(x => x.k === c.base), L = ntflOf(c.base, cfg);
+  const c = ntfcParse(k), b = NTF_LINKS.find(x => x.k === c.base) || svDef(c.base), L = ntflOf(c.base, cfg);
   return { on: true, roles: (L && L.roles.length ? L.roles : b.roles).slice(), text: `${ntfcName(c.fd, c.v)} · ${(L && L.text) || b.text}`.slice(0, 200) };
 }
 // ตัวเลือกเงื่อนไขของปุ่ม: ค่าในตั้งค่า + ค่าที่ตั้งเงื่อนไขไว้แล้ว
@@ -8735,10 +8833,12 @@ function nlpEnd() {
   pop.hidden = true;
   if (pop.parentElement !== document.body) document.body.appendChild(pop);
   $('#nlp-panel').hidden = true;
+  nlp.sv = null; svLast = null; svLastAt = 0;
   for (const el of nlpMarked) { el.classList.remove('nlp-t', 'nlp-on'); delete el.dataset.nlpk; }
   nlpMarked.clear();
   const bar = $('#nlp-bar');
   if (bar.parentElement !== document.body) document.body.appendChild(bar);
+  if (state.loaded) Promise.resolve().then(() => refresh(true)).catch(() => {});   // .48: ภาพบนจอที่เปลี่ยนก่อนถูกดัก (ไม่ได้บันทึกจริง) = โหลดข้อมูลจริงอีกครั้ง
   draft = null;   // .42: ร่างตั้งค่าที่วาดระหว่างโหมดนี้ (อยู่หน้าตั้งค่า) = ค่าก่อนบันทึกลิงก์ · เริ่มร่างใหม่จากค่าล่าสุด
   nlpBar();
   render();
@@ -8748,9 +8848,9 @@ function nlpBar() {
   document.body.classList.toggle('nl-pick', nlp.on);
   bar.hidden = !nlp.on;
   if (!nlp.on) { bar.innerHTML = ''; return; }
-  const n = NTF_LINKS.filter(d => nlpLinked(d.k)).length, nc = Object.keys(nlp.cfg.ntfLink || {}).filter(k => ntfcParse(k) && nlpLinked(k)).length;
-  bar.innerHTML = `<b>🔔 ตั้งลิงก์ประกาศ</b><span>เห็นเฉพาะแอดมิน · กดปุ่มที่มีกรอบประเพื่อตั้งประกาศ (กรอบทึบ = ลิงก์อยู่) · ปุ่มอื่นกดไม่ได้ในโหมดนี้ · ไปแถบอื่นได้ตามปกติ</span>
-    <span class="nlp-acts"><button type="button" class="btn sm" data-nlp="list">รายการปุ่มทั้งหมด (ลิงก์ ${n}/${NTF_LINKS.length}${nc ? ` · เงื่อนไข ${nc}` : ''})</button><button type="button" class="btn sm primary" data-nlp="save"${nlpDirty() ? '' : ' disabled'}>${state.user.isAdmin ? 'บันทึก' : 'ส่งขออนุมัติ'}</button><button type="button" class="btn sm" data-nlp="quit">${nlp.quit ? 'ออก (ทิ้งที่แก้)' : 'ออก'}</button></span>`;
+  const n = NTF_LINKS.filter(d => nlpLinked(d.k)).length, nc = Object.keys(nlp.cfg.ntfLink || {}).filter(k => ntfcParse(k) && nlpLinked(k)).length, ns = Object.keys(nlp.cfg.ntfLink || {}).filter(k => SV_RE.test(k) && nlpLinked(k)).length;
+  bar.innerHTML = `<b>🔔 ตั้งลิงก์ประกาศ</b><span>เห็นเฉพาะแอดมิน · กดปุ่มที่มีกรอบประเพื่อตั้งประกาศ (กรอบทึบ = ลิงก์อยู่) · ใช้หน้าเว็บได้ตามปกติ: กดบันทึกที่ไหนก็ได้ = <b>ไม่บันทึกจริง</b> แต่เปิดกล่องตั้งประกาศของจุดนั้น</span>
+    <span class="nlp-acts"><button type="button" class="btn sm" data-nlp="list">รายการปุ่มทั้งหมด (ลิงก์ ${n}/${NTF_LINKS.length}${nc ? ` · เงื่อนไข ${nc}` : ''}${ns ? ` · จุดบันทึก ${ns}` : ''})</button><button type="button" class="btn sm primary" data-nlp="save"${nlpDirty() ? '' : ' disabled'}>${state.user.isAdmin ? 'บันทึก' : 'ส่งขออนุมัติ'}</button><button type="button" class="btn sm" data-nlp="quit">${nlp.quit ? 'ออก (ทิ้งที่แก้)' : 'ออก'}</button></span>`;
 }
 // กรอบรอบปุ่มที่ลิงก์ได้: แถบที่เปิดอยู่ (ลิงก์ของแถบนั้น) + หน้าต่างที่เปิด (ทุกลิงก์)
 function nlpMark() {
@@ -8793,12 +8893,14 @@ function nlpOpen(k, anchor) {
   nlp.key = k;
   if (!inPop) nlp.anchor = anchor;
   nlp.at = state.view;
-  const host = inPop ? pop.parentElement : (anchor && anchor.closest('dialog[open]')) || document.body;
+  const dl0 = [...document.getElementsByTagName('dialog')].filter(x => x.open).pop(), live = !!anchor && anchor.isConnected;   // .48: จุดบันทึกที่ปิดหน้าต่างไปแล้ว = หน้าต่างบนสุด / กลางจอ
+  const host = inPop ? pop.parentElement : (live && anchor.closest('dialog[open]')) || (!live && dl0) || document.body;
   if (pop.parentElement !== host) host.appendChild(pop);   // ปุ่มในหน้าต่าง: กล่องตั้งอยู่ในหน้าต่างนั้น (หน้าต่างแบบ modal บังส่วนอื่น)
   pop.innerHTML = nlpPopHtml(k);
   pop.hidden = false;
   const w = pop.offsetWidth, h = pop.offsetHeight;
   if (inPop) { pop.style.top = `${Math.max(8, Math.min(innerHeight - h - 8, parseFloat(pop.style.top) || 8))}px`; return; }
+  if (!live) { pop.style.left = `${Math.max(8, (innerWidth - w) / 2)}px`; pop.style.top = '72px'; return; }
   const r = anchor.getBoundingClientRect();
   pop.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left))}px`;
   pop.style.top = `${r.bottom + 8 + h > innerHeight - 8 ? Math.max(8, r.top - h - 8) : r.bottom + 8}px`;
@@ -8813,7 +8915,23 @@ function nlpPopHtml(k) {
     <div><span class="lbl">อาชีพที่ได้รับ</span><div class="nl-roles">${roles.map(r => `<label class="check"><input type="checkbox" data-nlpf="role" value="${esc(r)}"${cur.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></div>
     <p class="muted nlp-prev">ตัวอย่าง: ${esc(nlpSample(cur.text))}${on && !cur.roles.length ? ' · <b>ยังไม่เลือกอาชีพ = ไม่ประกาศ</b>' : ''}</p>${old ? `<p class="nlp-old"><b>${esc(c ? NTFC_OLD : 'ปุ่มนี้ต้องใช้ Code.gs รุ่น 2026-11-24.10 ขึ้นไป')}</b></p>` : ''}
     ${c ? `<p class="nlp-note">รายการใหม่ที่ตรงเงื่อนไข = ประกาศนี้แทนประกาศปกติของปุ่ม · แก้รายการเดิมเป็น ${esc(nm)} = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ</p>
-    <div class="nlp-acts2"><button type="button" class="btn ghost sm" data-nlpset="${esc(c.base)}">‹ ปุ่ม ${esc(ntflDef(c.base).label)}</button><button type="button" class="btn ghost danger sm" data-nlp="cdel">ลบเงื่อนไข</button></div>` : nlpCondHtml(k)}`;
+    <div class="nlp-acts2"><button type="button" class="btn ghost sm" data-nlpset="${esc(c.base)}">‹ ปุ่ม ${esc(ntflDef(c.base).label)}</button><button type="button" class="btn ghost danger sm" data-nlp="cdel">ลบเงื่อนไข</button></div>` : SV_RE.test(k) ? nlpSvCondHtml(k) : nlpCondHtml(k)}`;
+}
+// .48: จุดบันทึก: เงื่อนไขจากค่าที่กรอกในการบันทึกที่เพิ่งกด · เงื่อนไขที่ตั้งไว้ · ลบจุดนี้
+function nlpSvCondHtml(base) {
+  const keys = ntfcKeys(base, nlp.cfg), rec = nlp.sv && 'sv.' + nlp.sv.fn === base ? nlp.sv.rec : {};
+  const cand = Object.entries(rec).filter(([f, v]) => svCondOk(f, v) && !keys.includes(ntfcKey(base, f, v)) && !!ntfcParse(ntfcKey(base, f, v))).slice(0, 14);
+  return `<div class="nlp-cond"><span class="lbl">ประกาศเฉพาะเมื่อ… <span class="sub-lbl">ค่าที่กรอกในการบันทึกนี้ · ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติ</span></span>
+    ${keys.length ? `<ul>${keys.map(rk => { const cc = ntfcParse(rk), on = nlpLinked(rk), x = ntflOf(rk, nlp.cfg); return `<li data-nlpcrow="${esc(rk)}"><span>${esc(cc.fd.label)} = <b>${esc(cc.v)}</b> · <span class="nlp-st${on ? ' on' : ''}">${on ? esc(x.roles.join(', ')) : 'ปิด'}</span></span><button type="button" class="btn ghost sm" data-nlpset="${esc(rk)}">ตั้ง</button></li>`; }).join('')}</ul>` : ''}
+    ${cand.length ? `<div class="nlp-svc">${cand.map(([f, v]) => `<button type="button" class="chip" data-nlpset="${esc(ntfcKey(base, f, v))}">+ ${esc(svFd(f).label)} = <b>${esc(v)}</b></button>`).join('')}</div>` : '<p class="muted nlp-note">กรอกฟอร์มแล้วกดบันทึก = เลือกค่าที่กรอกเป็นเงื่อนไขได้</p>'}
+    <div class="nlp-acts2"><button type="button" class="btn ghost danger sm" data-nlp="svdel">ลบจุดบันทึกนี้</button></div></div>`;
+}
+// .48: แผงรายการ: จุดบันทึกที่ตั้งจากหน้าเว็บ
+function nlpSvRows() {
+  const ks = Object.keys(nlp.cfg.ntfLink || {}).filter(k => SV_RE.test(k) || (c => !!c && SV_RE.test(c.base))(ntfcParse(k))).sort();
+  if (!ks.length) return '<li class="nlp-sv-h"><small class="muted">จุดบันทึกอื่น: ใช้หน้าเว็บตามปกติ แล้วกดบันทึก = ตั้งประกาศของจุดนั้น</small></li>';
+  return '<li class="nlp-sv-h"><b>จุดบันทึกที่ตั้งจากหน้าเว็บ</b></li>' + ks.map(k => { const d = ntflDef(k), on = nlpLinked(k), L = ntflOf(k, nlp.cfg), c = ntfcParse(k);
+    return `<li${c ? ' class="nlp-sub"' : ''} data-nlpcrow="${esc(k)}"><span><b>${c ? `↳ ${esc(c.fd.label)} = ${esc(c.v)}` : esc(d.label)}</b><small>${on ? esc(L.roles.join(', ')) : ''}</small></span><span class="nlp-st${on ? ' on' : ''}">${on ? 'ลิงก์อยู่' : 'ปิด'}</span><button type="button" class="btn ghost sm" data-nlpset="${esc(k)}">ตั้ง</button></li>`; }).join('');
 }
 // .42: กล่องของปุ่มบันทึกฟอร์ม: เงื่อนไขที่ตั้งไว้ + เพิ่มเงื่อนไข + เปิดฟอร์มเพื่อกดตัวเลือกจริง
 function nlpCondHtml(base) {
@@ -8832,7 +8950,7 @@ function nlpPanel(show) {
   p.innerHTML = `<div class="nlp-h"><span><b>ปุ่มที่ลิงก์ประกาศได้</b><small>ปุ่มในหน้าต่าง หรือที่ยังไม่มีบนจอ (เช่น วันนี้ไม่มีผู้ป่วย) ตั้งจากรายการนี้ได้</small></span><button type="button" class="nlp-x" data-nlp="pclose" aria-label="ปิด">✕</button></div>
     <ul>${NTF_LINKS.map(d => { const on = nlpLinked(d.k), L = ntflOf(d.k, nlp.cfg), go = nlpGo(d);
       return `<li data-nlprow="${d.k}"><span><b>${esc(d.label)}</b><small>${esc(d.where)}${on ? ` · ${esc(L.roles.join(', '))}` : ''}</small></span><span class="nlp-st${on ? ' on' : ''}">${on ? 'ลิงก์อยู่' : 'ไม่ลิงก์'}</span><button type="button" class="btn ghost sm" data-nlpset="${d.k}">ตั้ง</button>${go && go !== state.view && navOn(go) ? `<button type="button" class="btn ghost sm" data-nlpgo="${go}">ไปที่แถบ</button>` : ''}</li>`
-        + ntfcKeys(d.k, nlp.cfg).map(rk => { const c = ntfcParse(rk), on2 = nlpLinked(rk), x = ntflOf(rk, nlp.cfg); return `<li class="nlp-sub" data-nlpcrow="${esc(rk)}"><span><b>↳ ${esc(c.fd.label)} = ${esc(ntfcName(c.fd, c.v))}</b><small>เงื่อนไขในฟอร์ม${on2 ? ` · ${esc(x.roles.join(', '))}` : ''}</small></span><span class="nlp-st${on2 ? ' on' : ''}">${on2 ? 'ลิงก์อยู่' : 'ปิด'}</span><button type="button" class="btn ghost sm" data-nlpset="${esc(rk)}">ตั้ง</button></li>`; }).join(''); }).join('')}</ul>`;
+        + ntfcKeys(d.k, nlp.cfg).map(rk => { const c = ntfcParse(rk), on2 = nlpLinked(rk), x = ntflOf(rk, nlp.cfg); return `<li class="nlp-sub" data-nlpcrow="${esc(rk)}"><span><b>↳ ${esc(c.fd.label)} = ${esc(ntfcName(c.fd, c.v))}</b><small>เงื่อนไขในฟอร์ม${on2 ? ` · ${esc(x.roles.join(', '))}` : ''}</small></span><span class="nlp-st${on2 ? ' on' : ''}">${on2 ? 'ลิงก์อยู่' : 'ปิด'}</span><button type="button" class="btn ghost sm" data-nlpset="${esc(rk)}">ตั้ง</button></li>`; }).join(''); }).join('')}${nlpSvRows()}</ul>`;
 }
 function nlpRefresh() { nlpBar(); nlpMark(); if (!$('#nlp-panel').hidden) nlpPanel(true); }
 async function nlpSave(btn) {
@@ -8883,6 +9001,7 @@ document.addEventListener('click', e => {   // ปุ่มของโหมด
   if (a === 'cadd') { const sel = $('#nlp-pop [data-nlpc]'); return sel && sel.value ? nlpOpen(sel.value, sel) : undefined; }   // .42: เงื่อนไข
   if (a === 'cdel') { const c = ntfcParse(nlp.key); if (!c) return; if (nlp.cfg.ntfLink) delete nlp.cfg.ntfLink[nlp.key]; nlp.quit = false; nlpRefresh(); return nlpOpen(c.base, b); }
   if (a === 'form') { const f = NTFC_OPEN[nlp.key]; $('#nlp-pop').hidden = true; nlp.key = ''; nlpPanel(false); if (f) f[0](); return; }
+  if (a === 'svdel') { const base = nlp.key; for (const k of Object.keys(nlp.cfg.ntfLink || {})) if (k === base || k.startsWith(base + '|')) delete nlp.cfg.ntfLink[k]; $('#nlp-pop').hidden = true; nlp.key = ''; nlp.quit = false; return nlpRefresh(); }   // .48
   if (a === 'save') return nlpSave(b);
   if (a === 'quit') { if (nlpDirty() && !nlp.quit) { nlp.quit = true; return nlpBar(); } return nlpEnd(); }
 });
@@ -8902,21 +9021,11 @@ document.addEventListener('click', e => {
   if (!t || t.closest('#nlp-bar, #nlp-pop, #nlp-panel')) return;
   const pk = t.closest('.nlp-t');
   if (pk) { e.preventDefault(); e.stopImmediatePropagation(); return nlpOpen(pk.dataset.nlpk, pk); }
-  if (t.closest(NLP_PASS)) return;
-  if (t.closest('button, a[href], input, select, textarea, label, summary, [role="button"], [data-id], [tabindex]')) { e.preventDefault(); e.stopImmediatePropagation(); nlpHint(); }
+  svLast = t.closest('button, a[href], input, select, textarea, label, summary, [role="button"], [data-id], [tabindex]') || t;   // .48: ใช้หน้าเว็บได้ตามปกติ · การบันทึกถูกดักที่ store (svWrap) แทน
+  svLastAt = Date.now();
 }, true);
-document.addEventListener('keydown', e => {
-  if (!nlp.on || e.key !== 'Enter' && e.key !== ' ') return;
-  const t = e.target instanceof Element ? e.target : null;
-  if (!t || t.closest('#nlp-bar, #nlp-pop, #nlp-panel') || t.closest(NLP_PASS)) return;
-  if (e.key === 'Enter' || t.matches('button, [role="button"], summary')) { e.preventDefault(); e.stopImmediatePropagation(); }
-}, true);
-document.addEventListener('submit', e => { if (nlp.on) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
-document.addEventListener('change', e => {   // ช่องเลือกที่บันทึกทันที (เช่น ช่องติ๊กในตาราง): ไม่ส่งต่อในโหมดนี้
-  if (!nlp.on) return;
-  const t = e.target instanceof Element ? e.target : null;
-  if (t && !t.closest('#nlp-bar, #nlp-pop, #nlp-panel') && !t.closest('#view-settings') && t.closest('section[id^="view-"], dialog')) e.stopImmediatePropagation();
-}, true);
+document.addEventListener('submit', e => { if (nlp.on && e.target instanceof Element) { svLast = e.submitter || e.target.querySelector('[type="submit"]') || e.target; svLastAt = Date.now(); } }, true);
+for (const ev of ['keydown', 'input', 'change']) document.addEventListener(ev, () => { if (nlp.on) svLastAt = Date.now(); }, true);   // ใส่ PIN / พิมพ์แล้วบันทึกเอง = การกระทำของผู้ใช้
 // ปุ่มใหม่: หลังบันทึกสำเร็จ (ไม่รอ ไม่กระทบการบันทึก) · ctx = { ref, hn, name, date, doc, room, round, off }
 function ntfFire(k, ctx) {
   const d = ntflDef(k);
@@ -9162,7 +9271,7 @@ function mergeConfig(c) {
   out.subOrder = subOrderNorm(c.subOrder);
   out.flow = flowNorm(c.flow);
   out.icons = iconsNorm(c.icons);
-  out.msg = { mail: !(c.msg && c.msg.mail === false), leave: !(c.msg && c.msg.leave === false), signup: !(c.msg && c.msg.signup === false),   // 24 พ.ย. (.29): ข้อความส่วนตัว · .31: ผู้สมัครใหม่ = ข้อความถึง signupTo (ว่าง = แอดมินหลัก)
+  out.msg = { mail: !(c.msg && c.msg.mail === false), tg: !(c.msg && c.msg.tg === false), leave: !(c.msg && c.msg.leave === false), signup: !(c.msg && c.msg.signup === false),   // 24 พ.ย. (.29): ข้อความส่วนตัว · .31: ผู้สมัครใหม่ = ข้อความถึง signupTo (ว่าง = แอดมินหลัก)
     signupTo: [...new Set((c.msg && Array.isArray(c.msg.signupTo) ? c.msg.signupTo : []).map(x => str(x).toLowerCase()).filter(Boolean))].slice(0, 20) };
   out.iconsOff = Array.isArray(c.iconsOff) ? [...new Set(c.iconsOff.map(str))].filter(k => ICONS.some(x => x[0] === k)) : [];   // 22 พ.ย.: ไอคอนที่แอดมินปิด (ทุกคน)
   out.delGuard = c.delGuard !== false;
@@ -9198,6 +9307,7 @@ function mergeConfig(c) {
   { const nl = c.ntfLink && typeof c.ntfLink === 'object' && !Array.isArray(c.ntfLink) ? c.ntfLink : {};   // .40: ลิงก์ประกาศ
     out.ntfLink = {};
     for (const x of NTF_LINKS) { const v = nl[x.k]; if (v && typeof v === 'object') out.ntfLink[x.k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || x.text, ...(x.srv && v.cut === true ? { cut: true, on: false } : {}) }; }
+    for (const [k, v] of Object.entries(nl)) if (SV_RE.test(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 120) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || svDef(k).text };   // .48: จุดบันทึก
     // .42: เงื่อนไขในฟอร์ม (ปุ่ม|ช่อง=ค่า · ข้อความว่าง = ข้อความของปุ่ม · สูงสุด 80 ลิงก์)
     for (const [k, v] of Object.entries(nl)) if (ntfcParse(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 80) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) }; }
   const ta = c.tdfApp && typeof c.tdfApp === 'object' ? c.tdfApp : {};   // 17 พ.ย.: TDF Dose Calculator (แถบย่อยของ Planning) · rec = ชีตบันทึกของ TDF · pdf = โฟลเดอร์ PDF
@@ -9355,7 +9465,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.45';
+const PAGE_VERSION = '2026-11-22.48';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9424,6 +9534,7 @@ const sheetStore = {
   acctMe: () => call('acctMe'),   // 24 พ.ย. (API 126): บัญชีของฉัน / จัดการสมาชิก (ส่งต่อไป LPCH RO Workspace)
   acctSave: rec => call('acctSave', rec),
   selfProfile: rec => call('selfProfile', rec),
+  tgMe: () => call('tgMe'), tgLinkStart: () => call('tgLinkStart'), tgLinkCheck: code => call('tgLinkCheck', code || ''), tgMeTest: () => call('tgMeTest'), tgUnlink: () => call('tgUnlink'),   // .47 (API 137): Telegram ส่วนตัว
   sigMine: () => call('sigMine'),   // .38 (API 130): ลายเซ็นของตัวเอง
   sigSave: img => call('sigSave', img),
   sigDelete: () => call('sigDelete'),
@@ -9447,6 +9558,7 @@ const sheetStore = {
   ctMark: (id, mark) => call('ctMark', id, mark),
   ctDraft: (id, rec) => call('ctDraft', id, rec),
   ctContour: (id, on) => call('ctContour', id, !!on),
+  evalAct: (id, sid, act, note) => call('evalAct', id, sid || '', act, note || ''),   // .46 (API 136): แถบ Evaluation
   ctContourAct: (id, act, note) => call('ctContourAct', id, act, note),   // 23 พ.ย. (API 121): Contouring Re-CT / Cancel Treatment   // 23 พ.ย.: แถบ Contouring   // 23 พ.ย. (API 117): แจกงานฟิสิกส์ บันทึกไว้ก่อน
   apptSave: (rec, pin) => call('apptSave', rec, pin),
   apptRemove: (id, pin) => call('apptRemove', id, pin),
@@ -9991,6 +10103,12 @@ function localStore() {
       Object.assign(u, { fullName: name, email, phone: str(rec.phone).slice(0, 40) });
       return clone({ user: u, message: 'บันทึกข้อมูลเรียบร้อย (ตัวอย่าง)' });
     },
+    // .47: Telegram ส่วนตัว (โหมดตัวอย่าง: ไม่มี bot จริง · กดตรวจสอบ = เชื่อมแล้ว)
+    tgMe: async () => ({ set: true, bot: '', linked: !!(db.tgme && db.tgme.at), name: (db.tgme && db.tgme.name) || '', at: (db.tgme && db.tgme.at) || '', off: (state.config.msg || {}).tg === false, demo: true }),
+    tgLinkStart: async () => ({ code: Math.random().toString(16).slice(2, 10).toUpperCase().padEnd(8, '0'), bot: '', url: '', min: 30 }),
+    tgLinkCheck: async () => { db.tgme = { name: 'ผู้ใช้ตัวอย่าง', at: nowISO() }; persist(); return { set: true, bot: '', linked: true, name: db.tgme.name, at: db.tgme.at, demo: true }; },
+    tgMeTest: async () => ({ ok: true, err: '' }),
+    tgUnlink: async () => { db.tgme = null; persist(); return { set: true, bot: '', linked: false, name: '', at: '', demo: true }; },
     sigMine: async () => clone(db.sig || { img: '', at: '' }),   // .38: เหมือน sigMine / sigSave / sigDelete ใน Code.gs (API 130)
     sigSave: async img => {
       if (!/^data:image\/png;base64,iVBORw0KGgo/.test(str(img))) throw new Error('รูปลายเซ็นไม่ถูกต้อง (ต้องเป็นรูป PNG ที่หน้าเว็บเตรียมให้)');
@@ -10603,6 +10721,41 @@ function localStore() {
       persist();
       return clone(c);
     },
+    evalAct: async (id, sid, act, note) => {   // .46: เหมือน Code.gs evalAct
+      const c = db.cases.find(x => x.id === id), n = str(note).replace(/\s+/g, ' ').trim().slice(0, 300), who = str(state.user.name) || 'ผู้ใช้ตัวอย่าง';
+      sid = str(sid);
+      if (!c) throw new Error('ไม่พบเคสนี้ (อาจถูกลบไปแล้ว) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+      if (!['ok', 'edit', 'undo'].includes(act)) throw new Error('ไม่รู้จักคำสั่ง');
+      if (act === 'edit' && !n) throw new Error('กรอกหมายเหตุสิ่งที่ให้แก้ก่อนส่งกลับ');
+      const all = boostStamps(c), cur = sid ? all[sid] || {} : c, at = nowStamp(), put = {};
+      if (act === 'ok') {
+        if (!cur.fin) throw new Error('แผนนี้ยังไม่ได้ Finish (Planning อาจกำลังแก้แผน) โหลดหน้าใหม่แล้วลองอีกครั้ง');
+        if (cur.eval) throw new Error(`แผนนี้ Evaluate แล้ว (${cur.evalBy || '-'} ${cur.eval})`);
+        Object.assign(put, { eval: at, evalBy: who });
+      } else if (act === 'edit') {
+        if (!cur.fin) throw new Error('แผนนี้ส่งกลับไปแก้แล้ว หรือยังไม่ได้ Finish');
+        if (cur.eval) throw new Error('แผนนี้ Evaluate แล้ว ส่งกลับจากแถบนี้ไม่ได้ (ใช้ ส่งแก้แผน ในหน้าแก้ไขเคส)');
+        Object.assign(put, { fin: '', finBy: '', eval: '', evalBy: '' });
+      } else {
+        if (!cur.eval) throw new Error('แผนนี้ยังไม่ได้ Approved');
+        if (str(cur.evalBy) !== who) throw new Error('ยกเลิกได้เฉพาะ Approved ที่คุณกดเอง');
+        Object.assign(put, { eval: '', evalBy: '' });
+      }
+      if (sid) {
+        const x = { ...cur, ...put };
+        for (const k of Object.keys(x)) if (x[k] === '') delete x[k];
+        if (Object.keys(x).length) all[sid] = x; else delete all[sid];
+        c.bsteps = Object.keys(all).length ? JSON.stringify(all) : '';
+      } else Object.assign(c, put);
+      c.evNote = JSON.stringify([...evNotes(c), { at, by: who, act, note: n, sid }].slice(-30));
+      let msg = '';
+      if (act === 'edit' || (act === 'ok' && n)) {   // ข้อความถึง MP (เหมือน evalMsg_ ใน Code.gs · Approved พร้อมหมายเหตุด้วย)
+        const m = (state.config.staff || []).find(x => str(x.code).toUpperCase() === str(c.mp).toUpperCase()), acc = m ? str(m.user).trim().toLowerCase() : '';
+        if (acc) { db.inbox = [...(db.inbox || []), { id: uid(), to: acc, toName: m.name || m.code, from: '', fromName: 'Evaluation · ' + who, kind: 'msg', title: act === 'ok' ? 'แพทย์ Approved แผน (มีหมายเหตุ)' : 'แพทย์ให้แก้แผน (Evaluation)', text: `HN ${c.hn}${sid ? ' · ' + evPlanName(c, sid) : ''} · แพทย์ ${c.doc || '-'} ${act === 'ok' ? 'Approved แผน · หมายเหตุ' : 'ให้แก้แผน'}: ${n} · ${who}`, ref: `ev|${c.id}|${sid}`, at: nowISO(), read: '', mail: '' }]; msg = acc; }
+      }
+      persist();
+      return { rec: clone(c), msg };
+    },
     ctContourAct: async (id, act, note) => {   // 23 พ.ย.: เหมือน Code.gs ctContourAct
       const c = db.ctsim.find(x => x.id === id), n = str(note).slice(0, 300);
       if (!['rect', 'cancel'].includes(act)) throw new Error('ไม่รู้จักคำสั่ง');
@@ -10833,7 +10986,7 @@ function viewAsGuard(st) {   // โหมดตัวอย่าง: งาน�
   }
   return st;
 }
-const store = IN_SHEET ? sheetStore : viewAsGuard(localStore());
+const store = svWrap(IN_SHEET ? sheetStore : viewAsGuard(localStore()));   // .48: จุดบันทึก (โหมดตั้งลิงก์ประกาศ / ประกาศหลังบันทึก)
 
 // โหมดตัวอย่าง: วันลา RTT/RA ของทุกคนแบบเดียวกับ jobLeaves_ ใน Code.gs
 function demoJobLeaves(jobs) {
@@ -11810,6 +11963,7 @@ function render0() {
   else if (state.view === 'nurse') renderNurse();
   else if (state.view === 'appt') renderAppt();
   else if (state.view === 'contour') renderContour();
+  else if (state.view === 'evaluate') renderEvaluate();
   else if (state.view === 'bq') renderBq();
   else if (state.view === 'jobs') renderJobs();
   else if (state.view === 'mpleave') renderMpLeave();
@@ -12348,6 +12502,108 @@ async function cnActDo(id, btn) {
   } catch (e) { btn.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 $('#view-contour').addEventListener('input', e => { if (e.target.dataset.cnnote) cnAsk.note = e.target.value; });
+/* .46 (Code.gs API 136): แถบ Evaluation · แผนที่ Planning กด Finish แล้ว รอแพทย์ประเมิน
+ * Approved = บันทึก Evaluate ของแผนนั้น (เท่ากับปุ่ม Evaluate เดิม · นับใน P4P แพทย์) · Edit = ส่งกลับไปวางแผนเดิม:
+ * ล้าง Finish ของแผนนั้น (งานเดิม ไม่สร้างงานใหม่) + หมายเหตุ + ข้อความส่วนตัวถึง MP · ประวัติอยู่ในช่อง evNote ของเคส */
+const EVAL_API = 136;
+const EVAL_OLD = 'แถบ Evaluation ต้องใช้ Code.gs รุ่นใหม่ · วาง Code.gs ใหม่แล้ว Deploy เวอร์ชันใหม่';
+const evalOn = () => store.mode !== 'sheet' || serverHas(EVAL_API);
+const evUi = { st: '' }, evAsk = { k: '', note: '', mode: '' };   // mode: edit = ส่งกลับแก้แผน · ok = Approved พร้อมหมายเหตุ
+const EV_ST = [['', 'รอ Evaluation'], ['edit', 'ส่งกลับแก้แผน'], ['ok', 'Approved 7 วัน']];
+const evNotes = c => { try { const a = JSON.parse(c.evNote || '[]'); return Array.isArray(a) ? a.filter(x => x && typeof x === 'object') : []; } catch (e) { return []; } };
+const evLast = (c, sid) => { const l = evNotes(c).filter(x => str(x.sid) === str(sid)); return l[l.length - 1] || null; };
+const evFind = k => { const i = str(k).indexOf('|'), c = i > 0 ? state.cases.find(x => x.id === k.slice(0, i)) : null; return c ? { c, sid: k.slice(i + 1) } : null; };
+const evPlanName = (c, sid) => { const p = sid ? subPlans(c).find(x => x.sid === sid) : null; return p ? p.name : sid ? 'Boost' : ''; };
+// แผนของเคสที่ยังอยู่ในงานวางแผน (ไม่ใช่กิจกรรม · ยังไม่ส่งแก้แผนเป็นงานใหม่ · ยังไม่จบการฉาย) { c, sid, name, r = ขั้นตอนของแผน }
+function evPlans() {
+  const out = [];
+  for (const c of planCases()) {
+    if (isSimple(c) || revisedBy(c) || c.rt) continue;
+    out.push({ c, sid: '', name: '', r: c });
+    if (boostStepsOn()) for (const p of subPlans(c)) out.push({ c, sid: p.sid, name: p.name, r: boostStamps(c)[p.sid] || {} });
+  }
+  return out;
+}
+const evSent = p => { const x = evLast(p.c, p.sid); return !p.r.fin && x && x.act === 'edit' ? x : null; };   // ส่งกลับแล้ว ยังไม่ Finish ใหม่
+const evStOf = p => (p.r.fin && !p.r.eval ? 'wait' : evSent(p) ? 'edit' : p.r.eval && isDay(str(p.r.eval).slice(0, 10)) && daysFrom(str(p.r.eval).slice(0, 10)) >= -7 ? 'ok' : '');
+// Approved พร้อมหมายเหตุ: รายการล่าสุดของแผนนั้น = ok ที่มีหมายเหตุ และแผนยัง Evaluate อยู่
+const evOkNote = p => { const x = evLast(p.c, p.sid); return p.r.eval && x && x.act === 'ok' && str(x.note) ? x : null; };
+// ป้ายในงาน / งานรอ: แพทย์ให้แก้แผน (ส่งกลับจากแถบ Evaluation · หายเมื่อ Finish ใหม่) · หมายเหตุของ Approved (สีเขียว · หายเมื่อ Plan complete)
+function evTag(c) {
+  if (!c || !c.evNote || isSimple(c)) return '';
+  const ps = [{ sid: '', r: c }, ...(boostStepsOn() ? subPlans(c).map(p => ({ sid: p.sid, r: boostStamps(c)[p.sid] || {} })) : [])];
+  return ps.map(p => { const x = evSent({ c, ...p }), o = !x && !p.r.pc ? evOkNote({ c, ...p }) : null, pn = p.sid ? ` · ${esc(evPlanName(c, p.sid))}` : '';
+    if (o) return `<span class="rp-tag ev-tag ok" title="${esc(`แพทย์ Approved${p.sid ? ` (${evPlanName(c, p.sid)})` : ''} · หมายเหตุ: ${o.note} · ${o.by} ${o.at}`)}">แพทย์${pn}: ${esc(str(o.note).slice(0, 40))}</span>`;
+    return x ? `<span class="rp-tag ev-tag" title="${esc(`แพทย์ให้แก้แผน${p.sid ? ` (${evPlanName(c, p.sid)})` : ''}: ${x.note} · ${x.by} ${x.at}`)}">แก้แผน${p.sid ? ' · ' + esc(evPlanName(c, p.sid)) : ''}: ${esc(str(x.note).slice(0, 40))}</span>` : ''; }).join('');
+}
+const evText = p => `${caseText(p.c)} ${p.name} ${p.c.mp}`.toLowerCase();
+function renderEvaluate() {
+  const can = accessOf('evaluate') === 'edit', words = tabWords('evaluate');
+  syncTabQ('evaluate');
+  const all = evPlans().map(p => ({ ...p, st: evStOf(p) })).filter(p => p.st), cnt = k => all.filter(p => p.st === (k || 'wait')).length;
+  if (!EV_ST.some(([k]) => k === evUi.st)) evUi.st = '';
+  $('#ev-flt').innerHTML = EV_ST.map(([k, l]) => `<label><input type="radio" name="evflt" value="${k}"${evUi.st === k ? ' checked' : ''}><span>${esc(l)} <small>${cnt(k)}</small></span></label>`).join('');
+  $('#ev-help').textContent = `แผนที่ Planning กด Finish แล้ว รอแพทย์ Evaluate · Approved = บันทึก Evaluate (ชื่อคุณ · เวลานี้) · Approved + หมายเหตุ = บันทึก Evaluate พร้อมส่งหมายเหตุถึง MP · Edit = ใส่สิ่งที่ให้แก้ แล้วส่งกลับไปวางแผนเดิม (ล้าง Finish ของแผนนั้น) พร้อมส่งข้อความถึง MP · กด HN เพื่อดูรายละเอียดเคส`;
+  const list = all.filter(p => p.st === (evUi.st || 'wait') && (!words.length || wordsIn(words, evText(p))));
+  if (!list.length) { $('#ev-body').innerHTML = `<p class="empty-state">${words.length ? 'ไม่พบผู้ป่วยที่ตรงกับคำค้น' : evUi.st === 'edit' ? 'ไม่มีแผนที่ส่งกลับให้แก้' : evUi.st === 'ok' ? 'ไม่มีแผนที่ Approved ใน 7 วัน' : 'ไม่มีแผนรอ Evaluation'}</p>`; return; }
+  const me = myDoctor(), order = docCodes(), rank = d => (d === me ? -1 : order.includes(d) ? order.indexOf(d) : 999), who = str(state.user.name);
+  const docs = [...new Set(list.map(p => p.c.doc || ''))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const simKey = p => (isDay(p.c.sim) ? p.c.sim : p.c.sim === 'on call' ? '9998' : '9999');
+  const dis = evalOn() ? '' : ` disabled title="${esc(EVAL_OLD)}"`;
+  const row = p => {
+    const c = p.c, k = `${c.id}|${p.sid}`, si = simInfo(c, 'eval'), last = evLast(c, p.sid), sent = p.st === 'edit' ? evSent(p) : null;
+    const plan = `${catOf(c.cat).label}${p.name ? ` · ${p.name}` : ''}`;
+    const prev = p.st === 'wait' && last && last.act === 'edit' ? `<span class="ev-prev" title="${esc(`${last.by} ${last.at}`)}">แก้แผนแล้ว (ครั้งก่อน: ${esc(str(last.note).slice(0, 60))})</span>` : '';
+    const acts = p.st === 'wait' ? (can ? `<button type="button" class="btn primary sm" data-evlok="${esc(k)}"${dis}>✓ Approved</button><button type="button" class="btn ghost sm" data-evlokn="${esc(k)}"${dis}>Approved + หมายเหตุ</button><button type="button" class="btn ghost sm" data-evledit="${esc(k)}"${dis}>Edit</button>` : '<span class="cn-tag">รอ Evaluation</span>')
+      : p.st === 'edit' ? `<span class="cn-tag rect" title="${esc(`${sent.by} ${sent.at}`)}">ส่งกลับแก้แผน · ${esc(str(sent.note).slice(0, 60))}</span><span class="muted ev-by">${esc(firstName(sent.by))} ${esc(str(sent.at).slice(5, 16))}</span>`
+      : `<span class="cn-ok" title="${esc(`${p.r.evalBy} ${p.r.eval}`)}">✓ Approved · ${esc(firstName(p.r.evalBy))} ${esc(fmtStamp(p.r.eval))}</span>${(o => (o ? `<span class="ev-prev ok" title="${esc(`${o.by} ${o.at}`)}">หมายเหตุ: ${esc(str(o.note).slice(0, 60))}</span>` : ''))(evOkNote(p))}${can && str(p.r.evalBy) === who ? `<button type="button" class="btn ghost sm" data-evlundo="${esc(k)}"${dis}>ยกเลิก</button>` : ''}`;
+    const ask = can && evAsk.k === k && p.st === 'wait' ? (evAsk.mode === 'ok' ? `<div class="cn-ask ev-ask ok" data-evlask="${esc(k)}"><b>Approved พร้อมหมายเหตุ</b> <span class="muted">บันทึก Evaluate · มีหมายเหตุ = ส่งข้อความถึง MP ${esc(c.mp || '–')} (ไม่บังคับกรอก)</span>
+      <input class="cn-note" data-evlnote="1" maxlength="300" value="${esc(evAsk.note)}" placeholder="หมายเหตุถึง MP (ไม่บังคับ) เช่น ตรวจ setup วันแรก, ดู coverage ใน CBCT" aria-label="หมายเหตุของ Approved">
+      <button type="button" class="btn primary sm" data-evloksend="${esc(k)}"${dis}>✓ Approved</button><button type="button" class="btn ghost sm" data-evlno="1">ไม่ทำ</button></div>` : `<div class="cn-ask ev-ask" data-evlask="${esc(k)}"><b>Edit · ส่งกลับไปวางแผนเดิม</b> <span class="muted">ล้าง Finish ของแผนนี้ · ส่งข้อความถึง MP ${esc(c.mp || '–')}</span>
+      <input class="cn-note" data-evlnote="1" maxlength="300" value="${esc(evAsk.note)}" placeholder="สิ่งที่ให้แก้ (บังคับ) เช่น ลด dose ที่ spinal cord, เพิ่ม margin PTV" aria-label="สิ่งที่ให้แก้ในแผน">
+      <button type="button" class="btn primary sm" data-evlsend="${esc(k)}"${dis}>ส่งกลับให้แก้แผน</button><button type="button" class="btn ghost sm" data-evlno="1">ไม่ทำ</button></div>`) : '';
+    return `<li class="cn-row ev-row${p.st === 'ok' ? ' done' : ''}" data-evlk="${esc(k)}"><span class="cn-who"><button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="ดูรายละเอียดเคส"><b>${esc(c.hn || '—')}</b></button> ${c.doc ? docChip(c.doc) + ' ' : ''}${pnm(c.name)}</span>
+      <span class="ev-plan">${esc(plan)}</span>${si ? `<span class="sim ${si.cls}">Start RT <b>${esc(si.date)}</b>${si.rel ? ` <small>${esc(si.rel)}</small>` : ''}</span>` : ''}
+      <span class="cn-meta">MP ${esc(c.mp || '–')}${p.r.fin ? ` · Finish ${esc(fmtStamp(p.r.fin))}${p.r.finBy ? ' · ' + esc(firstName(p.r.finBy)) : ''}` : ''}</span>${prev}
+      <span class="cn-acts">${acts}</span>${ask}</li>`;
+  };
+  $('#ev-body').innerHTML = docs.map(d => {
+    const xs = list.filter(p => (p.c.doc || '') === d).sort((a, b) => simKey(a).localeCompare(simKey(b)) || str(a.r.fin).localeCompare(str(b.r.fin)));
+    return `<section class="cn-grp"><h3 class="cn-h">${d ? `${docChip(d)} ${esc(docName(d) || d)}` : 'ไม่ระบุแพทย์'} <small class="muted">${xs.length} แผน</small></h3><ul class="cn-list">${xs.map(row).join('')}</ul></section>`;
+  }).join('');
+}
+async function evDo(k, act, btn, withNote) {   // withNote = Approved พร้อมหมายเหตุ
+  if (!evalOn()) return toast(EVAL_OLD, { err: true });
+  const i = k.indexOf('|'), id = k.slice(0, i), sid = k.slice(i + 1), c = state.cases.find(x => x.id === id);
+  if (!c) return;
+  const note = act === 'edit' || withNote ? str(evAsk.note).trim() : '';   // Approved: หมายเหตุไม่บังคับ (ว่าง = Approved ธรรมดา)
+  if (act === 'edit' && !note) { toast('กรอกหมายเหตุสิ่งที่ให้แก้ก่อนส่งกลับ', { err: true }); const f = $('#view-evaluate [data-evlnote]'); if (f) f.focus(); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const out = await store.evalAct(id, sid, act, note), rec = putCase(normCase(out.rec)), lbl = `${catOf(rec.cat).label}${sid ? ' · ' + evPlanName(rec, sid) : ''}`;
+    if (act === 'edit' || withNote) Object.assign(evAsk, { k: '', note: '', mode: '' });
+    ntfFire(act === 'edit' ? 'ev.edit' : 'ev.ok', { ref: k, hn: rec.hn, name: rec.name, date: today(), doc: rec.doc, off: act === 'undo' });   // ลิงก์ประกาศ
+    render();
+    if (act === 'ok') toast(`${rec.hn} · ${lbl} · Approved${note ? ` พร้อมหมายเหตุ${out.msg ? ` · ส่งข้อความถึง MP ${rec.mp}` : rec.mp ? ` · MP ${rec.mp} ยังไม่ได้เชื่อมบัญชี (ไม่ได้ส่งข้อความ)` : ''}` : ''}`, { undo: () => evDo(k, 'undo', null) });
+    else if (act === 'edit') toast(`${rec.hn} · ${lbl} · ส่งกลับไปวางแผนเดิมแล้ว${out.msg ? ` · ส่งข้อความถึง MP ${rec.mp}` : rec.mp ? ` · MP ${rec.mp} ยังไม่ได้เชื่อมบัญชี (ไม่ได้ส่งข้อความ)` : ''}`);
+    else toast(`${rec.hn} · ${lbl} · ยกเลิก Approved แล้ว`);
+  } catch (e) { if (btn) btn.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+}
+$('#view-evaluate').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const ask = (k, mode) => { Object.assign(evAsk, { k, note: evAsk.k === k && evAsk.mode === mode ? evAsk.note : '', mode }); renderEvaluate(); const f = $('#view-evaluate [data-evlnote]'); if (f) f.focus(); };
+  if (b.dataset.evledit) return ask(b.dataset.evledit, 'edit');
+  if (b.dataset.evlokn) return ask(b.dataset.evlokn, 'ok');   // Approved พร้อมหมายเหตุ
+  if (b.dataset.evloksend) return evDo(b.dataset.evloksend, 'ok', b, true);
+  if (b.dataset.evlno) { Object.assign(evAsk, { k: '', note: '' }); return renderEvaluate(); }
+  if (b.dataset.evlsend) return evDo(b.dataset.evlsend, 'edit', b);
+  if (b.dataset.evlok) return evDo(b.dataset.evlok, 'ok', b);
+  if (b.dataset.evlundo) return evDo(b.dataset.evlundo, 'undo', b);
+});
+$('#view-evaluate').addEventListener('input', e => { if (e.target.dataset.evlnote) evAsk.note = e.target.value; });
+$('#view-evaluate').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.dataset.evlnote) { e.preventDefault(); const b = $('#view-evaluate [data-evlsend], #view-evaluate [data-evloksend]'); if (b) b.click(); } });
+$('#view-evaluate').addEventListener('change', e => { if (e.target.name === 'evflt') { evUi.st = e.target.value; Object.assign(evAsk, { k: '', note: '' }); renderEvaluate(); } });
 $('#view-contour').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -14190,12 +14446,12 @@ function removeDqLeave(id) {
 
 /* ---------- ประวัติการบันทึก (Code.gs API 73 · แท็บ AuditLog): ลิงก์ตัวเล็กท้ายหน้าของทุกแถบ และในหน้าต่างแก้ไขของแต่ละรายการ ---------- */
 // แถบที่ดูประวัติได้ (ตรงกับ AUDIT_VIEWS ใน Code.gs) · เก็บตั้งแต่วาง Code.gs รุ่นนี้
-const AUDIT_TABS = { deptcal: 1, reg: 1, dq: 1, consult: 1, nurse: 1, appt: 1, bq: 1, work: 1, pend: 1, queue: 1, course: 1, ctsim: 1, dash: 1, logs: 1, p4p: 1, jobs: 1, settings: 1 };
+const AUDIT_TABS = { evaluate: 1, deptcal: 1, reg: 1, dq: 1, consult: 1, nurse: 1, appt: 1, bq: 1, work: 1, pend: 1, queue: 1, course: 1, ctsim: 1, dash: 1, logs: 1, p4p: 1, jobs: 1, settings: 1 };
 const auditShown = view => !!AUDIT_TABS[view] && !!accessOf(view) && (store.mode !== 'sheet' || serverHas(DQM_API));
 const histLink = (ids, view, title) => (auditShown(view) ? `<button type="button" class="linkish hist-link" data-hist="${esc(ids.join(','))}" data-hist-view="${esc(view)}" data-hist-title="${esc(title || '')}">ประวัติ</button>` : '');
 const HIST_TABLE = { ncall: 'Nurse แจ้งผู้ป่วย', roJobs: 'P4P แพทย์', visit: 'พบแพทย์นอกตารางนัด', see: 'พบแพทย์วันนี้', rtd: 'คำสั่งแพทย์ระหว่างฉาย', events: 'กิจกรรมแผนก', cases: 'เคส', logs: 'กิจกรรม', leaves: 'วันลา MP', duty: 'ผู้ปฏิบัติงาน', ctsim: 'CT-SIM', appt: 'นัด', jobs: 'RTT/RA Jobs', reg: 'ลงทะเบียน', bq: 'นัดคิวใส่แร่', vac: 'Vac-Lok', dq: 'แจกงานแพทย์', dqLeave: 'วันลาแพทย์', dqDuty: 'เวร S1', config: 'ตั้งค่า' };
 const HIST_ACT = { add: 'เพิ่ม', edit: 'แก้ไข', del: 'ลบ', restore: 'กู้คืน', purge: 'ลบถาวร' };
-const HIST_FN = { fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
+const HIST_FN = { evalAct: 'Evaluation', fractionCase: 'สถานะ fraction', stampCase: 'ขั้นตอน', stampSteps: 'ขั้นตอน', stampCaseAt: 'ขั้นตอน', stampStepsAt: 'ขั้นตอน', stampBoost: 'ขั้นตอน (แผนอื่น)', editCase: 'แก้ไขเคส', addCases: 'แจกเคส',
   removeCase: 'ลบเคส', replanCase: 'งานวางแผนใหม่', moveCase: 'ย้ายห้อง', tagCase: 'รายละเอียดผู้ป่วย', timeCase: 'Mosaiq Time', addFxCase: 'เพิ่ม / ลบ fraction', courseCase: 'Complete course / Cancel RT',
   courseAdd: 'ผู้ป่วยในตารางวันฉาย', courseRemove: 'ลบผู้ป่วยในตารางวันฉาย', ctSave: 'CT-SIM', ctRemove: 'ลบ CT-SIM', ctMark: 'CT-SIM (ไม่ต้องแจก)', ctDraft: 'CT-SIM (บันทึกไว้ก่อนจากแจกงานฟิสิกส์)', ctContour: 'Contour เสร็จ (แถบ Contouring)', ctContourAct: 'Re-CT / Cancel Treatment (แถบ Contouring)', apptSave: 'นัด / CT Order', apptRemove: 'ลบนัด', apptMark: 'นัด (ไม่มาทำ CT)',
   regSave: 'ลงทะเบียน', regRemove: 'ลบลงทะเบียน', dqAdd: 'แจกงานแพทย์', dqEdit: 'แก้การแจก', dqBack: 'รับคืนจากแพทย์', seeSave: 'พบแพทย์วันนี้', seeSaveMany: 'ตารางพบแพทย์', visitSave: 'พบแพทย์นอกตารางนัด', visitMark: 'พบแพทย์แล้ว (นอกตารางนัด)', visitRemove: 'ยกเลิกพบแพทย์นอกตารางนัด', rtdSave: 'คำสั่งแพทย์ระหว่างฉาย', nurseMark: 'Nurse ยืนยัน', rtdNurse: 'รับคำสั่งแพทย์ (Nurse)', ncallAdd: 'เลื่อนนัดแจ้งพยาบาล', ncallMark: 'แจ้งผู้ป่วย (เลื่อนนัด)', ncallAtt: 'นัดวันนี้ (มา / ไม่มา)', dqRemove: 'ลบการแจก', dqMark: 'สถานะ (Consult)', dqLeaveSave: 'วันลาแพทย์', dqLeaveRemove: 'ยกเลิกวันลาแพทย์',
@@ -21215,7 +21471,7 @@ function caseRow(c, rcs) {
   const strip = on('steps') && !simple && stampsOn() ? stepStrip(c, k, on('vals')) : '';
   return `<li class="row${state.fresh.includes(c.id) ? ' fresh' : ''}">
     <button type="button" class="c-main" data-edit="${esc(c.id)}"${roTip(canEdit())}>
-      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${rpTag(c)}${revTag(c)}${dupTag(c)}${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
+      <span class="c-line">${on('cat') ? `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>` : ''}<span class="hn">${esc(c.hn || '—')}</span>${rpTag(c)}${revTag(c)}${dupTag(c)}${evTag(c)}${on('name') ? `<span class="pname">${esc(c.name)}</span>` : ''}</span>
       <span class="c-meta">${meta.filter(Boolean).join('') || '<span>—</span>'}</span>
     </button>
     <div class="c-who">${on('mp') ? av(c.mp) : ''}${on('rc') ? rcHtml(c, rcs) : ''}</div>
@@ -21244,7 +21500,7 @@ function caseLine(c, rcs, cols) {
     if (key.startsWith('x_')) { const f = extraList().find(x => 'x_' + x.id === key); return f ? cut(extraText(f, c[key])) : ''; }
     switch (key) {
       case 'cat': return `<span class="tag">${esc(k.label)}${unitsOf(c) > 1 ? ` <b title="จำนวนครั้ง">×${unitsOf(c)}</b>` : ''}</span>`;
-      case 'hn': return `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="${edit ? 'แก้ไขเคส' : 'ดูเคส (ดูอย่างเดียว)'}">${esc(c.hn || '—')}</button>` + rpTag(c) + revTag(c) + dupTag(c);
+      case 'hn': return `<button type="button" class="hn hn-btn" data-edit="${esc(c.id)}" title="${edit ? 'แก้ไขเคส' : 'ดูเคส (ดูอย่างเดียว)'}">${esc(c.hn || '—')}</button>` + rpTag(c) + revTag(c) + dupTag(c) + evTag(c);
       case 'name': return cut(c.name);
       case 'how': return howChips(c);
       case 'dx': return c.icd || c.dx ? `<span class="cut" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b> ` : ''}${esc(dxShort(c))}</span>` : '';
@@ -25657,7 +25913,7 @@ function fillCaseSelects(c) {
 }
 // สรุปขั้นตอนในหน้าแก้ไขเคส: ปุ่ม "แก้" / "บันทึก" เปิดหน้าต่าง PIN ของขั้นตอนนั้นซ้อนขึ้นมา
 // แก้ได้ทุกเมื่อ รวมถึงหลัง Plan complete (เคสที่ไม่อยู่ในงานรอแล้ว เปิดจากตารางวันฉายหรือค้นหาได้) · Plan 2… / boost กดทีละขั้นตอน
-const STAMP_KEYS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'bsteps'];
+const STAMP_KEYS = ['fin', 'finBy', 'eval', 'evalBy', 'mu', 'muBy', 'muVal', 'd0', 'd0By', 'd0Val', 'd4', 'd4By', 'd4Val', 'mc', 'mcBy', 'mcVal', 'pc', 'pcBy', 'muNote', 'd0Note', 'd4Note', 'mcNote', 'bsteps', 'evNote'];
 function renderCaseStamps(k) {
   const see = qaVisible(), c = editingCase;
   const btn = (key, done, sid, label) => `<button type="button" class="stamp-edit" data-stamp="${key}" data-id="${esc(c.id)}"${sid ? ` data-sid="${esc(sid)}"` : ''}>${label ? esc(label) : done ? 'แก้' : 'บันทึก'}</button>`;
@@ -29191,7 +29447,7 @@ document.addEventListener('click', e => {
 
 $('#q').addEventListener('input', e => { state.q = e.target.value; state.limit = 60; renderWork(); });
 $('#ct-tbl').addEventListener('keydown', e => { const tr = e.target.closest('tr[data-ctedit]'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCtForm(tr.dataset.ctedit); } });
-const TAB_RENDER = { contour: () => renderContour(), flow: () => renderFlow(), consult: () => renderConsult(), nurse: () => renderNurse(), vac: () => renderJobs(), pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt(), appt: () => renderAppt(), reg: () => renderReg(), dq: () => renderDq(), bq: () => { state.bqPt = ''; renderBq(); } };
+const TAB_RENDER = { evaluate: () => renderEvaluate(), contour: () => renderContour(), flow: () => renderFlow(), consult: () => renderConsult(), nurse: () => renderNurse(), vac: () => renderJobs(), pend: () => renderPend(), queue: () => renderQueue(), course: () => renderCourse(), logs: () => renderLogs(), ctsim: () => renderCt(), appt: () => renderAppt(), reg: () => renderReg(), dq: () => renderDq(), bq: () => { state.bqPt = ''; renderBq(); } };
 for (const el of $$('[data-tq]')) {
   let tqTimer = 0;
   el.addEventListener('input', () => {
@@ -29748,6 +30004,7 @@ const fltCase = c => (c ? { 'แพทย์': str(c.doc), 'ห้องฉา�
 const fltAppt = a => (a ? { 'แพทย์': str(a.doc), 'ห้องฉาย': a.room ? roomLabel(a.room) : '', 'CT': str(a.cm), 'เทคนิคพิเศษ': splitList(a.special).join(', '), 'ประเภทเคส': apEmerg(a) ? 'Emergency' : 'Normal' } : null);
 // รายการ / การ์ด (ไม่ใช่ตาราง) ที่รู้ว่าเป็นของเคสหรือนัดไหน: [ตัวเลือก, หาองค์ประกอบของรายการ, ข้อมูล → หัวข้อ]
 const FLT_RECS = [
+  ['[data-evlk]', el => el, el => (p => (p ? { 'แพทย์': str(p.c.doc), 'เทคนิค': catOf(p.c.cat).label, 'MP': str(p.c.mp), 'แผน': p.sid ? evPlanName(p.c, p.sid) : 'แผนแรก' } : null))(evFind(el.dataset.evlk))],   // .46: แถบ Evaluation (ก่อน [data-edit]: แถวมีปุ่ม HN)
   ['[data-nontx], [data-ontx], [data-hold]', el => el, el => fltCase(state.cases.find(c => c.id === (el.dataset.nontx || el.dataset.ontx || el.dataset.hold)))],
   ['[data-edit]', el => el.closest('li, article, .card'), el => fltCase(state.cases.find(c => c.id === el.dataset.edit))],
   ['.fxg-row', el => el, el => {   // ตารางวันฉาย (แถวผู้ป่วย): เคสของแถวหาจากปุ่มในแถว
@@ -31020,12 +31277,14 @@ const TG_KIND_LABEL = { patient: 'ผู้ป่วย', brachy: 'HDR ส่ง
 const tgUi = { st: null, loading: false, err: '', busy: '', test: {}, at: 0 };   // at = เวลาที่อ่านสถานะล่าสุด (0 = อ่านใหม่ตอนเปิดตั้งค่า)
 const tgMain = () => store.mode !== 'sheet' ? !!state.user.isAdmin : !!state.user.isAdmin || state.user.via === 'google';   // ตั้ง / ลบ bot
 const tgOld = () => store.mode === 'sheet' && !serverHas(TG_API);
+const tgTopicOld = () => store.mode === 'sheet' && !serverHas(137);   // .47: ส่งเข้า Topic (Code.gs API 137)
 // 24 พ.ย. (.29): ตั้งค่า → ข้อความส่วนตัว
 function msgSetHtml(d) {
   const m = d.msg || { mail: true, leave: true };
   return `<div class="sec" data-sec="msg"><div class="sec-head"><h2>ข้อความส่วนตัว</h2><p>ไอคอนซองจดหมายบนแถบเมนู · ส่งข้อความถึงบุคคลที่เชื่อมบัญชีในรายชื่อบุคลากร${msgOn() ? '' : ' · ต้องใช้ Code.gs รุ่น 2026-11-24.2 ขึ้นไป'}</p></div>
     <label class="check" style="margin-top:8px"><input type="checkbox" data-k="msg.leave"${m.leave ? ' checked' : ''}> <span>ลงวันลาใหม่ = ส่งข้อความขอรับทราบถึงหัวหน้างาน / รักษาการแทนของทีม (ตั้งค่า → ทีม → ใบลา) · หัวหน้างานกดรับทราบ = แจ้งผู้ลา</span></label>
     <label class="check" style="margin-top:8px"><input type="checkbox" data-k="msg.mail"${m.mail ? ' checked' : ''}> <span>ส่งสำเนาทางอีเมลด้วย (ผู้รับต้องมีอีเมลในรายชื่อบุคลากร · ส่งจากบัญชีเจ้าของ Apps Script · โควตาตามบัญชี Google)</span></label>
+    <label class="check" style="margin-top:8px"><input type="checkbox" data-k="msg.tg"${m.tg !== false ? ' checked' : ''}> <span>ส่งสำเนาเข้า Telegram ส่วนตัวของผู้รับที่เชื่อมไว้ (แต่ละคนเชื่อมเองที่ บัญชีของฉัน → Telegram ส่วนตัว · ใช้ bot เดียวกับประกาศ · Code.gs รุ่น 2026-11-25.5 ขึ้นไป)</span></label>
     ${msgSignupSet(m)}</div>`;
 }
 // 24 พ.ย. (.31): มีผู้สมัครสมาชิกจากหน้าเข้าสู่ระบบ = ข้อความ (+ อีเมล) ถึงผู้รับที่เลือก · ไม่เลือก = แอดมินหลัก (รายชื่อแอดมิน)
@@ -31050,7 +31309,7 @@ function ntflLegacy(d) {
   if (m['bq.ct']) d.bq = { ...d.bq, ntf: m['bq.ct'].on ? m['bq.ct'].roles.slice() : [] };
 }
 function ntflSetHtml(d) {
-  const roles = d.roles.filter(r => !txsOuterRole(r, d)), linked = NTF_LINKS.filter(x => ntflOf(x.k, d)), free = NTF_LINKS.filter(x => !ntflOf(x.k, d));
+  const roles = d.roles.filter(r => !txsOuterRole(r, d)), linked = [...NTF_LINKS.filter(x => ntflOf(x.k, d)), ...Object.keys(d.ntfLink || {}).filter(k => SV_RE.test(k)).sort().map(svDef)], free = NTF_LINKS.filter(x => !ntflOf(x.k, d));   // .48: จุดบันทึก
   const old = store.mode === 'sheet' && !serverHas(NTFL_API);
   const row = x => { const L = ntflOf(x.k, d);
     return `<tr data-nlrow="${x.k}"><td><input type="checkbox" data-nlk="${x.k}" data-nlf="on"${L.on ? ' checked' : ''} aria-label="เปิดลิงก์ ${esc(x.label)}"></td>
@@ -31093,11 +31352,11 @@ function tgSetInner(d) {
   if (tgOld()) return '<p class="notice"><b>ต้องอัปเดต Code.gs</b><span>ส่งประกาศเข้า Telegram ใช้ได้เมื่อวาง Code.gs รุ่น 2026-11-22.5 ขึ้นไป</span></p>';
   const t = d.tg, st = tgUi.st || { set: false, bot: '', chats: [] }, chats = st.chats || [], main = tgMain(), busy = tgUi.busy;
   const roles = d.roles.filter(r => !txsOuterRole(r, d));
-  const opt = cur => `<option value="">— ไม่ส่ง —</option>${chats.map(c => `<option value="${esc(c.id)}"${c.id === cur ? ' selected' : ''}>${esc(c.title)}</option>`).join('')}${cur && !chats.some(c => c.id === cur) ? `<option value="${esc(cur)}" selected>กลุ่ม ${esc(cur)}</option>` : ''}`;
+  const opt = cur => `<option value="">— ไม่ส่ง —</option>${chats.map(c => `<option value="${esc(c.id)}"${c.id === cur ? ' selected' : ''}>${esc(c.title)}</option>`).join('')}${cur && !chats.some(c => c.id === cur) ? `<option value="${esc(cur)}" selected>${cur.includes('#') ? 'Topic' : 'กลุ่ม'} ${esc(cur)}</option>` : ''}`;
   const res = k => { const x = tgUi.test[k]; return !x ? '' : x === 'busy' ? '<span class="tg-res muted">กำลังส่ง…</span>' : x === 'ok' ? '<span class="tg-res tg-ok">✓ ส่งแล้ว ดูในกลุ่ม</span>' : `<span class="tg-res tg-bad">${esc(x)}</span>`; };
   const row = (k, label, cur) => `<tr><td>${label}</td><td><select data-tgchat="${esc(k)}" aria-label="กลุ่ม Telegram ของ ${esc(label.replace(/<[^>]+>/g, ''))}"${st.set ? '' : ' disabled'}>${opt(cur)}</select></td><td><button type="button" class="btn ghost" data-tgtest="${esc(k)}"${cur && st.set ? '' : ' disabled'}>ทดสอบ</button> ${res(k)}</td></tr>`;
   const last = st.last, lastTxt = !last ? '' : `<p class="muted def-note">ส่งล่าสุด ${esc(ntfWhen(last.at))} · ${last.err ? `<span class="tg-bad">สำเร็จ ${last.ok || 0}/${last.sent || 0} · ${esc(last.err)}</span>` : `<span class="tg-ok">สำเร็จ ${last.ok || 0}/${last.sent || 0} กลุ่ม</span>`}</p>`;
-  return `<ol class="tg-steps"><li>ใน Telegram คุยกับ <b>@BotFather</b> → พิมพ์ <b>/newbot</b> → ตั้งชื่อ → ได้ <b>token</b></li><li>แอดมินหลักวาง token ด้านล่าง กด <b>ตั้ง bot</b></li><li>เพิ่ม bot เข้ากลุ่มของแต่ละอาชีพ (กลุ่มเดิมหรือสร้างใหม่) แล้วพิมพ์ <b>/start</b> ในกลุ่ม</li><li>กด <b>ค้นหากลุ่ม</b> → เลือกกลุ่มให้แต่ละอาชีพ → กด <b>ทดสอบ</b></li><li>ติ๊ก <b>ส่งประกาศเข้า Telegram</b> แล้วกด <b>บันทึกการตั้งค่า</b></li></ol>
+  return `<ol class="tg-steps"><li>ใน Telegram คุยกับ <b>@BotFather</b> → พิมพ์ <b>/newbot</b> → ตั้งชื่อ → ได้ <b>token</b></li><li>แอดมินหลักวาง token ด้านล่าง กด <b>ตั้ง bot</b></li><li>เพิ่ม bot เข้ากลุ่มของแต่ละอาชีพ (กลุ่มเดิมหรือสร้างใหม่) แล้วพิมพ์ <b>/start</b> ในกลุ่ม · <b>กลุ่มที่เปิด Topics</b>: พิมพ์ <b>/start</b> ในแต่ละ Topic ที่จะใช้ (เช่น Topic RO, MP, RTT) แล้วเลือก <b>กลุ่ม › Topic</b> ให้แต่ละอาชีพได้${tgTopicOld() ? ' (ต้องใช้ Code.gs 2026-11-25.5 ขึ้นไป)' : ''}</li><li>กด <b>ค้นหากลุ่ม</b> → เลือกกลุ่มให้แต่ละอาชีพ → กด <b>ทดสอบ</b></li><li>ติ๊ก <b>ส่งประกาศเข้า Telegram</b> แล้วกด <b>บันทึกการตั้งค่า</b></li></ol>
     ${tgUi.err ? `<p class="notice"><b>อ่านสถานะ Telegram ไม่ได้</b><span>${esc(tgUi.err)}</span></p>` : ''}
     <div class="tg-row"><span>Bot:</span>${tgUi.loading && !tgUi.st ? '<span class="muted">กำลังโหลด…</span>' : st.set ? `<span class="tg-bot">✓ ${esc(st.bot ? '@' + st.bot : 'ตั้งแล้ว')}</span>` : '<span class="muted">ยังไม่ได้ตั้ง</span>'}
       ${main ? `<input type="password" id="tg-tok" autocomplete="off" spellcheck="false" placeholder="${st.set ? 'วาง token ใหม่เพื่อเปลี่ยน bot' : 'วาง token จาก @BotFather'}" aria-label="token ของ bot"><button type="button" class="btn" data-tgset${busy ? ' disabled' : ''}>${busy === 'set' ? 'กำลังตรวจ…' : 'ตั้ง bot'}</button>${st.set ? `<button type="button" class="btn ghost danger" data-tgdel${busy ? ' disabled' : ''}>ลบ bot</button>` : ''}` : '<span class="muted">· แอดมินหลักเป็นผู้ตั้ง bot</span>'}</div>
@@ -31269,7 +31528,7 @@ async function openAcct(tab, q) {
   }
   for (const b of $$('#acct-dlg [data-accttab]')) b.hidden = b.dataset.accttab === 'mem';
   const who = `${state.user.username}|${state.user.name}|${state.user.role}`;
-  if (acctUi.who !== who) Object.assign(acctUi, { who, me: null, roles: [], sess: null, mem: null, sig: null, sigNew: '', sigErr: '', sigMsg: '', sigDel: false });
+  if (acctUi.who !== who) Object.assign(acctUi, { who, me: null, roles: [], sess: null, mem: null, sig: null, sigNew: '', sigErr: '', sigMsg: '', sigDel: false, tg: null, tgLink: null, tgErr: '', tgMsg: '', tgDel: false });
   Object.assign(acctUi, { tab: tab || 'me', err: '', note: '', del: '' });
   if (q != null) Object.assign(acctUi, { q: str(q), st: 'all' });
   if (!acctDlg.open) acctDlg.showModal();
@@ -31282,6 +31541,11 @@ async function acctLoad() {
     renderAcctDlg();
     try { const r = await store.acctMe(); acctUi.me = r.user; acctUi.roles = r.roles || []; } catch (e) { acctUi.err = errMsg(e); }
     acctUi.loading = '';
+  }
+  if (acctUi.me && acctUi.tab === 'me' && acctUi.tg == null && tgMeOn() && !acctUi.tgLoading) {   // .47: Telegram ส่วนตัว
+    acctUi.tgLoading = true;
+    try { acctUi.tg = await store.tgMe(); } catch (e) { acctUi.tg = { err: errMsg(e) }; }
+    acctUi.tgLoading = false;
   }
   if (acctUi.me && acctUi.tab === 'me' && acctUi.sig == null && sigOn() && !acctUi.sigLoading) {
     acctUi.sigLoading = true;
@@ -31313,6 +31577,7 @@ function acctMeHtml(u) {
     <label class="field"><span class="lbl">เบอร์โทร / เบอร์ภายใน</span><input id="acct-phone" type="tel" maxlength="30" autocomplete="tel" value="${esc(u.phone)}"></label>
     ${acctHubHtml(u)}
     <div id="acct-sigwrap">${acctSigHtml()}</div>
+    <div id="acct-tgwrap">${acctTgHtml()}</div>
     <div class="acct-acts"><button type="submit" class="btn primary" id="acct-save">บันทึกข้อมูลส่วนตัว</button>${pin}</div>
     <p class="muted acct-note">ข้อมูลบัญชีเก็บที่ LPCH RO Workspace: แก้ที่นี่ = แก้ที่ RO Workspace และแอปที่เชื่อมด้วย · เปลี่ยนชื่อผู้ใช้หรือตำแหน่ง ติดต่อผู้ดูแลระบบ · ขนาดตัวอักษรและสีของเว็บ: ปุ่ม Aa บนแถบด้านบน</p>
   </form>`;
@@ -31402,6 +31667,39 @@ function acctSigHtml() {
     + `<div class="acct-acts">${acts}</div>${cur && !nw && s.at ? `<small class="muted">บันทึกเมื่อ ${esc(whenText(s.at))}</small>` : ''}</fieldset>`;
 }
 const sigRender = () => { const w = $('#acct-sigwrap'); if (w) w.innerHTML = acctSigHtml(); };
+/* .47 (Code.gs API 137): Telegram ส่วนตัว · สำเนาข้อความส่วนตัวถึงฉันเข้า Telegram ของฉัน (bot เดียวกับประกาศ · แอดมินตั้ง)
+ * เชื่อม: รหัส 8 ตัว (30 นาที) → เปิด bot แล้วกด Start (ส่งรหัสให้ bot เอง) → ตรวจสอบการเชื่อม · chat id เก็บที่ Code.gs (ไม่ส่งกลับหน้าเว็บ) */
+const TGME_API = 137;
+const tgMeOn = () => store.mode !== 'sheet' || serverHas(TGME_API);
+function acctTgHtml() {
+  if (!tgMeOn()) return '';
+  const t = acctUi.tg, lk = acctUi.tgLink, dis = acctUi.tgBusy ? ' disabled' : '';
+  const head = '<fieldset class="acct-hub acct-tg"><legend>Telegram ส่วนตัว</legend>';
+  const foot = (acctUi.tgErr ? `<p class="acct-err" role="alert">${esc(acctUi.tgErr)}</p>` : acctUi.tgMsg ? `<p class="acct-ok" role="status">${esc(acctUi.tgMsg)}</p>` : '') + '</fieldset>';
+  if (t == null) return head + '<p class="muted acct-note">กำลังโหลด…</p></fieldset>';
+  if (t.err) return head + `<p class="acct-err">${esc(t.err)}</p></fieldset>`;
+  if (t.practice) return head + '<p class="muted acct-note">โหมดฝึกใช้: เชื่อม Telegram ในระบบจริง</p></fieldset>';
+  if (!t.set) return head + '<p class="muted acct-note">แอดมินยังไม่ได้ตั้ง bot ของ Telegram (ตั้งค่า → ประกาศ → Telegram) · ตั้งแล้วกลับมาเชื่อมที่นี่</p></fieldset>';
+  const note = `<p class="muted acct-note">รับสำเนาข้อความส่วนตัวถึงคุณ (ไอคอนซองจดหมาย) ใน Telegram ของคุณเอง${t.off ? ' · <b>ตอนนี้แอดมินปิดการส่งสำเนาเข้า Telegram อยู่</b>' : ''}</p>`;
+  if (t.linked) return head + note + `<p class="tg-on">✓ เชื่อมแล้ว${t.name ? ` · ${esc(t.name)}` : ''}${t.at ? ` <small class="muted">(${esc(whenText(t.at))})</small>` : ''}</p>
+    <div class="acct-acts"><button type="button" class="btn sm" data-tgmetest${dis}>ส่งข้อความทดสอบ</button><button type="button" class="btn ghost sm" data-tgunlink${dis}>${acctUi.tgDel ? 'กดอีกครั้งเพื่อยกเลิกการเชื่อม' : 'ยกเลิกการเชื่อม'}</button></div>` + foot;
+  if (lk) {
+    const step1 = lk.url ? `กด <a class="btn primary sm" href="${esc(lk.url)}" target="_blank" rel="noopener noreferrer">เปิด @${esc(lk.bot)} ใน Telegram</a> แล้วกด <b>Start</b>`
+      : t.demo ? 'โหมดตัวอย่าง: ไม่มี bot จริง ข้ามไปขั้นที่ 2 ได้เลย' : `ส่งรหัส <b>${esc(lk.code)}</b> ให้ bot ของแผนกใน Telegram`;
+    return head + note + `<ol class="setup-steps tg-steps"><li>${step1}</li><li>กลับมากด <b>ตรวจสอบการเชื่อม</b> · รหัส <code class="tg-code">${esc(lk.code)}</code> ใช้ได้ ${esc(String(lk.min || 30))} นาที</li></ol>
+      <div class="acct-acts"><button type="button" class="btn primary sm" data-tgcheck${dis}>ตรวจสอบการเชื่อม</button><button type="button" class="btn ghost sm" data-tgcancel${dis}>ยกเลิก</button></div>` + foot;
+  }
+  return head + note + `<div class="acct-acts"><button type="button" class="btn sm" data-tglink${dis}>เชื่อม Telegram</button></div>` + foot;
+}
+const tgRender = () => { const w = $('#acct-tgwrap'); if (w) w.innerHTML = acctTgHtml(); };
+async function tgDo(fn, done) {
+  if (acctUi.tgBusy) return;
+  Object.assign(acctUi, { tgBusy: true, tgErr: '', tgMsg: '' });
+  tgRender();
+  try { acctUi.tgMsg = (await done(await fn())) || ''; } catch (e) { acctUi.tgErr = errMsg(e); }
+  acctUi.tgBusy = false;
+  tgRender();
+}
 // รูป → PNG พื้นโปร่ง: ความเข้มของเส้น = ความมืดของพิกเซล (สว่างกว่า 215 = พื้น) · ตัดขอบชิดเส้น เว้น 8 px · สูงไม่เกิน 160 กว้างไม่เกิน 600
 async function sigProcess(file) {
   if (!file || !str(file.type).startsWith('image')) throw new Error('เลือกไฟล์รูปภาพ (PNG / JPG)');
@@ -31508,6 +31806,19 @@ acctDlg.addEventListener('click', e => {
   if (ds.acctpin !== undefined) { acctDlg.close(); return openPinSettings(); }
   if (ds.sigsave !== undefined) return sigDo(() => store.sigSave(acctUi.sigNew), r => { esigCache.clear(); acctUi.sig = r; acctUi.sigNew = ''; return 'บันทึกลายเซ็นเรียบร้อย'; });
   if (ds.sigcancel !== undefined) { Object.assign(acctUi, { sigNew: '', sigErr: '', sigMsg: '' }); return sigRender(); }
+  if (ds.tglink !== undefined) return tgDo(() => store.tgLinkStart(), r => { acctUi.tgLink = r; return ''; });   // .47: Telegram ส่วนตัว
+  if (ds.tgcheck !== undefined) return tgDo(() => store.tgLinkCheck(acctUi.tgLink && acctUi.tgLink.code), r => {
+    if (!r || !r.linked) throw new Error('ยังไม่พบการกด Start ใน bot · เปิด bot แล้วกด Start ก่อน แล้วกดตรวจสอบอีกครั้ง');
+    Object.assign(acctUi, { tg: r, tgLink: null });
+    return 'เชื่อม Telegram เรียบร้อย · bot ส่งข้อความยืนยันไปที่ Telegram ของคุณแล้ว';
+  });
+  if (ds.tgcancel !== undefined) { Object.assign(acctUi, { tgLink: null, tgErr: '', tgMsg: '' }); return tgRender(); }
+  if (ds.tgmetest !== undefined) return tgDo(() => store.tgMeTest(), r => { if (!r || !r.ok) throw new Error('ส่งไม่สำเร็จ: ' + ((r && r.err) || '')); return 'ส่งข้อความทดสอบแล้ว · ดูใน Telegram ของคุณ'; });
+  if (ds.tgunlink !== undefined) {
+    if (!acctUi.tgDel) { Object.assign(acctUi, { tgDel: true, tgMsg: '', tgErr: '' }); return tgRender(); }
+    acctUi.tgDel = false;
+    return tgDo(() => store.tgUnlink(), r => { acctUi.tg = r; return 'ยกเลิกการเชื่อม Telegram แล้ว'; });
+  }
   if (ds.sigdel !== undefined) {
     if (!acctUi.sigDel) { Object.assign(acctUi, { sigDel: true, sigMsg: '', sigErr: '' }); return sigRender(); }
     acctUi.sigDel = false;
