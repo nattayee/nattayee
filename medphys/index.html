@@ -1700,6 +1700,9 @@ dialog>.nlp-bar{top:14px;bottom:auto}   /* ในฟอร์ม: แถบม�
 .jobs-leave.ro{list-style:none;margin:4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 12px}
 .acct-tabs{margin-bottom:12px;flex-wrap:wrap;width:fit-content;max-width:100%;border-radius:16px}
 .acct-form{display:grid;gap:12px;max-width:560px}
+#acct-me.acct-form{max-width:none}   /* .51: ข้อมูลส่วนตัวใช้ความกว้างเต็มหน้าต่าง */
+.acct-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:12px 22px;align-items:start}
+.acct-col{display:grid;gap:12px;min-width:0;align-content:start}
 .acct-hub{border:1px solid var(--line);border-radius:10px;padding:8px 12px 10px;margin:0;display:grid;gap:8px;min-width:0}   /* 24 พ.ย.: ข้อมูลใบลา (RT Hub) */
 .acct-hub legend{font-weight:700;font-size:13.5px;padding:0 4px}
 .acct-tg .tg-on{margin:6px 0;color:var(--ok);font-weight:600}   /* .47: Telegram ส่วนตัว */
@@ -9518,7 +9521,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.50';
+const PAGE_VERSION = '2026-11-22.52';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -17292,19 +17295,20 @@ function txsImgRows(d) {
     if (!im) unk++; else if (!imgCodes(im).length) none++;
     if (im) for (const kk of imgCodes(im)) tot[kk] = (tot[kk] || 0) + im[kk];
     if (saved) rec++; else if (im) def++;
-    const txt = im ? igImgText(im) : 'ไม่ได้บันทึก', src = saved ? 'rec' : im ? 'def' : '', key = `${room}|${txt}|${src}`, last = rows[rows.length - 1];
+    const txt = im ? igImgText(im) : 'ไม่ได้บันทึก', src = saved ? 'rec' : im ? 'def' : '', key = `${room}|${txt}`, last = rows[rows.length - 1];
     if (last && last.key === key) { last.to = day; last.fxTo = m ? m.to : last.fxTo; continue; }
-    rows.push({ key, room, txt, src, from: day, to: day, fxFrom: m ? m.from : '', fxTo: m ? m.to : '' });
+    rows.push({ key, room, txt, src, none: !!im && !imgCodes(im).length, from: day, to: day, fxFrom: m ? m.from : '', fxTo: m ? m.to : '' });   // .52: none = ไม่ทำ image (ไม่แสดงในตาราง)
   }
   return { rows, tot, none, rec, def, unk };
 }
 function txsImgHtml(d) {
   const c = d.c, im = txsImgRows(d), tab = igrtTab(roomOf(c)), pr = igrtProto(c, tab), pl = pr ? IGRT_PROTO[pr.id].label : '';
+  const shown = im.rows.filter(r => !r.none);   // .52: ตารางแสดงเฉพาะวันที่ทำ image
   const sum = [...imgCodes(im.tot).map(kk => `${imgType(kk).label} ${im.tot[kk]} ครั้ง`), ...(im.none ? [`ไม่ทำ image ${im.none} วัน`] : [])].join(' · ') || '–';
   const src = [im.rec && `บันทึกจริง ${im.rec} วัน`, im.def && `ตามแนวทาง ${im.def} วัน`, im.unk && `ไม่ได้บันทึก ${im.unk} วัน`].filter(Boolean).join(' · ');
   return `<div class="txs-box txs-img"><h4>ภาพที่ใช้ตรวจสอบตำแหน่งก่อนฉาย (Image verification · IGRT)${pl ? ` · แนวทาง ${esc(pl)}` : ''}</h4>`
     + `<p class="txs-imgsum"><b>${esc(sum)}</b>${src ? `<small> · ${esc(src)}</small>` : ''}</p>`
-    + (im.rows.length ? `<table class="txs-t"><thead><tr><th>วันที่ฉาย</th><th>ครั้งที่</th><th>ห้อง</th><th>ภาพที่ทำ</th></tr></thead><tbody>${im.rows.map(r => `<tr><td class="k">${esc(txsRange(r.from, r.to))}</td><td class="nw">${esc(r.fxFrom === r.fxTo || !r.fxTo ? String(r.fxFrom || '–') : `${r.fxFrom} – ${r.fxTo}`)}</td><td class="nw">${esc(r.room === NO_ROOM ? '–' : roomLabel(r.room))}</td><td${r.src ? '' : ' class="mute"'}>${esc(r.txt)}${r.src === 'def' ? ' <small>(ตามแนวทาง)</small>' : ''}</td></tr>`).join('')}</tbody></table>` : '<p style="margin:0;color:#8a929e">ยังไม่มีวันที่ฉาย</p>')
+    + (shown.length ? `<table class="txs-t"><thead><tr><th>วันที่ฉาย</th><th>ครั้งที่</th><th>ห้อง</th><th>ภาพที่ทำ</th></tr></thead><tbody>${shown.map(r => `<tr><td class="k">${esc(txsRange(r.from, r.to))}</td><td class="nw">${esc(r.fxFrom === r.fxTo || !r.fxTo ? String(r.fxFrom || '–') : `${r.fxFrom} – ${r.fxTo}`)}</td><td class="nw">${esc(r.room === NO_ROOM ? '–' : roomLabel(r.room))}</td><td${r.src ? '' : ' class="mute"'}>${esc(r.txt)}</td></tr>`).join('')}</tbody></table>` : `<p style="margin:0;color:#8a929e">${im.rows.length ? 'ไม่มีวันที่ทำ image' : 'ยังไม่มีวันที่ฉาย'}</p>`)
     + '</div>';
 }
 function txsRtHtml(d, name) {
@@ -31845,12 +31849,15 @@ function acctMeHtml(u) {
   const pin = stampsOn() && state.user.canEdit ? `<button type="button" class="btn ghost" data-acctpin>🔑 ${state.user.hasPin ? 'เปลี่ยน' : 'ตั้ง'}รหัส PIN (ยืนยันการบันทึก)</button>` : '';
   return `<form id="acct-me" class="acct-form" novalidate>
     <div class="acct-info"><div><span class="lbl">ชื่อผู้ใช้</span><b>${esc(u.username)}</b></div><div><span class="lbl">ตำแหน่ง</span><b>${esc(acctRole(u.role))}</b></div>${u.adminLevel ? `<div><span class="lbl">สิทธิ์ใน RO Workspace</span><b>${esc(ACCT_LV[u.adminLevel] || u.adminLevel)}</b></div>` : ''}<div><span class="lbl">เข้าสู่ระบบล่าสุด</span><b>${esc(acctWhen(u.lastLogin))}</b></div></div>
+    <div class="acct-cols"><div class="acct-col">
     <label class="field"><span class="lbl"><span>ชื่อ-นามสกุล<b class="req">*</b></span></span><input id="acct-name" maxlength="80" autocomplete="name" value="${esc(u.fullName)}"></label>
     <label class="field"><span class="lbl"><span>อีเมล<b class="req">*</b></span></span><input id="acct-email" type="email" maxlength="100" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(u.email)}"><small class="gate-help">ใช้รับรหัสเมื่อลืมรหัสผ่าน · 1 อีเมลต่อ 1 บัญชี</small></label>
     <label class="field"><span class="lbl">เบอร์โทร / เบอร์ภายใน</span><input id="acct-phone" type="tel" maxlength="30" autocomplete="tel" value="${esc(u.phone)}"></label>
     ${acctHubHtml(u)}
+    </div><div class="acct-col">
     <div id="acct-sigwrap">${acctSigHtml()}</div>
     <div id="acct-tgwrap">${acctTgHtml()}</div>
+    </div></div>
     <div class="acct-acts"><button type="submit" class="btn primary" id="acct-save">บันทึกข้อมูลส่วนตัว</button>${pin}</div>
     <p class="muted acct-note">ข้อมูลบัญชีเก็บที่ LPCH RO Workspace: แก้ที่นี่ = แก้ที่ RO Workspace และแอปที่เชื่อมด้วย · เปลี่ยนชื่อผู้ใช้หรือตำแหน่ง ติดต่อผู้ดูแลระบบ · ขนาดตัวอักษรและสีของเว็บ: ปุ่ม Aa บนแถบด้านบน</p>
   </form>`;
