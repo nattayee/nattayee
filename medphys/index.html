@@ -3020,6 +3020,8 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .set-tabs [role="tab"][aria-selected="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-fg);font-weight:600}
 .set-tabs [role="tab"] small{margin-left:5px;font-size:11.5px;opacity:.75}
 .set-tabs input[type="search"]{flex:1 1 220px;max-width:300px;margin-left:auto}
+.set-tabs .nlp-quick{margin-left:auto;border-color:#7a3db8;white-space:nowrap}   /* .43: ทางลัดโหมดตั้งลิงก์ประกาศ */
+.set-tabs .nlp-quick+input[type="search"]{margin-left:0}
 .set-empty{margin:24px 0;color:var(--muted);text-align:center}
 @media (max-width:700px){.set-tabs [role="tablist"]{flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding-bottom:2px}.set-tabs input[type="search"]{max-width:none;margin-left:0}}
 .ro-wrap[disabled] .btn.ghost,.ro-wrap[disabled] .icon-btn,.ro-wrap[disabled] .opt-new,.ro-wrap[disabled] .opt-chip button,.ro-wrap[disabled] #reset-demo,.ro-wrap[disabled] #clear-all{display:none}
@@ -9305,7 +9307,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.42';
+const PAGE_VERSION = '2026-11-22.43';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -24020,7 +24022,7 @@ function renderSettings() {
       ${optEditor('admins', 'ชื่อผู้ใช้หรืออีเมล LPCH ของแอดมิน')}
       ${subSec}</div>`;
   el.innerHTML = `${roleBar}${subNote}${cfgReqHtml()}<div class="set-tabs" id="set-tabs"><div role="tablist" aria-label="หมวดการตั้งค่า">${SET_TABS.map(([k, l]) => `<button type="button" role="tab" data-settab="${k}" aria-selected="false">${esc(l)}<small></small></button>`).join('')}</div>
-    <input type="search" id="set-q" value="${esc(setQ)}" placeholder="ค้นหาการตั้งค่า เช่น PIN, IGRT, วันหยุด" aria-label="ค้นหาการตั้งค่า" autocomplete="off"></div>
+    ${nlpCan() ? '<button type="button" class="btn sm nlp-quick" data-nlpstart title="เปิดหน้าเว็บจริง แล้วกดเลือกปุ่ม / ตัวเลือกในฟอร์มที่ต้องการให้ประกาศ (เห็นเฉพาะแอดมิน) · ตาราง: หมวดระบบ → ลิงก์ประกาศ">🎯 ตั้งลิงก์ประกาศบนหน้าเว็บ</button>' : ''}<input type="search" id="set-q" value="${esc(setQ)}" placeholder="ค้นหาการตั้งค่า เช่น PIN, IGRT, วันหยุด" aria-label="ค้นหาการตั้งค่า" autocomplete="off"></div>
     <p class="set-empty" id="set-empty" hidden>ไม่พบการตั้งค่าที่มีคำนี้</p>
     <fieldset class="ro-wrap"${admin || subT.length ? '' : ' disabled'}>
     ${lpchCmpHtml(d)}
@@ -30928,6 +30930,7 @@ function ntflSetHtml(d) {
       <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></td>
       <td><button type="button" class="btn ghost danger sm" data-nldel="${x.k}" title="เลิกลิงก์ปุ่มนี้ (ไม่ประกาศ)">ลบลิงก์</button></td></tr>`; };
   return `<div class="sec" data-sec="ntflink"><div class="sec-head"><h2>ลิงก์ประกาศ</h2><p>ปุ่มที่ลิงก์กับระบบประกาศ: กดปุ่มแล้วบันทึกสำเร็จ = ประกาศขึ้นแถบตัววิ่งของอาชีพที่เลือก (และกลุ่ม Telegram ถ้าตั้งไว้) · ปุ่มที่ลิงก์แล้วมีจุดเทาจางมุมขวาบน · ข้อความใส่ ${NTFL_PH.map(p => `<code>{${p}}</code>`).join(' ')} ได้ · ประกาศเกี่ยวกับผู้ป่วยแนบ HN และชื่อให้เอง (Telegram ย่อชื่อตามตั้งค่า) · กดซ้ำรายการเดิมไม่ประกาศซ้ำ</p></div>
+    ${!nlpCan() && state.user && state.user.isSub ? '<p class="muted def-note" style="margin:0 0 8px">🎯 ตั้งบนหน้าเว็บจริง (กดเลือกปุ่มบนหน้าเว็บ) ใช้ได้เฉพาะแอดมินหลัก · แอดมินรองตั้งจากตารางนี้ได้</p>' : ''}
     ${nlpCan() ? '<p class="nl-pick-row" style="margin:0 0 8px"><button type="button" class="btn primary sm" data-nlpstart>🎯 ตั้งบนหน้าเว็บจริง</button> <span class="muted">เปิดหน้าเว็บจริง แล้วกดเลือกปุ่มที่ต้องการให้ประกาศ (เห็นเฉพาะแอดมิน)</span></p>' : ''}
     <div class="table-wrap set-table"><table class="nl-tb"><thead><tr><th>เปิด</th><th style="text-align:left">ปุ่ม</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ</th><th></th></tr></thead>
       <tbody>${linked.map(row).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีปุ่มที่ลิงก์</td></tr>'}</tbody></table></div>
