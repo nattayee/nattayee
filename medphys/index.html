@@ -797,6 +797,19 @@ button.bq-chk{cursor:pointer}
 .so-sign{position:absolute;right:4mm;bottom:3mm;display:grid;gap:2mm;max-width:calc(100% - 8mm)}
 .so-sign>div{white-space:nowrap}   /* 20 พ.ย.: ชื่อ วันที่ เวลา อยู่บรรทัดเดียว */
 .so-sign .so-c{text-align:center}
+/* .39: ลายเซ็นอิเล็กทรอนิกส์ในฟอร์ม · วางทับเส้นลงชื่อ ไม่ดันข้อความ (ไม่มีลายเซ็น = ว่าง) */
+.esig{position:absolute;left:50%;bottom:-.4mm;z-index:2;display:flex;align-items:flex-end;justify-content:center;width:40mm;height:12mm;margin-left:-20mm;pointer-events:none}
+.esig:empty{display:none}
+.esig img{display:block;max-width:100%;max-height:100%;width:auto;height:auto}
+.esig-w{position:relative;display:flex;align-items:flex-end;flex:1 1 auto;min-width:5mm}
+.esig-w>.lf-dot{flex:1 1 auto;min-width:5mm}
+.esig-w>.esig{left:0;margin-left:0}   /* ผู้ลาเซ็นในช่อง 40 มม. แรกหลัง (ลงชื่อ) = ที่เว้นไว้ให้เซ็น (ตรารับทราบไม่ทับ) */
+.lf-stamp .lf-sg i{position:relative}
+.lf-stamp .esig{bottom:-1.2mm;width:22mm;height:7.5mm;margin-left:-11mm}
+.so-sgw{position:relative;display:inline-block}
+.so-sgw .esig{bottom:-.8mm;width:34mm;height:10mm;margin-left:-17mm}
+.cso-sline{position:relative}
+.cso-sline .esig{bottom:100%;margin-bottom:-1.6mm;width:42mm;height:11mm;margin-left:-21mm}
 .so-rev{margin-top:1.5mm;font-weight:600;font-size:10pt}
 /* ตั้งค่า → สำรองข้อมูลและความปลอดภัย · แถบเตือนก่อนออกจากระบบอัตโนมัติ */
 .bk-stat{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:14px}
@@ -8885,7 +8898,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.38';
+const PAGE_VERSION = '2026-11-22.39';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -8956,7 +8969,8 @@ const sheetStore = {
   selfProfile: rec => call('selfProfile', rec),
   sigMine: () => call('sigMine'),   // .38 (API 130): ลายเซ็นของตัวเอง
   sigSave: img => call('sigSave', img),
-  sigDelete: () => call('sigDelete'),   // 24 พ.ย. (API 129): ข้อมูลใบลาของตัวเอง
+  sigDelete: () => call('sigDelete'),
+  sigForm: (kind, id) => call('sigForm', kind, id),   // .39 (API 131): ลายเซ็นของคนในฟอร์ม   // 24 พ.ย. (API 129): ข้อมูลใบลาของตัวเอง
   acctPassword: (o, n) => call('acctPassword', o, n),
   acctSessions: () => call('acctSessions'),
   acctSignOut: id => call('acctSignOut', id),
@@ -9513,6 +9527,39 @@ function localStore() {
       return clone(db.sig);
     },
     sigDelete: async () => { delete db.sig; persist(); return { ok: true }; },
+    // .39: เหมือน sigForm ใน Code.gs (API 131) · โหมดตัวอย่างมีลายเซ็นของบัญชีตัวอย่างบัญชีเดียว
+    sigForm: async (kind, id) => {
+      const cfg = db.config || {}, me = lfMe(), myName = str(state.user.name), out = {}, sig = db.sig;
+      const list = k => (Array.isArray(cfg[k]) ? cfg[k] : []).filter(x => x && typeof x === 'object');
+      const person = (src, w) => {
+        w = str(w).trim();
+        if (!w) return null;
+        const code = x => str(x.code).toUpperCase() === w.toUpperCase(), nm = x => !!str(x.name) && nameKey(x.name) === nameKey(w);
+        const rows = src === 'mp' ? list('staff').filter(code) : src === 'ro' ? list('doctors').filter(code) : src === 'rtt' ? list('crew').filter(nm) : [...list('staff'), ...list('doctors'), ...list('crew')].filter(nm);
+        const users = [...new Set(rows.map(x => str(x.user).toLowerCase()).filter(Boolean))], p = rows[0];
+        return { who: w, user: users.length === 1 ? users[0] : '', name: p && str(p.name) ? str(p.name) : src === 'mp' || src === 'ro' ? '' : w };
+      };
+      const want = {};
+      if (kind === 'lv') {
+        const i = str(id).indexOf('|'), src = str(id).slice(0, i), key = str(id).slice(i + 1);
+        let who = '';
+        if (src === 'mp') who = str((db.leaves.find(x => x.id === key) || {}).mp);
+        else if (src === 'ro') who = str(((db.dqLeave || []).find(x => x.id === key) || {}).doc);
+        else if (src === 'rtt') { const p = key.split('|'), l = demoJobLeaves(db.jobs || []).find(y => nameKey(y.who) === p[0] && y.date === p[1] && str(y.type) === p.slice(3).join('|')); who = l ? l.who : ''; }
+        if (!who) throw new Error('ไม่พบวันลานี้ (อาจถูกลบไปแล้ว)');
+        want.me = person(src, who);
+        const a = (db.lvack || []).find(x => x.id === id);
+        if (a && a.at) want.ack = { who: str(a.user), user: str(a.user).toLowerCase(), name: str(a.by) };
+      } else if (kind === 'so' || kind === 'ct') {
+        const x = (kind === 'so' ? db.dq || [] : db.appt || []).find(y => y.id === id);
+        if (!x) throw new Error('ไม่พบรายการของฟอร์มนี้ (อาจถูกลบไปแล้ว)');
+        want.doc = person('ro', x.doc);
+        if (kind === 'so') { if (x.nurse) want.rn = person('name', x.nurseBy); want.cc = person('name', str((soParse(x.so) || {}).rn) || x.by); }
+      } else throw new Error('ไม่รู้จักฟอร์มนี้');
+      if (!sig || !sig.img) return { slots: out };
+      for (const [k, p] of Object.entries(want)) if (p && (p.user ? me.includes(p.user) : !!p.name && nameKey(p.name) === nameKey(myName))) out[k] = { img: sig.img, who: p.who };
+      return clone({ slots: out });
+    },
     selfProfile: async rec => {   // 24 พ.ย.: เหมือน selfProfile ใน Code.gs (API 129) · อีเมล = อีเมลของบัญชีตัวอย่าง
       const rows = selfRows(db.config || {}), mail = str(demoRo().users[0].email).toLowerCase();
       if (!rows.length) throw new Error('บัญชีนี้ยังไม่อยู่ในรายชื่อบุคลากรของ RT Hub (ตั้งค่า → ทีม) · ติดต่อแอดมินให้เลือกบัญชีนี้ในรายชื่อก่อน');
@@ -11192,7 +11239,7 @@ let rDepth = 0;
 const rMemo = new Map();
 const rmemo = (k, fn) => { if (!rDepth) return fn(); if (!rMemo.has(k)) rMemo.set(k, fn()); return rMemo.get(k); };
 const inMemo = fn => { rDepth++; try { return fn(); } finally { if (!--rDepth) rMemo.clear(); } };
-function render() { inMemo(render0); }
+function render() { esigCache.clear(); inMemo(render0); }   // .39: ลายเซ็นในฟอร์มขอใหม่หลังข้อมูลเปลี่ยน
 function render0() {
   const gated = state.gate != null;
   renderPractice();
@@ -13093,6 +13140,7 @@ function soSheetHtml(x) {
   const tm = `${String(at.getHours()).padStart(2, '0')}.${String(at.getMinutes()).padStart(2, '0')}`;
   const nz = x.dq && x.dq.nurse ? new Date(x.dq.nurse) : null, nOk = nz && !isNaN(nz), nName = nOk ? str(x.dq.nurseBy) : '';   // ลงชื่อพยาบาลรังสีรักษา = ผู้ยืนยันที่แถบ Nurse → Call center
   const nTm = nOk ? `${String(nz.getHours()).padStart(2, '0')}.${String(nz.getMinutes()).padStart(2, '0')}` : '';
+  const sg = (h, k, who) => (x.dq && str(who) ? `<span class="so-sgw">${h}${esigSlot(k, who)}</span>` : h);   // .39: ลายเซ็น (รายการที่บันทึกแล้ว)
   return `<div class="cso-page so-page"><table class="so-t">
     <tr><th colspan="2" class="so-h1">Standing order สำหรับผู้ป่วยนัด case call center</th></tr>
     <tr><td colspan="2" class="so-id">ชื่อ-สกุล${dot(x.name, 55)} HN ${dot(x.hn, 35)} Dx ${dot(o.dx, 45)}</td></tr>
@@ -13104,9 +13152,9 @@ function soSheetHtml(x) {
     <tr><td colspan="2" class="so-labs-p"><div>${SO_LAB.map(([k, l]) => `<span>${box((o.lab || []).includes(k))} ${esc(l)}</span>`).join('')}<span>${box(!!o.labo)} อื่นๆระบุ${dot(o.labo, 50)}</span></div></td></tr>
     <tr><th colspan="2" class="so-h2">ความเห็นแพทย์</th></tr>
     <tr class="so-op-r"><td colspan="2" class="so-op"><div class="so-op-t">${esc(o.op || '')}</div><div class="so-sign">
-      <div>ลงชื่อแพทย์${dot('', 55)}</div><div class="so-c">( ${docFull ? esc(docFull) : '<span class="so-dots" style="width:50mm"></span>'} )</div>
-      <div>ลงชื่อพยาบาลรังสีรักษา${dot(nName, 28)}วันที่${dot(nOk ? day(localDay(nz.toISOString())) : '', 18)}เวลา${dot(nTm, 14)}</div>
-      <div>ลงชื่อพยาบาล call center${dot(o.rn || x.by, 28)}วันที่${dot(day(localDay(at.toISOString())), 18)}เวลา${dot(tm, 14)}</div></div></td></tr>
+      <div>ลงชื่อแพทย์${sg(dot('', 55), 'doc', x.doc)}</div><div class="so-c">( ${docFull ? esc(docFull) : '<span class="so-dots" style="width:50mm"></span>'} )</div>
+      <div>ลงชื่อพยาบาลรังสีรักษา${sg(dot(nName, 28), 'rn', nName)}วันที่${dot(nOk ? day(localDay(nz.toISOString())) : '', 18)}เวลา${dot(nTm, 14)}</div>
+      <div>ลงชื่อพยาบาล call center${sg(dot(o.rn || x.by, 28), 'cc', o.rn || x.by)}วันที่${dot(day(localDay(at.toISOString())), 18)}เวลา${dot(tm, 14)}</div></div></td></tr>
   </table><div class="so-rev">${esc(SO_REV)}</div></div>`;
 }
 function openSoPreview(x, ctx = '') {
@@ -13115,6 +13163,7 @@ function openSoPreview(x, ctx = '') {
   $('#cso-title').textContent = `Standing order · ${x.hn || ''}`;
   $('#cso-pdf-btn').hidden = true;
   $('#cso-prev-in').innerHTML = soSheetHtml(x);
+  esigFill($('#cso-prev-in'), 'so', esigDqId(x));   // .39
   syncCsoNurse();
   if (!csoDlg.open) csoDlg.showModal();
   fitCsoPreview();
@@ -22598,7 +22647,7 @@ function csoSheetHtml(a) {
     </div>
   </div>
   <div class="cso-instr"><div class="cso-h">Special Instruction</div><div class="cso-note">${esc(a.note)}</div></div>
-  <div class="cso-sign"><span>Attending Oncologist Signature</span><span class="cso-sline">${esc(doc)}${by}${apRks(a).length ? `<small>${esc(rksText(apRks(a).slice(-1)[0]))}</small>` : ''}</span></div>
+  <div class="cso-sign"><span>Attending Oncologist Signature</span><span class="cso-sline">${a.doc ? esigSlot('doc', a.doc) : ''}${esc(doc)}${by}${apRks(a).length ? `<small>${esc(rksText(apRks(a).slice(-1)[0]))}</small>` : ''}</span></div>
 </div>`;
 }
 async function csoPdf(a) {
@@ -22608,6 +22657,7 @@ async function csoPdf(a) {
   box.innerHTML = csoSheetHtml(a);
   csoImages(box);
   document.body.appendChild(box);
+  await esigFill(box, 'ct', esigApptId(a));   // .39
   try {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     await Promise.all($$('img', box).map(i => (i.decode ? i.decode().catch(() => null) : null)));
@@ -22704,6 +22754,7 @@ function openCsoPreview(a, ctx = '') {
   const inner = $('#cso-prev-in');
   inner.innerHTML = csoSheetHtml(a);
   csoImages(inner);
+  esigFill(inner, 'ct', esigApptId(a));   // .39: ลายเซ็นแพทย์ผู้สั่ง
   if (!csoDlg.open) csoDlg.showModal();
   fitCsoPreview();
 }
@@ -22724,6 +22775,7 @@ async function printCso(a, btn) {
   csoImages(box);
   if (btn) btn.disabled = true;
   try {
+    await (a.__so ? esigFill(box, 'so', esigDqId(a.__so)) : esigFill(box, 'ct', esigApptId(a)));   // .39: รอลายเซ็นก่อนพิมพ์
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     await Promise.all($$('img', box).map(i => (i.decode ? i.decode().catch(() => null) : null)));
     const st = document.createElement('style');
@@ -27230,7 +27282,8 @@ function lfStampPlace(root) {
     const obs = [], add = r => { if (r.width > 0.5 && r.height > 0.5) obs.push(R(r)); };
     const tw = document.createTreeWalker(page, NodeFilter.SHOW_TEXT), rg = document.createRange();
     for (let n = tw.nextNode(); n; n = tw.nextNode()) { if (!n.nodeValue.trim() || st.contains(n) || me.contains(n)) continue; rg.selectNodeContents(n); for (const r of rg.getClientRects()) add(r); }
-    for (const e of page.querySelectorAll('.lf-dot, table, img, .lf-cb')) if (!me.contains(e)) add(e.getBoundingClientRect());
+    for (const e of page.querySelectorAll('.lf-dot, table, img, .lf-cb')) if (!me.contains(e) && !st.contains(e)) add(e.getBoundingClientRect());
+    for (const e of me.querySelectorAll('.esig img')) add(e.getBoundingClientRect());   // .39: ลายเซ็นผู้ลา (ตราไม่ทับ)
     const sl = [...me.querySelectorAll('.lf-ln')].find(l => /ลงชื่อ/.test(l.textContent)), sd = sl && sl.querySelector('.lf-dot');
     if (sl && sd) { const a = R(sl.getBoundingClientRect()), d = R(sd.getBoundingClientRect()); obs.push({ l: a.l, t: a.t - 2 * mm, r: d.l + 40 * mm, b: a.b }); }   // ช่องให้ผู้ลาเซ็น
     const ln = me.querySelector('.lf-paren') || me, a = R(ln.getBoundingClientRect()), m = R(me.getBoundingClientRect()), cs = getComputedStyle(page);
@@ -27259,14 +27312,14 @@ function lfStampPlace(root) {
 }
 function lfSignBlock(o) {   // (ลงชื่อ) .... / (ชื่อ) / ตำแหน่ง / วันที่
   return `<div class="lf-sign${o.cls ? ' ' + o.cls : ''}">${o.lines ? Array.from({ length: o.lines }, () => `<div class="lf-ln">${lfDot('', 0)}</div>`).join('') : ''}
-    ${o.sign === false ? '' : `<div class="lf-ln"><span class="lf-l">(ลงชื่อ)</span>${lfDot('', 0)}</div>`}
+    ${o.sign === false ? '' : `<div class="lf-ln"><span class="lf-l">(ลงชื่อ)</span>${o.esig ? `<span class="esig-w">${lfDot('', 0)}${esigSlot(o.esig, o.esigWho)}</span>` : lfDot('', 0)}</div>`}
     ${o.paren === false ? '' : `<div class="lf-ln lf-paren">(${lfDot(o.name || '', 0, 'c')})${o.stamp || ''}</div>`}
     ${o.pos === false ? '' : `<div class="lf-ln"><span class="lf-l">ตำแหน่ง</span>${lfDot(o.pos || '', 0, 'c')}</div>`}
     ${o.date === false ? '' : `<div class="lf-ln lf-date"><span class="lf-l">วันที่</span>${lfDot('', 18)}/${lfDot('', 18)}/${lfDot('', 18)}</div>`}</div>`;
 }
 function lfStamp(st) {
   if (!st) return '';
-  return `<div class="lf-stamp"><b>รับทราบแล้ว</b><span class="lf-sg"><span>ลงชื่อ</span><i></i></span><span class="lf-sn">(${lfEsc(st.by)})</span><span class="lf-sd">${lfEsc(st.on)}</span></div>`;
+  return `<div class="lf-stamp"><b>รับทราบแล้ว</b><span class="lf-sg"><span>ลงชื่อ</span><i>${st.user ? esigSlot('ack', st.user) : ''}</i></span><span class="lf-sn">(${lfEsc(st.by)})</span><span class="lf-sd">${lfEsc(st.on)}</span></div>`;
 }
 function leaveFormHtml(f) {
   const w = lfParts(f.wd), vac = f.form === 'vac', head = f.head || {};
@@ -27294,7 +27347,7 @@ function leaveFormHtml(f) {
     <div class="lf-ln"><span class="lf-l">ตั้งแต่วันที่</span>${lfDot(lfLong(f.from), 50, 'c')}<span class="lf-l">ถึงวันที่</span>${lfDot(lfLong(f.to), 50, 'c')}<span class="lf-l">มีกำหนด</span>${lfDot(lfDays(f.days), 0, 'c')}<span class="lf-l">วัน</span></div>
     <div class="lf-ln"><span class="lf-l">ในระหว่างที่ลาจะติดต่อข้าพเจ้าได้ที่</span>${lfDot(f.phone, 0)}</div>`;
   }
-  const me = lfSignBlock({ name: f.name, pos: vac ? false : f.pos, date: false, cls: 'lf-me' });
+  const me = lfSignBlock({ name: f.name, pos: vac ? false : f.pos, date: false, cls: 'lf-me', esig: f.who ? 'me' : '', esigWho: f.who });   // .39: ลายเซ็นผู้ลา
   const boss = lfSignBlock({ lines: vac ? 1 : 2, name: head.name, pos: head.pos, paren: true, date: vac });
   const left = vac ? `<h3 class="lf-h u">สถิติการลาในปีงบประมาณนี้</h3>
       <table class="lf-tb"><tr><th>ลามาแล้ว<br>(วันทำการ)</th><th>ลาครั้งนี้<br>(วันทำการ)</th><th>รวมเป็น<br>(วันทำการ)</th></tr><tr class="tall"><td></td><td>${lfDays(f.days)}</td><td></td></tr></table>
@@ -27378,7 +27431,7 @@ function lfData(L) {
   const cfg = state.config.leave, p = lfPerson(L), k = lfFormOf(L.type), wdate = today(), g = cfg.group, a = cfg.acting, ack = lfAckOf(L);
   const acting = !!a.name && ((!!g.name && nameKey(g.name) === nameKey(p.name)) || (isDay(a.from) && wdate >= a.from && wdate <= (a.to || a.from)));
   return { form: k.form, sub: k.sub, at: cfg.at, wd: wdate, dear: cfg.dear, name: p.name, pos: p.pos, unit: cfg.unit, mission: cfg.mission, from: L.from, to: L.to, days: L.days, phone: p.phone,
-    reason: k.sub === 'กิจส่วนตัว' ? L.note : '', stamp: ack ? { by: lfAckName(ack), on: lfDayBE(lfAckDay(ack)) } : null,
+    reason: k.sub === 'กิจส่วนตัว' ? L.note : '', stamp: ack ? { by: lfAckName(ack), on: lfDayBE(lfAckDay(ack)), user: str(ack.user) } : null, who: L.who,
     head: acting ? { name: a.name, pos: [a.pos, g.pos ? 'รักษาการแทน' + g.pos : ''].filter(Boolean).join(' ') } : { name: g.name, pos: g.pos } };
 }
 const lfAckReady = () => store.mode !== 'sheet' || serverHas(LVACK_API);
@@ -27424,6 +27477,7 @@ function lfRender() {
   lfShrink(inner);
   lfStampPlace(inner);
   const again = () => { if (inner.isConnected && inner.firstElementChild) { lfShrink(inner); lfStampPlace(inner); } };
+  esigFill(inner, 'lv', `${L.src}|${L.key}`).then(n => { if (n && lfCur === L) again(); });   // .39: ลายเซ็นผู้ลา / หัวหน้างาน
   lfFonts().then(again);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(again);
 }
@@ -27444,6 +27498,7 @@ async function lfAck(L, btns) {
     const row = normLvack(await store.leaveAck({ src: L.src, key: L.key, who: L.who, from: L.from, to: L.to, type: L.type, undo }));
     const i = state.lvack.findIndex(x => x.id === row.id);
     if (i >= 0) state.lvack[i] = row; else state.lvack.push(row);
+    esigCache.clear();   // .39: ลายเซ็นในตรารับทราบ
     toast(undo ? `เอาตรารับทราบออกจากใบลาของ ${L.who} แล้ว` : `รับทราบใบลาของ ${L.who} ${rangeText(L)} แล้ว`);
     if (!undo) lvTellApplicant(L);   // 24 พ.ย. (.29): แจ้งผู้ลา
   } catch (e) { toast('ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
@@ -27530,6 +27585,7 @@ async function lfPrint(btn) {
     off.className = 'cso-render';   // วางนอกจอก่อน เพื่อวัดและย่อข้อความยาวให้พอดีช่อง แล้วจึงย้ายไปส่วนที่พิมพ์
     off.innerHTML = leaveFormHtml(lfData(lfCur));
     document.body.appendChild(off);
+    await esigFill(off, 'lv', `${lfCur.src}|${lfCur.key}`);   // .39
     lfShrink(off);
     lfStampPlace(off);
     box.innerHTML = off.innerHTML;
@@ -27560,6 +27616,7 @@ async function lfPdf(btn) {
     box.innerHTML = leaveFormHtml(lfData(L));
     csoImages(box);
     document.body.appendChild(box);
+    await esigFill(box, 'lv', `${L.src}|${L.key}`);   // .39
     await lfFonts();
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     lfShrink(box);
@@ -30678,6 +30735,34 @@ function selfApply(rows) {
  * เก็บในชีต Signatures (ไม่โหลดไปกับข้อมูลทั้งหมด) · เห็น / เปลี่ยน / ลบ ได้เฉพาะเจ้าของบัญชี */
 const SIG_API = 130, SIG_MAX = 45000;
 const sigOn = () => store.mode !== 'sheet' || serverHas(SIG_API);
+/* .39 (API 131): ลายเซ็นในฟอร์ม · ช่อง <span data-esig> ใส่ตอนวาดฟอร์ม แล้วเติมรูปจาก sigForm (เซิร์ฟเวอร์หาคนในฟอร์มเอง)
+ * ใส่เฉพาะเมื่อ who ที่เซิร์ฟเวอร์ใช้หา = ที่ฟอร์มแสดง (เช่น ฟอร์มที่ยังไม่บันทึกเปลี่ยนแพทย์ = ไม่ใส่) · ไม่มีลายเซ็น = ว่างเหมือนเดิม */
+const ESIG_API = 131;
+const esigOn = () => store.mode !== 'sheet' || serverHas(ESIG_API);
+const esigSlot = (k, who) => `<span class="esig" data-esig="${k}" data-esig-who="${esc(str(who))}"></span>`;
+const esigCache = new Map();   // kind|id → { t, p } · ล้างทุกครั้งที่วาดหน้าใหม่ (ข้อมูลอาจเปลี่ยน) และเมื่อเปลี่ยนลายเซ็นของตัวเอง
+function esigGet(kind, id) {
+  const k = kind + '|' + id, c = esigCache.get(k);
+  if (c && Date.now() - c.t < 60000) return c.p;
+  const p = Promise.resolve().then(() => store.sigForm(kind, id)).then(r => (r && r.slots) || {}, () => { esigCache.delete(k); return null; });
+  esigCache.set(k, { t: Date.now(), p });
+  return p;
+}
+async function esigFill(root, kind, id) {
+  if (!root || !kind || !id || !esigOn() || !root.querySelector('[data-esig]')) return 0;
+  const slots = await esigGet(kind, id);
+  if (!slots) return 0;
+  let n = 0;
+  for (const el of root.querySelectorAll('[data-esig]')) {
+    const x = slots[el.dataset.esig], w = str(el.dataset.esigWho), ok = !!x && !!x.img && !!w && nameKey(w) === nameKey(x.who);
+    el.innerHTML = ok ? `<img alt="" src="${esc(x.img)}">` : '';
+    if (ok) n++;
+  }
+  await Promise.all([...root.querySelectorAll('.esig img')].map(i => (i.decode ? i.decode().catch(() => null) : null)));
+  return n;
+}
+const esigApptId = a => (a && a.id && state.appt.some(x => x.id === a.id) ? a.id : '');   // ใบสั่ง CT Simulation ของนัดที่บันทึกแล้ว
+const esigDqId = x => (x && x.dq && x.dq.id && state.dq.some(y => y.id === x.dq.id) ? x.dq.id : '');   // Standing order ของรายการที่บันทึกแล้ว
 function acctSigHtml() {
   const s = acctUi.sig, cur = s && s.img, nw = acctUi.sigNew, busy = !!acctUi.sigBusy;
   const head = '<fieldset class="acct-hub acct-sig"><legend>ลายเซ็นอิเล็กทรอนิกส์</legend>';
@@ -30687,7 +30772,7 @@ function acctSigHtml() {
   const dis = busy ? ' disabled' : '';
   const acts = nw ? `<button type="button" class="btn primary sm" data-sigsave${dis}>บันทึกลายเซ็น</button><button type="button" class="btn ghost sm" data-sigcancel${dis}>ยกเลิก</button><small class="muted">ตัวอย่าง: พื้นขาวตัดออกแล้ว</small>`
     : `<label class="btn sm sig-pick">📎 ${cur ? 'เปลี่ยนรูปลายเซ็น' : 'แนบรูปลายเซ็น'}<input type="file" id="acct-sigfile" accept="image/png,image/jpeg,image/webp" class="sig-file"${dis}></label>${cur ? `<button type="button" class="btn ghost sm danger" data-sigdel${dis}>${acctUi.sigDel ? 'ยืนยันลบลายเซ็น' : 'ลบลายเซ็น'}</button>` : ''}`;
-  return head + '<p class="muted acct-note">ใช้ประทับลายเซ็นในฟอร์มของระบบ · เซ็นด้วยปากกาสีเข้มบนกระดาษขาว แล้วถ่ายรูปหรือสแกน · ระบบตัดพื้นขาวให้โปร่งและตัดขอบให้เอง · เห็นได้เฉพาะคุณ</p>'
+  return head + '<p class="muted acct-note">ประทับในช่องลงชื่อของคุณในฟอร์มของระบบ (ใบลา · ตรารับทราบใบลา · Standing order · ใบสั่ง CT Simulation) ผู้ที่เปิดฟอร์มนั้นได้จะเห็น · ยังไม่แนบ = ช่องลงชื่อว่างเหมือนเดิม · เซ็นด้วยปากกาสีเข้มบนกระดาษขาว แล้วถ่ายรูปหรือสแกน · ระบบตัดพื้นขาวให้โปร่งและตัดขอบให้เอง · เปลี่ยน / ลบ ได้เฉพาะคุณ</p>'
     + `<div class="sig-box">${box}</div>`
     + (acctUi.sigErr ? `<p class="acct-err" role="alert">${esc(acctUi.sigErr)}</p>` : acctUi.sigMsg ? `<p class="acct-ok" role="status">${esc(acctUi.sigMsg)}</p>` : '')
     + `<div class="acct-acts">${acts}</div>${cur && !nw && s.at ? `<small class="muted">บันทึกเมื่อ ${esc(whenText(s.at))}</small>` : ''}</fieldset>`;
@@ -30797,12 +30882,12 @@ acctDlg.addEventListener('click', e => {
   const ds = b.dataset;
   if (ds.accttab) { Object.assign(acctUi, { tab: ds.accttab, err: '', note: '', del: '' }); renderAcctDlg(); return acctLoad(); }
   if (ds.acctpin !== undefined) { acctDlg.close(); return openPinSettings(); }
-  if (ds.sigsave !== undefined) return sigDo(() => store.sigSave(acctUi.sigNew), r => { acctUi.sig = r; acctUi.sigNew = ''; return 'บันทึกลายเซ็นเรียบร้อย'; });
+  if (ds.sigsave !== undefined) return sigDo(() => store.sigSave(acctUi.sigNew), r => { esigCache.clear(); acctUi.sig = r; acctUi.sigNew = ''; return 'บันทึกลายเซ็นเรียบร้อย'; });
   if (ds.sigcancel !== undefined) { Object.assign(acctUi, { sigNew: '', sigErr: '', sigMsg: '' }); return sigRender(); }
   if (ds.sigdel !== undefined) {
     if (!acctUi.sigDel) { Object.assign(acctUi, { sigDel: true, sigMsg: '', sigErr: '' }); return sigRender(); }
     acctUi.sigDel = false;
-    return sigDo(() => store.sigDelete(), () => { acctUi.sig = { img: '', at: '' }; return 'ลบลายเซ็นแล้ว'; });
+    return sigDo(() => store.sigDelete(), () => { esigCache.clear(); acctUi.sig = { img: '', at: '' }; return 'ลบลายเซ็นแล้ว'; });
   }
   if (ds.acctflt) { acctUi.st = ds.acctflt; acctUi.del = ''; return renderAcctDlg(); }
   if (ds.acctout) return acctDo(() => store.acctSignOut(ds.acctout), async r => { acctUi.sess = null; await acctLoad(); return r.message || 'ออกจากระบบแล้ว'; });
