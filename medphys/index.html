@@ -3022,6 +3022,7 @@ dialog.dlg-full .dlg-body{flex:1 1 auto}
 .set-tabs input[type="search"]{flex:1 1 220px;max-width:300px;margin-left:auto}
 .set-tabs .nlp-quick{margin-left:auto;border-color:#7a3db8;white-space:nowrap}   /* .43: ทางลัดโหมดตั้งลิงก์ประกาศ */
 .set-tabs .nlp-quick+input[type="search"]{margin-left:0}
+.nav-acc .nav-subname{width:150px}   /* .44: ชื่อแถบย่อย (แถว └) · กว้างเท่าชื่อแถบหลัก */
 .set-empty{margin:24px 0;color:var(--muted);text-align:center}
 @media (max-width:700px){.set-tabs [role="tablist"]{flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding-bottom:2px}.set-tabs input[type="search"]{max-width:none;margin-left:0}}
 .ro-wrap[disabled] .btn.ghost,.ro-wrap[disabled] .icon-btn,.ro-wrap[disabled] .opt-new,.ro-wrap[disabled] .opt-chip button,.ro-wrap[disabled] #reset-demo,.ro-wrap[disabled] #clear-all{display:none}
@@ -7970,6 +7971,22 @@ function subOrderNorm(v) {
   return o;
 }
 const subOrderOf = (view, cfg) => ((cfg || state.config).subOrder || {})[view] || (SUB_VIEWS[view] || []).map(s => s[0]);
+// .44: ชื่อแถบย่อยที่แอดมินตั้ง (ตั้งค่า → แถบเมนู · ช่องชื่อของแถว └) · config.subName['<แถบ>.<แถบย่อย>'] · ว่าง = ชื่อเดิม · แจกงานแพทย์ = dq.call / dq.walk
+const subKeys = () => [...Object.entries(SUB_VIEWS).flatMap(([v, subs]) => subs.map(([k]) => `${v}.${k}`)), 'dq.call', 'dq.walk'];
+function subNameNorm(v) {
+  const o = {}, ok = subKeys();
+  if (!v || typeof v !== 'object') return o;
+  for (const k of ok) { const t = str(v[k]).replace(/\s+/g, ' ').trim().slice(0, 30); if (t) o[k] = t; }
+  return o;
+}
+const subDefName = (view, k, cfg) => view === 'dq' ? (DQ_DESKS.find(x => x[0] === k) || [k, k])[1] : view === 'jobs' && k === 'rtt' ? str((((cfg || state.config).jobs || {}).sys || {}).title) || 'ระบบงาน RTT' : ((SUB_VIEWS[view] || []).find(x => x[0] === k) || [k, k])[1];
+const subLabel = (view, k, cfg) => str(((cfg || state.config).subName || {})[`${view}.${k}`]) || subDefName(view, k, cfg);
+// .44: แอดมินรองที่ตั้งคอลัมน์แอดมินรองของแถบนี้ไว้ (ไม่ใช่ "ตามตำแหน่ง") = เห็นแถบย่อยเหมือนแอดมินหลัก
+const SUBV_API = 134;
+function subColOn(view) {
+  const u = state.user, x = (state.config.nav || []).find(n => n.view === view);
+  return !!u && !u.isAdmin && u.via !== 'google' && !u.pending && !!u.isSub && (store.mode !== 'sheet' || serverHas(SUB_NAV_API)) && !!x && !!x.access && ACC_SET.includes(x.access[SUB_ROLE]);
+}
 function subHideNorm(v) {
   const o = {};
   if (!v || typeof v !== 'object') return o;
@@ -8133,6 +8150,7 @@ const DEFAULT_CONFIG = {
   formRules: [],   // ค่าเริ่มต้นของฟอร์มตามตัวเลือก (ตั้งค่า → ฟอร์ม)
   cols: {},        // ค่าเริ่มต้นของลำดับ / การแสดงคอลัมน์ (ตั้งค่า → Column แสดงผล)
   subHide: {},     // 15 พ.ย.: แถบย่อยที่ตำแหน่งไม่เห็น (ตั้งค่า → แถบเมนู)
+  subName: {},     // .44: ชื่อแถบย่อยที่ตั้งเอง (ตั้งค่า → แถบเมนู · แถว └)
   subOrder: {},    // 20 พ.ย.: ลำดับแถบย่อย (ตั้งค่า → แถบเมนู)
   delGuard: true,  // 15 พ.ย.: แถบห้องฉายห้ามลบผู้ป่วยที่ยังรอในแถบอื่น
   fxSee: { gate: true },   // 20 พ.ย.: ผู้ป่วยพบแพทย์วันนั้น ต้องรอพยาบาลยืนยันคำสั่งแพทย์ก่อนจึงบันทึกสถานะ fraction ได้
@@ -8357,7 +8375,7 @@ const CFG_TABS = {
   tabs: ['reg', 'dq', 'appt', 'order', 'bq', 'ct', 'jobs', 'vac', 'flow', 'tdfApp', 'roP4p', 'sendBook', 'noShow'],   // roP4p (R9): P4P แพทย์ · sendBook (20 พ.ย.): ทะเบียนหนังสือส่ง · noShow (.33): ประกาศเมื่อผู้ป่วยไม่มา
   form: ['formRules'],
   cols: ['cols'],
-  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'icons', 'tg', 'iconsOff', 'msg', 'ntfLink'],   // ntfLink (.40): ลิงก์ประกาศ · msg (24 พ.ย.): ข้อความส่วนตัว · iconsOff (22 พ.ย.): ไอคอนบนแถบเมนูที่ปิด   // tg (22 พ.ย.): ประกาศ → Telegram
+  sys: ['pin', 'holidays', 'appName', 'appSub', 'logo', 'nav', 'roles', 'boxes', 'security', 'subHide', 'subOrder', 'subName', 'icons', 'tg', 'iconsOff', 'msg', 'ntfLink'],   // ntfLink (.40): ลิงก์ประกาศ · msg (24 พ.ย.): ข้อความส่วนตัว · iconsOff (22 พ.ย.): ไอคอนบนแถบเมนูที่ปิด   // tg (22 พ.ย.): ประกาศ → Telegram
 };
 const SUB_ALL = '*';   // 20 พ.ย.: แอดมินรองแบบทุกหมวด (Code.gs API 105 ส่ง '*' มาใน sub)
 const cfgTabOf = k => Object.keys(CFG_TABS).find(t => CFG_TABS[t].includes(k)) || '';
@@ -8677,7 +8695,7 @@ new MutationObserver(() => { if (!ntfDotQ) { ntfDotQ = true; requestAnimationFra
 /* .41: โหมดตั้งลิงก์ประกาศบนหน้าเว็บจริง (แอดมินหลัก) · ร่าง = nlp.cfg (สำเนาตั้งค่า) · บันทึก = saveConfig */
 const nlp = { on: false, cfg: null, base: '', key: '', anchor: null, quit: false, at: '', pv: '' };
 const nlpMarked = new Set();
-const nlpCan = () => !!state.user && (state.user.isAdmin || state.user.via === 'google') && !txsOnly();
+const nlpCan = () => !!state.user && (state.user.isAdmin || state.user.via === 'google' || (!!state.user.isSub && subScope().includes('sys'))) && !txsOnly();   // .44: แอดมินรอง (หมวดระบบ) = ส่งขออนุมัติ
 const nlpState = c => JSON.stringify({ l: c.ntfLink || {}, n: c.noShow || {}, b: (c.bq || {}).ntf || [] });
 const nlpDirty = () => nlp.on && nlpState(nlp.cfg) !== nlp.base;
 const nlpLinked = k => { const L = ntflOf(k, nlp.cfg); return !!L && L.on && L.roles.length > 0; };
@@ -8714,7 +8732,7 @@ function nlpBar() {
   if (!nlp.on) { bar.innerHTML = ''; return; }
   const n = NTF_LINKS.filter(d => nlpLinked(d.k)).length, nc = Object.keys(nlp.cfg.ntfLink || {}).filter(k => ntfcParse(k) && nlpLinked(k)).length;
   bar.innerHTML = `<b>🔔 ตั้งลิงก์ประกาศ</b><span>เห็นเฉพาะแอดมิน · กดปุ่มที่มีกรอบประเพื่อตั้งประกาศ (กรอบทึบ = ลิงก์อยู่) · ปุ่มอื่นกดไม่ได้ในโหมดนี้ · ไปแถบอื่นได้ตามปกติ</span>
-    <span class="nlp-acts"><button type="button" class="btn sm" data-nlp="list">รายการปุ่มทั้งหมด (ลิงก์ ${n}/${NTF_LINKS.length}${nc ? ` · เงื่อนไข ${nc}` : ''})</button><button type="button" class="btn sm primary" data-nlp="save"${nlpDirty() ? '' : ' disabled'}>บันทึก</button><button type="button" class="btn sm" data-nlp="quit">${nlp.quit ? 'ออก (ทิ้งที่แก้)' : 'ออก'}</button></span>`;
+    <span class="nlp-acts"><button type="button" class="btn sm" data-nlp="list">รายการปุ่มทั้งหมด (ลิงก์ ${n}/${NTF_LINKS.length}${nc ? ` · เงื่อนไข ${nc}` : ''})</button><button type="button" class="btn sm primary" data-nlp="save"${nlpDirty() ? '' : ' disabled'}>${state.user.isAdmin ? 'บันทึก' : 'ส่งขออนุมัติ'}</button><button type="button" class="btn sm" data-nlp="quit">${nlp.quit ? 'ออก (ทิ้งที่แก้)' : 'ออก'}</button></span>`;
 }
 // กรอบรอบปุ่มที่ลิงก์ได้: แถบที่เปิดอยู่ (ลิงก์ของแถบนั้น) + หน้าต่างที่เปิด (ทุกลิงก์)
 function nlpMark() {
@@ -8803,6 +8821,17 @@ async function nlpSave(btn) {
   const next = mergeConfig({ ...state.config, ntfLink: nlp.cfg.ntfLink || {}, noShow: nlp.cfg.noShow, bq: { ...state.config.bq, ntf: (nlp.cfg.bq || {}).ntf || [] } });
   btn.disabled = true;
   try {
+    if (!state.user.isAdmin) {   // .44: แอดมินรอง = ส่งเฉพาะส่วนที่แก้เป็นคำขอ (มีผลเมื่อแอดมินหลักอนุมัติ · เหมือนบันทึกหน้าตั้งค่า)
+      const changes = {};
+      for (const k of ['ntfLink', 'noShow', 'bq']) if (JSON.stringify(next[k]) !== JSON.stringify(state.config[k])) changes[k] = next[k];
+      if (!Object.keys(changes).length) { nlpEnd(); return toast('ไม่มีการแก้ไข'); }
+      const bad = cfgReqBad(state.config, changes, subScope());
+      if (bad.length) { btn.disabled = false; return toast(`แก้ส่วนนี้ไม่ได้ (นอกหมวดที่ได้รับสิทธิ์): ${bad.map(k => cfgKeyLabel(k)).join(', ')}`, { err: true }); }
+      const rows = await store.cfgPropose(changes, 'ตั้งลิงก์ประกาศบนหน้าเว็บ');
+      state.cfgReqs = cfgReqsFor(rows, state.user, null);
+      nlpEnd();
+      return toast(`ส่งคำขอแล้ว (${Object.keys(changes).map(cfgKeyLabel).join(', ')}) · มีผลเมื่อแอดมินหลักอนุมัติ`);
+    }
     await store.saveConfig(next);
     state.config = next;
     nlpEnd();
@@ -9111,6 +9140,7 @@ function mergeConfig(c) {
   { const sc = c.security && typeof c.security === 'object' ? c.security : {}, n = Math.floor(+sc.idleMin); out.security = { idleMin: sc.idleMin === 0 || sc.idleMin === '0' ? 0 : n > 0 ? Math.min(IDLE_MAX, Math.max(5, n)) : d.security.idleMin }; }
   out.formRules = fdNorm(c.formRules);
   out.subHide = subHideNorm(c.subHide);
+  out.subName = subNameNorm(c.subName);
   out.subOrder = subOrderNorm(c.subOrder);
   out.flow = flowNorm(c.flow);
   out.icons = iconsNorm(c.icons);
@@ -9307,7 +9337,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.43';
+const PAGE_VERSION = '2026-11-22.44';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -11372,7 +11402,7 @@ function viewAsRows() {
   for (const v of order) {
     const a = accessOf(v);
     rows.push({ v, label: navLabel(v), a, sub: false });
-    if (a && SUB_VIEWS[v]) { const vis = subVisible(v); for (const [k, l] of SUB_VIEWS[v]) rows.push({ v: `${v}.${k}`, label: l, a: vis.includes(k) ? a : '', sub: true }); }
+    if (a && SUB_VIEWS[v]) { const vis = subVisible(v); for (const [k] of SUB_VIEWS[v]) rows.push({ v: `${v}.${k}`, label: subLabel(v, k), a: vis.includes(k) ? a : '', sub: true }); }
   }
   return rows;
 }
@@ -13480,7 +13510,7 @@ const dqMarkOn = () => store.mode !== 'sheet' || serverHas(DQM_API);
 const DQ_DESK_API = 76;   // API 76: ภายใน / Walk in (API 75 เก็บ Walk in อย่างเดียว)
 const dqDeskOn = () => store.mode !== 'sheet' || serverHas(DQ_DESK_API);
 const DQ_DESK_OLD = 'แจกในแถบย่อย ภายใน/Walk in ต้องใช้ Code.gs รุ่น 2026-11-12.3 ขึ้นไป · วาง Code.gs ใหม่แล้ว Deploy (Manage deployments → แก้ deployment เดิม → New version)';
-const dqDeskName = k => (k === 'walk' ? 'ภายใน/Walk in' : 'Call center');
+const dqDeskName = k => subLabel('dq', k === 'walk' ? 'walk' : 'call');   // .44: ชื่อที่ตั้งเอง (ตั้งค่า → แถบเมนู)
 const dqDeskOf = r => (r.desk === 'walk' || r.desk === 'in' ? 'walk' : 'call');
 /* ---------- Standing order สำหรับผู้ป่วยนัด case call center (แถบย่อย Call center · ข้อมูลเก็บกับการแจก: ช่อง so · Code.gs API 78) ---------- */
 // ช่องตามแบบฟอร์มกระดาษ · เลือกประเภทการนัด = ติ๊กรายการที่ทำประจำของประเภทนั้นให้ (แก้ได้) · พิมพ์ / ดูตัวอย่างเป็นหน้า A4
@@ -13615,7 +13645,7 @@ const DQ_VIA = [['in', 'ภายใน'], ['walk', 'Walk in']];
 const dqViaName = v => (DQ_VIA.find(([k]) => k === v) || [, ''])[1];
 function dqDeskList() {
   const u = state.user, all = DQ_DESKS.map(([k]) => k);
-  if (u.via === 'google' || u.pending || u.isAdmin) return all;
+  if (u.via === 'google' || u.pending || u.isAdmin || (subColOn('dq') && serverHas(SUBV_API))) return all;   // .44: แอดมินรอง = เหมือนแอดมินหลัก (Code.gs dqDesks_ API 134)
   const set = state.config.dq.desks || {}, role = str(u.role).toUpperCase();
   const mine = all.filter(k => (set[k] || []).some(r => str(r).toUpperCase() === role));
   return mine.length ? mine : all;
@@ -14182,7 +14212,7 @@ const SUB_HIST = {
 };
 function curSubKey(view) {
   const n = curSubName(), subs = SUB_VIEWS[view] || [];
-  const x = n ? subs.find(s => s[1] === n || n.startsWith(s[1])) : null;
+  const x = n ? subs.find(s => { const l = subLabel(view, s[0]); return l === n || n.startsWith(l) || s[1] === n || n.startsWith(s[1]); }) : null;   // .44: ชื่อที่ตั้งเอง
   return x ? x[0] : '';
 }
 function viewHistBtn() {
@@ -14980,8 +15010,8 @@ function navDeskCells(d, k) {
     const on = deskSees(d, r).includes(k) ? 'on' : '';
     return `<select class="acc-sel" data-navdesk="${k}" data-deskrole="${esc(r)}" data-v="${on ? 'view' : ''}" aria-label="${esc(`${l} · ${r}`)}"${lock ? ' disabled' : ''}>${opt('on', 'เห็น', on)}${opt('', 'ไม่เห็น', on)}</select>`;
   };
-  return `<td></td><td class="nav-name nav-sub">└ ${esc(l)}</td><td colspan="2" class="nav-subnote">แถบย่อยของ ${esc(str(x.label) || VIEW_LABEL.dq)}${k === 'call' ? ' · แถบเดิม · ดึงรายงาน HIS' : ''}</td>`
-    + `${d.roles.map(r => `<td>${cell(r)}</td>`).join('')}<td class="acc-admin">${(x.access || {})[ADMIN_ROLE] ? '<span class="acc-fixed" title="แอดมินเห็นทุกแถบย่อย">เห็น</span>' : '<span class="acc-fixed">–</span>'}</td><td class="acc-admin"><span class="acc-fixed" title="ใช้ตามตำแหน่งของตัวเอง">ตามตำแหน่ง</span></td><td></td>`;
+  return `<td></td><td class="nav-name nav-sub">└ ${esc(subDefName('dq', k, d))}</td><td>${subNameIn(d, 'dq', k, subTabs().length > 0 && !subTabs().includes('sys'))}</td><td class="nav-subnote">แถบย่อยของ ${esc(str(x.label) || VIEW_LABEL.dq)}${k === 'call' ? ' · แถบเดิม · ดึงรายงาน HIS' : ''}</td>`
+    + `${d.roles.map(r => `<td>${cell(r)}</td>`).join('')}<td class="acc-admin">${(x.access || {})[ADMIN_ROLE] ? '<span class="acc-fixed" title="แอดมินเห็นทุกแถบย่อย">เห็น</span>' : '<span class="acc-fixed">–</span>'}</td><td class="acc-admin">${subAdmCell(x)}</td><td></td>`;
 }
 const syncNavDesks = () => { for (const tr of $$('[data-navsub]', settingsEl)) tr.innerHTML = navDeskCells(draft, tr.dataset.navsub); };
 let dqSkipYm = '';   // เดือนที่แสดงในตาราง หักคิวรายเดือนของแพทย์ (ว่าง = เดือนนี้)
@@ -15044,7 +15074,7 @@ function renderConsult() {
   const subs = subVisible('consult'), want = pref.get('csTab', 'cs'), cur = subs.includes(want) ? want : subs[0] || 'cs';
   const all = subs.includes('ontx') || subs.includes('hold') ? ontxAll() : [], sep = subs.includes('hold');
   const nOn = all.filter(x => !(sep && x.hold) && (x.c || !x.visit.seen)).length, nHold = sep ? all.filter(x => x.hold).length : 0;
-  const lbl = { cs: 'Consult', ontx: `ระหว่างฉาย${nOn ? `<b class="cs-n">${nOn}</b>` : ''}`, hold: `Hold RT${nHold ? `<b class="cs-n hold">${nHold}</b>` : ''}` };
+  const lbl = { cs: esc(subLabel('consult', 'cs')), ontx: `${esc(subLabel('consult', 'ontx'))}${nOn ? `<b class="cs-n">${nOn}</b>` : ''}`, hold: `${esc(subLabel('consult', 'hold'))}${nHold ? `<b class="cs-n hold">${nHold}</b>` : ''}` };
   $('#cs-tabs').innerHTML = subs.length > 1 ? subs.map(k => `<button type="button" class="tab" role="tab" data-cstab="${k}" aria-selected="${k === cur}">${lbl[k]}</button>`).join('') : '';
   $('#cs-main').hidden = cur !== 'cs';
   $('#cs-ontx').hidden = cur === 'cs';
@@ -15518,9 +15548,9 @@ function renderNurse() {
   const docF = str(pref.get('nurseDoc', '')).toUpperCase(), byDoc = r => !docF || str(r.doc).toUpperCase() === docF;
   // แถบย่อย: ตัวเลข = รอยืนยัน (ตามคำค้นและแพทย์ที่เลือก) · ปุ่มจัดลำดับแถบ
   $('#nurse-tabs').innerHTML = tabs.map(k => { const n = k === 'see' ? seeTodayN() : k === 'hold' && nc2On() ? nurseHoldList().filter(x => hit(x.c) && byDoc(x.c)).length : k === 'ontx' || k === 'hold' ? nurseOntxList(k).filter(x => { const r = ontxDec(x); return x.c && !(r && r.nurse) && hit(x.c) && byDoc(x.c); }).length + (k === 'ontx' ? nurseOldRtd().filter(r => hit(r) && byDoc(r)).length + ncOffRx().filter(x => x.att.status === 'see' && hit(x) && byDoc(x)).length : 0)
-      : k === 'mv' ? ncMvList().filter(r => r.status !== 'told').length : k === 'today' ? ncTodayList().filter(x => !x.att && !x.done).length : k === 'miss' ? ncMissList().filter(x => !x.att).length : k === 'chemo' ? chemoList(today()).filter(x => !x.done).length : data[k].wait.filter(r => hit(r) && byDoc(r)).length; return `<button type="button" class="tab" role="tab" data-nursetab="${k}" aria-selected="${k === cur}">${esc((SUB_VIEWS.nurse.find(x => x[0] === k) || [, k])[1])}${n ? `<b class="cs-n">${n}</b>` : ''}</button>`; }).join('')
+      : k === 'mv' ? ncMvList().filter(r => r.status !== 'told').length : k === 'today' ? ncTodayList().filter(x => !x.att && !x.done).length : k === 'miss' ? ncMissList().filter(x => !x.att).length : k === 'chemo' ? chemoList(today()).filter(x => !x.done).length : data[k].wait.filter(r => hit(r) && byDoc(r)).length; return `<button type="button" class="tab" role="tab" data-nursetab="${k}" aria-selected="${k === cur}">${esc(subLabel('nurse', k))}${n ? `<b class="cs-n">${n}</b>` : ''}</button>`; }).join('')
     + (tabs.length > 1 ? `<button type="button" class="btn ghost sm" data-nurseord="1" aria-expanded="${nurseOrdOpen}" title="จัดลำดับแถบย่อย (จำในเครื่องนี้)">⇅ จัดลำดับแถบ</button>` : '');
-  const ordHtml = nurseOrdOpen && tabs.length > 1 ? `<div class="nurse-ord" role="group" aria-label="ลำดับแถบย่อย"><b>ลำดับแถบ:</b>${tabs.map((k, i) => `<span>${esc((SUB_VIEWS.nurse.find(x => x[0] === k) || [, k])[1])}<button type="button" class="mv" data-nursemv="${k}|-1"${i ? '' : ' disabled'} aria-label="เลื่อนไปซ้าย">‹</button><button type="button" class="mv" data-nursemv="${k}|1"${i < tabs.length - 1 ? '' : ' disabled'} aria-label="เลื่อนไปขวา">›</button></span>`).join('')}<button type="button" class="btn ghost sm" data-nursemv="reset">ค่าเริ่มต้น</button><span class="muted" style="border:0;background:none">จำในเครื่องนี้</span></div>` : '';
+  const ordHtml = nurseOrdOpen && tabs.length > 1 ? `<div class="nurse-ord" role="group" aria-label="ลำดับแถบย่อย"><b>ลำดับแถบ:</b>${tabs.map((k, i) => `<span>${esc(subLabel('nurse', k))}<button type="button" class="mv" data-nursemv="${k}|-1"${i ? '' : ' disabled'} aria-label="เลื่อนไปซ้าย">‹</button><button type="button" class="mv" data-nursemv="${k}|1"${i < tabs.length - 1 ? '' : ' disabled'} aria-label="เลื่อนไปขวา">›</button></span>`).join('')}<button type="button" class="btn ghost sm" data-nursemv="reset">ค่าเริ่มต้น</button><span class="muted" style="border:0;background:none">จำในเครื่องนี้</span></div>` : '';
   if (cur === 'see') { $('#nurse-ctl').innerHTML = ordHtml; return renderSeeWeek(words); }   // นัดพบแพทย์: ตารางพบแพทย์รายสัปดาห์
   if (cur === 'hold' && nc2On()) return renderNurseHold(words, ordHtml);   // 20 พ.ย.: Hold RT = รายชื่อผู้ป่วยที่ Hold อยู่ · ส่งพบแพทย์ / ยกเลิก course / Note
   if (cur === 'ontx' || cur === 'hold') return renderNurseOntx(cur, words, ordHtml);   // 19 พ.ย.: รับคำสั่งแพทย์ (แพทย์ยังไม่สั่ง = พยาบาลสั่งแทนได้)
@@ -22269,7 +22299,7 @@ function renderRttSys() {
 }
 function renderJobs() {
   const jt = jobsTab(), nv = vacNos().length;
-  $('#jobs-tabs').innerHTML = subVisible('jobs').map(k => [k, { p4p: 'P4P', leave: 'วันลา', vac: 'Vac-Lok', rtt: state.config.jobs.sys.title }[k]]).map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacHeld().size}</span>` : ''}</button>`).join('');
+  $('#jobs-tabs').innerHTML = subVisible('jobs').map(k => [k, esc(subLabel('jobs', k))]).map(([k, l]) => `<button type="button" class="tab" role="tab" data-jtab="${k}" aria-selected="${jt === k}"${k === 'vac' && nv ? ' title="Vac-Lok ว่าง"' : ''}>${l}${k === 'vac' && nv ? `<span class="n">ว่าง ${nv - vacHeld().size}</span>` : ''}</button>`).join('');
   $('#jobs-p4p').hidden = jt !== 'p4p';
   $('#jobs-vac').hidden = jt !== 'vac';
   $('#jobs-rtt').hidden = jt !== 'rtt';
@@ -24367,7 +24397,7 @@ const CFG_KEY_LABEL = { flow: 'RT Workflow', tdfApp: 'TDF Dose Calculator', send
   brachySync: 'Brachytherapy จากระบบนัด', tdfSync: 'RC จาก TDF', ptags: 'รายละเอียดผู้ป่วย', mobility: 'สถานะผู้ป่วย', igrt: 'IGRT', qColors: 'สีคิว', queues: 'ช่วงคิวฉาย', fxTypes: 'สถานะ fraction',
   moveReplan: 'ย้ายห้องแล้วส่งงานวางแผนใหม่', fxgParts: 'ข้อมูลในคอลัมน์ผู้ป่วย', quota: 'โควตาต่อผู้ป่วย', dayMax: 'จำนวนผู้ป่วยต่อวันที่เป็นสีแดง', gapWarn: 'แจ้งเตือนคำนวณ decay', dutyRoles: 'ตำแหน่ง RTT / RA ประจำวัน',
   ptForm: 'ฟอร์มเพิ่มผู้ป่วย (ห้องฉาย)', reg: 'ลงทะเบียน', appt: 'ลงนัด', order: 'ใบสั่ง CT', bq: 'นัดคิวใส่แร่', ct: 'CT-SIM', jobs: 'RTT/RA Jobs', vac: 'Vac-Lok', pin: 'รหัส PIN', holidays: 'วันหยุด',
-  formRules: 'ค่าเริ่มต้นของฟอร์ม', cols: 'Column แสดงผล', subHide: 'แถบย่อย (แถบเมนู)', subOrder: 'ลำดับแถบย่อย', admins: 'แอดมิน', subAdmins: 'แอดมินรอง', delGuard: 'ห้ามลบผู้ป่วยที่ยังรอในแถบอื่น', fxSee: 'พบแพทย์วันนั้น: รอพยาบาลยืนยันก่อนบันทึก fraction', appName: 'ชื่อระบบ', appSub: 'บรรทัดรอง', logo: 'โลโก้', nav: 'แถบเมนู', roles: 'ตำแหน่ง', boxes: 'ลำดับกล่องในแถบ', renames: 'แก้ชื่อตัวเลือก', admins: 'แอดมิน', subAdmins: 'แอดมินรอง' };
+  formRules: 'ค่าเริ่มต้นของฟอร์ม', cols: 'Column แสดงผล', subHide: 'แถบย่อย (แถบเมนู)', subOrder: 'ลำดับแถบย่อย', subName: 'ชื่อแถบย่อย', admins: 'แอดมิน', subAdmins: 'แอดมินรอง', delGuard: 'ห้ามลบผู้ป่วยที่ยังรอในแถบอื่น', fxSee: 'พบแพทย์วันนั้น: รอพยาบาลยืนยันก่อนบันทึก fraction', appName: 'ชื่อระบบ', appSub: 'บรรทัดรอง', logo: 'โลโก้', nav: 'แถบเมนู', roles: 'ตำแหน่ง', boxes: 'ลำดับกล่องในแถบ', renames: 'แก้ชื่อตัวเลือก', admins: 'แอดมิน', subAdmins: 'แอดมินรอง' };
 CFG_KEY_LABEL.ntfLink = 'ลิงก์ประกาศ';
 const cfgKeyLabel = k => CFG_KEY_LABEL[k] || k;
 const tabLabel = t => (SET_TABS.find(x => x[0] === t) || [t, t])[1];
@@ -27559,7 +27589,7 @@ function renderMpLeave() {
 const roTab = () => { const v = pref.get('roTab', 'leave'), vis = subVisible('rojobs'); return vis.includes(v) ? v : vis.includes('leave') ? 'leave' : vis[0]; };
 function renderRoJobs() {
   const t = roTab();
-  $('#ro-tabs').innerHTML = subVisible('rojobs').map(k => [k, { p4p: 'P4P', leave: 'วันลา' }[k]]).map(([k, l]) => `<button type="button" class="tab" role="tab" data-rotab="${k}" aria-selected="${t === k}">${l}</button>`).join('');
+  $('#ro-tabs').innerHTML = subVisible('rojobs').map(k => [k, esc(subLabel('rojobs', k))]).map(([k, l]) => `<button type="button" class="tab" role="tab" data-rotab="${k}" aria-selected="${t === k}">${l}</button>`).join('');
   $('#ro-p4p').hidden = t !== 'p4p';
   $('#ro-leave').hidden = t !== 'leave';
   if (t === 'p4p') return renderRoP4p();
@@ -30331,7 +30361,7 @@ const EV_API = 79;
 const evOn = () => store.mode !== 'sheet' || serverHas(EV_API);
 const evCan = () => accessOf('deptcal') === 'edit' && evOn() && subVisible('deptcal').includes('ev');
 const DC_KINDS = [['ev', 'กิจกรรม'], ['mp', 'MP'], ['ro', 'แพทย์'], ['rtt', 'RTT/RA']];
-const dcKinds = () => subVisible('deptcal').map(k => DC_KINDS.find(x => x[0] === k)).filter(Boolean);   // ชั้นข้อมูลที่ตำแหน่งนี้เห็น (ตั้งค่า → แถบเมนู · แถว └ ใต้ปฏิทินแผนก)
+const dcKinds = () => subVisible('deptcal').map(k => DC_KINDS.find(x => x[0] === k)).filter(Boolean).map(([k, l]) => [k, str((state.config.subName || {})[`deptcal.${k}`]) || l]);   // .44: ชื่อที่ตั้งเอง   // ชั้นข้อมูลที่ตำแหน่งนี้เห็น (ตั้งค่า → แถบเมนู · แถว └ ใต้ปฏิทินแผนก)
 const dcShow = () => { const v = pref.get('dcShow', null), ks = dcKinds().map(x => x[0]); return Array.isArray(v) ? v.filter(k => ks.includes(k)) : ks; };
 function normEv(o) {
   const v = {};
@@ -30930,8 +30960,8 @@ function ntflSetHtml(d) {
       <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></td>
       <td><button type="button" class="btn ghost danger sm" data-nldel="${x.k}" title="เลิกลิงก์ปุ่มนี้ (ไม่ประกาศ)">ลบลิงก์</button></td></tr>`; };
   return `<div class="sec" data-sec="ntflink"><div class="sec-head"><h2>ลิงก์ประกาศ</h2><p>ปุ่มที่ลิงก์กับระบบประกาศ: กดปุ่มแล้วบันทึกสำเร็จ = ประกาศขึ้นแถบตัววิ่งของอาชีพที่เลือก (และกลุ่ม Telegram ถ้าตั้งไว้) · ปุ่มที่ลิงก์แล้วมีจุดเทาจางมุมขวาบน · ข้อความใส่ ${NTFL_PH.map(p => `<code>{${p}}</code>`).join(' ')} ได้ · ประกาศเกี่ยวกับผู้ป่วยแนบ HN และชื่อให้เอง (Telegram ย่อชื่อตามตั้งค่า) · กดซ้ำรายการเดิมไม่ประกาศซ้ำ</p></div>
-    ${!nlpCan() && state.user && state.user.isSub ? '<p class="muted def-note" style="margin:0 0 8px">🎯 ตั้งบนหน้าเว็บจริง (กดเลือกปุ่มบนหน้าเว็บ) ใช้ได้เฉพาะแอดมินหลัก · แอดมินรองตั้งจากตารางนี้ได้</p>' : ''}
-    ${nlpCan() ? '<p class="nl-pick-row" style="margin:0 0 8px"><button type="button" class="btn primary sm" data-nlpstart>🎯 ตั้งบนหน้าเว็บจริง</button> <span class="muted">เปิดหน้าเว็บจริง แล้วกดเลือกปุ่มที่ต้องการให้ประกาศ (เห็นเฉพาะแอดมิน)</span></p>' : ''}
+    ${!nlpCan() && state.user && state.user.isSub ? '<p class="muted def-note" style="margin:0 0 8px">🎯 ตั้งบนหน้าเว็บจริง: แอดมินรองต้องได้รับสิทธิ์หมวดระบบ (ตั้งค่า → แอดมิน)</p>' : ''}
+    ${nlpCan() ? '<p class="nl-pick-row" style="margin:0 0 8px"><button type="button" class="btn primary sm" data-nlpstart>🎯 ตั้งบนหน้าเว็บจริง</button> <span class="muted">เปิดหน้าเว็บจริง แล้วกดเลือกปุ่มที่ต้องการให้ประกาศ (เห็นเฉพาะแอดมิน' + (state.user && !state.user.isAdmin ? ' · แอดมินรอง: บันทึก = ส่งขออนุมัติ' : '') + ')</span></p>' : ''}
     <div class="table-wrap set-table"><table class="nl-tb"><thead><tr><th>เปิด</th><th style="text-align:left">ปุ่ม</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ</th><th></th></tr></thead>
       <tbody>${linked.map(row).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีปุ่มที่ลิงก์</td></tr>'}</tbody></table></div>
     ${free.length ? `<div class="nl-add"><label class="field" style="margin:0;min-width:260px"><span class="lbl">เพิ่มลิงก์ปุ่ม</span><select id="nl-add-k">${free.map(x => `<option value="${x.k}">${esc(x.label)} · ${esc(x.where)}</option>`).join('')}</select></label><button type="button" class="btn sm" data-nladd>+ เพิ่มลิงก์</button></div>` : ''}
@@ -31936,7 +31966,7 @@ function applyIcons() {
 /* ---------- 15 พ.ย.: แถบย่อยที่ตำแหน่งนี้เห็น (ตั้งค่า → แถบเมนู · แถว └) · แอดมิน / บัญชี Google เห็นทุกแถบย่อย · ซ่อนหมด = เห็นทั้งหมด (กันหน้าว่าง) ---------- */
 function subVisible(view) {
   const u = state.user, all = subOrderOf(view);   // 20 พ.ย.: เรียงตามลำดับที่ตั้งไว้ (ตั้งค่า → แถบเมนู)
-  if (u.via === 'google' || u.isAdmin || u.pending) return all;
+  if (u.via === 'google' || u.isAdmin || u.pending || subColOn(view)) return all;   // .44: แอดมินรอง (ตั้งคอลัมน์แอดมินรองไว้) = เหมือนแอดมินหลัก
   const hide = state.config.subHide || {}, mine = all.filter(k => !(hide[`${view}.${k}`] || []).includes(u.role));
   return mine.length ? mine : all;
 }
@@ -31948,9 +31978,25 @@ function navSubCells(d, view, k) {
     const on = hid.has(r) ? '' : 'on';
     return `<select class="acc-sel" data-navsubv="${key}" data-subrole="${esc(r)}" data-v="${on ? 'view' : ''}" aria-label="${esc(`${l} · ${r}`)}"${lock ? ' disabled' : ''}>${opt('on', 'เห็น', on)}${opt('', 'ไม่เห็น', on)}</select>`;
   };
-  return `<td></td><td class="nav-name nav-sub">└ ${esc(l)}</td><td colspan="2" class="nav-subnote">${view === 'deptcal' ? 'ข้อมูลในปฏิทิน' : 'แถบย่อย'}ของ ${esc(name)}</td>`
-    + `${d.roles.map(r => `<td>${cell(r)}</td>`).join('')}<td class="acc-admin">${(x.access || {})[ADMIN_ROLE] ? '<span class="acc-fixed" title="แอดมินเห็นทุกแถบย่อย">เห็น</span>' : '<span class="acc-fixed">–</span>'}</td><td class="acc-admin"><span class="acc-fixed" title="ใช้ตามตำแหน่งของตัวเอง">ตามตำแหน่ง</span></td><td><button type="button" class="icon-btn" data-subup="${key}" aria-label="เลื่อนแถบย่อย ${esc(l)} ขึ้น" title="เลื่อนแถบย่อยนี้ขึ้น (ลำดับใช้กับทุกคน)"${subOrderOf(view, d).indexOf(k) > 0 && !lock ? '' : ' disabled'}>↑</button></td>`;
+  return `<td></td><td class="nav-name nav-sub">└ ${esc(subDefName(view, k, d))}</td><td>${subNameIn(d, view, k, lock)}</td><td class="nav-subnote">${view === 'deptcal' ? 'ข้อมูลในปฏิทิน' : 'แถบย่อย'}ของ ${esc(name)}</td>`
+    + `${d.roles.map(r => `<td>${cell(r)}</td>`).join('')}<td class="acc-admin">${(x.access || {})[ADMIN_ROLE] ? '<span class="acc-fixed" title="แอดมินเห็นทุกแถบย่อย">เห็น</span>' : '<span class="acc-fixed">–</span>'}</td><td class="acc-admin">${subAdmCell(x)}</td><td><button type="button" class="icon-btn" data-subup="${key}" aria-label="เลื่อนแถบย่อย ${esc(l)} ขึ้น" title="เลื่อนแถบย่อยนี้ขึ้น (ลำดับใช้กับทุกคน)"${subOrderOf(view, d).indexOf(k) > 0 && !lock ? '' : ' disabled'}>↑</button></td>`;
 }
+// .44: ช่องชื่อแถบย่อย (ว่าง = ชื่อเดิม) · คอลัมน์แอดมินรอง: ตั้งคอลัมน์แอดมินรองของแถบหลักไว้ = เห็นทุกแถบย่อยเหมือนแอดมินหลัก
+const subNameIn = (d, view, k, lock) => { const def = subDefName(view, k, d); return `<input type="text" class="nav-subname" data-subname="${view}.${k}" value="${esc(str((d.subName || {})[`${view}.${k}`]))}" maxlength="30" placeholder="${esc(def)}" aria-label="ชื่อแถบย่อย ${esc(def)}" title="ชื่อที่แสดงของแถบย่อยนี้ (ว่าง = ${esc(def)})"${lock ? ' disabled' : ''}>`; };
+function subAdmCell(x) {
+  const a = (x.access || {})[SUB_ROLE];
+  if (a === 'edit' || a === 'view') return '<span class="acc-fixed" title="แอดมินรองเห็นทุกแถบย่อยเหมือนแอดมินหลัก (ตั้งคอลัมน์แอดมินรองของแถบหลักไว้)">เห็น</span>';
+  if (a === '') return '<span class="acc-fixed">–</span>';
+  return '<span class="acc-fixed" title="คอลัมน์แอดมินรองของแถบหลัก = ตามตำแหน่ง: ใช้ตามตำแหน่งของตัวเอง · ตั้งเป็น ดูได้ / บันทึกได้ = เห็นทุกแถบย่อยเหมือนแอดมินหลัก">ตามตำแหน่ง</span>';
+}
+document.addEventListener('input', e => {   // .44: ชื่อแถบย่อย (ร่างตั้งค่า)
+  const el = e.target;
+  if (!(el instanceof Element) || !el.dataset.subname || !draft) return;
+  const m = { ...(draft.subName || {}) }, t = str(el.value).replace(/\s+/g, ' ').trim().slice(0, 30);
+  if (t) m[el.dataset.subname] = t; else delete m[el.dataset.subname];
+  draft.subName = m;
+  updateSaveBar();
+});
 const syncNavSubs = () => { for (const tr of $$('[data-navsub2]', settingsEl)) { const [v, k] = tr.dataset.navsub2.split('.'); tr.innerHTML = navSubCells(draft, v, k); } };
 
 /* ---------- 15 พ.ย.: แถบห้องฉาย · ห้ามลบผู้ป่วยที่ยังรออยู่ในแถบอื่น (ตั้งค่า → ห้องฉาย · ค่าเริ่มต้นเปิด) ---------- */
