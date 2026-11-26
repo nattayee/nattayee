@@ -3583,6 +3583,9 @@ dialog.bg-hide::backdrop{opacity:0}
 .bq-ctline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
 .bq-ctline .check{min-width:84px}
 .bq-ctb{padding:0 6px!important;white-space:nowrap}
+.rm-n{color:var(--rc);font-weight:600}
+:root[data-theme="dark"] .rm-n{color:color-mix(in srgb,var(--rc) 62%,#fff)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .rm-n{color:color-mix(in srgb,var(--rc) 62%,#fff)}}
 .bq-rtroom{display:inline-block;padding:0 7px;border:1px solid var(--line-strong);border-radius:999px;color:var(--muted);font-size:12px;line-height:20px;white-space:nowrap}
 .bq-row.noshow td:not(.bq-act){color:var(--muted)}
 .bq-act{white-space:nowrap}
@@ -8697,6 +8700,13 @@ const ntflDef = k => NTF_LINKS.find(x => x.k === k) || ntfcDef(k) || svDef(k);  
  * บันทึกรายการใหม่ที่ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติของปุ่ม · แก้รายการเดิมเป็นค่านั้น = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ
  * box = ช่องในฟอร์ม (จุดเทาที่ตัวเลือก · โหมดตั้งบนหน้าเว็บกดตัวเลือกได้) · get = ค่าของรายการที่บันทึก (หลายค่า = array) · ช่องตรงกับ NTF_COND_ ใน Code.gs */
 const NTFC_API = 133;
+// .59 (Code.gs API 143): ส่งข้อความส่วนตัวถึงบุคคลของผู้ป่วย (ตรงกับ NTF_PPL_ ใน Code.gs)
+const NTF_PPL = [['doc', 'แพทย์เจ้าของไข้'], ['mp', 'นักฟิสิกส์ผู้วางแผน']];
+const NTF_PPL_API = 143;
+const nlPplOn = () => store.mode !== 'sheet' || serverHas(NTF_PPL_API);
+const ntfPpl = v => [...new Set((Array.isArray(v) ? v : []).map(str))].filter(x => NTF_PPL.some(p => p[0] === x));
+const lPpl = L => (L && nlPplOn() ? L.people || [] : []);
+const pplNames = ps => ps.map(p => (NTF_PPL.find(x => x[0] === p) || [p, p])[1]).join(', ');
 const NTFC_OLD = 'ประกาศตามเงื่อนไขในฟอร์มต้องใช้ Code.gs รุ่น 2026-11-25.1 ขึ้นไป';
 const NTF_COND = {
   'ap.new': [
@@ -8777,7 +8787,7 @@ function svFire(fn, a, r) {
   if (!ks.length) return;
   const rec = svRec(a, r), conds = ks.filter(k => k !== base && nlOn(k) && (c => !!c && ntfcHas(c.fd, c.v, rec))(ntfcParse(k)));
   const id = rec.id || (a.find(x => typeof x === 'string' && /^[\w|:.-]{3,80}$/.test(x)) || '');
-  const ctx = { ref: `${str(id).slice(0, 60) || uid()}|${today()}`, hn: rec.hn || '', name: rec.name || '', date: isDay(rec.date) ? rec.date : today(), doc: rec.doc || '', room: rec.room || '' };
+  const ctx = { ref: `${str(id).slice(0, 60) || uid()}|${today()}`, hn: rec.hn || '', name: rec.name || '', date: isDay(rec.date) ? rec.date : today(), doc: rec.doc || '', room: rec.room || '', mp: str(rec.mp).slice(0, 10) };   // .59 mp
   for (const k of conds.length ? conds : nlOn(base) ? [base] : []) ntfFire(k, ctx);
 }
 // store ทุกแบบ (ชีต / ตัวอย่าง): โหมดตั้งลิงก์ประกาศ = ไม่บันทึกจริง · ใช้งานจริง = ประกาศของจุดบันทึกหลังสำเร็จ
@@ -8833,18 +8843,18 @@ const ntfcOpts = (base, cfg) => (NTF_COND[base] || []).map(fd => {
 function ntflOf(k, cfg = state.config) {
   const d = ntflDef(k), m = (cfg && cfg.ntfLink) || {}, x = m[k];
   if (!d) return null;
-  if (x) return x.cut ? null : { on: x.on !== false, roles: x.roles || [], text: x.text || d.text };   // cut = ปุ่มเดิมที่แอดมินลบลิงก์ (ไม่ประกาศ)
+  if (x) return x.cut ? null : { on: x.on !== false, roles: x.roles || [], text: x.text || d.text, people: d.srv ? [] : ntfPpl(x.people) };   // cut = ปุ่มเดิมที่แอดมินลบลิงก์ (ไม่ประกาศ) · .59 people
   if (NTF_DEF[k] && ntfDefOn()) { const B = ntflOf(ntfcParse(k).base, cfg), D = NTF_DEF[k]; return { on: true, roles: [...new Set([...(B && B.on ? B.roles : []), ...D.roles])], text: D.text, def: true }; }   // .54
   if (/^ns\./.test(k)) { const ns = (cfg && cfg.noShow) || {}; return { on: ns[k.slice(3)] !== false, roles: ns.roles || [], text: d.text, old: true }; }
   if (k === 'bq.ct') return { on: true, roles: ((cfg && cfg.bq) || {}).ntf || [], text: d.text, old: true };
   return null;
 }
 // ลิงก์ใช้งานอยู่ (มีอาชีพที่ได้รับ · Code.gs รองรับ)
-const nlOn = k => { const L = ntflOf(k), d = ntflDef(k); return !!L && L.on && L.roles.length > 0 && (store.mode !== 'sheet' || serverHas(d.srv || d.api || NTFL_API)); };
+const nlOn = k => { const L = ntflOf(k), d = ntflDef(k); return !!L && L.on && (L.roles.length > 0 || lPpl(L).length > 0) && (store.mode !== 'sheet' || serverHas(d.srv || d.api || NTFL_API)); };   // .59: บุคคลอย่างเดียวก็ได้
 // คำอธิบายที่ปุ่ม / ตัวเลือก · noBase = ปุ่มบันทึกตอนแก้รายการเดิม (ไม่ประกาศปกติ · เงื่อนไขยังใช้)
 const ntflTip = (k, noBase) => {
   const c = ntfcParse(k), L = !noBase && nlOn(k) && (c || !ntflOnly(k)) ? ntflOf(k) : null, cs = c ? [] : ntfcOn(k);
-  const one = (kk, x) => { const cc = ntfcParse(kk); return `${cc ? `เลือก ${ntfcName(cc.fd, cc.v)} (${cc.fd.label}) แล้วบันทึก = ` : 'กดแล้ว'}ประกาศ "${x.text}" ถึง ${x.roles.join(', ')}`; };
+  const one = (kk, x) => { const cc = ntfcParse(kk), pp = lPpl(x); return `${cc ? `เลือก ${ntfcName(cc.fd, cc.v)} (${cc.fd.label}) แล้วบันทึก = ` : 'กดแล้ว'}${x.roles.length ? `ประกาศ "${x.text}" ถึง ${x.roles.join(', ')}` : `แจ้ง "${x.text}"`}${pp.length ? ` · ส่งข้อความถึง${pplNames(pp)}` : ''}`; };
   const parts = [...(L ? [one(k, L)] : []), ...cs.map(kk => one(kk, ntflOf(kk)))];
   return parts.length ? `ลิงก์ประกาศ: ${parts.join(' · ')} (และกลุ่ม Telegram ถ้าตั้งไว้)${cs.length ? ' · ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติ' : ''} · ตั้งค่า → ลิงก์ประกาศ` : '';
 };
@@ -8891,7 +8901,7 @@ const nlpMarked = new Set();
 const nlpCan = () => !!state.user && (state.user.isAdmin || state.user.via === 'google' || (!!state.user.isSub && subScope().includes('sys'))) && !txsOnly();   // .44: แอดมินรอง (หมวดระบบ) = ส่งขออนุมัติ
 const nlpState = c => JSON.stringify({ l: c.ntfLink || {}, n: c.noShow || {}, b: (c.bq || {}).ntf || [] });
 const nlpDirty = () => nlp.on && nlpState(nlp.cfg) !== nlp.base;
-const nlpLinked = k => { const L = ntflOf(k, nlp.cfg); return !!L && L.on && L.roles.length > 0; };
+const nlpLinked = k => { const L = ntflOf(k, nlp.cfg); return !!L && L.on && (L.roles.length > 0 || lPpl(L).length > 0); };
 const nlpGo = d => d.v[0] || ({ 'ct.new': 'ctsim', 'ap.new': 'appt', 'bq.new': 'bq' })[d.k] || '';
 // .42: เปิดฟอร์มเปล่า (ไม่บันทึกอะไร) เพื่อกดเลือกตัวเลือกของเงื่อนไข · [เปิด, เปิดอยู่แล้ว]
 const NTFC_OPEN = { 'ap.new': [() => openApForm(null), () => apDlg.open], 'ct.new': [() => openCtForm(null), () => ctDlg.open], 'bq.new': [() => openBqForm(null), () => bqDlg.open], 'dq.new': [() => { state.view = 'dq'; render(); }, () => state.view === 'dq'] };
@@ -8990,10 +9000,14 @@ function nlpPopHtml(k) {
     <label class="check"><input type="checkbox" data-nlpf="on"${on ? ' checked' : ''}> ${c ? `ประกาศเมื่อบันทึกฟอร์มที่เลือก ${esc(nm)}` : 'ประกาศเมื่อกดปุ่มนี้ (บันทึกสำเร็จ)'}</label>${!c && NTF_COND[k] ? `<label class="check"><input type="checkbox" data-nlpf="only"${ntflOnly(k, nlp.cfg) ? ' checked' : ''}> เฉพาะเคสที่ตรงเงื่อนไข (ด้านล่าง)</label>` : ''}
     <label class="field"><span class="lbl">ข้อความประกาศ <span class="sub-lbl">ใส่ ${NTFL_PH.map(p => `{${p}}`).join(' ')} ได้ · HN และชื่อผู้ป่วยแนบให้เอง</span></span><input type="text" data-nlpf="text" maxlength="200" value="${esc(cur.text)}" placeholder="${esc(d.text)}"></label>
     <div><span class="lbl">อาชีพที่ได้รับ</span><div class="nl-roles">${roles.map(r => `<label class="check"><input type="checkbox" data-nlpf="role" value="${esc(r)}"${cur.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></div>
-    <p class="muted nlp-prev">ตัวอย่าง: ${esc(nlpSample(cur.text))}${on && !cur.roles.length ? ' · <b>ยังไม่เลือกอาชีพ = ไม่ประกาศ</b>' : ''}</p>${old ? `<p class="nlp-old"><b>${esc(c ? NTFC_OLD : 'ปุ่มนี้ต้องใช้ Code.gs รุ่น 2026-11-24.10 ขึ้นไป')}</b></p>` : ''}
+    ${d.srv ? '' : nlpPplHtml(cur)}
+    <p class="muted nlp-prev">ตัวอย่าง: ${esc(nlpSample(cur.text))}${on && !cur.roles.length && !lPpl(cur).length ? ` · <b>${d.srv ? 'ยังไม่เลือกอาชีพ' : 'ยังไม่เลือกอาชีพหรือบุคคล'} = ไม่ประกาศ</b>` : ''}</p>${old ? `<p class="nlp-old"><b>${esc(c ? NTFC_OLD : 'ปุ่มนี้ต้องใช้ Code.gs รุ่น 2026-11-24.10 ขึ้นไป')}</b></p>` : ''}
     ${c ? `<p class="nlp-note">รายการใหม่ที่ตรงเงื่อนไข = ประกาศนี้แทนประกาศปกติของปุ่ม · แก้รายการเดิมเป็น ${esc(nm)} = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ</p>
     <div class="nlp-acts2"><button type="button" class="btn ghost sm" data-nlpset="${esc(c.base)}">‹ ปุ่ม ${esc(ntflDef(c.base).label)}</button><button type="button" class="btn ghost danger sm" data-nlp="cdel">ลบเงื่อนไข</button></div>` : SV_RE.test(k) ? nlpSvCondHtml(k) : nlpCondHtml(k)}`;
 }
+// .59: ส่งข้อความส่วนตัวถึงบุคคล (กล่องข้อความ RT Hub + Telegram ส่วนตัว)
+const NTF_PPL_TIP = 'ส่งเข้ากล่องข้อความใน RT Hub ของคนนั้น (เห็นเมื่อเข้าสู่ระบบ) และ Telegram ส่วนตัว (ถ้าเชื่อมไว้) · หาจาก HN ของรายการ: แพทย์ = แพทย์เจ้าของไข้ · นักฟิสิกส์ = MP ของเคส · ต้องเชื่อมบัญชีไว้ที่ตั้งค่า → ทีม · ไม่ส่งถึงคนที่กดเอง';
+const nlpPplHtml = cur => `<div><span class="lbl">ส่งข้อความส่วนตัวถึง <span class="sub-lbl" title="${esc(NTF_PPL_TIP)}">กล่องข้อความ RT Hub + Telegram ส่วนตัว</span></span><div class="nl-roles">${NTF_PPL.map(([v, l]) => `<label class="check"><input type="checkbox" data-nlpf="ppl" value="${v}"${(cur.people || []).includes(v) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>${store.mode === 'sheet' && !nlPplOn() ? '<p class="nlp-old"><b>ต้องใช้ Code.gs รุ่น 2026-11-26.3 ขึ้นไป</b></p>' : ''}</div>`;
 // .48: จุดบันทึก: เงื่อนไขจากค่าที่กรอกในการบันทึกที่เพิ่งกด · เงื่อนไขที่ตั้งไว้ · ลบจุดนี้
 function nlpSvCondHtml(base) {
   const keys = ntfcKeys(base, nlp.cfg), rec = nlp.sv && 'sv.' + nlp.sv.fn === base ? nlp.sv.rec : {};
@@ -9060,9 +9074,10 @@ $('#nlp-pop').addEventListener('input', e => {
   else if (el.dataset.nlpf === 'only') x.only = el.checked;   // .54
   else if (el.dataset.nlpf === 'text') x.text = str(el.value).replace(/\s+/g, ' ').slice(0, 200);
   else if (el.dataset.nlpf === 'role') x.roles = $$('#nlp-pop [data-nlpf="role"]:checked').map(y => y.value);
+  else if (el.dataset.nlpf === 'ppl') x.people = $$('#nlp-pop [data-nlpf="ppl"]:checked').map(y => y.value);   // .59
   ntflLegacy(nlp.cfg);
-  const pv = $('#nlp-pop .nlp-prev');
-  if (pv) pv.innerHTML = `ตัวอย่าง: ${esc(nlpSample(x.text || ntflDef(k).text))}${x.on && !x.roles.length ? ' · <b>ยังไม่เลือกอาชีพ = ไม่ประกาศ</b>' : ''}`;
+  const pv = $('#nlp-pop .nlp-prev'), srv = !!ntflDef(k).srv;
+  if (pv) pv.innerHTML = `ตัวอย่าง: ${esc(nlpSample(x.text || ntflDef(k).text))}${x.on && !x.roles.length && !lPpl(x).length ? ` · <b>${srv ? 'ยังไม่เลือกอาชีพ' : 'ยังไม่เลือกอาชีพหรือบุคคล'} = ไม่ประกาศ</b>` : ''}`;
   nlp.quit = false;
   nlpRefresh();
 });
@@ -9384,10 +9399,10 @@ function mergeConfig(c) {
     out.noShow = { roles: Array.isArray(ns.roles) ? [...new Set(ns.roles.map(str).filter(r => /^[\w -]{1,20}$/.test(r)))] : d.noShow.roles.slice(), ct: ns.ct !== false, sim: ns.sim !== false, see: ns.see !== false }; }
   { const nl = c.ntfLink && typeof c.ntfLink === 'object' && !Array.isArray(c.ntfLink) ? c.ntfLink : {};   // .40: ลิงก์ประกาศ
     out.ntfLink = {};
-    for (const x of NTF_LINKS) { const v = nl[x.k]; if (v && typeof v === 'object') out.ntfLink[x.k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || x.text, ...(x.srv && v.cut === true ? { cut: true, on: false } : {}), ...(NTF_COND[x.k] && typeof v.only === 'boolean' ? { only: v.only } : {}) }; }
-    for (const [k, v] of Object.entries(nl)) if (SV_RE.test(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 120) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || svDef(k).text };   // .48: จุดบันทึก
+    for (const x of NTF_LINKS) { const v = nl[x.k]; if (v && typeof v === 'object') out.ntfLink[x.k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || x.text, ...(!x.srv && ntfPpl(v.people).length ? { people: ntfPpl(v.people) } : {}), ...(x.srv && v.cut === true ? { cut: true, on: false } : {}), ...(NTF_COND[x.k] && typeof v.only === 'boolean' ? { only: v.only } : {}) }; }
+    for (const [k, v] of Object.entries(nl)) if (SV_RE.test(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 120) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200) || svDef(k).text, ...(ntfPpl(v.people).length ? { people: ntfPpl(v.people) } : {}) };   // .48: จุดบันทึก
     // .42: เงื่อนไขในฟอร์ม (ปุ่ม|ช่อง=ค่า · ข้อความว่าง = ข้อความของปุ่ม · สูงสุด 80 ลิงก์)
-    for (const [k, v] of Object.entries(nl)) if (ntfcParse(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 80) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200), ...(NTF_DEF[k] && v.cut === true ? { cut: true, on: false } : {}) }; }
+    for (const [k, v] of Object.entries(nl)) if (ntfcParse(k) && v && typeof v === 'object' && Object.keys(out.ntfLink).length < 80) out.ntfLink[k] = { on: v.on !== false, roles: [...new Set((Array.isArray(v.roles) ? v.roles : []).map(str).filter(r => /^[\w -]{1,20}$/.test(r)))], text: str(v.text).replace(/\s+/g, ' ').trim().slice(0, 200), ...(ntfPpl(v.people).length ? { people: ntfPpl(v.people) } : {}), ...(NTF_DEF[k] && v.cut === true ? { cut: true, on: false } : {}) }; }
   const ta = c.tdfApp && typeof c.tdfApp === 'object' ? c.tdfApp : {};   // 17 พ.ย.: TDF Dose Calculator (แถบย่อยของ Planning) · rec = ชีตบันทึกของ TDF · pdf = โฟลเดอร์ PDF
   out.tdfApp = { rec: str(ta.rec).trim().slice(0, 500), pdf: str(ta.pdf).trim().slice(0, 500) };
   out.sendBook = { url: str((c.sendBook && typeof c.sendBook === 'object' ? c.sendBook : {}).url).trim().slice(0, 500) };   // 20 พ.ย.: ทะเบียนหนังสือส่ง
@@ -9544,7 +9559,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.58';
+const PAGE_VERSION = '2026-11-22.59';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9930,15 +9945,17 @@ function localStore() {
       const ref = str(c.ref).slice(0, 80), id = `lk|${k}|${ref}`, cur = db.notify.find(x => x.id === id), live = !!cur && !cur.cancelAt;
       if (!ref) throw new Error('ไม่มีรายการของประกาศ');
       if (c.off) { if (live) { cur.cancelAt = nowISO(); cur.cancelBy = str(state.user.name); persist(); } return { rows: [] }; }
-      if (!L || !L.on || !L.roles.length || live) return { rows: [] };
+      if (!L || !L.on || (!L.roles.length && !lPpl(L).length) || live) return { rows: [] };   // .59: บุคคลอย่างเดียวก็ได้
       const dd = isDay(c.date) ? c.date : '', hn = str(c.hn).slice(0, 40);
       const sd = isDay(c.sim) ? c.sim : '';
       const text = L.text.replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันที่': dd ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}` : '', 'วันที่ start RT': sd ? `${sd.slice(8, 10)}/${sd.slice(5, 7)}` : '', 'แพทย์': str(c.doc).toUpperCase(), 'ห้อง': str(c.room), 'ห้องฉาย': str(c.txroom).slice(0, 30), 'รอบ': str(c.round) }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+\)/g, ')').trim() || d.text;
       const r = { id, text: hn ? ntfAddRoom(text, hn) : text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
+      const dm = ntfDmDemo(db, L, c, hn, r.text, id);   // .59: ข้อความส่วนตัวถึงบุคคล (เหมือน ntfDm_ ใน Code.gs)
+      if (!L.roles.length) { persist(); return { rows: [], dm }; }
       if (cur) Object.assign(cur, r); else db.notify.push(r);
       demoTgSend([r]);
       persist();
-      return clone({ rows: [r] });
+      return clone({ rows: [r], dm });
     },
     notifyDelete: async id => {   // 22 พ.ย.: เหมือน notifyDelete ใน Code.gs (API 112) · แอดมินหลัก / แอดมินรอง
       if (!ntfBoss()) throw new Error('ลบประกาศได้เฉพาะแอดมินหลักและแอดมินรอง');
@@ -15593,7 +15610,7 @@ function partsTag(c) {
 function ontxWho(x) {
   const c = x.c, td = today(), st = x.hold ? `<span class="ontx-tag st hold">${esc(x.st.t)}</span>${hold30Tag(x.st)}` : '';
   const rcAp = state.appt.filter(a => hnKey(a.hn) === hnKey(c.hn) && apState(a) !== 'skip' && /\bRe-CT/i.test(a.note) && localDay(a.created) >= plusDays(td, -30)).sort((a, b) => b.created.localeCompare(a.created))[0];
-  return `<div class="ontx-who"><b class="hn">${esc(c.hn)}</b> ${pnm(c.name)} <span class="muted">ห้อง ${esc(roomLabel(x.room))}</span>${x.hold ? st : stPill(x.st)}${partsTag(c)}${x.see ? '<span class="ontx-tag see">พบแพทย์วันนี้</span>' : ''}${x.rect ? `<span class="ontx-tag rect" title="${esc([x.rect.label, x.rect.reason, x.rect.by && `บันทึกโดย ${x.rect.by}`].filter(Boolean).join(' · '))}">Re-CT · พบแพทย์</span>` : ''}${x.fxsee ? `<span class="ontx-tag see" title="${esc([`สถานะ fraction วันนี้: ${x.fxsee.label}`, x.fxsee.note, x.fxsee.by && `บันทึกโดย ${x.fxsee.by}`].filter(Boolean).join(' · '))}">พบแพทย์ (ห้องฉาย)</span>` : ''}${x.visit ? `<span class="ontx-tag walk" title="${esc([x.visit.note, `ส่งโดย ${x.visit.by}`].filter(Boolean).join(' · '))}">${visitTag(x.visit)}${x.visit.note && x.visit.note !== VISIT_APPT ? ` · ${esc(x.visit.note)}` : ''}</span>` : ''}${rcAp ? `<span class="ontx-tag rect" title="${esc(rcAp.note)}">Re-CT: ลง CT Order แล้ว ${esc(isDay(rcAp.date) ? `นัด CT ${fmtDay(rcAp.date)}` : 'นัด CT on call')}</span>` : ''}</div>`;
+  return `<div class="ontx-who"><b class="hn">${esc(c.hn)}</b> ${pnm(c.name)} <span class="muted">ห้อง ${roomName(x.room)}</span>${x.hold ? st : stPill(x.st)}${partsTag(c)}${x.see ? '<span class="ontx-tag see">พบแพทย์วันนี้</span>' : ''}${x.rect ? `<span class="ontx-tag rect" title="${esc([x.rect.label, x.rect.reason, x.rect.by && `บันทึกโดย ${x.rect.by}`].filter(Boolean).join(' · '))}">Re-CT · พบแพทย์</span>` : ''}${x.fxsee ? `<span class="ontx-tag see" title="${esc([`สถานะ fraction วันนี้: ${x.fxsee.label}`, x.fxsee.note, x.fxsee.by && `บันทึกโดย ${x.fxsee.by}`].filter(Boolean).join(' · '))}">พบแพทย์ (ห้องฉาย)</span>` : ''}${x.visit ? `<span class="ontx-tag walk" title="${esc([x.visit.note, `ส่งโดย ${x.visit.by}`].filter(Boolean).join(' · '))}">${visitTag(x.visit)}${x.visit.note && x.visit.note !== VISIT_APPT ? ` · ${esc(x.visit.note)}` : ''}</span>` : ''}${rcAp ? `<span class="ontx-tag rect" title="${esc(rcAp.note)}">Re-CT: ลง CT Order แล้ว ${esc(isDay(rcAp.date) ? `นัด CT ${fmtDay(rcAp.date)}` : 'นัด CT on call')}</span>` : ''}</div>`;
 }
 // 24 พ.ย.: Nurse ยืนยันคำสั่งแล้ว = แพทย์แก้ / บันทึกซ้ำไม่ได้ (ปุ่มเป็น inactive · Nurse ยกเลิกการยืนยันก่อนจึงแก้ได้) · P4P แพทย์นับจากคำสั่งนี้อัตโนมัติ
 const RTD_LOCK_MSG = 'Nurse ยืนยันคำสั่งนี้แล้ว · แพทย์แก้ไม่ได้ (Nurse ยกเลิกการยืนยันที่แถบ Nurse → รับคำสั่งแพทย์ ก่อนจึงแก้ได้) · P4P นับให้แพทย์อัตโนมัติแล้ว';
@@ -15931,7 +15948,7 @@ function nurseRow(k, r, ok, edit) {
   // 20 พ.ย.: สัญลักษณ์แพทย์ต่อจาก HN · ไม่แสดงชื่อเต็มของแพทย์ในแถว (ชื่อเต็มอยู่ที่หัวกลุ่มและ tooltip ของสัญลักษณ์)
   const who = `<b class="hn">${esc(r.hn)}</b> ${r.doc ? docChip(r.doc) + ' ' : ''}${pnm(r.name)} `;
   if (k === 'ct') return `<li><span class="nurse-who">${who}${apReCt(r) ? ` <span class="sp-tag rect-tag" title="นัด Re-CT (ส่งมาจากห้องฉาย / ห้องตรวจ / ส่งแก้แผน)">${esc(apReCt(r))}</span>` : ''}${emergTag(r)}<small>นัด CT ${r.date === 'on call' ? 'On Call' : esc(fmtDay(r.date))}${r.ct ? ` · ${esc(ctLabel(r.ct))}` : ''}${r.sim && r.sim !== 'on call' ? ` · Start RT ${esc(fmtDay(r.sim))}` : ''}${r.by ? ` · ลงนัดโดย ${esc(r.by)}` : ''}</small></span>${okTxt}<button type="button" class="btn ghost sm" data-appdf="${esc(r.id)}" data-nurseprev="1" title="ดูใบสั่ง · ยืนยันได้ในหน้าต่างใบสั่ง">ใบสั่ง</button>${btn}</li>`;
-  if (k === 'rtd') return `<li><span class="nurse-who">${who}<b class="st ${decCls(r)}">${esc(decText(r))}</b><small>${esc(fmtDay(r.date))} · ห้อง ${esc(roomLabel(r.room))}${r.note ? ` · ${esc(r.note)}` : ''} · สั่งโดย ${esc(r.by)} ${esc(whenText(r.at))}</small></span>${okTxt}${btn}</li>`;
+  if (k === 'rtd') return `<li><span class="nurse-who">${who}<b class="st ${decCls(r)}">${esc(decText(r))}</b><small>${esc(fmtDay(r.date))} · ห้อง ${roomName(r.room)}${r.note ? ` · ${esc(r.note)}` : ''} · สั่งโดย ${esc(r.by)} ${esc(whenText(r.at))}</small></span>${okTxt}${btn}</li>`;
   const a = dqAppt(r);
   return `<li><span class="nurse-who">${who}<small>แจก ${esc(fmtDay(r.date))}${a ? ` · ลงนัด CT ${a.date === 'on call' ? 'On Call' : esc(fmtDay(a.date))}` : ''}${r.note ? ` · ${esc(r.note)}` : ''}</small></span>${okTxt}<button type="button" class="btn ghost sm" data-ccso="${esc(r.id)}" title="ดู Standing order · ยืนยันได้ในหน้าต่างนั้น">Standing order</button>${btn}</li>`;
 }
@@ -15993,7 +16010,7 @@ function ncOffRxRow(x, edit) {
   const st = done ? `<span class="nurse-ok">✓ ยืนยัน + แนะนำผู้ป่วยแล้ว · ${esc(x.att.nBy)} ${esc(whenText(x.att.nAt))}</span>` : seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)} ${esc(whenText(v.seen))}</span>` : `<span class="st wait">รอพบแพทย์ที่${esc(navLabel('consult'))}</span>`;
   const btn = !edit ? '' : done ? `<button type="button" class="btn ghost sm" data-att="${esc(key)}" data-st="see">ยกเลิก</button>`
     : `<button type="button" class="btn primary sm" data-att="${esc(key)}" data-st="seeadv"${seen ? '' : ' disabled title="แพทย์ยังไม่ได้กด พบแพทย์แล้ว"'}>ยืนยัน + แนะนำผู้ป่วยแล้ว</button>`;
-  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span></span>${st}<span class="nc-acts">${btn}</span></li>`;
+  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span></span>${st}<span class="nc-acts">${btn}</span></li>`;
 }
 // .45: CT Order Re-CT / New CT (New Part) · Nurse → CT Order และ รับคำสั่งแพทย์ (รายการเดียวกัน ยืนยันที่ใดก็ได้)
 function ncCtReHtml(list, edit, rx) {
@@ -16099,7 +16116,7 @@ function chemoRow(x, d, edit) {
     : x.att ? `<span class="cmt-tag" title="${esc(CMTW_TIP[w])}">${esc(CMTW_LBL[w])}</span><span class="nurse-ok">✓ ${esc(x.att.nBy)} ${esc(whenText(x.att.nAt))}</span>` : edit ? '' : '<span class="st wait">รอเลือก RT→CMT / CMT→RT</span>';
   const btn = !edit || x.dec ? '' : x.att ? `<button type="button" class="btn ghost sm" data-cmtatt="${esc(key)}" data-st="">ยกเลิก</button>`
     : ['rc', 'cr'].map(v => `<button type="button" class="btn sm cmt-btn" data-cmtatt="${esc(key)}" data-st="${v}" title="${esc(CMTW_TIP[v])}">${esc(CMTW_LBL[v])}</button>`).join('');
-  return `<li class="nc-row" data-chemo="${esc(x.r.case)}"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)}${x.room ? ` <span class="muted">· ${esc(x.room)}</span>` : ''}<span class="ontx-tag walk">CMT Tomorrow · สั่ง ${esc(fmtDay(x.r.date))} · ${esc(x.r.nurseBy)}</span></span>${st}<span class="nc-acts">${btn}</span></li>`;
+  return `<li class="nc-row" data-chemo="${esc(x.r.case)}"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)}${x.room ? ` <span class="muted">· ${roomName(x.room)}</span>` : ''}<span class="ontx-tag walk">CMT Tomorrow · สั่ง ${esc(fmtDay(x.r.date))} · ${esc(x.r.nurseBy)}</span></span>${st}<span class="nc-acts">${btn}</span></li>`;
 }
 function renderNurseChemo(words, ordHtml) {
   const box = $('#nurse-body'), td = today(), nx = chemoDayOf(td), edit = accessOf('nurse') === 'edit' && ncOn() && chemoOn();
@@ -16166,7 +16183,7 @@ function renderNurseHold(words, ordHtml) {
   if (!list.length) { box.innerHTML = `<p class="empty-state">ไม่มีผู้ป่วยที่ Hold RT อยู่${words.length || docF ? ' ที่ตรงกับคำค้น / แพทย์ที่เลือก' : ''}</p>`; return; }
   const row = x => {
     const c = x.c, ev = fxEventAt(parseFx(c), td), sent = holdSent(c), dec = state.rtd.find(r => r.id === `${td}|${c.id}`), notes = holdNotes(c), nd = holdUi.notes.get(c.id) || '', long = (x.st.days || 0) > 10;
-    const info = [`ห้อง ${roomLabel(x.room)}`, rxText(c), ev && ev.note && `เหตุผล: ${ev.note}`, ev && ev.by && `Hold โดย ${ev.by}`].filter(Boolean).map(esc).join(' · ');
+    const info = [`ห้อง ${roomName(x.room)}`, ...[rxText(c), ev && ev.note && `เหตุผล: ${ev.note}`, ev && ev.by && `Hold โดย ${ev.by}`].filter(Boolean).map(esc)].join(' · ');
     return `<li class="ontx-card hold-card" data-hold="${esc(c.id)}">
       <div class="ontx-who"><b class="hn">${esc(c.hn)}</b> ${c.doc ? docChip(str(c.doc).toUpperCase()) : '<span class="muted">ไม่ระบุแพทย์</span>'} ${pnm(c.name)} <span class="ontx-tag st hold${long ? ' long' : ''}">${esc(x.st.t)} · ${x.st.days || 0} วัน</span>${hold30Tag(x.st)}${sent ? `<span class="ontx-tag walk">ส่งพบแพทย์วันนี้แล้ว${sent.seen ? ' · พบแพทย์แล้ว' : ''}</span>` : ''}${dec ? `<span class="ontx-tag see">คำสั่งวันนี้: ${esc(decText(dec))}${dec.nurse ? ' · ยืนยันแล้ว' : ' · รอยืนยันที่รับคำสั่งแพทย์'}</span>` : ''}</div>
       <div class="ontx-dec">${info}</div>
@@ -16421,12 +16438,12 @@ const SPK_SVG = '<svg class="spk" viewBox="0 0 24 24" fill="none" stroke="curren
 const nsTip = w => '';   // .40: คำอธิบายใส่ตอนใส่จุด (ntfDots)
 function ncOffRow(x, edit, pop) {   // 23 พ.ย.: นัดวันนี้ กลุ่ม Off RT · .45: pop = แถวกดเปิดหน้าต่างตัวเลือก
   const key = `${x.what}|${x.ref}|${x.date}`, st = x.att ? x.att.status : '', note = ncNoteDraft.has('att|' + key) ? ncNoteDraft.get('att|' + key) : x.att ? x.att.note : '', v = ncOffVisit(x);
-  if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>${x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</button>${ncBadge(x)}</li>`;
+  if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>${x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</button>${ncBadge(x)}</li>`;
   const badge = st && NC_OFF_ST[st] ? `<span class="nurse-ok">✓ ${esc(NC_OFF_ST[st])} · ${esc(x.att.nBy)}</span>${st === 'see' ? (v && v.seen ? `<span class="st wait">แพทย์พบแล้ว · ยืนยันที่รับคำสั่งแพทย์</span>` : `<span class="st wait">รอพบแพทย์ที่${esc(navLabel('consult'))}</span>`) : ''}` : '';
   const b = (val, lbl, off, cls) => `<button type="button" class="btn ${st === val ? 'ghost' : cls} sm" data-att="${esc(key)}" data-st="${st === val ? '' : val}">${st === val ? off : lbl}</button>`;
   const btns = edit && st !== 'seeadv' ? `<span class="nc-acts"><input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}">`
     + (nc3On() ? b('adv', NC_OFF_ST.adv, 'ยกเลิก', 'primary') + b('see', 'พบแพทย์', 'ยกเลิกพบแพทย์', '') : `<span class="muted" title="${esc(NC3_OLD)}">ต้องใช้ Code.gs รุ่นใหม่</span>`) + '</span>' : '';
-  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>`
+  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>`
     + `${!edit && x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</span>${badge}${btns}</li>`;
 }
 // .45: สถานะท้ายแถว (นัดวันนี้แบบหน้าต่าง)
@@ -16450,9 +16467,9 @@ function ncAttRow(x, edit, pop) {
   const v = x.visit, extra = v ? `<span class="ontx-tag walk">${esc(v.note === NC_HOLD_SEE ? 'Hold RT · ส่งพบแพทย์' : visitTag(v))}${v.note && ![VISIT_APPT, NC_HOLD_SEE].includes(v.note) ? ` · ${esc(v.note)}` : ''}</span>${v.seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)}</span>` : ''}`
     : x.ev ? `<span class="ontx-tag see" title="${esc([x.ev.note, x.ev.by && `บันทึกโดย ${x.ev.by}`].filter(Boolean).join(' · '))}">${esc(x.ev.label)} · พบแพทย์</span>` : '';
   const pc = x.what === 'sim' ? state.cases.find(c => c.id === x.ref) : null;   // .33: Start RT วันแรก ของผู้ป่วยหลาย part
-  if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}${extra}`
+  if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}${extra}`
     + `${x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</button>${ncBadge(x)}</li>`;
-  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.kind ? ` <span class="nc-mv">นัด ${esc(ncDay(x.date))}</span>` : ''}${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}${extra}`
+  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.kind ? ` <span class="nc-mv">นัด ${esc(ncDay(x.date))}</span>` : ''}${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}${extra}`
     + `${!edit && x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</span>${badge}${btns}</li>`;
 }
 function renderNurseToday(words, ordHtml) {
@@ -16505,7 +16522,7 @@ function ncPopHtml(x, edit) {
   const key = `${x.what}|${x.ref}|${x.date}`, st = x.att ? x.att.status : '', note = ncNoteDraft.has('att|' + key) ? ncNoteDraft.get('att|' + key) : x.att ? x.att.note : '';
   const wl = x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what, consult = esc(navLabel('consult'));
   const cur = x.done ? 'ลง CT-SIM แล้ว' : x.what === 'off' ? NC_OFF_ST[st] || '' : st === 'came' ? (x.what === 'ct' || x.what === 'sim' ? 'มาตามนัด · ไม่พบแพทย์' : ncCameLbl(x.what)) : st === 'see' ? 'มาตามนัด · พบแพทย์' : st === 'noshow' ? ncNoLbl(x.what) : '';
-  const head = `<p class="nc-pop-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(wl)}</span>${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}</p>`
+  const head = `<p class="nc-pop-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(wl)}</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}</p>`
     + `<p class="nc-pop-st">${cur ? `สถานะ: <b>${esc(cur)}</b>${x.att && x.att.nBy ? ` · ${esc(x.att.nBy)} ${esc(whenText(x.att.nAt))}` : ''}` : '<span class="muted">ยังไม่ได้บันทึก</span>'}</p>`;
   if (x.done || (x.what === 'off' && st === 'seeadv')) return head;
   if (!edit) return head + '<p class="muted">ดูอย่างเดียว</p>';
@@ -17817,6 +17834,11 @@ const rxText = c => { const ss = sitesOf(c); return [catOf(c.cat).label || c.tec
 // สีของห้องฉาย (ตามลำดับห้องใน ตั้งค่า · ห้องเดิมสีเดิมทุกแพทย์): หัวข้อห้องและพื้นหลังของห้องนั้น
 const ROOM_TINTS = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0891b2', '#65a30d'];
 const roomTint = room => ROOM_TINTS[Math.max(0, dashRooms().indexOf(room)) % ROOM_TINTS.length];
+// .59: ชื่อห้องฉายใส่สีประจำห้อง (สีเดียวกับ roomTint) · ไม่ใช่ห้องฉายในตั้งค่า = ข้อความธรรมดา
+function roomName(room) {
+  const r = str(room), i = r ? (state.config.rooms || []).indexOf(r) : -1;
+  return i < 0 ? esc(r === NO_ROOM ? roomLabel(r) : r) : `<span class="rm-n" style="--rc:${ROOM_TINTS[i % ROOM_TINTS.length]}">${esc(r)}</span>`;
+}
 async function seeAppt(caseId, date, btn) {
   if (accessOf('nurse') !== 'edit') return toast(RO_MSG, { err: true });
   if (!visitOn()) return toast(VISIT_OLD, { err: true });
@@ -17994,6 +18016,23 @@ function ntfTxRooms(hn) {
     if (room && !out.includes(room)) out.push(room);
   }
   return out;
+}
+// .59: บุคคลของผู้ป่วย (เหมือน ntfPeople_ ใน Code.gs · โหมดตัวอย่าง) · เคสในคอร์ส (ไม่บังคับห้อง) · รายการที่กด (ref มี id ของเคส) ก่อน
+function ntfPeopleOf(people, ctx, hn) {
+  const k = hnKey(hn), td = today(), old = plusDays(td, -180), out = [], seen = new Set(), up = v => str(v).trim().toUpperCase(), me = str(ntfMe()).toLowerCase();
+  if (!people.length) return out;
+  const cs = !k ? [] : byHn(state.cases, k).filter(c => catOf(c.cat).kind !== 'simple' && (!c.replan || (rpOf(c) || {}).kind === 'revise') && !revisedBy(c)).filter(c => { const ref = str(c.sim || c.in || c.created).slice(0, 10); return !((c.rt === 'complete' && (!c.rtDate || c.rtDate < td)) || (c.rt === 'cancel' && (!c.rtDate || c.rtDate <= td)) || (isDay(ref) && ref < old) || parseFx(c).some(e => e.act === 'off' && e.date <= td)); });
+  const ids = str(ctx.ref).split('|'), one = cs.filter(c => c.id && ids.includes(str(c.id))), use = one.length ? one : cs;
+  const add = (type, list, code) => { const p = (list || []).find(x => up(x.code) && up(x.code) === up(code)), acc = p ? str(p.user).trim().toLowerCase() : ''; if (!acc || acc === me || seen.has(acc)) return; seen.add(acc); out.push({ type, acc, name: str(p.name) || str(p.code) }); };
+  if (people.includes('doc')) (ctx.doc ? [ctx.doc] : use.map(c => c.doc)).filter(Boolean).forEach(code => add('doc', state.config.doctors, code));
+  if (people.includes('mp')) (ctx.mp ? [ctx.mp] : use.map(c => c.mp)).filter(Boolean).forEach(code => add('mp', state.config.staff, code));
+  return out;
+}
+function ntfDmDemo(db, L, ctx, hn, text, ref) {
+  const to = ntfPeopleOf(lPpl(L), ctx, hn).filter(x => !(db.inbox || []).some(m => m.ref === ref && m.to === x.acc));
+  if (!to.length) return 0;
+  db.inbox = [...(db.inbox || []), ...to.map(x => ({ id: uid(), to: x.acc, toName: x.name, from: '', fromName: str(state.user.name || state.user.username), kind: 'msg', title: 'ประกาศถึง' + (NTF_PPL.find(p => p[0] === x.type) || ['', ''])[1], text: `${hn ? `HN ${hn} · ` : ''}${text}`, ref, at: nowISO(), read: '', mail: '' }))];
+  return to.length;
 }
 function ntfAddRoom(text, hn) { const t = str(text), rs = ntfTxRooms(hn).filter(r => !t.includes(r)); return rs.length ? `${t} · ห้อง ${rs.join(', ')}`.slice(0, 300) : t; }
 const bqImgOn = () => serverHas(BQ_IMG_API);
@@ -18355,7 +18394,7 @@ function bqRowsHtml(rows, edit) {
     const chkCell = a.chk ? (chkOk ? `<button type="button" class="bq-chk" data-bqchk="${esc(a.id)}" data-on="0" title="${esc(chkTip + ' · กดเพื่อเอาออก (ใส่ PIN)')}">✓ ตรวจสอบแล้ว</button>` : `<span class="bq-chk" title="${esc(chkTip)}">✓ ตรวจสอบแล้ว</span>`)
       : chkOk && a.status !== BQ_ST.cancel ? `<button type="button" class="btn ghost sm bq-chkb" data-bqchk="${esc(a.id)}" data-on="1" title="บันทึกว่าตรวจสอบนัดนี้แล้ว">ตรวจสอบแล้ว</button>` : '';
     const rtr = bqRoomOf(a), rst = bqRtStatus(a), dOf = isDay(a.date) && a.date < today() ? a.date : today();
-    const room = (rtr ? `<span class="bq-rtroom" title="ฉายรังสีภายนอกที่ห้อง ${esc(roomLabel(rtr))}">${esc(roomLabel(rtr))}</span>` : rst ? '' : '<span class="muted">—</span>')
+    const room = (rtr ? `<span class="bq-rtroom" title="ฉายรังสีภายนอกที่ห้อง ${esc(roomLabel(rtr))}">${roomName(rtr)}</span>` : rst ? '' : '<span class="muted">—</span>')
       + (rst ? `<span class="bq-rtst ${rst.k}" title="${esc(`สถานะในแถบ${navLabel('course')} ณ ${fmtDay(dOf)}`)}">${esc(rst.t)}</span>` : '');
     return `<tr class="ct-row bq-row${st ? ' ' + st : ''} click" data-bqedit="${esc(a.id)}" tabindex="0"${roTip(edit)}>
       <td class="num">${bqLive(a) ? ++q : '–'}</td><td class="ct-hn"><b class="hn">${esc(a.hn)}</b></td><td class="ct-name">${esc(a.name)}</td><td class="bq-rtc">${room}</td><td>${bqDocHtml(a.doc)}</td>
@@ -21630,7 +21669,7 @@ function caseRow(c, rcs) {
   const areaTxt = on('area') && c.area && `<span>${esc(c.area)}</span>`;
   const dxs = on('dx') && (c.icd || c.dx) && `<span class="dx" title="${esc(dxValue(c))}">${c.icd ? `<b>${esc(c.icd)}</b>` : ''}${esc(dxShort(c))}</span>`;
   const more = on('area') ? sitesOf(c).map(x => `<span title="บริเวณที่ฉายเพิ่มเติม">+ ${esc(siteText(x))}</span>`) : [];
-  const room = on('room') && c.room && `<span title="ห้องฉาย">${esc(c.room)}</span>`;
+  const room = on('room') && c.room && `<span title="ห้องฉาย">${roomName(c.room)}</span>`;
   const extras = extraList().filter(f => on('x_' + f.id) && str(c['x_' + f.id])).map(f => `<span><span class="xl">${esc(f.label)}</span> ${esc(extraText(f, c['x_' + f.id]))}</span>`);
   const how = on('how') && howChips(c), note = on('note') && c.note && `<span>${esc(c.note)}</span>`;
   const meta = simple ? [how, dxs, areaTxt, dose, ...more, ...extras, note]
@@ -21687,7 +21726,7 @@ function caseLine(c, rcs, cols) {
       case 'tech': return esc(c.tech || '');
       case 'dose': return c.dpf || c.fx ? `<span class="mono" title="${esc(doseText(c))}">${esc(`${c.dpf ? cGy(c.dpf) : '?'} × ${c.fx || '?'}`)}</span>` : cut(c.freq);
       case 'aim': return esc(c.aim || '');
-      case 'room': return esc(c.room || '');
+      case 'room': return c.room ? roomName(c.room) : '';
       case 'note': return cut(c.note);
       case 'mp': return av(c.mp);
       case 'rc': return rcHtml(c, rcs);
@@ -29906,6 +29945,7 @@ function settingsEdit(el) {
     else if (el.dataset.nlf === 'only') x.only = el.checked;   // .54
     else if (el.dataset.nlf === 'text') x.text = str(el.value).replace(/\s+/g, ' ').slice(0, 200);
     else if (el.dataset.nlf === 'role') x.roles = $$(`[data-nlk="${k}"][data-nlf="role"]:checked`, settingsEl).map(y => y.value);
+    else if (el.dataset.nlf === 'ppl') x.people = $$(`[data-nlk="${k}"][data-nlf="ppl"]:checked`, settingsEl).map(y => y.value);   // .59
     ntflLegacy(draft);
   } else if (el.dataset.bqroles) {
     draft.bq.signRoles = $$('[data-bqroles]:checked', settingsEl).map(x => x.value);
@@ -31431,7 +31471,7 @@ function pcRender() {
   $('#pc-body').innerHTML = head + tabs + `<div class="pc-pane">${pcs.tab === 'tl' ? pcTl(k) : pcs.tab === 'log' ? pcLog(k) : pcs.tab === 'doc' ? pcDocs(k, p.ap, p.cs) : pcSum(k, p.cs, p.ap)}</div>`;
 }
 function pcSum(k, cs, ap) {
-  const rows = pcTxRows(cs).map(r => `<tr><td><b>${esc(r.cat)}</b></td><td>${esc(r.dose)}</td><td>${esc(r.room)}</td><td>${esc(r.sim)}</td><td>${esc(r.fx)}</td><td>MP ${esc(r.mp)}</td><td><span class="chip ${r.st[0]}">${esc(r.st[1])}</span></td></tr>`).join('');
+  const rows = pcTxRows(cs).map(r => `<tr><td><b>${esc(r.cat)}</b></td><td>${esc(r.dose)}</td><td>${roomName(r.room)}</td><td>${esc(r.sim)}</td><td>${esc(r.fx)}</td><td>MP ${esc(r.mp)}</td><td><span class="chip ${r.st[0]}">${esc(r.st[1])}</span></td></tr>`).join('');
   const up = pcUpcoming(k, cs, ap), last = pcEvents(k).slice(0, 5);
   return `<h3 class="pc-h">การฉายรังสี</h3>${rows ? `<div class="table-wrap"><table class="pc-tb"><thead><tr><th>เทคนิค</th><th>Dose</th><th>ห้อง</th><th>Start RT</th><th>ฉายแล้ว</th><th>MP</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">ยังไม่มีงานวางแผน</p>'}
     <h3 class="pc-h">นัดที่จะถึง</h3>${up.length ? `<ul class="pc-up">${up.map(([d0, t]) => `<li><b>${esc(fmtDay(d0))}</b> ${esc(t)}</li>`).join('')}</ul>` : '<p class="muted">ไม่มีนัด</p>'}
@@ -31702,7 +31742,7 @@ function msgSignupSet(m) {
 // แถวในร่างตั้งค่า (ปุ่มเดิมที่ยังไม่ได้ตั้ง = เริ่มจากค่าเดิม)
 function ntflRow(d, k) {
   if (!d.ntfLink) d.ntfLink = {};
-  if (!d.ntfLink[k]) { const L = ntflOf(k, d) || (ntfcParse(k) ? ntfcNew(k, d) : { on: true, roles: ntflDef(k).roles.slice(), text: ntflDef(k).text }); d.ntfLink[k] = { on: L.on, roles: L.roles.slice(), text: L.text }; }
+  if (!d.ntfLink[k]) { const L = ntflOf(k, d) || (ntfcParse(k) ? ntfcNew(k, d) : { on: true, roles: ntflDef(k).roles.slice(), text: ntflDef(k).text }); d.ntfLink[k] = { on: L.on, roles: L.roles.slice(), text: L.text, ...(L.people && L.people.length ? { people: L.people.slice() } : {}) }; }
   return d.ntfLink[k];
 }
 // Code.gs ก่อน API 132 ใช้ noShow / bq.ntf: ซิงก์จากลิงก์ (ไม่มา × 3 = อาชีพรวมกัน)
@@ -31718,16 +31758,16 @@ function ntflSetHtml(d) {
     return `<tr data-nlrow="${x.k}"><td><input type="checkbox" data-nlk="${x.k}" data-nlf="on"${L.on ? ' checked' : ''} aria-label="เปิดลิงก์ ${esc(x.label)}"></td>
       <td><b>${esc(x.label)}</b><small class="muted" style="display:block">${esc(x.where)}${x.srv ? '' : old ? ' · ต้องใช้ Code.gs รุ่น 2026-11-24.10' : ''}</small>${NTF_COND[x.k] ? `<label class="check nl-only"><input type="checkbox" data-nlk="${x.k}" data-nlf="only"${ntflOnly(x.k, d) ? ' checked' : ''}> <small>เฉพาะเคสที่ตรงเงื่อนไข (ประกาศตามเงื่อนไขในฟอร์มด้านล่าง)</small></label>` : ''}</td>
       <td><input type="text" data-nlk="${x.k}" data-nlf="text" maxlength="200" value="${esc(L.text)}" placeholder="${esc(x.text)}" aria-label="ข้อความประกาศ ${esc(x.label)}"></td>
-      <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></td>
+      <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>${x.srv ? '' : `<div class="nl-roles nl-ppl" role="group" aria-label="ส่งข้อความส่วนตัวถึง ${esc(x.label)}" title="${esc(NTF_PPL_TIP)}"><small class="muted">ส่งข้อความถึง:</small>${NTF_PPL.map(([v, l]) => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="ppl" value="${v}"${(L.people || []).includes(v) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>`}</td>
       <td><button type="button" class="btn ghost danger sm" data-nldel="${x.k}" title="เลิกลิงก์ปุ่มนี้ (ไม่ประกาศ)">ลบลิงก์</button></td></tr>`; };
   return `<div class="sec" data-sec="ntflink"><div class="sec-head"><h2>ลิงก์ประกาศ</h2><p>ปุ่มที่ลิงก์กับระบบประกาศ: กดปุ่มแล้วบันทึกสำเร็จ = ประกาศขึ้นแถบตัววิ่งของอาชีพที่เลือก (และกลุ่ม Telegram ถ้าตั้งไว้) · ปุ่มที่ลิงก์แล้วมีจุดเทาจางมุมขวาบน · ข้อความใส่ ${NTFL_PH.map(p => `<code>{${p}}</code>`).join(' ')} ได้ · ประกาศเกี่ยวกับผู้ป่วยแนบ HN และชื่อให้เอง (Telegram ย่อชื่อตามตั้งค่า) · กดซ้ำรายการเดิมไม่ประกาศซ้ำ</p></div>
     ${!nlpCan() && state.user && state.user.isSub ? '<p class="muted def-note" style="margin:0 0 8px">🎯 ตั้งบนหน้าเว็บจริง: แอดมินรองต้องได้รับสิทธิ์หมวดระบบ (ตั้งค่า → แอดมิน)</p>' : ''}
     ${nlpCan() ? '<p class="nl-pick-row" style="margin:0 0 8px"><button type="button" class="btn primary sm" data-nlpstart>🎯 ตั้งบนหน้าเว็บจริง</button> <span class="muted">เปิดหน้าเว็บจริง แล้วกดเลือกปุ่มที่ต้องการให้ประกาศ (เห็นเฉพาะแอดมิน' + (state.user && !state.user.isAdmin ? ' · แอดมินรอง: บันทึก = ส่งขออนุมัติ' : '') + ')</span></p>' : ''}
-    <div class="table-wrap set-table"><table class="nl-tb"><thead><tr><th>เปิด</th><th style="text-align:left">ปุ่ม</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ</th><th></th></tr></thead>
+    <div class="table-wrap set-table"><table class="nl-tb"><thead><tr><th>เปิด</th><th style="text-align:left">ปุ่ม</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ · ส่งข้อความถึง</th><th></th></tr></thead>
       <tbody>${linked.map(row).join('') || '<tr><td colspan="5" class="muted">ยังไม่มีปุ่มที่ลิงก์</td></tr>'}</tbody></table></div>
     ${free.length ? `<div class="nl-add"><label class="field" style="margin:0;min-width:260px"><span class="lbl">เพิ่มลิงก์ปุ่ม</span><select id="nl-add-k">${free.map(x => `<option value="${x.k}">${esc(x.label)} · ${esc(x.where)}</option>`).join('')}</select></label><button type="button" class="btn sm" data-nladd>+ เพิ่มลิงก์</button></div>` : ''}
     ${ntflCondHtml(d, roles)}
-    <p class="muted def-note" style="margin:6px 0 0">ไม่ติ๊กอาชีพใดเลย = ไม่ประกาศ · ประกาศแสดงถึงสิ้นวัน · ยกเลิก (เช่น ยกเลิกไม่มา / ยกเลิกยืนยัน) = ยกเลิกประกาศ${old ? ' · <b>ปุ่มใหม่ (นอกจากไม่มา และ CT / Re-CT นัดใส่แร่) ต้องใช้ Code.gs รุ่น 2026-11-24.10 ขึ้นไป</b>' : ''}</p></div>`;
+    <p class="muted def-note" style="margin:6px 0 0">ไม่ติ๊กอาชีพใดเลย = ไม่ประกาศ (ติ๊กแค่ส่งข้อความถึง = ส่งข้อความส่วนตัวอย่างเดียว ไม่ขึ้นแถบประกาศ · ต้องใช้ Code.gs รุ่น 2026-11-26.3) · ประกาศแสดงถึงสิ้นวัน · ยกเลิก (เช่น ยกเลิกไม่มา / ยกเลิกยืนยัน) = ยกเลิกประกาศ${old ? ' · <b>ปุ่มใหม่ (นอกจากไม่มา และ CT / Re-CT นัดใส่แร่) ต้องใช้ Code.gs รุ่น 2026-11-24.10 ขึ้นไป</b>' : ''}</p></div>`;
 }
 // .42: ประกาศตามเงื่อนไขในฟอร์ม (ตารางเงื่อนไข + เพิ่มเงื่อนไข)
 function ntflCondHtml(d, roles) {
@@ -31738,10 +31778,10 @@ function ntflCondHtml(d, roles) {
     return `<tr data-nlcrow="${ek}"><td><input type="checkbox" data-nlk="${ek}" data-nlf="on"${L.on ? ' checked' : ''} aria-label="เปิด ${esc(x.label)}"></td>
       <td><b>${esc(ntflDef(x.base).label)}</b><small class="muted" style="display:block">เลือก ${esc(x.fd.label)} = <b>${esc(ntfcName(x.fd, x.v))}</b> แล้วบันทึก · ${esc(x.where)}${L.def ? ' · ค่าเริ่มต้น' : ''}</small></td>
       <td><input type="text" data-nlk="${ek}" data-nlf="text" maxlength="200" value="${esc(L.text)}" placeholder="${esc(x.text)}" aria-label="ข้อความประกาศ ${esc(x.label)}"></td>
-      <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${ek}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div></td>
+      <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${ek}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>${ntflDef(x.base).srv ? '' : `<div class="nl-roles nl-ppl" role="group" aria-label="ส่งข้อความส่วนตัวถึง ${esc(x.label)}" title="${esc(NTF_PPL_TIP)}"><small class="muted">ส่งข้อความถึง:</small>${NTF_PPL.map(([v, l]) => `<label class="check"><input type="checkbox" data-nlk="${ek}" data-nlf="ppl" value="${v}"${(L.people || []).includes(v) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>`}</td>
       <td><button type="button" class="btn ghost danger sm" data-nldel="${ek}" title="ลบเงื่อนไขนี้">ลบเงื่อนไข</button></td></tr>`; };
   return `<h3 class="nl-h3">ประกาศตามเงื่อนไขในฟอร์ม</h3><p class="muted def-note" style="margin:0 0 6px">เช่น CT Order ที่เลือก Emergency: บันทึกรายการใหม่ที่ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติของปุ่มบันทึก · แก้รายการเดิมเป็นค่านั้น = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ · ตัวเลือกที่ตั้งไว้มีจุดเทาในฟอร์ม${oldC ? ` · <b>${esc(NTFC_OLD)}</b>` : ''}</p>
-    ${keys.length ? `<div class="table-wrap set-table"><table class="nl-tb nl-ctb"><thead><tr><th>เปิด</th><th style="text-align:left">ฟอร์ม · เงื่อนไข</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ</th><th></th></tr></thead><tbody>${keys.map(row).join('')}</tbody></table></div>` : ''}
+    ${keys.length ? `<div class="table-wrap set-table"><table class="nl-tb nl-ctb"><thead><tr><th>เปิด</th><th style="text-align:left">ฟอร์ม · เงื่อนไข</th><th style="text-align:left">ข้อความประกาศ</th><th style="text-align:left">อาชีพที่ได้รับ · ส่งข้อความถึง</th><th></th></tr></thead><tbody>${keys.map(row).join('')}</tbody></table></div>` : ''}
     ${groups ? `<div class="nl-add"><label class="field" style="margin:0;min-width:260px"><span class="lbl">เพิ่มเงื่อนไข</span><select id="nl-cadd-k">${groups}</select></label><button type="button" class="btn sm" data-nlcadd>+ เพิ่มเงื่อนไข</button></div>` : ''}`;
 }
 function tgSetHtml(d) {
