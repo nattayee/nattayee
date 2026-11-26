@@ -9544,7 +9544,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.56';
+const PAGE_VERSION = '2026-11-22.57';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9934,7 +9934,7 @@ function localStore() {
       const dd = isDay(c.date) ? c.date : '', hn = str(c.hn).slice(0, 40);
       const sd = isDay(c.sim) ? c.sim : '';
       const text = L.text.replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันที่': dd ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}` : '', 'วันที่ start RT': sd ? `${sd.slice(8, 10)}/${sd.slice(5, 7)}` : '', 'แพทย์': str(c.doc).toUpperCase(), 'ห้อง': str(c.room), 'ห้องฉาย': str(c.txroom).slice(0, 30), 'รอบ': str(c.round) }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+\)/g, ')').trim() || d.text;
-      const r = { id, text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
+      const r = { id, text: hn ? ntfAddRoom(text, hn) : text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
       if (cur) Object.assign(cur, r); else db.notify.push(r);
       demoTgSend([r]);
       persist();
@@ -10579,7 +10579,7 @@ function localStore() {
       Object.assign(a, { hist: JSON.stringify(hist), editedBy: by, updated: nowISO() });
       // 22 พ.ย.: รอบ CT ใหม่ = ประกาศ HDR ส่งภาพแล้ว (เหมือน bqCtNotify_ ใน Code.gs)
       const nlk = ntflOf('bq.ct'), added = 'ct' in set ? bqCtPairs(a).map(p => p.t).filter(t => !ctBefore.includes(t)) : [], nroles = nlk && nlk.on ? nlk.roles : [];   // .40: ลิงก์ประกาศ
-      const sent = added.length && nroles.length ? added.map(t => ({ id: uid(), text: nlk.text.replace(/\{รอบ\}/g, t).replace(/\{(วันที่|แพทย์|ห้อง)\}/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').trim(), roles: nroles.join(', '), level: 'urgent', until: today(), by, byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: 'brachy', hn: a.hn, pname: a.name })) : [];
+      const sent = added.length && nroles.length ? added.map(t => ({ id: uid(), text: ntfAddRoom(nlk.text.replace(/\{รอบ\}/g, t).replace(/\{(วันที่|แพทย์|ห้อง)\}/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').trim(), a.hn), roles: nroles.join(', '), level: 'urgent', until: today(), by, byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: 'brachy', hn: a.hn, pname: a.name })) : [];
       if (sent.length) { db.notify.push(...sent); demoTgSend(sent); }
       persist();
       return sent.length ? { ...clone(a), _ntf: clone(sent) } : clone(a);
@@ -17948,17 +17948,19 @@ const bqCtLabel = p => `${p.t}${p.room ? ' ' + ctShort(p.room) : ''}`;
 // เพิ่มรอบ CT ใหม่ = บันทึกใหม่ · รอบที่บันทึกไว้ยังอยู่ครบ (ชนิดและห้องเดิม)
 const bqCtKept = (a, now) => bqCtPairs(a).every(p => bqCtPairs(now).some(q => q.t === p.t && q.room === p.room));
 // ห้องฉายรังสีภายนอกของผู้ป่วย (วันนัดใส่แร่): เคส HN เดียวกันที่ Start RT ล่าสุดไม่เกินวันนั้น (ย้ายห้องตลอดไปแล้ว = ห้องใหม่) · ไม่มีข้อมูลเคส = ที่ Code.gs ส่งมา
+// .57: เคสเดียวกับตารางวันฉาย: งานแก้แผน (ส่งแก้แผน) ใช้แทนงานเดิม · งานเดิมที่ส่งแก้แล้วไม่นับ · งานวางแผนใหม่แบบอื่นไม่นับ
+function bqRtOk(c) { return !!c.room && catOf(c.cat).kind !== 'simple' && (!c.replan || (rpOf(c) || {}).kind === 'revise') && !revisedBy(c); }
 function bqRtCase(a) {
   const k = hnKey(a.hn);
   if (!k) return null;
-  const cs = byHn(state.cases, k).filter(c => c.room && catOf(c.cat).kind !== 'simple' && !c.replan).sort((x, y) => str(x.sim).localeCompare(str(y.sim)));
-  return [...cs].reverse().find(x => isDay(x.sim) && x.sim <= a.date) || cs[0] || null;
+  const cs = byHn(state.cases, k).filter(bqRtOk).sort((x, y) => str(x.sim).localeCompare(str(y.sim)));
+  const past = cs.filter(x => isDay(x.sim) && x.sim <= a.date).reverse();
+  return past.find(c => ['on', 'hold'].includes((bqRtSt(c, a) || {}).k)) || past[0] || cs[0] || null;   // .57: หลาย part = part ที่ยังฉายอยู่ก่อน
 }
 // สถานะในแถบห้องฉาย ณ วันนัด (นัดล่วงหน้า = วันนี้): On Treatment · สถานะไม่ได้ฉายที่บันทึก (Hold, HV, Re-CT ฯลฯ) · รอเริ่มฉาย · ฉายครบ · Complete course · Cancel RT · Off RT
 // ไม่นับสถานะ HDR อัตโนมัติของวันนัดใส่แร่ (บันทึกเองเท่านั้น) · ไม่มีเคสฉายรังสีภายนอก = ไม่แสดง
-function bqRtStatus(a) {
-  const c = bqRtCase(a);
-  if (!c) return null;
+function bqRtStatus(a) { const c = bqRtCase(a); return c ? bqRtSt(c, a) : null; }
+function bqRtSt(c, a) {
   const td = today(), d = isDay(a.date) && a.date < td ? a.date : td;
   if (c.rt === 'cancel' && c.rtDate && c.rtDate <= d) return { t: 'Cancel RT', k: 'stop' };
   if (c.rt === 'complete' && c.rtDate && c.rtDate < d) return { t: 'Complete course', k: 'done' };
@@ -17977,6 +17979,21 @@ function bqRoomOf(a) {
   const mv = parseMoves(c).filter(m => m.scope === 'on' && m.date <= a.date).pop();
   return mv ? mv.room : c.room;
 }
+// .57: ห้องฉายของผู้ป่วยต่อท้ายประกาศอัตโนมัติ (เหมือน ntfTxRoom_ ใน Code.gs 2026-11-26.2 · ใช้ในโหมดตัวอย่าง)
+function ntfTxRooms(hn) {
+  const k = hnKey(hn), td = today(), old = plusDays(td, -180), out = [];
+  if (!k) return out;
+  for (const c of byHn(state.cases, k)) {
+    if (!bqRtOk(c)) continue;
+    const ref = str(c.sim || c.in || c.created).slice(0, 10);
+    if ((c.rt === 'complete' && (!c.rtDate || c.rtDate < td)) || (c.rt === 'cancel' && (!c.rtDate || c.rtDate <= td)) || (isDay(ref) && ref < old)) continue;
+    if (parseFx(c).some(e => e.act === 'off' && e.date <= td)) continue;
+    const mv = parseMoves(c).filter(m => m.scope === 'on' && m.date <= td).sort((x, y) => x.date.localeCompare(y.date)).pop(), room = str(mv ? mv.room : c.room).replace(/\s+/g, ' ').slice(0, 30);
+    if (room && !out.includes(room)) out.push(room);
+  }
+  return out;
+}
+function ntfAddRoom(text, hn) { const t = str(text), rs = ntfTxRooms(hn).filter(r => !t.includes(r)); return rs.length ? `${t} · ห้อง ${rs.join(', ')}`.slice(0, 300) : t; }
 const bqImgOn = () => serverHas(BQ_IMG_API);
 const bqImgOld = () => `บันทึก CT / US ต้องใช้ Code.gs รุ่น 2026-11-02.2 ขึ้นไป (ที่ใช้อยู่: รุ่น ${state.codeVersion || (state.api ? `API ${state.api}` : 'เก่า')}) · วาง Code.gs ใหม่แล้ว Deploy → New version`;
 const ctShort = id => ctLabel(id).replace(/\s*\(.*\)\s*$/, '');
