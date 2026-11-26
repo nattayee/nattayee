@@ -9544,7 +9544,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.57';
+const PAGE_VERSION = '2026-11-22.58';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -15642,9 +15642,9 @@ function renderOntx(tab = 'ontx') {
   if (!list.length) { box.innerHTML = `${old}<p class="empty-state">${isHold ? 'ไม่มีผู้ป่วยที่ Hold RT อยู่' : `ยังไม่มีผู้ป่วยระหว่างฉายที่ต้องพบแพทย์วันนี้ · นัดที่แถบ ${esc(navLabel('nurse'))} → นัดพบแพทย์${sep ? ' · ผู้ป่วยที่ Hold RT อยู่ดูที่แถบย่อย Hold RT' : ' · ผู้ป่วยที่ Hold RT อยู่มารอที่นี่ด้วย'}`}</p>`; return; }
   const order = dqAllDocs(), at = c => (order.includes(c) ? order.indexOf(c) : 999), docOf = x => str(x.visit ? x.visit.doc : x.c.doc).toUpperCase();
   const codes = [...new Set(list.map(docOf))].sort((a, b) => (b === me) - (a === me) || at(a) - at(b) || a.localeCompare(b));
-  const done = list.filter(x => (x.c ? state.rtd.some(r => r.id === `${td}|${x.c.id}`) : !!x.visit.seen)).length;
+  const rtdIds = new Set(state.rtd.map(r => r.id)), isDone = x => (x.c ? rtdIds.has(`${td}|${x.c.id}`) : !!x.visit.seen), done = list.filter(isDone).length;   // .58: บันทึกแล้วเลื่อนลงล่าง
   box.innerHTML = `${old}<h3 class="ontx-h">${isHold ? 'Hold RT' : 'ระหว่างฉาย'} · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${done})${hold30Head(list)}<small>${isHold ? 'ผู้ป่วยที่ Hold RT อยู่ (ทุกห้องฉาย) · สั่ง Continue RT เมื่อพร้อมฉายต่อ' : `พบแพทย์วันนี้ (นัดพบแพทย์ / ตารางพบแพทย์ในแถบ ${esc(navLabel('nurse'))}) · พบแพทย์นอกตารางนัด${sep ? '' : ' · ผู้ป่วยที่ Hold RT อยู่'}`} · RT Alone: Continue RT / Hold RT · CCRT: เลือกทั้ง RT และ CMT · บันทึกแล้วไปรอพยาบาลยืนยันที่แถบ ${esc(navLabel('nurse'))}${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
-    + codes.map(code => { const rs = list.filter(x => docOf(x) === code).sort((a, b) => !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn))); return `<details class="ontx-g${code === me ? ' mine' : ''}" open><summary>${docChip(code)} ${esc(docName(code) || code)} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => (x.c ? ontxCard(x, edit) : visitCard(x.visit))).join('')}</ul></details>`; }).join('');
+    + codes.map(code => { const rs = list.filter(x => docOf(x) === code).sort((a, b) => isDone(a) - isDone(b) || !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn))); return `<details class="ontx-g${code === me ? ' mine' : ''}" open><summary>${docChip(code)} ${esc(docName(code) || code)} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => (x.c ? ontxCard(x, edit) : visitCard(x.visit))).join('')}</ul></details>`; }).join('');
 }
 /* ---------- 18 พ.ย. (Code.gs API 90): พบแพทย์นอกตารางนัด ----------
  * แถบ Nurse → นัดพบแพทย์: ปุ่ม "+ พบแพทย์นอกตารางนัด" กรอก HN ชื่อ แพทย์ (วันที่ · เหตุผล) → ห้องตรวจ → ระหว่างฉาย ในกลุ่มของแพทย์ท่านนั้น
@@ -16105,7 +16105,7 @@ function renderNurseChemo(words, ordHtml) {
   const box = $('#nurse-body'), td = today(), nx = chemoDayOf(td), edit = accessOf('nurse') === 'edit' && ncOn() && chemoOn();
   $('#nurse-ctl').innerHTML = ordHtml;
   const hit = x => !words.length || wordsIn(words, `${x.hn} ${x.name} ${x.doc} ${docName(x.doc)} ${x.room}`.toLowerCase());
-  const now = chemoList(td).filter(hit), next = chemoList(nx).filter(hit);
+  const now = chemoList(td).filter(hit).sort((a, b) => !!a.done - !!b.done), next = chemoList(nx).filter(hit);   // .58: เลือกแล้วเลื่อนลงล่าง
   const old = store.mode === 'sheet' && !chemoOn() ? `<p class="notice"><b>ยังบันทึกไม่ได้</b><span>${esc(CHEMO_OLD)}</span></p>` : '';
   box.innerHTML = old + `<h3 class="ontx-h">นัดเคมีบำบัด · ${esc(fmtDay(td))} · ${now.length} คน (เลือกแล้ว ${now.filter(x => x.done).length})<small>ผู้ป่วยที่กด CMT Tomorrow ที่แถบย่อยรับคำสั่งแพทย์ (วันทำการก่อนหน้า) · เลือก RT→CMT (ฉายก่อนแล้วให้เคมี) หรือ CMT→RT (ให้เคมีก่อนแล้วฉาย) · ตารางวันฉายแสดงตามที่เลือก</small></h3>`
     + (now.length ? `<ul class="nurse-list nc-list">${now.map(x => chemoRow(x, td, edit)).join('')}</ul>` : '<p class="empty-state">ไม่มีผู้ป่วยนัดเคมีบำบัดวันนี้</p>')
@@ -16143,7 +16143,8 @@ function renderNurseOntx(tab, words, ordHtml) {
   const decs = list.map(ontxDec).filter(Boolean), nOk = decs.filter(r => r.nurse).length, nNs = decs.filter(r => /(^|,)nurse(,|$)/.test(str(r.src))).length;
   box.innerHTML = old + `<h3 class="ontx-h">${name} · ${esc(fmtDay(td))} · ${list.length} คน (สั่งแล้ว ${decs.length}${nNs ? ` · พยาบาลบันทึกแทน ${nNs}` : ''} · ยืนยันแล้ว ${nOk})<small>รายชื่อเดียวกับ ${esc(navLabel('consult'))} → ${isHold ? 'Hold RT' : 'ระหว่างฉาย'} · แพทย์สั่งแล้ว = ตัวเลือกตามคำสั่ง ตรวจแล้วกด "ยืนยัน" · แพทย์ยังไม่สั่ง (เช่น Continue RT) = พยาบาลเลือกแล้วกด "ยืนยัน" ได้เลย${me ? ' · เคสของคุณอยู่บนสุด' : ''}</small></h3>`
     + codes.map(code => {
-      const rs = list.filter(x => docOf(x) === code).sort((a, b) => !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn)));
+      const okd = x => { const r = ontxDec(x); return !!(r && r.nurse); };   // .58: ยืนยันแล้วเลื่อนลงล่าง
+      const rs = list.filter(x => docOf(x) === code).sort((a, b) => okd(a) - okd(b) || !a.c - !b.c || a.room.localeCompare(b.room) || str(pt(a).hn).localeCompare(str(pt(b).hn)));
       return `<details class="ontx-g nurse-g${code && code === me ? ' mine' : ''}" open><summary>${code ? `${docChip(code)} ${esc(docName(code) || code)}` : 'ไม่ระบุแพทย์'} <span class="n">${rs.length} คน</span></summary><ul class="ontx-list">${rs.map(x => nurseOntxCard(x, edit)).join('')}</ul></details>`;
     }).join('') + pastHtml;
 }
@@ -16461,7 +16462,8 @@ function renderNurseToday(words, ordHtml) {
   // ไม่มา (ติดต่อแล้ว) / ไม่ได้พบแพทย์ = ออกจากรายการวันนี้ ไปอยู่แถบย่อยผู้ป่วยไม่มาตามนัด
   const every = ncTodayList().filter(hit), gone = every.filter(x => x.att && x.att.status === 'noshow'), all = every.filter(x => !gone.includes(x)), of = w => all.filter(x => (w === 'rect' ? x.what === 'ct' && x.re : x.what === w && !(w === 'ct' && x.re)));   // .45: Re-CT / New CT แยกกลุ่ม
   const old = store.mode === 'sheet' && !ncOn() ? `<p class="notice"><b>ยังบันทึกไม่ได้</b><span>${esc(NC_OLD)}</span></p>` : store.mode === 'sheet' && !nc2On() ? `<p class="notice"><b>ตัวเลือกใหม่ยังใช้ไม่ได้</b><span>มาแล้วพบแพทย์ก่อน และกลุ่มนัดพบแพทย์ / พบแพทย์ระหว่างฉาย ${esc(NC2_OLD)}</span></p>` : '';
-  const sec = (h, xs, sub) => `<section class="nurse-sec" data-ncsec="${xs.w}"><h3>${esc(h)} <span class="muted">(${xs.length})</span></h3>${sub ? `<p>${sub}</p>` : ''}${xs.length ? `<ul class="nurse-list nc-list">${xs.map(x => ncAttRow(x, edit)).join('')}</ul>` : '<p class="muted" style="margin:4px 0">ไม่มี</p>'}</section>`;   // .56: ปุ่มในแถวแบบเดิม (ไม่เปิดหน้าต่าง)
+  const saved = x => !!(x.done || (x.att && x.att.status)), last = xs => [...xs].sort((a, b) => saved(a) - saved(b));   // .58: บันทึกแล้วเลื่อนลงล่าง
+  const sec = (h, xs, sub) => `<section class="nurse-sec" data-ncsec="${xs.w}"><h3>${esc(h)} <span class="muted">(${xs.length})</span></h3>${sub ? `<p>${sub}</p>` : ''}${xs.length ? `<ul class="nurse-list nc-list">${last(xs).map(x => ncAttRow(x, edit)).join('')}</ul>` : '<p class="muted" style="margin:4px 0">ไม่มี</p>'}</section>`;   // .56: ปุ่มในแถวแบบเดิม (ไม่เปิดหน้าต่าง)
   const g = w => Object.assign(of(w), { w });
   const add = vedit ? '<div class="see-aptools"><button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในรายชื่อ · ส่งไปรอที่ห้องตรวจ → ระหว่างฉาย">+ พบแพทย์นอกตารางนัด</button></div>' : '';
   box.innerHTML = old + `<h3 class="ontx-h">ผู้ป่วยนัดวันนี้ · ${esc(LONG_DAY_FMT.format(parseISO(td)))} <span class="muted">(${all.length})</span><small>ไม่มา แจ้งแพทย์แล้ว = แจ้งแพทย์เจ้าของไข้ + ประกาศ แล้วย้ายไปแถบย่อยผู้ป่วยไม่มาตามนัด${gone.length ? ` (วันนี้ ${gone.length} ราย)` : ''} · CT-Sim = ออกจากคิว CT และกลับไปรอลงนัดที่ห้องตรวจ ให้แพทย์แก้วันนัด / ยกเลิกนัด · Start RT = ป้าย "ไม่มา Start RT" ในตารางวันฉายของห้องฉาย (14 วัน)</small></h3>`
