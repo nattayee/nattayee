@@ -494,6 +494,7 @@ button.duty-line:hover{border-color:var(--accent)}
 .pc-sheet{position:relative}
 .pc-wm{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
 .pc-wm span{position:absolute;left:14%;transform:rotate(-28deg);white-space:nowrap;font-size:22pt;font-weight:700;letter-spacing:.04em;color:rgba(128,128,128,.14)}
+.cso-wm span{left:6%;font-size:18pt;color:rgba(128,128,128,.2)}   /* .56: ใบสั่งจาก Patient chart */
 @media print{#ss-print .pc-wm{position:fixed}}
 .pc-sh-logo{height:14mm;width:auto}
 .pc-sh-t{flex:1}
@@ -9543,7 +9544,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.55';
+const PAGE_VERSION = '2026-11-22.56';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12982,6 +12983,15 @@ function crewNames(g) {
   const live = dutyDir.who.filter(x => x.group === grp && !users.has(x.user) && !keys.has(nameKey(x.name))).map(x => x.name);
   return [...new Set([...mine, ...live])];
 }
+// .56: ชื่อของคนเดียวกันหลายแบบ (มี / ไม่มีคำนำหน้า · ช่องว่าง) = คนเดียว · ยึดชื่อใน RT Hub (ตั้งค่า → RTT, RA และบุคลากรอื่น) เป็นหลัก
+function crewCanon(n) {
+  const v = str(n).replace(/\s+/g, ' ').trim(), k = nameKey(v);
+  if (!k) return v;
+  const c = (state.config.crew || []).find(x => x.name && nameKey(x.name) === k);
+  return c ? str(c.name).replace(/\s+/g, ' ').trim() : v;
+}
+// รายชื่อไม่ซ้ำคน (ลำดับเดิม · ชื่อของ RT Hub แทนชื่อแบบอื่น)
+const crewUniq = list => { const seen = new Set(), out = []; for (const n of list) { const v = crewCanon(n), k = nameKey(v); if (!k || seen.has(k)) continue; seen.add(k); out.push(v); } return out; };
 // ชื่อที่ตั้งไม่ปฏิบัติงาน: ไม่เสนอให้เลือก (ที่บันทึกไว้แล้วยังแสดง)
 const crewOff = () => new Set((state.config.crew || []).filter(x => !x.active).map(x => nameKey(x.name)));
 // ฟอร์มลงนัด (ช่องตาม ตั้งค่า → ลงนัด) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ลงนัดใหม่: แพทย์เริ่มที่ผู้ใช้ที่เข้าระบบ (ถ้าเป็นแพทย์และช่องแพทย์แสดงอยู่)
@@ -16434,14 +16444,14 @@ function ncAttRow(x, edit, pop) {
   const b = (v, lbl, off, cls) => `<button type="button" class="btn ${st === v ? 'ghost' : cls} sm" data-att="${esc(key)}" data-st="${st === v ? '' : v}">${st === v ? off : lbl}</button>`;
   const btns = edit && !x.done && can2 ? `<span class="nc-acts"><input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}">`
     + (miss ? '' : b('came', ncCameLbl(x.what), x.what === 'sim' ? 'ยกเลิก RT ได้' : x.what === 'fx' ? 'ยกเลิกส่งพบแพทย์' : 'ยกเลิกมาแล้ว', 'primary'))
-    + (!miss && x.what === 'sim' && nc2On() ? b('see', 'มาแล้วพบแพทย์ก่อน', 'ยกเลิกพบแพทย์ก่อน', '') : '')
-    + (nsOn(x.what) && st !== 'noshow' ? b('noshow', ncNoLbl(x.what), '', 'ghost danger').replace('<button ', `<button title="${esc(nsTip(x.what))}" `) : b('noshow', ncNoLbl(x.what), x.what === 'fx' ? 'ยกเลิกไม่ได้พบ' : 'ยกเลิกไม่มา', 'ghost danger')) + '</span>' : '';
+    + (!miss && ((x.what === 'sim' && nc2On()) || (x.what === 'ct' && nc4On())) ? b('see', 'มาแล้วพบแพทย์ก่อน', 'ยกเลิกพบแพทย์ก่อน', '') : '')   // .56: CT-Sim ด้วย (API 135)
+    + (st !== 'noshow' && x.what !== 'fx' ? b('noshow', ncNoLbl(x.what), '', 'ghost danger').replace('<button ', `<button title="${esc(nsWho(x))}" `) : b('noshow', ncNoLbl(x.what), x.what === 'fx' ? 'ยกเลิกไม่ได้พบ' : 'ยกเลิกไม่มา', 'ghost danger')) + '</span>' : '';
   const v = x.visit, extra = v ? `<span class="ontx-tag walk">${esc(v.note === NC_HOLD_SEE ? 'Hold RT · ส่งพบแพทย์' : visitTag(v))}${v.note && ![VISIT_APPT, NC_HOLD_SEE].includes(v.note) ? ` · ${esc(v.note)}` : ''}</span>${v.seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)}</span>` : ''}`
     : x.ev ? `<span class="ontx-tag see" title="${esc([x.ev.note, x.ev.by && `บันทึกโดย ${x.ev.by}`].filter(Boolean).join(' · '))}">${esc(x.ev.label)} · พบแพทย์</span>` : '';
   const pc = x.what === 'sim' ? state.cases.find(c => c.id === x.ref) : null;   // .33: Start RT วันแรก ของผู้ป่วยหลาย part
   if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}${extra}`
     + `${x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</button>${ncBadge(x)}</li>`;
-  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.kind ? ` <span class="nc-mv">นัด ${esc(ncDay(x.date))}</span>` : ''}${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}${extra}`
+  return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what ${esc(x.what)}">${esc(x.what === 'ct' && x.re ? x.re : NC_ATT_WHAT[x.what] || x.what)}</span>${pc ? partsTag(pc) : ''}${x.kind ? ` <span class="nc-mv">นัด ${esc(ncDay(x.date))}</span>` : ''}${x.where ? ` <span class="muted">· ${esc(x.where)}</span>` : ''}${extra}`
     + `${!edit && x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</span>${badge}${btns}</li>`;
 }
 function renderNurseToday(words, ordHtml) {
@@ -16451,13 +16461,13 @@ function renderNurseToday(words, ordHtml) {
   // ไม่มา (ติดต่อแล้ว) / ไม่ได้พบแพทย์ = ออกจากรายการวันนี้ ไปอยู่แถบย่อยผู้ป่วยไม่มาตามนัด
   const every = ncTodayList().filter(hit), gone = every.filter(x => x.att && x.att.status === 'noshow'), all = every.filter(x => !gone.includes(x)), of = w => all.filter(x => (w === 'rect' ? x.what === 'ct' && x.re : x.what === w && !(w === 'ct' && x.re)));   // .45: Re-CT / New CT แยกกลุ่ม
   const old = store.mode === 'sheet' && !ncOn() ? `<p class="notice"><b>ยังบันทึกไม่ได้</b><span>${esc(NC_OLD)}</span></p>` : store.mode === 'sheet' && !nc2On() ? `<p class="notice"><b>ตัวเลือกใหม่ยังใช้ไม่ได้</b><span>มาแล้วพบแพทย์ก่อน และกลุ่มนัดพบแพทย์ / พบแพทย์ระหว่างฉาย ${esc(NC2_OLD)}</span></p>` : '';
-  const sec = (h, xs, sub) => `<section class="nurse-sec" data-ncsec="${xs.w}"><h3>${esc(h)} <span class="muted">(${xs.length})</span></h3>${sub ? `<p>${sub}</p>` : ''}${xs.length ? `<ul class="nurse-list nc-list">${xs.map(x => ncAttRow(x, edit, true)).join('')}</ul>` : '<p class="muted" style="margin:4px 0">ไม่มี</p>'}</section>`;
+  const sec = (h, xs, sub) => `<section class="nurse-sec" data-ncsec="${xs.w}"><h3>${esc(h)} <span class="muted">(${xs.length})</span></h3>${sub ? `<p>${sub}</p>` : ''}${xs.length ? `<ul class="nurse-list nc-list">${xs.map(x => ncAttRow(x, edit)).join('')}</ul>` : '<p class="muted" style="margin:4px 0">ไม่มี</p>'}</section>`;   // .56: ปุ่มในแถวแบบเดิม (ไม่เปิดหน้าต่าง)
   const g = w => Object.assign(of(w), { w });
   const add = vedit ? '<div class="see-aptools"><button type="button" class="btn sm" data-vsnew="1" title="ผู้ป่วยที่มาพบแพทย์โดยไม่ได้อยู่ในรายชื่อ · ส่งไปรอที่ห้องตรวจ → ระหว่างฉาย">+ พบแพทย์นอกตารางนัด</button></div>' : '';
-  box.innerHTML = old + `<h3 class="ontx-h">ผู้ป่วยนัดวันนี้ · ${esc(LONG_DAY_FMT.format(parseISO(td)))} <span class="muted">(${all.length})</span><small>กดชื่อผู้ป่วยเพื่อเลือก: มาตามนัด (ไม่พบแพทย์ = ยืนยัน · พบแพทย์ = ส่งไป${esc(navLabel('consult'))} → ระหว่างฉาย และรับคำสั่งแพทย์) · ไม่มาตามนัด = ประกาศ (แจ้งแพทย์เจ้าของไข้ + RTT) แล้วย้ายไปแถบย่อยผู้ป่วยไม่มาตามนัด${gone.length ? ` (วันนี้ ${gone.length} ราย)` : ''} · CT-Sim = ออกจากคิว CT และกลับไปรอลงนัดที่ห้องตรวจ ให้แพทย์แก้วันนัด / ยกเลิกนัด · Start RT = ป้าย "ไม่มา Start RT" ในตารางวันฉายของห้องฉาย (14 วัน)</small></h3>`
-    + add + sec('นัด CT-Sim วันนี้', g('ct'), 'มาตามนัด → ไม่พบแพทย์ / พบแพทย์ · ไม่มาตามนัด → ประกาศ')
-    + sec('Re-CT / New CT (New Part)', g('rect'), `นัด CT-Sim ซ้ำของผู้ป่วยระหว่างฉาย (CT Order จาก${esc(navLabel('consult'))} / ห้องฉาย / ส่งแก้แผน) · มาตามนัด → ไม่พบแพทย์ / พบแพทย์ · ไม่มาตามนัด → ประกาศ`)
-    + sec('Start RT วันแรก', g('sim'), `มาตามนัด → ไม่พบแพทย์ = ฉายได้เลย · พบแพทย์ = ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย (แพทย์สั่งแล้วพยาบาลยืนยันที่รับคำสั่งแพทย์ จึงฉายได้)`)
+  box.innerHTML = old + `<h3 class="ontx-h">ผู้ป่วยนัดวันนี้ · ${esc(LONG_DAY_FMT.format(parseISO(td)))} <span class="muted">(${all.length})</span><small>ไม่มา แจ้งแพทย์แล้ว = แจ้งแพทย์เจ้าของไข้ + ประกาศ แล้วย้ายไปแถบย่อยผู้ป่วยไม่มาตามนัด${gone.length ? ` (วันนี้ ${gone.length} ราย)` : ''} · CT-Sim = ออกจากคิว CT และกลับไปรอลงนัดที่ห้องตรวจ ให้แพทย์แก้วันนัด / ยกเลิกนัด · Start RT = ป้าย "ไม่มา Start RT" ในตารางวันฉายของห้องฉาย (14 วัน)</small></h3>`
+    + add + sec('นัด CT-Sim วันนี้', g('ct'), nc4On() ? `มาแล้ว = ทำ CT ได้เลย · มาแล้วพบแพทย์ก่อน = ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย` : '')
+    + sec('Re-CT / New CT (New Part)', g('rect'), `นัด CT-Sim ซ้ำของผู้ป่วยระหว่างฉาย (CT Order จาก${esc(navLabel('consult'))} / ห้องฉาย / ส่งแก้แผน)`)
+    + sec('Start RT วันแรก', g('sim'), `มาแล้ว RT ได้ = ฉายได้เลย · มาแล้วพบแพทย์ก่อน = ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย (แพทย์สั่งแล้วพยาบาลยืนยันที่รับคำสั่งแพทย์ จึงฉายได้)`)
     + sec('นัดพบแพทย์ระหว่างฉาย', g('see'), `ผู้ป่วยที่นัดพบแพทย์วันนี้ (นัดจากแถบย่อยนัดพบแพทย์ · พบแพทย์นอกตารางนัด) · รอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย`)
     + sec('พบแพทย์ระหว่างฉาย', g('fx'), `ห้องฉายบันทึกสถานะ fraction วันนี้แบบ "พบแพทย์" (แถบ ${esc(navLabel('course'))}) · ส่งผู้ป่วยไปพบแพทย์แล้วกด "ส่งพบแพทย์แล้ว"`)
     + sec('Off RT', g('off'), `ผู้ป่วยที่บันทึก Off RT / Complete course / Cancel RT วันนี้ (แถบ ${esc(navLabel('course'))}) · ไม่พบแพทย์ = กด "${esc(NC_OFF_ST.adv)}" · พบแพทย์ = ไปรอที่ ${esc(navLabel('consult'))} → ระหว่างฉาย แล้วยืนยันที่รับคำสั่งแพทย์`);
@@ -16537,7 +16547,7 @@ async function ncAttDo(key, st, btn) {
     if (ncDlg.open) ncDlg.close();   // .45: หน้าต่างตัวเลือก
     if (what === 'off') { toast(st === 'see' ? `HN ${x.hn} · Off RT พบแพทย์ · ไปรอที่${navLabel('consult')} → ระหว่างฉาย` : st ? `HN ${x.hn} · ${NC_OFF_ST[st]}` : `HN ${x.hn} · ล้างสถานะ`); render(); return; }
     toast(st === 'noshow' ? `HN ${x.hn} · ${what === 'fx' ? 'ไม่ได้พบแพทย์' : 'ไม่มาตามนัด'}${r.docMsg ? ` · แจ้งแพทย์ ${x.doc} แล้ว` : ''} → แถบย่อยผู้ป่วยไม่มาตามนัด${what === 'ct' ? ' · ออกจากคิว CT (แพทย์เห็นในรอลงนัด เพื่อแก้วันนัด / ยกเลิกนัด)' : what === 'sim' ? ' · ป้ายไม่มา Start RT ในตารางวันฉาย (ห้องฉาย)' : ''}`
-      : st === 'see' ? `HN ${x.hn} · มาตามนัด · พบแพทย์ · ไปรอที่${navLabel('consult')} → ระหว่างฉาย` : st === 'came' ? `HN ${x.hn} · ${ncCameLbl(what)}` : `HN ${x.hn} · ล้างสถานะ`);
+      : st === 'see' ? `HN ${x.hn} · มาแล้ว พบแพทย์ก่อน · ไปรอที่${navLabel('consult')} → ระหว่างฉาย` : st === 'came' ? `HN ${x.hn} · ${ncCameLbl(what)}` : `HN ${x.hn} · ล้างสถานะ`);
     render();
   } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); if (btn && btn.isConnected) btn.disabled = false; }
 }
@@ -18041,15 +18051,15 @@ function bqDocHtml(v) {
 const bqDocText = v => { const c = docCodeOf(v); return c ? `${c} ${docName(c)}`.trim() : str(v); };   // ค้นหา: รหัสและชื่อแพทย์
 // RTT ของนัดใส่แร่: RTT เริ่มต้น (ตั้งค่า → นัดคิวใส่แร่) ก่อน แล้วรายชื่อ RTT จาก LPCH (ตำแหน่งที่ตั้งใน ตารางวันฉาย) ผู้ปฏิบัติงานประจำวัน และ RTT ที่เคยลงในแถบนี้
 function bqRttNames(extra = []) {
-  const def = state.config.bq.rtt, from = plusDays(today(), -120);
+  const def = state.config.bq.rtt ? crewCanon(state.config.bq.rtt) : '', from = plusDays(today(), -120);   // .56: ชื่อของ RT Hub
   const off = crewOff(), names = [...crewNames('rtt'), ...[...dutyRecent('rtt'), ...state.bq.filter(a => a.rtt && a.date >= from).map(a => a.rtt)].filter(n => !off.has(nameKey(n))), ...extra].map(n => str(n).trim()).filter(Boolean);
-  const rest = [...new Set(names)].filter(n => n !== def).sort((a, b) => a.localeCompare(b, 'th'));
+  const rest = crewUniq(names).filter(n => nameKey(n) !== nameKey(def)).sort((a, b) => a.localeCompare(b, 'th'));   // .56: คนเดียวกันแสดงครั้งเดียว
   return def ? [def, ...rest] : rest;
 }
 const bqRttShort = n => str(n).replace(DOC_TITLE_RE, '').trim().split(/\s+/)[0] || str(n);   // ในตาราง: ชื่อต้น (ชี้ค้าง = ชื่อเต็ม)
 // ตัวเลือก RTT (ไม่ระบุ + รายชื่อ) และช่องพิมพ์ชื่ออื่น · ดึงรายชื่อจาก LPCH ครั้งแรกแล้ววาดใหม่
 function bqRttChips(id, name, v) {
-  const draw = () => { const cur = chipValue($(id)) || v; $(id).innerHTML = [['', 'ไม่ระบุ'], ...bqRttNames(cur ? [cur] : []).map(n => [n, n])].map(([n, l]) => `<label><input type="radio" name="${name}" value="${esc(n)}"${n === (cur || '') ? ' checked' : ''}><span>${esc(l)}</span></label>`).join(''); };
+  const draw = () => { const c0 = chipValue($(id)) || v, cur = c0 ? crewCanon(c0) : ''; $(id).innerHTML = [['', 'ไม่ระบุ'], ...bqRttNames(cur ? [cur] : []).map(n => [n, n])].map(([n, l]) => `<label><input type="radio" name="${name}" value="${esc(n)}"${n === (cur || '') ? ' checked' : ''}><span>${esc(l)}</span></label>`).join(''); };
   draw();
   if (!dutyDir.loaded) { const p = loadDutyDir(); if (p) p.then(() => { if ($(id).isConnected) draw(); }); }
 }
@@ -20618,8 +20628,8 @@ const dutyLabelOf = r => (/^CT:/.test(r) ? ctLabel(r.slice(3)) : roomLabel(r) ||
 function renderDutyBox(sel) {
   const rooms = pinCtx.rooms;
   $('#pin-duty-rooms').innerHTML = rooms.map(r => `<div class="duty-room" data-droom="${esc(r)}">${rooms.length > 1 || r ? `<h4>${esc(dutyLabelOf(r))}</h4>` : ''}${pinCtx.groups.map(([g, l]) => {
-    const off = crewOff(), cur = (sel[r] || {})[g] || [], names = [...new Set([...crewNames(g), ...dutyRecent(g).filter(n => !off.has(nameKey(n))), ...cur])].sort((a, b) => a.localeCompare(b, 'th'));
-    return `<div class="field"><span class="lbl">${esc(l)}</span><div class="duty-pick"><div class="chips" data-dgrp="${g}">${names.map(n => `<label><input type="checkbox" value="${esc(n)}"${cur.includes(n) ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>
+    const off = crewOff(), cur = (sel[r] || {})[g] || [], curK = new Set(cur.map(nameKey)), names = crewUniq([...crewNames(g), ...dutyRecent(g).filter(n => !off.has(nameKey(n))), ...cur]).sort((a, b) => a.localeCompare(b, 'th'));   // .56: คนเดียวกันแสดงครั้งเดียว
+    return `<div class="field"><span class="lbl">${esc(l)}</span><div class="duty-pick"><div class="chips" data-dgrp="${g}">${names.map(n => `<label><input type="checkbox" value="${esc(n)}"${curK.has(nameKey(n)) ? ' checked' : ''}><span>${esc(n)}</span></label>`).join('')}</div>
       <input class="duty-other" data-dother="${g}" maxlength="60" autocomplete="off" placeholder="+ พิมพ์ชื่อแล้วกด Enter" aria-label="เพิ่มชื่อ ${esc(l)}${r ? ` ห้อง ${esc(r)}` : ''}"></div></div>`;
   }).join('')}</div>`).join('');
   const n = dutyDir.rtt.length + dutyDir.ra.length, nc = (state.config.crew || []).filter(x => x.active && crewGroup(x.role)).length;
@@ -20632,7 +20642,7 @@ function renderDutyBox(sel) {
 function readDutyBox() {
   const out = {};
   for (const box of $$('#pin-duty-rooms .duty-room')) {
-    out[box.dataset.droom] = Object.fromEntries(pinCtx.groups.map(([g]) => [g, uniqTags([...chipValues($(`[data-dgrp="${g}"]`, box)), ...splitList($(`[data-dother="${g}"]`, box).value)])]));
+    out[box.dataset.droom] = Object.fromEntries(pinCtx.groups.map(([g]) => [g, crewUniq(uniqTags([...chipValues($(`[data-dgrp="${g}"]`, box)), ...splitList($(`[data-dother="${g}"]`, box).value)]))]));   // .56: บันทึกเป็นชื่อของ RT Hub
   }
   return out;
 }
@@ -22248,11 +22258,11 @@ function ctSheets(wb, room, ym, recs, ct) {
   SLOTS.forEach(([g, k, t], i) => {
     const r = 18 + i;
     Object.assign(wc.getCell(r, 3), { value: t, font: bold, border: box });
-    days.forEach((d, j) => { const c = wc.getCell(r, dayCol(j + 1)); c.value = duty[d][g][k] || null; c.border = box; c.alignment = { textRotation: 90, vertical: 'bottom', horizontal: 'center' }; });
+    days.forEach((d, j) => { const c = wc.getCell(r, dayCol(j + 1)); c.value = duty[d][g][k] ? crewCanon(duty[d][g][k]) : null; c.border = box; c.alignment = { textRotation: 90, vertical: 'bottom', horizontal: 'center' }; });
   });
   for (let r = 18; r <= 26; r++) wc.getRow(r).height = 62;
   // รายชื่อให้เลือก (คอลัมน์ AJ แบบไฟล์เดิม): RTT แล้ว RA
-  const names = g => [...new Set([...crewNames(g), ...days.flatMap(d => (g === 'rtt' ? [...duty[d].rtt, ...duty[d].qc] : duty[d].ra))])];
+  const names = g => crewUniq([...crewNames(g), ...days.flatMap(d => (g === 'rtt' ? [...duty[d].rtt, ...duty[d].qc] : duty[d].ra))]);   // .56: คนเดียวกันครั้งเดียว (ชื่อของ RT Hub)
   const techs = names('rtt'), aids = names('ra'), aj = 36;
   Object.assign(wc.getCell(3, aj), { value: 'รายชื่อ', font: bold });
   [...techs, ...aids].forEach((n, i) => { wc.getCell(4 + i, aj).value = n; });
@@ -23729,15 +23739,23 @@ function openCsoPreview(a, ctx = '') {
   csoRec = a;
   csoCtx = ctx;
   syncCsoNurse();
-  $('#cso-pdf-btn').hidden = false;
-  $('#cso-title').textContent = `ใบสั่ง CT Simulation${a.hn ? ' · ' + a.hn : ''}${apEmerg(a) ? ' · Emergency' : ''}`;
+  $('#cso-pdf-btn').hidden = ctx === 'pchart';   // .56: ดูจาก Patient chart = ไม่มี PDF (ไม่มีลายน้ำ)
+  $('#cso-title').textContent = `ใบสั่ง CT Simulation${a.hn ? ' · ' + a.hn : ''}${apEmerg(a) ? ' · Emergency' : ''}${ctx === 'pchart' ? ' · ดูจาก Patient chart' : ''}`;
   const inner = $('#cso-prev-in');
   inner.innerHTML = csoSheetHtml(a);
+  if (ctx === 'pchart') csoWm(inner);
   csoImages(inner);
   esigFill(inner, 'ct', esigApptId(a));   // .39: ลายเซ็นแพทย์ผู้สั่ง
   ntfDots(csoDlg);
   if (!csoDlg.open) csoDlg.showModal();
   fitCsoPreview();
+}
+// .56: ลายน้ำของใบสั่งที่เปิดจาก Patient chart (ชื่อผู้ดู · วันเวลา) · ทั้งบนจอและตอนพิมพ์
+function csoWm(box) {
+  const pg = box.querySelector('.cso-page');
+  if (!pg) return;
+  const now = new Date(), wm = `ดูจาก Patient chart · ${state.user.name || state.user.username || ''} · ${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  pg.insertAdjacentHTML('beforeend', `<div class="pc-wm cso-wm" aria-hidden="true">${[10, 30, 50, 70, 90].map(t => `<span style="top:${t}%">${esc(wm)}</span>`).join('')}</div>`);
 }
 function fitCsoPreview() {
   const box = $('#cso-prev'), inner = $('#cso-prev-in'), page = inner.firstElementChild;
@@ -23753,6 +23771,7 @@ async function printCso(a, btn) {
   if (!a) return;
   const box = $('#cso-print');
   box.innerHTML = a.__so ? soSheetHtml(a.__so) : csoSheetHtml(a);   // __so = Standing order ของ Call center
+  if (csoCtx === 'pchart' && !a.__so) csoWm(box);   // .56: พิมพ์จาก Patient chart = มีลายน้ำ
   csoImages(box);
   if (btn) btn.disabled = true;
   try {
@@ -31441,8 +31460,8 @@ function pcLog(k) {
   return `<p class="muted" id="pc-log-note">${L.rows.length} รายการ · ใหม่ก่อน${L.more ? ' · แสดง 300 รายการล่าสุด' : ''} · ไม่แสดงค่า QA${seenN ? ` · รวมการเปิดดู chart ${seenN} ครั้ง (เห็นเฉพาะแอดมิน)` : ''}</p><ul class="hist-list pc-log">${items}</ul>`;
 }
 function pcDocs(k, ap, cs) {
-  const it = (l, sub, view) => `<li><b>${esc(l)}</b> <span class="muted">${esc(sub)}</span>${navOn(view) ? ` <button type="button" class="btn ghost sm" data-pcgo="${view}">เปิดที่แถบ ${esc(navLabel(view))}</button>` : ''}</li>`;
-  const out = [...ap.map(a => it('CT Order', `${fmtDay(str(a.created).slice(0, 10))} · แพทย์ ${a.doc || '-'}`, 'appt')), ...state.ct.filter(c => pcHas(c, k)).map(c => it('CT Simulation Order Form', `${fmtDay(c.date)} · ${ctLabel(c.ct) || ''}`, 'ctsim')),
+  const it = (l, sub, view, more = '') => `<li><b>${esc(l)}</b> <span class="muted">${esc(sub)}</span>${more}${navOn(view) ? ` <button type="button" class="btn ghost sm" data-pcgo="${view}">เปิดที่แถบ ${esc(navLabel(view))}</button>` : ''}</li>`;
+  const out = [...ap.map(a => it('CT Order', `${fmtDay(str(a.created).slice(0, 10))} · แพทย์ ${a.doc || '-'}`, 'appt', ` <button type="button" class="btn ghost sm" data-pccso="${esc(a.id)}" title="ใบสั่ง CT Simulation · มีลายน้ำชื่อผู้ดู">ดูใบสั่ง</button>`)), ...state.ct.filter(c => pcHas(c, k)).map(c => it('CT Simulation Order Form', `${fmtDay(c.date)} · ${ctLabel(c.ct) || ''}`, 'ctsim')),
     ...state.dq.filter(x => pcHas(x, k) && x.so).map(x => it('Standing order', fmtDay(x.date), 'dq')), ...cs.filter(c => !isSimple(c)).map(c => it('Treatment Summary', `${catOf(c.cat).label} · Start RT ${fmtDay(c.sim) || '—'}`, TXS_VIEW))];
   return `<ul class="pc-docs">${out.join('') || '<li class="muted">ไม่มีเอกสาร</li>'}</ul>`;
 }
@@ -31492,6 +31511,7 @@ pcDlg.addEventListener('click', e => {
   if (b.dataset.pccat !== undefined) { pcs.cat = b.dataset.pccat; return pcRender(); }
   if (b.dataset.pcprint !== undefined) return pcPrint(b);
   if (b.dataset.pcgo) { pcDlg.close(); return flowGo(b.dataset.pcgo, pcs.hn); }
+  if (b.dataset.pccso) { const a = state.appt.find(x => x.id === b.dataset.pccso); return a ? openCsoPreview(a, 'pchart') : toast('ไม่พบ CT Order นี้', { err: true }); }   // .56: ใบสั่งมีลายน้ำ
   if (b.dataset.pchit) { Object.assign(pcs, { hn: b.dataset.pchit, tab: 'sum', cat: '', log: null }); pcSeenLog(pcs.hn); $('#pc-q').value = ''; return pcRender(); }
 });
 $('#pc-q').addEventListener('input', () => {
