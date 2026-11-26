@@ -9574,7 +9574,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.62';
+const PAGE_VERSION = '2026-11-22.63';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -16535,9 +16535,9 @@ function renderNurseMv(words, ordHtml) {
     const note = ncNoteDraft.has(r.id) ? ncNoteDraft.get(r.id) : r.note, st = r.status;
     return `<li class="nc-row" data-ncid="${esc(r.id)}"><span class="nurse-who"><b class="hn">${esc(r.hn)}</b> ${r.doc ? docChip(r.doc) + ' ' : ''}${pnm(r.name)} <span class="nc-what ${esc(r.what)}">${esc(NC_WHAT[r.what] || r.what)}</span> <span class="nc-mv">${esc(ncDay(r.from))} → <b>${esc(!r.to && str(r.note).startsWith(NC_CANCEL) ? 'ยกเลิกนัด' : ncDay(r.to))}</b></span>`
       + `<small>เลื่อนโดย ${esc(r.by)} ${esc(whenText(r.at))}${st === 'told' ? ` · <span class="nurse-ok">✓ แจ้งผู้ป่วยแล้ว · ${esc(r.nBy)} ${esc(whenText(r.nAt))}</span>` : st === 'fail' ? ` · <span class="nc-no">ติดต่อไม่ได้ ${esc(r.tries || '1')} ครั้ง (ล่าสุด ${esc(whenText(r.nAt))} · ${esc(r.nBy)})</span>` : ''}${!edit && r.note ? ` · หมายเหตุ: ${esc(r.note)}` : ''}</small></span>`
-      + (edit ? `<span class="nc-acts"><input class="nc-note" data-ncnote="${esc(r.id)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(r.hn)}">`
+      + (edit ? `<span class="nc-acts">`
         + (st === 'told' ? `<button type="button" class="btn ghost sm" data-ncmark="${esc(r.id)}" data-st="">ยกเลิก</button>`
-          : `<button type="button" class="btn primary sm" data-ncmark="${esc(r.id)}" data-st="told">แจ้งผู้ป่วยแล้ว</button><button type="button" class="btn ghost sm danger" data-ncmark="${esc(r.id)}" data-st="fail">ติดต่อไม่ได้${+r.tries ? ` (${esc(r.tries)})` : ''}</button>`) + '</span>' : '') + '</li>';
+          : `<button type="button" class="btn primary sm" data-ncmark="${esc(r.id)}" data-st="told">แจ้งผู้ป่วยแล้ว</button><button type="button" class="btn ghost sm danger" data-ncmark="${esc(r.id)}" data-st="fail">ติดต่อไม่ได้${+r.tries ? ` (${esc(r.tries)})` : ''}</button>`) + `<input class="nc-note" data-ncnote="${esc(r.id)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(r.hn)}"></span>` : '') + '</li>';
   };
   box.innerHTML = old + `<h3 class="ontx-h">เลื่อนนัด · รอแจ้งผู้ป่วย <span class="muted">(${wait.length})</span><small>CT Order: นัดที่ติ๊ก "เลื่อนนัดแจ้งพยาบาล" ใต้ช่องวันที่ (วันทำ CT-Sim · Start RT) · นัดคิวใส่แร่: ทุกครั้งที่เลื่อนนัด / เลื่อนไม่มีกำหนด / ลงวันนัดใหม่ / แก้วันที่ ส่งมาเอง · แจ้งผู้ป่วยแล้ว = ออกจากรายการรอ · ติดต่อไม่ได้ = นับจำนวนครั้ง · ใส่หมายเหตุได้ทั้งสองแบบ</small></h3>`
     + (wait.length ? `<ul class="nurse-list nc-list">${wait.map(row).join('')}</ul>` : '<p class="empty-state">ไม่มีนัดที่รอแจ้งผู้ป่วย</p>')
@@ -16597,8 +16597,8 @@ function ncOffRow(x, edit, pop) {   // 23 พ.ย.: นัดวันนี้ 
   if (pop) return `<li class="nc-row"><button type="button" class="nurse-who nc-open" data-ncpop="${esc(key)}" title="กดเพื่อเลือกสถานะ"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>${x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</button>${ncBadge(x)}</li>`;
   const badge = st && NC_OFF_ST[st] ? `<span class="nurse-ok">✓ ${esc(NC_OFF_ST[st])} · ${esc(x.att.nBy)}</span>${st === 'see' ? (v && v.seen ? `<span class="st wait">แพทย์พบแล้ว · ยืนยันที่รับคำสั่งแพทย์</span>` : `<span class="st wait">รอพบแพทย์ที่${esc(navLabel('consult'))}</span>`) : ''}` : '';
   const b = (val, lbl, off, cls) => ncOptBtn(key, st === val, val, lbl, off, cls);
-  const btns = edit && st !== 'seeadv' ? `<span class="nc-acts"><input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}">`
-    + (nc3On() ? b('adv', NC_OFF_ST.adv, 'ยกเลิก', 'primary') + b('see', 'พบแพทย์', 'ยกเลิกพบแพทย์', '') : `<span class="muted" title="${esc(NC3_OLD)}">ต้องใช้ Code.gs รุ่นใหม่</span>`) + '</span>' : '';
+  const btns = edit && st !== 'seeadv' ? `<span class="nc-acts">`
+    + (nc3On() ? b('adv', NC_OFF_ST.adv, 'ยกเลิก', 'primary') + b('see', 'พบแพทย์', 'ยกเลิกพบแพทย์', '') : `<span class="muted" title="${esc(NC3_OLD)}">ต้องใช้ Code.gs รุ่นใหม่</span>`) + `<input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}"></span>` : '';
   return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span>`
     + `${!edit && x.att && x.att.note ? `<small>หมายเหตุ: ${esc(x.att.note)}</small>` : ''}</span>${badge}${btns}</li>`;
 }
@@ -16616,10 +16616,10 @@ function ncAttRow(x, edit, pop) {
   const badge = x.done ? '<span class="nurse-ok">✓ ลง CT-SIM แล้ว</span>' : st === 'came' ? `<span class="nurse-ok">✓ ${esc(ncCameLbl(x.what))} · ${esc(x.att.nBy)}</span>`
     : st === 'see' ? `<span class="nurse-ok">✓ มาแล้วพบแพทย์ก่อน · ${esc(x.att.nBy)}</span>` : st === 'noshow' ? `<span class="nc-no">✗ ${esc(ncNoLbl(x.what))} · ${esc(x.att.nBy)} ${esc(whenText(x.att.nAt))}</span>` : '';
   const b = (v, lbl, off, cls) => ncOptBtn(key, st === v, v, lbl, off, cls);
-  const btns = edit && !x.done && can2 ? `<span class="nc-acts"><input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}">`
+  const btns = edit && !x.done && can2 ? `<span class="nc-acts">`
     + (miss ? '' : b('came', ncCameLbl(x.what), x.what === 'sim' ? 'ยกเลิก RT ได้' : x.what === 'fx' ? 'ยกเลิกส่งพบแพทย์' : 'ยกเลิกมาแล้ว', 'primary'))
     + (!miss && ((x.what === 'sim' && nc2On()) || (x.what === 'ct' && nc4On())) ? b('see', 'มาแล้วพบแพทย์ก่อน', 'ยกเลิกพบแพทย์ก่อน', '') : '')   // .56: CT-Sim ด้วย (API 135)
-    + (st !== 'noshow' && x.what !== 'fx' ? b('noshow', ncNoLbl(x.what), '', 'ghost danger').replace('<button ', `<button title="${esc(nsWho(x))}" `) : b('noshow', ncNoLbl(x.what), x.what === 'fx' ? 'ยกเลิกไม่ได้พบ' : 'ยกเลิกไม่มา', 'ghost danger')) + '</span>' : '';
+    + (st !== 'noshow' && x.what !== 'fx' ? b('noshow', ncNoLbl(x.what), '', 'ghost danger').replace('<button ', `<button title="${esc(nsWho(x))}" `) : b('noshow', ncNoLbl(x.what), x.what === 'fx' ? 'ยกเลิกไม่ได้พบ' : 'ยกเลิกไม่มา', 'ghost danger')) + `<input class="nc-note" data-attnote="${esc(key)}" maxlength="300" placeholder="หมายเหตุ" value="${esc(note)}" aria-label="หมายเหตุ HN ${esc(x.hn)}"></span>` : '';
   const v = x.visit, extra = v ? `<span class="ontx-tag walk">${esc(v.note === NC_HOLD_SEE ? 'Hold RT · ส่งพบแพทย์' : visitTag(v))}${v.note && ![VISIT_APPT, NC_HOLD_SEE].includes(v.note) ? ` · ${esc(v.note)}` : ''}</span>${v.seen ? `<span class="nurse-ok">✓ พบแพทย์แล้ว · ${esc(v.seenBy)}</span>` : ''}`
     : x.ev ? `<span class="ontx-tag see" title="${esc([x.ev.note, x.ev.by && `บันทึกโดย ${x.ev.by}`].filter(Boolean).join(' · '))}">${esc(x.ev.label)} · พบแพทย์</span>` : '';
   const pc = x.what === 'sim' ? state.cases.find(c => c.id === x.ref) : null;   // .33: Start RT วันแรก ของผู้ป่วยหลาย part
@@ -21615,12 +21615,23 @@ const boostList = c => sitesOf(c).filter(x => x.start === 'boost' && x.sid).map(
 const boostStamps = c => { try { const o = JSON.parse(c.bsteps || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
 // ขั้นตอนของทุกแผนของเคส (แผนแรก + Plan 2…n + Sequential boost) · กด Eva / PC แผนเดียว แผนอื่นที่ยังไม่ทำยังรออยู่ · same = เฉพาะแผนที่ทำพร้อมกัน (ไม่รวม boost ที่วางแผนทีหลัง)
 const planStamps = (c, same) => (boostStepsOn() && catOf(c.cat).kind !== 'simple' ? [c, ...subPlans(c).filter(x => !same || x.plan).map(x => boostStamps(c)[x.sid] || {})] : [c]);
-const boostName = (c, b) => `Boost${boostList(c).length > 1 ? ' ' + b.n : ''}${b.area ? ' · ' + b.area : ''}`;
+const boostName = (c, b, k) => `Boost${boostList(c).length > 1 ? ' ' + b.n : ''}${k ? ` Plan ${k}` : ''}${b.area ? ' · ' + b.area : ''}`;
+// .63: ×n + Sequential boost = boost แต่ละบริเวณมีครบ n แผน (Boost Plan 1 = รหัสเดิม · Plan 2…n = <sid>-p2…) · Code.gs รับรหัสแบบนี้อยู่แล้ว
+// เคสเก่าที่ทุกแผนเดิมทำ Plan complete ก่อนวันเริ่มใช้ และยังไม่มีขั้นตอนของ boost แผนเพิ่ม = boost แผนเดียวแบบเดิม (ไม่กลับมาค้างในรายการรอ)
+const BOOSTX_FROM = '2026-11-26';
+function boostX(c) {
+  const n = unitsOf(c), bs = boostList(c);
+  if (n < 2 || !bs.length) return 1;
+  const st = boostStamps(c), more = Array.from({ length: n - 1 }, (_, i) => i + 2);
+  if (bs.some(b => more.some(k => st[`${b.sid}-p${k}`]))) return n;
+  const old = [c, ...more.map(k => st['p' + k] || {}), ...bs.map(b => st[b.sid] || {})];
+  return old.every(r => str(r.pc) && str(r.pc).slice(0, 10) < BOOSTX_FROM) ? 1 : n;
+}
 // แผนที่มีปุ่มขั้นตอนของตัวเอง นอกจากแผนแรก (เก็บแยกในคอลัมน์ ขั้นตอนของ boost ด้วย stampBoost)
 // จำนวนครั้ง ×n = Plan 2…n (รหัส p2…pn) แล้วตามด้วย Sequential boost แต่ละบริเวณ
 const subPlans = c => [
   ...Array.from({ length: unitsOf(c) - 1 }, (_, i) => ({ sid: 'p' + (i + 2), name: `Plan ${i + 2}`, tip: `แผนที่ ${i + 2} จาก ${unitsOf(c)} (${catOf(c.cat).label} ×${unitsOf(c)})`, plan: true })),
-  ...boostList(c).map(b => ({ sid: b.sid, name: boostName(c, b), tip: siteText(b), plan: false }))];
+  ...boostList(c).flatMap(b => { const bx = boostX(c); return Array.from({ length: bx }, (_, i) => ({ sid: i ? `${b.sid}-p${i + 1}` : b.sid, name: boostName(c, b, bx > 1 ? i + 1 : 0), tip: siteText(b) + (bx > 1 ? ` · แผน boost ที่ ${i + 1} จาก ${bx} (×${bx})` : ''), plan: false })); })];
 const subTag = p => `<span class="boost-tag${p.plan ? ' plan' : ''}" title="${esc(p.tip)}">↳ ${esc(p.name)}</span>`;
 function checkSites(base) {
   const fx1 = +$(`#${base}-fx`).value || 0;
