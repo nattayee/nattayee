@@ -8972,7 +8972,9 @@ function nlpMark() {
     }
   }
 }
-const nlpSample = t => { const s7 = plusDays(today(), 7); return str(t).replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => ({ 'HN': '999000001', 'วันที่': `${today().slice(8, 10)}/${today().slice(5, 7)}`, 'วันที่ start RT': `${s7.slice(8, 10)}/${s7.slice(5, 7)}`, 'แพทย์': 'AA', 'ห้อง': str((state.config.rooms || [])[0]) || 'ห้อง 1', 'ห้องฉาย': str((state.config.rooms || [])[0]) || 'ห้อง 1', 'รอบ': 'CT' }[p])); };
+// .60: {วันที่ start RT} = "(Start RT วว/ดด)" (ข้อความเขียน Start RT ไว้เองแล้ว = วันที่อย่างเดียว · ไม่มีวัน = ว่าง) · เหมือน ntfSimTxt_ ใน Code.gs
+const ntfSimTxt = (tpl, sd) => { if (!isDay(sd)) return ''; const d = `${sd.slice(8, 10)}/${sd.slice(5, 7)}`; return /start\s*rt/i.test(str(tpl).replace(/\{วันที่ start RT\}/g, '')) ? d : `(Start RT ${d})`; };
+const nlpSample = t => { const s7 = plusDays(today(), 7); return str(t).replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => ({ 'HN': '999000001', 'วันที่': `${today().slice(8, 10)}/${today().slice(5, 7)}`, 'วันที่ start RT': ntfSimTxt(t, s7), 'แพทย์': 'AA', 'ห้อง': str((state.config.rooms || [])[0]) || 'ห้อง 1', 'ห้องฉาย': str((state.config.rooms || [])[0]) || 'ห้อง 1', 'รอบ': 'CT' }[p])); };
 function nlpOpen(k, anchor) {
   const d = ntflDef(k);
   if (!d) return;
@@ -9559,7 +9561,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.59';
+const PAGE_VERSION = '2026-11-22.60';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9948,7 +9950,7 @@ function localStore() {
       if (!L || !L.on || (!L.roles.length && !lPpl(L).length) || live) return { rows: [] };   // .59: บุคคลอย่างเดียวก็ได้
       const dd = isDay(c.date) ? c.date : '', hn = str(c.hn).slice(0, 40);
       const sd = isDay(c.sim) ? c.sim : '';
-      const text = L.text.replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันที่': dd ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}` : '', 'วันที่ start RT': sd ? `${sd.slice(8, 10)}/${sd.slice(5, 7)}` : '', 'แพทย์': str(c.doc).toUpperCase(), 'ห้อง': str(c.room), 'ห้องฉาย': str(c.txroom).slice(0, 30), 'รอบ': str(c.round) }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+\)/g, ')').trim() || d.text;
+      const text = L.text.replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันที่': dd ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}` : '', 'วันที่ start RT': ntfSimTxt(L.text, sd), 'แพทย์': str(c.doc).toUpperCase(), 'ห้อง': str(c.room), 'ห้องฉาย': str(c.txroom).slice(0, 30), 'รอบ': str(c.round) }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+\)/g, ')').trim() || d.text;
       const r = { id, text: hn ? ntfAddRoom(text, hn) : text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
       const dm = ntfDmDemo(db, L, c, hn, r.text, id);   // .59: ข้อความส่วนตัวถึงบุคคล (เหมือน ntfDm_ ใน Code.gs)
       if (!L.roles.length) { persist(); return { rows: [], dm }; }
@@ -13330,6 +13332,9 @@ function submitAp(e) {
   if (orig && apVia === 'ctsim') {   // 20 พ.ย.: แก้ CT Order ทั้งใบจากหน้าต่าง CT-SIM = รคส.
     const diff = apDiffAll(orig, rec);
     if (diff.length) { rec.order = rksStamp(orig, parseOrder(rec.order), diff); apRksNote = true; }
+  } else if (!apByOwnDoc(rec)) {   // .60: บันทึก / แก้โดยคนที่ไม่ใช่แพทย์ของใบสั่ง (Nurse · RTT · MP ฯลฯ) = รคส. + ชื่อผู้บันทึก
+    const diff = orig ? apDiffAll(orig, rec) : ['บันทึก CT Order ใหม่ (รับคำสั่งแพทย์)'];
+    if (diff.length) { rec.order = rksStamp(orig || rec, parseOrder(rec.order), diff); apRksNote = true; }
   }
   openApPin('apsave', rec);
 }
@@ -13424,8 +13429,7 @@ function apSaved(rec, isNew) {
   const co = parseOrder(rec.order);
   const rk = apRksNote && apRks(rec).slice(-1)[0];
   apRksNote = false;
-  if (rk) return toast(`บันทึกการแก้ไข CT Order ${rec.hn} แล้ว · ${rksText(rk)} · แสดงในแถบ ${navLabel('appt')} ของแพทย์ด้วย`);
-  toast(`${co.src === 'consult' && !co.co ? 'ลงนัด CT+RT' : isNew ? 'ลงนัด' : 'บันทึก CT Order'} ${rec.hn} · ${isDay(rec.date) ? `นัด CT ${fmtDay(rec.date)}` : 'On Call (ยังไม่มีวันนัด CT)'}${co.src === 'consult' && !co.co ? ` · รอ CT Order ในแถบ ${navLabel('appt')}` : isNew ? ' · ส่งไปรอในแถบ CT-SIM แล้ว' : ''}`);
+  toast(`${co.src === 'consult' && !co.co ? 'ลงนัด CT+RT' : isNew ? 'ลงนัด' : 'บันทึก CT Order'} ${rec.hn} · ${isDay(rec.date) ? `นัด CT ${fmtDay(rec.date)}` : 'On Call (ยังไม่มีวันนัด CT)'}${co.src === 'consult' && !co.co ? ` · รอ CT Order ในแถบ ${navLabel('appt')}` : isNew ? ' · ส่งไปรอในแถบ CT-SIM แล้ว' : ''}${rk ? ` · ${rksText(rk)}` : ''}`);   // .60: รคส. ต่อท้าย
 }
 function apDeleted(id) {
   state.appt = state.appt.filter(x => x.id !== id);
@@ -19237,10 +19241,12 @@ function apDiffAll(a, b) {
 }
 // รคส.: รายการแก้ไขคำสั่งแพทย์จากห้อง CT-SIM (เก่า → ใหม่)
 const apRks = r => { const l = parseOrder(r && r.order).rks; return Array.isArray(l) ? l.filter(x => x && typeof x === 'object' && x.at) : []; };
-const rksText = x => `รคส. ${str(x.doc) || '–'} · ผู้แก้ไข ${str(x.by) || '–'} · ${whenText(x.at)}`;
+const rksText = x => `รคส. ${str(x.by) || '–'} · คำสั่งแพทย์ ${str(x.doc) || '–'} · ${whenText(x.at)}`;   // .60: รคส. + ชื่อผู้รับคำสั่ง
+// .60: ผู้บันทึกเป็นแพทย์ของใบสั่งเอง (บัญชีที่เชื่อมกับแพทย์ใน ตั้งค่า → ทีม · ไม่ได้เชื่อม = ตำแหน่ง RO) = ไม่ใช่ รคส.
+const apByOwnDoc = rec => { const me = myDoctor(); return me ? str(me).toUpperCase() === str(rec.doc).toUpperCase() : /^RO$/i.test(str(state.user.role)); };
 function apRksHtml(r) {
   const l = apRks(r);
-  return l.length ? `<div class="rks-box"><b>แก้ไขคำสั่งจากห้อง CT-SIM (รคส.) ${l.length} ครั้ง</b><ul>${l.slice().reverse().map(x => `<li><span class="rks-who">${esc(rksText(x))}</span>${x.what ? `<span class="rks-what">${esc(x.what)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
+  return l.length ? `<div class="rks-box"><b>รับคำสั่งแพทย์ (รคส.) ${l.length} ครั้ง</b><ul>${l.slice().reverse().map(x => `<li><span class="rks-who">${esc(rksText(x))}</span>${x.what ? `<span class="rks-what">${esc(x.what)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
 }
 const apRksTag = r => { const l = apRks(r); return l.length ? ` <span class="sp-tag rks-tag" title="${esc(l.map(x => rksText(x) + (x.what ? ' · ' + x.what : '')).join(' | '))}">รคส.</span>` : ''; };
 // ใบสั่งใหม่ + รายการ รคส. · doc = แพทย์ผู้บันทึก CT Order (แพทย์ของนัด · ไม่มี = ผู้ลงนัด) · เก็บ 12 ครั้งล่าสุด
@@ -19684,7 +19690,7 @@ function reRounds(evs) {
   return evs.filter(e => e.act === 'skip' && isReType(e.type)).sort((a, b) => a.date.localeCompare(b.date)).map(e => ({ date: e.date, label: e.label, n: (n[e.type] = (n[e.type] || 0) + 1) }));
 }
 const roundName = r => `${r.label} ${r.n}`;   // "Re-CT 2"
-const fxTip = e => [e.label, e.reason, e.act === 'skip' ? (e.back ? `กลับมาฉาย ${fmtDay(e.back)}` : 'จนกว่าจะกลับมา') : '', e.note, e.by && `บันทึกโดย ${e.by} ${fmtStamp(e.at) || ''}`.trim()].filter(Boolean).join(' · ');
+const fxTip = e => [e.label, e.reason, e.act === 'skip' ? (e.back ? `กลับมาฉาย ${fmtDay(e.back)}${e.cont ? ' (แพทย์สั่ง Continue RT · พยาบาลยืนยันแล้ว)' : ''}` : 'จนกว่าจะกลับมา') : '', e.note, e.by && `บันทึกโดย ${e.by} ${fmtStamp(e.at) || ''}`.trim()].filter(Boolean).join(' · ');
 const isWeekday = ds => { const w = parseISO(ds).getDay(); return w !== 0 && w !== 6; };
 const weekdayFrom = ds => { let d = ds; while (!isWeekday(d)) d = nextDate(d); return d; };
 const shiftWeekdays = (ds, n) => { let d = ds; for (let k = 0; k < Math.abs(n);) { d = plusDays(d, n < 0 ? -1 : 1); if (isWeekday(d)) k++; } return d; };
@@ -25303,10 +25309,21 @@ function parseFx(c, all) {
   if (!Array.isArray(a)) a = [];
   if (fxOpt.length && c.id) for (const o of fxOpt) if (o.ids.includes(c.id) && !a.some(x => x && str(x.date).slice(0, 10) === o.date && str(x.lane) === o.lane)) a = a.concat([o.stamp]);   // กำลังบันทึก ฉายแล้ว
   const acts = FX_ACTS.map(x => x[0]);
-  return a.filter(x => x && isDay(x.date) && (all || !str(x.lane))).map(x => {
+  const evs = a.filter(x => x && isDay(x.date) && (all || !str(x.lane))).map(x => {
     const date = str(x.date).slice(0, 10), act = acts.includes(x.act) ? x.act : 'treat', back = act === 'skip' && isDay(x.back) ? str(x.back).slice(0, 10) : '', lane = str(x.lane);
     return { date, type: str(x.type), label: str(x.label) || str(x.type) || '?', act, back: back > date ? back : '', reason: str(x.reason), note: str(x.note), by: str(x.by), at: str(x.at), ...(lane ? { lane } : {}), ...(String(x.see) === '1' || x.see === true ? { see: '1' } : {}), ...(igImgParse(x.img) ? { img: igImgStr(igImgParse(x.img)) } : {}) };
   }).sort((a, b) => a.date.localeCompare(b.date));
+  if (evs.some(e => e.act === 'skip')) {   // .60: Continue RT ที่พยาบาลยืนยันแล้ว = กลับมาฉายวันที่สั่ง
+    const cd = rtdContDays(c);
+    if (cd.length) for (const e of evs) if (e.act === 'skip' && !isReCt(e)) { const d = cd.find(x => x > e.date && (!e.back || x < e.back)); if (d) { e.back = d; e.cont = 1; } }
+  }
+  return evs;
+}
+// .60: วันที่แพทย์สั่ง Continue RT แล้วพยาบาลยืนยัน (รับคำสั่งแพทย์) ของผู้ป่วย (เคสนั้นหรือ HN เดียวกัน)
+function rtdContDays(c) {
+  const k = hnKey(c.hn), out = [];
+  for (const r of state.rtd || []) if (r.rt === 'continue' && r.nurse && isDay(r.date) && ((c.id && r.case === c.id) || (k && hnKey(r.hn) === k))) out.push(r.date);
+  return out.sort();
 }
 const laneEvs = c => parseFx(c, true).filter(e => e.lane);
 // แถวย่อยของผู้ป่วย: บริเวณละแถว (Sequential boost ต่อในแถวบริเวณที่ 1) · BID / TID = รอบละแถว · ["0"] = แถวเดียว
