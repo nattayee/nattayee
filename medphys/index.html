@@ -9767,7 +9767,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.66';
+const PAGE_VERSION = '2026-11-22.67';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -14698,6 +14698,32 @@ function ptIndex0() {
   return out;
 }
 const ptByHn = hn => (ptHnOk(hn) ? ptIndex().find(p => p.hn && hnKey(p.hn) === hnKey(hn)) || null : null);
+// 27 พ.ย. (.67): ชื่อผู้ป่วยจาก HN เมื่อรายการนั้นไม่มีชื่อ · แถบลงทะเบียนก่อน แล้วรายการอื่นของ HN เดียวกัน (ล่าสุดก่อน · ข้ามค่าที่เป็นตัวเลขล้วน)
+// ไม่พบในข้อมูลที่โหลด = ถามที่เก็บถาวรของแถบลงทะเบียน (ptNameAsk · ครั้งเดียวต่อ HN · ครั้งละไม่เกิน 5 HN)
+const ptNameMemo = new Map(), ptNameAsked = new Set();
+const ptNameOk = v => /[^\d\s-]/.test(str(v));
+function ptNameOf(hn) {
+  const k = hnKey(hn);
+  if (!k) return '';
+  const r = regByHn(hn);
+  if (r && ptNameOk(r.name)) return regName(r);
+  for (const list of [state.cases, state.appt, state.ct, state.bq, state.dq, state.rtd, state.ncall, state.logs]) {
+    const xs = list || [];
+    for (let i = xs.length - 1; i >= 0; i--) if (ptNameOk(xs[i].name) && hnKey(xs[i].hn) === k) return str(xs[i].name).replace(/\s+/g, ' ').trim();
+  }
+  return ptNameMemo.get(k) || '';
+}
+function ptNameAsk(hns, done) {
+  if (!archOn() || !(state.regArch && state.regArch.total)) return;
+  const want = [];
+  for (const hn of hns) { const k = hnKey(hn); if (k && !ptNameAsked.has(k) && want.length < 5) { ptNameAsked.add(k); want.push([k, str(hn).trim()]); } }
+  if (!want.length) return;
+  Promise.all(want.map(([k, hn]) => store.regFind(hn).then(res => {
+    const x = ((res && res.rows) || []).map(normReg).find(y => hnKey(y.hn) === k && ptNameOk(y.name));
+    if (x) ptNameMemo.set(k, regName(x));
+    return !!x;
+  }, () => false))).then(got => { if (got.some(Boolean) && done) done(); });
+}
 // ค้นผู้ป่วย: HN ขึ้นต้นด้วยที่พิมพ์ก่อน (ผู้ป่วยที่ลงทะเบียนแล้วก่อน) แล้วชื่อ/สกุลที่มีทุกคำ · skipReg = ไม่เอาผู้ป่วยที่ลงทะเบียนแล้ว (ฟอร์มลงทะเบียน)
 function regSearch(q, skipReg) {
   const k = hnKey(q), words = str(q).toLowerCase().split(/\s+/).filter(Boolean);
@@ -32324,7 +32350,7 @@ function flowData(all) {
     else if (st.k === 'done' && st.d && st.d >= doneFrom) add('done', { ...base, tip: `${st.t} ${fmtDay(st.d)} · ห้อง ${roomLabel(room)}`, meta: `${st.t} ${fmtDay(st.d)}` });
   }
   for (const a of state.bq) if (a.date === td && bqLive(a)) add('bq', { hn: a.hn, name: a.name, doc: a.doc, go: 'bq', tip: `${a.tech || 'Brachytherapy'}${a.fx ? ` · Fx ${a.fx}${a.total ? '/' + a.total : ''}` : ''} วันนี้`, meta: `${a.tech || 'Brachy'}${a.fx ? ` Fx ${a.fx}${a.total ? '/' + a.total : ''}` : ''}` });
-  for (const x of out) if (!str(x.name)) { const r = regByHn(x.hn); x.name = nameOf.get(hnKey(x.hn)) || (r ? regName(r) : ''); }
+  for (const x of out) if (!str(x.name)) x.name = nameOf.get(hnKey(x.hn)) || ptNameOf(x.hn);   // .67: รายการอื่นของ HN เดียวกันทุกแถบ (เดิม = แถบลงทะเบียนเท่านั้น)
   if (all) return out;
   const best = new Map();
   for (const x of out) { const k = hnKey(x.hn), r = FLOW_RANK.indexOf(x.stage), c = best.get(k); if (!c || r > c.r) best.set(k, { r, x }); }
@@ -32364,6 +32390,7 @@ const fwTxRooms = xs => `<span class="fw-txr">${(fwSubKeys('tx', xs) || []).map(
 function renderFlow() {
   syncTabQ('flow');
   const cols = flowCols(), words = tabWords('flow'), all = flowData(), admin = !!state.user.isAdmin, view = flowViewCur(), on = flowViewsOn();
+  ptNameAsk(all.filter(x => !str(x.name)).map(x => x.hn), () => { if (state.view === 'flow') renderFlow(); });   // .67: ชื่อจากที่เก็บถาวร
   const found = words.length ? all.filter(x => wordsIn(words, `${x.hn} ${x.name} ${x.doc} ${docName(x.doc) || ''} ${x.tip} ${x.sub}`.toLowerCase())) : all;
   const list = view === 'F' || !fw.doc ? found : found.filter(x => (x.doc || '-') === fw.doc);   // F มีแถวของทุกแพทย์อยู่แล้ว
   if (!admin) flowEdit = false;
