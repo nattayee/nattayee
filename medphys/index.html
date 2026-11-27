@@ -3412,6 +3412,34 @@ dialog.bg-hide::backdrop{opacity:0}
 .cso-prev{overflow:auto;padding:12px;border-radius:10px;background:var(--sunken)}
 .cso-prev-in{margin:0 auto;transform-origin:top left;box-shadow:0 2px 12px rgba(0,0,0,.25)}
 .cso-dlg .dlg-head{gap:8px}
+/* .68: Re-CT ไม่พบแพทย์ · รายชื่อรอแพทย์กรอก CT Order ในแถบ Nurse → CT Order / รับคำสั่งแพทย์ · ป้ายไม่พบแพทย์ */
+.rcnv-sub{margin:4px 0 2px;font-size:13px}
+.sp-tag.ns-tag{margin-left:4px;background:var(--warn-soft);color:var(--warn);font-weight:700}
+/* .68: Standing order · Nurse กรอกเพิ่ม (แผงซ้ายของหน้าต่าง · ใบ A4 ด้านขวา) */
+.cso-dlg.so-fill .dlg-body{display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:860px){.cso-dlg.so-fill .dlg-body{grid-template-columns:1fr}}
+.so-nf{display:grid;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:13.5px}
+.so-nf-h{display:grid;gap:2px}
+.so-nf-h b{font-size:15px}
+.so-nf-h small{color:var(--muted);font-size:12.5px}
+.so-nf-sec{margin:0;padding:8px 10px 10px;border:1px solid var(--line);border-radius:8px;display:grid;gap:6px;min-width:0}
+.so-nf-sec legend{padding:0 4px;font-weight:700;font-size:13px}
+.so-nf-labs{display:flex;flex-wrap:wrap;gap:4px 12px}
+.so-nf-labs .check{white-space:normal;align-items:flex-start}
+.so-nf-doc input:disabled+span{color:var(--fg)}
+.so-nf-tag{margin-left:4px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-style:normal;font-weight:600}
+.so-nf-docl{margin:0;font-size:12.5px;color:var(--muted)}
+.so-nf textarea{width:100%;min-height:96px;resize:vertical}
+.so-nf textarea:disabled,.so-nf input:disabled{background:var(--sunken);color:var(--fg)}
+.so-nf-note{justify-self:start;font-size:12.5px;text-align:left}
+.so-nf-sg>div{display:grid;grid-template-columns:8.5em minmax(0,1fr);gap:0 8px;align-items:baseline}
+.so-nf-sg>div>span{color:var(--muted);font-size:12.5px}
+.so-nf-sg small{grid-column:2;color:var(--muted);font-size:12px}
+.so-nf-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.so-nf-st{font-size:12.5px;color:var(--muted)}
+.so-nf-st.dirty{color:var(--warn);font-weight:600}
+.so-op-by{display:block;margin-top:2mm;font-size:8.5pt;color:#444}
+.nurse-who .so-nf-chip{margin-left:6px;padding:0 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11.5px;font-weight:600;white-space:nowrap}
 #cso-print{display:none}
 /* 23 พ.ย.: ใบลา A4 ตามไฟล์ของโรงพยาบาล (ฟอนต์ Sarabun) · ตรา รับทราบแล้ว สีน้ำเงินข้างชื่อผู้ลา */
 .lf-page{box-sizing:border-box;width:210mm;height:297mm;padding:10mm 18mm 8mm 20mm;background:#fff;color:#000;font-family:'LF SarabunPSK','TH SarabunPSK','TH Sarabun PSK','TH Sarabun New','Sarabun',sans-serif;font-size:16pt;line-height:6.6mm;position:relative;overflow:hidden}
@@ -5643,7 +5671,7 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
 <dialog id="cso-dlg" class="dlg-wide cso-dlg" aria-labelledby="cso-title">
   <div class="dlg">
     <header class="dlg-head"><h2 id="cso-title">ใบสั่ง CT Simulation</h2><span class="ap-acts"><button type="button" class="btn primary sm" id="cso-nurse-btn" hidden>✓ ยืนยัน CT Order</button><button type="button" class="btn ghost sm" id="cso-next-btn" hidden>ใบถัดไป ›</button><button type="button" class="btn primary sm ap-print" id="cso-print-btn">🖨 พิมพ์</button><button type="button" class="btn ghost sm" id="cso-pdf-btn">download PDF</button></span><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
-    <div class="dlg-body"><div class="cso-prev" id="cso-prev"><div class="cso-prev-in" id="cso-prev-in"></div></div></div>
+    <div class="dlg-body"><div class="so-nf" id="so-nf" hidden></div><div class="cso-prev" id="cso-prev"><div class="cso-prev-in" id="cso-prev-in"></div></div></div>
   </div>
 </dialog>
 <!-- 20 พ.ย.: สถานะเครื่อง · ไอคอนชนิดเครื่อง (เครื่องฉาย / CT / ใส่แร่ / อื่นๆ) · หน้าต่างตั้งสถานะ · ประวัติและสถิติ -->
@@ -9767,7 +9795,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.67';
+const PAGE_VERSION = '2026-11-22.68';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -9939,6 +9967,7 @@ const sheetStore = {
   backupSave: cfg => call('backupSave', cfg),
   backupNow: mail => call('backupNow', mail),
   dqEdit: (id, ch, pin) => call('dqEdit', id, ch, pin),
+  soNurse: (id, part) => call('soNurse', id, part),   // .68 (API 147)
   dqRemove: (id, pin) => call('dqRemove', id, pin),
   dqLeaveSave: rec => call('dqLeaveSave', rec),
   evSave: (rec, pin) => call('evSave', rec, pin),   // API 79: กิจกรรมของแผนก
@@ -11240,6 +11269,20 @@ function localStore() {
       });
       persist();
       return out;
+    },
+    soNurse: async (id, part) => {   // .68: Nurse กรอก Standing order (เหมือน soNurse ใน Code.gs)
+      const r = db.dq.find(x => x.id === id);
+      if (!r) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
+      if (r.nurse) throw new Error('ยืนยัน order แล้ว · กดยกเลิกการยืนยันก่อนแก้');
+      part = part && typeof part === 'object' ? part : {};
+      const o = soParse(r.so) || {}, lab = (Array.isArray(part.lab) ? part.lab : []).filter(k => SO_LAB.some(([x]) => x === k));
+      if (lab.length) o.lab = lab; else delete o.lab;
+      for (const [k, n] of [['labo', 120], ['op', 1000]]) { const v = str(part[k]).slice(0, n); if (v) o[k] = v; else delete o[k]; }
+      Object.assign(o, { nBy: state.user.name || 'ผู้ใช้ตัวอย่าง', nAt: nowISO() });
+      r.so = JSON.stringify(o).slice(0, 4000);
+      r.updated = nowISO();
+      persist();
+      return clone(r);
     },
     dqEdit: async (id, ch, pin) => {
       demoCheckPin(pin);
@@ -13675,8 +13718,10 @@ const apEmerg = r => parseOrder(r && r.order).prio === 'Emergency';
 // .45: CT Order ของผู้ป่วยระหว่างฉาย (Re-CT จากห้องตรวจ / ห้องฉาย / ส่งแก้แผน · New CT (New Part) จากห้องตรวจ) = ป้าย · '' = CT Order ใหม่
 const apTxCt = r => apReCt(r) || (str(r && r.note).includes('New CT (New Part)') ? 'New CT (New Part)' : '');
 const apReCt = r => { const m = /\bRe-?CT\s*(#\s*\d+)?/i.exec(str(r && r.note)); return m ? `RE-CT${m[1] ? ' ' + m[1].replace(/\s+/g, '') : ''}` : ''; };
-const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '');
-const emergPre = r => (apEmerg(r) ? '<span class="sp-tag emerg-tag pre">Emergency</span> ' : '');   // 23 พ.ย.: หน้า HN (คอลัมน์ HN ชิดขวา เลข HN ตรงกัน)
+// .68: Re-CT ไม่พบแพทย์ (order.ns) = ป้ายต่อจาก Emergency ทุกรายการนัด
+const nsTag = r => (r && r.order && parseOrder(r.order).ns ? ' <span class="sp-tag ns-tag" title="Re-CT จากแถบห้องฉายแบบไม่พบแพทย์">ไม่พบแพทย์</span>' : '');
+const emergTag = r => (apEmerg(r) ? ' <span class="sp-tag emerg-tag">Emergency</span>' : '') + nsTag(r);
+const emergPre = r => (apEmerg(r) ? '<span class="sp-tag emerg-tag pre">Emergency</span> ' : '') + (nsTag(r) ? nsTag(r).trim() + ' ' : '');   // .68: + ป้ายไม่พบแพทย์   // 23 พ.ย.: หน้า HN (คอลัมน์ HN ชิดขวา เลข HN ตรงกัน)
 // สถานะ: wait = รอลง CT-SIM · took = ลง CT-SIM แล้ว · skip = ไม่มาทำ CT
 // 20 พ.ย.: dup = นัดซ้ำ · นัดที่ยังรอลง CT-SIM แต่ (1) HN เดียวกันมีนัดที่ลงทีหลัง (ไม่นับนัดที่ไม่มาทำ CT) หรือ (2) มีรายการ CT-SIM ของ HN นั้นที่ลงหลังนัดนี้ (ไม่ใช่ CT ของ HDR / งานวิจัย)
 // = ไม่นับเป็นนัดรอทำ CT (ผู้ป่วยหนึ่งคนมีสถานะเดียว) · อยู่ในกล่อง "นัดซ้ำ" ของหน้าต่างนัดรอลง CT-SIM ให้ลบ
@@ -13767,13 +13812,24 @@ function reCtWaiting() {
 function reCtToAp(x) {
   const rg = state.reg.find(g => hnKey(g.hn) === x.k), c = x.c;
   if (x.np) return { ...(rg ? regToAp(rg) : {}), hn: c.hn, name: c.name || (rg ? regName(rg) : ''), doc: c.doc || (rg ? rg.doc : ''), note: NEWPART };   // part ใหม่: ข้อมูลผู้ป่วย + แพทย์ · บริเวณ / ขนาดรังสีกรอกใหม่
-  return { ...(rg ? regToAp(rg) : {}), hn: c.hn, name: c.name || (rg ? regName(rg) : ''), doc: c.doc || (rg ? rg.doc : ''), room: c.room,
+  const pv = reCtPrev(x.k), reg = rg ? regToAp(rg) : {}, ord = { ...parseOrder(reg.order), ...pv.order, ...(!x.e.rev && str(x.e.see) !== '1' ? { ns: 1 } : {}) };   // .68: ข้อมูลจาก CT ครั้งก่อน · ns = Re-CT ไม่พบแพทย์
+  return { ...reg, ...pv.ap, hn: c.hn, name: c.name || (rg ? regName(rg) : ''), doc: c.doc || (rg ? rg.doc : ''), room: c.room,
     icd: c.icd || (rg ? rg.icd : ''), dx: c.dx || (rg ? rg.dx : ''), dpf: x.rx.dpf || '', fx: x.rx.fx || '', freq: c.freq,
-    note: [`${reCtName(x)}${x.e.reason ? ` (${x.e.reason})` : ''}`, x.e.note].filter(Boolean).join(' · ') };   // บันทึก Re-CT#ครั้งที่ ในนัด
+    note: [`${reCtName(x)}${x.e.reason ? ` (${x.e.reason})` : ''}`, x.e.note].filter(Boolean).join(' · '),   // บันทึก Re-CT#ครั้งที่ ในนัด
+    order: Object.keys(ord).length ? JSON.stringify(ord) : '' };
+}
+// .68: Re-CT = ข้อมูลจาก CT ครั้งก่อนของผู้ป่วย · ใบสั่ง CT Order ล่าสุด: CM · เทคนิคพิเศษ · เครื่อง CT · ส่วนที่ตรวจ · ท่า · อุปกรณ์ยึด · พื้นที่วาด · ช่องกรอก · IV · CBCT · Vac-Lok
+// ไม่มีใบสั่งเดิม = รายการ CT-SIM ครั้งก่อน (มีสารทึบรังสี = CM · เทคนิคพิเศษ · เครื่อง CT) · ไม่ยกค่าแล็บ ความเร่งด่วน Standing order และประวัติ รคส.
+const RECT_ORDER_KEEP = ['exam', 'fill', 'pos', 'immob', 'vol', 'ivMl', 'flow', 'cbct', 'cbctFx', 'vac'];
+function reCtPrev(k) {
+  const a = state.appt.filter(y => hnKey(y.hn) === k && apState(y) !== 'skip').sort((p, q) => str(q.created).localeCompare(str(p.created)))[0];
+  if (a) { const o = parseOrder(a.order); return { ap: { cm: str(a.cm), special: str(a.special), ct: str(a.ct) }, order: Object.fromEntries(RECT_ORDER_KEEP.filter(key => o[key] != null && o[key] !== '' && !(Array.isArray(o[key]) && !o[key].length)).map(key => [key, o[key]])), from: 'ap' }; }
+  const r = state.ct.filter(y => hnKey(y.hn) === k).sort((p, q) => str(q.date).localeCompare(str(p.date)) || str(q.created).localeCompare(str(p.created)))[0];
+  return r ? { ap: { cm: !str(r.cm) || /non/i.test(str(r.cm)) ? 'Non-CM' : 'CM', special: str(r.special), ct: str(r.ct) }, order: {}, from: 'ct' } : { ap: {}, order: {}, from: '' };
 }
 const reCtText = x => [x.hn, x.name, x.c.doc, ctDocText(x.c.doc), x.c.room, x.e.label, reCtName(x), x.e.reason, x.e.note].join(' ').toLowerCase();
 // Re-CT / CP (บันทึกระหว่างฉาย หรือ ส่งแก้แผน) = รอ CT Order ในกล่องเดียวกับนัดจากแถบ Consult (ต้องมีใบสั่ง CT ของแพทย์ก่อนทำ CT) · ป้าย Re-CT#ครั้งที่
-const reCtRow = (x, edit) => `<li data-rect="${esc(x.c.id)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} <span class="chip rect-tag">${esc(reCtName(x))}</span> ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · ${x.e.rev ? 'แผน' : 'เหลือ'} ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
+const reCtRow = (x, edit) => `<li data-rect="${esc(x.c.id)}"><div class="ct-pull-main"><b class="hn">${esc(x.hn)}</b>${x.name ? ' ' + esc(x.name) : ''} <span class="chip rect-tag">${esc(reCtName(x))}</span>${!x.np && !x.e.rev && str(x.e.see) !== '1' ? ` <span class="sp-tag ns-tag" title="Re-CT ไม่พบแพทย์ · รายชื่อขึ้นที่แถบ ${esc(navLabel('nurse'))} → CT Order ด้วย (รอแพทย์กรอก CT Order)">ไม่พบแพทย์</span>` : ''} ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${x.rx.fx ? ` · ${x.e.rev ? 'แผน' : 'เหลือ'} ${esc(x.rx.dpf ? cGyText(x.rx.dpf) : '? cGy')} × ${esc(x.rx.fx)} fx` : ''}
     <small>${[x.c.room && `ห้อง ${x.c.room}`, ctDocText(x.c.doc), x.c.mp && `MP ${x.c.mp}`, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean).map(esc).join(' · ')}</small></div>${edit ? `<span class="ct-pull-acts"><button type="button" class="btn primary sm" data-aprect="${esc(x.c.id)}">CT Order</button></span>` : ''}</li>`;
 function renderReCt() { const box = $('#ap-rect'); box.hidden = true; box.innerHTML = ''; }
 // แถบ CT Order: นัดที่ลง CT+RT จากแถบ Consult แล้ว ยังไม่ได้กรอกใบสั่ง (CT Order) · ลง CT-SIM แล้วหรือไม่มาทำ CT = ออกจากรายการ
@@ -14106,7 +14162,8 @@ function readApOrder() {
     age: str($('#a-age').value), sex: chipValue($('#a-sex')), exam: [...apPicked('exam'), ...($('#a-exam-other').checked ? ['Other'] : [])], fill, pos: chipValue($('#a-pos')),
     ivMl: str($('#a-iv').value), flow: str($('#a-flow').value), labDate: str($('#a-lab-date').value), cr: str($('#a-cr').value), crcl: str($('#a-crcl').value),
     immob: [...apPicked('immob'), ...($('#a-immob-other').checked ? ['Other'] : [])], vol: apOrder.vol,
-    rks: Array.isArray(apOrder.rks) && apOrder.rks.length ? apOrder.rks : '',   // 20 พ.ย.: ประวัติ รคส. อยู่ครบเมื่อบันทึกจากฟอร์มเต็ม
+    rks: Array.isArray(apOrder.rks) && apOrder.rks.length ? apOrder.rks : '',
+    ns: apOrder.ns ? 1 : '',   // .68: Re-CT ไม่พบแพทย์ (ป้ายในรายการนัด)   // 20 พ.ย.: ประวัติ รคส. อยู่ครบเมื่อบันทึกจากฟอร์มเต็ม
     // CBCT ระหว่างฉาย: เก็บเมื่อเลือกเอง (ไม่ได้เลือก = รูปแบบเริ่มต้นของเทคนิคตามตั้งค่า) · กำหนดเอง = Fx ที่ทำ CBCT
     ...apCbctPick(),
     // Vac-Lok ที่จองไว้: ติ๊ก Vac-lok เท่านั้น (ช่องไม่แสดงเพราะ Code.gs เก่า/ยังไม่มีเลข = เลขเดิมคงไว้)
@@ -14254,6 +14311,7 @@ function apFullErr(rec) {
 // Start RT เต็ม: ผู้ป่วยใหม่ของห้องนั้น (ลิมิตต่อห้อง) หรือของแพทย์คนนั้นในห้องนั้น (ลิมิตต่อแพทย์ต่อห้อง) · นับเหมือนปฏิทิน · นัดเดิมที่ไม่ได้เปลี่ยนวัน ห้อง แพทย์ บันทึกได้เสมอ
 // เทคนิคพิเศษ: วันทำ CBCT (นับเป็นผู้ป่วยใหม่) ห้องนั้นต้องยังไม่ครบลิมิตด้วย
 function simFullErr(rec) {
+  if (apReCt(rec)) return '';   // .68: Re-CT ของผู้ป่วยระหว่างฉาย ไม่จำกัดจำนวน (วัน Start RT)
   const l = simLim(), old = state.appt.find(x => x.id === rec.id), doc = str(rec.doc).toUpperCase(), room = str(rec.room), hol = holidayMap();
   if (!isDay(rec.sim) || !room || (!l.room && !l.doc)) return '';
   const cbs = l.room ? simCbDays(rec, hol).filter(d => d !== rec.sim) : [];
@@ -14268,6 +14326,7 @@ function simFullErr(rec) {
   return '';
 }
 function ctFullErr(rec) {
+  if (apReCt(rec)) return '';   // .68: Re-CT ของผู้ป่วยระหว่างฉาย ไม่จำกัดจำนวน (วันทำ CT-Sim)
   const l = ctLim(), old = state.appt.find(x => x.id === rec.id), doc = str(rec.doc).toUpperCase();
   if (!isDay(rec.date) || (!l.day && !l.doc) || (old && old.date === rec.date && str(old.doc).toUpperCase() === doc)) return '';
   const v = calCounts('ct', { c: '', r: '', a: rec.id }).get(rec.date), k = str(rec.hn);
@@ -14908,7 +14967,7 @@ function soAuto(dq) {
 }
 // หน้า A4 แบบฟอร์มกระดาษ · x = { hn, name, doc, by, at, so, dq } (dq = การแจก: ค่าอัตโนมัติ · พยาบาลที่ยืนยัน)
 function soSheetHtml(x) {
-  const s0 = x.so || {}, au = soAuto(x.dq), o = { ...s0, ...au, lab: [...new Set([...(s0.lab || []), ...(au.lab || [])])] }, dot = (v, w) => (v ? `<u class="so-v">${esc(v)}</u>` : `<span class="so-dots" style="width:${w}mm"></span>`), day = v => (isDay(v) ? `${+v.slice(8, 10)}/${+v.slice(5, 7)}/${String(+v.slice(0, 4) + 543).slice(2)}` : '');
+  const s0 = x.so || {}, au = soAuto(x.dq), o = { ...s0, ...au, lab: [...new Set([...(s0.lab || []), ...(au.lab || [])])], labo: [...new Set([au.labo, s0.labo].map(str).filter(Boolean))].join(' · ') }, dot = (v, w) => (v ? `<u class="so-v">${esc(v)}</u>` : `<span class="so-dots" style="width:${w}mm"></span>`), day = v => (isDay(v) ? `${+v.slice(8, 10)}/${+v.slice(5, 7)}/${String(+v.slice(0, 4) + 543).slice(2)}` : '');
   const box = on => `<span class="so-cb">${on ? '√' : ''}</span>`, red = t => (t ? ` <span class="so-red">${esc(t)}</span>` : '');
   const typ = k => { const [, l, subs] = SO_TYPES.find(t => t[0] === k); return `<div class="so-tt">${k === 't5' ? box(o[k]) + ' ' : ''}${esc(l).replace('case Emergency', '<span class="so-red so-ul">case Emergency</span>')}</div>${subs.map(([sk, t, sl, , r]) => t === 'c' ? `<div class="so-line">${box(o[sk])} ${esc(sl)}${red(r)}</div>` : `<div class="so-line">${esc(sl)}${t === 'd' || isDay(o[sk]) ? dot(day(o[sk]), 60) : dot(o[sk], 60)}</div>`).join('')}`; };
   const docFull = x.doc ? docName(x.doc) || x.doc : '', at = x.at ? new Date(x.at) : new Date();
@@ -14926,13 +14985,14 @@ function soSheetHtml(x) {
     <tr><th colspan="2" class="so-h2">รายการสั่งตรวจเพิ่มเติม</th></tr>
     <tr><td colspan="2" class="so-labs-p"><div>${SO_LAB.map(([k, l]) => `<span>${box((o.lab || []).includes(k))} ${esc(l)}</span>`).join('')}<span>${box(!!o.labo)} อื่นๆระบุ${dot(o.labo, 50)}</span></div></td></tr>
     <tr><th colspan="2" class="so-h2">ความเห็นแพทย์</th></tr>
-    <tr class="so-op-r"><td colspan="2" class="so-op"><div class="so-op-t">${esc(o.op || '')}</div><div class="so-sign">
+    <tr class="so-op-r"><td colspan="2" class="so-op"><div class="so-op-t">${esc(o.op || '')}${o.op && s0.nBy ? `<small class="so-op-by">บันทึกโดย ${esc(s0.nBy)}${s0.nAt ? ' ' + esc(soNfHm(s0.nAt)) : ''}</small>` : ''}</div><div class="so-sign">
       <div>ลงชื่อแพทย์${sg(dot('', 55), 'doc', x.doc)}</div><div class="so-c">( ${docFull ? esc(docFull) : '<span class="so-dots" style="width:50mm"></span>'} )</div>
       <div>ลงชื่อพยาบาลรังสีรักษา${sg(dot(nName, 28), 'rn', nName)}วันที่${dot(nOk ? day(localDay(nz.toISOString())) : '', 18)}เวลา${dot(nTm, 14)}</div>
       <div>ลงชื่อพยาบาล call center${sg(dot(o.rn || x.by, 28), 'cc', o.rn || x.by)}วันที่${dot(day(localDay(at.toISOString())), 18)}เวลา${dot(tm, 14)}</div></div></td></tr>
   </table><div class="so-rev">${esc(SO_REV)}</div></div>`;
 }
 function openSoPreview(x, ctx = '') {
+  if (ctx !== 'nurse') soNfClose();
   csoRec = { __so: x };
   csoCtx = ctx;
   $('#cso-title').textContent = `Standing order · ${x.hn || ''}`;
@@ -14950,10 +15010,117 @@ function openSoNurse(id) {
   const r = state.dq.find(x => x.id === id);
   if (!r) return toast('ไม่พบรายการนี้แล้ว', { err: true });
   openSoPreview(soOfDq(r), 'nurse');
+  soNfOpen(r);   // .68: Nurse กรอกเพิ่ม
 }
 // ข้อมูลสำหรับพิมพ์จากฟอร์มแจก (แพทย์ = ที่เลือกในฟอร์ม / ตามคิว) · จากหน้าแก้ไข (แพทย์ของรายการ)
 const soFromDq = () => ({ hn: str($('#dq-hn').value), name: str($('#dq-name').value), doc: dqChosen(dqRun()), by: state.user.name || '', so: soRead($('#dq-form')) || {} });
 const soFromEdit = () => ({ hn: str($('#dqe-hn').value), name: str($('#dqe-name').value), doc: chipValue($('#dqe-doc')) || (dqEditing || {}).doc, by: (dqEditing || {}).by || '', at: (dqEditing || {}).created, so: soRead($('#dqe-so')) || {}, dq: dqEditing || null });
+/* .68: Standing order · Nurse กรอกเพิ่ม ในหน้าต่าง Standing order ของแถบ Nurse → Call center (หัวข้อในใบ: รายการสั่งตรวจเพิ่มเติม · ความเห็นแพทย์ · ลงชื่อ)
+ * พิมพ์แล้วเติมลงใบ A4 ทันที · บันทึกลงช่อง so ของรายการแจก (lab · labo · op · nBy · nAt) · ยืนยัน order แล้ว = ล็อก (ยกเลิกการยืนยันในรายการก่อนแก้)
+ * รายการตรวจที่แพทย์ติ๊กใน CT Order ติ๊กไว้และเอาออกไม่ได้ · ลงชื่อพยาบาลรังสีรักษา = ผู้กดยืนยัน + เวลาที่ยืนยัน (เหมือนเดิม) · ปิดหน้าต่างก่อนบันทึก = เก็บร่างไว้ในเครื่อง */
+const SO_NF_API = 147;
+const soNfOn = () => store.mode !== 'sheet' || serverHas(SO_NF_API);
+const SO_NF_OLD = 'Nurse กรอก Standing order ต้องใช้ Code.gs รุ่นใหม่ · วาง Code.gs ใหม่แล้ว Deploy';
+const soNfBox = $('#so-nf'), soNfDrafts = new Map();
+let soNf = null;   // { id, draft: { lab, labo, op }, dirty }
+const soNfDocLab = r => new Set(soAuto(r).lab || []);
+const soNfFrom = r => { const s = soParse(r.so) || {}, doc = soNfDocLab(r); return { lab: (s.lab || []).filter(k => !doc.has(k) && SO_LAB.some(([x]) => x === k)), labo: str(s.labo), op: str(s.op) }; };
+const soNfPart = () => ({ lab: soNf.draft.lab.slice(), labo: str(soNf.draft.labo).slice(0, 120), op: str(soNf.draft.op).slice(0, 1000) });
+const soNfHm = v => { const d = new Date(v); return isNaN(d) ? '' : `${fmtDay(localDay(d.toISOString()))} ${pad(d.getHours())}.${pad(d.getMinutes())}`; };
+// สรุปในแถว Call center: สิ่งที่ Nurse กรอกแล้ว
+const soNfSum = r => { const s = soParse(r.so) || {}, n = (s.lab || []).length + (s.labo ? 1 : 0); return s.nBy ? [n ? `Lab ${n}` : '', s.op ? 'ความเห็นแพทย์' : ''].filter(Boolean).join(' · ') : ''; };
+function soNfOpen(r) {
+  soNf = { id: r.id, draft: soNfFrom(r), dirty: false };
+  const d = soNfDrafts.get(r.id);
+  if (d && !r.nurse) soNf = { id: r.id, draft: d, dirty: true };
+  csoDlg.classList.add('so-fill');
+  soNfRender();
+  if (soNf.dirty) soNfPreview();
+}
+function soNfClose() { soNf = null; soNfBox.hidden = true; soNfBox.innerHTML = ''; csoDlg.classList.remove('so-fill'); }
+function soNfRender() {
+  const r = soNf && state.dq.find(y => y.id === soNf.id);
+  if (!r) return soNfClose();
+  const edit = accessOf('nurse') === 'edit' && soNfOn(), lock = !!r.nurse || !edit, d = soNf.draft, au = soAuto(r), doc = soNfDocLab(r), a = dqAppt(r), note = a ? str(a.note) : '', s0 = soParse(r.so) || {};
+  const labs = SO_LAB.map(([k, l]) => { const dk = doc.has(k); return `<label class="check${dk ? ' so-nf-doc' : ''}"><input type="checkbox" data-nflab="${k}"${dk || d.lab.includes(k) ? ' checked' : ''}${dk || lock ? ' disabled' : ''}> <span>${esc(l)}${dk ? ' <em class="so-nf-tag" title="แพทย์ติ๊กไว้ใน CT Order">แพทย์สั่ง</em>' : ''}</span></label>`; }).join('');
+  const head = r.nurse ? `ยืนยัน order แล้ว · แก้ได้เมื่อกด ยกเลิก การยืนยันในรายการ Call center` : !soNfOn() ? SO_NF_OLD : !edit ? 'ดูอย่างเดียว' : 'พิมพ์แล้วเติมลงใบทันที · กดบันทึก (หรือกด ✓ ยืนยัน order = บันทึกแล้วยืนยัน)';
+  const st = soNf.dirty ? 'ยังไม่บันทึก' : s0.nBy ? `บันทึกล่าสุด ${s0.nBy} ${whenText(s0.nAt)}` : 'ยังไม่มีข้อมูลที่ Nurse กรอก';
+  soNfBox.innerHTML = `<div class="so-nf-h"><b>Nurse กรอกเพิ่ม</b><small>${esc(head)}</small></div>
+    <fieldset class="so-nf-sec"><legend>รายการสั่งตรวจเพิ่มเติม</legend><div class="so-nf-labs">${labs}</div>
+      ${au.labo ? `<p class="so-nf-docl">แพทย์ระบุใน CT Order: ${esc(au.labo)}</p>` : ''}
+      <label class="field so-sub"><span class="lbl">อื่นๆระบุ</span><input data-nf="labo" maxlength="120" value="${esc(d.labo)}"${lock ? ' disabled' : ''}></label></fieldset>
+    <fieldset class="so-nf-sec"><legend>ความเห็นแพทย์</legend><textarea data-nf="op" rows="5" maxlength="1000" placeholder="บันทึกตามที่แพทย์สั่ง หรือความเห็นของแพทย์"${lock ? ' disabled' : ''}>${esc(d.op)}</textarea>
+      ${note && !lock ? `<button type="button" class="linkish so-nf-note" data-nfnote>+ ใส่หมายเหตุจาก CT Order: ${esc(note.length > 60 ? note.slice(0, 60) + '…' : note)}</button>` : ''}</fieldset>
+    <fieldset class="so-nf-sec so-nf-sg"><legend>ลงชื่อในใบ (อัตโนมัติ)</legend>
+      <div><span>แพทย์</span><b>${esc(docName(r.doc) || r.doc || '—')}</b></div>
+      <div><span>พยาบาลรังสีรักษา</span>${r.nurse ? `<b>${esc(r.nurseBy)}</b><small>${esc(soNfHm(r.nurse))}</small>` : `<small>ลงชื่อเมื่อกด ✓ ยืนยัน order${state.user.name ? ` (${esc(state.user.name)})` : ''}</small>`}</div>
+      <div><span>พยาบาล call center</span><b>${esc(str(s0.rn) || r.by || '—')}</b>${r.created ? `<small>${esc(soNfHm(r.created))}</small>` : ''}</div></fieldset>
+    ${lock ? '' : `<div class="so-nf-acts"><button type="button" class="btn primary sm" id="so-nf-save"${soNf.dirty ? '' : ' disabled'}>บันทึก</button><span class="so-nf-st${soNf.dirty ? ' dirty' : ''}">${esc(st)}</span></div>`}`;
+  soNfBox.hidden = false;
+}
+// ใบ A4 จากร่างที่กำลังพิมพ์ (ยังไม่บันทึก = ผู้บันทึกเป็นตัวเอง)
+let soNfTimer = 0;
+function soNfPreview() {
+  clearTimeout(soNfTimer);
+  soNfTimer = setTimeout(() => {
+    const r = soNf && state.dq.find(y => y.id === soNf.id);
+    if (!r || !csoRec || !csoRec.__so) return;
+    const x = soOfDq(r), p = soNfPart();
+    x.so = { ...x.so, lab: p.lab, labo: p.labo, op: p.op, ...(soNf.dirty ? { nBy: state.user.name || '', nAt: nowISO() } : {}) };
+    for (const k of ['labo', 'op']) if (!x.so[k]) delete x.so[k];
+    const inner = $('#cso-prev-in');
+    inner.innerHTML = soSheetHtml(x);
+    esigFill(inner, 'so', esigDqId(x));
+    fitCsoPreview();
+  }, 120);
+}
+function soNfDirty() {
+  soNf.dirty = true;
+  soNfDrafts.set(soNf.id, soNf.draft);
+  const b = $('#so-nf-save'), s = soNfBox.querySelector('.so-nf-st');
+  if (b) b.disabled = false;
+  if (s) { s.textContent = 'ยังไม่บันทึก'; s.classList.add('dirty'); }
+  soNfPreview();
+}
+soNfBox.addEventListener('input', e => {
+  if (!soNf) return;
+  const t = e.target;
+  if (t.dataset.nflab) { const k = t.dataset.nflab, l = soNf.draft.lab.filter(x => x !== k); soNf.draft.lab = t.checked ? SO_LAB.map(([x]) => x).filter(x => x === k || l.includes(x)) : l; }
+  else if (t.dataset.nf) soNf.draft[t.dataset.nf] = t.value;
+  else return;
+  soNfDirty();
+});
+soNfBox.addEventListener('click', e => {
+  if (!soNf) return;
+  if (e.target.closest('#so-nf-save')) return soNfSave(e.target.closest('#so-nf-save'));
+  if (e.target.closest('[data-nfnote]')) {
+    const r = state.dq.find(y => y.id === soNf.id), a = r && dqAppt(r), note = a ? str(a.note) : '', ta = soNfBox.querySelector('[data-nf="op"]');
+    if (!note || !ta) return;
+    ta.value = soNf.draft.op = [str(ta.value), note].filter(Boolean).join('\n').slice(0, 1000);
+    soNfDirty();
+    ta.focus();
+  }
+});
+async function soNfSave(btn) {
+  const r = soNf && state.dq.find(y => y.id === soNf.id);
+  if (!r) return false;
+  if (accessOf('nurse') !== 'edit') { toast(RO_MSG, { err: true }); return false; }
+  if (!soNfOn()) { toast(SO_NF_OLD, { err: true }); return false; }
+  if (btn) btn.disabled = true;
+  try {
+    const row = normDq(await store.soNurse(r.id, soNfPart())), i = state.dq.findIndex(y => y.id === row.id);
+    if (i >= 0) state.dq[i] = row;
+    dqMemo = null;
+    soNfDrafts.delete(row.id);
+    soNf.dirty = false;
+    toast(`บันทึก Standing order แล้ว · HN ${row.hn}`);
+    render();
+    if (csoDlg.open && csoRec && csoRec.__so && csoRec.__so.dq && csoRec.__so.dq.id === row.id) openSoNurse(row.id);
+    return true;
+  } catch (e) { toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); return false; }
+  finally { if (btn && btn.isConnected) btn.disabled = false; }
+}
+$('#cso-dlg').addEventListener('close', () => soNfClose());
 
 // แถบย่อย ภายใน/Walk in: ผู้ป่วยภายใน (in) หรือ Walk in (walk) · เลือกในฟอร์มแจก ใต้ HN
 const DQ_VIA = [['in', 'ภายใน'], ['walk', 'Walk in']];
@@ -16948,7 +17115,7 @@ function nurseRow(k, r, ok, edit) {
   if (k === 'ct') return `<li><span class="nurse-who">${who}${apReCt(r) ? ` <span class="sp-tag rect-tag" title="นัด Re-CT (ส่งมาจากห้องฉาย / ห้องตรวจ / ส่งแก้แผน)">${esc(apReCt(r))}</span>` : ''}${emergTag(r)}<small>นัด CT ${r.date === 'on call' ? 'On Call' : esc(fmtDay(r.date))}${r.ct ? ` · ${esc(ctLabel(r.ct))}` : ''}${r.sim && r.sim !== 'on call' ? ` · Start RT ${esc(fmtDay(r.sim))}` : ''}${r.by ? ` · ลงนัดโดย ${esc(r.by)}` : ''}</small></span>${okTxt}<button type="button" class="btn ghost sm" data-appdf="${esc(r.id)}" data-nurseprev="1" title="ดูใบสั่ง · ยืนยันได้ในหน้าต่างใบสั่ง">ใบสั่ง</button>${btn}</li>`;
   if (k === 'rtd') return `<li><span class="nurse-who">${who}<b class="st ${decCls(r)}">${esc(decText(r))}</b><small>${esc(fmtDay(r.date))} · ห้อง ${roomName(r.room)}${r.note ? ` · ${esc(r.note)}` : ''} · สั่งโดย ${esc(r.by)} ${esc(whenText(r.at))}</small></span>${okTxt}${btn}</li>`;
   const a = dqAppt(r);
-  return `<li><span class="nurse-who">${who}<small>แจก ${esc(fmtDay(r.date))}${a ? ` · ลงนัด CT ${a.date === 'on call' ? 'On Call' : esc(fmtDay(a.date))}` : ''}${r.note ? ` · ${esc(r.note)}` : ''}</small></span>${okTxt}<button type="button" class="btn ghost sm" data-ccso="${esc(r.id)}" title="ดู Standing order · ยืนยันได้ในหน้าต่างนั้น">Standing order</button>${btn}</li>`;
+  return `<li><span class="nurse-who">${who}<small>แจก ${esc(fmtDay(r.date))}${a ? ` · ลงนัด CT ${a.date === 'on call' ? 'On Call' : esc(fmtDay(a.date))}` : ''}${r.note ? ` · ${esc(r.note)}` : ''}</small>${soNfSum(r) ? `<span class="so-nf-chip" title="Nurse กรอกใน Standing order แล้ว">${esc(soNfSum(r))}</span>` : ''}</span>${okTxt}<button type="button" class="btn ghost sm" data-ccso="${esc(r.id)}" title="ดู Standing order · ยืนยันได้ในหน้าต่างนั้น">Standing order</button>${btn}</li>`;
 }
 function renderNurse() {
   syncTabQ('nurse');
@@ -16978,7 +17145,7 @@ function renderNurse() {
   const cmp = (a, b) => (sort === 'hn' ? str(a.hn).localeCompare(str(b.hn)) : sort === 'name' ? str(a.name).localeCompare(str(b.name), 'th') : 0)
     || (sort === 'new' ? d.key(b).localeCompare(d.key(a)) : d.key(a).localeCompare(d.key(b)));
   let wait = d.wait.filter(r => hit(r) && byDoc(r)).sort(cmp);
-  const ok = d.ok.filter(r => hit(r) && byDoc(r)).sort(cmp), nAll = wait.length, reHtml = cur === 'ct' ? ncCtReHtml(wait, edit, false) : '';   // .45: Re-CT / New CT แยกกลุ่ม
+  const ok = d.ok.filter(r => hit(r) && byDoc(r)).sort(cmp), nAll = wait.length, reHtml = cur === 'ct' ? ncCtReHtml(wait, edit, false, x => hit(x) && byDoc(x)) : '';   // .45: Re-CT / New CT แยกกลุ่ม
   if (cur === 'ct') wait = wait.filter(a => !apTxCt(a));
   const list = rs => `<ul class="nurse-list">${rs.map(r => nurseRow(cur, r, !!r.nurse, edit)).join('')}</ul>`;
   let body;
@@ -17020,13 +17187,24 @@ function ncOffRxRow(x, edit) {
   return `<li class="nc-row"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="nc-what off">Off RT</span>${x.where ? ` <span class="muted">· ${roomName(x.where)}</span>` : ''}<span class="ontx-tag off">${esc(x.lbl)}</span></span>${st}<span class="nc-acts">${btn}</span></li>`;
 }
 // .45: CT Order Re-CT / New CT (New Part) · Nurse → CT Order และ รับคำสั่งแพทย์ (รายการเดียวกัน ยืนยันที่ใดก็ได้)
-function ncCtReHtml(list, edit, rx) {
-  const re = list.filter(apTxCt);
-  if (!re.length) return '';
-  return `<section class="nurse-sec" data-ncsec="${rx ? 'ctrx' : 'ctre'}"><h3>${rx ? 'CT Order · ' : ''}Re-CT / New CT (New Part) <span class="muted">(${re.length})</span></h3>`
+function ncCtReHtml(list, edit, rx, keep) {
+  const re = list.filter(apTxCt), nv = rcNvList().filter(x => !keep || keep(x));   // .68: Re-CT ไม่พบแพทย์ที่ยังไม่มี CT Order
+  if (!re.length && !nv.length) return '';
+  return `<section class="nurse-sec" data-ncsec="${rx ? 'ctrx' : 'ctre'}"><h3>${rx ? 'CT Order · ' : ''}Re-CT / New CT (New Part) <span class="muted">(${re.length + nv.length})</span></h3>`
     + `<p>CT Order ของผู้ป่วยระหว่างฉาย (จาก${esc(navLabel('consult'))} / ห้องฉาย / ส่งแก้แผน) · แสดงทั้ง Nurse → CT Order และรับคำสั่งแพทย์ · ยืนยันที่ใดที่หนึ่งก็ได้ (รายการเดียวกัน)</p>`
-    + `<ul class="nurse-list">${re.map(r => nurseRow('ct', r, !!r.nurse, edit)).join('')}</ul></section>`;
+    + (nv.length ? `<p class="rcnv-sub"><b>Re-CT ไม่พบแพทย์ (จากแถบ ${esc(navLabel('course'))}) · รอแพทย์กรอก CT Order</b> · เห็นรายชื่อไว้ก่อน · แพทย์กรอกแล้วกดยืนยันได้ตามปกติ</p><ul class="nurse-list" data-rcnvlist>${nv.map(x => rcNvRow(x, edit)).join('')}</ul>` : '')
+    + (re.length ? `<ul class="nurse-list">${re.map(r => nurseRow('ct', r, !!r.nurse, edit)).join('')}</ul>` : '') + '</section>';
 }
+/* .68: Re-CT จากห้องฉายที่เลือก "ไม่พบแพทย์" = ยังรอแพทย์กรอก CT Order ในแถบ CT Order เหมือนเดิม · แถบ Nurse → CT Order (และรับคำสั่งแพทย์) กลุ่ม Re-CT / New CT
+ * เห็นรายชื่อที่รออยู่พร้อมกัน (ปุ่มใบสั่ง / ยืนยัน เหมือนแถวอื่น · กดได้เมื่อแพทย์กรอก CT Order แล้ว) · CT Order ที่แพทย์กรอกจาก Re-CT นี้มีป้าย "ไม่พบแพทย์" (order.ns) */
+const rcNvList = () => reCtWaiting().filter(x => !x.np && !x.e.rev && str(x.e.see) !== '1').map(x => ({ ...x, id: x.c.id, doc: str(x.c.doc).toUpperCase() }));
+function rcNvRow(x, edit) {
+  const rx = x.rx && (x.rx.dpf || x.rx.fx) ? `เหลือ ${[x.rx.dpf && `${x.rx.dpf} cGy`, x.rx.fx && `${x.rx.fx} fx`].filter(Boolean).join(' × ')}` : '';
+  const info = [x.c.room && `ห้อง ${roomLabel(x.c.room) || x.c.room}`, rx, x.e.note, x.e.by && `บันทึกโดย ${x.e.by}`].filter(Boolean);
+  const btn = edit ? '<button type="button" class="btn ghost sm" disabled title="รอแพทย์กรอก CT Order">ใบสั่ง</button><button type="button" class="btn primary sm" disabled title="รอแพทย์กรอก CT Order ก่อน · แพทย์กรอกแล้วกดยืนยันได้">ยืนยัน</button>' : '';
+  return `<li class="rcnv-row" data-rcnv="${esc(x.id)}"><span class="nurse-who"><b class="hn">${esc(x.hn)}</b> ${x.doc ? docChip(x.doc) + ' ' : ''}${pnm(x.name)} <span class="sp-tag rect-tag">${esc(reCtName(x))}</span><span class="sp-tag ns-tag">ไม่พบแพทย์</span><small>รอแพทย์กรอก CT Order · Re-CT ${esc(fmtDay(x.e.date))}${x.e.reason ? ` (${esc(x.e.reason)})` : ''}${info.length ? ' · ' + info.map(esc).join(' · ') : ''}</small></span>${btn}</li>`;
+}
+
 function ncOffRxHtml(words, docF, edit) {
   const xs = ncOffRx().filter(x => (!words.length || wordsIn(words, `${x.hn} ${x.name} ${x.doc} ${docName(x.doc)}`.toLowerCase())) && (!docF || x.doc === docF));
   return xs.length ? `<section class="nurse-sec" data-ncsec="offrx"><h3>Off RT <span class="muted">(${xs.length})</span></h3><p>ผู้ป่วย Off RT วันนี้ที่ส่งพบแพทย์ (Nurse → นัดวันนี้) · แพทย์กดพบแพทย์แล้ว → แนะนำผู้ป่วย แล้วกด "ยืนยัน + แนะนำผู้ป่วยแล้ว"</p><ul class="nurse-list nc-list">${xs.map(x => ncOffRxRow(x, edit && ncOn())).join('')}</ul></section>` : '';
@@ -17193,7 +17371,7 @@ function renderNurseOntx(tab, words, ordHtml) {
   const pastHit = r => (!words.length || wordsIn(words, `${r.hn} ${r.name} ${r.doc} ${docName(r.doc)}`.toLowerCase())) && (!docF || r.doc === docF);
   const past = isHold ? [] : nurseOldRtd().filter(pastHit).sort((a, b) => b.date.localeCompare(a.date));
   const ctRx = isHold ? [] : apWaiting().filter(a => !a.nurse && apTxCt(a) && pastHit(a));   // .45: CT Order ของผู้ป่วยระหว่างฉาย = จุดรับคำสั่งทั่วไปด้วย
-  const offHtml = isHold ? '' : ncCtReHtml(ctRx, edit, true) + ncOffRxHtml(words, docF, edit);   // 23 พ.ย.: กลุ่ม Off RT
+  const offHtml = isHold ? '' : ncCtReHtml(ctRx, edit, true, pastHit) + ncOffRxHtml(words, docF, edit);   // 23 พ.ย.: กลุ่ม Off RT
   const pastHtml = offHtml + (past.length ? `<section class="nurse-sec"><h3>คำสั่งแพทย์วันก่อนที่ยังไม่ยืนยัน <span class="muted">(${past.length})</span></h3><ul class="nurse-list">${past.map(r => nurseRow('rtd', r, false, edit)).join('')}</ul></section>` : '');
   if (!list.length) { box.innerHTML = old + `<p class="empty-state">${isHold ? 'ไม่มีผู้ป่วยที่ Hold RT อยู่' : 'ยังไม่มีผู้ป่วยระหว่างฉายที่ต้องพบแพทย์วันนี้'}${words.length || docF ? ' ที่ตรงกับคำค้น / แพทย์ที่เลือก' : ''}</p>` + pastHtml; return; }
   const codes = [...new Set(list.map(docOf))].sort((a, b) => (b === me) - (a === me) || at(a) - at(b) || a.localeCompare(b));
@@ -24717,7 +24895,7 @@ function csoSheetHtml(a) {
   return `<div class="cso-page">
   <div class="cso-banner"><img data-cso="banner" alt=""></div><div class="cso-dept">DEPARTMENT OF RADIATION ONCOLOGY</div><div class="cso-logo"><img data-cso="logo" alt=""></div>
   <table class="cso-info"><colgroup><col style="width:20.69mm"><col style="width:69.71mm"><col style="width:27.89mm"><col style="width:62.52mm"></colgroup>
-    <tr><td colspan="4" class="cso-title">CT Simulation Order Form${apEmerg(a) ? '<span class="cso-emerg">EMERGENCY</span>' : ''}${apReCt(a) ? `<span class="cso-emerg cso-rect">${esc(apReCt(a))}</span>` : ''}</td></tr>
+    <tr><td colspan="4" class="cso-title">CT Simulation Order Form${apEmerg(a) ? '<span class="cso-emerg">EMERGENCY</span>' : ''}${apReCt(a) ? `<span class="cso-emerg cso-rect">${esc(apReCt(a))}</span>${parseOrder(a.order).ns ? '<span class="cso-emerg cso-rect">ไม่พบแพทย์</span>' : ''}` : ''}</td></tr>
     <tr><th>Name</th><td>${v(a.name)}</td><th>Diagnosis</th><td>${v(dxValue(a))}</td></tr>
     <tr><th>HN</th><td>${v(a.hn)}</td><th>Oncologist</th><td>${v(doc)}</td></tr>
     <tr><th>Age</th><td>${v(o.age)}</td><th>CT Room</th><td>${v(a.ct ? ctLabel(a.ct) : '')}</td></tr>
@@ -24857,6 +25035,7 @@ function syncCsoNurse() {
 }
 function openCsoPreview(a, ctx = '') {
   if (!a) return;
+  soNfClose();
   csoRec = a;
   csoCtx = ctx;
   syncCsoNurse();
@@ -24890,6 +25069,7 @@ window.addEventListener('resize', fitCsoPreview);
 // พิมพ์: เปิดหน้าต่างพิมพ์ของเครื่องนี้ เฉพาะใบสั่ง (A4 ไม่มีขอบ) · ปิดหน้าต่างพิมพ์แล้วหน้าเว็บกลับเหมือนเดิม
 async function printCso(a, btn) {
   if (!a) return;
+  if (a.__so && soNf && soNf.dirty) return toast('ยังไม่บันทึก · กดบันทึกก่อนพิมพ์', { err: true });   // .68
   const box = $('#cso-print');
   box.innerHTML = a.__so ? soSheetHtml(a.__so) : csoSheetHtml(a);   // __so = Standing order ของ Call center
   if (csoCtx === 'pchart' && !a.__so) csoWm(box);   // .56: พิมพ์จาก Patient chart = มีลายน้ำ
@@ -30086,8 +30266,8 @@ document.addEventListener('click', e => {
   if (ds.holdcancelok) return holdCancelDo(ds.holdcancelok, t);
   if (ds.holdnotesave) return holdNoteDo(ds.holdnotesave, t);
   if (ds.ccso) return openSoNurse(ds.ccso);   // Call center: Standing order + ยืนยัน
-  if (ds.csonursedq) return nurseMark('dq', ds.csonursedq, true, t).then(() => openSoNurse(ds.csonursedq));
-  if (ds.csonextdq) return openSoNurse(ds.csonextdq);
+  if (ds.csonursedq) { const id = ds.csonursedq; return (soNf && soNf.dirty && soNf.id === id ? soNfSave() : Promise.resolve(true)).then(okk => (okk ? nurseMark('dq', id, true, t).then(() => openSoNurse(id)) : null)); }   // .68: มีร่างที่ยังไม่บันทึก = บันทึกก่อนแล้วยืนยัน
+  if (ds.csonextdq) { if (soNf && soNf.dirty) toast('ร่างของใบนี้ยังไม่บันทึก · เก็บไว้ให้ในเครื่องนี้ กลับมาเปิดแล้วกดบันทึก'); return openSoNurse(ds.csonextdq); }
   if (ds.seesum) return openSeeSum();   // 19 พ.ย.: สรุปนัดพบแพทย์รายวัน
   if (ds.otaall) return openOta();   // 20 พ.ย.: ผู้ป่วยระหว่างฉายทั้งหมด
   if (ds.otag) { ota.g = ds.otag; pref.set('otaGroup', ota.g); return renderOta(); }
@@ -30785,7 +30965,7 @@ function pickCal(d) {
   if (d && calData && calData.need) return toast('เลือกห้องฉายก่อน แล้วจึงเลือกวันได้', { err: true });
   if (CAL_VIEW_BOX[el.id]) { const keep = calKeep(); el.value = d; calWarn = ''; renderCal(); placeCal(false, keep); return; }   // ดูอย่างเดียว: วันที่เลือก = ดูรายชื่อ (ปฏิทินไม่ปิด)
   // ลงนัด: วันที่เต็มแล้ว (CT-Sim ทั้งวัน / แพทย์ · Start RT ห้อง / แพทย์ในห้อง / วันทำ CBCT) เลือกไม่ได้ · ปฏิทินยังเปิดให้เลือกวันอื่น · Emergency ลงเกินได้ (ถ้าตั้งไว้)
-  const ap = d && editingAp && apDlg.open ? { id: editingAp.id, hn: str($('#a-hn').value), doc: calData.doc } : null;
+  const ap = d && editingAp && apDlg.open ? { id: editingAp.id, hn: str($('#a-hn').value), doc: calData.doc, note: str($('#a-note').value) } : null;   // .68: note = Re-CT ไม่จำกัดจำนวน
   const warn = !ap ? '' : el.id === 'a-date' ? ctFullErr({ ...ap, date: d }) : el.id === 'a-sim' ? simFullErr({ ...readApForm(), sim: d, room: rb ? calRoom : chipValue($('#a-room')) }) : '';
   const emerg = warn && chipValue($('#a-prio')) === 'Emergency' && state.config.appt.emergOver;
   if (warn && !emerg) {
