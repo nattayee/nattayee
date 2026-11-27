@@ -9104,6 +9104,9 @@ const NTF_LINKS = [
   { k: 'ns.sim', v: ['nurse'], label: 'ไม่มา แจ้งแพทย์แล้ว · Start RT วันแรก', where: 'Nurse → นัดวันนี้', sel: '#nc-dlg [data-att^="sim|"][data-st="noshow"], #nurse-body [data-att^="sim|"][data-st="noshow"]', srv: 127, text: 'ไม่มา RT วันนี้ ({วันที่})', roles: ['RTT'] },
   { k: 'ns.see', v: ['nurse'], label: 'ไม่มา แจ้งแพทย์แล้ว · นัดพบแพทย์ระหว่างฉาย', where: 'Nurse → นัดวันนี้', sel: '#nc-dlg [data-att^="see|"][data-st="noshow"], #nurse-body [data-att^="see|"][data-st="noshow"]', srv: 127, text: 'ไม่มาพบแพทย์ระหว่างฉายวันนี้ ({วันที่})', roles: ['RTT'] },
   { k: 'bq.ct', v: ['bq'], label: 'CT / Re-CT1 / Re-CT2 (HDR ส่งภาพแล้ว · สีม่วง)', where: 'นัดคิวใส่แร่', sel: '.bq-ctb', srv: 111, text: 'HDR {รอบ} ส่งภาพแล้ว', roles: ['RO', 'MP'], ek: el => (el.dataset.ct ? ntfcKey('bq.ct', 'rd', el.dataset.ct) : 'bq.ct') },   // .80: แยกรอบ (ek = คีย์ของปุ่มแต่ละรอบ)
+  // .82: เปลี่ยนวันของรายการเดิม (CT Order / CT-SIM / Planning) = ประกาศผู้ป่วย · Code.gs ส่งเอง (ไม่มีปุ่ม · ตั้งจาก ตั้งค่า → ลิงก์ประกาศ)
+  { k: 'dt.ct', v: [], label: 'เปลี่ยนวัน CT-Sim (อัตโนมัติ)', where: 'แก้วัน CT-Sim ของรายการเดิม · CT Order / CT-SIM / Planning', sel: '[data-dtntf="ct"]', srv: 155, text: 'เปลี่ยนวัน CT-Sim {วันเดิม} → {วันที่}', roles: ['RO', 'MP', 'RTT', 'Nurse'] },
+  { k: 'dt.sim', v: [], label: 'เปลี่ยนวัน Start RT (อัตโนมัติ)', where: 'แก้วัน Start RT ของรายการเดิม · CT Order / CT-SIM / Planning', sel: '[data-dtntf="sim"]', srv: 155, text: 'เปลี่ยนวัน Start RT {วันเดิม} → {วันที่}', roles: ['RO', 'MP', 'RTT', 'Nurse'] },
   { k: 'ct.new', v: [], label: 'บันทึกผู้ป่วย CT-SIM ใหม่', where: 'CT-SIM', sel: '#ct-save', only: true, cond: () => !editingCt || !state.ct.some(x => x.id === editingCt.id), text: 'ทำ CT-SIM แล้ว ({วันที่})', roles: ['RO'] },
   { k: 'cn.done', v: ['contour'], label: '✓ Contour เสร็จแล้ว', where: 'Contouring', sel: '[data-cndone]', text: 'Contour เสร็จแล้ว รอวางแผน', roles: ['MP'] },
   { k: 'cn.rect', v: ['contour'], label: 'Re-CT', where: 'Contouring', sel: '[data-cnact="rect"]', api: 141, text: 'Re-CT จาก Contouring ({วันที่})', roles: ['Nurse'] },   // .54: ตั้งแยกจาก Cancel Treatment
@@ -9133,7 +9136,7 @@ const NTF_LINKS = [
   { k: 'cn.hdr', v: ['contour'], label: '✓ Contour HDR เสร็จ', where: 'Contouring (HDR)', sel: '[data-cnhdr][data-on="1"]', api: 148, text: 'Contour HDR {รอบ} เสร็จแล้ว รอวางแผน', roles: ['MP'] },
   { k: 'ev.bq', v: ['evaluate'], label: '✓ Approved แผน HDR', where: 'Evaluation (Brachytherapy)', sel: '[data-evbqok]', api: 148, text: 'แพทย์ Approved แผน HDR แล้ว', roles: ['RTT'] },
 ];
-const NTFL_PH = ['HN', 'วันที่', 'แพทย์', 'ห้อง', 'รอบ', 'วันที่ start RT', 'ห้องฉาย'];   // .54: HN · วันที่ start RT · ห้องฉาย
+const NTFL_PH = ['HN', 'วันที่', 'แพทย์', 'ห้อง', 'รอบ', 'วันที่ start RT', 'ห้องฉาย', 'วันเดิม'];   // .82: {วันเดิม} = วันก่อนเปลี่ยน (dt.ct / dt.sim)   // .54: HN · วันที่ start RT · ห้องฉาย
 const ntflDef = k => NTF_LINKS.find(x => x.k === k) || ntfcDef(k) || svDef(k);   // .48: จุดบันทึก sv.
 /* .42 (Code.gs API 133): ประกาศตามเงื่อนไขในฟอร์ม · คีย์ใน config.ntfLink = ปุ่มบันทึกฟอร์ม|ช่อง=ค่า (เช่น ap.new|prio=Emergency)
  * บันทึกรายการใหม่ที่ตรงเงื่อนไข = ประกาศของเงื่อนไขแทนประกาศปกติของปุ่ม · แก้รายการเดิมเป็นค่านั้น = ประกาศ · แก้เป็นค่าอื่น = ยกเลิกประกาศ
@@ -9295,6 +9298,7 @@ function ntflOf(k, cfg = state.config) {
   if (NTF_DEF[k] && ntfDefOn()) { const B = ntflOf(ntfcParse(k).base, cfg), D = NTF_DEF[k]; return { on: true, roles: [...new Set([...(B && B.on ? B.roles : []), ...D.roles])], text: D.text, def: true }; }   // .54
   if (/^ns\./.test(k)) { const ns = (cfg && cfg.noShow) || {}; return { on: ns[k.slice(3)] !== false, roles: ns.roles || [], text: d.text, old: true }; }
   if (k === 'bq.ct') return { on: true, roles: ((cfg && cfg.bq) || {}).ntf || [], text: d.text, old: true };
+  if (/^dt\./.test(k)) return { on: true, roles: d.roles.slice(), text: d.text, old: true };   // .82: ยังไม่ตั้ง = RO, MP, RTT, Nurse (เหมือน Code.gs)
   return null;
 }
 // ลิงก์ใช้งานอยู่ (มีอาชีพที่ได้รับ · Code.gs รองรับ)
@@ -10019,7 +10023,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.81';
+const PAGE_VERSION = '2026-11-22.82';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10313,6 +10317,25 @@ function localStore() {
       n += ids.size;
     }
     if (n) db.tgDemo.last = { at: nowISO(), sent: n, ok: n, err: '' };
+  };
+  // .82: แก้วัน CT-Sim / Start RT ของรายการเดิม = ประกาศผู้ป่วย (เหมือน chgFlush_ ใน Code.gs API 155 · ลงวันครั้งแรก / ล้างวัน = ไม่แจ้ง)
+  const demoDtNtf = (old, set, keys) => {
+    const day = v => { const x = str(v); return /^\d{4}-\d{2}-\d{2}/.test(x) ? x.slice(0, 10) : x.toLowerCase(); }, dm = v => (isDay(v) ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : v);
+    const rows = [], hn = str(old && old.hn).slice(0, 40);
+    if (!hn) return;
+    for (const [f, k] of keys) {
+      if (!(f in set)) continue;
+      const from = day(old[f]), to = day(set[f]), L = ntflOf('dt.' + k);
+      if (!from || !to || from === to || !L || !L.on || !L.roles.length || rows.some(r => r.id.startsWith(`dt|${k}|`))) continue;
+      const doc = str(set.doc || old.doc).toUpperCase().slice(0, 10), room = str(set.room || old.room).slice(0, 30);
+      const t0 = L.text.replace(/\{(HN|วันที่ start RT|วันที่|วันเดิม|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันเดิม': dm(from), 'วันที่': dm(to), 'แพทย์': doc, 'ห้อง': room, 'ห้องฉาย': room }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      let text = ntfAddRoom(t0, hn);
+      if (text === t0 && room && !t0.includes(room)) text = `${t0} · ห้อง ${room}`;
+      rows.push({ id: `dt|${k}|${hn}|${uid()}`, doc, text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: 'patient', hn, pname: str(old.name).slice(0, 200), from: '', tgAt: '' });
+    }
+    if (!rows.length) return;
+    db.notify.push(...rows);
+    demoTgSend(rows);
   };
   const api = {
     mode: 'local',
@@ -10814,7 +10837,7 @@ function localStore() {
       persist();
       return clone(c);
     },
-    editCase: async (rec, pin) => { demoCheckPin(pin); upsert(db.cases, clone(rec)); persist(); return rec; },
+    editCase: async (rec, pin) => { demoCheckPin(pin); const p0 = db.cases.find(x => x.id === rec.id), prev = p0 ? { ...p0 } : null; upsert(db.cases, clone(rec)); if (prev) demoDtNtf(prev, rec, [['ct', 'ct'], ['sim', 'sim']]); persist(); return rec; },
     removeCase: async (id, pin) => { demoCheckPin(pin); db.cases = db.cases.filter(x => x.id !== id); persist(); return true; },
     editLog: async (rec, pin) => { demoCheckPin(pin); upsert(db.logs, clone(rec)); persist(); return rec; },
     course: async (id, status, date, note, pin) => {
@@ -11103,7 +11126,7 @@ function localStore() {
         return { ...clone(c), vacAll: clone(db.vac) };
       };
       const old = rec.id && db.ctsim.find(x => x.id === rec.id);
-      if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return withVac(old); }
+      if (old) { const prev = { ...old }; Object.assign(old, set, { updated: nowISO() }); demoDtNtf(prev, set, [['date', 'ct'], ['sim', 'sim']]); persist(); return withVac(old); }
       const c = { ...set, id: rec.id || uid(), took: '', tookBy: '', tookAt: '', by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
       db.ctsim.push(c);
       const ap = rec.apptFrom && db.appt.find(x => x.id === rec.apptFrom && hnKey(x.hn) === hnKey(c.hn) && !x.took);   // ลงจากนัด: นัดนี้ลง CT-SIM แล้ว (HN ตรงกันเท่านั้น)
@@ -11150,7 +11173,7 @@ function localStore() {
       demoCheckPin(pin);
       const set = Object.fromEntries(APPT_KEYS.filter(k => !['id', 'took', 'tookBy', 'tookAt', 'by', 'created', 'updated'].includes(k)).map(k => [k, str(rec[k])]));
       const old = rec.id && db.appt.find(x => x.id === rec.id);
-      if (old) { Object.assign(old, set, { updated: nowISO() }); persist(); return clone(old); }
+      if (old) { const prev = { ...old }; Object.assign(old, set, { updated: nowISO() }); demoDtNtf(prev, set, [['date', 'ct'], ['sim', 'sim']]); persist(); return clone(old); }
       const a = { ...set, id: rec.id || uid(), took: '', tookBy: '', tookAt: '', by: state.user.name || 'ผู้ใช้ตัวอย่าง', created: nowISO(), updated: '' };
       db.appt.push(a);
       persist();
@@ -34330,7 +34353,7 @@ function ntflSetHtml(d) {
   const old = store.mode === 'sheet' && !serverHas(NTFL_API);
   const row = x => { const L = ntflOf(x.k, d);
     return `<tr data-nlrow="${x.k}"><td><input type="checkbox" data-nlk="${x.k}" data-nlf="on"${L.on ? ' checked' : ''} aria-label="เปิดลิงก์ ${esc(x.label)}"></td>
-      <td><b>${esc(x.label)}</b><small class="muted" style="display:block">${esc(x.where)}${x.srv ? '' : old ? ' · ต้องใช้ Code.gs รุ่น 2026-11-24.10' : ''}</small>${NTF_COND[x.k] ? `<label class="check nl-only"><input type="checkbox" data-nlk="${x.k}" data-nlf="only"${ntflOnly(x.k, d) ? ' checked' : ''}> <small>เฉพาะเคสที่ตรงเงื่อนไข (ประกาศตามเงื่อนไขในฟอร์มด้านล่าง)</small></label>` : ''}</td>
+      <td><b>${esc(x.label)}</b><small class="muted" style="display:block">${esc(x.where)}${x.srv ? (x.srv >= 155 && store.mode === 'sheet' && !serverHas(x.srv) ? ' · ต้องใช้ Code.gs รุ่น 2026-11-27.8' : '') : old ? ' · ต้องใช้ Code.gs รุ่น 2026-11-24.10' : ''}</small>${NTF_COND[x.k] ? `<label class="check nl-only"><input type="checkbox" data-nlk="${x.k}" data-nlf="only"${ntflOnly(x.k, d) ? ' checked' : ''}> <small>เฉพาะเคสที่ตรงเงื่อนไข (ประกาศตามเงื่อนไขในฟอร์มด้านล่าง)</small></label>` : ''}</td>
       <td><input type="text" data-nlk="${x.k}" data-nlf="text" maxlength="200" value="${esc(L.text)}" placeholder="${esc(x.text)}" aria-label="ข้อความประกาศ ${esc(x.label)}"></td>
       <td><div class="nl-roles" role="group" aria-label="อาชีพที่ได้รับ ${esc(x.label)}">${roles.map(r => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="role" value="${esc(r)}"${L.roles.includes(r) ? ' checked' : ''}> ${esc(r)}</label>`).join('')}</div>${x.srv ? '' : `<div class="nl-roles nl-ppl" role="group" aria-label="ส่งข้อความส่วนตัวถึง ${esc(x.label)}" title="${esc(NTF_PPL_TIP)}"><small class="muted">ส่งข้อความถึง:</small>${NTF_PPL.map(([v, l]) => `<label class="check"><input type="checkbox" data-nlk="${x.k}" data-nlf="ppl" value="${v}"${(L.people || []).includes(v) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div>`}</td>
       <td><button type="button" class="btn ghost danger sm" data-nldel="${x.k}" title="เลิกลิงก์ปุ่มนี้ (ไม่ประกาศ)">ลบลิงก์</button></td></tr>`; };
@@ -34388,7 +34411,7 @@ function tgSetInner(d) {
     <div class="tg-wrap"><table class="tg-map"><thead><tr><th>อาชีพที่ประกาศถึง</th><th>กลุ่ม Telegram</th><th></th></tr></thead><tbody>
       ${roles.map(r => row(r, `<b>${esc(r)}</b> ${esc(NTF_LABEL[r] || '')}`, t.chats[r] || '')).join('')}
       ${row('*', '<b>กลุ่มรวม</b> ทุกประกาศ (ไม่บังคับ)', t.all || '')}
-      ${row('#log', `<b>กลุ่ม log</b> (เช่น RT Hub log) แจ้งเมื่อมีคนกดพิมพ์ ดาวน์โหลด หรือเปิดดูตัวอย่างฟอร์ม (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(PRLOG_API) ? ' · ต้องใช้ Code.gs 2026-11-27.5' : ''}`, t.log || '')}
+      ${row('#log', `<b>กลุ่ม log</b> (เช่น RT Hub log) แจ้งเมื่อมีคนกดพิมพ์ ดาวน์โหลด เปิดดูตัวอย่างฟอร์ม · ลบผู้ป่วย · เปลี่ยนวัน CT-Sim / Start RT (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(PRLOG_API) ? ' · ต้องใช้ Code.gs 2026-11-27.5' : store.mode === 'sheet' && !serverHas(DTNTF_API) ? ' · ลบผู้ป่วย / เปลี่ยนวัน ต้องใช้ Code.gs 2026-11-27.8' : ''}`, t.log || '')}
       ${row('#login', `<b>กลุ่ม login</b> (เช่น RT Hub login) แจ้งเมื่อมีคนเข้าสู่ระบบ · ชื่อ · ตำแหน่ง · อุปกรณ์ (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(154) ? ' · ต้องใช้ Code.gs 2026-11-27.7' : ''}`, t.login || '')}</tbody></table></div>
     <div class="tg-row"><button type="button" class="btn ghost" data-tgfind${st.set && !busy ? '' : ' disabled'}>${busy === 'find' ? 'กำลังค้นหา…' : 'ค้นหากลุ่มที่เพิ่ม bot แล้ว'}</button><span class="muted def-note" style="margin:0">พบ ${chats.length} กลุ่ม · Telegram เก็บไว้ 24 ชั่วโมง · ไม่พบ = พิมพ์ /start ในกลุ่มแล้วกดอีกครั้ง · หลายอาชีพใช้กลุ่มเดียวกันได้ (ส่งครั้งเดียว)</span></div>
     ${lastTxt}`;
@@ -34466,6 +34489,7 @@ async function tgTestRole(k) {
 // .79 (Code.gs API 152): กลุ่ม Telegram log · แจ้งเมื่อมีคนกดพิมพ์ฟอร์ม (ปุ่มพิมพ์ทุกจุด + Ctrl+P / เมนูพิมพ์ของเบราว์เซอร์) · ดาวน์โหลดไฟล์ (PDF / Excel) · เปิดดูตัวอย่างฟอร์ม
 // ไม่ได้ตั้งกลุ่ม log / ส่งไม่สำเร็จ = เงียบ (ไม่กระทบการพิมพ์) · รายการเดิมซ้ำภายใน 3 วินาที = ครั้งเดียว · ไม่ส่งชื่อผู้ป่วย (HN ตามตั้งค่าข้อมูลผู้ป่วยของ Telegram)
 const PRLOG_API = 152, PRLOG_ACTS = ['print', 'dl', 'prev'];
+const DTNTF_API = 155;   // .82: Code.gs แจ้งกลุ่ม log เมื่อลบผู้ป่วย / เปลี่ยนวัน CT-Sim · Start RT + ประกาศผู้ป่วย (dt.ct / dt.sim)
 let prLogLast = { k: '', at: 0 }, prPrintAt = 0;
 function prLogOn() {
   if (state.gate != null || !state.user || state.user.pending) return false;
