@@ -930,6 +930,12 @@
 
 ## ความเร็วเมื่อข้อมูลสะสมหลายปี (รุ่น 2026-11-09.11 · Code.gs 2026-11-09.5 · API 61)
 
+- **2026-11-22.76: ใบพิมพ์ HDR Order เหมือนแบบฟอร์ม Brachytherapy Process Form ของแผนก (ไฟล์ Word ต้นแบบ)**
+  - หัวกระดาษแบบเดียวกับใบพิมพ์ Treatment Order (External beam): โลโก้โรงพยาบาล · DEPARTMENT OF RADIATION ONCOLOGY / Brachytherapy Process Form · HN ชื่อ วันนัด ชิดขวา
+  - ตารางเดียวกับต้นแบบ: Doctor | CT sim RTT1–3 · No. of Treatment □1–□5 + Date
+    - หัวข้อแนวตั้ง Equipment and Patient prepare · Diagnostic and Prescription · Note · ข้อความและลำดับบรรทัดตามต้นแบบ · ค่าที่กรอกอยู่บนเส้นประ · ช่องติ๊กเป็นกล่อง (ติ๊กแล้ว = ✓)
+    - รูปวาด + คำอธิบายด้านซ้ายวางตามรูปต้นแบบ (at diagnosis / at brachytherapy · Dose of EBT · w h t · Vaginal Involvement · ตารางสี Infiltrative / Exophytic · สีที่เลือก · Patient: HN · Signature) · ช่องลงชื่อด้านขวา Nurse / RTT / MP / MP Recheck / Order / Approved RO · Plan Code / Dwell Time
+    - ฟอนต์ TH SarabunPSK 16pt (ฝังในหน้าเว็บ) · ความกว้างคอลัมน์ตามต้นแบบ · A4 หน้าเดียว (ยาวเกิน = ย่อทั้งหน้า · หัวข้อแนวตั้งยาวเกินแถว = ย่อตัวอักษร)
 - **2026-11-22.75 + Code.gs 2026-11-27.3 (API 150): ตั้งเวลาประกาศ**
   - ฟอร์มส่งประกาศมีแถว **เริ่มแสดง**: ทันที (ค่าเริ่มต้น · เหมือนเดิม) / **ตั้งเวลา** = เลือกวันที่และเวลา (ค่าเริ่มต้น พรุ่งนี้ 08:00 · ล่วงหน้าได้ไม่เกิน 30 วัน) · ข้อความใต้ช่องบอกเวลาที่จะขึ้นแถบ
     - **แสดงถึง** นับจากวันเริ่ม (ชิปแรก = วันเริ่ม · +1 วัน · 3 วัน · 7 วัน) · เวลาที่ผ่านมาแล้ว = ส่งไม่ได้ (บอกเหตุผล)
