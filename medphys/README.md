@@ -930,6 +930,10 @@
 
 ## ความเร็วเมื่อข้อมูลสะสมหลายปี (รุ่น 2026-11-09.11 · Code.gs 2026-11-09.5 · API 61)
 
+- **2026-11-22.77: วันที่ในใบพิมพ์ทุกใบ = วัน เดือนเต็ม ปี พ.ศ. (27 พฤศจิกายน 2569)**
+  - HDR Order · Treatment Order (External beam) · CT Simulation Order Form · Standing order · Treatment Summary · ใบลา (ตรารับทราบ) · Patient chart · สรุปนัดพบแพทย์ / ผู้ป่วยระหว่างฉายทั้งหมด (หัวกระดาษ วัน + วันที่ · เวลาพิมพ์) · รายชื่อจากแถบสถิติ (เวลาพิมพ์) · ทะเบียนหนังสือส่ง
+  - ฟอร์ม HDR Order: Date / S/P Ext RT Date / Post ICRT F/U Date เป็นช่องเลือกวันที่ + แสดงวันที่ภาษาไทยข้างช่อง · ค่าเดิมที่พิมพ์เป็นข้อความไว้ยังแก้เป็นข้อความได้ (พิมพ์ตามที่พิมพ์ไว้)
+  - ยังย่อเหมือนเดิม: ช่องตารางวันในปฏิทินของ Treatment Summary และวันในแถวของรายชื่อ (ที่แคบ)
 - **2026-11-22.76: ใบพิมพ์ HDR Order เหมือนแบบฟอร์ม Brachytherapy Process Form ของแผนก (ไฟล์ Word ต้นแบบ)**
   - หัวกระดาษแบบเดียวกับใบพิมพ์ Treatment Order (External beam): โลโก้โรงพยาบาล · DEPARTMENT OF RADIATION ONCOLOGY / Brachytherapy Process Form · HN ชื่อ วันนัด ชิดขวา
   - ตารางเดียวกับต้นแบบ: Doctor | CT sim RTT1–3 · No. of Treatment □1–□5 + Date

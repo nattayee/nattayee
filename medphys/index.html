@@ -1642,6 +1642,7 @@ dialog.hdro-dlg{width:min(1080px,calc(100vw - 16px))}
 .hp-sgc .hp-ln{display:block;margin:1mm auto 0;font-size:13pt}
 .hp-sgc small{display:block;font-size:11pt}
 .hp-note{white-space:pre-wrap}
+.hdd-thd{margin-left:6px;color:var(--muted);font-size:12.5px;white-space:nowrap}
 .hp-measure{position:absolute;left:-10000px;top:0;visibility:hidden}
 .fx-left{margin:-2px 0 8px;font-size:12.5px;color:var(--muted)}   /* .71: fraction ที่เหลือตามตารางห้องฉาย */
 .fx-left.warn{color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:4px 8px}
@@ -8832,6 +8833,19 @@ const fmtDay = s => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? DAY_FMT.format(parseI
 // Finish / Evaluate เก็บวันและเวลา "2026-10-11 14:32" (ข้อมูลเก่ามีแต่วัน)
 const nowStamp = () => { const d = new Date(); return `${iso(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const fmtStamp = s => (s ? [fmtDay(s.slice(0, 10)), s.slice(11, 16)].filter(Boolean).join(' ') : '');
+// .77: วันที่ในใบพิมพ์ทุกใบ = วัน เดือนเต็ม ปี พ.ศ. (27 พฤศจิกายน 2569) · รับ YYYY-MM-DD หรือเวลา ISO (วันตามเวลาเครื่อง) · อย่างอื่น = ข้อความเดิม (เช่นที่พิมพ์เองในฟอร์มเก่า)
+const TH_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+function thDate(v) {
+  const s = str(v).trim();
+  let d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+  if (!d && /^\d{4}-\d{2}-\d{2}[T ]\d/.test(s)) { const t = new Date(s.replace(' ', 'T')); if (!isNaN(t)) d = iso(t); }
+  if (!d) return s;
+  const [y, m, dd] = d.split('-').map(Number);
+  return m >= 1 && m <= 12 ? `${dd} ${TH_MONTHS_FULL[m - 1]} ${y + 543}` : s;
+}
+const thStamp = v => { const t = v instanceof Date ? v : new Date(str(v)); return isNaN(t) ? '' : `${thDate(iso(t))} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`; };   // 27 พฤศจิกายน 2569 10:05
+const TH_WD_FMT = new Intl.DateTimeFormat('th-TH', { weekday: 'long' });
+const thDateW = d => `${TH_WD_FMT.format(parseISO(d))} ${thDate(d)}`;   // วันศุกร์ 27 พฤศจิกายน 2569
 const fmtMonth = ym => MONTH_FMT.format(parseISO(ym + '-01'));
 const NUM_FMT = {};   // ตัวจัดรูปแบบตัวเลขต่อจำนวนทศนิยม (สร้างครั้งเดียว · toLocaleString สร้างใหม่ทุกครั้ง ช้าเมื่อข้อมูลเยอะ)
 const num = (n, dp = 1) => (NUM_FMT[dp] || (NUM_FMT[dp] = new Intl.NumberFormat('en-US', { maximumFractionDigits: dp }))).format(Number(n || 0));
@@ -9986,7 +10000,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.76';
+const PAGE_VERSION = '2026-11-22.77';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -13351,6 +13365,8 @@ function renderHdro() {
   const hn = (o && o.hn) || a.hn, name = (o && o.name) || a.name, sig = o ? o.sig : {}, me = str(state.user.role), au = hdroAuto(a.id ? a : null);
   if (hdroUi.drawSrc !== hdroUi.f) { hdroUi.strokes = hdroDrawDec(hdroUi.f && hdroUi.f.draw); hdroUi.drawSrc = hdroUi.f; }
   const fill = (k, ph, w = '3.6em') => `<input class="ord-fill" data-hdf="${k}" value="${esc(hdroV(k))}" placeholder="${esc(ph)}" style="width:${w}"${dis} aria-label="${esc(ph)}">`;
+  // .77: วันที่ = ช่องเลือกวันที่ + วันที่ภาษาไทยข้างช่อง · ค่าเดิมที่พิมพ์เองไว้ (ไม่ใช่วันที่) = ช่องพิมพ์เหมือนเดิม
+  const dtIn = (k, l) => { const x = hdroV(k); return !x || isDay(x) ? `<input type="date" data-hdf="${k}" value="${esc(x)}"${dis} aria-label="${esc(l)}"><small class="hdd-thd">${esc(thDate(x))}</small>` : tx(k, 'วันที่', '8em'); };
   const tx = (k, ph = '', w = '') => `<input data-hdf="${k}" value="${esc(hdroV(k))}" placeholder="${esc(ph)}"${w ? ` style="width:${w}"` : ''}${dis} aria-label="${esc(ph || k)}">`;
   const rd = (k, vals, lab = v => v, tip = () => '') => `<div class="chips">${vals.map(v => `<label${tip(v) ? ` title="${esc(tip(v))}"` : ''}><input type="radio" name="hdr-${k}" data-hdr="${k}" value="${esc(v)}"${hdroV(k) === v ? ' checked' : ''}${dis}><span>${esc(lab(v))}</span></label>`).join('')}</div>`;
   const ck = (k, l, extra = '') => `<label><input type="checkbox" data-hdc="${k}"${hdroV(k) === '1' ? ' checked' : ''}${dis}><span>${esc(l)}${extra}</span></label>`;
@@ -13366,7 +13382,7 @@ function renderHdro() {
   <section class="hdr-sec"><h3>แพทย์ / CT sim</h3>
     ${row('Doctor', rd('doc', hdroDocs(), c => c, c => docName(c) || c))}
     ${row('CT sim RTT', `<div class="hdd-rtt">${tx('rtt1', 'RTT1', '12em')} ${tx('rtt2', 'RTT2', '12em')} ${tx('rtt3', 'RTT3', '12em')}</div>`, `<div>${auto(`ห้อง CT: ${au.rttNote}`, au.rtts.length)}</div>`)}
-    ${row('No. of Treatment', `${rd('no', ['1', '2', '3', '4', '5'])}<span class="hdd-date">Date <input type="date" data-hdf="date" value="${esc(hdroV('date'))}"${dis} aria-label="วันที่"></span>`)}</section>
+    ${row('No. of Treatment', `${rd('no', ['1', '2', '3', '4', '5'])}<span class="hdd-date">Date <input type="date" data-hdf="date" value="${esc(hdroV('date'))}"${dis} aria-label="วันที่"><small class="hdd-thd">${esc(thDate(hdroV('date')))}</small></span>`)}</section>
   <section class="hdr-sec"><h3>Equipment and Patient prepare</h3>
     ${row('Applicator', `${rd('app', HDRO_APP)} ${tx('appOt', 'อื่นๆ ระบุ', '11em')}`)}
     ${row('อุปกรณ์', `<div class="chips">${ck('tan', 'Tandem', ` No ${fill('tanNo', 'No')}`)}${ck('ovo', 'Ovoid', ` No ${fill('ovoNo', 'No')}`)}${ck('mou', 'Mould', ` No ${fill('mouNo', 'No')} Ø ${fill('mouDia', 'cm')} cm`)}</div>`)}
@@ -13375,11 +13391,11 @@ function renderHdro() {
   <section class="hdr-sec"><h3>Diagnostic and Prescription <button type="button" class="linkish dc-link" data-dcopen="11">Dose constraint (HDR)</button></h3>
     ${row('Diagnosis', `${rd('dx', HDRO_DX)} ${tx('dxOt', 'อื่นๆ ระบุ', '12em')}`)}
     ${row('Stage / S/P', `STAGE ${tx('stage', 'Stage', '7em')} S/P ${tx('sp', 'S/P', '14em')}`)}
-    ${row('S/P Ext RT', `${tx('extDose', 'cGy', '6em')} cGy · Date ${tx('extDate', 'วันที่', '8em')}`, `<div>${auto(au.rx ? `จากคอร์สฉายรังสีภายนอก: ${au.rxNote} · แก้ได้` : au.rxNote, !!au.rx)}</div>`)}
+    ${row('S/P Ext RT', `${tx('extDose', 'cGy', '6em')} cGy · Date ${dtIn('extDate', 'วันที่ Ext RT')}`, `<div>${auto(au.rx ? `จากคอร์สฉายรังสีภายนอก: ${au.rxNote} · แก้ได้` : au.rxNote, !!au.rx)}</div>`)}
     ${row('PV', `<textarea data-hdf="pv" rows="2" maxlength="800"${dis} aria-label="PV">${esc(hdroV('pv'))}</textarea>`)}
     ${row('Sound / Tandem', `Sound ${tx('sound', 'cm', '5em')} cm · Tandem ${tx('tanLen', 'cm', '5em')} cm`)}
     ${row('Prescribed dose', `<div class="chips">${ck('d90', 'D90', ` ${fill('d90v', 'cGy', '4.2em')} cGy`)}${ck('sur', 'Surface', ` ${fill('surv', 'cGy', '4.2em')} cGy`)}${ck('s05', '0.5 cm surface', ` ${fill('s05v', 'cGy', '4.2em')} cGy`)}</div><span class="hdd-date">Load ${tx('load', 'cm', '5em')} cm</span>`)}
-    ${row('Post ICRT F/U', `${tx('fu', 'F/U for', '12em')} Date ${tx('fuDate', 'วันที่', '7.5em')} time ${tx('fuTime', 'เวลา', '5em')}`)}
+    ${row('Post ICRT F/U', `${tx('fu', 'F/U for', '12em')} Date ${dtIn('fuDate', 'วันที่ F/U')} time ${tx('fuTime', 'เวลา', '5em')}`)}
     ${row('สี', `<div class="chips">${HDRO_COL.map(([v, l]) => `<label><input type="checkbox" data-hdcol="${v}"${cols.includes(v) ? ' checked' : ''}${dis}><span><i class="hdr-dot ${v}"></i> ${esc(l)}</span></label>`).join('')}</div>`)}</section>
   <section class="hdr-sec"><h3>แผนการรักษา</h3>
     ${row('Plan Code', `${tx('code', 'Plan Code', '11em')} Dwell Time ${tx('dwell', 'Dwell Time', '9em')}`)}
@@ -13529,7 +13545,7 @@ function hdroPrintHtml() {
   const id = hdroUi.id, a = (state.bq || []).find(x => x.id === id) || {}, o = hdroOf(id), f = hdroUi.f || {}, sig = o ? o.sig : {}, au = hdroAuto(a.id ? a : null);
   const v = k => str(f[k]), on = k => v(k) === '1', cols = Array.isArray(f.col) ? f.col : [], G = '<span class="hp-g"></span>';
   const hn = str((o && o.hn) || a.hn), name = str((o && o.name) || a.name), dt = str(a.date || (o && o.date));
-  const sg = r => (sig[r] ? [str(sig[r].by), fmtDay(localDay(sig[r].at))] : ['', '']);
+  const sg = r => (sig[r] ? [str(sig[r].by), thDate(localDay(sig[r].at))] : ['', '']);
   const [mpBy, mpAt] = sg('MP'), [roBy, roAt] = sg('RO');
   const sc = (lab, by, at) => `<td class="hp-sgc">${lab} ${hpLn(by, '26mm')}${at ? `<small>${esc(at)}</small>` : ''}</td>`;
   const V = (t, rs) => `<td class="hp-v"${rs ? ` rowspan="${rs}"` : ''}><span>${t}</span></td>`;
@@ -13543,11 +13559,11 @@ function hdroPrintHtml() {
     + hpAt(15, 162, `Vaginal Involvement = ${hpLn(v('vi'), '7mm')} cm`) + hpAt(70, 212, '<u>Infiltrative</u>') + hpAt(130, 212, '<u>Exophytic</u>') + pal
     + hpAt(70, 431, '<span class="hp-sl"></span>') + hpAt(86, 444, '<i>Signature</i>', 'hp-s') + hpAt(612, 18, `Patient: ${hpLn(hn, '22mm')}`);
   // หัวกระดาษแบบเดียวกับใบพิมพ์ Treatment Order (External Radiation Process Form): โลโก้ · ชื่อหน่วยงาน / ชื่อแบบฟอร์ม · HN ชิดขวา
-  return `<div class="hp-page"><div class="fp-hd hp-hd"><img src="${TXS_LOGO}" alt=""><div><b>DEPARTMENT OF RADIATION ONCOLOGY</b><br>Brachytherapy Process Form</div><div class="fp-pt">HN <b>${esc(hn)}</b><br>${esc(name)}${dt ? `<br><small>นัด ${esc(fmtDay(dt))}${a.fx ? ` · Fx ${esc(a.fx)}/${esc(a.total)}` : ''}</small>` : ''}</div></div>
+  return `<div class="hp-page"><div class="fp-hd hp-hd"><img src="${TXS_LOGO}" alt=""><div><b>DEPARTMENT OF RADIATION ONCOLOGY</b><br>Brachytherapy Process Form</div><div class="fp-pt">HN <b>${esc(hn)}</b><br>${esc(name)}${dt ? `<br><small>นัด ${esc(thDate(dt))}${a.fx ? ` · Fx ${esc(a.fx)}/${esc(a.total)}` : ''}</small>` : ''}</div></div>
   <table class="hp-t"><colgroup><col style="width:8.2mm"><col style="width:92.5mm"><col style="width:55mm"><col style="width:36.5mm"></colgroup>
   <tr style="height:9mm"><td colspan="2" class="hp-b"><b>Doctor</b> ${hdroDocs().map(c => hpBox(v('doc') === c, docName(c) || c)).join(G)}</td>
     <td colspan="2" class="hp-b"><b>CT sim</b> RTT1${hpLn(v('rtt1'), '12mm')}RTT2${hpLn(v('rtt2'), '12mm')}RTT3${hpLn(v('rtt3'), '12mm')}</td></tr>
-  <tr style="height:9.3mm"><td colspan="4"><b>No. of Treatment</b>${G}${['1', '2', '3', '4', '5'].map(n => `<span class="hp-big">${hpBox(v('no') === n)}${n}</span>`).join(G)}${G}${G}<b>Date:</b>${hpLn(v('date') ? fmtDay(v('date')) : '', '45mm')}</td></tr>
+  <tr style="height:9.3mm"><td colspan="4"><b>No. of Treatment</b>${G}${['1', '2', '3', '4', '5'].map(n => `<span class="hp-big">${hpBox(v('no') === n)}${n}</span>`).join(G)}${G}${G}<b>Date:</b>${hpLn(thDate(v('date')), '50mm')}</td></tr>
   <tr>${V('Equipment and Patient prepare')}<td colspan="3">
     <div>${HDRO_APP.map(x => hpBox(v('app') === x, x)).join(G)}${hpLn(v('appOt'), '45mm')}</div>
     <div>${hpBox(on('tan'), 'Tendem')} No${hpLn(v('tanNo'), '42mm')}${G}${hpBox(on('ovo'), 'Ovoid')} No.${hpLn(v('ovoNo'), '42mm')}</div>
@@ -13559,12 +13575,12 @@ function hdroPrintHtml() {
   <tr>${V('Diagnostic and Prescription', 3)}<td colspan="3">
     <div>${HDRO_DX.map(x => hpBox(v('dx') === x, x)).join(G)}${hpLn(v('dxOt'), '45mm')}</div>
     <div>STAGE${hpLn(v('stage'), '38mm')}${G}S/P${hpLn(v('sp'), '75mm')}</div>
-    <div>S/P: Ext RT Dose${hpLn(v('extDose'), '32mm')}cGy${G}Date${hpLn(v('extDate'), '42mm')}</div>
+    <div>S/P: Ext RT Dose${hpLn(v('extDose'), '32mm')}cGy${G}Date${hpLn(thDate(v('extDate')), '48mm')}</div>
     <div class="hp-fl">PV${hpLn(v('pv'), '0', 'hp-w')}</div>
     <div>Sound${hpLn(v('sound'), '24mm')}cm${G}${G}Tendem${hpLn(v('tanLen'), '24mm')}cm</div></td></tr>
   <tr><td colspan="3"><div>Prescribed dose${G}${hpBox(on('d90'), 'D90')}${hpLn(v('d90v'), '26mm')}cGy</div>
     <div class="hp-in">${hpBox(on('sur'), 'Surface')}${hpLn(v('surv'), '22mm')}cGy${G}${hpBox(on('s05'), '0.5 cm surface')}${hpLn(v('s05v'), '22mm')}cGy${G}Load${hpLn(v('load'), '22mm')}cm</div></td></tr>
-  <tr><td colspan="3" class="hp-b">Post ICRT, F/U for${hpLn(v('fu'), '52mm')}Date${hpLn(v('fuDate'), '34mm')}time${hpLn(v('fuTime'), '22mm')}</td></tr>
+  <tr><td colspan="3" class="hp-b">Post ICRT, F/U for${hpLn(v('fu'), '52mm')}Date${hpLn(thDate(v('fuDate')), '40mm')}time${hpLn(v('fuTime'), '22mm')}</td></tr>
   <tr><td colspan="3" rowspan="5" class="hp-dc"><div class="hp-dg"><img class="hp-dimg" src="${hdroDrawImg()}" alt="">${lg}</div></td>${sc('<b>Nurse</b>', au.nurse)}</tr>
   <tr>${sc('<b>RTT</b>', au.rtt)}</tr><tr>${sc('<b>MP</b>', mpBy, mpAt)}</tr><tr>${sc('<b>MP Recheck</b>', au.rc)}</tr><tr>${sc('Order/Approved<br><b>RO</b>', roBy, roAt)}</tr>
   <tr><td colspan="4" class="hp-b">Plan Code:${hpLn(v('code'), '58mm')}${G}Dwell Time${hpLn(v('dwell'), '58mm')}</td></tr>
@@ -13591,6 +13607,7 @@ async function hdroPrint() {
 }
 hdroDlg.addEventListener('input', () => { if (!hdroUi.dirty) { hdroUi.dirty = true; const d = $('#hdro-body .txo-foot > span:first-child'); if (d) { d.className = 'txo-dirty'; d.textContent = 'มีการแก้ที่ยังไม่บันทึก'; } } });
 hdroDlg.addEventListener('change', () => { hdroUi.dirty = true; });
+hdroDlg.addEventListener('input', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'date' && t.dataset.hdf) { const x = t.nextElementSibling; if (x && x.classList.contains('hdd-thd')) x.textContent = thDate(t.value); } });   // .77
 // .73: ชิปเลือกได้ข้อเดียวกดซ้ำ = เอาออก · พิมพ์จำนวนในชิป = ติ๊กชิปนั้นให้ · เครื่องมือวาด
 hdroDlg.addEventListener('pointerdown', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'radio' && t.dataset.hdr) t.dataset.was = t.checked ? '1' : ''; }, true);
 hdroDlg.addEventListener('click', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'radio' && t.dataset.hdr && t.dataset.was === '1') { t.checked = false; t.dataset.was = ''; t.dispatchEvent(new Event('input', { bubbles: true })); } });
@@ -13698,13 +13715,13 @@ function txoPrintHtml(e) {
   <tr><th>Treatment Order</th><td>Aim of Treatment ${fpBox(aim === 'Curative', 'Curative')} ${fpBox(aim === 'Palliative', 'Palliative')}</td></tr>
   <tr><td colspan="2">${TXO_TECHS.map(t => fpBox(techs.includes(t), t)).join(' ')}</td></tr>
   ${rx.map((x, i) => `<tr><td>PTV ${fpLine(x ? [x.t, x.site].filter(Boolean).join(' · ') : '', '9em')} ${fpLine(x && txoTot(x) != null ? num(txoTot(x), 2) : '', '4em')} Gy, in ${fpLine(x && x.fx != null ? String(x.fx) : '', '3em')} Fx, Dose ${fpLine(x && x.dpf != null ? num(x.dpf, 2) : '', '3em')} Gy/Fx</td><td>${i === 0 ? '<b>Dose Constraint</b>' : i === 1 ? `Target ${fpLine(dv.tgt, '14em')}` : i === 2 ? `OAR ${fpLine(dv.oar, '15em')}` : ''}</td></tr>`).join('')}
-  <tr><td>${TXO_FQ.map(v => fpBox(fq === v, v)).join(' ')} ${fpBox(fq && !TXO_FQ.includes(fq), 'Other')} ${fpLine(fq && !TXO_FQ.includes(fq) ? fq : '', '8em')}</td><td>RO ${fpLine(e.rxAt ? `${e.rxBy} · ${fmtDay(localDay(e.rxAt))}` : '', '14em')}</td></tr>
-  <tr><th colspan="2">Treatment Remark</th></tr>${remRows.map(x => { const t = x && t2(x.at); return `<tr><td colspan="2">Date ${fpLine(t ? fmtDay(iso(t)) : '', '7em')} Time ${fpLine(t ? String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '', '4em')} ${x ? esc(x.text) : ''} Sign ${fpLine(x ? x.by : '', '10em')}</td></tr>`; }).join('')}
+  <tr><td>${TXO_FQ.map(v => fpBox(fq === v, v)).join(' ')} ${fpBox(fq && !TXO_FQ.includes(fq), 'Other')} ${fpLine(fq && !TXO_FQ.includes(fq) ? fq : '', '8em')}</td><td>RO ${fpLine(e.rxAt ? `${e.rxBy} · ${thDate(localDay(e.rxAt))}` : '', '16em')}</td></tr>
+  <tr><th colspan="2">Treatment Remark</th></tr>${remRows.map(x => { const t = x && t2(x.at); return `<tr><td colspan="2">Date ${fpLine(t ? thDate(iso(t)) : '', '10em')} Time ${fpLine(t ? String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '', '4em')} ${x ? esc(x.text) : ''} Sign ${fpLine(x ? x.by : '', '10em')}</td></tr>`; }).join('')}
   <tr><th colspan="2">Planning Remark</th></tr><tr><td colspan="2">${esc(e.plan.note || '')}&nbsp;</td></tr>
   <tr><th>Plan Name</th><td>${esc(e.plan.name || '')}</td></tr>
-  <tr><td colspan="2">MP ${fpLine(c ? c.finBy || c.mp : '', '10em')} Date ${fpLine(c && c.fin ? fmtDay(str(c.fin).slice(0, 10)) : '', '7em')}</td></tr>
-  <tr><td colspan="2">MP Recheck ${fpLine(e.plan.rckAt ? `${e.plan.rck} · ${fmtDay(localDay(e.plan.rckAt))}` : '', '14em')}</td></tr>
-  <tr><td colspan="2">RO Approval ${fpLine(c && c.eval ? c.evalBy : '', '14em')}</td></tr><tr><td colspan="2">Date Approval ${fpLine(c && c.eval ? fmtDay(str(c.eval).slice(0, 10)) : '', '10em')}</td></tr></table></div>`;
+  <tr><td colspan="2">MP ${fpLine(c ? c.finBy || c.mp : '', '10em')} Date ${fpLine(c && c.fin ? thDate(str(c.fin).slice(0, 10)) : '', '10em')}</td></tr>
+  <tr><td colspan="2">MP Recheck ${fpLine(e.plan.rckAt ? `${e.plan.rck} · ${thDate(localDay(e.plan.rckAt))}` : '', '16em')}</td></tr>
+  <tr><td colspan="2">RO Approval ${fpLine(c && c.eval ? c.evalBy : '', '14em')}</td></tr><tr><td colspan="2">Date Approval ${fpLine(c && c.eval ? thDate(str(c.eval).slice(0, 10)) : '', '10em')}</td></tr></table></div>`;
 }
 document.addEventListener('change', e => {
   const t = e.target;
@@ -15811,7 +15828,7 @@ function soAuto(dq) {
 }
 // หน้า A4 แบบฟอร์มกระดาษ · x = { hn, name, doc, by, at, so, dq } (dq = การแจก: ค่าอัตโนมัติ · พยาบาลที่ยืนยัน)
 function soSheetHtml(x) {
-  const s0 = x.so || {}, au = soAuto(x.dq), o = { ...s0, ...au, lab: [...new Set([...(s0.lab || []), ...(au.lab || [])])], labo: [...new Set([au.labo, s0.labo].map(str).filter(Boolean))].join(' · ') }, dot = (v, w) => (v ? `<u class="so-v">${esc(v)}</u>` : `<span class="so-dots" style="width:${w}mm"></span>`), day = v => (isDay(v) ? `${+v.slice(8, 10)}/${+v.slice(5, 7)}/${String(+v.slice(0, 4) + 543).slice(2)}` : '');
+  const s0 = x.so || {}, au = soAuto(x.dq), o = { ...s0, ...au, lab: [...new Set([...(s0.lab || []), ...(au.lab || [])])], labo: [...new Set([au.labo, s0.labo].map(str).filter(Boolean))].join(' · ') }, dot = (v, w) => (v ? `<u class="so-v">${esc(v)}</u>` : `<span class="so-dots" style="width:${w}mm"></span>`), day = v => (isDay(v) ? thDate(v) : '');   // .77: 27 พฤศจิกายน 2569
   const box = on => `<span class="so-cb">${on ? '√' : ''}</span>`, red = t => (t ? ` <span class="so-red">${esc(t)}</span>` : '');
   const typ = k => { const [, l, subs] = SO_TYPES.find(t => t[0] === k); return `<div class="so-tt">${k === 't5' ? box(o[k]) + ' ' : ''}${esc(l).replace('case Emergency', '<span class="so-red so-ul">case Emergency</span>')}</div>${subs.map(([sk, t, sl, , r]) => t === 'c' ? `<div class="so-line">${box(o[sk])} ${esc(sl)}${red(r)}</div>` : `<div class="so-line">${esc(sl)}${t === 'd' || isDay(o[sk]) ? dot(day(o[sk]), 60) : dot(o[sk], 60)}</div>`).join('')}`; };
   const docFull = x.doc ? docName(x.doc) || x.doc : '', at = x.at ? new Date(x.at) : new Date();
@@ -18712,9 +18729,9 @@ function seeSumSheet(d, pts, land) {
       + `<table class="ss-doc-t" style="--dc:${ssDocColor(code)}">${head}<tbody>${rs.map(line).join('')}</tbody></table>`;
   }).join('');
   const tot = codes.map(c => `${esc(c || '-')} ${rows.filter(r => r.doc === c).length}`).join(' · '), holdN = rows.filter(r => r.st && r.st.k === 'hold').length;
-  return `<header class="ss-hd"><div><b>${esc(state.config.appName || '')}</b><h1>สรุปนัดพบแพทย์</h1><p>${esc(LONG_DAY_FMT.format(parseISO(d)))}</p></div><div class="ss-tot"><b>${rows.length}</b> คน${holdN ? ` (Hold ${holdN})` : ''}${tot ? `<small>${tot}</small>` : ''}</div></header>`
+  return `<header class="ss-hd"><div><b>${esc(state.config.appName || '')}</b><h1>สรุปนัดพบแพทย์</h1><p>${esc(thDateW(d))}</p></div><div class="ss-tot"><b>${rows.length}</b> คน${holdN ? ` (Hold ${holdN})` : ''}${tot ? `<small>${tot}</small>` : ''}</div></header>`
     + (rows.length ? tbl : '<p class="ss-empty">ไม่มีนัดพบแพทย์ในวันนี้</p>')
-    + `<footer class="ss-ft">พิมพ์ ${esc(whenText(nowISO()))}${state.user.name ? ` · ${esc(state.user.name)}` : ''} · นัดพบแพทย์ = พยาบาลนัดไว้ · นอกตารางนัด = ผู้ป่วยขอพบแพทย์ · ตารางพบแพทย์ = ติ๊กแพทย์ในห้องฉาย · คำสั่งเดิม = คำสั่งแพทย์ล่าสุดก่อนวันนี้ · สีตัวอักษรห้องฉาย = สีประจำเครื่อง · พื้นหลัง = แพทย์</footer>`;
+    + `<footer class="ss-ft">พิมพ์ ${esc(thStamp(new Date()))}${state.user.name ? ` · ${esc(state.user.name)}` : ''} · นัดพบแพทย์ = พยาบาลนัดไว้ · นอกตารางนัด = ผู้ป่วยขอพบแพทย์ · ตารางพบแพทย์ = ติ๊กแพทย์ในห้องฉาย · คำสั่งเดิม = คำสั่งแพทย์ล่าสุดก่อนวันนี้ · สีตัวอักษรห้องฉาย = สีประจำเครื่อง · พื้นหลัง = แพทย์</footer>`;
 }
 function renderSeeSum() {
   const td = today(), days = seeSumDays(), nx = nextWorkday(plusDays(td, 1), holidayMap());
@@ -18805,9 +18822,9 @@ function otaSheet() {
     }).join('');
   const tot = (g === 'room' ? [...new Set(rows.map(r => r.room))].sort(roomCmp).map(k => `${k ? roomLabel(k) : '-'} ${rows.filter(r => r.room === k).length}`) : [...new Set(rows.map(r => r.doc))].sort(docCmp).map(k => `${k || '-'} ${rows.filter(r => r.doc === k).length}`)).map(esc).join(' · ');
   const filt = [ota.doc && (ota.doc === OTA_NONE ? 'ไม่ระบุแพทย์' : `แพทย์ ${ota.doc}`), ota.room && (ota.room === OTA_NONE ? 'ไม่ระบุห้องฉาย' : `ห้องฉาย ${roomLabel(ota.room)}`)].filter(Boolean).join(' · '), holdN = rows.filter(r => r.hold).length;
-  return { n: rows.length, all, html: `<header class="ss-hd"><div><b>${esc(state.config.appName || '')}</b><h1>ผู้ป่วยระหว่างฉายทั้งหมด</h1><p>${esc(LONG_DAY_FMT.format(parseISO(td)))}${filt ? ` · ${esc(filt)}` : ''}</p></div><div class="ss-tot"><b>${rows.length}</b> คน${holdN ? ` (Hold ${holdN})` : ''}${tot ? `<small>${tot}</small>` : ''}</div></header>`
+  return { n: rows.length, all, html: `<header class="ss-hd"><div><b>${esc(state.config.appName || '')}</b><h1>ผู้ป่วยระหว่างฉายทั้งหมด</h1><p>${esc(thDateW(td))}${filt ? ` · ${esc(filt)}` : ''}</p></div><div class="ss-tot"><b>${rows.length}</b> คน${holdN ? ` (Hold ${holdN})` : ''}${tot ? `<small>${tot}</small>` : ''}</div></header>`
     + (rows.length ? body : `<p class="ss-empty">${all.length ? 'ไม่มีผู้ป่วยระหว่างฉายที่ตรงกับตัวกรอง' : 'วันนี้ไม่มีผู้ป่วยระหว่างฉาย'}</p>`)
-    + `<footer class="ss-ft">พิมพ์ ${esc(whenText(nowISO()))}${state.user.name ? ` · ${esc(state.user.name)}` : ''} · รายชื่อจากตารางวันฉายของวันนี้ (ฉายอยู่ + Hold RT) · นัดพบแพทย์ = นัดที่ยังไม่ได้พบ ตั้งแต่วันนี้</footer>` };
+    + `<footer class="ss-ft">พิมพ์ ${esc(thStamp(new Date()))}${state.user.name ? ` · ${esc(state.user.name)}` : ''} · รายชื่อจากตารางวันฉายของวันนี้ (ฉายอยู่ + Hold RT) · นัดพบแพทย์ = นัดที่ยังไม่ได้พบ ตั้งแต่วันนี้</footer>` };
 }
 function renderOta() {
   if (!ota.g) ota.g = pref.get('otaGroup', 'doc');
@@ -19406,9 +19423,9 @@ const txsFrom = () => { const f = (state.config.txs || {}).from; return f === un
 // 22 พ.ย.: แอดมินหลัก / แอดมินรอง (และบัญชี Google) เห็นทุกคอร์ส ไม่จำกัดวันที่เริ่มฉาย · ดูในมุมมองตำแหน่งอื่น = เห็นแบบตำแหน่งนั้น
 const txsAllDates = () => !state.viewAs && (state.user.via === 'google' || !!state.user.isAdmin || subTabs().length > 0);
 const txsCut = () => (txsAllDates() ? '' : txsFrom());
-const txsFromText = () => (txsFrom() ? `เริ่มฉายตั้งแต่ ${fmtDay(txsFrom())} ${parseISO(txsFrom()).getFullYear() + 543}` : '');
+const txsFromText = () => (txsFrom() ? `เริ่มฉายตั้งแต่ ${thDate(txsFrom())}` : '');
 const txsStPill = d => (d.st === 'complete' ? '<span class="txs-pill ok">Complete course</span>' : d.st === 'cancel' ? '<span class="txs-pill bad">Cancel RT</span>' : d.hold ? `<span class="txs-pill warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-pill on">On treatment</span>');
-const txsChip = d => (d.st === 'complete' ? `<span class="txs-chip">Complete course${d.to ? ' ' + esc(fmtDay(d.to)) : ''}</span>` : d.st === 'cancel' ? `<span class="txs-chip bad">Cancel RT${d.c && isDay(d.c.rtDate) ? ' ' + esc(fmtDay(d.c.rtDate)) : ''}</span>` : d.hold ? `<span class="txs-chip warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-chip on">On treatment</span>');
+const txsChip = d => (d.st === 'complete' ? `<span class="txs-chip">Complete course${d.to ? ' ' + esc(thDate(d.to)) : ''}</span>` : d.st === 'cancel' ? `<span class="txs-chip bad">Cancel RT${d.c && isDay(d.c.rtDate) ? ' ' + esc(thDate(d.c.rtDate)) : ''}</span>` : d.hold ? `<span class="txs-chip warn">On treatment · ${esc(d.hold.label)}</span>` : '<span class="txs-chip on">On treatment</span>');
 const txsWm = () => `<div class="txs-wm" aria-hidden="true">${Array.from({ length: 15 }, (_, i) => `<span style="left:${(i % 3) * 36 - 10}%;top:${Math.floor(i / 3) * 21 + 3}%">ใช้ภายในเท่านั้น</span>`).join('')}</div>`;
 const txsHead = (d, name, kick, sub) => `<header class="txs-hd${d.kind === 'bq' ? ' bq' : ''}"><div><div class="txs-kick">${esc(kick)}</div><div class="txs-name">${esc(name || '—')}</div><div class="txs-sub">${esc(sub)}</div></div>
   <div class="txs-hr"><div class="txs-hnbox">HN ${esc(d.hn)}</div><div class="txs-org"><img class="txs-logo" src="${TXS_LOGO}" alt="โลโก้โรงพยาบาล"><div><div>${esc(state.config.appSub || '')}</div><div>ข้อมูลจาก ${esc(state.config.appName)} ณ ${esc(txsStamp())}</div></div></div></div></header>`;
@@ -19440,7 +19457,7 @@ function txsTimeline(d) {
   const c = d.c, sc = d.sc, k = d.k, items = [], td = today();
   if (isDay(c.ct)) items.push([c.ct, 'CT-Sim', '', 'o']);
   if (k.given.length) items.push([k.given[0], `เริ่มฉาย ครั้งที่ 1${c.area ? ' · ' + c.area : ''}${txsBreath(c) ? ' · ' + txsBreath(c) : ''}`, '', '']);
-  for (const e of sc.evs) if (e.act === 'skip' && !e.auto && e.date <= (d.to || td)) items.push([e.date, e.label, e.back ? `กลับมาฉาย ${fmtDay(e.back)}` : e.date <= td ? 'ยังไม่กลับมาฉาย' : '', 'o']);
+  for (const e of sc.evs) if (e.act === 'skip' && !e.auto && e.date <= (d.to || td)) items.push([e.date, e.label, e.back ? `กลับมาฉาย ${thDate(e.back)}` : e.date <= td ? 'ยังไม่กลับมาฉาย' : '', 'o']);
   for (const m of parseMoves(c)) if (m.date <= td) items.push([m.date, `ย้ายห้องฉาย → ${roomLabel(m.room)}`, '', 'o']);
   const half = Math.ceil(k.plannedMain / 2);
   if (k.plannedMain >= 4) for (const day of k.given) { const x = k.main(sc.fx.get(day)); if (x && x.to >= half && x.from <= half) { items.push([day, `ครบครึ่งคอร์ส ครั้งที่ ${half}`, `สะสม ${num(cgy(c.dpf) * half, 0)} cGy`, '']); break; } }
@@ -19448,7 +19465,7 @@ function txsTimeline(d) {
   else if (d.st === 'complete' && k.lastG) items.push([k.lastG, `ครั้งที่ ${k.doneMain} · ครบ ${num(cgy(k.dose), 0)} cGy`, 'Complete course', '']);
   else if (d.st === 'on') { if (k.lastG) items.push([k.lastG, `ล่าสุด ครั้งที่ ${k.doneMain}`, `สะสม ${num(cgy(k.dose), 0)} cGy`, '']); if (sc.last && sc.last > td && !sc.pending) items.push([sc.last, 'กำหนดฉายครบตามแผน', `ครั้งที่ ${k.plannedMain}`, 'o']); }
   const seen = new Set();
-  return `<ol class="txs-tl">${items.filter(x => { const key = x[0] + x[1]; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 9).map(([day, t, sub, o]) => `<li class="${o}"><small>${esc(fmtDay(day))}</small>${esc(t)}${sub ? `<small>${esc(sub)}</small>` : ''}</li>`).join('')}</ol>`;
+  return `<ol class="txs-tl">${items.filter(x => { const key = x[0] + x[1]; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 9).map(([day, t, sub, o]) => `<li class="${o}"><small>${esc(thDate(day))}</small>${esc(t)}${sub ? `<small>${esc(sub)}</small>` : ''}</li>`).join('')}</ol>`;
 }
 const txsBreath = c => (str(c.brth) || (/DIBH/i.test([c.tech, c.note, c.ptags].join(' ')) ? 'DIBH' : ''));
 // RTT ประจำห้องในวันที่ฉาย (ผู้ปฏิบัติงานประจำวันของแถบห้องฉาย) · วันติดกันที่ทีมเดียวกันรวมเป็นแถวเดียว
@@ -19517,7 +19534,7 @@ function txsBqHtml(d, name) {
   const sub = [str(r.sex), txsAge(r.birth), txsIcd(icd, dx)].filter(Boolean).join(' · ');
   const courses = [...new Set(state.bq.filter(a => hnKey(a.hn) === hk).sort((a, b) => a.date.localeCompare(b.date)).map(a => a.course || a.id))], nth = courses.indexOf(d.rows[0].course || d.rows[0].id) + 1;
   const cards = txsCards([['แพทย์รังสีรักษา', txsDoctor(d.doc)], ['รูปแบบการใส่แร่', d.tech || '–', nth > 0 ? `คอร์สที่ ${nth}` : ''], ['จำนวนครั้งตามแผน', `${d.total} Fx`], ['นัดถัดไป', d.next ? txsDay(d.next.date) : d.st === 'complete' ? 'ครบแล้ว' : '–', d.next ? `Fx ${d.next.fx}/${d.total}` : '']]);
-  const ds = l => (l.length ? `(${l.map(a => fmtDay(a.date)).join(', ')})` : '');
+  const ds = l => (l.length ? `(${l.map(a => thDate(a.date)).join(', ')})` : '');
   const can = d.rows.filter(a => a.status === BQ_ST.cancel || a.status === BQ_ST.noshow), book = d.rows.filter(a => a.status === BQ_ST.booked && a.date >= td), pp = d.rows.filter(a => a.status === BQ_ST.pp);
   const stats = `<div class="txs-stats">${txsStat(String(d.total), 'ครั้ง', 'จำนวนครั้งตามแผน')}${txsStat(String(d.done.length), 'ครั้ง', `มาตามนัดแล้ว ${ds(d.done)}`)}${txsStat(String(can.length), 'ครั้ง', `ยกเลิก / ไม่มา ${ds(can)}`)}${txsStat(String(book.length + pp.length), 'ครั้ง', `นัดไว้ ${ds(book)}${pp.length ? ` · เลื่อนนัดไม่มีกำหนด ${pp.length}` : ''}`)}</div>`;
   const stc = a => (a.status === BQ_ST.done ? '' : a.status === BQ_ST.cancel || a.status === BQ_ST.noshow ? 'warn' : 'on');
@@ -19526,7 +19543,7 @@ function txsBqHtml(d, name) {
   const hol = holidayMap(), first = d.rows[0].date;
   const ebrt = cs.filter(c => !preRow(c) && inCourse(c) && planReady(c)).map(c => ({ c, sc: txsSched(c, hol) })).filter(x => x.sc && x.sc.fx.size && x.sc.start <= td && x.sc.start <= plusDays(first, 60))
     .map(({ c, sc }) => { const st = c.rt === 'complete' || c.rt === 'cancel' ? c.rt : 'on', k = txsRtCalc(c, sc, st); return { c, sc, k, st }; });
-  const eb = ebrt.length ? ebrt.map(({ c, k, st }) => `<div class="txs-plan"><div class="txs-plan-h"><b>External beam · ${esc(roomsOf(c).filter(x => x !== NO_ROOM).map(roomLabel).join(', ') || '–')}</b><span class="txs-chip${st === 'on' ? ' on' : st === 'cancel' ? ' bad' : ''}">${st === 'complete' ? `Complete course ${esc(fmtDay(k.end))}` : st === 'cancel' ? `Cancel RT ${esc(fmtDay(c.rtDate))}` : 'On treatment'}</span><span class="when">${esc(txsRange(k.first, txsFin(st) ? k.end : k.lastG || today()))}</span></div>
+  const eb = ebrt.length ? ebrt.map(({ c, k, st }) => `<div class="txs-plan"><div class="txs-plan-h"><b>External beam · ${esc(roomsOf(c).filter(x => x !== NO_ROOM).map(roomLabel).join(', ') || '–')}</b><span class="txs-chip${st === 'on' ? ' on' : st === 'cancel' ? ' bad' : ''}">${st === 'complete' ? `Complete course ${esc(thDate(k.end))}` : st === 'cancel' ? `Cancel RT ${esc(thDate(c.rtDate))}` : 'On treatment'}</span><span class="when">${esc(txsRange(k.first, txsFin(st) ? k.end : k.lastG || today()))}</span></div>
     <div class="txs-kv"><div><small>จำนวนครั้งที่ฉาย</small><b>${k.doneMain} / ${k.plannedMain} ครั้ง</b></div><div><small>Prescription</small><b>${esc(+c.dpf && +c.fx ? `${num(cgy(c.dpf), 0)} cGy × ${Math.floor(+c.fx)}` : '–')}</b></div><div><small>${txsFin(st) ? 'Total' : 'สะสม'}</small><b>${num(cgy(k.dose), 0)} cGy</b></div><div><small>เทคนิค</small><b>${esc(catOf(c.cat).label)}</b></div></div></div>`).join('')
     : `<p style="margin:0;color:#8a929e">${esc(state.config.appName)} ไม่มีข้อมูลการฉายรังสีภายนอกของผู้ป่วยนี้</p>`;
   return `<div class="txs-page">${txsWm()}${txsHead(d, name, 'BRACHYTHERAPY SUMMARY · สรุปข้อมูลการใส่แร่', sub)}<div class="txs-bd">${cards}
@@ -25754,8 +25771,8 @@ function csoSheetHtml(a) {
   const pr = csoProtocols(a), pos = [...cfg.order.positions, ...(o.pos && !cfg.order.positions.includes(o.pos) ? [o.pos] : [])], [none, iv] = csoCmValues();
   const vol = o.vol && isFinite(o.vol.t) && isFinite(o.vol.b) && o.vol.b > o.vol.t ? o.vol : null;
   const rooms = [...cfg.rooms, ...(a.room && !cfg.rooms.includes(a.room) ? [a.room] : [])].map((r, i) => ck(a.room === r, i < cfg.rooms.length ? `L${i + 1}` : r, i < 2 ? 23.28 : 0)).join('');
-  const doc = a.doc ? docName(a.doc) || a.doc : '', rtDay = oncall ? '' : apDate(a.sim);
-  const by = a.by ? `<small>บันทึกโดย ${esc(a.by)}${a.created ? ` · ${esc(fmtStamp(isoStamp(a.updated || a.created)))}` : ''}</small>` : '';
+  const doc = a.doc ? docName(a.doc) || a.doc : '', rtDay = oncall ? '' : isDay(a.sim) ? thDate(a.sim) : '';   // .77
+  const by = a.by ? `<small>บันทึกโดย ${esc(a.by)}${a.created ? ` · ${esc(thStamp(a.updated || a.created))}` : ''}</small>` : '';
   return `<div class="cso-page">
   <div class="cso-banner"><img data-cso="banner" alt=""></div><div class="cso-dept">DEPARTMENT OF RADIATION ONCOLOGY</div><div class="cso-logo"><img data-cso="logo" alt=""></div>
   <table class="cso-info"><colgroup><col style="width:20.69mm"><col style="width:69.71mm"><col style="width:27.89mm"><col style="width:62.52mm"></colgroup>
@@ -25763,7 +25780,7 @@ function csoSheetHtml(a) {
     <tr><th>Name</th><td>${v(a.name)}</td><th>Diagnosis</th><td>${v(dxValue(a))}</td></tr>
     <tr><th>HN</th><td>${v(a.hn)}</td><th>Oncologist</th><td>${v(doc)}</td></tr>
     <tr><th>Age</th><td>${v(o.age)}</td><th>CT Room</th><td>${v(a.ct ? ctLabel(a.ct) : '')}</td></tr>
-    <tr><th>Gender</th><td>${v(o.sex)}</td><th>Date of CT SIM</th><td>${v(apDate(a.date))}</td></tr>
+    <tr><th>Gender</th><td>${v(o.sex)}</td><th>Date of CT SIM</th><td>${v(isDay(a.date) ? thDate(a.date) : '')}</td></tr>
   </table>
   <div class="cso-blk cso-main">
     <div class="cso-col cso-l">
@@ -25786,7 +25803,7 @@ function csoSheetHtml(a) {
         <div class="cso-row"><span class="cso-cell">${bx(a.cm === iv)}</span><span class="cso-cell" style="width:32.5mm">IV<span class="cso-fill" style="width:13mm">${esc(o.ivMl || '')}</span>ml</span><span class="cso-cell">Flow Rate<span class="cso-fill" style="width:16mm">${esc(o.flow || '')}</span>ml/sec</span></div></div>
       <div class="cso-h cso-hl cso-hb" style="background:#fbe9f8">Pre-procedural Lab (CT with contrast)</div>
       <div class="cso-lab"><span style="width:18.15mm">Date</span><span style="width:34.93mm">Creatinine</span><span>CrCl</span></div>
-      <div class="cso-lab"><span style="width:18.15mm">${esc(o.labDate || '')}</span><span style="width:34.93mm">${esc(o.cr || '')}</span><span>${esc(o.crcl || '')}</span></div>
+      <div class="cso-lab"><span style="width:18.15mm">${esc(thDate(o.labDate || ''))}</span><span style="width:34.93mm">${esc(o.cr || '')}</span><span>${esc(o.crcl || '')}</span></div>
       <div class="cso-gap"></div>
     </div>
     <div class="cso-col cso-r">
@@ -27882,7 +27899,7 @@ function renderStl() {
 }
 // ใบพิมพ์: หัวเอกสาร (โลโก้ ชื่อสถิติ ช่วง ผู้พิมพ์ เวลา) · ลายน้ำชื่อคนพิมพ์ + เวลา ทุกหน้า · groups = หลายตาราง (เช่น รายชื่อของวันในปฏิทิน)
 function stlSheet(title, sub, groups) {
-  const now = new Date(), who = str(state.user.name || state.user.username) || 'ผู้ใช้', at = `${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`, wm = `${who} · ${at}`;
+  const now = new Date(), who = str(state.user.name || state.user.username) || 'ผู้ใช้', at = thStamp(now), wm = `${who} · ${at}`;
   const all = groups.flatMap(g => g.rows);
   const table = g => `${g.h ? `<h2>${esc(g.h)} <span>${g.rows.length} รายการ</span></h2>` : ''}<table><thead><tr><th style="width:9mm">#</th><th style="width:22mm">HN</th><th>ชื่อ</th>${g.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
     <tbody>${g.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="ss-hn">${esc(r.hn || '—')}</td><td>${esc(r.name)}</td>${r.vals.map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${g.cols.length + 3}">ไม่มีรายการ</td></tr>`}</tbody></table>`;
@@ -30385,7 +30402,7 @@ function sbkPrint() {
   const rows = sbkRowsNow(), unit = str((sbkLatest(sbk.records) || {}).from), box = $('#ss-print');
   box.innerHTML = `<div class="ss-sheet sbk-sheet"><h1>ทะเบียนหนังสือส่ง ประจำปี พ.ศ. ${esc(sbk.year)}${unit ? ` — ${esc(unit)}` : ''}</h1>
     <table><thead><tr><th>เลขทะเบียนส่ง</th><th>ที่</th><th>ลงวันที่</th><th>จาก</th><th>ถึง</th><th>เรื่อง</th><th>การปฏิบัติ</th><th>หมายเหตุ</th></tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${esc(r.no)}</td><td>${esc(r.ref)}</td><td>${esc(r.date ? sbkDate(r.date) : r.dateText || '-')}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${esc(r.subject)}</td><td>${esc(r.action)}</td><td>${esc(r.note)}</td></tr>`).join('') || '<tr><td colspan="8">ไม่มีรายการ</td></tr>'}</tbody></table></div>`;
+    <tbody>${rows.map(r => `<tr><td>${esc(r.no)}</td><td>${esc(r.ref)}</td><td>${esc(r.date ? thDate(r.date) : r.dateText || '-')}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${esc(r.subject)}</td><td>${esc(r.action)}</td><td>${esc(r.note)}</td></tr>`).join('') || '<tr><td colspan="8">ไม่มีรายการ</td></tr>'}</tbody></table></div>`;
   const st = document.createElement('style');
   st.textContent = '@page{size:A4 landscape;margin:12mm}';
   document.head.appendChild(st);
@@ -30751,7 +30768,7 @@ function lfData(L) {
   const cfg = state.config.leave, p = lfPerson(L), k = lfFormOf(L.type), wdate = today(), g = cfg.group, a = cfg.acting, ack = lfAckOf(L);
   const acting = !!a.name && ((!!g.name && nameKey(g.name) === nameKey(p.name)) || (isDay(a.from) && wdate >= a.from && wdate <= (a.to || a.from)));
   return { form: k.form, sub: k.sub, at: cfg.at, wd: wdate, dear: cfg.dear, name: p.name, pos: p.pos, unit: cfg.unit, mission: cfg.mission, from: L.from, to: L.to, days: L.days, phone: p.phone,
-    reason: k.sub === 'กิจส่วนตัว' ? L.note : '', stamp: ack ? { by: lfAckName(ack), on: lfDayBE(lfAckDay(ack)), user: str(ack.user) } : null, who: L.who,
+    reason: k.sub === 'กิจส่วนตัว' ? L.note : '', stamp: ack ? { by: lfAckName(ack), on: thDate(lfAckDay(ack)), user: str(ack.user) } : null, who: L.who,
     head: acting ? { name: a.name, pos: [a.pos, g.pos ? 'รักษาการแทน' + g.pos : ''].filter(Boolean).join(' ') } : { name: g.name, pos: g.pos } };
 }
 const lfAckReady = () => store.mode !== 'sheet' || serverHas(LVACK_API);
@@ -30765,7 +30782,7 @@ function lfSync() {
   $('#lv-lf-open').textContent = `📄 ใบลา${k.form === 'vac' ? 'พักผ่อน' : 'ลา' + k.sub}`;
   $('#lv-lf-open').title = `${rangeText(L)} · ${fmtN(L.days, 1)} วันทำการ · ดู พิมพ์ หรือ download PDF`;
   st.className = 'lv-lf-st' + (ack ? ' ok' : '');
-  st.textContent = ack ? `✓ หัวหน้างานรับทราบแล้ว · ${ack.by} · ${lfDayBE(lfAckDay(ack))}` : 'หัวหน้างานยังไม่รับทราบ';
+  st.textContent = ack ? `✓ หัวหน้างานรับทราบแล้ว · ${ack.by} · ${thDate(lfAckDay(ack))}` : 'หัวหน้างานยังไม่รับทราบ';
   b.hidden = !can;
   b.className = `btn sm${ack ? ' ghost' : ' primary'}`;
   b.textContent = ack ? 'เอาตรารับทราบออก' : '✓ รับทราบ (หัวหน้างาน)';
@@ -33938,14 +33955,14 @@ function pcDocs(k, ap, cs) {
 // พิมพ์ / PDF: หัวเอกสาร (โลโก้ HN ชื่อ แพทย์ Diag ขั้นตอนตอนนี้) · การฉายรังสี · นัดที่จะถึง · ขั้นตอนทั้งหมด (เก่า → ใหม่) พร้อมผู้ปฏิบัติ · ไม่มีค่า QA
 function pcSheet() {
   const k = hnKey(pcs.hn), p = pcInfo(k), now = new Date(), tx = pcTxRows(p.cs), up = pcUpcoming(k, p.cs, p.ap), ev = pcEvents(k).reverse();
-  const wm = `${state.user.name || state.user.username || ''} · ${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;   // .50: ลายน้ำชื่อคนพิมพ์
+  const wm = `${state.user.name || state.user.username || ''} · ${thStamp(now)}`;   // .50: ลายน้ำชื่อคนพิมพ์
   return `<div class="ss-sheet pc-sheet"><div class="pc-wm" aria-hidden="true">${[14, 40, 66, 90].map(t => `<span style="top:${t}%">${esc(wm)}</span>`).join('')}</div>
     <div class="pc-sh-hd"><img class="pc-sh-logo" src="${TXS_LOGO}" alt=""><div class="pc-sh-t"><h1>Patient chart</h1><p>HN <b>${esc(pcs.hn)}</b> · ${esc(p.name || '—')}${p.facts.length ? ` · ${esc(p.facts.join(' · '))}` : ''}</p></div>
-      <div class="pc-sh-at">พิมพ์ ${esc(fmtDayY(today()))} ${pad(now.getHours())}:${pad(now.getMinutes())}<br>โดย ${esc(state.user.name || state.user.username || '')}</div></div>
+      <div class="pc-sh-at">พิมพ์ ${esc(thStamp(now))}<br>โดย ${esc(state.user.name || state.user.username || '')}</div></div>
     <p class="pc-sh-facts">${[p.doc && `แพทย์ ${docName(p.doc) || p.doc}`, p.dx && `Diag ${p.dx}`, p.stage && `ตอนนี้: ${p.stage}`].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</p>
     <h2>การฉายรังสี</h2>${tx.length ? `<table><colgroup><col style="width:22%"><col style="width:20%"><col style="width:14%"><col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:14%"></colgroup><thead><tr><th>เทคนิค</th><th>Dose</th><th>ห้อง</th><th>Start RT</th><th>ฉายแล้ว</th><th>MP</th><th>สถานะ</th></tr></thead>
       <tbody>${tx.map(r => `<tr><td>${esc(r.cat)}</td><td>${esc(r.dose)}</td><td>${esc(r.room)}</td><td>${esc(r.sim)}</td><td>${esc(r.fx)}</td><td>${esc(r.mp)}</td><td>${esc(r.st[1])}</td></tr>`).join('')}</tbody></table>` : '<p class="ss-empty">ยังไม่มีงานวางแผน</p>'}
-    <h2>นัดที่จะถึง</h2>${up.length ? `<ul>${up.map(([d0, t]) => `<li><b>${esc(fmtDay(d0))}</b> ${esc(t)}</li>`).join('')}</ul>` : '<p class="ss-empty">ไม่มีนัด</p>'}
+    <h2>นัดที่จะถึง</h2>${up.length ? `<ul>${up.map(([d0, t]) => `<li><b>${esc(thDate(d0))}</b> ${esc(t)}</li>`).join('')}</ul>` : '<p class="ss-empty">ไม่มีนัด</p>'}
     <h2>ขั้นตอนทั้งหมด <span>(เก่า → ใหม่ · ${ev.length} รายการ)</span></h2>${ev.length ? `<table><colgroup><col style="width:19%"><col style="width:31%"><col style="width:30%"><col style="width:20%"></colgroup><thead><tr><th>วันเวลา</th><th>ขั้นตอน</th><th>รายละเอียด</th><th>ผู้ปฏิบัติ</th></tr></thead>
       <tbody>${ev.map(e => `<tr><td>${esc(pcWhen(e.at))}</td><td>${esc(e.t)}</td><td>${esc(e.d || '')}</td><td>${esc(e.by || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="ss-empty">ไม่มีรายการ</p>'}
     <p class="pc-sh-ft">เอกสารภายในแผนก · ไม่แสดงค่า QA</p></div>`;
