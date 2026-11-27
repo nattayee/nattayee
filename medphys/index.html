@@ -3412,6 +3412,22 @@ dialog.bg-hide::backdrop{opacity:0}
 .cso-prev{overflow:auto;padding:12px;border-radius:10px;background:var(--sunken)}
 .cso-prev-in{margin:0 auto;transform-origin:top left;box-shadow:0 2px 12px rgba(0,0,0,.25)}
 .cso-dlg .dlg-head{gap:8px}
+/* .69: ตั้งค่าฟอร์มบนหน้าจริง */
+.fm-ctl{display:inline-flex;margin-left:8px;border:1px solid var(--line-strong);border-radius:999px;overflow:hidden;vertical-align:middle;font-weight:400}
+.fm-ctl button{padding:1px 8px;border:0;background:var(--surface);color:var(--muted);font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.fm-ctl button+button{border-left:1px solid var(--line)}
+.fm-ctl button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:600}
+.fm-ctl button[data-fmv="off"][aria-pressed="true"]{background:#8a8f98}
+.fm-ctl button[data-fmv="req"][aria-pressed="true"]{background:var(--late,#c0392b)}
+#ap-form.fm-on .fm-off{opacity:.45;outline:1px dashed var(--line-strong);outline-offset:2px}
+.fm-seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:999px;overflow:hidden}
+.fm-seg button{padding:2px 12px;border:0;background:var(--surface);color:var(--fg);font:inherit;font-size:13px;cursor:pointer}
+.fm-seg button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:600}
+.set-fm{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+#ap-form.fm-on .lbl{display:flex;flex-wrap:wrap;align-items:center;gap:4px 0}
+#ap-form.fm-on .fm-ctl{flex:0 1 auto;max-width:100%;flex-wrap:wrap;border-radius:10px}
+#ap-form.fm-on .fm-ctl button{padding:1px 6px}
+.fm-ctl.fm-forced::after{content:"แสดงเสมอ (มีลิมิต)";padding:1px 8px;border-left:1px solid var(--line);font-size:11px;color:var(--warn);background:var(--warn-soft);white-space:nowrap}
 /* .68: Re-CT ไม่พบแพทย์ · รายชื่อรอแพทย์กรอก CT Order ในแถบ Nurse → CT Order / รับคำสั่งแพทย์ · ป้ายไม่พบแพทย์ */
 .rcnv-sub{margin:4px 0 2px;font-size:13px}
 .sp-tag.ns-tag{margin-left:4px;background:var(--warn-soft);color:var(--warn);font-weight:700}
@@ -8119,6 +8135,9 @@ const APPT_FORM = [
   ['doc', 'แพทย์ (Doc)', 'off'], ['dx', 'Diag (ICD-10)', 'off'], ['exam', 'Examination Part (ใบสั่ง)', 'off'], ['pos', 'Position (ใบสั่ง)', 'off'], ['immob', 'Immobilization (ใบสั่ง)', 'off'],
   ['lab', 'Pre-procedural Lab (ใบสั่ง)', 'off', false], ['vol', 'Draw area (ขอบเขตที่จะทำ CT)', 'show'], ['note', 'Note', 'show'],
 ];
+// .69: ลงนัด CT+RT (แถบ Consult) ตั้งช่องแยกจาก CT Order (config.appt.cform) · ค่าเริ่มต้น = ช่องหลักตามเดิม + ส่วนใบสั่งตาม CT Order แต่ไม่บังคับ
+const CFORM_DEF = { name: 'req', prio: 'show', cm: 'req', special: 'show', dpf: 'show', fx: 'req', freq: 'req', sim: 'req', room: 'req', doc: 'req', dx: 'show' };
+const FD_NEW = 'a:new';   // .69: ค่าเริ่มต้นเสมอ (เปิดฟอร์มใหม่) · ไม่ใช่ตัวเลือกในฟอร์ม
 const APPT_LISTS = [['cms', 'CT'], ['specials', 'เทคนิคพิเศษ (สีแดง · ปฏิทิน Start RT นับแยก)']];
 // เทคนิคพิเศษ: CBCT ระหว่างฉาย (รูปแบบเดียวกับระบบนัดคิวเทคนิคพิเศษ) · วันทำ CBCT = ผู้ป่วยใหม่ 1 คนในปฏิทิน Start RT ของห้องนั้น (วันเริ่มฉายนับอยู่แล้ว)
 const CBCT_PATS = [['first3_weekly', '3 ครั้งแรก แล้วสัปดาห์ละครั้ง'], ['dibh', 'Fx 1, 2, 3, 6, 11 (Breast DIBH)'], ['weekly', 'สัปดาห์ละครั้ง'], ['daily', 'ทุกครั้ง'],
@@ -8212,7 +8231,8 @@ const DIRECT_KEYS = ['cat', 'type', 'hn', 'name', 'icd', 'dx', 'doc', 'aim', 'te
 // ข้อ 4 (13 พ.ย.): ฟอร์มที่ตั้งค่าเริ่มต้นตามตัวเลือกได้ (ตั้งค่า → ฟอร์ม) · [คีย์, ชื่อ, ตัวเลือกของฟอร์ม, แถบ]
 const FD_FORMS = [
   ['ct', 'เพิ่มผู้ป่วย CT-SIM', '#ct-form', 'ctsim'],
-  ['ap', 'CT Order / ลงนัด CT+RT', '#ap-form', 'appt'],
+  ['apc', 'ลงนัด CT+RT', '#ap-form.consult', 'consult'],   // .69: แยกจาก CT Order (ฟอร์มเดียวกัน · class consult)
+  ['ap', 'CT Order', '#ap-form', 'appt'],
   ['rg', 'ลงทะเบียน', '#rg-form', 'reg'],
   ['dq', 'แจกงานแพทย์ (รวม Standing order)', '#dq-form', 'dq'],
   ['intake', 'แจกเคส (Planning)', '#intake', 'work'],
@@ -8225,7 +8245,7 @@ const FD_MAX = 200;
 const fdKeyOk = k => /^[rcmdst]:./.test(str(k)) && str(k).length <= 160;
 function fdNorm(v) {
   const forms = new Set(FD_FORMS.map(f => f[0])), seen = new Set();
-  return (Array.isArray(v) ? v : []).filter(r => r && typeof r === 'object' && forms.has(r.form) && r.when && fdKeyOk(r.when.k) && Array.isArray(r.set))
+  return (Array.isArray(v) ? v : []).filter(r => r && typeof r === 'object' && forms.has(r.form) && r.when && (fdKeyOk(r.when.k) || r.when.k === FD_NEW) && Array.isArray(r.set))
     .map(r => ({ id: str(r.id).slice(0, 40) || uid(), form: r.form, on: r.on !== false,
       when: { k: str(r.when.k), v: str(r.when.v).slice(0, 300), t: str(r.when.t).slice(0, 160) },
       set: r.set.filter(x => x && fdKeyOk(x.k) && x.k !== r.when.k).slice(0, 60).map(x => ({ k: str(x.k), v: str(x.v).slice(0, 500), t: str(x.t).slice(0, 160) })) }))
@@ -9556,6 +9576,9 @@ function mergeConfig(c) {
   // Dose/fx, Fx, ความถี่ ตั้งแยกกันตั้งแต่รุ่น 2026-11-08.6 · การตั้งค่าเดิม (dose ช่องเดียว: บังคับ = Dose/fx และ Fx) ใช้ค่าเดิม
   const apf = ap.form && typeof ap.form === 'object' ? ap.form : {}, oldDose = k => (apf.dose == null ? undefined : k === 'freq' && apf.dose === 'req' ? 'show' : apf.dose);
   out.appt = { form: Object.fromEntries(APPT_FORM.map(([k, , v, req]) => { const x = apf[k] == null && ['dpf', 'fx', 'freq'].includes(k) ? oldDose(k) : apf[k]; return [k, ['off', 'show', ...(req === false ? [] : ['req'])].includes(x) ? x : v]; })) };
+  const apc = ap.cform && typeof ap.cform === 'object' ? ap.cform : {};   // .69: ฟอร์มลงนัด CT+RT (เดิม = ช่องหลักตาม CFORM_DEF · ส่วนใบสั่งตาม CT Order แต่ไม่บังคับ)
+  out.appt.cform = Object.fromEntries(APPT_FORM.map(([k, , , req]) => { const dv = k in CFORM_DEF ? CFORM_DEF[k] : out.appt.form[k] === 'req' ? 'show' : out.appt.form[k]; return [k, ['off', 'show', ...(req === false ? [] : ['req'])].includes(apc[k]) ? apc[k] : dv]; }));
+  out.appt.fdApc = true;   // .69: ค่าเริ่มต้นของฟอร์มแยก CT Order / ลงนัด CT+RT แล้ว
   for (const [k] of APPT_LISTS) out.appt[k] = Array.isArray(ap[k]) ? [...new Set(ap[k].map(x => str(x).replace(/,/g, ' ').trim()).filter(Boolean))] : d.appt[k].slice();
   if (out.appt.specials.join() === 'SRS/SRT,SBRT,DIBH') out.appt.specials = d.appt.specials.slice();
   const al = ap.limits && typeof ap.limits === 'object' ? ap.limits : {}, an = (v, dv) => (v === '' || v == null || !isFinite(+v) || +v < 0 ? dv : Math.min(200, Math.floor(+v)));
@@ -9593,6 +9616,7 @@ function mergeConfig(c) {
   // แจกงานแพทย์ (ตรงกับ dqCfg_ ใน Code.gs)
   { const sc = c.security && typeof c.security === 'object' ? c.security : {}, n = Math.floor(+sc.idleMin); out.security = { idleMin: sc.idleMin === 0 || sc.idleMin === '0' ? 0 : n > 0 ? Math.min(IDLE_MAX, Math.max(5, n)) : d.security.idleMin }; }
   out.formRules = fdNorm(c.formRules);
+  if (!ap.fdApc) out.formRules = fdNorm([...out.formRules, ...out.formRules.filter(r => r.form === 'ap').map(r => ({ ...r, id: (r.id + 'c').slice(0, 40), form: 'apc' }))]);   // .69: กติกาเดิมของ CT Order / ลงนัด CT+RT ใช้กับทั้งสองฟอร์มต่อไป
   out.subHide = subHideNorm(c.subHide);
   out.subName = subNameNorm(c.subName);
   out.subOrder = subOrderNorm(c.subOrder);
@@ -9795,7 +9819,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.68';
+const PAGE_VERSION = '2026-11-22.69';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -13687,10 +13711,11 @@ const AP_OLD = 'แถบลงนัดต้องใช้ Code.gs รุ่�
 // แพทย์: มีลิมิต CT-Sim ต่อแพทย์ (ตั้งค่า → ลงนัด) = แสดงในฟอร์มเสมอ (ต้องรู้แพทย์ของนัดจึงนับได้)
 // dose = แถว Prescription (แสดงเมื่อมีช่องใดช่องหนึ่ง) · rx ตาม Dose/fx และ Fx · แพทย์ / ห้องฉาย แสดงเสมอเมื่อเปิดลิมิตที่ใช้ช่องนั้น
 // ลงนัด CT+RT (แถบ Consult): ช่องตามที่กำหนด (ไม่มีส่วนใบสั่ง) · CT Order = ช่องตาม ตั้งค่า → ลงนัด
-const CFORM = { name: 'req', prio: 'show', cm: 'req', special: 'show', dpf: 'show', fx: 'req', freq: 'req', sim: 'req', room: 'req', doc: 'req', dx: 'show' };
+const CFORM = CFORM_DEF;
+let fmRec = null;   // .69: ตั้งค่าฟอร์มบนหน้าจริง (ใช้ค่าในร่างแทนค่าที่บันทึก)
 const apCons = () => apForm.classList.contains('consult');
 // ลงนัด CT+RT (แถบ Consult): ช่องด้านซ้ายตาม CFORM · ส่วนใบสั่งด้านขวาแสดงตามฟอร์ม CT Order แต่ไม่บังคับ (บังคับตอนกรอก CT Order)
-const apFormCfg = () => { const f = state.config.appt.form; if (!apCons()) return f; const o = {}; for (const [k, v] of Object.entries(f)) if (!(k in CFORM)) o[k] = v === 'req' ? 'show' : v; return { ...o, ...CFORM }; };
+const apFormCfg = () => (fmRec ? fmRec.cfg : state.config.appt)[apCons() ? 'cform' : 'form'];   // .69: ลงนัด CT+RT ตั้งแยก (config.appt.cform)
 const apMode = k => {
   const f = apFormCfg(), sl = simLim();
   if (k === 'dose') return ['dpf', 'fx', 'freq'].some(x => (f[x] || 'off') !== 'off') ? 'show' : 'off';
@@ -14079,6 +14104,7 @@ function openApForm(id, rg, rc, dqId, mode) {
   syncApCbct(true);
   syncApFull();
   formRo(apForm, ro);
+  if (!r && !ro) fdApplyNew(apForm, cons ? 'apc' : 'ap');   // .69: ค่าเริ่มต้นเสมอของฟอร์ม (เฉพาะช่องที่ยังว่าง)
   apDlg.showModal();
   if (!r) $('#a-hn').focus();
 }
@@ -14086,7 +14112,8 @@ function syncApForm() {
   const f = state.config.appt.form, ctCall = $('#a-oncall-ct').checked;
   for (const el of $$('[data-apf]', apForm)) {
     const v = apMode(el.dataset.apf);
-    el.classList.toggle('pt-off', v === 'off');
+    el.classList.toggle('pt-off', v === 'off' && !fmRec);
+    el.classList.toggle('fm-off', v === 'off' && !!fmRec);   // .69: โหมดตั้งค่าฟอร์ม
     el.classList.toggle('ctf-req', v === 'req');
   }
   $('#a-date').disabled = ctCall;
@@ -26005,7 +26032,8 @@ function renderSettings() {
       <p class="muted def-note" style="margin:12px 0 12px">เต็มแล้วลงนัดวันนั้นไม่ได้ · ปฏิทิน CT-Sim แสดงจำนวนของแพทย์แต่ละคน · ปฏิทิน Start RT แสดงผู้ป่วยใหม่เริ่มฉายของแต่ละห้อง (จำนวน/ลิมิต) และผู้ป่วยของแพทย์แต่ละคนในห้อง (ใหม่ + ฉายต่อเนื่อง เหมือนตารางวันฉาย · เลือกห้องในปฏิทิน หรือกด ⤢ เต็มจอ) · ลิมิตแพทย์ต่อห้องตรวจทุกวันที่ผู้ป่วยใหม่จะฉาย (ตาม Fx และความถี่) · ลิมิต Start RT ตรวจจากห้องฉายและแพทย์ในฟอร์ม (เปิดลิมิต = ต้องเลือกห้องฉายเมื่อใส่วัน Start RT) · นับรวมเคสในแถบ${esc(navLabel('queue'))} รายการ CT-SIM ที่รอแจก และนัดที่ยังไม่ลง CT-SIM</p>
       <h3 class="sub-h">ฟอร์มลงนัด</h3>
       <p class="muted def-note" style="margin:0 0 10px">HN และวันนัด CT-Sim บังคับเสมอ (ติ๊ก on call = ยังไม่มีวันนัด · ใบสั่งเป็น No appointment) · ช่องที่ไม่แสดงยังเก็บค่าเดิมไว้เมื่อแก้ · ช่องที่มีคำว่า (ใบสั่ง) ใช้ในใบสั่ง CT Simulation (เริ่มต้นไม่แสดง · ช่องที่ไม่ได้กรอกเว้นว่างในใบสั่งให้เขียนเอง) · Draw area = ลากขอบเขตที่จะทำ CT บนรูปในใบสั่ง · ห้องฉาย: เลือกห้องในปฏิทิน Start RT แล้วกดวันที่ = ตั้งห้องให้ด้วย · ลงข้อมูล CT-SIM จากนัด: ใส่ HN ชื่อ แพทย์ Diag Prescription Start RT ห้องฉาย และเทคนิคพิเศษที่ตรงกับ Technique ให้ (ที่เหลือต่อหน้า Note)</p>
-      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>ในฟอร์ม</th></tr></thead><tbody>${APPT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'doc' && d.appt.limits.doc ? '<small class="muted"> · แสดงเสมอเมื่อมีลิมิต CT-Sim ต่อแพทย์</small>' : ''}</td><td><select data-k="appt.form.${k}" aria-label="${esc(l)} ในฟอร์มลงนัด">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.form[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <div class="set-fm"><button type="button" class="btn sm" data-fmstart="ap">⚙ ตั้งค่าบนหน้าฟอร์มจริง: CT Order</button><button type="button" class="btn sm" data-fmstart="apc">⚙ ตั้งค่าบนหน้าฟอร์มจริง: ลงนัด CT+RT</button><span class="muted">กดเลือก ไม่แสดง / แสดง / บังคับ ที่หัวแต่ละช่อง และเลือกค่าเริ่มต้นในฟอร์ม</span></div>
+      <div class="table-wrap set-table pt-table"><table><thead><tr><th style="text-align:left">ช่อง</th><th>CT Order</th><th>ลงนัด CT+RT</th></tr></thead><tbody>${APPT_FORM.map(([k, l, , req]) => `<tr><td style="text-align:left">${esc(l)}${k === 'doc' && d.appt.limits.doc ? '<small class="muted"> · แสดงเสมอเมื่อมีลิมิต CT-Sim ต่อแพทย์</small>' : ''}</td><td><select data-k="appt.form.${k}" aria-label="${esc(l)} ในฟอร์ม CT Order">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.form[k])).join('')}</select></td><td><select data-k="appt.cform.${k}" aria-label="${esc(l)} ในฟอร์มลงนัด CT+RT">${PT_OPTS.filter(([v]) => req !== false || v !== 'req').map(([v, t]) => opt(v, t, d.appt.cform[k])).join('')}</select></td></tr>`).join('')}</tbody></table></div>
       <h3 class="sub-h">ตัวเลือกในใบสั่ง CT Simulation</h3>
       <p class="muted def-note" style="margin:0 0 10px">ตัวเลือกของช่อง (ใบสั่ง) ในฟอร์มลงนัด และแถวในใบสั่ง PDF · ค่าเริ่มต้นตรงกับใบสั่งเดิม · เพิ่มบรรทัดหรือข้อได้ (ใบสั่งยาวขึ้นตามจำนวนบรรทัด) · ข้อที่เคยติ๊กในนัดเก่ายังเก็บไว้</p>
       <div class="form-grid">
@@ -31925,6 +31953,7 @@ document.addEventListener('change', e => {
   const [def, root] = fdRootOf(e.target);
   if (!def) return;
   if (fdRec && fdRec.root === root) return fdRecChange(e.target);
+  if (fmRec && fmRec.root === root) { setTimeout(() => fmBar(), 0); return; }   // .69
   if (!e.isTrusted) return;
   const k = fdFieldKey(e.target);
   if (k) fdTouch(root, k);
@@ -31940,6 +31969,7 @@ let fdRec = null;   // { form, root, trig, base, id, inline, view, start }
 const FD_OPEN = {
   ct: () => openCtForm(),
   ap: () => openApForm(),
+  apc: () => openApForm(null, null, null, null, 'consult'),
   rg: () => openRgForm(),
   dq: () => fdGoView('dq'),
   intake: () => fdGoView('work'),
@@ -32044,11 +32074,147 @@ function fdSecHtml(d) {
   return `<div class="sec" data-sec="form"><div class="sec-head"><h2>ค่าเริ่มต้นของฟอร์ม</h2><p>เลือกตัวเลือกที่เป็นเงื่อนไขในฟอร์มแล้ว ช่องอื่นถูกเลือกให้ตามที่ตั้งไว้ (เช่น เทคนิคพิเศษ DIBH → ติ๊ก C-RAD) · ใส่ให้เฉพาะช่องที่ผู้ใช้ยังไม่ได้แก้เอง แก้ต่อในฟอร์มได้ · กด + ตั้งค่าเริ่มต้น แล้วฟอร์มจริงจะเปิดขึ้น: กดตัวเลือกที่เป็นเงื่อนไขก่อน แล้วเลือกค่าที่ต้องการ แล้วกด บันทึกค่าเริ่มต้น</p></div>
     ${FD_FORMS.map(([k, label]) => {
       const rs = rules.filter(r => r.form === k);
-      return `<div class="fd-form"><div class="fd-h"><b>${esc(label)}</b><span class="muted">${rs.length ? `${rs.length} เงื่อนไข` : 'ยังไม่มี'}</span><span class="spacer"></span><button type="button" class="btn ghost sm" data-fdnew="${k}">+ ตั้งค่าเริ่มต้น</button></div>
-        ${rs.length ? `<ul class="fd-list">${rs.map(r => `<li class="${r.on ? '' : 'off'}"><label class="check"><input type="checkbox" data-fdon="${esc(r.id)}"${r.on ? ' checked' : ''}> ใช้</label><span class="fd-when">เมื่อเลือก <b>${esc(r.when.t || r.when.v)}</b> →</span><span class="fd-set">${r.set.map(x => `<span class="chip">${esc(x.t || x.k)}</span>`).join('')}</span><span class="fd-acts"><button type="button" class="btn ghost sm" data-fdedit="${esc(r.id)}">แก้</button><button type="button" class="btn ghost sm danger" data-fddel="${esc(r.id)}">ลบ</button></span></li>`).join('')}</ul>` : ''}</div>`;
+      return `<div class="fd-form"><div class="fd-h"><b>${esc(label)}</b><span class="muted">${rs.length ? `${rs.length} เงื่อนไข` : 'ยังไม่มี'}</span><span class="spacer"></span>${FM_FORMS[k] ? `<button type="button" class="btn ghost sm" data-fmstart="${k}">⚙ ช่อง + ค่าเริ่มต้นบนฟอร์มจริง</button>` : ''}<button type="button" class="btn ghost sm" data-fdnew="${k}">+ ตั้งค่าเริ่มต้น</button></div>
+        ${rs.length ? `<ul class="fd-list">${rs.map(r => `<li class="${r.on ? '' : 'off'}"><label class="check"><input type="checkbox" data-fdon="${esc(r.id)}"${r.on ? ' checked' : ''}> ใช้</label><span class="fd-when">${r.when.k === FD_NEW ? '<b>เปิดฟอร์มใหม่</b> (ค่าเริ่มต้นเสมอ)' : `เมื่อเลือก <b>${esc(r.when.t || r.when.v)}</b>`} →</span><span class="fd-set">${r.set.map(x => `<span class="chip">${esc(x.t || x.k)}</span>`).join('')}</span><span class="fd-acts">${r.when.k === FD_NEW ? `<button type="button" class="btn ghost sm" data-fmstart="${esc(r.form)}">แก้</button>` : `<button type="button" class="btn ghost sm" data-fdedit="${esc(r.id)}">แก้</button>`}<button type="button" class="btn ghost sm danger" data-fddel="${esc(r.id)}">ลบ</button></span></li>`).join('')}</ul>` : ''}</div>`;
     }).join('')}
     <p class="muted def-note">ค่าเริ่มต้นของฟอร์มแจกเคส (Planning) แบบเดิม (ช่องว่าง วันที่ เทคนิค → Dose) ยังอยู่ที่ แถบแจกเคส → ค่าเริ่มต้นและช่องบังคับกรอก</p></div>`;
 }
+/* .69: ตั้งค่าฟอร์มบนหน้าฟอร์มจริง (CT Order / ลงนัด CT+RT แยกกัน) · หัวทุกช่องมีปุ่ม ไม่แสดง / แสดง / บังคับ (เห็นผลทันที · ช่องที่ไม่แสดงจางไว้ให้เปิดคืนได้)
+ * เลือกค่าในฟอร์ม = ค่าเริ่มต้นเสมอเมื่อเปิดฟอร์มใหม่ (กติกา when = a:new · ใส่ให้เฉพาะช่องที่ยังว่าง) · บันทึกลงร่างการตั้งค่า แล้วกด บันทึก ที่แถบล่างของหน้าตั้งค่า */
+const FM_FORMS = { ap: 'CT Order', apc: 'ลงนัด CT+RT' };
+const FM_KEYS = new Set(APPT_FORM.map(([k]) => k));
+const FM_OPTS = [['off', 'ไม่แสดง'], ['show', 'แสดง'], ['req', 'บังคับ']];
+const FM_NODEF = /^t:a-(hn|name|date|sim|age|see|lab-date|cr|crcl|dx|note)$/;   // ช่องเฉพาะผู้ป่วย: ไม่เป็นค่าเริ่มต้น
+const fmNewRule = (rules, form) => rules.find(r => r.form === form && r.when.k === FD_NEW) || null;
+let fmBack = '', fmSkipClose = 0;
+// เปิดฟอร์มใหม่: ใส่ค่าเริ่มต้นเสมอ เฉพาะช่องที่ยังว่าง (ไม่ทับค่าที่ระบบใส่ให้ เช่น Re-CT จาก CT ครั้งก่อน)
+function fdApplyNew(root, form) {
+  const r = fdRules(state.config).find(x => x.on && x.form === form && x.when.k === FD_NEW);
+  if (!r || !root) return;
+  const cur = fdSnap(root);
+  for (const x of r.set) if (!str(cur[x.k]) && str(x.v)) fdSet(root, x.k, x.v);
+}
+const fmRulesOf = cfg => [...fdRules(draft).filter(r => !(FM_FORMS[r.form] && r.when.k === FD_NEW)), ...Object.values(cfg.rules).filter(Boolean)];
+function fmStart(form, keep) {
+  if (!FM_FORMS[form]) return;
+  if (!draft) { draft = clone(state.config); draftBase = JSON.stringify(draft); }
+  fdStop();
+  if (!keep) fmBack = pref.get('setTab', '');
+  const cfg = keep || { form: { ...draft.appt.form }, cform: { ...draft.appt.cform }, rules: { ap: fmNewRule(fdRules(draft), 'ap'), apc: fmNewRule(fdRules(draft), 'apc') } };
+  fmStop(false);
+  const def = fdDef(form), pv = state.view, real = state.config.formRules;
+  fmRec = { form, cfg };
+  state.view = def[3];
+  state.config.formRules = fmRulesOf(cfg);   // ฟอร์มเปิดด้วยค่าเริ่มต้นของร่างนี้
+  try { FD_OPEN[form](); } catch (e) { console.error(e); }
+  state.config.formRules = real;
+  state.view = pv;
+  const root = $(def[2]), dlg = root && root.closest('dialog');
+  if (!root || !dlg || !dlg.open || root.dataset.ro) {
+    fmRec = null;
+    if (dlg && dlg.open) dlg.close();
+    if (state.view !== 'settings') fdGoView('settings');
+    return toast(`เปิดฟอร์ม${FM_FORMS[form]}ไม่ได้ · ต้องมีสิทธิ์บันทึกในแถบนั้น`, { err: true });
+  }
+  fmRec.root = root;
+  fmRec.s0 = fdSnap(root);
+  const sb = $('.dlg-foot [type="submit"]', root);
+  if (sb && !sb.hidden) { sb.hidden = true; fmRec.sb = sb; }
+  root.classList.add('fm-on');
+  ($('.dlg-body', root) || root).insertAdjacentHTML('afterbegin', '<div class="fd-bar fm-bar" id="fm-bar" role="region" aria-label="ตั้งค่าฟอร์ม"></div>');
+  syncApForm();
+  fmDecorate();
+  fmBar();
+  $('#fm-bar').scrollIntoView({ block: 'nearest' });
+}
+// ค่าเริ่มต้นที่จะบันทึก: กติกาเดิมของฟอร์ม + ช่องที่เลือกในรอบนี้ (ลบค่าออก = เลิกค่าเริ่มต้นนั้น)
+function fmDefaults() {
+  const r = fmRec, old = r.cfg.rules[r.form], m = new Map((old ? old.set : []).map(x => [x.k, x]));
+  const now = fdSnap(r.root);
+  for (const k of Object.keys(now)) {
+    if (!(k in r.s0) || now[k] === r.s0[k] || FM_NODEF.test(k)) continue;
+    if (str(now[k])) m.set(k, { k, v: now[k], t: fdText(r.root, k, now[k]) }); else m.delete(k);
+  }
+  return [...m.values()].slice(0, 60);
+}
+function fmFold() {
+  const r = fmRec;
+  if (!r || !r.root) return;
+  const set = fmDefaults(), old = r.cfg.rules[r.form];
+  r.cfg.rules[r.form] = set.length ? { id: old ? old.id : uid(), form: r.form, on: true, when: { k: FD_NEW, v: '1', t: 'เปิดฟอร์มใหม่ (ค่าเริ่มต้นเสมอ)' }, set } : null;
+}
+function fmStop(back) {
+  const r = fmRec;
+  if (!r) return;
+  fmRec = null;
+  const bar = $('#fm-bar');
+  if (bar) bar.remove();
+  if (r.sb) r.sb.hidden = false;
+  if (r.root) {
+    r.root.classList.remove('fm-on');
+    for (const c of $$('.fm-ctl', r.root)) c.remove();
+    const dlg = r.root.closest('dialog');
+    if (dlg && dlg.open) { fmSkipClose++; dlg.close(); }
+  }
+  if (back) { pref.set('setTab', fmBack || 'tabs'); fdGoView('settings'); }
+}
+function fmDecorate() {
+  const r = fmRec;
+  if (!r || !r.root) return;
+  const cf = r.cfg[r.form === 'apc' ? 'cform' : 'form'];
+  for (const el of $$('[data-apf]', r.root)) {
+    const k = el.dataset.apf;
+    if (!FM_KEYS.has(k)) continue;
+    let c = [...el.querySelectorAll('.fm-ctl')].find(x => x.closest('[data-apf]') === el);
+    if (!c) {
+      const req = (APPT_FORM.find(f => f[0] === k) || [])[3] !== false;
+      const html = `<span class="fm-ctl" role="group" aria-label="ช่องนี้ในฟอร์ม">${FM_OPTS.filter(([v]) => req || v !== 'req').map(([v, l]) => `<button type="button" data-fmk="${k}" data-fmv="${v}">${esc(l)}</button>`).join('')}</span>`;
+      const lbl = [...el.querySelectorAll('.lbl')].find(x => x.closest('[data-apf]') === el);
+      if (lbl) lbl.insertAdjacentHTML('beforeend', html); else el.insertAdjacentHTML('afterbegin', html);
+      c = [...el.querySelectorAll('.fm-ctl')].find(x => x.closest('[data-apf]') === el);
+    }
+    for (const b of $$('button', c)) b.setAttribute('aria-pressed', String(b.dataset.fmv === (cf[k] || 'off')));
+    const forced = (cf[k] || 'off') === 'off' && apMode(k) !== 'off';   // แพทย์ / ห้องฉาย แสดงเสมอเมื่อมีลิมิต
+    c.classList.toggle('fm-forced', forced);
+    c.title = forced ? 'ตั้งไม่แสดง แต่ยังแสดงเพราะมีลิมิต CT-Sim / Start RT (ต้องรู้แพทย์และห้องจึงนับได้)' : '';
+  }
+}
+function fmBar(msg) {
+  const r = fmRec, bar = $('#fm-bar');
+  if (!r || !bar) return;
+  const cf = r.cfg[r.form === 'apc' ? 'cform' : 'form'], n = v => APPT_FORM.filter(([k]) => (cf[k] || 'off') === v).length, defs = fmDefaults();
+  bar.innerHTML = `<div class="fd-top"><b>ตั้งค่าฟอร์มบนหน้าจริง</b><span class="fm-seg" role="group" aria-label="ฟอร์ม">${Object.entries(FM_FORMS).map(([k, l]) => `<button type="button" data-fmgo="${k}" aria-pressed="${k === r.form}">${esc(l)}</button>`).join('')}</span><span class="muted">ฟอร์มนี้ใช้ตั้งค่าเท่านั้น ไม่บันทึกผู้ป่วย</span></div>
+    <p class="fd-step"><b>ช่อง:</b> กดปุ่มที่หัวแต่ละช่อง ไม่แสดง / แสดง / บังคับ · บังคับ ${n('req')} · แสดง ${n('show')} · ไม่แสดง ${n('off')} (ช่องที่ไม่แสดงจางไว้ให้เปิดคืนได้)</p>
+    <p class="fd-step"><b>ค่าเริ่มต้น:</b> เลือกค่าในฟอร์ม = ใส่ให้เมื่อเปิดฟอร์มใหม่ (เฉพาะช่องที่ยังว่าง) · ลบค่าออก = เลิกค่าเริ่มต้นนั้น · ค่าเริ่มต้นตามเงื่อนไข (เช่น DIBH → C-RAD) ตั้งที่ ตั้งค่า → ฟอร์ม</p>
+    <div class="fd-set">${defs.length ? defs.map(x => `<span class="chip">${esc(x.t)}</span>`).join('') : '<span class="muted">ยังไม่มีค่าเริ่มต้น</span>'}</div>
+    ${msg ? `<p class="fd-msg">${esc(msg)}</p>` : ''}
+    <div class="fd-acts"><button type="button" class="btn primary sm" data-fmact="save">บันทึก</button><button type="button" class="btn ghost sm" data-fmact="cancel">ยกเลิก</button></div>`;
+}
+document.addEventListener('click', e => {
+  if (!fmRec || !(e.target instanceof Element) || !fmRec.root || !fmRec.root.contains(e.target)) return;
+  const b = e.target.closest('[data-fmv], [data-fmgo], [data-fmact]');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const r = fmRec;
+  if (b.dataset.fmv) { r.cfg[r.form === 'apc' ? 'cform' : 'form'][b.dataset.fmk] = b.dataset.fmv; syncApForm(); fmDecorate(); return fmBar(); }
+  if (b.dataset.fmgo) { if (b.dataset.fmgo === r.form) return; fmFold(); return fmStart(b.dataset.fmgo, r.cfg); }
+  if (b.dataset.fmact === 'cancel') return fmStop(true);
+  if (b.dataset.fmact === 'save') {
+    fmFold();
+    draft.appt.form = { ...r.cfg.form };
+    draft.appt.cform = { ...r.cfg.cform };
+    draft.formRules = fdNorm(fmRulesOf(r.cfg));
+    fmStop(true);
+    toast('ตั้งค่าฟอร์ม CT Order / ลงนัด CT+RT แล้ว · กด บันทึก ที่แถบล่างเพื่อใช้จริง');
+  }
+}, true);
+document.addEventListener('submit', e => { if (fmRec && e.target === fmRec.root) { e.preventDefault(); e.stopImmediatePropagation(); fmBar('ฟอร์มนี้ใช้ตั้งค่าเท่านั้น · กด บันทึก ที่แถบด้านบน'); } }, true);
+document.addEventListener('close', e => {
+  if (!(e.target instanceof HTMLDialogElement)) return;
+  if (fmSkipClose && e.target.contains(apForm)) { fmSkipClose--; return; }
+  if (fmRec && fmRec.root && e.target.contains(fmRec.root)) fmStop(true);   // ปิดหน้าต่าง (×) = ยกเลิก
+}, true);
 
 /* ---------- ข้อ 13 (13 พ.ย.): ขยับ / ซ่อนคอลัมน์ (แต่ละคนตั้งเอง จำในเครื่องนี้ · แอดมินตั้งค่าเริ่มต้นที่ ตั้งค่า → Column แสดงผล) ---------- */
 const colUser = () => str(state.user && (state.user.username || state.user.email)).toLowerCase() || 'me';
@@ -32280,6 +32446,7 @@ document.addEventListener('click', e => {
   if (b.dataset.dqopen) return openDqEdit(b.dataset.dqopen);   // ข้อ 12: Consult → กด HN
   if (!b.closest('#view-settings') || !draft) return;
   if (b.dataset.fdnew) return fdStart(b.dataset.fdnew);
+  if (b.dataset.fmstart) return fmStart(b.dataset.fmstart);   // .69: ตั้งค่าบนหน้าฟอร์มจริง
   if (b.dataset.fdedit) { const r = fdRules(draft).find(x => x.id === b.dataset.fdedit); if (r) fdStart(r.form, r.id); return; }
   if (b.dataset.fddel) { draft.formRules = fdRules(draft).filter(x => x.id !== b.dataset.fddel); return renderSettings(); }
   if (b.dataset.colclr) { const c = { ...draft.cols }; delete c[b.dataset.colclr]; draft.cols = c; return renderSettings(); }
