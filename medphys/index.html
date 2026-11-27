@@ -2053,6 +2053,9 @@ dialog.dlg-wide.ntf-dlg{width:min(880px,calc(100vw - 16px))}
 .ntf-head .st.urg{background:var(--late-soft);color:var(--late)}
 .ntf-head .st.done{background:var(--ok-soft);color:var(--ok)}
 .ntf-head .st.off{background:var(--sunken);color:var(--muted)}
+.ntf-head .st.sched{background:var(--warn-soft);color:var(--warn)}
+.ntf-item.sched{border-style:dashed dashed dashed solid;border-left-color:var(--warn)}
+.ntf-sched input[type="date"],.ntf-sched input[type="time"]{width:auto;min-height:34px;padding:4px 8px}
 .ntf-acks{display:flex;flex-wrap:wrap;gap:6px}
 .ntf-ack{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12.5px;white-space:nowrap}
 .ntf-ack.ok{background:var(--ok-soft);color:var(--ok)}
@@ -8162,7 +8165,7 @@ const normNtf = o => {
   if (!a || typeof a !== 'object' || Array.isArray(a)) a = {};
   return { id: str(o.id), text: str(o.text), roles: (Array.isArray(o.roles) ? o.roles : str(o.roles).split(',')).map(str).filter(Boolean), level: o.level === 'urgent' ? 'urgent' : 'normal',
     until: str(o.until).slice(0, 10), by: str(o.by), byUser: str(o.byUser), at: str(o.at), acks: a, cancelBy: str(o.cancelBy), cancelAt: str(o.cancelAt),
-    kind: ['patient', 'brachy'].includes(o.kind) ? o.kind : 'general', hn: str(o.hn), pname: str(o.pname) };   // brachy (API 111) = HDR ส่งภาพแล้ว (ระบบสร้างจากปุ่ม CT ของนัดคิวใส่แร่)   // 22 พ.ย. (API 110): ประเภท ผู้ป่วย / ทั่วไป
+    kind: ['patient', 'brachy'].includes(o.kind) ? o.kind : 'general', hn: str(o.hn), pname: str(o.pname), from: str(o.from), tgAt: str(o.tgAt) };   // .75 (API 150): from = ตั้งเวลาเริ่มแสดง · tgAt = ส่ง Telegram ตามเวลาแล้ว   // brachy (API 111) = HDR ส่งภาพแล้ว (ระบบสร้างจากปุ่ม CT ของนัดคิวใส่แร่)   // 22 พ.ย. (API 110): ประเภท ผู้ป่วย / ทั่วไป
 };
 const normMlog = o => ({ id: str(o.id) || uid(), machine: str(o.machine), status: MST[str(o.status)] ? str(o.status) : 'ready', from: str(o.from), to: str(o.to), cat: str(o.cat), note: str(o.note), eta: str(o.eta), wait: str(o.wait), by: str(o.by), role: str(o.role), at: str(o.at), editBy: str(o.editBy), editAt: str(o.editAt), energy: str(o.energy) });
 function normTxs(t) {
@@ -9947,7 +9950,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.74';
+const PAGE_VERSION = '2026-11-22.75';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10254,12 +10257,24 @@ function localStore() {
       if (kind === 'patient' && !pname) throw new Error('ประกาศผู้ป่วย: กรอกชื่อผู้ป่วย');
       if (!text) throw new Error('พิมพ์ข้อความประกาศก่อนส่ง');
       if (!roles.length) throw new Error('เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง');
-      if (!isDay(rec.until) || rec.until < today() || rec.until > plusDays(today(), 30)) throw new Error('วันที่แสดงถึงไม่ถูกต้อง');
-      const r = { id: uid(), text, roles: roles.join(', '), level: kind === 'patient' || rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind, hn, pname };
+      const fv = str(rec && rec.from), ft = fv ? Date.parse(fv) : NaN;   // .75: ตั้งเวลา (เหมือน ntfFrom_ ใน Code.gs API 150)
+      if (fv && isNaN(ft)) throw new Error('เวลาเริ่มแสดงไม่ถูกต้อง');
+      if (ft > Date.now() + 31 * 864e5) throw new Error('ตั้งเวลาล่วงหน้าได้ไม่เกิน 30 วัน');
+      const from = ft > Date.now() + 60000 ? new Date(ft).toISOString() : '', d0 = from ? iso(new Date(from)) : today();
+      if (!isDay(rec.until) || rec.until < d0 || rec.until > plusDays(d0, 30)) throw new Error('วันที่แสดงถึงไม่ถูกต้อง');
+      const r = { id: uid(), text, roles: roles.join(', '), level: kind === 'patient' || rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind, hn, pname, from, tgAt: '' };
       db.notify.push(r);
-      demoTgSend([r]);
+      if (!from) demoTgSend([r]);
       persist();
       return { rows: [clone(r)] };
+    },
+    ntfDue: async () => {   // .75: เหมือน ntfDueRun_ ใน Code.gs (API 150) · ถึงเวลาแล้ว = ส่ง Telegram (จำลอง) ครั้งเดียว
+      const now = Date.now(), due = db.notify.filter(x => x.from && !x.tgAt && !x.cancelAt && !(Date.parse(x.from) > now));
+      if (!due.length) return { rows: [] };
+      for (const x of due) x.tgAt = nowISO();
+      demoTgSend(due);
+      persist();
+      return { rows: due.map(clone) };
     },
     leaveCancel: async req => {   // 24 พ.ย.: เหมือน Code.gs leaveCancel (API 128)
       const L = req || {}, act = ['ask', 'undo', 'ok', 'no'].includes(L.act) ? L.act : '', src = ['mp', 'ro', 'rtt'].includes(L.src) ? L.src : '', key = lvTxt(L.key, 200), who = lvTxt(L.who, 120), from = dateStr(L.from), to = dateStr(L.to) || from, type = lvTxt(L.type, 40);
@@ -10462,6 +10477,7 @@ function localStore() {
       if (!role) throw new Error('บัญชีนี้ไม่มีตำแหน่ง จึงรับทราบในนามอาชีพไม่ได้');
       const k = str(r.roles).split(',').map(str).find(x => x.toLowerCase() === role.toLowerCase());
       if (!k) throw new Error('ประกาศนี้ไม่ได้แจ้ง ' + role);
+      if (!r.cancelAt && r.from && Date.parse(r.from) > Date.now()) throw new Error('ประกาศนี้ยังไม่ถึงเวลาแสดง');   // .75
       const a = normNtf(r).acks;
       if (!a[k]) {
         if (r.cancelAt) throw new Error('ประกาศนี้ถูกยกเลิกแล้ว');
@@ -33730,7 +33746,7 @@ function pcEvents(k) {
   for (const n of state.ncall.filter(x => pcHas(x, k))) add(n.at, 'nurse', `Nurse · ${{ came: 'มาตามนัด', see: 'มาตามนัด · พบแพทย์', noshow: 'ไม่มาตามนัด' }[n.status] || n.status || 'บันทึก'}`, n.note, n.by);
   for (const r of state.rtd.filter(x => pcHas(x, k))) { add(r.at, 'reg', 'คำสั่งแพทย์ (ระหว่างฉาย)', [r.rt, r.cmt, r.note].filter(Boolean).join(' · '), r.by); if (r.nurse) add(r.nurse, 'nurse', 'Nurse ยืนยันคำสั่งแพทย์', '', r.nurseBy); }
   for (const b of state.bq.filter(x => pcHas(x, k))) add(b.created || b.date, 'bq', `นัดใส่แร่ ${fmtDay(b.date)}`, [b.tech, b.status].filter(Boolean).join(' · '), b.by);
-  for (const n of (state.notify || []).filter(x => pcHas(x, k))) add(n.at, 'ntf', 'ประกาศ', n.text, n.by);
+  for (const n of (state.notify || []).filter(x => pcHas(x, k) && !ntfWait(x) && !ntfNever(x))) add(n.from || n.at, 'ntf', 'ประกาศ', n.text, n.by);
   return ev.sort((a, b) => b.at.localeCompare(a.at));
 }
 // หัวของ chart: ชื่อ เพศ อายุ สิทธิ แพทย์ Diag ขั้นตอนตอนนี้ (RT Workflow) ประกาศที่ยังอยู่
@@ -33742,7 +33758,7 @@ function pcInfo(k) {
   let fl = null;
   try { fl = flowData(true).filter(x => hnKey(x.hn) === k).sort((a, b) => FLOW_RANK.indexOf(b.stage) - FLOW_RANK.indexOf(a.stage))[0] || null; } catch (e) { fl = null; }
   const stage = fl ? `${flowLabel(flowCols().find(c => c.id === fl.col))}${fl.sub ? ` · ${fl.sub}` : ''}` : '';
-  const ntf = (state.notify || []).filter(x => pcHas(x, k) && !x.cancelAt && (!x.until || x.until >= today()));
+  const ntf = (state.notify || []).filter(x => pcHas(x, k) && !x.cancelAt && (!x.until || x.until >= today()) && !ntfWait(x));
   return { reg, cs, ap, name, doc, dx, stage, ntf, facts: [reg.sex, pcAge(reg.birth), reg.right].filter(Boolean) };
 }
 const pcTxRows = cs => cs.filter(c => !isSimple(c)).map(c => ({ c, cat: catOf(c.cat).label, dose: doseText(c) || '—', room: roomLabel(c.room) || '—', sim: isDay(c.sim) ? fmtDay(c.sim) : c.sim || '—', fx: `${parseFx(c).filter(e => e.act === 'given').length}/${c.fx || '?'}`, mp: c.mp || '–', st: caseStatus(c) }));
@@ -34269,17 +34285,20 @@ const ntfMe = () => str(state.user.username) || (store.mode !== 'sheet' ? 'demo.
 const ntfCanCancel = n => ntfBoss() || (ntfNew() && !!n.byUser && n.byUser === ntfMe());
 const ntfRank = n => (n.kind === 'patient' ? 0 : n.kind === 'brachy' ? 1 : n.level === 'urgent' ? 2 : 3);   // ผู้ป่วย → HDR ส่งภาพแล้ว → ด่วนแบบเดิม → ทั่วไป   // ผู้ป่วยขึ้นก่อนเสมอ แล้วด่วนแบบเดิม แล้วทั่วไป
 const ntfSort = (a, b) => ntfRank(a) - ntfRank(b) || str(b.at).localeCompare(str(a.at));
-const ntfSees = n => ntfBoss() || ntfMine(n) || (!!n.byUser && n.byUser === ntfMe());   // แอดมินเห็นทุกประกาศ · คนอื่นเห็นของตำแหน่งตัวเองและที่ตัวเองส่ง
+const ntfSees = n => ntfBoss() || (!!n.byUser && n.byUser === ntfMe()) || (ntfMine(n) && !ntfWait(n) && !ntfNever(n));   // .75: ตั้งเวลาไว้ = ผู้รับยังไม่เห็น (ยกเลิกก่อนถึงเวลา = ไม่เห็นเลย)   // แอดมินเห็นทุกประกาศ · คนอื่นเห็นของตำแหน่งตัวเองและที่ตัวเองส่ง
 const ntfPt = n => (n.kind === 'patient' || n.kind === 'brachy' ? `HN ${n.hn}${n.pname ? ' ' + n.pname : ''}` : '');
 const NTF_KIND_LABEL = { patient: 'ผู้ป่วย', brachy: 'HDR', general: 'ทั่วไป' };
 const ntfRole = () => str(state.user.role);
 const ntfRoles = () => [...new Set((state.config.roles && state.config.roles.length ? state.config.roles : LPCH_ROLES).map(str).filter(Boolean))].filter(r => !txsOuterRole(r));
 const ntfRoleName = r => `${r}${NTF_LABEL[r] ? ' · ' + NTF_LABEL[r] : ''}`;
-const ntfLive = n => !n.cancelAt && n.until >= today();
+// .75 (Code.gs API 150): ตั้งเวลาประกาศ · ก่อนถึงเวลาเริ่ม = ไม่ขึ้นแถบ · แอดมินและผู้ส่งเห็นในกลุ่ม ตั้งเวลาไว้ (ยกเลิกได้)
+const ntfWait = n => !n.cancelAt && !!n.from && Date.parse(n.from) > Date.now();
+const ntfNever = n => !!n.from && !!n.cancelAt && n.cancelAt < n.from;   // ยกเลิกก่อนถึงเวลา
+const ntfLive = n => !n.cancelAt && n.until >= today() && !ntfWait(n);
 const ntfKeyOf = (n, role) => n.roles.find(x => x.toLowerCase() === str(role).toLowerCase()) || '';
 const ntfMine = n => !!ntfRole() && !!ntfKeyOf(n, ntfRole());
 const ntfAckOf = (n, role) => { const k = ntfKeyOf(n, role); return k ? n.acks[k] || null : null; };
-const ntfDone = n => !ntfLive(n) || n.roles.every(r => n.acks[r]);
+const ntfDone = n => !ntfWait(n) && (!ntfLive(n) || n.roles.every(r => n.acks[r]));
 // 22 พ.ย.: ลิงก์ในข้อความประกาศกดได้ · เฉพาะ http / https (ตัวอักษรของ URL ตามมาตรฐาน · ไทยหรือช่องว่างต่อท้าย = จบลิงก์) · วงเล็บ / จุด / จุลภาคท้ายลิงก์ไม่นับ · ส่วนอื่น escape ตามเดิม
 const NTF_URL_RE = /https?:\/\/[A-Za-z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+/g;
 // .73: ประกาศผู้ป่วย / HDR แสดง HN แยกอยู่แล้ว = ตัด HN ที่ซ้ำในเนื้อความ (แม่แบบ {HN}) · คำว่า Emergency = ป้ายสีแดง
@@ -34306,7 +34325,18 @@ function ntfLinks(t) {
 const ntfForMe = () => (state.notify || []).filter(n => ntfLive(n) && ntfMine(n) && !ntfAckOf(n, ntfRole())).sort(ntfSort);
 const ntfWhen = s => { const d = new Date(s); if (isNaN(d.getTime())) return ''; const hm = `${pad(d.getHours())}:${pad(d.getMinutes())} น.`; return iso(d) === today() ? `วันนี้ ${hm}` : `${fmtDay(iso(d))} ${hm}`; };
 const ntfMerge = rows => { for (const x of (rows || []).map(normNtf)) { const i = state.notify.findIndex(y => y.id === x.id); if (i >= 0) state.notify[i] = x; else state.notify.push(x); } };
-const NTF_FORM0 = () => ({ kind: 'patient', hn: '', pname: '', auto: '', text: '', roles: [], days: 0 });   // 22 พ.ย.: แสดงถึง ค่าเริ่มต้น = วันนี้
+const NTF_FORM0 = () => ({ kind: 'patient', hn: '', pname: '', auto: '', text: '', roles: [], days: 0, sched: false, sd: '', st: '' });   // 22 พ.ย.: แสดงถึง ค่าเริ่มต้น = วันนี้
+const NTF_SCHED_DAYS = 30;   // .75: ตั้งเวลาล่วงหน้าได้ไม่เกิน (วัน) = NTF_MAX_DAYS ใน Code.gs
+const ntfSchedOk = () => serverHas(150);
+const ntfSchedAt = f => (f.sched && isDay(f.sd) && /^\d{2}:\d{2}$/.test(f.st) ? new Date(`${f.sd}T${f.st}:00`).getTime() : NaN);
+const ntfBase = f => (f.sched && ntfSchedOk() && isDay(f.sd) ? f.sd : today());
+const ntfSchedNote = f => { const t = ntfSchedAt(f); return isNaN(t) ? 'เลือกวันและเวลาเริ่มแสดง' : t <= Date.now() + 60000 ? 'เวลาเริ่มต้องหลังจากนี้ (หรือเลือก ทันที)' : `ขึ้นแถบ${(state.config.tg || {}).on ? 'และส่ง Telegram' : ''} ${ntfWhen(new Date(t).toISOString())} · ก่อนถึงเวลาผู้รับยังไม่เห็น`; };
+const ntfUntilNote = f => `ถึง ${fmtDay(plusDays(ntfBase(f), f.days))} · หมดอายุแล้วหายเองแม้ยังไม่มีใครกดรับทราบ`;
+function ntfSchedPaint() {
+  const f = ntfUi.form, a = $('#ntf-sched-note'), b = $('#ntf-until');
+  if (a) a.textContent = ntfSchedNote(f);
+  if (b) b.textContent = ntfUntilNote(f);
+}
 const ntfUi = { idx: 0, key: '', tab: 'now', q: '', role: '', kindF: '', form: NTF_FORM0(), err: '', busy: false, arm: '', armT: 0, del: '', delT: 0, seen: null };
 const ntfDlg = $('#ntf-dlg');
 /* ---------- 24 พ.ย. (.29 · Code.gs API 124): ข้อความส่วนตัว ----------
@@ -34865,7 +34895,22 @@ function lvTellApplicant(L) {
   if (!a || lfMe().includes(a)) return;
   msgPost({ to: [{ acc: a, name: lfPerson(L).name }], kind: 'ack', title: `หัวหน้างานรับทราบ${L.type || 'วันลา'} ${rangeText(L)} แล้ว`, text: `รับทราบโดย ${state.user.name || ''}`, ref: `${L.src}|${L.src === 'rtt' ? `jl|${L.who}|${L.from}` : L.key}` }, true);
 }
+// .75: ประกาศตั้งเวลา = วาดแถบใหม่ตอนถึงเวลาเริ่ม (โหมดตัวอย่าง: ส่ง Telegram จำลองด้วย)
+let ntfWaitT = 0, ntfWaitAt = 0;
+function ntfWaitTimer() {
+  const nx = Math.min(Infinity, ...(state.notify || []).filter(ntfWait).map(n => Date.parse(n.from)));
+  if (nx === ntfWaitAt) return;
+  clearTimeout(ntfWaitT);
+  ntfWaitAt = nx; ntfWaitT = 0;
+  if (!isFinite(nx)) return;
+  ntfWaitT = setTimeout(async () => {
+    ntfWaitAt = 0;
+    if (store.ntfDue) { try { const r = await store.ntfDue(); ntfMerge(r && r.rows); } catch (e) { /* รอบหน้า */ } }
+    ntfUi.key = ''; renderNtf(); renderNtfDlg();
+  }, Math.min(Math.max(nx - Date.now() + 300, 50), 2147483000));
+}
 function renderNtf(gated) {
+  ntfWaitTimer();
   const bar = $('#ntf-bar'), btn = $('#ntf-btn');
   const on = !gated && state.gate == null && ntfOn() && !(store.mode === 'sheet' && !state.loaded) && !txsOnly();
   btn.hidden = !on;
@@ -34979,7 +35024,8 @@ function ntfRead() {
 }
 function ntfStatus(n) {
   const left = n.roles.filter(r => !n.acks[r]).length;
-  if (n.cancelAt) return '<span class="st off">ยกเลิกแล้ว</span>';
+  if (ntfWait(n)) return `<span class="st sched">ตั้งเวลา · เริ่ม ${esc(ntfWhen(n.from))}</span>`;   // .75
+  if (n.cancelAt) return `<span class="st off">${ntfNever(n) ? 'ยกเลิกก่อนถึงเวลา' : 'ยกเลิกแล้ว'}</span>`;
   if (!ntfLive(n)) return '<span class="st off">หมดอายุ</span>';
   if (!left) return '<span class="st done">รับทราบครบ</span>';
   return `<span class="st ${n.kind === 'brachy' ? 'bq' : n.level === 'urgent' || n.kind === 'patient' ? 'urg' : 'on'}">${n.kind === 'general' && n.level === 'urgent' ? 'ด่วน · ' : ''}รอ ${left} อาชีพ</span>`;   // ประเภทอยู่ในป้ายหน้ารายการแล้ว
@@ -34987,14 +35033,14 @@ function ntfStatus(n) {
 function ntfItem(n, send) {
   const role = ntfRole(), mineAck = ntfAckOf(n, role), mine = ntfMine(n);
   const chips = send ? `<div class="ntf-acks">${n.roles.map(r => { const a = n.acks[r]; return a ? `<span class="ntf-ack ok">✓ ${esc(ntfRoleName(r))} <small>${esc(a.by)} · ${esc(ntfWhen(a.at))}</small></span>`
-    : `<span class="ntf-ack wait">○ ${esc(ntfRoleName(r))} <small>${ntfLive(n) ? 'ยังไม่รับทราบ' : 'ไม่ได้รับทราบ'}</small></span>`; }).join('')}</div>`
+    : `<span class="ntf-ack wait">○ ${esc(ntfRoleName(r))} <small>${ntfWait(n) ? 'รอถึงเวลา' : ntfLive(n) ? 'ยังไม่รับทราบ' : 'ไม่ได้รับทราบ'}</small></span>`; }).join('')}</div>`
     : mineAck ? `<div class="ntf-acks"><span class="ntf-ack ok">✓ ${esc(ntfRoleName(ntfKeyOf(n, role)))} รับทราบแล้ว <small>${esc(mineAck.by)} · ${esc(ntfWhen(mineAck.at))}</small></span></div>` : '';
   const acts = [];
   if (ntfCanDel()) acts.push(`<button type="button" class="btn${ntfUi.del === n.id ? '' : ' ghost'} danger ntf-del" data-ntfdel="${esc(n.id)}" title="ลบประกาศนี้ถาวร · หายจากแถบและประวัติของทุกคน (แอดมิน)">${ntfUi.del === n.id ? 'กดอีกครั้งเพื่อยืนยันลบถาวร' : 'ลบ'}</button>`);   // 22 พ.ย. (API 112)
-  if (ntfCanCancel(n) && ntfLive(n) && !ntfDone(n)) acts.push(`<button type="button" class="btn ghost${ntfUi.arm === n.id ? ' danger' : ''}" data-ntfcancel="${esc(n.id)}">${ntfUi.arm === n.id ? 'กดอีกครั้งเพื่อยืนยันยกเลิก' : 'ยกเลิกประกาศ'}</button>`);
+  if (ntfCanCancel(n) && (ntfLive(n) || ntfWait(n)) && !ntfDone(n)) acts.push(`<button type="button" class="btn ghost${ntfUi.arm === n.id ? ' danger' : ''}" data-ntfcancel="${esc(n.id)}">${ntfUi.arm === n.id ? 'กดอีกครั้งเพื่อยืนยันยกเลิก' : ntfWait(n) ? 'ยกเลิกตั้งเวลา' : 'ยกเลิกประกาศ'}</button>`);
   if (mine && ntfLive(n) && !mineAck) acts.push(`<button type="button" class="btn primary" data-ntfack="${esc(n.id)}">รับทราบ</button>`);
   const pt = n.kind === 'patient', bq = n.kind === 'brachy';
-  return `<li class="ntf-item${bq ? ' bq' : n.level === 'urgent' || pt ? ' urgent' : ''}${ntfLive(n) ? '' : ' off'}" data-ntfid="${esc(n.id)}"><div class="ntf-head"><span class="ntf-kind${pt ? ' pt' : bq ? ' bq' : ''}">${NTF_KIND_LABEL[n.kind] || 'ทั่วไป'}</span>${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span><span>ถึง ${esc(fmtDay(n.until))}</span></div>
+  return `<li class="ntf-item${bq ? ' bq' : n.level === 'urgent' || pt ? ' urgent' : ''}${ntfWait(n) ? ' sched' : ntfLive(n) ? '' : ' off'}" data-ntfid="${esc(n.id)}"><div class="ntf-head"><span class="ntf-kind${pt ? ' pt' : bq ? ' bq' : ''}">${NTF_KIND_LABEL[n.kind] || 'ทั่วไป'}</span>${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span>${n.from && !ntfWait(n) ? `<span>เริ่ม ${esc(ntfWhen(n.from))}</span>` : ''}<span>ถึง ${esc(fmtDay(n.until))}</span></div>
     ${pt || bq ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b><span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : bq ? 'bq' : 'gen'}">${ntfLinks(ntfBodyText(n))}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
 }
 function ntfHistHtml(send) {
@@ -35012,13 +35058,14 @@ function ntfHistHtml(send) {
 }
 function ntfDlgHtml() {
   const send = ntfCanSend(), f = ntfUi.form, roles = ntfRoles();
-  const now = (state.notify || []).filter(n => !ntfDone(n) && ntfSees(n)).sort(ntfSort);
+  const open = (state.notify || []).filter(n => !ntfDone(n) && ntfSees(n)).sort(ntfSort), now = open.filter(n => !ntfWait(n)), wait = open.filter(ntfWait).sort((a, b) => str(a.from).localeCompare(str(b.from)));   // .75: ตั้งเวลาไว้ แยกกลุ่ม
   const nHist = (state.notify || []).filter(n => ntfDone(n) && ntfSees(n)).length;
   const track = n => ntfBoss() || (!!n.byUser && n.byUser === ntfMe());   // ติดตามรายตำแหน่งได้: แอดมิน และผู้ส่งเอง
-  const tabs = `<div class="ntf-tabs" role="tablist"><button type="button" role="tab" data-ntftab="now" aria-selected="${ntfUi.tab === 'now'}">${send ? 'ส่ง · ติดตาม' : 'ประกาศถึงฉัน'}<span class="n">${now.length}</span></button><button type="button" role="tab" data-ntftab="hist" aria-selected="${ntfUi.tab === 'hist'}">ประวัติ<span class="n">${nHist}</span></button></div>`;
+  const waitSec = wait.length ? `<section class="ntf-sec ntf-waitsec"><h3>ตั้งเวลาไว้ · ยังไม่แสดง (${wait.length})</h3><ul class="ntf-list">${wait.map(n => ntfItem(n, track(n))).join('')}</ul></section>` : '';
+  const tabs = `<div class="ntf-tabs" role="tablist"><button type="button" role="tab" data-ntftab="now" aria-selected="${ntfUi.tab === 'now'}">${send ? 'ส่ง · ติดตาม' : 'ประกาศถึงฉัน'}<span class="n">${open.length}</span></button><button type="button" role="tab" data-ntftab="hist" aria-selected="${ntfUi.tab === 'hist'}">ประวัติ<span class="n">${nHist}</span></button></div>`;
   if (ntfUi.tab === 'hist') return tabs + ntfHistHtml(send);
   if (!send) return tabs + `<p class="ntf-who">${ntfNew() ? `ตำแหน่งของคุณ (${esc(ntfRole() || '—')}) รับประกาศได้อย่างเดียว · แอดมินตั้งสิทธิ์ส่งที่ ตั้งค่า → แถบเมนู → ประกาศ` : 'ส่งประกาศได้เฉพาะแอดมินและแอดมินรอง'} · กดรับทราบในนามอาชีพของคุณ (${esc(ntfRole() || '—')}) แล้วประกาศหายจากทุกคนในอาชีพนั้น</p>
-    <section class="ntf-sec"><h3>ประกาศถึง ${esc(ntfRoleName(ntfRole()))}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศค้างอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+    <section class="ntf-sec"><h3>ประกาศถึง ${esc(ntfRoleName(ntfRole()))}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศค้างอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>${waitSec}`;
   const pt = f.kind === 'patient' && ntfNew(), lead = pt ? ntfPt({ kind: 'patient', hn: f.hn || '…', pname: f.pname }) + ' · ' : '';
   const all = roles.length > 0 && roles.every(r => f.roles.includes(r));
   return tabs + `<section class="ntf-sec"><h3>ส่งประกาศใหม่</h3><form class="ntf-form" id="ntf-form" autocomplete="off">
@@ -35028,11 +35075,12 @@ function ntfDlgHtml() {
       <p class="ntf-tipline">เคล็ดลับ: พิมพ์ HN หรือชื่อในช่อง HN แล้วเลือกผู้ป่วย = ใส่ HN และชื่อให้ · ไอคอนข้าง HN ในรายการ = Patient chart (ดูทุกอย่างของผู้ป่วย)</p></div>` : ''}
     <textarea id="ntf-text" maxlength="300" placeholder="${pt ? 'สถานะผู้ป่วย เช่น มาถึงแล้ว รอ CT-Sim ที่ห้อง CT-1 / ย้ายไปฉายเครื่อง Infinity วันนี้' : 'ข้อความที่จะวิ่งบนแถบ เช่น CT-1 ใช้ไม่ได้ช่วงเช้า นัด CT-Sim ย้ายไปบ่าย'}" aria-label="ข้อความประกาศ">${esc(f.text)}</textarea>
     <div class="ntf-row" role="group" aria-label="แจ้งอาชีพ"><span class="lbl">แจ้งอาชีพ</span><button type="button" class="chip-btn" data-ntfall aria-pressed="${all}">ทุกอาชีพ</button>${roles.map(r => `<button type="button" class="chip-btn" data-ntfrole="${esc(r)}" aria-pressed="${f.roles.includes(r)}">${esc(ntfRoleName(r))}</button>`).join('')}</div>
-    <div class="ntf-row" role="group" aria-label="แสดงถึง"><span class="lbl">แสดงถึง</span>${[[0, 'วันนี้'], [1, 'พรุ่งนี้'], [3, '3 วัน'], [7, '7 วัน']].map(([d, l]) => `<button type="button" class="chip-btn" data-ntfdays="${d}" aria-pressed="${f.days === d}">${l}</button>`).join('')}<span class="muted" style="font-size:12.5px">ถึง ${esc(fmtDay(plusDays(today(), f.days)))} · หมดอายุแล้วหายเองแม้ยังไม่มีใครกดรับทราบ</span></div>
+    ${ntfSchedOk() ? `<div class="ntf-row ntf-sched" role="group" aria-label="เริ่มแสดง"><span class="lbl">เริ่มแสดง</span><button type="button" class="chip-btn" data-ntfsched="0" aria-pressed="${!f.sched}">ทันที</button><button type="button" class="chip-btn" data-ntfsched="1" aria-pressed="${!!f.sched}">ตั้งเวลา</button>${f.sched ? `<input type="date" id="ntf-sd" value="${esc(f.sd)}" min="${today()}" max="${plusDays(today(), NTF_SCHED_DAYS)}" aria-label="วันที่เริ่มแสดง"><input type="time" id="ntf-st" value="${esc(f.st)}" aria-label="เวลาเริ่มแสดง"><span class="muted" id="ntf-sched-note" style="font-size:12.5px">${esc(ntfSchedNote(f))}</span>` : ''}</div>` : ''}
+    <div class="ntf-row" role="group" aria-label="แสดงถึง"><span class="lbl">แสดงถึง</span>${[[0, f.sched ? 'วันเริ่ม' : 'วันนี้'], [1, f.sched ? '+1 วัน' : 'พรุ่งนี้'], [3, '3 วัน'], [7, '7 วัน']].map(([d, l]) => `<button type="button" class="chip-btn" data-ntfdays="${d}" aria-pressed="${f.days === d}">${l}</button>`).join('')}<span class="muted" id="ntf-until" style="font-size:12.5px">${esc(ntfUntilNote(f))}</span></div>
     <div class="ntf-prev ${pt ? 'pt' : 'gen'}" aria-hidden="true" data-lead="${esc(lead)}"><span>ตัวอย่างบนแถบ:</span><span>${esc(lead + f.text) || '—'}</span></div>
     ${ntfUi.err ? `<p class="ntf-err" role="alert">${esc(ntfUi.err)}</p>` : ''}
     <div class="ntf-acts"><button type="submit" class="btn primary"${ntfUi.busy ? ' disabled' : ''}>${ntfUi.busy ? 'กำลังส่ง…' : 'ส่งประกาศ'}</button></div></form></section>
-    <section class="ntf-sec"><h3>${ntfBoss() ? 'กำลังแสดง · ใครรับทราบแล้ว' : `กำลังแสดง · ถึง ${esc(ntfRoleName(ntfRole()))} และที่คุณส่ง`}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศที่ยังแสดงอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>`;
+    <section class="ntf-sec"><h3>${ntfBoss() ? 'กำลังแสดง · ใครรับทราบแล้ว' : `กำลังแสดง · ถึง ${esc(ntfRoleName(ntfRole()))} และที่คุณส่ง`}</h3>${now.length ? `<ul class="ntf-list">${now.map(n => ntfItem(n, track(n))).join('')}</ul>` : '<p class="ntf-empty">ไม่มีประกาศที่ยังแสดงอยู่ · ดูที่ผ่านมาในแท็บ ประวัติ</p>'}</section>${waitSec}`;
 }
 // 22 พ.ย.: ผู้ป่วยล่าสุด = ที่เพิ่งเลือก / เปิดจากกระดิ่งข้าง HN (เครื่องนี้) ต่อด้วยประกาศผู้ป่วยล่าสุด · ไม่เกิน 6 คน
 const NTF_RECENT_N = 6;
@@ -35093,17 +35141,22 @@ async function ntfSend() {
   const pt = f.kind === 'patient' && ntfNew();
   if (pt) { f.hn = str(($('#ntf-hn') || {}).value || f.hn).replace(/\s+/g, '').toUpperCase(); f.pname = str(($('#ntf-pname') || {}).value || f.pname).replace(/\s+/g, ' '); }
   ntfUi.err = pt && !NTF_HN_RE.test(f.hn) ? 'ประกาศผู้ป่วย: กรอก HN' : pt && !f.pname ? 'ประกาศผู้ป่วย: กรอกชื่อผู้ป่วย' : !f.text ? 'พิมพ์ข้อความก่อนส่ง' : !f.roles.length ? 'เลือกอย่างน้อย 1 อาชีพที่จะแจ้ง' : '';
+  const sch = !!f.sched && ntfSchedOk(), at = sch ? ntfSchedAt(f) : NaN;   // .75: ตั้งเวลา
+  if (!ntfUi.err && sch) ntfUi.err = isNaN(at) ? 'ตั้งเวลา: เลือกวันและเวลาเริ่มแสดง' : at <= Date.now() + 60000 ? 'ตั้งเวลา: เวลาเริ่มต้องหลังจากนี้อย่างน้อย 1 นาที (หรือเลือก ทันที)' : f.sd > plusDays(today(), NTF_SCHED_DAYS) ? `ตั้งเวลาล่วงหน้าได้ไม่เกิน ${NTF_SCHED_DAYS} วัน` : '';
   if (ntfUi.err || ntfUi.busy) return renderNtfDlg();
   ntfUi.busy = true;
   renderNtfDlg();
   try {
     const roles = ntfRoles().filter(r => f.roles.includes(r)).concat(f.roles.filter(r => !ntfRoles().includes(r)));
-    const rec = pt ? { kind: 'patient', hn: f.hn, pname: f.pname, text: f.text, roles, level: 'urgent', until: plusDays(today(), f.days) } : { kind: 'general', text: f.text, roles, level: 'normal', until: plusDays(today(), f.days) };
+    const base = sch ? f.sd : today();   // .75: แสดงถึง นับจากวันเริ่ม
+    const rec = pt ? { kind: 'patient', hn: f.hn, pname: f.pname, text: f.text, roles, level: 'urgent', until: plusDays(base, f.days) } : { kind: 'general', text: f.text, roles, level: 'normal', until: plusDays(base, f.days) };
+    if (sch) rec.from = new Date(at).toISOString();
     const r = await store.notifyAdd(rec);
     ntfMerge(r && r.rows);
     tgUi.at = 0;   // 22 พ.ย.: ผลส่งเข้า Telegram ล่าสุดเปลี่ยน
     ntfUi.form = NTF_FORM0();
-    toast(`ส่งประกาศ${pt ? 'ผู้ป่วย' : ''}แล้ว · ขึ้นแถบของ ${roles.join(', ')} ภายในราว 1 นาที`);
+    if (sch) toast(`ตั้งเวลาประกาศ${pt ? 'ผู้ป่วย' : ''}แล้ว · ขึ้นแถบของ ${roles.join(', ')} ${ntfWhen(rec.from)}${r && r.due === false ? ' · ระบบตั้งตัวส่ง Telegram ตามเวลาไม่ได้ (แจ้งแอดมิน)' : ''}`, r && r.due === false ? { err: true } : {});
+    else toast(`ส่งประกาศ${pt ? 'ผู้ป่วย' : ''}แล้ว · ขึ้นแถบของ ${roles.join(', ')} ภายในราว 1 นาที`);
   } catch (e) { ntfUi.err = 'ส่งไม่สำเร็จ: ' + errMsg(e); }
   finally { ntfUi.busy = false; ntfUi.key = ''; renderNtf(); renderNtfDlg(); }
 }
@@ -35153,6 +35206,7 @@ ntfDlg.addEventListener('click', e => {
   else if (d.ntfpick) return ntfPickPt(d.ntfpick, d.ntfpname || ntfPtName(ptByHn(d.ntfpick)));
   else if (d.ntfkind) f.kind = d.ntfkind;
   else if ('ntfkf' in d) ntfUi.kindF = d.ntfkf;
+  else if ('ntfsched' in d) { f.sched = d.ntfsched === '1'; if (f.sched) { f.sd = f.sd || plusDays(today(), 1); f.st = f.st || '08:00'; } }   // .75
   else if (d.ntfdays) f.days = +d.ntfdays;
   else if (d.ntfcancel) return ntfCancel(d.ntfcancel);
   else if (d.ntfdel) return ntfDelete(d.ntfdel);
@@ -35162,7 +35216,8 @@ ntfDlg.addEventListener('click', e => {
   renderNtfDlg();
 });
 ntfDlg.addEventListener('input', e => {
-  if (e.target.id === 'ntf-q') { ntfUi.q = e.target.value; renderNtfDlg(); }
+  if (e.target.id === 'ntf-sd' || e.target.id === 'ntf-st') { ntfUi.form[e.target.id === 'ntf-sd' ? 'sd' : 'st'] = e.target.value; ntfSchedPaint(); }   // .75: ไม่วาดใหม่ (ช่องเวลายังพิมพ์ต่อได้)
+  else if (e.target.id === 'ntf-q') { ntfUi.q = e.target.value; renderNtfDlg(); }
   else if (e.target.id === 'ntf-text') { ntfUi.form.text = e.target.value; const p = $('.ntf-prev', ntfDlg); if (p) p.lastElementChild.textContent = (p.dataset.lead || '') + e.target.value || '—'; }
   else if (e.target.id === 'ntf-hn' || e.target.id === 'ntf-pname') {   // 22 พ.ย.: HN ที่มีในระบบ = เติมชื่อให้ (ไม่ทับชื่อที่พิมพ์เอง)
     const f = ntfUi.form;
