@@ -930,6 +930,18 @@
 
 ## ความเร็วเมื่อข้อมูลสะสมหลายปี (รุ่น 2026-11-09.11 · Code.gs 2026-11-09.5 · API 61)
 
+- **2026-11-22.72 + Code.gs 2026-11-27.1 (API 148): Treatment Order ตามแบบฟอร์ม · HDR Order · Contouring กลุ่ม HDR · Evaluation กลุ่ม Brachytherapy · ประกาศของสถานะ fraction**
+  - **Treatment Order** (ตาม External Radiation Process Form): ส่วนคำสั่งรังสีมี **Aim of Treatment** (Curative / Palliative) · ช่องติ๊ก **เทคนิค** (Electron · 3D-CRT · IMRT/VMAT · SRS/SRT · SBRT · DIBH · Hyperthermia)
+    - **Prescription แยกตาม Site**: แต่ละแถว = Site (เลือกจากรายการ Examination Part ของ CT Order หรือพิมพ์เอง) · PTV · Gy · in Fx · Dose Gy/Fx · ใบใหม่สร้างแถวตาม Examination Part ที่ติ๊กใน CT Order ให้
+    - **ความถี่** Daily / EOD / BID / Other (ใช้กับทุกแถว) · **Dose Constraint Target / OAR** · **Treatment Remark** (วันที่ เวลา ข้อความ ผู้ลงชื่อ · RTT / แพทย์เพิ่มได้ · เพิ่มอย่างเดียว)
+    - **Planning Remark** · **MP Recheck** (MP อีกคนกดตรวจแผน · กดซ้ำ = ยกเลิก) · ปุ่ม **พิมพ์แบบฟอร์ม** (A4 แบบ External Radiation Process Form)
+  - **HDR Order** (Brachytherapy process form) ต่อนัดใส่แร่: ปุ่ม HDR Order ในแถบนัดคิวใส่แร่ · Contouring (HDR) · Evaluation (Brachytherapy)
+    - ช่องตามแบบฟอร์ม: แพทย์ (จากรายชื่อแพทย์ในระบบ) · CT sim RTT1–3 · No. of Treatment · Equipment (Manchester / Fletcher / Tandem / Ovoid / Mould / gauze …) · Pt prepare · Diagnosis · Stage · Ext RT dose · PV · Sound · Prescribed dose (D90 / Surface / 0.5 cm) · Load · F/U · สี · Plan Code · Dwell Time · Note
+    - ใส่ค่าเริ่มต้นจากนัด (แพทย์ · ครั้งที่ · วันที่ · RTT) และเคสรังสีภายนอก (Diagnosis · Ext RT dose / วันจบ) · ลงนามช่อง Nurse / RTT / MP / Order-Approved RO ได้เฉพาะตำแหน่งของตัวเอง · พิมพ์ A4
+  - **Contouring กลุ่ม HDR**: นัดใส่แร่ที่กด CT / Re-CT ในแถบนัดคิวใส่แร่ (30 วันล่าสุด) · แพทย์กด **Contour CT / Re-CT เสร็จ** ต่อรอบ (ลิงก์ประกาศ cn.hdr ถึง MP)
+  - **Evaluation กลุ่ม Brachytherapy**: นัดใส่แร่ที่ MP กด + MP แล้ว · **Approved** / **Edit** (ส่งกลับ MP พร้อมหมายเหตุ · ล้าง MP ของนัด ให้ MP กด + MP ใหม่เมื่อแก้เสร็จ) / ยกเลิก Approved · ลิงก์ประกาศ ev.bq
+  - **ลิงก์ประกาศของหน้าต่างสถานะ fraction** (fx.st): ตั้งที่ ตั้งค่า → ลิงก์ประกาศ หรือโหมดตั้งบนหน้าเว็บจริง · ตั้งเงื่อนไขตาม **สถานะ** (เช่น Re-CT · Hold · CP · Off RT) และ **พบแพทย์ / ไม่พบแพทย์** · ค่าเริ่มต้นปิด
+  - **ต้องวาง Code.gs 2026-11-27.1 (API 148)** · ก่อนวาง: กลุ่ม HDR / Brachytherapy และปุ่ม HDR Order ไม่แสดง · Treatment Order ใช้ได้แต่ Aim / ความถี่ / Target / OAR / Remark / Recheck ยังไม่บันทึก
 - **2026-11-22.71: Nurse นัดวันนี้ กลุ่ม Off RT เฉพาะที่สั่ง Off RT · fraction ที่เหลือของ Re-CT ตรงกันทุกจุด**
   - **Nurse → นัดวันนี้ กลุ่ม Off RT**: ขึ้นเฉพาะผู้ป่วยที่ห้องฉายสั่ง Off RT จากสถานะ fraction ก่อนครบคอร์ส (Complete course ก่อนกำหนด) · Cancel RT · Off RT แบบเดิม
     - ผู้ป่วยที่ฉายครบ fraction สุดท้าย (ค่าเริ่มต้นของ fraction สุดท้าย = Off RT → Complete course) **ไม่ขึ้นแล้ว** · แถบห้องตรวจ (จบการฉายวันนี้) ยังแสดงเหมือนเดิม
