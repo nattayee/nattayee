@@ -9866,7 +9866,7 @@ function mergeConfig(c) {
   out.sendBook = { url: str((c.sendBook && typeof c.sendBook === 'object' ? c.sendBook : {}).url).trim().slice(0, 500) };   // 20 พ.ย.: ทะเบียนหนังสือส่ง
   const tg = c.tg && typeof c.tg === 'object' ? c.tg : {}, tgId = v => (TG_ID_RE.test(str(v).trim()) ? str(v).trim() : '');   // 22 พ.ย. (API 113): ประกาศ → Telegram
   out.tg = { on: tg.on === true, chats: Object.fromEntries(Object.entries(tg.chats && typeof tg.chats === 'object' ? tg.chats : {}).map(([r, v]) => [str(r), tgId(v)]).filter(([r, v]) => v && /^[\w -]{1,20}$/.test(r))),
-    all: tgId(tg.all), log: tgId(tg.log), kinds: Array.isArray(tg.kinds) ? TG_KINDS.filter(k => tg.kinds.includes(k)) : TG_KINDS.slice() };
+    all: tgId(tg.all), log: tgId(tg.log), login: tgId(tg.login), kinds: Array.isArray(tg.kinds) ? TG_KINDS.filter(k => tg.kinds.includes(k)) : TG_KINDS.slice() };
   out.tg.pt = TG_PT.includes(tg.pt) ? tg.pt : 'hn';   // 22 พ.ย. (API 114): ข้อมูลผู้ป่วยในข้อความ · abbr = HN + ชื่อย่อ · 25 พ.ย. (.50): ยังไม่เลือก = HN อย่างเดียว (PDPA)
   out.tg.hn = out.tg.pt !== 'none';
   out.tg.link = TG_LINK_RE.test(str(tg.link).trim()) ? str(tg.link).trim() : '';   // 22 พ.ย. (API 115): ลิงก์เชิญเข้ากลุ่ม (ไอคอนบนแถบเมนู)   // Code.gs 2026-11-22.5 อ่าน hn (HN อย่างเดียว)
@@ -10019,7 +10019,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.80';
+const PAGE_VERSION = '2026-11-22.81';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -32298,6 +32298,7 @@ function settingsEdit(el) {
     const r = el.dataset.tgchat, v = TG_ID_RE.test(el.value) ? el.value : '';
     if (r === '*') draft.tg = { ...draft.tg, all: v };
     else if (r === '#log') draft.tg = { ...draft.tg, log: v };   // .79: กลุ่ม log
+    else if (r === '#login') draft.tg = { ...draft.tg, login: v };   // .81: กลุ่ม login
     else { const c = { ...draft.tg.chats }; if (v) c[r] = v; else delete c[r]; draft.tg = { ...draft.tg, chats: c }; }
     tgUi.test = {};
     renderTgSet();   // ปุ่มทดสอบของแถวนี้
@@ -34387,7 +34388,8 @@ function tgSetInner(d) {
     <div class="tg-wrap"><table class="tg-map"><thead><tr><th>อาชีพที่ประกาศถึง</th><th>กลุ่ม Telegram</th><th></th></tr></thead><tbody>
       ${roles.map(r => row(r, `<b>${esc(r)}</b> ${esc(NTF_LABEL[r] || '')}`, t.chats[r] || '')).join('')}
       ${row('*', '<b>กลุ่มรวม</b> ทุกประกาศ (ไม่บังคับ)', t.all || '')}
-      ${row('#log', `<b>กลุ่ม log</b> (เช่น RT Hub log) แจ้งเมื่อมีคนกดพิมพ์ ดาวน์โหลด หรือเปิดดูตัวอย่างฟอร์ม (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(PRLOG_API) ? ' · ต้องใช้ Code.gs 2026-11-27.5' : ''}`, t.log || '')}</tbody></table></div>
+      ${row('#log', `<b>กลุ่ม log</b> (เช่น RT Hub log) แจ้งเมื่อมีคนกดพิมพ์ ดาวน์โหลด หรือเปิดดูตัวอย่างฟอร์ม (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(PRLOG_API) ? ' · ต้องใช้ Code.gs 2026-11-27.5' : ''}`, t.log || '')}
+      ${row('#login', `<b>กลุ่ม login</b> (เช่น RT Hub login) แจ้งเมื่อมีคนเข้าสู่ระบบ · ชื่อ · ตำแหน่ง · อุปกรณ์ (ไม่บังคับ)${store.mode === 'sheet' && !serverHas(154) ? ' · ต้องใช้ Code.gs 2026-11-27.7' : ''}`, t.login || '')}</tbody></table></div>
     <div class="tg-row"><button type="button" class="btn ghost" data-tgfind${st.set && !busy ? '' : ' disabled'}>${busy === 'find' ? 'กำลังค้นหา…' : 'ค้นหากลุ่มที่เพิ่ม bot แล้ว'}</button><span class="muted def-note" style="margin:0">พบ ${chats.length} กลุ่ม · Telegram เก็บไว้ 24 ชั่วโมง · ไม่พบ = พิมพ์ /start ในกลุ่มแล้วกดอีกครั้ง · หลายอาชีพใช้กลุ่มเดียวกันได้ (ส่งครั้งเดียว)</span></div>
     ${lastTxt}`;
 }
@@ -34407,8 +34409,8 @@ function tgFixMig(d) {   // ร่างตั้งค่า: แถวที�
   let n = 0;
   const chats = { ...d.tg.chats }, fix = v => { const x = tgMigOf(v, mig); if (x !== str(v)) { n++; tgMigChat(str(v), x); } return x; };
   for (const r of Object.keys(chats)) chats[r] = fix(chats[r]);
-  const all = d.tg.all ? fix(d.tg.all) : d.tg.all, log = d.tg.log ? fix(d.tg.log) : d.tg.log;
-  if (n) d.tg = { ...d.tg, chats, all, log };
+  const all = d.tg.all ? fix(d.tg.all) : d.tg.all, log = d.tg.log ? fix(d.tg.log) : d.tg.log, login = d.tg.login ? fix(d.tg.login) : d.tg.login;
+  if (n) d.tg = { ...d.tg, chats, all, log, login };
   return n;
 }
 async function tgLoad() {
@@ -34445,14 +34447,14 @@ async function tgFind() {
   tgUi.busy = ''; renderTgSet();
 }
 async function tgTestRole(k) {
-  const id = k === '*' ? draft.tg.all : k === '#log' ? draft.tg.log : draft.tg.chats[k];
+  const id = k === '*' ? draft.tg.all : k === '#log' ? draft.tg.log : k === '#login' ? draft.tg.login : draft.tg.chats[k];
   if (!id) return;
   tgUi.test[k] = 'busy'; renderTgSet();
   try {
     const r = await store.tgTest(id);
     tgUi.test[k] = r && r.ok ? 'ok' : 'ส่งไม่สำเร็จ: ' + errMsg((r && r.err) || '');
     if (r && r.mig && r.mig !== id) {   // .54: กลุ่มอัปเกรดเป็น supergroup = ใช้ id ใหม่ในแถวนี้ (กดบันทึกการตั้งค่า)
-      draft.tg = k === '*' ? { ...draft.tg, all: r.mig } : k === '#log' ? { ...draft.tg, log: r.mig } : { ...draft.tg, chats: { ...draft.tg.chats, [k]: r.mig } };
+      draft.tg = k === '*' ? { ...draft.tg, all: r.mig } : k === '#log' ? { ...draft.tg, log: r.mig } : k === '#login' ? { ...draft.tg, login: r.mig } : { ...draft.tg, chats: { ...draft.tg.chats, [k]: r.mig } };
       tgMigChat(id, r.mig);
       if (r.ok) tgUi.test[k] = 'mig';
       updateSaveBar();
