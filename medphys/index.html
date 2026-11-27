@@ -1923,6 +1923,7 @@ a.ntf-a:hover,a.ntf-a:focus-visible{text-decoration-thickness:2px}
 .ntf-kind.pt{background:var(--late-soft);color:var(--late)}
 .ntf-ptline{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--late);font-size:15px}
 .ntf-ptline b{font-weight:700}
+.ntf-doc{font-weight:800}   /* .78: ตัวย่อแพทย์ */
 .ntf-item p.gen{color:var(--ok)}
 .ntf-item.urgent p.gen,.ntf-item p.pt{color:var(--late)}
 .ntf-pt-fields{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:8px}
@@ -8202,7 +8203,7 @@ const normNtf = o => {
   if (!a || typeof a !== 'object' || Array.isArray(a)) a = {};
   return { id: str(o.id), text: str(o.text), roles: (Array.isArray(o.roles) ? o.roles : str(o.roles).split(',')).map(str).filter(Boolean), level: o.level === 'urgent' ? 'urgent' : 'normal',
     until: str(o.until).slice(0, 10), by: str(o.by), byUser: str(o.byUser), at: str(o.at), acks: a, cancelBy: str(o.cancelBy), cancelAt: str(o.cancelAt),
-    kind: ['patient', 'brachy'].includes(o.kind) ? o.kind : 'general', hn: str(o.hn), pname: str(o.pname), from: str(o.from), tgAt: str(o.tgAt) };   // .75 (API 150): from = ตั้งเวลาเริ่มแสดง · tgAt = ส่ง Telegram ตามเวลาแล้ว   // brachy (API 111) = HDR ส่งภาพแล้ว (ระบบสร้างจากปุ่ม CT ของนัดคิวใส่แร่)   // 22 พ.ย. (API 110): ประเภท ผู้ป่วย / ทั่วไป
+    kind: ['patient', 'brachy'].includes(o.kind) ? o.kind : 'general', hn: str(o.hn), pname: str(o.pname), from: str(o.from), tgAt: str(o.tgAt), doc: str(o.doc).toUpperCase() };   // .78 (API 151): doc = ตัวย่อแพทย์   // .75 (API 150): from = ตั้งเวลาเริ่มแสดง · tgAt = ส่ง Telegram ตามเวลาแล้ว   // brachy (API 111) = HDR ส่งภาพแล้ว (ระบบสร้างจากปุ่ม CT ของนัดคิวใส่แร่)   // 22 พ.ย. (API 110): ประเภท ผู้ป่วย / ทั่วไป
 };
 const normMlog = o => ({ id: str(o.id) || uid(), machine: str(o.machine), status: MST[str(o.status)] ? str(o.status) : 'ready', from: str(o.from), to: str(o.to), cat: str(o.cat), note: str(o.note), eta: str(o.eta), wait: str(o.wait), by: str(o.by), role: str(o.role), at: str(o.at), editBy: str(o.editBy), editAt: str(o.editAt), energy: str(o.energy) });
 function normTxs(t) {
@@ -10000,7 +10001,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.77';
+const PAGE_VERSION = '2026-11-22.78';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -10312,7 +10313,7 @@ function localStore() {
       if (ft > Date.now() + 31 * 864e5) throw new Error('ตั้งเวลาล่วงหน้าได้ไม่เกิน 30 วัน');
       const from = ft > Date.now() + 60000 ? new Date(ft).toISOString() : '', d0 = from ? iso(new Date(from)) : today();
       if (!isDay(rec.until) || rec.until < d0 || rec.until > plusDays(d0, 30)) throw new Error('วันที่แสดงถึงไม่ถูกต้อง');
-      const r = { id: uid(), text, roles: roles.join(', '), level: kind === 'patient' || rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind, hn, pname, from, tgAt: '' };
+      const r = { id: uid(), text, roles: roles.join(', '), level: kind === 'patient' || rec.level === 'urgent' ? 'urgent' : 'normal', until: rec.until, by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind, hn, pname, from, tgAt: '', doc: kind === 'patient' ? str(rec.doc).replace(/[^0-9A-Za-z\u0E00-\u0E7F._-]/g, '').toUpperCase().slice(0, 10) : '' };
       db.notify.push(r);
       if (!from) demoTgSend([r]);
       persist();
@@ -10554,7 +10555,7 @@ function localStore() {
       const dd = isDay(c.date) ? c.date : '', hn = str(c.hn).slice(0, 40);
       const sd = isDay(c.sim) ? c.sim : '';
       const text = L.text.replace(/\{(HN|วันที่ start RT|วันที่|แพทย์|ห้องฉาย|ห้อง|รอบ)\}/g, (m, p) => str({ 'HN': hn, 'วันที่': dd ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}` : '', 'วันที่ start RT': ntfSimTxt(L.text, sd), 'แพทย์': str(c.doc).toUpperCase(), 'ห้อง': str(c.room), 'ห้องฉาย': str(c.txroom).slice(0, 30), 'รอบ': str(c.round) }[p])).replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').replace(/\s+\)/g, ')').trim() || d.text;
-      const r = { id, text: hn ? ntfAddRoom(text, hn) : text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
+      const r = { id, doc: hn ? str(c.doc).toUpperCase().slice(0, 10) || ntfDocFor(hn) : '', text: hn ? ntfAddRoom(text, hn) : text, roles: L.roles.join(', '), level: 'urgent', until: today(), by: str(state.user.name || state.user.username), byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: hn ? 'patient' : 'general', hn, pname: hn ? str(c.name).slice(0, 200) : '' };
       const dm = ntfDmDemo(db, L, c, hn, r.text, id);   // .59: ข้อความส่วนตัวถึงบุคคล (เหมือน ntfDm_ ใน Code.gs)
       if (!L.roles.length) { persist(); return { rows: [], dm }; }
       if (cur) Object.assign(cur, r); else db.notify.push(r);
@@ -11201,7 +11202,7 @@ function localStore() {
       Object.assign(a, { hist: JSON.stringify(hist), editedBy: by, updated: nowISO() });
       // 22 พ.ย.: รอบ CT ใหม่ = ประกาศ HDR ส่งภาพแล้ว (เหมือน bqCtNotify_ ใน Code.gs)
       const nlk = ntflOf('bq.ct'), added = 'ct' in set ? bqCtPairs(a).map(p => p.t).filter(t => !ctBefore.includes(t)) : [], nroles = nlk && nlk.on ? nlk.roles : [];   // .40: ลิงก์ประกาศ
-      const sent = added.length && nroles.length ? added.map(t => ({ id: uid(), text: ntfAddRoom(nlk.text.replace(/\{รอบ\}/g, t).replace(/\{(วันที่|แพทย์|ห้อง)\}/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').trim(), a.hn), roles: nroles.join(', '), level: 'urgent', until: today(), by, byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: 'brachy', hn: a.hn, pname: a.name })) : [];
+      const sent = added.length && nroles.length ? added.map(t => ({ id: uid(), text: ntfAddRoom(nlk.text.replace(/\{รอบ\}/g, t).replace(/\{(วันที่|แพทย์|ห้อง)\}/g, '').replace(/\(\s*\)/g, '').replace(/\s+/g, ' ').trim(), a.hn), roles: nroles.join(', '), level: 'urgent', until: today(), by, byUser: ntfMe(), at: nowISO(), acks: '{}', cancelBy: '', cancelAt: '', kind: 'brachy', hn: a.hn, pname: a.name, doc: str(a.doc).toUpperCase() })) : [];
       if (sent.length) { db.notify.push(...sent); demoTgSend(sent); }
       persist();
       return sent.length ? { ...clone(a), _ntf: clone(sent) } : clone(a);
@@ -34302,7 +34303,7 @@ function tgSetInner(d) {
     <label class="check"><input type="checkbox" data-tg="on"${t.on ? ' checked' : ''}> <b>ส่งประกาศเข้า Telegram</b></label>
     <div class="tg-row" role="group" aria-label="ประเภทที่ส่ง"><span>ส่งประเภท:</span>${TG_KINDS.map(k => `<label class="check"><input type="checkbox" data-tgkind="${k}"${t.kinds.includes(k) ? ' checked' : ''}> ${TG_KIND_LABEL[k]}</label>`).join('')}</div>
     <div class="tg-pt" role="radiogroup" aria-label="ข้อมูลผู้ป่วยในข้อความ"><span>ข้อมูลผู้ป่วยในข้อความ (ผู้ป่วย / HDR):</span>
-      ${[['abbr', `HN + คำนำหน้า + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก) เช่น HN 999000123 · ${tgAbbr('นาย สมชาย ใจดี')}${store.mode === 'sheet' && !serverHas(TG_PT_API) ? ' · ต้องใช้ Code.gs 2026-11-22.6' : ''}`], ['hn', 'HN อย่างเดียว (แนะนำ · ค่าเริ่มต้น)'], ['none', 'ไม่ใส่ (บอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub")']].map(([k, l]) => `<label class="check"><input type="radio" name="tg-pt" data-tgpt="${k}"${t.pt === k ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
+      ${[['abbr', `HN + ตัวย่อแพทย์ + คำนำหน้า + ชื่อย่อ (ชื่อ 3 ตัวอักษรแรก · นามสกุล 3 ตัวอักษรแรก) เช่น HN 999000123 AA ${tgAbbr('นาย สมชาย ใจดี')}${store.mode === 'sheet' && !serverHas(TG_PT_API) ? ' · ต้องใช้ Code.gs 2026-11-22.6' : ''}`], ['hn', 'HN อย่างเดียว (แนะนำ · ค่าเริ่มต้น)'], ['none', 'ไม่ใส่ (บอกว่า "HN และชื่อผู้ป่วยดูใน RT Hub")']].map(([k, l]) => `<label class="check"><input type="radio" name="tg-pt" data-tgpt="${k}"${t.pt === k ? ' checked' : ''}> ${esc(l)}</label>`).join('')}
       <p class="muted def-note" style="margin:2px 0 0"><b>ชื่อเต็มของผู้ป่วยไม่ส่งเสมอ</b> · ข้อความใน Telegram อยู่ในมือถือของสมาชิกกลุ่มและเก็บที่เซิร์ฟเวอร์ต่างประเทศ ใช้กลุ่มที่มีเฉพาะเจ้าหน้าที่ · ชื่อย่อ + HN ยังระบุตัวผู้ป่วยได้ (ข้อมูลสุขภาพตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล) จึงแนะนำ HN อย่างเดียว</p></div>
     <div><label class="field"><span class="lbl">ลิงก์เชิญเข้ากลุ่ม · ไอคอน Telegram บนแถบเมนู (ไม่บังคับ)</span><input type="url" data-tglink value="${esc(t.link || '')}" placeholder="https:\/\/t.me/+…" autocomplete="off" spellcheck="false" aria-label="ลิงก์เชิญเข้ากลุ่ม Telegram"${tgLinkOld() ? ' disabled' : ''}></label>
       <p class="muted def-note" style="margin:2px 0 0">${tgLinkOld() ? '<b>ต้องใช้ Code.gs 2026-11-22.7</b> (ซ่อนลิงก์จากหน่วยงานภายนอก) · ' : ''}ใน Telegram: เปิดกลุ่ม → ชื่อกลุ่ม → Invite Links (หรือ Add Members → Invite via Link) → คัดลอก · ไอคอนแสดงให้ผู้ที่เห็นประกาศ (หน่วยงานภายนอกไม่เห็น) · <b>ใครได้ลิงก์ก็เข้ากลุ่มได้</b> ถ้าลิงก์หลุดให้ Revoke ใน Telegram แล้ววางลิงก์ใหม่</p></div>
@@ -34390,7 +34391,19 @@ const ntfCanCancel = n => ntfBoss() || (ntfNew() && !!n.byUser && n.byUser === n
 const ntfRank = n => (n.kind === 'patient' ? 0 : n.kind === 'brachy' ? 1 : n.level === 'urgent' ? 2 : 3);   // ผู้ป่วย → HDR ส่งภาพแล้ว → ด่วนแบบเดิม → ทั่วไป   // ผู้ป่วยขึ้นก่อนเสมอ แล้วด่วนแบบเดิม แล้วทั่วไป
 const ntfSort = (a, b) => ntfRank(a) - ntfRank(b) || str(b.at).localeCompare(str(a.at));
 const ntfSees = n => ntfBoss() || (!!n.byUser && n.byUser === ntfMe()) || (ntfMine(n) && !ntfWait(n) && !ntfNever(n));   // .75: ตั้งเวลาไว้ = ผู้รับยังไม่เห็น (ยกเลิกก่อนถึงเวลา = ไม่เห็นเลย)   // แอดมินเห็นทุกประกาศ · คนอื่นเห็นของตำแหน่งตัวเองและที่ตัวเองส่ง
-const ntfPt = n => (n.kind === 'patient' || n.kind === 'brachy' ? `HN ${n.hn}${n.pname ? ' ' + n.pname : ''}` : '');
+// .78: ตัวย่อแพทย์ของผู้ป่วยต่อจาก HN (ตัวหนา) · เก็บไว้กับประกาศ (doc · Code.gs API 151) · ประกาศเก่า / Code.gs เดิม = หาจากข้อมูลในหน้า (เคส → นัด → CT → ใส่แร่ → แจกงานแพทย์ ล่าสุด)
+function ntfDocFor(hn) {
+  const k = hnKey(hn);
+  if (!k) return '';
+  for (const list of [state.cases, state.appt, state.ct, state.bq, state.dq]) {
+    const xs = list || [];
+    for (let i = xs.length - 1; i >= 0; i--) if (xs[i] && str(xs[i].doc) && hnKey(xs[i].hn) === k) return str(xs[i].doc).toUpperCase();
+  }
+  return '';
+}
+const ntfDoc = n => (n && (n.kind === 'patient' || n.kind === 'brachy') ? str(n.doc) || ntfDocFor(n.hn) : '');
+const NTF_DOC_KEEP = new Set(['RT', 'CT', 'MP', 'RO', 'HN', 'HDR', 'CMT', 'SIM', 'OK', 'FX', 'US', 'PV', 'IV', 'CM', 'OR', 'MV', 'KV', 'CB']);   // คำย่อทั่วไป: ไม่ตัดออกจากเนื้อความ (เหมือน TG_DOC_KEEP ใน Code.gs)
+const ntfPt = n => (n.kind === 'patient' || n.kind === 'brachy' ? `HN ${n.hn}${ntfDoc(n) ? ' ' + ntfDoc(n) : ''}${n.pname ? ' ' + n.pname : ''}` : '');
 const NTF_KIND_LABEL = { patient: 'ผู้ป่วย', brachy: 'HDR', general: 'ทั่วไป' };
 const ntfRole = () => str(state.user.role);
 const ntfRoles = () => [...new Set((state.config.roles && state.config.roles.length ? state.config.roles : LPCH_ROLES).map(str).filter(Boolean))].filter(r => !txsOuterRole(r));
@@ -34409,7 +34422,9 @@ const NTF_URL_RE = /https?:\/\/[A-Za-z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+/g;
 function ntfBodyText(n) {
   const t = str(n && n.text), h = str(n && n.hn).replace(/[^0-9A-Za-z]/g, '');
   if (!h || !(n.kind === 'patient' || n.kind === 'brachy')) return t;
-  const x = t.replace(new RegExp(`(^|[^0-9A-Za-z])${h}(?![0-9A-Za-z])`, 'g'), '$1').replace(/[ \t]{2,}/g, ' ').replace(/^[ \t·,:-]+/, '').trim();
+  let x = t.replace(new RegExp(`(^|[^0-9A-Za-z])${h}(?![0-9A-Za-z])`, 'g'), '$1').replace(/[ \t]{2,}/g, ' ').replace(/^[ \t·,:-]+/, '').trim();
+  const d = ntfDoc(n).replace(/[^0-9A-Za-z\u0E00-\u0E7F]/g, '');   // .78: ตัวย่อแพทย์อยู่หน้าข้อความแล้ว = ตัดที่ซ้ำ
+  if (x && d.length >= 2 && !NTF_DOC_KEEP.has(d)) x = x.replace(new RegExp(`(^|[^0-9A-Za-z\u0E00-\u0E7F])${d}(?![0-9A-Za-z\u0E00-\u0E7F])`, 'g'), '$1').replace(/[ \t]{2,}/g, ' ').replace(/^[ \t·,:-]+/, '').trim() || x;
   return x || t;
 }
 const ntfEm = h => h.replace(/\b(emergency)\b/gi, '<span class="ntf-emer">$1</span>');
@@ -35033,7 +35048,7 @@ function renderNtf(gated) {
   if (fresh >= 0) ntfUi.idx = fresh;
   if (!list.length) { bar.hidden = true; bar.innerHTML = ''; ntfUi.key = ''; return; }
   if (ntfUi.idx >= list.length) ntfUi.idx = 0;
-  const n = list[ntfUi.idx], key = [n.id, ntfUi.idx, list.length, send, n.level, n.kind, n.hn, n.pname, n.text].join('|');
+  const n = list[ntfUi.idx], key = [n.id, ntfUi.idx, list.length, send, n.level, n.kind, n.hn, ntfDoc(n), n.pname, n.text].join('|');
   bar.hidden = false;
   if (key === ntfUi.key) return;   // ไม่วาดซ้ำ = ตัววิ่งไม่เริ่มใหม่ทุกครั้งที่หน้าเว็บวาด
   ntfUi.key = key;
@@ -35042,7 +35057,7 @@ function renderNtf(gated) {
   bar.classList.toggle('pt', n.kind === 'patient');
   bar.classList.toggle('bq', n.kind === 'brachy');
   bar.innerHTML = `<span class="ntf-tag">${NTF_BELL}<span class="ntf-tt">${n.kind === 'patient' ? 'ผู้ป่วย' : n.kind === 'brachy' ? 'HDR' : n.level === 'urgent' ? 'ด่วน' : 'ประกาศ'}</span></span>${list.length > 1 ? `<span class="ntf-pos">${ntfUi.idx + 1}/${list.length}</span>` : ''}
-    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน · กดที่ข้อความ = อ่านทั้งหมด"><span class="ntf-run"><b>${ntfPt(n) ? `<span class="ntf-pt">${esc(ntfPt(n))}</span> ` : ''}${ntfLinks(ntfBodyText(n))}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
+    <div class="ntf-track" tabindex="0" title="ชี้ค้างไว้เพื่อหยุดอ่าน · กดที่ข้อความ = อ่านทั้งหมด"><span class="ntf-run"><b>${ntfPt(n) ? `<span class="ntf-pt">HN ${esc(n.hn)}${ntfDoc(n) ? ` <span class="ntf-doc">${esc(ntfDoc(n))}</span>` : ''}${n.pname ? ' ' + esc(n.pname) : ''}</span> ` : ''}${ntfLinks(ntfBodyText(n))}</b><span class="ntf-meta">จาก ${esc(n.by)} · ${esc(ntfWhen(n.at))} · ถึง ${esc(n.roles.join(', '))}</span></span></div>
     ${list.length > 1 ? '<span class="ntf-nav"><button type="button" data-ntfnav="-1" aria-label="ประกาศก่อนหน้า">‹</button><button type="button" data-ntfnav="1" aria-label="ประกาศถัดไป">›</button></span>' : ''}
     ${send ? '<button type="button" class="ntf-link new" data-ntfnew title="เขียนประกาศใหม่">+ ส่ง<span class="ntf-lt">ประกาศ</span></button>' : ''}<button type="button" class="ntf-link" data-ntfhist title="ประกาศที่ผ่านมา และใครรับทราบเมื่อไร">ประวัติ</button>
     <button type="button" class="ntf-ok" data-ntfack="${esc(n.id)}" title="ประกาศนี้จะหายจากทุกคนใน ${esc(ntfRoleName(role))}">รับทราบ</button>`;
@@ -35145,7 +35160,7 @@ function ntfItem(n, send) {
   if (mine && ntfLive(n) && !mineAck) acts.push(`<button type="button" class="btn primary" data-ntfack="${esc(n.id)}">รับทราบ</button>`);
   const pt = n.kind === 'patient', bq = n.kind === 'brachy';
   return `<li class="ntf-item${bq ? ' bq' : n.level === 'urgent' || pt ? ' urgent' : ''}${ntfWait(n) ? ' sched' : ntfLive(n) ? '' : ' off'}" data-ntfid="${esc(n.id)}"><div class="ntf-head"><span class="ntf-kind${pt ? ' pt' : bq ? ' bq' : ''}">${NTF_KIND_LABEL[n.kind] || 'ทั่วไป'}</span>${ntfStatus(n)}<span>${esc(n.by)} · ${esc(ntfWhen(n.at))}</span>${n.from && !ntfWait(n) ? `<span>เริ่ม ${esc(ntfWhen(n.from))}</span>` : ''}<span>ถึง ${esc(fmtDay(n.until))}</span></div>
-    ${pt || bq ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b><span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : bq ? 'bq' : 'gen'}">${ntfLinks(ntfBodyText(n))}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
+    ${pt || bq ? `<p class="ntf-ptline"><b>HN ${esc(n.hn)}</b>${ntfDoc(n) ? `<b class="ntf-doc">${esc(ntfDoc(n))}</b>` : ''}<span>${esc(n.pname)}</span></p>` : ''}<p class="${pt ? 'pt' : bq ? 'bq' : 'gen'}">${ntfLinks(ntfBodyText(n))}</p>${chips}${acts.length ? `<div class="ntf-acts">${acts.join('')}</div>` : ''}</li>`;
 }
 function ntfHistHtml(send) {
   const q = ntfUi.q.trim().toLowerCase();
@@ -35253,7 +35268,7 @@ async function ntfSend() {
   try {
     const roles = ntfRoles().filter(r => f.roles.includes(r)).concat(f.roles.filter(r => !ntfRoles().includes(r)));
     const base = sch ? f.sd : today();   // .75: แสดงถึง นับจากวันเริ่ม
-    const rec = pt ? { kind: 'patient', hn: f.hn, pname: f.pname, text: f.text, roles, level: 'urgent', until: plusDays(base, f.days) } : { kind: 'general', text: f.text, roles, level: 'normal', until: plusDays(base, f.days) };
+    const rec = pt ? { kind: 'patient', hn: f.hn, pname: f.pname, doc: ntfDocFor(f.hn), text: f.text, roles, level: 'urgent', until: plusDays(base, f.days) } : { kind: 'general', text: f.text, roles, level: 'normal', until: plusDays(base, f.days) };
     if (sch) rec.from = new Date(at).toISOString();
     const r = await store.notifyAdd(rec);
     ntfMerge(r && r.rows);
