@@ -510,6 +510,25 @@ button.duty-line:hover{border-color:var(--accent)}
 .ev-prev{font-size:12.5px;color:var(--warn)}
 .ev-by{font-size:12px}
 .ev-row .hn-btn{font-size:inherit}
+/* .66: แถบสถิติ → รายชื่อผู้ป่วย (กดตัวเลข) · ใบพิมพ์ลายน้ำ */
+.stl-n{padding:0 4px;border:0;border-bottom:1px dashed currentColor;background:transparent;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums}
+.stl-n:hover{background:var(--accent-soft)}
+#view-dash [data-stl]:not(button){cursor:pointer}
+#view-dash .vb-row[data-stl]:hover,#view-dash .vc-g[data-stl]:hover,#view-dash tr[data-stl]:hover{background:var(--hover)}
+.viz-kpi .stl-n{font-size:inherit;border-bottom-width:2px}
+dialog.stl-dlg{width:min(1100px,calc(100vw - 16px))}
+.stl-sub{margin:0}
+.stl-q{width:min(360px,100%);min-height:34px}
+.stl-t{width:100%;border-collapse:collapse;font-size:13.5px}
+.stl-t th{position:sticky;top:0;background:var(--surface);text-align:left;font-size:12.5px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1.5px solid var(--line-strong);white-space:nowrap}
+.stl-t td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+.stl-t td.num{color:var(--faint);font-variant-numeric:tabular-nums}
+.stl-t .hn{font-size:14px}
+.dash-day-print{margin-left:8px}
+.stl-sheet h2{margin:10px 0 4px;font-size:11pt}
+.stl-sheet h2 span{font-weight:400;font-size:9pt;color:#444}
+.stl-sheet table{table-layout:auto}
+.stl-ft{margin:8px 0 0;font-size:8pt;color:#444}
 /* .65: Treatment Order (หน้าต่างใบสั่ง · ปุ่มในแถบ Contouring · ป้ายในงาน / Evaluation) */
 .txo-open small{margin-left:6px;font-weight:600;opacity:.85}
 .txo-open .txo-st.ok{color:inherit}
@@ -5712,6 +5731,12 @@ footer { margin-top: 28px; font-size: .78rem; color: var(--muted); max-width: 80
   </div>
 </dialog>
 <!-- 20 พ.ย.: Treatment Summary · เอกสาร A4 (ดู / พิมพ์ตามสิทธิ์ของหน่วยงาน) -->
+<dialog id="stl-dlg" class="dlg-wide stl-dlg" aria-labelledby="stl-title">
+  <div class="dlg">
+    <header class="dlg-head"><h2 id="stl-title">รายชื่อผู้ป่วย</h2><span class="ap-acts"><button type="button" class="btn primary sm" id="stl-print">🖨 พิมพ์</button></span><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
+    <div class="dlg-body" id="stl-body"></div>
+  </div>
+</dialog>
 <dialog id="txo-dlg" class="dlg-wide txo-dlg" aria-labelledby="txo-title">
   <div class="dlg">
     <header class="dlg-head"><h2 id="txo-title">Treatment Order</h2><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header>
@@ -9742,7 +9767,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.65';
+const PAGE_VERSION = '2026-11-22.66';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -26733,7 +26758,101 @@ function calMove(step) {
   dash.day = v === 'day' ? dash.at : '';
   render();
 }
+/* .66: แถบสถิติ → กดตัวเลข / แท่ง / แถว = รายชื่อผู้ป่วยของสถิตินั้น (HN · ชื่อ · รายละเอียด) · ค้นหาได้ · พิมพ์ A4 พร้อมลายน้ำชื่อคนพิมพ์และเวลา
+ * รายการเก็บไว้ตอนวาด (คีย์ l1, l2, …) · วาดแถบสถิติใหม่ทั้งแถบ = ล้าง · DIBH = เทคนิคพิเศษ DIBH ในรายการ CT-SIM / CT Order หรือเคสที่ระบุ DIBH */
+const stl = new Map();
+let stlSeq = 0, stlCur = null;
+const stlKey = spec => { const k = 'l' + (++stlSeq); stl.set(k, spec); return k; };
+const stlBtn = (n, spec) => (n ? `<button type="button" class="stl-n" data-stl="${stlKey(spec)}" title="${esc(`ดูรายชื่อ · ${spec.title}`)}">${n}</button>` : '–');
+const stlAttr = r => (r && r.stl && r.stl.rows && r.stl.rows.length ? ` data-stl="${stlKey(r.stl)}"` : '');
+const DIBH_RE = /\bDIBH\b/i;
+const ctDibh = r => DIBH_RE.test(str(r.special));
+const dibhIds = () => new Set(state.ct.filter(ctDibh).flatMap(r => splitList(r.took)));
+const caseDibh = (c, ids) => DIBH_RE.test([c.tech, c.note, c.ptags, c.brth].map(str).join(' ')) || (ids || dibhIds()).has(c.id) || (!!c.replan && (ids || dibhIds()).has((rpOf(c) || {}).of));
+const stlDay = v => (isDay(str(v).slice(0, 10)) ? fmtDay(str(v).slice(0, 10)) : v === 'on call' ? 'On Call' : '');
+// รูปแบบรายการ: cols = หัวคอลัมน์ (ต่อจาก HN · ชื่อ) · row = ค่าของแต่ละคอลัมน์
+const STL_KINDS = {
+  case: { cols: () => ['เทคนิค', 'แพทย์', 'ห้อง', 'In', 'Start RT', 'MP', 'Aim / Type'],
+    row: c => [`${catOf(c.cat).label}${unitsOf(c) > 1 ? ` ×${unitsOf(c)}` : ''}`, c.doc, c.room, stlDay(c.in), stlDay(c.sim), c.mp, [c.aim, c.type].filter(Boolean).join(' · ')], key: c => c.in },
+  ct: { cols: () => ['วัน CT', 'เครื่อง CT', 'แพทย์', 'CM', 'เทคนิคพิเศษ', 'HDR'], row: r => [stlDay(r.date), r.ct ? ctLabel(r.ct) : '', r.doc, r.cm, r.special, r.hdr], key: r => r.date },
+  bq: { cols: () => ['วันนัด', 'Fx', 'แพทย์', 'รูปแบบการใส่', 'สถานะ'], row: a => [stlDay(a.date), [a.fx, a.total].filter(Boolean).join('/'), a.doc, a.tech, a.status], key: a => a.date },
+  wait: { cols: s => ['เทคนิค', msLabel(s.a), msLabel(s.b), `ระยะ (${s.unit})`], row: x => [catOf(x.c.cat).label, stlDay(x.c[x.a]) + (str(x.c[x.a]).length > 10 ? ' ' + str(x.c[x.a]).slice(11, 16) : ''), stlDay(x.c[x.b]) + (str(x.c[x.b]).length > 10 ? ' ' + str(x.c[x.b]).slice(11, 16) : ''), num(x.v, 1)], key: x => -x.v, it: x => x.c },
+  dibh: { cols: () => ['ที่มา', 'วันที่', 'แพทย์', 'ห้อง', 'รายละเอียด'],
+    row: x => (x.src === 'ct' ? ['CT-Sim', stlDay(x.r.date), x.r.doc, x.r.room, [x.r.ct ? ctLabel(x.r.ct) : '', x.r.special].filter(Boolean).join(' · ')]
+      : ['เคสวางแผน', stlDay(x.r.in), x.r.doc, x.r.room, [catOf(x.r.cat).label, isDay(x.r.sim) ? `Start RT ${fmtDay(x.r.sim)}` : ''].filter(Boolean).join(' · ')]), key: x => (x.src === 'ct' ? x.r.date : x.r.in), it: x => x.r },
+};
+// แถวของรายการ: { hn, name, vals } เรียงตามวันที่ (ระยะรอ = นานสุดก่อน)
+function stlRows(spec) {
+  const K = STL_KINDS[spec.kind] || STL_KINDS.case, it = K.it || (x => x);
+  return [...spec.rows].sort((a, b) => { const x = K.key(a), y = K.key(b); return typeof x === 'number' ? x - y : str(x).localeCompare(str(y)); })
+    .map(x => ({ hn: str(it(x).hn), name: str(it(x).name), vals: K.row(x).map(str) }));
+}
+const stlCols = spec => (STL_KINDS[spec.kind] || STL_KINDS.case).cols(spec);
+const stlPts = rows => new Set(rows.map(r => hnKey(r.hn) || r.name)).size;
+const stlDlg = $('#stl-dlg');
+function openStl(k) {
+  const spec = stl.get(k);
+  if (!spec) return toast('รายการนี้เก่าแล้ว · กดตัวเลขอีกครั้ง', { err: true });
+  stlCur = { spec, rows: stlRows(spec), q: '' };
+  $('#stl-title').textContent = spec.title;
+  renderStl();
+  if (!stlDlg.open) stlDlg.showModal();
+  const q = $('#stl-q'); if (q) q.focus();
+}
+const stlShown = () => { const w = str(stlCur.q).toLowerCase().split(/\s+/).filter(Boolean); return stlCur.rows.filter(r => wordsIn(w, `${r.hn} ${r.name} ${r.vals.join(' ')}`.toLowerCase())); };
+function renderStl() {
+  const s = stlCur, rows = stlShown(), cols = stlCols(s.spec), pc = pcOn();
+  const body = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td><b class="hn">${esc(r.hn || '—')}</b>${pc && r.hn ? ` <button type="button" class="linkish" data-pcopen="${esc(r.hn)}" title="Patient chart">chart</button>` : ''}</td><td>${esc(r.name)}</td>${r.vals.map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('');
+  const keep = $('#stl-q') && document.activeElement === $('#stl-q');
+  $('#stl-body').innerHTML = `<p class="muted stl-sub">${esc(s.spec.sub || '')}${s.spec.sub ? ' · ' : ''}${s.rows.length} รายการ · ผู้ป่วย ${stlPts(s.rows)} คน${s.q ? ` · ตรงกับคำค้น ${rows.length}` : ''}</p>
+    <input type="search" id="stl-q" class="stl-q" value="${esc(s.q)}" placeholder="ค้นหา HN ชื่อ หรือรายละเอียด" autocomplete="off" aria-label="ค้นหาในรายชื่อ">
+    <div class="table-wrap"><table class="stl-t"><thead><tr><th>#</th><th>HN</th><th>ชื่อ</th>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length + 3}" class="muted">ไม่มีรายการ</td></tr>`}</tbody></table></div>`;
+  if (keep) { const q = $('#stl-q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+// ใบพิมพ์: หัวเอกสาร (โลโก้ ชื่อสถิติ ช่วง ผู้พิมพ์ เวลา) · ลายน้ำชื่อคนพิมพ์ + เวลา ทุกหน้า · groups = หลายตาราง (เช่น รายชื่อของวันในปฏิทิน)
+function stlSheet(title, sub, groups) {
+  const now = new Date(), who = str(state.user.name || state.user.username) || 'ผู้ใช้', at = `${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`, wm = `${who} · ${at}`;
+  const all = groups.flatMap(g => g.rows);
+  const table = g => `${g.h ? `<h2>${esc(g.h)} <span>${g.rows.length} รายการ</span></h2>` : ''}<table><thead><tr><th style="width:9mm">#</th><th style="width:22mm">HN</th><th>ชื่อ</th>${g.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+    <tbody>${g.rows.map((r, i) => `<tr><td>${i + 1}</td><td class="ss-hn">${esc(r.hn || '—')}</td><td>${esc(r.name)}</td>${r.vals.map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${g.cols.length + 3}">ไม่มีรายการ</td></tr>`}</tbody></table>`;
+  return `<div class="ss-sheet pc-sheet stl-sheet"><div class="pc-wm" aria-hidden="true">${[8, 26, 44, 62, 80, 96].map(t => `<span style="top:${t}%">${esc(wm)}</span>`).join('')}</div>
+    <div class="pc-sh-hd"><img class="pc-sh-logo" src="${TXS_LOGO}" alt=""><div class="pc-sh-t"><h1>${esc(title)}</h1><p>${esc(sub || '')}${sub ? ' · ' : ''}${all.length} รายการ · ผู้ป่วย ${stlPts(all)} คน</p></div>
+      <div class="pc-sh-at">พิมพ์ ${esc(at)}<br>โดย ${esc(who)}</div></div>${groups.map(table).join('')}
+    <p class="stl-ft">ที่มา: ${esc(state.config.appName)} · แถบ${esc(navLabel('dash'))} · เอกสารมีข้อมูลผู้ป่วย ใช้ภายในเท่านั้น · พิมพ์โดย ${esc(who)} ${esc(at)}</p></div>`;
+}
+async function stlPrint(html, btn) {
+  const box = $('#ss-print');
+  box.innerHTML = html;
+  if (btn) btn.disabled = true;
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const st = document.createElement('style');
+    st.textContent = '@page{size:A4;margin:10mm}';
+    document.head.appendChild(st);
+    document.body.classList.add('printing-ss');
+    let done = false;
+    const end = () => { if (done) return; done = true; document.body.classList.remove('printing-ss'); st.remove(); box.innerHTML = ''; window.removeEventListener('afterprint', end); };
+    window.addEventListener('afterprint', end);
+    setTimeout(end, 120000);
+    window.print();
+  } catch (e) { toast('พิมพ์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { if (btn) btn.disabled = false; }
+}
+$('#stl-print').addEventListener('click', e => { if (stlCur) stlPrint(stlSheet(stlCur.spec.title, stlCur.spec.sub, [{ cols: stlCols(stlCur.spec), rows: stlShown() }]), e.currentTarget); });
+stlDlg.addEventListener('input', e => { if (e.target.id === 'stl-q' && stlCur) { stlCur.q = e.target.value; renderStl(); } });
+// ปฏิทิน → รายชื่อของวันที่เลือก: พิมพ์ทุกกลุ่มในใบเดียว
+let dashDayGroups = null;
+$('#view-dash').addEventListener('click', e => {
+  const b = e.target.closest('[data-stl], [data-stlday], [data-vdbby]');
+  if (!b) return;
+  if (b.dataset.vdbby) { pref.set('vizDbBy', b.dataset.vdbby); return renderDashCharts(); }
+  if (b.dataset.stlday !== undefined) { if (dashDayGroups) stlPrint(stlSheet(dashDayGroups.title, dashDayGroups.sub, dashDayGroups.groups), b); return; }
+  e.stopPropagation();
+  openStl(b.dataset.stl);
+});
+$('#view-dash').addEventListener('keydown', e => { const b = e.target.closest && e.target.closest('[data-stl]'); if (b && b.tagName !== 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openStl(b.dataset.stl); } });
 function renderDash() {
+  stl.clear();   // .66: รายชื่อของตัวเลขในแถบสถิติ (วาดใหม่ทั้งแถบ = เริ่มใหม่)
   const metrics = pref.get('dashMetrics', ['tx', 'start', 'end']).filter(k => DASH_METRICS.some(m => m.key === k));
   const room = pref.get('dashRoom', '');
   const rooms = dashRooms();
@@ -26819,21 +26938,22 @@ function dashCaseItem(c, extra) {
 function renderDashDay(tx, ev, hol, metrics, room, rooms) {
   const box = $('#dash-day'), ds = dash.day;
   if (!ds) { box.hidden = true; return; }
-  const parts = [];
+  const parts = [], groups = [];
   if (metrics.includes('tx')) {
     const byRoom = tx[ds] || {};
     for (const r of (room ? [room] : rooms)) {
       const list = uniq(byRoom[r]);
-      if (list.length) parts.push(`<h4><span class="ev-tx" style="padding:0 7px;border-radius:999px">${esc(roomLabel(r))} ${list.length}</span> กำลังฉาย</h4><ul>${list.map(c => dashCaseItem(c)).join('')}</ul>`);
+      if (list.length) { parts.push(`<h4><span class="ev-tx" style="padding:0 7px;border-radius:999px">${esc(roomLabel(r))} ${list.length}</span> กำลังฉาย</h4><ul>${list.map(c => dashCaseItem(c)).join('')}</ul>`); groups.push({ h: `${roomLabel(r)} · กำลังฉาย`, kind: 'case', rows: list }); }
     }
   }
   for (const m of DASH_METRICS) {
     if (m.key === 'tx' || !metrics.includes(m.key)) continue;
     const list = evList(m.key, (ev[m.key] || {})[ds]);
-    if (list.length) parts.push(`<h4><span class="ev-${m.key}" style="padding:0 7px;border-radius:999px">${esc(m.label)} ${list.length}</span></h4><ul>${list.map(c => dashCaseItem(c)).join('')}</ul>`);
+    if (list.length) { parts.push(`<h4><span class="ev-${m.key}" style="padding:0 7px;border-radius:999px">${esc(m.label)} ${list.length}</span></h4><ul>${list.map(c => dashCaseItem(c)).join('')}</ul>`); groups.push({ h: m.label, kind: 'case', rows: list }); }
   }
   box.hidden = false;
-  box.innerHTML = `<h3>${esc(LONG_DAY_FMT.format(parseISO(ds)))}${hol[ds] ? ` · <span class="cal-hol">${esc(hol[ds])}</span>` : !isWorkday(ds, hol) ? ' · <span class="muted">ไม่มีการฉาย</span>' : ''}</h3>${parts.join('') || '<p class="muted" style="margin:0">ไม่มีรายการตามที่เลือกแสดง</p>'}`;
+  dashDayGroups = { title: `ปฏิทินห้องฉาย · ${LONG_DAY_FMT.format(parseISO(ds))}`, sub: room ? `ห้อง ${roomLabel(room)}` : 'ทุกห้อง', groups: groups.map(g => ({ h: g.h, cols: stlCols(g), rows: stlRows(g) })) };   // .66
+  box.innerHTML = `<h3>${esc(LONG_DAY_FMT.format(parseISO(ds)))}${hol[ds] ? ` · <span class="cal-hol">${esc(hol[ds])}</span>` : !isWorkday(ds, hol) ? ' · <span class="muted">ไม่มีการฉาย</span>' : ''}${groups.length ? ' <button type="button" class="btn ghost sm dash-day-print" data-stlday="1">🖨 พิมพ์รายชื่อ</button>' : ''}</h3>${parts.join('') || '<p class="muted" style="margin:0">ไม่มีรายการตามที่เลือกแสดง</p>'}`;
 }
 // งานรอ: ขั้นตอนที่ยังไม่ได้กด (เฉพาะปุ่มที่เทคนิคนั้นมี) · ตรวจ QA และ Plan complete นับเฉพาะเคสที่ยังไม่ Evaluate หรือ Start RT ไม่เกิน 7 วันที่แล้ว
 const PEND_STEPS = () => STEPS.filter(x => x.key === 'fin' || x.key === 'eval' || (stampsOn() && stepOn(x)));
@@ -26947,20 +27067,21 @@ function renderDashStats() {
   const { list, label, p } = periodCases();
   $('#dash-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${p === v}">${l}</button>`).join('');
   rangeBoxes('dash', p);
-  $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้`;
+  $('#dash-stat-note').textContent = `เคสที่ In ${label} · กำลังฉายและรอ Finish นับ ณ วันนี้ · กดตัวเลขเพื่อดูรายชื่อ (HN) และพิมพ์`;
   const hol = holidayMap(), td = today(), rooms = dashRooms();
   const longAgo = plusDays(td, -365);
   const onToday = state.cases.filter(c => { if (isDay(c.sim) && (c.sim > td || (c.rt && isDay(c.rtDate) && c.rtDate < td && c.sim < longAgo))) return false; const sc = catOf(c.cat).kind !== 'simple' && !c.replan && caseSchedule(c, hol); return sc && sc.days.has(td); });
   const cats = state.config.cats.filter(k => k.on || list.some(c => c.cat === k.id));
-  const row = (name, cs, catId) => {
+  const ids = dibhIds();
+  const row = (name, cs, catId, dibh) => {
     const units = cs.reduce((t, c) => t + unitsOf(c), 0);
-    const tx = uniq(onToday.filter(c => !catId || c.cat === catId)).length;
-    const wait = planCases().filter(c => (!catId || c.cat === catId) && catOf(c.cat).kind !== 'simple' && !c.fin).length;
-    const cell = n => (n ? `<td>${n}</td>` : '<td class="zero">–</td>');
-    return `<tr><td>${esc(name)}</td>${cell(cs.length)}${cell(units)}${rooms.map(r => cell(cs.filter(c => roomOf(c) === r).length)).join('')}${cell(cs.filter(c => c.aim === 'Curative').length)}${cell(cs.filter(c => c.aim === 'Palliative').length)}${cell(tx)}${cell(wait)}</tr>`;
+    const only = c => (!catId || c.cat === catId) && (!dibh || caseDibh(c, ids));   // .66: แถว DIBH = เคส DIBH ทุกเทคนิค
+    const txL = uniq(onToday.filter(only)), waitL = planCases().filter(c => only(c) && catOf(c.cat).kind !== 'simple' && !c.fin);
+    const cell = (rs, col, n = rs.length) => (n ? `<td>${stlBtn(n, { title: `${name} · ${col}`, sub: col === 'กำลังฉายวันนี้' || col === 'รอ Finish' ? `ณ ${fmtDay(td)}` : `In ${label}`, kind: 'case', rows: rs })}</td>` : '<td class="zero">–</td>');
+    return `<tr${dibh ? ' class="dash-dibh"' : ''}><td>${esc(name)}</td>${cell(cs, 'เคส')}${cell(cs, 'ครั้ง', units)}${rooms.map(r => cell(cs.filter(c => roomOf(c) === r), `ห้อง ${roomLabel(r)}`)).join('')}${cell(cs.filter(c => c.aim === 'Curative'), 'Curative')}${cell(cs.filter(c => c.aim === 'Palliative'), 'Palliative')}${cell(txL, 'กำลังฉายวันนี้')}${cell(waitL, 'รอ Finish')}</tr>`;
   };
   $('#dash-stats').innerHTML = `<table><thead><tr><th>เทคนิค</th><th>เคส</th><th>ครั้ง</th>${rooms.map(r => `<th>${esc(roomLabel(r))}</th>`).join('')}<th>Curative</th><th>Palliative</th><th>กำลังฉายวันนี้</th><th>รอ Finish</th></tr></thead>
-    <tbody>${cats.map(k => row(k.label, list.filter(c => c.cat === k.id), k.id)).join('')}</tbody><tfoot>${row('รวม', list, '')}</tfoot></table>`;
+    <tbody>${cats.map(k => row(k.label, list.filter(c => c.cat === k.id), k.id)).join('')}${row('↳ DIBH (ทุกเทคนิค)', list.filter(c => caseDibh(c, ids)), '', true)}</tbody><tfoot>${row('รวม', list, '')}</tfoot></table>`;
 }
 // ระยะเวลารอคอย ระหว่างสองขั้นตอน (วัน หรือวันทำการ)
 const MILESTONES = [['ct', 'CT-Sim'], ['in', 'In'], ['fin', 'Finish'], ['eval', 'Evaluate'], ['mu', 'Dose check'], ['d0', 'F0'], ['d4', 'Delta4'], ['mc', 'SRS MapCheck'], ['pc', 'Plan complete'], ['sim', 'Start RT']];
@@ -27008,13 +27129,13 @@ const vizTip = (r, series, i) => series.map((s, k) => `${r.vals[k]} ${s.unit}`).
 const vizColor = (series, k, i) => (series.length > 1 ? `var(--viz-${k + 1})` : 'var(--viz-1)');
 function vizBars(rows, series) {
   const max = Math.max(1, ...rows.flatMap(r => r.vals)), tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0));
-  return `<div class="vb">${rows.map(r => `<div class="vb-row" tabindex="0" data-tip="${esc(vizTip(r, series, series.length === 1 ? vizPct(r.vals[0], tot[0]) : null))}">
+  return `<div class="vb">${rows.map(r => `<div class="vb-row" tabindex="0"${stlAttr(r)} data-tip="${esc(vizTip(r, series, series.length === 1 ? vizPct(r.vals[0], tot[0]) : null))}">
     <span class="vb-lbl${r.two ? ' two' : ''}">${esc(r.label)}${r.sub ? `<small>${esc(r.sub)}</small>` : ''}</span>
     <span class="vb-bars">${series.map((s, k) => `<span class="vb-track"><i class="${r.vals[k] ? '' : 'zero'}" style="width:calc((100% - 46px) * ${(r.vals[k] / max).toFixed(4)});background:${vizColor(series, k)}"></i><b>${r.vals[k]}</b></span>`).join('')}</span></div>`).join('')}</div>`;
 }
 function vizCols(rows, series) {
   const max = Math.max(1, ...rows.flatMap(r => r.vals)), tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0));
-  return `<div class="vc">${rows.map(r => `<div class="vc-g" tabindex="0" data-tip="${esc(vizTip(r, series, series.length === 1 ? vizPct(r.vals[0], tot[0]) : null))}">
+  return `<div class="vc">${rows.map(r => `<div class="vc-g" tabindex="0"${stlAttr(r)} data-tip="${esc(vizTip(r, series, series.length === 1 ? vizPct(r.vals[0], tot[0]) : null))}">
     <span class="vc-bars">${series.map((s, k) => `<span class="vc-bar"><b>${r.vals[k]}</b><i class="${r.vals[k] ? '' : 'zero'}" style="height:calc((100% - 18px) * ${(r.vals[k] / max).toFixed(4)});background:${vizColor(series, k)}"></i></span>`).join('')}</span>
     <span class="vc-lbl">${esc(r.short || r.label)}</span></div>`).join('')}</div>`;
 }
@@ -27024,26 +27145,26 @@ function vizDonut(rows, s) {
   if (list.length > VIZ_SLOTS) {
     const keep = [...list].sort((a, b) => b.vals[0] - a.vals[0]).slice(0, VIZ_SLOTS - 1);
     const rest = list.filter(r => !keep.includes(r));
-    list = [...list.filter(r => keep.includes(r)), { label: `อื่นๆ (${rest.length})`, vals: [rest.reduce((t, r) => t + r.vals[0], 0)], other: true }];
+    list = [...list.filter(r => keep.includes(r)), { label: `อื่นๆ (${rest.length})`, vals: [rest.reduce((t, r) => t + r.vals[0], 0)], other: true, stl: rest.every(r => r.stl) && rest.length ? { ...rest[0].stl, title: `${rest[0].stl.title.split(' · ')[0]} · อื่นๆ (${rest.map(r => r.label).join(', ')})`, rows: rest.flatMap(r => r.stl.rows) } : null }];
     list.forEach((r, i) => { if (!r.other) r.slot = i + 1; });
   }
   const total = list.reduce((t, r) => t + r.vals[0], 0), R = 48, C = 2 * Math.PI * R, gap = list.length > 1 ? 2 : 0;
   let at = 0;
   const arcs = list.map(r => {
     const len = (r.vals[0] / total) * C, color = r.other ? 'var(--viz-other)' : `var(--viz-${r.slot})`;
-    const arc = `<circle r="${R}" cx="60" cy="60" stroke="${color}" stroke-dasharray="${Math.max(0.5, len - gap).toFixed(2)} ${(C - Math.max(0.5, len - gap)).toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}" tabindex="0" data-tip="${esc(`${r.vals[0]} ${s.unit} — ${r.label} (${vizPct(r.vals[0], total)})`)}"></circle>`;
+    const arc = `<circle r="${R}" cx="60" cy="60" stroke="${color}" stroke-dasharray="${Math.max(0.5, len - gap).toFixed(2)} ${(C - Math.max(0.5, len - gap)).toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}" tabindex="0"${stlAttr(r)} data-tip="${esc(`${r.vals[0]} ${s.unit} — ${r.label} (${vizPct(r.vals[0], total)})`)}"></circle>`;
     at += len;
     return arc;
   }).join('');
   return `<div class="vd"><svg viewBox="0 0 120 120" role="img" aria-label="${esc(list.map(r => `${r.label} ${r.vals[0]}`).join(', '))}"><g transform="rotate(-90 60 60)">${arcs}</g><text class="vd-sum" x="60" y="63">${total}</text><text class="vd-unit" x="60" y="78">${esc(s.unit)}</text></svg>
-    <ul>${list.map(r => `<li data-tip="${esc(`${r.vals[0]} ${s.unit} — ${r.label} (${vizPct(r.vals[0], total)})`)}"><i style="background:${r.other ? 'var(--viz-other)' : `var(--viz-${r.slot})`}"></i><span>${esc(r.label)}</span><b>${r.vals[0]}</b><small>${vizPct(r.vals[0], total)}</small></li>`).join('')}</ul></div>`;
+    <ul>${list.map(r => `<li tabindex="0"${stlAttr(r)} data-tip="${esc(`${r.vals[0]} ${s.unit} — ${r.label} (${vizPct(r.vals[0], total)})`)}"><i style="background:${r.other ? 'var(--viz-other)' : `var(--viz-${r.slot})`}"></i><span>${esc(r.label)}</span><b>${r.vals[0]}</b><small>${vizPct(r.vals[0], total)}</small></li>`).join('')}</ul></div>`;
 }
 // extra: คอลัมน์เพิ่มท้ายตาราง (ชื่อ) · ค่าอยู่ใน r.extra · r.tsub = คำอธิบายในตาราง (ไม่ระบุ = r.sub)
 function vizTable(rows, series, extra = []) {
   const tot = series.map((s, k) => rows.reduce((t, r) => t + r.vals[k], 0)), xtot = extra.map((x, k) => rows.reduce((t, r) => t + ((r.extra || [])[k] || 0), 0));
   const sub = r => (r.tsub !== undefined ? r.tsub : r.sub);
   return `<div class="table-wrap"><table class="vt"><thead><tr><th></th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}${series.length === 1 ? '<th>สัดส่วน</th>' : ''}${extra.map(x => `<th class="vt-x">${esc(x)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${esc(r.label)}${sub(r) ? ` <span class="muted">${esc(sub(r))}</span>` : ''}</td>${r.vals.map(v => `<td>${v}</td>`).join('')}${series.length === 1 ? `<td>${vizPct(r.vals[0], tot[0])}</td>` : ''}${extra.map((x, k) => `<td class="vt-x">${(r.extra || [])[k] || 0}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tbody>${rows.map(r => `<tr tabindex="0"${stlAttr(r)}><td>${esc(r.label)}${sub(r) ? ` <span class="muted">${esc(sub(r))}</span>` : ''}</td>${r.vals.map(v => `<td>${v}</td>`).join('')}${series.length === 1 ? `<td>${vizPct(r.vals[0], tot[0])}</td>` : ''}${extra.map((x, k) => `<td class="vt-x">${(r.extra || [])[k] || 0}</td>`).join('')}</tr>`).join('')}</tbody>
     <tfoot><tr><td>รวม${series.length > 1 ? ' (ราย = ผู้ป่วยไม่ซ้ำในแต่ละแถว)' : ''}</td>${tot.map(t => `<td>${t}</td>`).join('')}${series.length === 1 ? '<td>100%</td>' : ''}${xtot.map(t => `<td class="vt-x">${t}</td>`).join('')}</tr></tfoot></table></div>`;
 }
 function renderDashCharts() {
@@ -27053,19 +27174,20 @@ function renderDashCharts() {
   $('#chart-period').innerHTML = DASH_PERIODS.map(([v, l]) => `<button type="button" data-dperiod="${v}" aria-pressed="${b.p === v}">${l}</button>`).join('');
   rangeBoxes('chart', b.p);
   $('#chart-count').innerHTML = [['case', 'เคส'], ['pt', 'ผู้ป่วย']].map(([v, l]) => `<button type="button" data-vcount="${v}" aria-pressed="${by === v}">${l}</button>`).join('');
-  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · CT-SIM ตามวันทำ CT · Brachytherapy ตามวันนัดในแถบนัดคิวใส่แร่`;
+  $('#dash-chart-note').textContent = `${b.label} · เคสตามวัน In · CT-SIM ตามวันทำ CT · Brachytherapy ตามวันนัดในแถบนัดคิวใส่แร่ · กดแท่ง / แถว / ตัวเลขเพื่อดูรายชื่อ (HN) และพิมพ์`;
   const cases = planCases().filter(c => inBounds(c.in, b) && catOf(c.cat).kind !== 'simple');
   const count = cs => (by === 'pt' ? uniq(cs).length : cs.length), unit = by === 'pt' ? 'คน' : 'เคส', series = [{ name: by === 'pt' ? 'ผู้ป่วย' : 'เคส', unit }];
   // ห้องฉาย (ห้องของบริเวณที่ 1) · แพทย์ (ลำดับตามตั้งค่า) · ไม่ระบุไว้ท้าย
   const rooms = dashRooms(), extraRooms = [...new Set(cases.map(roomOf))].filter(r => !rooms.includes(r));
-  const roomRows = [...rooms, ...extraRooms].map(r => ({ label: roomLabel(r), vals: [count(cases.filter(c => roomOf(c) === r))] })).filter(r => r.vals[0] || state.config.rooms.includes(r.label));
+  const cst = (title, rs) => ({ title, sub: `In ${b.label}${by === 'pt' ? ' · นับเป็นผู้ป่วย (HN ไม่ซ้ำ)' : ''}`, kind: 'case', rows: rs });   // .66
+  const roomRows = [...rooms, ...extraRooms].map(r => ({ label: roomLabel(r), vals: [count(cases.filter(c => roomOf(c) === r))], stl: cst(`ห้อง ${roomLabel(r)}`, cases.filter(c => roomOf(c) === r)) })).filter(r => r.vals[0] || state.config.rooms.includes(r.label));
   const docs = [...docCodes(), ...[...new Set(cases.map(c => str(c.doc)))].filter(d => d && !docCodes().includes(d))];
-  const docRows = [...docs.map(d => ({ label: d, sub: docName(d), vals: [count(cases.filter(c => str(c.doc) === d))] })),
-    { label: 'ไม่ระบุแพทย์', vals: [count(cases.filter(c => !str(c.doc)))] }].filter(r => r.vals[0] || docCodes().includes(r.label));
+  const docRows = [...docs.map(d => ({ label: d, sub: docName(d), vals: [count(cases.filter(c => str(c.doc) === d))], stl: cst(`แพทย์ ${d}`, cases.filter(c => str(c.doc) === d)) })),
+    { label: 'ไม่ระบุแพทย์', vals: [count(cases.filter(c => !str(c.doc)))], stl: cst('ไม่ระบุแพทย์', cases.filter(c => !str(c.doc))) }].filter(r => r.vals[0] || docCodes().includes(r.label));
   // ICD-10 10 อันดับ (เคสที่มีรหัส)
   const byIcd = new Map();
   for (const c of cases) { const k = str(c.icd).toUpperCase(); if (k) (byIcd.get(k) || byIcd.set(k, []).get(k)).push(c); }
-  const icdRows = [...byIcd].map(([k, cs]) => ({ label: `${k} ${dxShort(cs[0]) || ''}`.trim(), short: k, vals: [count(cs)] }))
+  const icdRows = [...byIcd].map(([k, cs]) => ({ label: `${k} ${dxShort(cs[0]) || ''}`.trim(), short: k, vals: [count(cs)], stl: cst(`ICD-10 ${k}`, cs) }))
     .sort((x, y) => y.vals[0] - x.vals[0] || x.short.localeCompare(y.short)).slice(0, 10);
   // Brachytherapy: จากแถบนัดคิวใส่แร่ ตามวันนัด · ไม่นับนัดที่ยกเลิก (ตั้งค่า → Brachytherapy นับเฉพาะ "มาตามนัด" = นับเฉพาะมาตามนัด)
   // ราย (เคส) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx) · แยกตามแพทย์ (ค่าเริ่มต้น) รูปแบบการใส่ หรือเดือน · ตาราง: รูปแบบการใส่ / แพทย์ เป็นคอลัมน์
@@ -27078,12 +27200,13 @@ function renderDashCharts() {
   const brBy = ['tech', 'month'].includes(pref.get('vizBrBy', 'doc')) ? pref.get('vizBrBy', 'doc') : 'doc';
   const split = (rs, keys, keyOf) => keys.map(k => rs.filter(a => keyOf(a) === k).length);
   const brief = (rs, keys, keyOf) => keys.map(k => [k, rs.filter(a => keyOf(a) === k).length]).filter(x => x[1]).map(([k, n]) => `${k} ${n}`).join(' · ');
-  const brRow = (label, rs, keys, keyOf, o = {}) => ({ label, vals: [pts(rs), rs.length], sub: [o.name, brief(rs, keys, keyOf)].filter(Boolean).join(' · '), tsub: o.name || '', two: true, extra: split(rs, keys, keyOf), short: o.short });
+  const bst = (title, rs) => ({ title: `Brachytherapy · ${title}`, sub: `นัด ${b.label}`, kind: 'bq', rows: rs });   // .66
+  const brRow = (label, rs, keys, keyOf, o = {}) => ({ label, stl: bst(label, rs), vals: [pts(rs), rs.length], sub: [o.name, brief(rs, keys, keyOf)].filter(Boolean).join(' · '), tsub: o.name || '', two: true, extra: split(rs, keys, keyOf), short: o.short });
   const brExtra = brBy === 'tech' ? brDocs : brTechs;
   const brRows = brBy === 'doc' ? brDocs.map(d => brRow(d, bqs.filter(a => docK(a) === d), brTechs, techK, { name: d === NODOC ? '' : docName(d) }))
     : brBy === 'tech' ? brTechs.map(t => brRow(t, bqs.filter(a => techK(a) === t), brDocs, docK))
       : [...new Set(bqs.map(a => a.date.slice(0, 7)))].sort().map(ym => brRow(fmtMonth(ym), bqs.filter(a => a.date.startsWith(ym)), brTechs, techK, { short: fmtMonth(ym).split(' ')[0] }));
-  const brTop = `<div class="viz-kpis"><div class="viz-kpi"><small>เคส (ราย)</small><b>${pts(bqs)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${bqs.length}</b></div><div class="viz-kpi"><small>แพทย์</small><b>${brDocs.filter(d => d !== NODOC).length}</b></div></div>
+  const brTop = `<div class="viz-kpis"><div class="viz-kpi"><small>เคส (ราย)</small><b>${stlBtn(pts(bqs), bst('ทุกนัด', bqs))}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${stlBtn(bqs.length, bst('ทุกนัด', bqs))}</b></div><div class="viz-kpi"><small>แพทย์</small><b>${brDocs.filter(d => d !== NODOC).length}</b></div></div>
     ${bqs.length ? `<p class="viz-note">รูปแบบการใส่: ${brTechs.map(t => `${esc(t)} <b>${bqs.filter(a => techK(a) === t).length}</b>`).join(' · ')}</p>` : ''}
     <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['doc', 'แพทย์'], ['tech', 'รูปแบบการใส่'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vbrby="${v}" aria-pressed="${brBy === v}">${l}</button>`).join('')}</span></div>`;
   // CT-SIM: จากแถบ CT-SIM ตามวันทำ CT · ราย = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนครั้งที่ทำ CT · แยกตามเครื่อง CT (ค่าเริ่มต้น) แพทย์ หรือเดือน
@@ -27091,21 +27214,35 @@ function renderDashCharts() {
   const cts = state.ct.filter(r => isDay(r.date) && inBounds(r.date, b)), hdr0 = (state.config.ct.hdrs || [])[0] || 'HDR', NOCT = 'ไม่ระบุเครื่อง';
   const cmN = rs => rs.filter(r => str(r.cm)).length, hdrN = rs => rs.filter(r => r.hdr === hdr0).length;
   const ctBy = ['doc', 'month'].includes(pref.get('vizCtBy', 'ct')) ? pref.get('vizCtBy', 'ct') : 'ct';
-  const ctRow = (label, rs, o = {}) => ({ label, vals: [pts(rs), rs.length], two: true, short: o.short, tsub: o.name || '',
+  const cts2 = (title, rs) => ({ title: `CT-SIM · ${title}`, sub: `CT ${b.label}`, kind: 'ct', rows: rs });   // .66
+  const ctRow = (label, rs, o = {}) => ({ label, stl: cts2(label, rs), vals: [pts(rs), rs.length], two: true, short: o.short, tsub: o.name || '',
     sub: [o.name, [['CM', cmN(rs)], ['ไม่ใช้ CM', rs.length - cmN(rs)], [hdr0, hdrN(rs)]].filter(x => x[1]).map(([k, n]) => `${k} ${n}`).join(' · ')].filter(Boolean).join(' · '),
     extra: [cmN(rs), rs.length - cmN(rs), hdrN(rs)] });
   const ctK = r => str(r.ct) || NOCT, ctMs = ordered(ctRooms().map(x => x.id), cts.map(ctK), NOCT), ctDocs = ordered(docCodes(), cts.map(docK), NODOC);
   const ctRows = ctBy === 'doc' ? ctDocs.map(d => ctRow(d, cts.filter(r => docK(r) === d), { name: d === NODOC ? '' : docName(d) }))
     : ctBy === 'month' ? [...new Set(cts.map(r => r.date.slice(0, 7)))].sort().map(ym => ctRow(fmtMonth(ym), cts.filter(r => r.date.startsWith(ym)), { short: fmtMonth(ym).split(' ')[0] }))
       : ctMs.map(m => ctRow(m === NOCT ? m : ctLabel(m), cts.filter(r => ctK(r) === m), { short: m === NOCT ? m : ctShort(m) }));
-  const ctTop = `<div class="viz-kpis"><div class="viz-kpi"><small>ผู้ป่วย (ราย)</small><b>${pts(cts)}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${cts.length}</b></div><div class="viz-kpi"><small>ใช้ CM</small><b>${cmN(cts)}</b></div><div class="viz-kpi"><small>${esc(hdr0)}</small><b>${hdrN(cts)}</b></div></div>
+  const ctTop = `<div class="viz-kpis"><div class="viz-kpi"><small>ผู้ป่วย (ราย)</small><b>${stlBtn(pts(cts), cts2('ทั้งหมด', cts))}</b></div><div class="viz-kpi"><small>ครั้ง</small><b>${stlBtn(cts.length, cts2('ทั้งหมด', cts))}</b></div><div class="viz-kpi"><small>ใช้ CM</small><b>${stlBtn(cmN(cts), cts2('ใช้ CM', cts.filter(r => str(r.cm))))}</b></div><div class="viz-kpi"><small>${esc(hdr0)}</small><b>${stlBtn(hdrN(cts), cts2(hdr0, cts.filter(r => r.hdr === hdr0)))}</b></div></div>
     <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['ct', 'เครื่อง CT'], ['doc', 'แพทย์'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vctby="${v}" aria-pressed="${ctBy === v}">${l}</button>`).join('')}</span></div>`;
+  // .66: DIBH = รายการ CT-SIM ที่เทคนิคพิเศษมี DIBH (ตามวันทำ CT) + เคสวางแผน DIBH (ตามวัน In) · ราย = ผู้ป่วย HN ไม่ซ้ำ · แยกตามแพทย์ ห้อง หรือเดือน
+  const dIds = dibhIds(), dbCt = cts.filter(ctDibh), dbCs = cases.filter(c => caseDibh(c, dIds)), dbAll = [...dbCt.map(r => ({ src: 'ct', r })), ...dbCs.map(r => ({ src: 'case', r }))];
+  const dbBy = ['room', 'month'].includes(pref.get('vizDbBy', 'doc')) ? pref.get('vizDbBy', 'doc') : 'doc', NOROOM = 'ไม่ระบุห้อง';
+  const dbKey = x => (dbBy === 'room' ? str(x.r.room) || NOROOM : dbBy === 'month' ? str(x.src === 'ct' ? x.r.date : x.r.in).slice(0, 7) : str(x.r.doc) || NODOC);
+  const dbKeys = dbBy === 'month' ? [...new Set(dbAll.map(dbKey))].sort() : dbBy === 'room' ? ordered(state.config.rooms, dbAll.map(dbKey), NOROOM) : ordered(docCodes(), dbAll.map(dbKey), NODOC);
+  const dst = (title, xs) => ({ title: `DIBH · ${title}`, sub: `CT / In ${b.label}`, kind: 'dibh', rows: xs });
+  const dbRows = dbKeys.map(k => { const xs = dbAll.filter(x => dbKey(x) === k), label = dbBy === 'month' ? fmtMonth(k) : k;
+    return { label, short: dbBy === 'month' ? fmtMonth(k).split(' ')[0] : undefined, two: true, vals: [pts(xs.map(x => x.r)), xs.filter(x => x.src === 'ct').length], extra: [xs.filter(x => x.src === 'case').length],
+      sub: [dbBy === 'doc' && k !== NODOC ? docName(k) : '', `เคสวางแผน ${xs.filter(x => x.src === 'case').length}`].filter(Boolean).join(' · '), tsub: dbBy === 'doc' && k !== NODOC ? docName(k) : '', stl: dst(label, xs) }; });
+  const dbTop = `<div class="viz-kpis"><div class="viz-kpi"><small>ผู้ป่วย (ราย)</small><b>${stlBtn(pts(dbAll.map(x => x.r)), dst('ทั้งหมด', dbAll))}</b></div><div class="viz-kpi"><small>CT-Sim DIBH</small><b>${stlBtn(dbCt.length, dst('CT-Sim', dbCt.map(r => ({ src: 'ct', r }))))}</b></div><div class="viz-kpi"><small>เคสวางแผน DIBH</small><b>${stlBtn(dbCs.length, dst('เคสวางแผน', dbCs.map(r => ({ src: 'case', r }))))}</b></div></div>
+    <div class="viz-legend" style="margin-top:-4px">แยกตาม <span class="seg-mini" role="group" aria-label="แยกตาม">${[['doc', 'แพทย์'], ['room', 'ห้องฉาย'], ['month', 'เดือน']].map(([v, l]) => `<button type="button" data-vdbby="${v}" aria-pressed="${dbBy === v}">${l}</button>`).join('')}</span></div>`;
   box.innerHTML = [
     vizCard('room', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละห้อง`, 'ห้องของบริเวณที่ 1 · เคสวางแผน (ไม่นับกิจกรรมแบบง่าย)', roomRows, series),
     vizCard('doc', `${by === 'pt' ? 'ผู้ป่วย' : 'เคส'}รวมแต่ละแพทย์`, '', docRows, series),
     vizCard('icd', 'ICD-10 10 อันดับ', `นับเป็น${by === 'pt' ? 'ผู้ป่วย' : 'เคส'} · เฉพาะเคสที่มีรหัส ICD-10`, icdRows, series, { empty: 'ไม่มีเคสที่มีรหัส ICD-10 ในช่วงนี้' }),
     vizCard('ctsim', 'CT-SIM', `จากแถบ${navLabel('ctsim')} ตามวันทำ CT · ราย = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนครั้งที่ทำ CT`, ctRows, [{ name: 'ราย', unit: 'ราย' }, { name: 'ครั้ง', unit: 'ครั้ง' }],
       { types: ['bar', 'col', 'table'], top: ctTop, extra: ['CM', 'ไม่ใช้ CM', hdr0], empty: ctOn() ? `ไม่มีการทำ CT ในช่วงนี้ (แถบ${navLabel('ctsim')})` : 'ยังไม่ได้ใช้แถบ CT-SIM' }),
+    vizCard('dibh', 'DIBH', 'Deep Inspiration Breath Hold · CT-SIM ที่เลือกเทคนิคพิเศษ DIBH ตามวันทำ CT + เคสวางแผนที่ระบุ DIBH ตามวัน In · ราย = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = CT-Sim DIBH', dbRows, [{ name: 'ราย', unit: 'ราย' }, { name: 'CT-Sim', unit: 'ครั้ง' }],
+      { types: ['bar', 'col', 'table'], top: dbTop, extra: ['เคสวางแผน'], empty: 'ไม่มี DIBH ในช่วงนี้ (เลือก DIBH ในเทคนิคพิเศษของ CT Order / CT-SIM หรือระบุในเคส)' }),
     vizCard('brachy', 'Brachytherapy', `จากแถบนัดคิวใส่แร่ ตามวันนัด · ${brDone ? 'นับเฉพาะมาตามนัด' : 'ไม่นับนัดที่ยกเลิก'} · เคส (ราย) = ผู้ป่วย HN ไม่ซ้ำ · ครั้ง = จำนวนนัด (Fx)`, brRows, [{ name: 'เคส (ราย)', unit: 'ราย' }, { name: 'ครั้ง', unit: 'ครั้ง' }],
       { types: ['bar', 'col', 'table'], top: brTop, extra: brExtra, empty: 'ไม่มีนัดใส่แร่ในช่วงนี้ (แถบนัดคิวใส่แร่)' }),
   ].join('');
@@ -27140,7 +27277,7 @@ function renderWait() {
   const row = ([a, b], custom) => {
     const st = waitStats(cases, a, b, work, hol);
     const name = `${msLabel(a)} → ${msLabel(b)}`;
-    return `<tr${custom ? ' class="wait-row-custom"' : ''}><td>${custom ? '<b>' : ''}${esc(name)}${custom ? '</b> <span class="unit">ที่เลือก</span>' : ''}${st.back ? ` <span class="unit" title="วันที่ของขั้นตอนหลังมาก่อนขั้นตอนแรก ไม่นับ">· ลำดับกลับ ${st.back}</span>` : ''}</td>${st.n ? `<td>${st.n}</td><td>${f(st.mean)}</td><td>${f(st.median)}</td><td>${f(st.min)}</td><td>${f(st.max)}</td>` : '<td class="zero">0</td><td class="zero">–</td><td class="zero">–</td><td class="zero">–</td><td class="zero">–</td>'}</tr>`;
+    return `<tr${custom ? ' class="wait-row-custom"' : ''}><td>${custom ? '<b>' : ''}${esc(name)}${custom ? '</b> <span class="unit">ที่เลือก</span>' : ''}${st.back ? ` <span class="unit" title="วันที่ของขั้นตอนหลังมาก่อนขั้นตอนแรก ไม่นับ">· ลำดับกลับ ${st.back}</span>` : ''}</td>${st.n ? `<td>${stlBtn(st.n, { title: `ระยะรอ ${name}`, sub: `In ${label} · ${unit} · นานสุดก่อน`, kind: 'wait', a, b, unit, rows: cases.map(c => ({ c, a, b, v: waitOf(c, a, b, work, hol) })).filter(x => x.v !== null && x.v >= 0) })}</td><td>${f(st.mean)}</td><td>${f(st.median)}</td><td>${f(st.min)}</td><td>${f(st.max)}</td>` : '<td class="zero">0</td><td class="zero">–</td><td class="zero">–</td><td class="zero">–</td><td class="zero">–</td>'}</tr>`;
   };
   $('#dash-wait').innerHTML = `<table><thead><tr><th>ช่วง</th><th>เคส</th><th>เฉลี่ย</th><th>มัธยฐาน</th><th>เร็วสุด</th><th>นานสุด</th></tr></thead>
     <tbody>${WAITS.map(w => row(w)).join('')}</tbody><tfoot>${row([from, to], true)}</tfoot></table>`;
