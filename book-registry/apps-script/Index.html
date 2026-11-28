@@ -144,6 +144,22 @@
     .stat .value.small .muted { font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .loading { padding: 64px 16px; text-align: center; color: var(--muted); }
+
+    .setup {
+      display: grid;
+      gap: 12px;
+      max-width: 640px;
+      margin: 32px auto;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .setup h2 { font-size: 20px; }
+    .setup p { margin: 0; }
+    .setup form { display: grid; gap: 12px; justify-items: start; }
+    .setup .field { width: 100%; }
     .spinner {
       width: 32px; height: 32px; margin: 0 auto 12px;
       border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%;
@@ -336,6 +352,19 @@
       <div class="spinner"></div>
       กำลังโหลดข้อมูลจาก Google Sheet…
     </div>
+
+    <section class="setup" id="setup" hidden aria-labelledby="setup-title">
+      <h2 id="setup-title">เชื่อมเว็บแอปกับ Google Sheet ทะเบียน</h2>
+      <p class="muted">ทำครั้งเดียว: วางลิงก์ Google Sheet ที่ใช้เก็บทะเบียนหนังสือส่ง ระบบจะจำไว้ให้ทุกคนที่เปิดเว็บแอปนี้</p>
+      <form id="form-setup">
+        <label class="field" for="setup-url">ลิงก์ Google Sheet
+          <input id="setup-url" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" required placeholder="https://docs.google.com/spreadsheets/d/…/edit">
+        </label>
+        <p class="error" id="setup-error" role="alert"></p>
+        <button class="btn primary" id="btn-setup" type="submit">เชื่อมชีตนี้</button>
+      </form>
+      <p class="hint">ถ้ายังไม่มีชีต ให้สร้าง Google ชีตใหม่แบบว่างเปล่าก่อน ระบบจะสร้างแท็บปี พ.ศ. พร้อมหัวตารางให้เองตอนออกเลขครั้งแรก</p>
+    </section>
 
     <div id="app" hidden>
       <nav class="years" id="years" aria-label="เลือกปี พ.ศ."></nav>
@@ -577,6 +606,16 @@
 
     async function load() {
       const data = await gs('getState');
+      if (data.needsSheet) {
+        $('#unit').textContent = data.unitName || '';
+        document.querySelector('.top-actions').hidden = true;
+        $('#loading').hidden = true;
+        $('#setup').hidden = false;
+        $('#setup-url').focus();
+        return;
+      }
+      $('#setup').hidden = true;
+      document.querySelector('.top-actions').hidden = false;
       state.records = data.records;
       state.nextNo = data.nextNo;
       state.currentYear = data.currentYear;
@@ -757,7 +796,7 @@
       try {
         if (state.editing) {
           body.no = Number(form.no.value);
-          const rec = await gs('updateRecord', { year: state.editing.year, no: state.editing.no }, body);
+          const rec = await gs('updateRecord', { year: state.editing.year, no: state.editing.no, row: state.editing.row }, body);
           state.highlight = rec.id;
           $('#dlg-record').close();
           await load();
@@ -791,7 +830,7 @@
       const btn = $('#btn-confirm-delete');
       btn.disabled = true;
       try {
-        await gs('deleteRecord', { year: rec.year, no: rec.no });
+        await gs('deleteRecord', { year: rec.year, no: rec.no, row: rec.row });
         $('#dlg-confirm').close();
         $('#dlg-record').close();
         await load();
@@ -903,6 +942,24 @@
     for (const btn of document.querySelectorAll('[data-close]')) {
       btn.addEventListener('click', () => btn.closest('dialog').close());
     }
+
+    $('#form-setup').addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const btn = $('#btn-setup');
+      btn.disabled = true;
+      btn.textContent = 'กำลังเชื่อม…';
+      $('#setup-error').textContent = '';
+      try {
+        await gs('linkSheet', $('#setup-url').value);
+        await load();
+        toast('เชื่อมกับ Google Sheet แล้ว');
+      } catch (err) {
+        $('#setup-error').textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'เชื่อมชีตนี้';
+      }
+    });
 
     // โหลดข้อมูลใหม่เมื่อกลับมาที่หน้านี้ เผื่อมีคนอื่นออกเลขไปแล้ว
     document.addEventListener('visibilitychange', () => {

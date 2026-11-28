@@ -168,7 +168,8 @@ test('importFromSpreadsheet: คัดลอกทะเบียนจากไ
 test('เว็บแอปที่ไม่มีชีตที่เปิดอยู่: ใช้ ID ที่จำไว้จากเมนูในชีต', () => {
   const { api, setBound, props, ui } = fixture();
   setBound(false);
-  assert.throws(() => api.getState(), /ยังไม่ได้เชื่อม/);
+  assert.equal(api.getState().needsSheet, true);
+  assert.throws(() => api.createRecord({ date: '2026-10-12', subject: 'x' }), /ยังไม่ได้เชื่อม/);
 
   setBound(true);
   api.linkThisSheet();
@@ -212,4 +213,73 @@ test('ฉบับไฟล์เดียว: doGet ใช้หน้าเว
   assert.equal(page.name, undefined);
   assert.equal(page.content, html.replace(/\n$/, ''));
   assert.equal(api.createRecord({ date: '2026-11-28', subject: 'ทดสอบ' }).no, 1);
+});
+
+test('linkSheet: วางลิงก์ชีตจากหน้าเว็บ ครั้งเดียว แล้วเว็บแอปใช้ชีตนั้น', () => {
+  const { api, setBound, props, ss } = fixture();
+  setBound(false);
+  assert.equal(api.getState().needsSheet, true);
+  assert.throws(() => api.linkSheet('ไม่ใช่ลิงก์'), /ลิงก์ไม่ถูกต้อง/);
+  assert.throws(() => api.linkSheet('https://docs.google.com/spreadsheets/d/nope/edit'), /เปิด Google Sheet นี้ไม่ได้/);
+  assert.equal(props.get('SPREADSHEET_ID'), undefined);
+
+  const st = api.linkSheet(ss.getUrl() + '#gid=0');
+  assert.equal(props.get('SPREADSHEET_ID'), 'mock');
+  assert.equal(st.nextNo[2569], 4);
+  assert.equal(api.createRecord({ date: '2026-10-12', subject: 'จากเว็บแอป' }).no, 4);
+  // เชื่อมแล้ว เปลี่ยนชีตจากหน้าเว็บไม่ได้
+  assert.throws(() => api.linkSheet(ss.getUrl()), /เชื่อมกับ Google Sheet ไว้แล้ว/);
+});
+
+// ชีตแบบทะเบียน RTT: แถวชื่อทะเบียนด้านบน, หัว "การปฎิบัติ", เลขเป็นข้อความ "001",
+// ปี 2 หลักแบบ พ.ศ. ที่ชีตแปลงเป็น ค.ศ. 19xx, เลขพิมพ์ซ้ำ, แถวเตรียมเลขที่ใส่ "ที่" "จาก" "ถึง" รอไว้
+function rttFixture() {
+  const REF2 = 'สธ.0315.3(2.7.2)';
+  const head = ['เลขทะเบียนส่ง', 'ที่', 'ลงวันที่', 'จาก', 'ถึง', 'เรื่อง', 'การปฎิบัติ', 'หมายเหตุ'];
+  return loadAppsScript({
+    2569: [
+      ['ทะเบียนหนังสือส่ง งานรังสีรักษา ปีงบประมาณ 2569'],
+      head,
+      ['001', REF2, { y: 2026, m: 1, d: 14 }, 'รังสีรักษา', 'ผอ.', 'ขออนุมัติจัดซื้อ', 'วรวรรณ'],
+      ['002', REF2, { y: 1969, m: 1, d: 15 }, 'รังสีรักษา', 'ผอ.', 'ขออนุมัติลาพักผ่อน', 'วุฒิชัย'],
+      ['002', REF2, { y: 2026, m: 1, d: 16 }, 'รังสีรักษา', 'ผอ.', 'พิมพ์เลขซ้ำ', 'นพดล'],
+      ['003', REF2, '', 'รังสีรักษา', 'ผอ.'],
+      ['004', REF2, '', 'รังสีรักษา', 'ผอ.'],
+    ],
+    2570: [['ทะเบียนหนังสือส่ง งานรังสีรักษา ปีงบประมาณ 2570'], head, ['001', REF2, '', 'รังสีรักษา', 'ผอ.']],
+  });
+}
+
+test('ทะเบียนแบบ RTT: อ่านหัวตาราง วันที่ปี 2 หลัก เลขซ้ำ และแถวที่เตรียมเลขไว้', () => {
+  const { api } = rttFixture();
+  const st = api.getState();
+  const recs = st.records.filter(r => r.year === 2569);
+  assert.deepEqual(recs.map(r => r.no), [1, 2, 2]);
+  assert.equal(recs[0].action, 'วรวรรณ');
+  assert.equal(recs[1].date, '2026-01-15'); // 15/1/69 → พ.ศ. 2569
+  assert.equal(new Set(recs.map(r => r.id)).size, 3); // เลขซ้ำแยกกันได้
+  assert.equal(st.nextNo[2569], 3);
+  assert.equal(st.nextNo[2570], 1);
+  assert.equal(st.records.filter(r => r.year === 2570).length, 0);
+});
+
+test('ทะเบียนแบบ RTT: ออกเลขลงแถวที่เตรียมไว้ เขียนเลขแบบ "003" และใช้ค่าที่พิมพ์รอไว้', () => {
+  const { api, ss, tz } = rttFixture();
+  const rec = api.createRecord({ date: '2026-11-28', ref: '', from: '', to: '', subject: 'เบิก OT', action: 'วรวรรณ' });
+  assert.equal(rec.no, 3);
+  assert.deepEqual(rowOf(ss, tz, '2569', 6), ['003', 'สธ.0315.3(2.7.2)', '2026-11-28', 'รังสีรักษา', 'ผอ.', 'เบิก OT', 'วรวรรณ', '']);
+  assert.equal(ss.getSheetByName('2569').rows[5][0].format, '@');
+  assert.equal(api.createRecord({ date: '2026-11-28', subject: 'ฉบับถัดไป' }).no, 4);
+  assert.equal(api.createRecord({ date: '2026-11-28', subject: 'ต่อท้าย' }).no, 5);
+  assert.deepEqual(rowOf(ss, tz, '2569', 8).slice(0, 1), ['005']);
+  assert.equal(api.createRecord({ date: '2027-01-04', subject: 'ปีใหม่' }).no, 1);
+  assert.deepEqual(rowOf(ss, tz, '2570', 3).slice(0, 6), ['001', 'สธ.0315.3(2.7.2)', '2027-01-04', 'รังสีรักษา', 'ผอ.', 'ปีใหม่']);
+});
+
+test('ทะเบียนแบบ RTT: แก้/ลบรายการที่เลขซ้ำได้ถูกแถว', () => {
+  const { api, ss, tz } = rttFixture();
+  const dup = api.getState().records.find(r => r.subject === 'พิมพ์เลขซ้ำ');
+  api.updateRecord({ year: 2569, no: 2, row: dup.row }, { note: 'เลขซ้ำ' });
+  assert.equal(rowOf(ss, tz, '2569', 5)[7], 'เลขซ้ำ');
+  assert.equal(rowOf(ss, tz, '2569', 4)[7], '');
 });

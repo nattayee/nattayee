@@ -31,7 +31,7 @@ var HEADER_NAMES = {
   from: ['จาก'],
   to: ['ถึง'],
   subject: ['เรื่อง'],
-  action: ['การปฏิบัติ'],
+  action: ['การปฏิบัติ', 'การปฎิบัติ'],
   note: ['หมายเหตุ'],
 };
 var TEXT_LIMITS = { ref: 100, from: 200, to: 200, subject: 1000, action: 200, note: 1000 };
@@ -141,7 +141,9 @@ function importFromSpreadsheet(url) {
 
 /** ข้อมูลทั้งหมดสำหรับหน้าเว็บ */
 function getState() {
-  var ss = spreadsheet_();
+  var ss = findSpreadsheet_();
+  // ยังไม่รู้ว่าใช้ชีตไหน → หน้าเว็บจะขอให้วางลิงก์ชีต (linkSheet)
+  if (!ss) return { needsSheet: true, unitName: String(UNIT_NAME || '').trim() };
   var tz = ss.getSpreadsheetTimeZone();
   var records = [];
   var nextNo = {};
@@ -180,7 +182,10 @@ function createRecord(input) {
 
     var rec = { year: year, no: no, date: input.date, dateText: '' };
     TEXT_FIELDS.forEach(function (f) { rec[f] = fields[f] || ''; });
-    writeRow_(sheet, row, parsed.cols, rec, tz);
+    // ช่องที่เว้นว่าง ใช้ค่าที่พิมพ์รอไว้ในแถวที่เตรียมเลข
+    var pre = parsed.prefill[no] || {};
+    ['ref', 'from', 'to'].forEach(function (f) { if (!rec[f] && pre[f]) rec[f] = pre[f]; });
+    writeRow_(sheet, row, parsed.cols, rec, tz, parsed.noStyle);
     setCounter_(year, no + 1);
     return publicRecord_(rec);
   });
@@ -205,7 +210,7 @@ function updateRecord(key, input) {
       update.date = input.date;
     }
 
-    writeRow_(found.sheet, rec.row, found.parsed.cols, update, tz);
+    writeRow_(found.sheet, rec.row, found.parsed.cols, update, tz, found.parsed.noStyle);
     // เรื่องที่เคยเขียนต่อบรรทัดถัดไป ถูกรวมไว้ในแถวหลักแล้ว จึงล้างบรรทัดต่อออก
     if (update.subject !== undefined || update.note !== undefined) {
       rec.extraRows.forEach(function (r) {
@@ -265,6 +270,8 @@ function readSheet_(sheet, year, tz) {
   var placeholders = {};
   var seen = {};
   var prev = null;
+  var prefill = {}; // "ที่" "จาก" "ถึง" ที่พิมพ์รอไว้ในแถวที่เตรียมเลข
+  var noStyle = { text: false, width: 0 }; // เลขทะเบียนในชีตเป็นข้อความไหม และเติม 0 ข้างหน้ากี่หลัก (เช่น "001")
 
   for (var r = header.row + 1; r < values.length; r++) {
     var row = values[r];
@@ -285,10 +292,21 @@ function readSheet_(sheet, year, tz) {
       if (!rec.date) rec.dateText = cleanText_(rawDate);
     }
 
-    var hasContent = rec.date || rec.dateText || TEXT_FIELDS.some(function (f) { return rec[f]; });
+    var rawNo = get('no');
+    if (typeof rawNo === 'string' && rec.no !== null) {
+      noStyle.text = true;
+      if (/^\s*0\d/.test(rawNo)) noStyle.width = Math.max(noStyle.width, rawNo.trim().length);
+    }
+
+    // แถวที่มีเลขแต่ยังไม่มีวันที่/เรื่อง/ผู้ปฏิบัติ/หมายเหตุ = เลขที่เตรียมไว้ล่วงหน้า ยังไม่ถูกใช้
+    // (อาจพิมพ์ "ที่" "จาก" "ถึง" รอไว้แล้วก็ได้)
+    var hasContent = rec.date || rec.dateText || rec.subject || rec.action || rec.note ||
+      (rec.no === null && (rec.ref || rec.from || rec.to));
     if (!hasContent) {
-      // แถวที่มีแต่เลขลำดับ = เลขที่เตรียมไว้ล่วงหน้า ยังไม่ถูกใช้
-      if (rec.no !== null && !placeholders[rec.no]) placeholders[rec.no] = r + 1;
+      if (rec.no !== null && !placeholders[rec.no]) {
+        placeholders[rec.no] = r + 1;
+        prefill[rec.no] = { ref: rec.ref, from: rec.from, to: rec.to };
+      }
       continue;
     }
     if (rec.no === null) {
@@ -301,12 +319,13 @@ function readSheet_(sheet, year, tz) {
       }
       continue;
     }
-    if (seen[rec.no]) continue;
+    // เลขซ้ำในชีต (พิมพ์เลขผิด) ยังแสดงครบทุกแถว โดยแยกกันด้วยเลขแถว
+    if (seen[rec.no]) rec.dup = true;
     seen[rec.no] = true;
     records.push(rec);
     prev = rec;
   }
-  return { records: records, placeholders: placeholders, cols: cols };
+  return { records: records, placeholders: placeholders, prefill: prefill, cols: cols, noStyle: noStyle };
 }
 
 function findHeader_(values) {
@@ -333,7 +352,8 @@ function findRecord_(ss, tz, key) {
   var no = Number(key && key.no);
   var sheet = findYearSheet_(ss, year);
   var parsed = sheet && readSheet_(sheet, year, tz);
-  var record = parsed && parsed.records.filter(function (r) { return r.no === no; })[0];
+  var row = Number(key && key.row) || 0;
+  var record = parsed && parsed.records.filter(function (r) { return r.no === no && (!row || r.row === row); })[0];
   if (!record) throw new Error('ไม่พบเลข ' + no + ' ของปี ' + year + ' (อาจถูกลบหรือแก้ไขในชีตไปแล้ว)');
   return { sheet: sheet, parsed: parsed, record: record };
 }
@@ -341,7 +361,7 @@ function findRecord_(ss, tz, key) {
 // ============================================================ เขียนชีต
 
 /** เขียนเฉพาะช่องที่มีใน values ลงแถว row (ข้อความถูกเก็บเป็นข้อความเสมอ ไม่ถูกแปลงเป็นสูตร/วันที่) */
-function writeRow_(sheet, row, cols, values, tz) {
+function writeRow_(sheet, row, cols, values, tz, noStyle) {
   if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows() + 50);
   var idx = FIELDS.map(function (f) { return cols[f]; });
   var min = Math.min.apply(null, idx);
@@ -357,7 +377,8 @@ function writeRow_(sheet, row, cols, values, tz) {
       cells[i] = values.date ? Utilities.parseDate(values.date, tz, 'yyyy-MM-dd') : '';
       formats[i] = DATE_FORMAT;
     } else if (f === 'no') {
-      cells[i] = values.no;
+      cells[i] = formatNo_(values.no, noStyle);
+      if (typeof cells[i] === 'string') formats[i] = '@';
     } else {
       cells[i] = values[f];
       formats[i] = '@';
@@ -441,6 +462,16 @@ function firstFreeNumber_(numbers) {
  * ถ้ารันเป็นเว็บแอป ใช้ SPREADSHEET_ID หรือ ID ที่จำไว้
  */
 function spreadsheet_() {
+  var ss = findSpreadsheet_();
+  if (!ss) {
+    throw new Error('เว็บแอปยังไม่ได้เชื่อมกับ Google Sheet — เปิดหน้าเว็บแอปแล้ววางลิงก์ชีตทะเบียน ' +
+      '(หรือใส่ SPREADSHEET_ID ที่บรรทัดบนสุดของ Code.gs)');
+  }
+  return ss;
+}
+
+/** เหมือน spreadsheet_() แต่คืน null ถ้ายังไม่ได้ตั้งว่าใช้ชีตไหน */
+function findSpreadsheet_() {
   var props = PropertiesService.getScriptProperties();
   var active = SpreadsheetApp.getActiveSpreadsheet();
   if (active) {
@@ -448,15 +479,41 @@ function spreadsheet_() {
     if (!SPREADSHEET_ID || SPREADSHEET_ID === active.getId()) return active;
   }
   var id = SPREADSHEET_ID || props.getProperty('SPREADSHEET_ID');
-  if (!id) {
-    throw new Error('เว็บแอปยังไม่ได้เชื่อมกับ Google Sheet — เปิดชีตทะเบียน รีเฟรชหน้า แล้วกดเมนู ' +
-      '"ทะเบียนหนังสือ › เชื่อมเว็บแอปกับชีตนี้" (หรือใส่ SPREADSHEET_ID ที่บรรทัดบนสุดของ Code.gs)');
-  }
+  if (!id) return null;
   try {
     return SpreadsheetApp.openById(id);
   } catch (err) {
     throw new Error('เปิด Google Sheet ทะเบียนไม่ได้ (ID ' + id + ') ตรวจว่ามีสิทธิ์แก้ไขชีตนี้: ' + err.message);
   }
+}
+
+/**
+ * เชื่อมเว็บแอปกับชีตจากหน้าเว็บ: รับลิงก์ (หรือ ID) ของ Google Sheet แล้วจำไว้
+ * ทำได้เฉพาะตอนที่ยังไม่ได้เชื่อม เพื่อไม่ให้ใครเปลี่ยนชีตทะเบียนจากหน้าเว็บได้
+ */
+function linkSheet(url) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่อีกครั้ง');
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (SPREADSHEET_ID || props.getProperty('SPREADSHEET_ID') || SpreadsheetApp.getActiveSpreadsheet()) {
+      throw new Error('เว็บแอปเชื่อมกับ Google Sheet ไว้แล้ว เปลี่ยนชีตได้ที่ SPREADSHEET_ID บรรทัดบนสุดของ Code.gs');
+    }
+    var text = String(url || '').trim();
+    var m = /\/spreadsheets\/d\/([\w-]+)/.exec(text);
+    var id = m ? m[1] : (/^[\w-]{20,}$/.test(text) ? text : '');
+    if (!id) throw new Error('ลิงก์ไม่ถูกต้อง ให้คัดลอกลิงก์จากแถบที่อยู่ของ Google Sheet (มี /spreadsheets/d/… อยู่ในลิงก์)');
+    var ss;
+    try {
+      ss = SpreadsheetApp.openById(id);
+    } catch (err) {
+      throw new Error('เปิด Google Sheet นี้ไม่ได้ ตรวจว่าเจ้าของเว็บแอปมีสิทธิ์แก้ไขชีตนี้ (' + err.message + ')');
+    }
+    props.setProperty('SPREADSHEET_ID', ss.getId());
+  } finally {
+    lock.releaseLock();
+  }
+  return getState();
 }
 
 function withLock_(fn) {
@@ -476,7 +533,8 @@ function withLock_(fn) {
 
 function publicRecord_(r) {
   return {
-    id: r.year + '-' + r.no,
+    id: r.year + '-' + r.no + (r.dup ? '-' + r.row : ''),
+    row: r.row || null,
     year: r.year,
     no: r.no,
     ref: r.ref || '',
@@ -553,6 +611,22 @@ function validDate_(value) {
   return !!m && isoDate_(+m[1], +m[2], +m[3]) === value;
 }
 
+/** ปี 2 หลัก: เลือกระหว่าง พ.ศ. 25xx กับ ค.ศ. 20xx ให้ใกล้ปีของชีตที่สุด → คืนค่าเป็น ค.ศ. */
+function nearYear_(yy, yearBE) {
+  var asBE = 2500 + yy - 543;
+  var asCE = 2000 + yy;
+  var target = yearBE - 543;
+  return Math.abs(asBE - target) <= Math.abs(asCE - target) ? asBE : asCE;
+}
+
+/** เขียนเลขทะเบียนแบบเดียวกับที่ชีตใช้อยู่: ตัวเลข หรือข้อความเติม 0 (เช่น "001") */
+function formatNo_(no, style) {
+  if (!style || !style.text) return no;
+  var s = String(no);
+  while (s.length < style.width) s = '0' + s;
+  return s;
+}
+
 /** ปี 4 หลัก: มากกว่า 2400 ถือเป็น พ.ศ. → คืนค่าเป็น ค.ศ. */
 function toCE_(year) {
   return year > 2400 ? year - 543 : year;
@@ -567,6 +641,8 @@ function toCE_(year) {
 function parseDate_(value, yearBE, tz) {
   if (isDate_(value)) {
     var p = Utilities.formatDate(value, tz, 'yyyy-MM-dd').split('-').map(Number);
+    // พิมพ์ปี 2 หลักเป็น พ.ศ. (เช่น 2/10/66) ชีตจะเข้าใจเป็น ค.ศ. 1966 → เลือกปีที่ใกล้ปีของชีต
+    if (p[0] >= 1930 && p[0] <= 1999) return isoDate_(nearYear_(p[0] - 1900, yearBE), p[1], p[2]);
     return isoDate_(toCE_(p[0]), p[1], p[2]);
   }
   if (typeof value !== 'string') return null;
@@ -584,12 +660,7 @@ function parseDate_(value, yearBE, tz) {
   if (m[3].length === 4) {
     year = toCE_(+m[3]);
   } else {
-    // ปี 2 หลัก: เลือกระหว่าง พ.ศ. 25xx กับ ค.ศ. 20xx ให้ใกล้ปีของชีตที่สุด
-    var yy = +m[3];
-    var asBE = 2500 + yy - 543;
-    var asCE = 2000 + yy;
-    var target = yearBE - 543;
-    year = Math.abs(asBE - target) <= Math.abs(asCE - target) ? asBE : asCE;
+    year = nearYear_(+m[3], yearBE);
   }
   return isoDate_(year, month, day);
 }

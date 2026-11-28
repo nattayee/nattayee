@@ -18,7 +18,8 @@ const sheets = file
 const config = {};
 if (process.env.UNIT_NAME) config.UNIT_NAME = process.env.UNIT_NAME;
 if (process.env.REF_PREFIX) config.REF_PREFIX = process.env.REF_PREFIX;
-const { api } = loadAppsScript(sheets, { config });
+// PREVIEW_UNLINKED=1 → จำลองเว็บแอปที่ยังไม่รู้ว่าใช้ชีตไหน (ดูหน้าวางลิงก์ชีต)
+const { api } = loadAppsScript(sheets, { config, bound: !process.env.PREVIEW_UNLINKED });
 
 // google.script.run จำลอง: ส่งคำขอมาที่ /rpc/<ชื่อฟังก์ชัน>
 const SHIM = `<script>
@@ -44,7 +45,7 @@ const server = http.createServer((req, res) => {
       setTimeout(() => {
         let out;
         try {
-          if (!['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo'].includes(rpc[1])) throw new Error('ไม่มีฟังก์ชันนี้');
+          if (!['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'linkSheet'].includes(rpc[1])) throw new Error('ไม่มีฟังก์ชันนี้');
           out = { result: api[rpc[1]](...JSON.parse(body || '[]')) };
         } catch (err) {
           out = { error: err.message };

@@ -259,7 +259,7 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true
 
   // แปลงผลลัพธ์ข้าม realm ให้เป็นอ็อบเจกต์ธรรมดา (เหมือนที่ google.script.run ส่งกลับมาเป็น JSON)
   const api = {};
-  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet', 'importFromSpreadsheet', 'copyFromOldSheet', 'linkThisSheet']) {
+  for (const fn of ['getState', 'createRecord', 'updateRecord', 'deleteRecord', 'setNextNo', 'doGet', 'importFromSpreadsheet', 'copyFromOldSheet', 'linkThisSheet', 'linkSheet']) {
     api[fn] = (...args) => JSON.parse(JSON.stringify(context[fn](...JSON.parse(JSON.stringify(args))) ?? null));
   }
   const setBound = v => { context.__bound = v; };
