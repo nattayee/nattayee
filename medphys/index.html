@@ -508,6 +508,39 @@ button.duty-line:hover{border-color:var(--accent)}
 .pc-sh-at{font-size:8.5pt;color:#444;text-align:right}
 .pc-sh-facts{margin:6px 0 0;font-size:10pt}
 .pc-sh-ft{margin:10px 0 0;font-size:8pt;color:#666;text-align:right}
+/* .86: เอกสารใน Patient chart · หน้าต่างดูเอกสาร (ลายน้ำชื่อผู้ดู + เวลา ซ้ำทั้งหน้า) · ดู / พิมพ์ทั้งหมด */
+.pc-docs-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 10px}
+.pc-docs-bar .muted{font-size:12.5px}
+.pc-docs li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.pcd-dlg .dlg{max-height:94vh}
+.pcd-note{margin:0 0 8px}
+.pcd-prev{padding:12px;border-radius:10px;background:var(--sunken);overflow:auto}
+.pcd-in{margin:0 auto}
+.pcd-doc{position:relative;box-sizing:border-box;width:210mm;margin:0 auto 14px;background:#fff;color:#000;text-align:left;box-shadow:0 2px 12px rgba(0,0,0,.25);overflow:hidden}
+.pcd-doc.pcd-m{padding:10mm}
+.pcd-doc.pcd-h{padding:7mm 8.9mm 6mm}
+.pcd-doc.pcd-s{padding:0}
+.pcd-doc .txs-page,.pcd-doc .ss-sheet{margin:0;box-shadow:none}
+.pcd-wm{position:absolute;inset:0;z-index:6;pointer-events:none;overflow:hidden;background-repeat:repeat;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pcd-measure{position:absolute;left:-10000px;top:0;visibility:hidden}
+.pcd-cck table td:nth-child(3){white-space:nowrap}
+.pcd-cck .bad{color:#b3361f;font-weight:700}
+#pcd-print{display:none}
+@page pcdz{size:A4;margin:0}
+@page pcdm{size:A4;margin:10mm}
+@media print{
+  body.printing-pcd>*:not(#pcd-print){display:none !important}
+  body.printing-pcd #pcd-print{display:block !important}
+  body.printing-pcd{background:#fff !important}
+  #pcd-print .pcd-doc{width:auto;margin:0;padding:0;box-shadow:none;overflow:visible;break-before:page}
+  #pcd-print .pcd-doc:first-child{break-before:auto}
+  #pcd-print .pcd-z{page:pcdz}
+  #pcd-print .pcd-m{page:pcdm}
+  #pcd-print .pcd-h{page:hp}
+  #pcd-print .cso-page{min-height:0;height:297mm;overflow:hidden}
+  #pcd-print .ss-sheet{width:auto;min-height:0;padding:0;box-shadow:none}
+  #pcd-print>.pcd-wm,#txs-print .pcd-wm,#ss-print>.pcd-wm{position:fixed}
+}
 .nlp-svc{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}   /* .48: เงื่อนไขของจุดบันทึก */
 .nlp-svc .chip{cursor:pointer}
 #nlp-panel .nlp-sv-h{display:block;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
@@ -10092,7 +10125,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.85';
+const PAGE_VERSION = '2026-11-22.86';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -13460,6 +13493,8 @@ async function evBqDo(id, act, btn) {
   } catch (e) { if (btn) btn.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errMsg(e), { err: true }); }
 }
 // ---- HDR Order (Brachytherapy process form) ----
+document.body.insertAdjacentHTML('beforeend', `<dialog id="pcd-dlg" class="dlg-wide pcd-dlg" aria-labelledby="pcd-title"><div class="dlg"><header class="dlg-head"><h2 id="pcd-title">เอกสาร</h2><span class="spacer"></span><button type="button" class="btn primary sm" id="pcd-print-btn" disabled>พิมพ์ / PDF</button><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></header><div class="dlg-body"><p class="muted pcd-note" id="pcd-note"></p><div class="pcd-prev" id="pcd-prev"><div class="pcd-in" id="pcd-in"></div></div></div></div></dialog><div id="pcd-print" aria-hidden="true"></div>`);   // .86: เอกสารจาก Patient chart
+const pcdDlg = $('#pcd-dlg');
 document.body.insertAdjacentHTML('beforeend', `<dialog id="hdro-dlg" class="dlg-wide hdro-dlg" aria-labelledby="hdro-title"><div class="dlg-head"><h2 id="hdro-title">HDR Order</h2><span class="spacer"></span><button type="button" class="btn ghost sm" data-hdract="print">พิมพ์</button><button type="button" class="icon-btn" data-close aria-label="ปิด">×</button></div><div class="dlg-body" id="hdro-body"></div></dialog><div id="fp-print" hidden></div>`);
 const hdroDlg = $('#hdro-dlg');
 const hdroUi = { id: '', f: null, dirty: false };
@@ -13764,7 +13799,7 @@ function hdroPrintHtml() {
   <tr style="height:14.8mm">${V('Note')}<td colspan="3" class="hp-note">${esc(v('note'))}</td></tr></table></div>`;
 }
 // วัดในหน้าก่อนพิมพ์: หัวข้อแนวตั้งยาวกว่าแถว = ย่อตัวอักษร · ทั้งหน้าสูงเกิน A4 = ย่อทั้งหน้าให้พอดีหน้าเดียว
-async function hdroPrint() {
+async function hdroPrintBuild() {
   try { await lfFonts(); } catch (e) { /* ใช้ฟอนต์ของเครื่อง */ }
   const m = document.createElement('div');
   m.className = 'hp-measure';
@@ -13780,6 +13815,10 @@ async function hdroPrint() {
   if (h > HP_H) pg.style.zoom = (HP_H / h).toFixed(3);
   const html = m.innerHTML;
   m.remove();
+  return html;
+}
+async function hdroPrint() {
+  const html = await hdroPrintBuild();
   const ha = (state.bq || []).find(x => x.id === hdroUi.id) || {}, ho = hdroOf(hdroUi.id);
   fpPrint(html, `HDR Order ${hdroUi.id}`, { form: 'HDR Order', hn: str((ho && ho.hn) || ha.hn) });
 }
@@ -16115,9 +16154,10 @@ function openSoPreview(x, ctx = '') {
   if (ctx !== 'nurse') soNfClose();
   csoRec = { __so: x };
   csoCtx = ctx;
-  $('#cso-title').textContent = `Standing order · ${x.hn || ''}`;
+  $('#cso-title').textContent = `Standing order · ${x.hn || ''}${ctx === 'pchart' ? ' · ดูจาก Patient chart' : ''}`;
   $('#cso-pdf-btn').hidden = true;
   $('#cso-prev-in').innerHTML = soSheetHtml(x);
+  if (ctx === 'pchart') csoWm($('#cso-prev-in'));   // .86
   esigFill($('#cso-prev-in'), 'so', esigDqId(x));   // .39
   syncCsoNurse();
   ntfDots(csoDlg);
@@ -19947,22 +19987,24 @@ function fitTxs() {
 }
 window.addEventListener('resize', fitTxs);
 txsDlg.addEventListener('click', e => { const b = e.target instanceof Element ? e.target.closest('[data-txspub]') : null; if (b) txsPubDo(b.dataset.txskey, b.dataset.txspub, b); });
-txsDlg.addEventListener('close', () => { document.body.classList.remove('txs-noprint'); txsUi.cur = null; txsUi.pdf = null; $('#txs-prev').innerHTML = ''; });
+txsDlg.addEventListener('close', () => { document.body.classList.remove('txs-noprint'); txsUi.cur = null; txsUi.pdf = null; txsUi.pc = false; $('#txs-prev').innerHTML = ''; });   // .86: ลายน้ำ Patient chart เฉพาะที่เปิดจาก Patient chart
 function txsShowDoc() {
   const d = txsUi.cur;
   if (!d) return;
   $('#txs-prev').innerHTML = txsPageHtml(d, txsShort(d.name));
+  if (txsUi.pc) { const pg = $('#txs-prev .txs-page'); if (pg) pg.insertAdjacentHTML('beforeend', pcWmEl(pcWmUrl())); }
   $('#txs-back-btn').hidden = true;
-  $('#txs-pdf-btn').hidden = !txsUi.pdf;
+  $('#txs-pdf-btn').hidden = !txsUi.pdf || !!txsUi.pc;   // .86: เปิดจาก Patient chart = ไม่มี PDF ที่จัดเก็บ (ใส่ลายน้ำไม่ได้)
   if (txsUi.pdf) $('#txs-pdf-btn').textContent = `PDF ที่จัดเก็บไว้${txsUi.pdf.v ? ` (v${txsUi.pdf.v})` : ''}`;
   requestAnimationFrame(fitTxs);
 }
-async function openTxsDoc(key) {
+async function openTxsDoc(key, pc = false) {
   const d = txsDocs().find(x => x.key === key), me = txsMe();
   if (!d) return toast('ไม่พบเอกสารนี้ (ข้อมูลอาจเปลี่ยนไปแล้ว)', { err: true });
   txsUi.cur = d;
   txsUi.pdf = null;
-  $('#txs-title').textContent = `${d.kind === 'bq' ? 'Brachytherapy Summary' : 'Treatment Summary'} · HN ${d.hn}`;
+  txsUi.pc = !!pc;   // .86: เปิดจาก Patient chart = ลายน้ำชื่อผู้ดูเพิ่ม (บนจอและตอนพิมพ์)
+  $('#txs-title').textContent = `${d.kind === 'bq' ? 'Brachytherapy Summary' : 'Treatment Summary'} · HN ${d.hn}${pc ? ' · ดูจาก Patient chart' : ''}`;
   $('#txs-note').textContent = `เลขที่เอกสาร ${d.no} · ${me.print ? 'กดพิมพ์ = เอกสารมีชื่อเต็มของผู้ป่วย' : 'หน่วยงานนี้ดูได้อย่างเดียว (พิมพ์ไม่ได้)'} · การเปิดและการพิมพ์ถูกบันทึกในประวัติการเข้าถึง`;
   $('#txs-print-btn').hidden = !me.print;
   txsPubActs();
@@ -19975,13 +20017,13 @@ async function openTxsDoc(key) {
   try { await store.txsLog('view', { hn: d.hn, doc: d.no, kind: d.kind, id: d.id, detail: `${d.kind === 'bq' ? 'Brachytherapy' : 'RT'} · ${txsStName(d)}` }); }
   catch (e) { if (/TXS_DENY/.test(errMsg(e))) { txsDlg.close(); toast('เปิดเอกสารไม่ได้: ' + txsErr(e), { err: true }); return; } }
   if (me.print && state.config.txs.folder && serverHas(TXS_API)) {
-    try { const r = await store.txsPdf(d.hn, d.kind, { meta: 1, doc: d.no }); if (r && txsUi.cur === d) { txsUi.pdf = r; $('#txs-pdf-btn').hidden = false; $('#txs-pdf-btn').textContent = `PDF ที่จัดเก็บไว้${r.v ? ` (v${r.v})` : ''}`; } } catch (e) { /* ไม่มี PDF ที่จัดเก็บ: ใช้เอกสารที่สร้าง */ }
+    try { const r = await store.txsPdf(d.hn, d.kind, { meta: 1, doc: d.no }); if (r && txsUi.cur === d) { txsUi.pdf = r; $('#txs-pdf-btn').hidden = !!txsUi.pc; $('#txs-pdf-btn').textContent = `PDF ที่จัดเก็บไว้${r.v ? ` (v${r.v})` : ''}`; } } catch (e) { /* ไม่มี PDF ที่จัดเก็บ: ใช้เอกสารที่สร้าง */ }
   }
 }
 // PDF ที่สร้างอัตโนมัติและจัดเก็บไว้แล้ว (Google Drive) = แสดงไฟล์เดียวกัน
 async function openTxsPdf(btn) {
   const d = txsUi.cur;
-  if (!d) return;
+  if (!d || txsUi.pc) return;
   btn.disabled = true;
   try {
     const r = await store.txsPdf(d.hn, d.kind, { doc: d.no });
@@ -20013,6 +20055,7 @@ async function printTxsDoc(btn) {
     const h = page.scrollHeight, max = page.offsetWidth * 297 / 210 - 3;   // สูงไม่เกินหนึ่งหน้า A4 (เผื่อปัดเศษ ไม่ให้มีหน้าว่างหน้าที่สอง)
     box.classList.remove('measure');
     if (h > max) { page.style.zoom = String(Math.max(0.5, max / h)); page.style.height = `${h}px`; } else page.style.height = `${max}px`;
+    if (txsUi.pc) page.insertAdjacentHTML('beforeend', pcWmEl(pcWmUrl()));   // .86
     const st = document.createElement('style');
     st.textContent = '@page{size:A4;margin:0}';
     document.head.appendChild(st);
@@ -26221,6 +26264,7 @@ document.addEventListener('click', e => {
   pref.set('dlgFull:' + dlg.id, !dlg.classList.contains('dlg-full'));
   dlgFullSync(dlg);
   if (dlg.id === 'cso-dlg') fitCsoPreview();
+  if (dlg.id === 'pcd-dlg') fitPcd();
   if (dlg.id === 'lf-dlg') lfFit();
 });
 // ดูใบสั่ง (ยังไม่ดาวน์โหลดหรือพิมพ์) · ย่อให้พอดีความกว้างของหน้าต่าง
@@ -26299,7 +26343,7 @@ async function printCso(a, btn) {
   if (a.__so && soNf && soNf.dirty) return toast('ยังไม่บันทึก · กดบันทึกก่อนพิมพ์', { err: true });   // .68
   const box = $('#cso-print');
   box.innerHTML = a.__so ? soSheetHtml(a.__so) : csoSheetHtml(a);   // __so = Standing order ของ Call center
-  if (csoCtx === 'pchart' && !a.__so) csoWm(box);   // .56: พิมพ์จาก Patient chart = มีลายน้ำ
+  if (csoCtx === 'pchart') csoWm(box);   // .56 / .86: พิมพ์จาก Patient chart = มีลายน้ำ (รวม Standing order)
   csoImages(box);
   if (btn) btn.disabled = true;
   try {
@@ -34323,13 +34367,210 @@ function pcLog(k) {
   const seenN = L.rows.filter(r => r.act === 'view').length;
   return `<p class="muted" id="pc-log-note">${L.rows.length} รายการ · ใหม่ก่อน${L.more ? ' · แสดง 300 รายการล่าสุด' : ''} · ไม่แสดงค่า QA${seenN ? ` · รวมการเปิดดู chart ${seenN} ครั้ง (เห็นเฉพาะแอดมิน)` : ''}</p><ul class="hist-list pc-log">${items}</ul>`;
 }
-function pcDocs(k, ap, cs) {
-  const it = (l, sub, view, more = '') => `<li><b>${esc(l)}</b> <span class="muted">${esc(sub)}</span>${more}${navOn(view) ? ` <button type="button" class="btn ghost sm" data-pcgo="${view}">เปิดที่แถบ ${esc(navLabel(view))}</button>` : ''}</li>`;
-  const out = [...ap.map(a => it('CT Order', `${fmtDay(str(a.created).slice(0, 10))} · แพทย์ ${a.doc || '-'}`, 'appt', ` <button type="button" class="btn ghost sm" data-pccso="${esc(a.id)}" title="ใบสั่ง CT Simulation · มีลายน้ำชื่อผู้ดู">ดูใบสั่ง</button>`)), ...state.ct.filter(c => pcHas(c, k)).map(c => it('CT Simulation Order Form', `${fmtDay(c.date)} · ${ctLabel(c.ct) || ''}`, 'ctsim')),
-    ...state.dq.filter(x => pcHas(x, k) && x.so).map(x => it('Standing order', fmtDay(x.date), 'dq')), ...cs.filter(c => !isSimple(c)).map(c => it('Treatment Summary', `${catOf(c.cat).label} · Start RT ${fmtDay(c.sim) || '—'}`, TXS_VIEW))];
-  for (const o of (txoSee() ? state.txo || [] : []).filter(x => hnKey(x.hn) === k)) out.push(`<li><b>Treatment Order</b> <span class="muted">CT ${esc(fmtDay(o.ctDate))} · ${esc(txoState(o))}</span> <button type="button" class="btn ghost sm" data-txo="${esc(o.id)}">เปิดใบสั่ง</button></li>`);   // .65
-  return `<ul class="pc-docs">${out.join('') || '<li class="muted">ไม่มีเอกสาร</li>'}</ul>`;
+/* .86: เอกสารของผู้ป่วย · ทุกใบเปิดดูได้จากตรงนี้ (ไม่ต้องไปที่แถบ) · ดู / พิมพ์จาก Patient chart = ลายน้ำชื่อผู้ดู + วันเวลา ทั้งบนจอและตอนพิมพ์ + บันทึกเข้ากลุ่ม log
+ * Treatment Order / HDR Order ตามสิทธิ์ของแถบที่ใช้ใบนั้น · Treatment Summary ตามสิทธิ์และการบันทึกการเข้าถึงของแถบ Treatment Summary · Chart check เฉพาะคนที่เปิดแถบ Chart check ได้ */
+function pcDocItems(k, ap) {
+  const out = [], add = (t, id, label, sub, view, more = '') => out.push({ t, id: str(id), label, sub, view, more });
+  for (const a of ap) add('cso', a.id, 'CT Order', `ใบสั่ง CT Simulation · ${fmtDay(str(a.created).slice(0, 10))} · แพทย์ ${a.doc || '-'}`, 'appt');
+  for (const c of state.ct.filter(x => pcHas(x, k))) add('ctf', c.id, 'CT Simulation Order Form', [fmtDay(c.date), ctLabel(c.ct)].filter(Boolean).join(' · '), 'ctsim');
+  for (const x of state.dq.filter(r => pcHas(r, k) && r.so)) add('so', x.id, 'Standing order', fmtDay(x.date), 'dq');
+  if (txoSee()) for (const o of (state.txo || []).filter(x => hnKey(x.hn) === k)) add('txo', o.id, 'Treatment Order', `CT ${fmtDay(o.ctDate)} · ${txoState(o)}`, '');   // ไม่มีปุ่มเปิดหน้าต่างแก้ไขใบสั่งจากตรงนี้ (ทุกอย่างที่เปิดจาก Patient chart มีลายน้ำ) · แก้ไขที่แถบงาน
+  if (hdroSee()) for (const o of (state.hdro || []).filter(x => hnKey(x.hn) === k)) { const a = (state.bq || []).find(x => x.id === o.id) || {}; add('hdro', o.id, 'HDR Order', [fmtDay(str(a.date || o.date)), o.doc ? 'แพทย์ ' + o.doc : ''].filter(Boolean).join(' · '), 'bq'); }
+  if (txsMe().ok) for (const d of txsDocs().filter(x => hnKey(x.hn) === k)) add('txs', d.key, d.kind === 'bq' ? 'Brachytherapy Summary' : 'Treatment Summary', `${txsStName(d)}${d.from ? ` · ${fmtDay(d.from)}${d.to ? ' – ' + fmtDay(d.to) : ''}` : ''}`, TXS_VIEW);
+  if (accessOf(CCK_VIEW)) for (const c of state.cases.filter(x => pcHas(x, k))) { const n = (state.cck || []).filter(r => r.case === c.id && !r.undo).length; if (n) add('cck', c.id, 'Chart check (TG-275)', `${catOf(c.cat).label} · Start RT ${fmtDay(c.sim) || '—'} · ตรวจแล้ว ${n} ครั้ง`, CCK_VIEW); }
+  return out;
 }
+function pcDocs(k, ap) {
+  const L = pcDocItems(k, ap);
+  pcs.docs = L;
+  const li = x => `<li><b>${esc(x.label)}</b> <span class="muted">${esc(x.sub)}</span> <button type="button" class="btn ghost sm" data-pcdoc="${esc(x.t + '|' + x.id)}">ดู / พิมพ์</button>${x.more}${x.view && navOn(x.view) ? ` <button type="button" class="linkish" data-pcgo="${x.view}">ไปที่แถบ ${esc(navLabel(x.view))}</button>` : ''}</li>`;
+  return `<div class="pc-docs-bar"><button type="button" class="btn primary sm" data-pcdall=""${L.length ? '' : ' disabled'}>ดู / พิมพ์ทั้งหมด (${L.length} ฉบับ)</button><span class="muted">ดูหรือพิมพ์จากตรงนี้ = ทุกหน้ามีลายน้ำชื่อผู้ดูและเวลา · บันทึกเข้ากลุ่ม log</span></div>`
+    + `<ul class="pc-docs">${L.map(li).join('') || '<li class="muted">ไม่มีเอกสาร</li>'}</ul>`;
+}
+// ลายน้ำ: ข้อความเดียวกับใบสั่ง CT Simulation ที่เปิดจาก Patient chart (.56) · รูปที่วาดจากฟอนต์ของหน้าเว็บ ปูซ้ำทั้งหน้า (เอกสารยาวกี่หน้าก็มีทุกหน้า)
+const pcWmText = () => { const now = new Date(); return `ดูจาก Patient chart · ${state.user.name || state.user.username || ''} · ${fmtDayY(today())} ${pad(now.getHours())}:${pad(now.getMinutes())}`; };
+function pcWmUrl() {
+  try {
+    const t = pcWmText(), cv = document.createElement('canvas'), x = cv.getContext('2d'), f = `700 20px ${getComputedStyle(document.body).fontFamily}`, a = 28 * Math.PI / 180;
+    if (!x) return '';
+    x.font = f;
+    const w = Math.ceil(x.measureText(t).width);
+    cv.width = Math.ceil(w * Math.cos(a)) + 140;
+    cv.height = Math.ceil(w * Math.sin(a)) + 150;
+    x.font = f;
+    x.fillStyle = 'rgba(128,128,128,0.2)';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.translate(cv.width / 2, cv.height / 2);
+    x.rotate(-a);
+    x.fillText(t, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch (e) { return ''; }
+}
+const pcWmEl = url => (url ? `<div class="pcd-wm" aria-hidden="true" style="background-image:url(${url})"></div>` : `<div class="pc-wm pcd-wm" aria-hidden="true">${[8, 26, 44, 62, 80].map(t => `<span style="top:${t}%">${esc(pcWmText())}</span>`).join('')}</div>`);
+function pcDocOpen(key) {
+  const i = key.indexOf('|'), t = key.slice(0, i), id = key.slice(i + 1), miss = () => toast('ไม่พบเอกสารนี้แล้ว (ข้อมูลอาจเปลี่ยนไป)', { err: true });
+  if (t === 'cso') { const a = state.appt.find(x => x.id === id); return a ? openCsoPreview(a, 'pchart') : miss(); }
+  if (t === 'ctf') {
+    const r = state.ct.find(x => x.id === id);
+    if (!r) return miss();
+    openCsoPreview(ctCsoRec(r), 'pchart');
+    $('#cso-title').textContent = `CT Simulation Order Form · ${r.hn} · ดูจาก Patient chart`;
+    return;
+  }
+  if (t === 'so') { const r = state.dq.find(x => x.id === id); return r ? openSoPreview(soOfDq(r), 'pchart') : miss(); }
+  if (t === 'txs') return openTxsDoc(id, true);
+  return pcdOpen([{ t, id }]);
+}
+// Chart check ของคอร์ส: ทุกครั้งที่ลงชื่อ (ไม่รวมที่ยกเลิก) · ผลทุกข้อ · ปัญหาที่พบ
+function cckSheetHtml(c) {
+  const rows = (state.cck || []).filter(r => r.case === c.id && !r.undo).sort((a, b) => str(a.at).localeCompare(str(b.at)));
+  const ans = Object.fromEntries(CCK_ANS);
+  const recs = rows.map(r => {
+    const T = CCK[r.type] || { label: r.type, th: '', items: [] };
+    const items = T.items.map(([id, text], i) => { const v = r.items[id] || {}; return `<tr><td class="num">${i + 1}</td><td>${esc(text)}${str(v.n) ? `<br><small class="bad">ปัญหา: ${esc(v.n)}</small>` : ''}</td><td${v.a === 'bad' ? ' class="bad"' : ''}>${esc(ans[v.a] || 'ไม่ได้ตอบ')}</td></tr>`; }).join('');
+    return `<h2>${esc(T.label)}${T.th ? ` <span>(${esc(T.th)})</span>` : ''} · Fx ${r.fx}${r.total ? '/' + r.total : ''}</h2>`
+      + `<p class="pc-sh-facts">ลงชื่อ ${esc(r.by)} · ${esc(thStamp(r.at))} · ${r.issues ? `<b class="bad">พบปัญหา ${r.issues} ข้อ</b>` : 'ไม่พบปัญหา'}${str(r.note) ? ` · หมายเหตุ: ${esc(r.note)}` : ''}</p>`
+      + `<table><colgroup><col style="width:7%"><col style="width:75%"><col style="width:18%"></colgroup><thead><tr><th>ข้อ</th><th>รายการตรวจ</th><th>ผล</th></tr></thead><tbody>${items}</tbody></table>`;
+  }).join('');
+  return `<div class="ss-sheet pc-sheet pcd-cck"><div class="pc-sh-hd"><img class="pc-sh-logo" src="${TXS_LOGO}" alt=""><div class="pc-sh-t"><h1>Chart check (AAPM TG-275)</h1><p>HN <b>${esc(c.hn)}</b> · ${esc(c.name || '—')} · ${esc(catOf(c.cat).label)}${c.area ? ' · ' + esc(c.area) : ''}</p></div>`
+    + `<div class="pc-sh-at">Start RT ${esc(thDate(c.sim))}${c.room ? `<br>ห้อง ${esc(c.room)}` : ''}</div></div>${recs || '<p>ยังไม่มีการตรวจที่ลงชื่อไว้</p>'}<p class="pc-sh-ft">เอกสารภายในแผนก · จากแถบ Chart check</p></div>`;
+}
+// Treatment Summary: หน้าเดียว A4 (ย่อให้พอดีหน้าเหมือนตอนพิมพ์จากแถบ Treatment Summary)
+function txsFit(html) {
+  const m = document.createElement('div');
+  m.className = 'pcd-measure';
+  m.innerHTML = html;
+  document.body.appendChild(m);
+  const page = m.querySelector('.txs-page');
+  if (page) {
+    page.style.minHeight = '0';
+    const h = page.scrollHeight, max = page.offsetWidth * 297 / 210 - 3;
+    if (h > max) { page.style.zoom = String(Math.max(0.5, max / h)); page.style.height = `${h}px`; } else page.style.height = `${max}px`;
+  }
+  const out = m.innerHTML;
+  m.remove();
+  return out;
+}
+// HDR Order ที่บันทึกแล้ว → หน้าพิมพ์ (ใช้ตัวสร้างเดียวกับปุ่มพิมพ์ในหน้าต่าง HDR Order · ไม่แตะใบที่เปิดค้างไว้)
+async function hdroHtmlFor(id) {
+  const o = hdroOf(id);
+  if (!o) return '';
+  const keep = { id: hdroUi.id, f: hdroUi.f, dirty: hdroUi.dirty, strokes: hdroUi.strokes, drawSrc: hdroUi.drawSrc };
+  try {
+    if (!hdroImg.complete && hdroImg.decode) await hdroImg.decode().catch(() => null);
+    const a = (state.bq || []).find(x => x.id === id), f = clone(o.f || {});
+    if (a) { const p = hdroPrefill(a); for (const k of ['extDose', 'ebt', 'rtt1', 'rtt2', 'rtt3']) if (!str(f[k]) && p[k]) f[k] = p[k]; }
+    Object.assign(hdroUi, { id, f, strokes: hdroDrawDec(f.draw), drawSrc: f });
+    return await hdroPrintBuild();
+  } finally { Object.assign(hdroUi, keep); }
+}
+const PCD_FORM = { cso: 'CT Simulation Order Form', ctf: 'CT Simulation Order Form', so: 'Standing order', txo: 'Treatment Order', hdro: 'HDR Order', cck: 'Chart check' };
+let pcdCur = null;
+// เอกสาร → [{ key, cls, html, form, sig }] · mode 'print' = Treatment Summary ขอชื่อเต็ม + บันทึกการพิมพ์ (ข้ามใบที่ไม่มีสิทธิ์พิมพ์) · 'prev' = บันทึกการดู
+async function pcdBuild(items, mode) {
+  const out = [], skip = [], me = txsMe();
+  for (const it of items) {
+    const key = it.t + '|' + it.id;
+    try {
+      if (it.t === 'cso' || it.t === 'ctf') {
+        const r = it.t === 'ctf' ? state.ct.find(x => x.id === it.id) : null, a = it.t === 'cso' ? state.appt.find(x => x.id === it.id) : r ? ctCsoRec(r) : null;
+        if (a) out.push({ key, cls: 'pcd-z pcd-s', html: csoSheetHtml(a), form: PCD_FORM[it.t], sig: ['ct', esigApptId(a)] });
+      } else if (it.t === 'so') {
+        const r = state.dq.find(x => x.id === it.id);
+        if (r) { const x = soOfDq(r); out.push({ key, cls: 'pcd-z pcd-s', html: soSheetHtml(x), form: PCD_FORM.so, sig: ['so', esigDqId(x)] }); }
+      } else if (it.t === 'txo') {
+        const o = txoOf(it.id);
+        if (o) out.push({ key, cls: 'pcd-m', html: txoPrintHtml(clone(o)), form: PCD_FORM.txo });
+      } else if (it.t === 'hdro') {
+        const h = await hdroHtmlFor(it.id);
+        if (h) out.push({ key, cls: 'pcd-h', html: h, form: PCD_FORM.hdro });
+      } else if (it.t === 'cck') {
+        const c = state.cases.find(x => x.id === it.id);
+        if (c) out.push({ key, cls: 'pcd-m pcd-s', html: cckSheetHtml(c), form: PCD_FORM.cck });
+      } else if (it.t === 'txs') {
+        const d = txsDocs().find(x => x.key === it.id);
+        if (!d) continue;
+        const form = d.kind === 'bq' ? 'Brachytherapy Summary' : 'Treatment Summary';
+        if (mode === 'print' && (!me.print || state.viewAs)) { skip.push(`${form} (ไม่มีสิทธิ์พิมพ์)`); continue; }
+        let name = txsShort(d.name);
+        if (!state.viewAs) {
+          const r = await store.txsLog(mode === 'print' ? 'print' : 'view', { hn: d.hn, doc: d.no, kind: d.kind, id: d.id, detail: `${d.kind === 'bq' ? 'Brachytherapy' : 'RT'} · ${txsStName(d)}` });
+          if (mode === 'print') name = str(r && r.name) || d.name;
+        }
+        out.push({ key, cls: 'pcd-z', html: txsFit(txsPageHtml(d, name)), form });
+      }
+    } catch (e) { skip.push(`${PCD_FORM[it.t] || 'Treatment Summary'}: ${it.t === 'txs' ? txsErr(e) : errMsg(e)}`); }
+  }
+  return { out, skip };
+}
+const pcdSecs = (parts, url, each) => parts.map(p => `<section class="pcd-doc ${p.cls}" data-pcdk="${esc(p.key)}">${p.html}${each ? pcWmEl(url) : ''}</section>`).join('');
+// ลายเซ็นอิเล็กทรอนิกส์และรูปของใบสั่ง (เหมือนหน้าต่างใบสั่ง CT Simulation / Standing order)
+async function pcdAfter(root, parts) {
+  for (const p of parts) {
+    if (!p.sig) continue;
+    const sec = [...root.querySelectorAll('[data-pcdk]')].find(s => s.dataset.pcdk === p.key);
+    if (!sec) continue;
+    csoImages(sec);
+    try { await esigFill(sec, p.sig[0], p.sig[1]); } catch (e) { /* ไม่มีลายเซ็น */ }
+  }
+}
+function fitPcd() {
+  const box = $('#pcd-prev'), inner = $('#pcd-in'), page = inner.querySelector('.pcd-doc');
+  if (!pcdDlg.open || !page) return;
+  inner.style.zoom = '';
+  const k = Math.min(1, (box.clientWidth - 24) / page.offsetWidth);
+  inner.style.zoom = String(Math.max(0.3, k));
+}
+window.addEventListener('resize', fitPcd);
+async function pcdOpen(items, all) {
+  if (!items.length) return;
+  const cur = (pcdCur = { items, hn: pcs.hn, all: !!all });
+  $('#pcd-title').textContent = all ? `เอกสารทั้งหมด · HN ${cur.hn}` : `${PCD_FORM[items[0].t] || 'เอกสาร'} · HN ${cur.hn} · ดูจาก Patient chart`;
+  $('#pcd-note').textContent = 'กำลังเตรียมเอกสาร…';
+  $('#pcd-in').innerHTML = '';
+  $('#pcd-print-btn').disabled = true;
+  if (!pcdDlg.open) pcdDlg.showModal();
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* ใช้ฟอนต์ของเครื่อง */ }
+  const { out, skip } = await pcdBuild(items, 'prev');
+  if (pcdCur !== cur) return;   // ปิด / เปิดเอกสารอื่นระหว่างเตรียม
+  const box = $('#pcd-in');
+  box.innerHTML = pcdSecs(out, pcWmUrl(), true) || '<p class="muted">ไม่มีเอกสารที่เปิดได้</p>';
+  $('#pcd-note').textContent = [out.length ? `${out.length} ฉบับ · ทุกหน้ามีลายน้ำชื่อผู้ดูและเวลา (ทั้งบนจอและตอนพิมพ์)` : '', skip.length ? `ไม่ได้รวม: ${skip.join(' · ')}` : ''].filter(Boolean).join(' · ');
+  $('#pcd-print-btn').disabled = !out.length;
+  await pcdAfter(box, out);
+  fitPcd();
+  if (out.length) actLog('prev', all ? `Patient chart · เอกสารทั้งหมด ${out.length} ฉบับ` : out[0].form, cur.hn);
+}
+async function pcdPrint(btn) {
+  const cur = pcdCur;
+  if (!cur) return;
+  btn.disabled = true;
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const { out, skip } = await pcdBuild(cur.items, 'print');
+    if (!out.length) return toast(`ไม่มีเอกสารที่พิมพ์ได้${skip.length ? ': ' + skip.join(' · ') : ''}`, { err: true });
+    if (skip.length) toast(`ไม่ได้รวมในการพิมพ์: ${skip.join(' · ')}`, { err: true });
+    const box = $('#pcd-print');
+    box.innerHTML = pcdSecs(out, '', false) + pcWmEl(pcWmUrl());
+    await pcdAfter(box, out);
+    await Promise.all($$('img', box).map(i => (i.decode ? i.decode().catch(() => null) : null)));
+    const st = document.createElement('style');
+    // Chromium: @page ที่ไม่มีชื่อซึ่งมาทีหลังทับขอบกระดาษของ named page · จึงประกาศ named page ซ้ำต่อท้าย
+    st.textContent = '@page{size:A4;margin:0} @page pcdz{size:A4;margin:0} @page pcdm{size:A4;margin:10mm} @page hp{size:A4;margin:7mm 8.9mm 6mm}';
+    document.head.appendChild(st);
+    document.body.classList.add('printing-pcd');
+    let done = false;
+    const end = () => { if (done) return; done = true; document.body.classList.remove('printing-pcd'); st.remove(); box.innerHTML = ''; window.removeEventListener('afterprint', end); };
+    window.addEventListener('afterprint', end);
+    setTimeout(end, 120000);
+    printMark(out.length > 1 ? `Patient chart · เอกสารทั้งหมด ${out.length} ฉบับ` : out[0].form, cur.hn);   // กลุ่ม log เก็บชื่อแบบฟอร์มได้ 80 ตัวอักษร
+    window.print();
+  } catch (e) { toast('พิมพ์ไม่สำเร็จ: ' + errMsg(e), { err: true }); }
+  finally { btn.disabled = false; }
+}
+$('#pcd-print-btn').addEventListener('click', e => pcdPrint(e.currentTarget));
+pcdDlg.addEventListener('close', () => { pcdCur = null; $('#pcd-in').innerHTML = ''; });
 // พิมพ์ / PDF: หัวเอกสาร (โลโก้ HN ชื่อ แพทย์ Diag ขั้นตอนตอนนี้) · การฉายรังสี · นัดที่จะถึง · ขั้นตอนทั้งหมด (เก่า → ใหม่) พร้อมผู้ปฏิบัติ · ไม่มีค่า QA
 function pcSheet() {
   const k = hnKey(pcs.hn), p = pcInfo(k), now = new Date(), tx = pcTxRows(p.cs), up = pcUpcoming(k, p.cs, p.ap), ev = pcEvents(k).reverse();
@@ -34348,7 +34589,7 @@ function pcSheet() {
 async function pcPrint(btn) {
   if (!pcs.hn) return;
   const box = $('#ss-print');
-  box.innerHTML = pcSheet();
+  box.innerHTML = pcSheet() + pcWmEl(pcWmUrl());   // .86: พิมพ์ / PDF จาก Patient chart = ลายน้ำชื่อผู้ดูทุกหน้า
   if (btn) btn.disabled = true;
   try {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
@@ -34377,6 +34618,8 @@ pcDlg.addEventListener('click', e => {
   if (b.dataset.pccat !== undefined) { pcs.cat = b.dataset.pccat; return pcRender(); }
   if (b.dataset.pcprint !== undefined) return pcPrint(b);
   if (b.dataset.pcgo) { pcDlg.close(); return flowGo(b.dataset.pcgo, pcs.hn); }
+  if (b.dataset.pcdoc) return pcDocOpen(b.dataset.pcdoc);   // .86
+  if (b.dataset.pcdall !== undefined) return pcdOpen(pcs.docs || [], true);
   if (b.dataset.pccso) { const a = state.appt.find(x => x.id === b.dataset.pccso); return a ? openCsoPreview(a, 'pchart') : toast('ไม่พบ CT Order นี้', { err: true }); }   // .56: ใบสั่งมีลายน้ำ
   if (b.dataset.pchit) { Object.assign(pcs, { hn: b.dataset.pchit, tab: 'sum', cat: '', log: null }); pcSeenLog(pcs.hn); $('#pc-q').value = ''; return pcRender(); }
 });
