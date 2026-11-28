@@ -9,6 +9,10 @@
 | `Code.gs` | ไฟล์สคริปต์ `Code.gs` |
 | `Index.html` | ไฟล์ HTML ชื่อ **`Index`** (ต้องสะกดตรงนี้) |
 
+**ฉบับไฟล์เดียว (แนะนำ)** — `node scripts/build-single-file.js > Code.gs` รวมหน้าเว็บไว้ใน `Code.gs`
+วางไฟล์เดียวก็ใช้ได้ ไม่ต้องสร้างไฟล์ HTML `Index` จึงไม่เจอข้อผิดพลาด
+*"No HTML file named Index was found"* (เกิดเมื่อชื่อไฟล์ HTML ไม่ตรง เช่น `index` หรือ `Index.html.html`)
+
 ## ค่าตั้งต้นบนสุดของ `Code.gs`
 
 | ค่า | ใช้ทำอะไร | ตัวอย่าง |

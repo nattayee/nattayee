@@ -50,7 +50,12 @@ var THAI_PUA = {
 // ============================================================ หน้าเว็บ
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  // ฉบับไฟล์เดียว: หน้าเว็บอยู่ในตัวแปร INDEX_HTML ท้ายไฟล์นี้ ไม่ต้องสร้างไฟล์ HTML แยก
+  // ฉบับสองไฟล์: หน้าเว็บอยู่ในไฟล์ HTML ชื่อ Index
+  var page = typeof INDEX_HTML === 'string'
+    ? HtmlService.createHtmlOutput(INDEX_HTML)
+    : HtmlService.createHtmlOutputFromFile('Index');
+  return page
     .setTitle('ทะเบียนหนังสือส่ง' + (UNIT_NAME ? ' ' + UNIT_NAME : ''))
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

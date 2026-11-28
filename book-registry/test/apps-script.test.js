@@ -201,3 +201,15 @@ test('ไม่ตั้งชื่อหน่วยงาน: ค่าว่
   assert.equal(st.unitName, '');
   assert.equal(st.refPrefix, '');
 });
+
+test('ฉบับไฟล์เดียว: doGet ใช้หน้าเว็บที่รวมไว้ใน Code.gs ไม่ต้องมีไฟล์ Index', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { build } = require('../scripts/build-single-file');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8');
+  const { api } = loadAppsScript({ 'ชีต1': [] }, { code: build(), config: { UNIT_NAME: 'RTT' } });
+  const page = api.doGet();
+  assert.equal(page.name, undefined);
+  assert.equal(page.content, html.replace(/\n$/, ''));
+  assert.equal(api.createRecord({ date: '2026-11-28', subject: 'ทดสอบ' }).no, 1);
+});

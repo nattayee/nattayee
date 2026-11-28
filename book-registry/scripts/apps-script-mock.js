@@ -192,7 +192,8 @@ function makeSpreadsheet(sheets, tz, id) {
 
 /** others: { ลิงก์: { ชื่อชีต: แถว[][] } } = ไฟล์อื่นที่เปิดได้ด้วย openByUrl */
 /** config: ค่าบนสุดของ Code.gs ที่ต้องการแทน เช่น { UNIT_NAME: 'RTT' } */
-function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true, config = {} } = {}) {
+/** code: ข้อความโค้ดที่จะใช้แทน apps-script/Code.gs (เช่น ฉบับไฟล์เดียว) */
+function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true, config = {}, code: codeText } = {}) {
   const ss = makeSpreadsheet(sheets, tz, 'mock');
   const files = Object.fromEntries(Object.entries(others).map(([url, s], i) => [url, makeSpreadsheet(s, tz, `other${i}`)]));
   files[ss.getUrl()] = ss;
@@ -245,10 +246,14 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true
         const out = { name, setTitle: () => out, addMetaTag: () => out };
         return out;
       },
+      createHtmlOutput: content => {
+        const out = { content, setTitle: () => out, addMetaTag: () => out };
+        return out;
+      },
     },
   });
   context.__bound = bound;
-  const code = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
+  const code = codeText ?? fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
   vm.runInContext(code, context, { filename: 'Code.gs' });
   Object.assign(context, config);
 
