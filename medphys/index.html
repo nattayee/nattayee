@@ -162,6 +162,11 @@ button{cursor:pointer}
    พื้นหลังเต็มความกว้างจอ (เงาขยายข้าง ตัดด้วย clip-path ไม่ทำให้หน้าเลื่อนข้าง) · เส้นใต้ (เงาชั้นที่สอง) เมื่อเลื่อนลงมาแล้ว */
 .top{position:sticky;top:0;z-index:30;background:var(--bg);box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
 .top.stuck{box-shadow:0 0 0 100vmax var(--bg),0 1px 0 100vmax var(--line);clip-path:inset(0 -100vmax -1px)}
+/* .83: หัวแถบย่อยของแถบที่เปิด (แถวแถบย่อย / แถบเครื่องมือแรก) ค้างใต้แถบด้านบน · พื้นหลังเต็มความกว้างจอ · เส้นใต้ย้ายมาอยู่ใต้หัวแถบย่อย */
+.vpin{position:sticky;z-index:20;background:var(--bg);box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
+.vpinned .top.stuck{box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax)}
+.vpin.vpin-stuck{box-shadow:0 0 0 100vmax var(--bg),0 1px 0 100vmax var(--line);clip-path:inset(0 -100vmax -1px)}
+@media print{.vpin{position:static;box-shadow:none;clip-path:none}}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .mark{flex:none;width:34px;height:34px;color:var(--accent)}
 .logo{flex:none;display:block;height:48px;width:auto;max-width:96px;border-radius:10px;object-fit:cover;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
@@ -10023,7 +10028,7 @@ function cleanDefaults(src, cfg) {
 const IN_SHEET = !!(window.google && google.script && google.script.run);
 // บัญชี LPCH RO Workspace: token เก็บในเบราว์เซอร์นี้ ส่งไปกับทุกคำขอ (ตัวท้ายสุด) เซิร์ฟเวอร์ตรวจกับ LPCH เอง
 // รุ่นของหน้าเว็บนี้ และรุ่นของ Code.gs ที่ต้องใช้ (API_LEVEL ใน Code.gs)
-const PAGE_VERSION = '2026-11-22.82';
+const PAGE_VERSION = '2026-11-22.83';
 const NEEDS_API = 5;
 const LPCH_HOME = 'https:\/\/script.google.com/macros/s/AKfycbwBVKgsqip8pavg0H-ibZFcR-9petxW12W3A8eNkO5CI8swiRIk347QMh42JryQJ_k/exec';
 const LPCH_KEY = 'medphys-dispatch:lpch';
@@ -12540,6 +12545,42 @@ for (const box of [$('#intake'), $('#case-form > .dlg-body')]) {
 // หน้าปฏิทินห้องฉาย: ค้างแถบด้านบนทั้งแถบ ต่อด้วยแท็บ คำอธิบาย ช่วงวันที่ และหัวตาราง เมื่อรวมกันไม่เกิน 60% ของความสูงจอ (จอเตี้ยหรือมือถือ: แบบเดิม)
 const topBar = $('header.top'), coursePin = $('#course-pin');
 let pinOffset = 0;
+// .83: หัวแถบย่อยของแถบที่เปิด = ลูกแถวแรกๆ ของหน้าที่เป็นแถวแถบย่อย / แถบเครื่องมือ (ติดกันจากบนสุด ข้ามที่ซ่อนอยู่) ค้างใต้แถบด้านบนเมื่อเลื่อนลง
+// ซ้อนหลายแถวได้ (top สะสม) · สูงรวมกับแถบด้านบนเกิน 45% ของจอ = ค้างแถวแรกแถวเดียว / ไม่ค้าง (มือถือจอเตี้ย) · ห้องฉาย / ตั้งค่า มีส่วนค้างของตัวเอง
+const VPIN_SKIP = new Set(['course', 'settings', 'notify', 'pchart']), VPIN_SEL = '.toolbar, .tabs, [role="tablist"]';
+let vpinEls = [], vpinWatch = [], vpinAt = 0;
+const vpinRO = window.ResizeObserver ? new ResizeObserver(() => pinTop()) : null;   // แถวแถบย่อยเปลี่ยนความสูง / ซ่อน-แสดง = คำนวณใหม่
+function vpinSet(off) {
+  const v = state.view && !VPIN_SKIP.has(state.view) ? $(`#view-${state.view}`) : null;
+  const cand = v && !v.hidden ? [...v.children].filter(el => el.matches(VPIN_SEL)) : [];
+  if (vpinRO) {
+    for (const el of vpinWatch) if (!cand.includes(el)) vpinRO.unobserve(el);
+    for (const el of cand) if (!vpinWatch.includes(el)) vpinRO.observe(el);
+  }
+  vpinWatch = cand;
+  let head = [];
+  if (v && !v.hidden) for (const el of v.children) {
+    if (el.hidden || el.matches('.view-hist.solo') || !(el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0)) continue;   // ปุ่มประวัติที่วางเดี่ยวใต้แถบย่อย = เลื่อนผ่านได้
+    if (!el.matches(VPIN_SEL)) break;
+    head.push(el);
+  }
+  const ph = topBar.offsetHeight - off, sum = els => els.reduce((t, el) => t + el.offsetHeight, 0), max = innerHeight * 0.45;
+  if (head.length > 1 && ph + sum(head) > max) head = head.slice(0, 1);
+  if (head.length && ph + sum(head) > max) head = [];
+  for (const el of vpinEls) if (!head.includes(el)) { el.classList.remove('vpin', 'vpin-stuck'); el.style.top = ''; }
+  let acc = 0;
+  for (const el of head) {
+    el.classList.add('vpin');
+    const t = acc ? `calc(var(--pin-h, 0px) + ${acc}px)` : 'var(--pin-h, 0px)';
+    if (el.style.top !== t) el.style.top = t;
+    if (el !== head[head.length - 1]) el.classList.remove('vpin-stuck');
+    acc += el.offsetHeight;
+  }
+  vpinEls = head;
+  vpinAt = head.length ? acc - head[head.length - 1].offsetHeight : 0;
+  document.documentElement.classList.toggle('vpinned', head.length > 0);
+  return acc;
+}
 function pinTop() {
   const root = document.documentElement, head = state.view === 'course' && !$('#course-bar').hidden && $('#course-grid .fxg-head');
   const lock = !!head && topBar.offsetHeight + coursePin.offsetHeight + head.offsetHeight <= innerHeight * 0.6;
@@ -12548,9 +12589,9 @@ function pinTop() {
   const off = lock ? 0 : Math.max(0, Math.round(row.getBoundingClientRect().top - topBar.getBoundingClientRect().top) - 8);
   if (off !== pinOffset) { pinOffset = off; topBar.style.top = `${-off}px`; }
   topBar.classList.toggle('two-row', off > 0);   // 20 พ.ย.: แถวโลโก้เลื่อนพ้นจอได้ = สถานะเครื่องแบบย่อในแถวเมนู
-  const below = lock ? coursePin.offsetHeight : 0;
+  const below = lock ? coursePin.offsetHeight : 0, vh = vpinSet(off);   // .83: หัวแถบย่อยที่ค้าง
   // .38: เขียนเฉพาะค่าที่เปลี่ยน (ตัวแปร CSS ที่ราก = คำนวณ style ใหม่ทั้งหน้า)
-  const sp = `${topBar.offsetHeight - off + below + (lock ? head.offsetHeight : 0) + 12}px`, ph = `${topBar.offsetHeight - off}px`, cp = `${below}px`;
+  const sp = `${topBar.offsetHeight - off + below + (lock ? head.offsetHeight : 0) + vh + 12}px`, ph = `${topBar.offsetHeight - off}px`, cp = `${below}px`;
   if (root.style.scrollPaddingTop !== sp) root.style.scrollPaddingTop = sp;
   if (root.style.getPropertyValue('--pin-h') !== ph) root.style.setProperty('--pin-h', ph);   // หัวตารางวันฉายติดใต้แถบนี้
   if (root.style.getPropertyValue('--cpin-h') !== cp) root.style.setProperty('--cpin-h', cp);   // หน้าปฏิทินที่ค้างส่วนหัว: หัวตารางติดใต้ส่วนหัวของหน้า
@@ -12571,7 +12612,13 @@ function curSubName() {
   }
   return '';
 }
-function markStuck() { topBar.classList.toggle('stuck', topBar.getBoundingClientRect().top <= -pinOffset + 0.5 && scrollY > 0); if (typeof ntfPlace === 'function') ntfPlace(); mbPlace(); }
+function markStuck() {
+  topBar.classList.toggle('stuck', topBar.getBoundingClientRect().top <= -pinOffset + 0.5 && scrollY > 0);
+  const last = vpinEls[vpinEls.length - 1];   // .83: เส้นใต้หัวแถบย่อยเมื่อค้างอยู่
+  if (last) last.classList.toggle('vpin-stuck', scrollY > 0 && last.getBoundingClientRect().top <= topBar.offsetHeight - pinOffset + vpinAt + 0.5);
+  if (typeof ntfPlace === 'function') ntfPlace();
+  mbPlace();
+}
 // 24 พ.ย.: โลโก้ย่อ (#mini-brand) เมื่อแถวโลโก้เลื่อนพ้นจอ · วางที่ว่างด้านซ้ายของแถวแรกที่ค้างอยู่ซึ่งมีที่ว่างพอ (ไม่พอ = โลโก้อย่างเดียว · ยังไม่พอ = ซ่อน)
 // วัดเฉพาะเมื่อขนาดส่วนหัวเปลี่ยน (คีย์เก็บไว้ที่ตัวปุ่ม) · ส่วนหัวทั้งแถบค้าง (หน้าปฏิทินห้องฉาย) = แถวโลโก้ยังเห็นอยู่ ไม่ต้องแสดง
 function mbPlace(force) {
