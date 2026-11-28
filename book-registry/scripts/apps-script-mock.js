@@ -191,7 +191,8 @@ function makeSpreadsheet(sheets, tz, id) {
 }
 
 /** others: { ลิงก์: { ชื่อชีต: แถว[][] } } = ไฟล์อื่นที่เปิดได้ด้วย openByUrl */
-function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true } = {}) {
+/** config: ค่าบนสุดของ Code.gs ที่ต้องการแทน เช่น { UNIT_NAME: 'RTT' } */
+function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true, config = {} } = {}) {
   const ss = makeSpreadsheet(sheets, tz, 'mock');
   const files = Object.fromEntries(Object.entries(others).map(([url, s], i) => [url, makeSpreadsheet(s, tz, `other${i}`)]));
   files[ss.getUrl()] = ss;
@@ -249,6 +250,7 @@ function loadAppsScript(sheets, { tz = 'Asia/Bangkok', others = {}, bound = true
   context.__bound = bound;
   const code = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
   vm.runInContext(code, context, { filename: 'Code.gs' });
+  Object.assign(context, config);
 
   // แปลงผลลัพธ์ข้าม realm ให้เป็นอ็อบเจกต์ธรรมดา (เหมือนที่ google.script.run ส่งกลับมาเป็น JSON)
   const api = {};

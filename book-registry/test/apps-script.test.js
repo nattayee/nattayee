@@ -179,3 +179,25 @@ test('เว็บแอปที่ไม่มีชีตที่เปิ�
   assert.equal(api.getState().nextNo[2569], 4);
   assert.equal(api.createRecord({ date: '2026-10-12', subject: 'จากเว็บแอป' }).no, 4);
 });
+
+test('ตั้งค่าหน่วยงาน (เช่น RTT): ไฟล์ใหม่ว่างเปล่า เริ่มออกเลข 1 และส่งชื่อหน่วยงานให้หน้าเว็บ', () => {
+  const { api, ss, tz } = loadAppsScript({ 'ชีต1': [] }, { config: { UNIT_NAME: 'RTT', REF_PREFIX: 'สธ 0000' } });
+  const st = api.getState();
+  assert.equal(st.unitName, 'RTT');
+  assert.equal(st.refPrefix, 'สธ 0000');
+  assert.equal(st.records.length, 0);
+  assert.equal(st.nextNo[st.currentYear], 1);
+
+  const rec = api.createRecord({ date: '2026-11-28', ref: 'สธ 0000', from: 'RTT', to: 'ผู้อำนวยการ', subject: 'ขออนุมัติ' });
+  assert.equal(rec.no, 1);
+  assert.equal(rec.year, 2569);
+  assert.deepEqual(rowOf(ss, tz, '2569', 1), HEADER);
+  assert.deepEqual(rowOf(ss, tz, '2569', 2), [1, 'สธ 0000', '2026-11-28', 'RTT', 'ผู้อำนวยการ', 'ขออนุมัติ', '', '']);
+  assert.equal(api.createRecord({ date: '2026-11-28', subject: 'ฉบับที่สอง' }).no, 2);
+});
+
+test('ไม่ตั้งชื่อหน่วยงาน: ค่าว่าง (หน้าเว็บใช้ช่อง "จาก" ของฉบับล่าสุดแทน)', () => {
+  const st = fixture().api.getState();
+  assert.equal(st.unitName, '');
+  assert.equal(st.refPrefix, '');
+});

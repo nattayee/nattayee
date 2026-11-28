@@ -13,6 +13,14 @@
 // ปกติไม่ต้องใส่: กดเมนู "ทะเบียนหนังสือ › เชื่อมเว็บแอปกับชีตนี้" ในชีตครั้งเดียว ระบบจะจำให้เอง
 var SPREADSHEET_ID = '';
 
+// ชื่อหน่วยงาน (ไม่บังคับ) — แสดงใต้หัวเว็บ, ชื่อแท็บ, หัวรายงานตอนพิมพ์ และเป็นค่าตั้งต้นช่อง "จาก"
+// เว้นว่างไว้ = ใช้ช่อง "จาก" ของหนังสือฉบับล่าสุด
+var UNIT_NAME = '';
+
+// เลข "ที่" ตั้งต้นของหน่วยงาน (ไม่บังคับ) เช่น 'สธ 0315.3(2.7.1)'
+// ใช้ตอนทะเบียนยังว่าง หลังจากนั้นระบบใช้ "ที่" ของหนังสือฉบับล่าสุด
+var REF_PREFIX = '';
+
 var HEADER = ['เลขทะเบียนส่ง', 'ที่', 'ลงวันที่', 'จาก', 'ถึง', 'เรื่อง', 'การปฏิบัติ', 'หมายเหตุ'];
 var FIELDS = ['no', 'ref', 'date', 'from', 'to', 'subject', 'action', 'note'];
 var TEXT_FIELDS = ['ref', 'from', 'to', 'subject', 'action', 'note'];
@@ -43,7 +51,7 @@ var THAI_PUA = {
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('ทะเบียนหนังสือส่ง')
+    .setTitle('ทะเบียนหนังสือส่ง' + (UNIT_NAME ? ' ' + UNIT_NAME : ''))
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -141,7 +149,14 @@ function getState() {
   });
   var thisYear = currentYear_(tz);
   if (nextNo[thisYear] === undefined) nextNo[thisYear] = nextNo_(thisYear, null);
-  return { records: records, nextNo: nextNo, currentYear: thisYear, sheetUrl: ss.getUrl() };
+  return {
+    records: records,
+    nextNo: nextNo,
+    currentYear: thisYear,
+    sheetUrl: ss.getUrl(),
+    unitName: String(UNIT_NAME || '').trim(),
+    refPrefix: String(REF_PREFIX || '').trim(),
+  };
 }
 
 /** ออกเลขใหม่: ได้เลขถัดไปของปี พ.ศ. ตามวันที่หนังสือ */

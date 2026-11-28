@@ -1,6 +1,7 @@
 'use strict';
 // เปิดดูหน้าเว็บเวอร์ชัน Apps Script ในเครื่อง โดยใช้ Google Sheet จำลองจากไฟล์ Excel
 //   node scripts/preview-apps-script.js [ทะเบียนหนังสือ.xlsx]
+//   UNIT_NAME=RTT node scripts/preview-apps-script.js   (ตั้งชื่อหน่วยงาน)
 // ข้อมูลอยู่ในหน่วยความจำเท่านั้น ปิดแล้วหายไป (ไม่เขียนกลับลงไฟล์ Excel)
 
 const fs = require('fs');
@@ -13,7 +14,11 @@ const file = process.argv[2];
 const sheets = file
   ? Object.fromEntries(readXlsx(fs.readFileSync(file)).map(s => [s.name, s.rows.map(r => r.map(v => v ?? ''))]))
   : {};
-const { api } = loadAppsScript(sheets);
+// ตั้งชื่อหน่วยงานได้ เช่น  UNIT_NAME=RTT node scripts/preview-apps-script.js
+const config = {};
+if (process.env.UNIT_NAME) config.UNIT_NAME = process.env.UNIT_NAME;
+if (process.env.REF_PREFIX) config.REF_PREFIX = process.env.REF_PREFIX;
+const { api } = loadAppsScript(sheets, { config });
 
 // google.script.run จำลอง: ส่งคำขอมาที่ /rpc/<ชื่อฟังก์ชัน>
 const SHIM = `<script>
